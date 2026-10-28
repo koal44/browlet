@@ -23,6 +23,8 @@ struct AddonData {
   Global<Private> lifetime_key;
   Global<Private> queue_key;
   Global<Private> context_key;
+  Global<Private> script_key;
+  Global<ObjectTemplate> script_template;
   std::unordered_set<NativeHandle*> handles;
 };
 
@@ -284,6 +286,50 @@ void Detach(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(proxy);
 }
 
+void CompileScript(const FunctionCallbackInfo<Value>& args) {
+  auto isolate = args.GetIsolate();
+  auto realm = isolate->GetCurrentContext();
+  if (!args[1]->IsUndefined() && !GetContext(args, args[1]).ToLocal(&realm)) return;
+  if (!args[0]->IsString() || !args[2]->IsString() || !args[3]->IsInt32()) {
+    Fail(isolate, "ERR_INVALID_ARG_TYPE", "Expected source, filename and line offset");
+    return;
+  }
+  Local<UnboundScript> compiled;
+  {
+    // Syntax errors belong to the supplied realm. The unbound result can
+    // subsequently execute in any attached context in this isolate.
+    Context::Scope scope(realm);
+    ScriptOrigin origin(args[2], args[3].As<Int32>()->Value());
+    ScriptCompiler::Source source(args[0].As<String>(), origin);
+    if (!ScriptCompiler::CompileUnboundScript(isolate, &source).ToLocal(&compiled)) return;
+  }
+  // V8 traces the artifact through its holder, without a strong native root.
+  // Allocating the holder in the caller also avoids retaining the compile realm.
+  auto host = isolate->GetCurrentContext();
+  Local<Object> holder;
+  if (!Data(args)->script_template.Get(isolate)->NewInstance(host).ToLocal(&holder)) return;
+  holder->SetInternalField(0, compiled);
+  if (holder->SetPrivate(host, Data(args)->script_key.Get(isolate), True(isolate)).IsNothing()) return;
+  args.GetReturnValue().Set(holder);
+}
+
+void RunScript(const FunctionCallbackInfo<Value>& args) {
+  auto isolate = args.GetIsolate();
+  Local<Value> brand;
+  if (!args[0]->IsObject() || !args[0].As<Object>()->GetPrivate(isolate->GetCurrentContext(),
+          Data(args)->script_key.Get(isolate)).ToLocal(&brand) || !brand->IsTrue()) {
+    Fail(isolate, "ERR_INVALID_ARG_TYPE", "Expected a compiled script handle");
+    return;
+  }
+  auto compiled = args[0].As<Object>()->GetInternalField(0).As<UnboundScript>();
+  Local<Context> realm;
+  if (!GetContext(args, args[1]).ToLocal(&realm)) return;
+  Context::Scope scope(realm);
+  Local<Value> result;
+  if (!compiled->BindToCurrentContext()->Run(realm).ToLocal(&result)) return;
+  args.GetReturnValue().Set(result);
+}
+
 void Evaluate(const FunctionCallbackInfo<Value>& args) {
   auto isolate = args.GetIsolate();
   Local<Context> realm;
@@ -347,11 +393,17 @@ v8::Local<v8::External> InitializeVm(v8::Local<v8::Object> exports,
   data->lifetime_key.Reset(isolate, Private::New(isolate));
   data->queue_key.Reset(isolate, Private::New(isolate));
   data->context_key.Reset(isolate, Private::New(isolate));
+  data->script_key.Reset(isolate, Private::New(isolate));
+  auto script_template = ObjectTemplate::New(isolate);
+  script_template->SetInternalFieldCount(1);
+  data->script_template.Reset(isolate, script_template);
 
   const struct { const char* name; FunctionCallback callback; } methods[] = {
     {"createMicrotaskQueue", CreateQueue},
     {"createContextHandle", CreateContext},
     {"evaluate", Evaluate},
+    {"compileScript", CompileScript},
+    {"runScript", RunScript},
     {"isContext", IsContext},
     {"setPropertyDelegate", SetPropertyDelegate},
   };
@@ -365,8 +417,15 @@ v8::Local<v8::External> InitializeVm(v8::Local<v8::Object> exports,
 
 v8::MaybeLocal<v8::Context> GetContext(
     const v8::FunctionCallbackInfo<v8::Value>& args, v8::Local<v8::Value> value) {
+  return GetContext(args, value, args.Data().As<v8::External>());
+}
+
+v8::MaybeLocal<v8::Context> GetContext(
+    const v8::FunctionCallbackInfo<v8::Value>& args, v8::Local<v8::Value> value,
+    v8::Local<v8::External> vm_data) {
   auto isolate = args.GetIsolate();
-  auto handle = Unwrap<ContextHandle>(isolate, value, Data(args)->context_key);
+  auto data = static_cast<AddonData*>(vm_data->Value());
+  auto handle = Unwrap<ContextHandle>(isolate, value, data->context_key);
   if (!handle) return {};
   if (handle->state != ContextHandle::kAttached || handle->context.IsEmpty()) {
     Fail(isolate, "ERR_CONTEXT_NOT_INITIALIZED", "Context handle is detached");

@@ -283,7 +283,7 @@ export function fetchSingleModuleScript(
       } else if (moduleType === 'javascript-or-wasm' && mimeType !== null && isJavaScriptMIMEType(mimeType)) {
         script = new JavaScriptModuleScript(source, env, response.url!, options);
       } else if (moduleType === 'css' && essence === 'text/css') {
-        script = new CSSModuleScript(source, env);
+        script = new CSSModuleScript(source, response.url!, env);
       } else if (moduleType === 'json' && mimeType !== null && isJSONMIMEType(mimeType)) {
         script = new JSONModuleScript(source, env);
       }

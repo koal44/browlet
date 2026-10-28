@@ -1,9 +1,10 @@
 import { InternalError, type TaskCreationOptions } from '../../infra/index';
 import {
-  JSRealm, bindAsyncContext, getAssociatedRealm,
+  JSRealm, bindAsyncContext, getAssociatedRealm, isObject,
   type GlobalObject, type GlobalThis, type JSRealmOptions,
 } from '../../js-engine/index';
 import type { CallbackHooks, SecurityCheckType, StampedPlatformObject, WebIDLRealm } from '../../web-idl/index';
+import { serializeURL } from '../../url/index';
 
 import type { Window, WindowProxy } from '../platform';
 import { coarsenedSharedCurrentTime, type DOMHighResTimeStamp } from '../timing/index';
@@ -17,8 +18,9 @@ import { SandboxAgent, type Agent, type WindowAgent } from './agents';
 import { JSExecutionContext } from './execution-context';
 import type { TaskSource } from './event-loop';
 import type { QueuedTaskHandle } from './tasks';
-import type {
-  JavaScriptModuleScript, JSSourceTextModuleRecord, JSWebAssemblyModuleRecord, WebAssemblyModuleScript,
+import {
+  JSSourceTextModuleRecord, JSModuleRequest,
+  type JavaScriptModuleScript, type JSWebAssemblyModuleRecord, type WebAssemblyModuleScript,
 } from './script';
 
 /** Create an HTML realm and install the host-selected global and global-this identities. */
@@ -142,10 +144,21 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
 
   /** Parse a source-text module in this realm without linking or evaluating it. */
   // https://tc39.es/ecma262/#sec-parsemodule
-  parseModule(_source: string, _script: JavaScriptModuleScript): JSSourceTextModuleRecord | SyntaxError[] {
-    // TODO: Connect ParseModule to our VMContext backend. Node's SourceTextModule
-    // requires a Node context, whereas the native backend owns an addon context handle.
-    throw new InternalError('Source-text module parsing is not implemented');
+  parseModule(source: string, script: JavaScriptModuleScript): JSSourceTextModuleRecord | SyntaxError[] {
+    let code;
+    try { code = this.compileModule(source, serializeURL(script.baseURL!)); }
+    catch (error) {
+      if (isObject(error) && Reflect.getPrototypeOf(error) === this.SyntaxError.prototype) {
+        return [error as SyntaxError];
+      }
+      // eslint-disable-next-line no-restricted-properties -- Stock Node can allocate parser failures in its host realm.
+      if (!(error instanceof globalThis.SyntaxError)) throw error;
+      return [new this.SyntaxError(error.message)];
+    }
+    const requests = this.getModuleRequests(code).map((request) =>
+      new JSModuleRequest(request.specifier,
+        Object.entries(request.attributes).map(([key, value]) => ({ key, value })), request.phase));
+    return new JSSourceTextModuleRecord(script, code, requests);
   }
 
   /** Parse a WebAssembly ESM record, including its imports, in this realm. */

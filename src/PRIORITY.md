@@ -43,13 +43,14 @@ agreed secure-context clash and adding modeled active-script lookup.
 now supplies fetch options, classic-script/classic-worker fetchers, and single-module
 fetching with shared module-map callbacks, plus document/worker/worklet graph
 orchestration and shared worklet responses. §8.1.4.3 now creates compiled classic
-scripts and CSS/JSON/text synthetic export inputs. JavaScript/Wasm module parsing,
-module-record loading/linking, CSS export projection, and creation timing retain
+scripts and real source-text/CSS/JSON/text engine modules. Supplied graphs link
+and evaluate, with CSS exports projected through Binding. Automatic module loading,
+Wasm ESM parsing, module-specific context restoration, and creation timing retain
 explicit unfinished boundaries. Worker-imported scripts
 still need synchronous pause. §8.1.3.4 now has settings/object scripting predicates;
 §8.1.4.4 has classic/module runners and the running-script lookup. Active child
 documents provisionally pass the missing ancestor activity check until Section 7.
-Retained engine evaluation, termination, timing, and production
+Retained classic and linked module evaluation are connected; termination, timing, and production
 script callers remain explicit dependencies. §8.1.4.5 now records the Agent's
 unfinished abort operation, live-disable integration, and optional resource/UI
 policies. Forced interruption is explicitly deferred for the shared Node thread;

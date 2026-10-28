@@ -157,13 +157,14 @@ context followed by a script context. This does not intercept arbitrary author
 function calls. The A-to-B callback-registration investigation is skipped pending
 review of its observer and translation of HTML's examples; see the
 [audit record](browlet/scripting/ROADMAP.md#html-8133-explicit-context-experiment).
-New Node/V8 work remains parked.
+Native interception of arbitrary author frames remains parked.
 
 `UserAgent.webDriver` owns the BiDi remote-end command algorithms, whose completion
 uses `InternalPromise` through `UserAgent.HostPromise`. `PageEvaluation`
 owns Browlet's Node convenience API above that boundary. Its existing local source
-evaluator remains in use until the driver's retained-script execution, protocol
-values, and target/session lifecycles are connected. Navigation currently notifies
+evaluator remains in use until the driver's Await operation, protocol values,
+and target/session lifecycles are connected. Retained classic execution now runs
+through JSRealm on both stock and addon contexts. Navigation currently notifies
 the local evaluation clients through a UserAgent-owned weak map; cancellation and
 Node callback reinstallation are convenience behavior, not BiDi events. The
 [automation boundary](browlet/automation/README.md) records this temporary path and
@@ -177,6 +178,17 @@ provide the same state. Module maps remain settings-owned; import maps are a
 separate per-global record. `env.globalImplementation` selects that internal
 global state; `env.global` remains the platform global used for author execution
 and task routing. Neither lookup copies state or moves it onto the environment.
+
+HTML's source-text and synthetic module records retain Node-shaped module objects,
+supplied by Node or the addon; the addon's native handles remain private.
+JSRealm compiles, inspects requests, links supplied dependencies, evaluates, and
+reads namespaces; V8 owns bindings, cycles, and top-level await. HTML converts
+the native completion Promise through `env.InternalPromise`. CSS module creation
+uses the environment's binding-supplied `projectCSSStyleSheet()` before retaining
+the author-visible export. This does not change Stylelet's host-neutral state.
+Automatic dependency loading and module-specific context/async restoration are
+still explicit dependencies; supplying a graph does not implement those hooks.
+
 `BrowletEnvironment.reportException()` combines that global's reporting flag with
 DOM ErrorEvent dispatch. The realm's existing reporting callback and Window's
 `reportError()` method forward directly to it. ErrorEvent lives beside the

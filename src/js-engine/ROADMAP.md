@@ -40,10 +40,13 @@ pipeline. [Scripting](../browlet/scripting/ROADMAP.md) owns that pipeline;
 [loader](../browlet/loader/ROADMAP.md) owns fetching and resource lifetime.
 HTML now defines script-state and partial parsed-record contracts, including
 HostDefined, and active-script lookup over its modeled stack. `JSRealm.parseScript()`
-now compiles with Node's `vm.Script` without execution and realizes syntax failures
-in the target realm. HTML retains that opaque compiled artifact on its Script Record.
-Running it in the retained realm, including addon-owned contexts, remains unfinished;
-the existing source-string evaluation path has not been repurposed to recompile it.
+compiles without execution using Node's `vm.Script` on stock contexts or a native
+UnboundScript handle on addon contexts. Syntax failures belong to the target realm.
+HTML retains the artifact on its Script Record and executes it through
+`JSRealm.runScript()`, with modeled script-context entry and restoration.
+Production script-element callers and complete source/active-script metadata
+remain integration work; source evaluation does not recompile
+retained artifacts.
 
 Custom hooks expose incumbent registration and opaque script metadata. Connect
 those to actual Script records and restore them around callbacks. The existing
@@ -77,16 +80,26 @@ events; routing diagnostics onto an HTML queue previously prevented exit.
 
 ### Modules and dynamic import
 
-Connect engine module parse/link/evaluate with HTML module maps, Fetch, import
-attributes, `import.meta`, and classic/worker/module consumers. Fetch now exists;
-module records, resolution policy, and script integration remain the dependencies.
+Source-text and default-export synthetic engine modules are integrated on all
+three addon bases and on stock Node with its VM-modules flag. JSRealm exposes
+compilation, requests, supplied-graph linking, evaluation, and namespaces. HTML
+creates real records, projects CSS exports, and adapts native evaluation Promises
+through `env.InternalPromise`. A dependency-free inline module completes HTML's
+graph path. The engine tests cover cycles, live bindings, errors, pending/rejected
+top-level await, realm ownership, collection, and teardown. The addon now exposes
+the supported Node-shaped `Script`, `SourceTextModule`, and `SyntheticModule`
+classes; the compatibility implementation needs no Node association patch.
+The [supported surface](../../node-compat/README.md#contexts-globals-and-optional-facilities)
+does not yet include Node's async linker, import callbacks, or execution timeouts.
+
+Connect these operations with automatic HTML dependency loading, module maps,
+Fetch, import attributes, `import.meta`, and classic/worker/module consumers.
 Wire `HostLoadImportedModule`, `HostGetImportMetaProperties`, and
 `HostGetSupportedImportAttributes` through that pipeline.
-Include JSON, text, and synthetic modules when their specified consumers arrive.
-HTML now parses JSON/CSS and retains their default-export inputs, alongside text.
-These modeled records still require engine linking/evaluation; CSS additionally
-requires binding projection of the retained stylesheet implementation. Source-text
-module and Wasm ESM parsers have explicit throwing boundaries on BrowletRealm.
+`LoadRequestedModules()` still throws for records with imports; Wasm ESM parsing
+also remains explicit. Module-specific active-script entry and restoration after
+await need engine metadata/hooks: the current HTML runner supplies the retained
+realm context, not a fictitious root-script context for every dependency.
 
 The addon still lacks context-level dynamic-import callbacks. Re-enable the
 approved skipped case in [capabilities.test.cjs](../../node-compat/test/capabilities.test.cjs)
@@ -95,6 +108,22 @@ module tests do not prove backup-incumbent restoration: they also pass without
 our hook patches.
 
 ## Other engine hooks and facts
+
+Adopt Pip's completed native experiments in bounded slices. Retained classic
+execution and source-text/synthetic modules are integrated; import.meta/dynamic-import
+routing, rejection notifications, and string-compilation policy remain separate
+integration work. Preserve Node's own dispatch and each experiment's lifetime tests.
+
+Eric approved retaining demonstrated gaps as expected failures during adoption,
+without expanding this work into further engine patches. Carry over the three
+[Wasm failures](../../node-compat/experimental/module-records/WASM.md): mutable
+global live bindings, v128 export initialization, and mutable globals re-exported
+through JavaScript. Keep their Node-only controls, which reproduce all three.
+Likewise retain the four [string-compilation hook failures](../../node-compat/experimental/compile-strings/README.md):
+eval/Function distinction, original parameter boundaries, TrustedScript argument
+identity, and the implicit untrusted empty body. Keep specification expectations,
+record the responsible boundary, and revisit them with the relevant consumer or
+upstream API change. Their experimental assertions remain intact until that adoption.
 
 Implement these with their consuming feature, rather than adding inert hooks:
 
@@ -165,7 +194,7 @@ this runtime; they do not configure it. They include ECMAScript's
 `[[IsLockFree8]]`, which HTML's initialization list still omits. CandidateExecution
 remains the engine's memory-model machinery rather than a fabricated host log.
 
-New addon/V8 integration is parked on `research/html-agent-execution` while the
+Agent execution-control research is parked on `research/html-agent-execution` while the
 [HTML §8 audit](../browlet/scripting/ROADMAP.md#html-811812-audit) proceeds.
 Establish actual execution topology and engine controls with their consuming
 features. The Window Atomics.wait regression in

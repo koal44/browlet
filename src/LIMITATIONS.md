@@ -13,6 +13,12 @@ and native callback iterators. Test capabilities, not just the `custom` label.
 [Node compatibility](../node-compat/README.md) owns builds and supported bases;
 [JS Engine](js-engine/README.md) owns their common runtime contract.
 
+Addon context handles cannot be passed directly to Node's own `vm.Script` or
+`vm.Module` classes. The addon supplies matching `Script`, `SourceTextModule`,
+and `SyntheticModule` classes for its contexts; JS Engine selects the backend.
+This supported subset excludes async linking callbacks, dynamic import,
+timeouts, and cached data. See the [VM API contract](../node-compat/README.md#contexts-globals-and-optional-facilities).
+
 ## Realm identity and global objects
 
 - **`node-v8-object-realms`:** Native `getRealm` and `getFunctionRealm` use
@@ -24,9 +30,13 @@ and native callback iterators. Test capabilities, not just the `custom` label.
   Sources: [runtime](js-engine/runtime.ts), [constructor tests](../test/web-idl/binding/constructor-realm.test.ts),
   [callback tests](../test/web-idl/binding/realm/callback.test.ts).
 - **`node-vm-global-proxy`:** Plain Node cannot reuse Browlet's modeled
-  WindowProxy as the VM's actual top-level `this`. Its JavaScript proxy must
-  also relax forwarded nonconfigurable descriptors across retargeting. The
-  native context/allocation path resolves these two mismatches. Remove the
+  WindowProxy as the VM's actual top-level `this`. Global `var` declarations
+  consequently live on a different object from Window's
+  `globalThis`; both source and retained-script execution expose that mismatch.
+  [Calling tests](../test/browlet/scripting/script-calling.test.ts) retain approved
+  stock-only expected failures. The JavaScript proxy also relaxes forwarded
+  nonconfigurable descriptors across retargeting. The native context/allocation
+  path resolves these mismatches. Remove the
   modeled proxy/descriptor accommodations only when that path is required.
   Sources: [JSRealm](js-engine/realm.ts), [Window binding tests](../test/browlet/dom-binding.test.ts),
   [navigation tests](../test/browlet/browsing/navigation/document-lifecycle.test.ts).
@@ -53,7 +63,9 @@ and native callback iterators. Test capabilities, not just the `custom` label.
 
 - **HTML script calling has explicit runtime boundaries.** Classic/module run
   methods implement eligibility, error/rejection control flow, and preparation/
-  cleanup, but retained classic execution and module evaluation still throw.
+  cleanup. Retained classic code and supplied module graphs execute on both
+  backends. Module-specific active-script attribution and restoration after await
+  remain unfinished, as do production script-element callers.
   Termination is only a represented outcome; timing remains unfinished.
   Active child documents provisionally pass the missing
   ancestor portion of `isFullyActive()` by agreement. Documents without a browsing
@@ -91,14 +103,15 @@ and native callback iterators. Test capabilities, not just the `custom` label.
   [import-map audit](browlet/scripting/ROADMAP.md#html-815-module-specifier-resolution).
 
 - **Script creation is separate from execution.** Classic creation now compiles
-  without running; CSS/JSON/text creation retains synthetic default-export inputs.
-  JavaScript-module parsing and WebAssembly ESM parsing still throw explicitly.
-  Synthetic records are not engine modules, and CSS export projection remains
-  unfinished. Classic compiled code still needs execution in the retained realm
-  through the selected backend. Long Animation Frames creation timing is also missing. Module
+  without running; source-text and CSS/JSON/text creation now retain real engine
+  modules. Binding projects CSS exports before author use. Stock Node requires
+  `--experimental-vm-modules` and its synchronous module linking API; the addon
+  needs neither that flag nor an engine patch for static modules. WebAssembly ESM
+  parsing and Long Animation Frames creation timing remain unfinished. Module
   graph orchestration covers document, worker, and worklet entry points, including
-  shared worklet responses, but the record operations that load dependencies and
-  link remain unfinished. Worker `importScripts()` fetching
+  shared worklet responses. Linking supplied dependencies works, but automatic
+  dependency loading still throws at `LoadRequestedModules()` for imports.
+  Dynamic import and import.meta are not connected. Worker `importScripts()` fetching
   requires an unavailable synchronous pause. Existing direct evaluation remains
   separate, and HTML script/worker startup does not call these fetchers yet. See the
   [script-creation audit](browlet/scripting/ROADMAP.md#html-8143-creating-scripts).
@@ -113,6 +126,7 @@ and native callback iterators. Test capabilities, not just the `custom` label.
   [§8.1.2 audit](browlet/scripting/ROADMAP.md#html-811812-audit).
 - **`node-v8-microtask-queue` / `node-v8-checkpoint`:** Without explicit queues,
   all event loops share Node's ambient queue and use private `_tickCallback()`.
+  It cannot synchronously drain reactions from within an existing Node microtask.
   It can drain unrelated jobs, next-ticks, and rejection machinery, including
   premature unhandled-rejection reporting during nested checkpoints. The
   explicit backend gives each configured HTML loop its own queue. Retire the

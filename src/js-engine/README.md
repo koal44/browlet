@@ -103,11 +103,24 @@ apply their own decoding rules before entering the realm's JSON parser.
 
 ## Runtime and realm ownership
 
-`JSRealm.parseScript()` compiles classic code with Node's `vm.Script` without
-executing it, returning an opaque artifact or target-realm syntax errors. HTML
-wraps successful code with its Script Record, realm, and HostDefined. Execution
-of retained compiled artifacts remains separate, unfinished work; `evaluate()`
-still takes source text and is not used as a parser.
+`JSRealm.parseScript()` compiles classic code without executing it, returning an
+retained `Script` object or target-realm syntax errors. Stock contexts use Node's
+`vm.Script`; addon contexts use its matching addon class over a V8 UnboundScript.
+`JSRealm.runScript()` executes that artifact in the existing context without
+reparsing or performing a checkpoint. HTML owns the Script Record, script
+association, modeled execution-context entry, and completion handling.
+`evaluate()` remains the separate source-text convenience path.
+
+`compileModule()` and `createDefaultExportModule()` retain real engine modules.
+`getModuleRequests()` exposes their unresolved dependencies, `linkModule()` links
+an explicitly supplied graph, and `evaluateModule()` returns its native completion
+Promise without a checkpoint. `getModuleNamespace()` preserves live bindings.
+Both backends expose `SourceTextModule` and `SyntheticModule` objects with
+`moduleRequests`, `linkRequests()`, `instantiate()`, `evaluate()`, and `namespace`
+as applicable. The addon keeps its native handles private; stock Node uses its VM
+classes with `--experimental-vm-modules`. HTML owns URL resolution, loading, its script
+records, and conversion of the evaluation Promise to `env.InternalPromise`.
+CSS exports are projected by Binding before entering the synthetic module.
 
 One private `JSRuntime` per module instance owns isolate-level associations and
 the ambient queue. Consumers use named functions; realm-owned operations stay

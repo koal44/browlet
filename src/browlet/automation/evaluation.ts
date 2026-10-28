@@ -34,7 +34,7 @@ export class PageEvaluation {
   ): Promise<Awaited<Result>> {
     const evaluation = this.#getEvaluation();
     // TODO(WebDriver BiDi): Encode inputs and call the protocol commands after
-    // retained-script execution and protocol value serialization are connected.
+    // target/session lookup, Await, and protocol value serialization are connected.
     // Keep this temporary path explicit; never fall back from a failed driver command.
     return (typeof expression === 'function'
       ? evaluation.callFunction(String(expression), [argument])

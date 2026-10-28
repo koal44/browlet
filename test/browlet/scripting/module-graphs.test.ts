@@ -14,8 +14,8 @@ import { runInHostTask } from '../../support/tasks';
 
 afterEach(() => vi.restoreAllMocks());
 
-// These exercise HTML's orchestration using real owner Promises. Module parsing/loading/linking
-// remain unfinished, so the record operations and inline creation are controlled test dependencies.
+// These isolate HTML's orchestration using real owner Promises and controlled
+// loading/linking completion. Engine execution is covered in module-execution.test.ts.
 describe('module script graph entry points', () => {
   it('loads and links an external graph after retrieving its root from the module map', async () => {
     const { env, url, script, loading, load, link } = await createFixture();
@@ -175,7 +175,7 @@ async function createFixture() {
   const script: JavaScriptModuleScript = createScriptState(env);
   script.baseURL = url;
   script.fetchOptions = new ScriptFetchOptions();
-  const record = new JSSourceTextModuleRecord(script);
+  const record = new JSSourceTextModuleRecord(script, env.realm.compileModule('', 'fixture.js'));
   script.record = record;
   const loading = env.InternalPromise.withResolvers(internalType<void>());
   const load = vi.spyOn(record, 'loadRequestedModules').mockReturnValue(loading.promise);

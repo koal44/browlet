@@ -17,6 +17,8 @@ the observable constraints of each runtime.
 | Area | Implementation and evidence |
 | --- | --- |
 | Contexts, globals, and microtask queues | [vm.cc](addon/vm.cc), [JavaScript adapters](addon/vm.cjs); [queue tests](test/capabilities.test.cjs), [browser global tests](../test/browlet/browsing/native-global.test.ts) |
+| Retained classic scripts | [vm.cc](addon/vm.cc), [JavaScript adapters](addon/vm.cjs); [compilation, execution, and lifetime tests](test/retained-scripts.test.cjs) |
+| Source-text and synthetic modules | [vm-modules.cc](addon/vm-modules.cc), [module classes](addon/vm-modules.cjs); [Node API comparisons](test/vm-api.test.cjs), [native linking and lifetime tests](test/modules.test.cjs) |
 | Realm identity and lookup | [realm.cc](addon/realm.cc); [realm tests](test/capabilities.test.cjs) |
 | Promise observation | [promise.cc](addon/promise.cc); [Promise tests](test/capabilities.test.cjs) |
 | Callback and job hooks | [host-hooks.cc](addon/host-hooks.cc), [JavaScript adapter](addon/host-hooks.cjs); [native hook tests](test/host-hooks.test.cjs), [HTML Promise jobs](../test/browlet/scripting/promise-jobs.test.ts) |
@@ -30,6 +32,8 @@ the observable constraints of each runtime.
 Context and queue handles retain their shared lifetime owner in `vm.cc`.
 Factories that allocate in a context use `GetContext()` with the opaque callback
 data returned by `InitializeVm()`; they do not access the handle's stored state.
+`vm-modules.cc` owns its module branding and templates separately, retaining only
+that opaque VM data for context lookup.
 
 The [native addon suite](test/) also covers lifetime, garbage collection, and runtime selection.
 
@@ -41,8 +45,46 @@ The [native addon suite](test/) also covers lifetime, garbage collection, and ru
 The supported options are queue selection, `reuseGlobalProxyFrom`, and
 `globalPrototypeChain`; evaluation accepts filename, lineOffset, and
 `displayErrors: false`. Unsupported options fail explicitly. Dynamic-import
-callbacks, vm.Script interoperability, timeouts, and automatic afterEvaluate
+callbacks, interoperability with Node's own contextified objects, timeouts, and automatic afterEvaluate
 checkpoints remain outside this API.
+
+The addon exports a supported subset of Node's VM object API:
+
+| API | Contract |
+| --- | --- |
+| `new Script(source, { filename, lineOffset, displayErrors: false })` | Compiles without a context or execution; `.runInContext(handle)` binds the retained code to an existing context. Compilation errors originate in the host realm; HTML realizes them in its selected realm. |
+| `new SourceTextModule(source, { context, identifier, lineOffset })` | Compiles in the supplied addon context. `.moduleRequests` exposes frozen requests with specifiers, attribute records, and phases. |
+| `source.linkRequests(dependencies)`; `source.instantiate()` | Supply dependencies in request order for each source module, then instantiate from the root. Instantiation links the graph without running it. |
+| `new SyntheticModule(names, callback, { context, identifier })` | Creates an already instantiated module, like current Node. Evaluation calls the callback with `this.setExport(name, value)` available; exports retain identity and remain mutable. The callback's return value is ignored. |
+| `module.evaluate()` | Returns the engine's completion Promise without a checkpoint. Admission errors instead reject a host Promise, as Node does. |
+| `module.context`, `.identifier`, `.status`, `.error`, `.namespace` | Expose the retained context and current engine state. Namespace exports are live bindings; `.error` requires an errored module. |
+
+These classes use addon context handles, not Node's private Contextify state.
+JS Engine selects Node's classes for stock contexts and the addon classes for
+addon contexts. The public free-function compile/link/evaluate handle API is
+replaced; those operations remain private native implementation details.
+Module loading remains the host's responsibility. HTML's default-export helper
+uses `SyntheticModule`; the addon itself supports arbitrary named exports.
+
+This is not the complete `node:vm` API. Modules require an explicit context;
+async `link(linker)`, import callbacks, cached data, timeouts, column offsets,
+and display-error annotation remain unsupported. Unknown options are rejected.
+The public linker accepts evaluation-phase module dependencies; the native
+source-phase Wasm regression remains below that surface. No operation performs
+an automatic checkpoint. GC-traced fields retain module/context state without
+per-module native roots, and evaluation releases synthetic callbacks.
+
+Static modules require no Node/V8 patch. Stock JS Engine uses Node's VM module
+API and requires `--experimental-vm-modules` plus its synchronous linking API
+(present on all supported runtime bases). Unit tests enable that flag; addon
+modules themselves do not need it. HTML dependency fetching, import.meta and
+dynamic-import routing, and Wasm ESM integration remain separate work. The
+[promoted module tests](test/modules.test.cjs) preserve Pip's lifetime and engine
+behavior cases through the private bridge. The synthetic evaluation callback
+retains its handle until assigning the export; the lifetime test checks collection
+after that callback. [Public API tests](test/vm-api.test.cjs) cover the matching
+Node call path, callback collection, and live exports. Remaining probes stay in
+`experimental/module-records/`.
 
 A handle separates its stable realm reference from its reusable global proxy.
 Detachment allows that proxy to transfer once to a fresh context. Retaining the

@@ -30,16 +30,18 @@ explicitly:
 | Dependency | Remaining work |
 | --- | --- |
 | Target lookup | Context/realm registration, lifecycle, ID lookup, and sandbox selection |
-| `JSScriptRecord.evaluate()` | Execute the retained compiled artifact in its realm and connect active-script metadata |
 | ECMAScript Await | Observe the native author Promise in its realm; suspend/resume the modeled execution context when invoking its internal continuation |
 | LocalValue/RemoteValue | Specified deserialization, serialization limits, handles, shared node IDs, and channels |
 | Exception details | Throw-site stack frames and protocol serialization |
 | User activation | HTML's activation-notification algorithm |
 
-The algorithm tests substitute those dependencies explicitly. They verify
+Retained classic execution is connected through `JSScriptRecord.evaluate()`;
+it installs the modeled script context and restores it before HTML cleanup.
+The algorithm tests substitute the remaining dependencies explicitly, including
+a retained-code execution case with only lookup and serialization replaced. They verify
 command behavior such as exception results, the default null function receiver,
 and awaiting only genuine Promises when requested. They do not establish
-runtime execution or protocol conformance. `awaitPromise()` remains an explicit
+full protocol conformance. `awaitPromise()` remains an explicit
 throwing dependency. Its eventual internal result must resume the script
 context for cleanup before the command continues on the host; changing its
 return type does not implement ECMAScript Await.

@@ -7,6 +7,7 @@
 #include "promise.h"
 #include "realm.h"
 #include "vm.h"
+#include "vm-modules.h"
 
 namespace node_compat {
 namespace {
@@ -15,6 +16,7 @@ void Initialize(v8::Local<v8::Object> exports, v8::Local<v8::Value>,
                 v8::Local<v8::Context> context) {
   auto vm_data = InitializeVm(exports, context);
   if (vm_data.IsEmpty()) return;
+  InitializeVmModules(exports, context, vm_data);
   InitializeArrayBuffer(exports, context, vm_data);
   InitializeRealm(exports, context);
   InitializeHostHooks(exports, context);

@@ -20,9 +20,9 @@ import {
   type CacheUsage, type Destination, type FetchMode, type FetchResponse, type FetchTimingInfo,
   type NetworkPartitionKey, type RequestCredentials, type ResponseBodyInfo,
 } from '../fetch/index';
-import { cssStyleSheetIDL, type StyleletEnvironment } from '../stylelet/index';
+import { cssStyleSheetIDL, type CSSStyleSheetImpl, type StyleletEnvironment } from '../stylelet/index';
 
-import type { QuotaExceededError } from './platform';
+import type { CSSStyleSheet, QuotaExceededError } from './platform';
 import { Moment, UnsafeMoment, monotonicClock, EnvironmentTiming } from './timing/index';
 import type { CORSSettingsState } from './dom/nodes/html/attributes/index';
 import {
@@ -176,6 +176,8 @@ export interface BrowletEnvironmentInit {
   createAbortSignal: () => AbortSignalImpl;
   /** Allocate a projected QuotaExceededError in this environment's realm. */
   createQuotaExceededError: () => QuotaExceededError;
+  /** Project a constructed sheet for an author-visible CSS module export. */
+  projectCSSStyleSheet: (sheet: CSSStyleSheetImpl) => CSSStyleSheet;
   /** Clone into this environment's realm, optionally transferring objects. */
   clone: (value: unknown, transferList?: object[]) => unknown;
   /** Serialize through this environment's binding. */
@@ -218,6 +220,8 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   createDependentAbortSignal;
   /** Allocate a projected QuotaExceededError in this environment's realm. */
   createQuotaExceededError;
+  /** Project a constructed sheet for an author-visible CSS module export. */
+  projectCSSStyleSheet;
 
   /** Clone into this environment's realm, optionally transferring objects. */
   clone;
@@ -231,6 +235,7 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   constructor(realm: BrowletRealm, baseEnv: BrowletEnvironmentBase | null, initialization: BrowletEnvironmentInit) {
     super(baseEnv);
     this.InternalPromise = initialization.InternalPromise;
+    this.projectCSSStyleSheet = initialization.projectCSSStyleSheet;
     this.nativeLineEnding = initialization.nativeLineEnding;
     this.runInParallel = initialization.runInParallel;
     this.createDocument = initialization.createDocument;

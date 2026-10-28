@@ -1,5 +1,3 @@
-import { Script } from 'node:vm';
-
 import { Stamper } from '../infra/stamper';
 import { InternalPromise } from '../infra/promises';
 import { InternalError } from '../infra/internal-error';
@@ -13,10 +11,14 @@ import {
 import { isObject } from './abstract-operations';
 import { addon } from './node-addons';
 import {
-  associateContext, associateGlobalRealm, associateObjectRealm, cloneSharedArrayBuffer,
+  compileModule, createDefaultExportModule, moduleRequests, linkModule, evaluateModule, moduleNamespace,
+  type CompiledModule, type ModuleRequest,
+} from './modules';
+import {
+  associateContext, associateGlobalRealm, associateObjectRealm, cloneSharedArrayBuffer, compileScript,
   createCollectionIterator, createContext, createMicrotaskQueue, detachContext,
   getContextGlobalAllocation, getContextGlobalProxy,
-  makePrototypeImmutable, observePromise, runInContext, runWithActiveRealm,
+  makePrototypeImmutable, observePromise, runInContext, runScript, runWithActiveRealm,
   setGlobalObject, setPropertyDelegate, type JSMicrotaskQueue, type VMContext,
 } from './runtime';
 
@@ -557,12 +559,52 @@ export class JSRealm {
   // HTML supplies its Script Record and HostDefined around this unbound compiled code.
   parseScript(source: string, filename: string): CompiledScript | SyntaxError[] {
     try {
-      return new Script(source, { filename }) as unknown as CompiledScript;
+      return compileScript(source, this.#vmContext, filename);
     } catch (error) {
+      // The compiler's fresh error has the intrinsic prototype; instanceof could
+      // invoke an author-defined Symbol.hasInstance on the realm constructor.
+      if (isObject(error) && Reflect.getPrototypeOf(error) === this.SyntaxError.prototype) {
+        return [error as SyntaxError];
+      }
       // eslint-disable-next-line no-restricted-properties -- Node's compiler allocates its syntax failure in the host realm.
       if (!(error instanceof globalThis.SyntaxError)) throw error;
       return [new this.SyntaxError(error.message)];
     }
+  }
+
+  /** Execute retained compiled code in this realm without an implicit checkpoint. */
+  runScript(script: CompiledScript): unknown {
+    return runWithActiveRealm(this, () => runScript(script, this.#vmContext));
+  }
+
+  /** Compile module source in this realm without linking or executing it. */
+  compileModule(source: string, filename: string): CompiledModule {
+    return compileModule(source, this.#vmContext, filename);
+  }
+
+  /** Retain a prepared author value as a synthetic module's default export. */
+  createDefaultExportModule(value: unknown): CompiledModule {
+    return createDefaultExportModule(value, this.#vmContext);
+  }
+
+  /** Read the engine's import requests before host resolution and loading. */
+  getModuleRequests(module: CompiledModule): readonly ModuleRequest[] {
+    return moduleRequests(module);
+  }
+
+  /** Link supplied dependencies in the order of each referrer's requests. */
+  linkModule(root: CompiledModule, graph: Map<CompiledModule, CompiledModule[]>): void {
+    linkModule(root, graph);
+  }
+
+  /** Evaluate a linked graph, returning its native completion Promise. */
+  evaluateModule(module: CompiledModule): Promise<unknown> {
+    return runWithActiveRealm(this, () => evaluateModule(module));
+  }
+
+  /** Return the linked module's namespace with live exported bindings. */
+  getModuleNamespace(module: CompiledModule): object {
+    return moduleNamespace(module);
   }
 
   /** Evaluate a script in this realm, using the supplied source location in diagnostics. */
@@ -682,14 +724,14 @@ export class JSRealm {
   }
 }
 
-declare const compiledScriptBrand: unique symbol;
-
 /**
- * Opaque Node.js vm.Script object, compiled from source by V8 in JSRealm.parseScript().
- * The type-only brand adds no runtime property; it hides Node's methods from callers.
+ * Retained code from JSRealm.parseScript(): a Node.js vm.Script or the addon's
+ * matching Script object. Both keep compilation separate from context selection.
  * HTML separately retains the associated realm and script.
  */
-export type CompiledScript = { [compiledScriptBrand]: true; };
+export interface CompiledScript {
+  runInContext(context: VMContext, options?: { displayErrors?: boolean; }): unknown;
+}
 
 export type CollectionIteratorKind = 'map' | 'set';
 

@@ -12,9 +12,9 @@ import { urlIDLDefinitions, serializeURL } from '../url/index';
 import { fileIDLDefinitions } from '../file/index';
 import { xhrIDLDefinitions } from '../xhr/index';
 import { fetchIDLDefinitions } from '../fetch/index';
-import { styleletIDLDefinitions } from '../stylelet/index';
+import { CSSStyleSheetImpl, styleletIDLDefinitions } from '../stylelet/index';
 
-import type { QuotaExceededError, Window } from './platform';
+import type { CSSStyleSheet, QuotaExceededError, Window } from './platform';
 import { domHighResTimeStampIDL, epochTimeStampIDL } from './timing/index';
 import {
   EventLoop, SandboxAgent, eventHandlerIDL, eventHandlerNonNullIDL,
@@ -187,6 +187,7 @@ export function createBrowletEnvironmentInit(context: BindingContext<BrowletEnvi
     createAbortSignal: () => context.construct(AbortSignalImpl),
     createQuotaExceededError: () =>
       context.project(QuotaExceededErrorImpl, new QuotaExceededErrorImpl()) as StampedPlatformObject<QuotaExceededError>,
+    projectCSSStyleSheet: (sheet) => context.project(CSSStyleSheetImpl, sheet) as StampedPlatformObject<CSSStyleSheet>,
     createAbortController: () => context.construct(AbortControllerImpl),
     createDependentAbortSignal: (signals) => AbortSignalImpl.any(
       context.construct(AbortSignalImpl), signals as AbortSignalImpl[],

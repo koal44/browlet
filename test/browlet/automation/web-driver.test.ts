@@ -10,7 +10,7 @@ import { JSScriptRecord } from '../../../src/browlet/scripting/script';
 afterEach(() => vi.restoreAllMocks());
 
 // These exercise command orchestration with explicit dependency substitutes.
-// They are not end-to-end BiDi tests: target lookup, runtime execution, and
+// They are not end-to-end BiDi tests: target lookup and
 // protocol serialization remain unfinished.
 describe('WebDriver BiDi script command algorithms', () => {
   it.each(['evaluate', 'callFunction'] as const)('completes %s on the host without a page checkpoint', async (command) => {
@@ -63,6 +63,22 @@ describe('WebDriver BiDi script command algorithms', () => {
     expect(serialize).toHaveBeenCalledWith(
       42, { maxDomDepth: 0, maxObjectDepth: 2, includeShadowTree: 'none' }, 'root', new Map(), realm, session,
     );
+  });
+
+  it('executes the retained script with only target lookup and protocol serialization substituted', async () => {
+    const { driver, session, realm, env, parameters } = fixture();
+    const evaluate = vi.spyOn(JSScriptRecord.prototype, 'evaluate');
+    const serialize = vi.spyOn(driver, 'serializeAsRemoteValue').mockImplementation((value) => {
+      expect(env.responsibleEventLoop.executionContextStack).toHaveLength(0);
+      expect(value).toBe(42);
+      return { type: 'number', value: 42 };
+    });
+
+    expect(await observe(driver.evaluate(session, { ...parameters, expression: '21 * 2' }))).toEqual({
+      type: 'success', result: { type: 'number', value: 42 }, realm: driver.getRealmId(realm),
+    });
+    expect(evaluate).toHaveBeenCalledOnce();
+    expect(serialize).toHaveBeenCalledOnce();
   });
 
   it('returns an exception result for a throw completion instead of rejecting the command', async () => {

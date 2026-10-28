@@ -4,7 +4,38 @@ const vm = require('node:vm');
 
 // Adapt the public options to the native context/evaluation arguments.
 module.exports = native => {
+  class Script {
+    #handle;
+
+    constructor(source, options = {}) {
+      if (typeof options === 'string') options = { filename: options };
+      for (const key of Object.keys(options)) {
+        if (key !== 'filename' && key !== 'lineOffset' && key !== 'displayErrors') {
+          throw new TypeError(`Unsupported node-compat script option: ${key}`);
+        }
+      }
+      if (options.displayErrors !== undefined && options.displayErrors !== false) {
+        throw new TypeError('node-compat does not implement displayErrors annotation');
+      }
+      // A Script is unbound. HTML realizes parser failures in its selected realm.
+      this.#handle = native.compileScript(`${source}`, undefined,
+        options.filename ?? 'evalmachine.<anonymous>', options.lineOffset ?? 0);
+    }
+
+    runInContext(context, options = {}) {
+      for (const key of Object.keys(options)) {
+        if (key !== 'displayErrors') throw new TypeError(`Unsupported node-compat execution option: ${key}`);
+      }
+      if (options.displayErrors !== undefined && options.displayErrors !== false) {
+        throw new TypeError('node-compat does not implement displayErrors annotation');
+      }
+      return native.runScript(this.#handle, context);
+    }
+  }
+
   const methods = {
+    Script,
+    ...require('./vm-modules.cjs')(native),
     createMicrotaskQueue: native.createMicrotaskQueue,
     createContextHandle: function createContextHandle(options = {}) {
       for (const key of Object.keys(options)) {

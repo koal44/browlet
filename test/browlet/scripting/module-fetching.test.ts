@@ -6,8 +6,10 @@ import { JSModuleRequest, type ModuleScript, type ModuleType } from '../../../sr
 import { ScriptFetchOptions } from '../../../src/browlet/scripting/script-fetch-options';
 import type { PerformScriptFetch } from '../../../src/browlet/scripting/script-fetching';
 import { utf8Encode } from '../../../src/encoding/index';
+import * as fetching from '../../../src/fetch/index';
 import { FetchHeaders } from '../../../src/fetch/headers';
 import { FetchResponse } from '../../../src/fetch/response';
+import { CSSStyleSheetImpl, fetchStyleResource, UrlValue } from '../../../src/stylelet/index';
 import { serializeURL } from '../../../src/url/index';
 import { mockHTTPTransport } from '../../fetch/transport-fixture';
 import { getRelevantRealm } from '../../support/browlet-binding';
@@ -26,7 +28,7 @@ describe('module request type', () => {
   });
 });
 
-// Real Fetch or its specified custom hook; only the unfinished module creation steps are replaced.
+// Real Fetch or its specified custom hook; constructor mocks isolate module-kind dispatch.
 describe('fetch a single module script', () => {
   it('uses the fetch client for requests and the target settings for creation and caching', async () => {
     const { env, url, scripts, create } = await createFixture();
@@ -108,10 +110,44 @@ describe('fetch a single module script', () => {
     expect(complete).toHaveBeenCalledExactlyOnceWith(scripts[kind]);
     if (kind === 'wasm') expect(create.wasm).toHaveBeenCalledExactlyOnceWith(bytes, env, url, options);
     else if (kind === 'javascript') expect(create.javascript).toHaveBeenCalledExactlyOnceWith('€', env, url, options);
+    else if (kind === 'css') expect(create.css).toHaveBeenCalledExactlyOnceWith('€', url, env);
     else expect(create[kind]).toHaveBeenCalledExactlyOnceWith('€', env);
     for (const [other, creator] of Object.entries(create)) {
       if (other !== kind) expect(creator).not.toHaveBeenCalled();
     }
+  });
+
+  it('resolves CSS resources against the final module URL instead of the document base', async () => {
+    const browser = new Browlet({ route: () => '<base href="/document-base/">', reporting: false });
+    await browser.navigate('https://modules.test/pages/index.html');
+    const env = getRelevantRealm(browser.window).env;
+    const url = env.parseURL('https://modules.test/imports/theme.css')!;
+    const finalURL = env.parseURL('https://modules.test/styles/theme.css')!;
+    const createSheet = vi.spyOn(CSSStyleSheetImpl, 'createConstructed');
+    const complete = vi.fn<(script: ModuleScript | null) => void>();
+    const performFetch: PerformScriptFetch = (_request, _topLevel, respond) => {
+      const response = new FetchResponse();
+      response.urlList = [url, finalURL];
+      response.headerList.append('Content-Type', 'text/css');
+      respond(response, utf8Encode('div { color: red; }'));
+    };
+
+    env.fetchSingleModuleScript(
+      url, env, 'script', new ScriptFetchOptions(), 'client', moduleRequest('css'), false, complete, performFetch,
+    );
+
+    expect(complete).toHaveBeenCalledExactlyOnceWith(expect.any(scriptClasses.CSSModuleScript));
+    expect(complete.mock.calls[0]![0]!.baseURL).toBeNull();
+    const sheet = createSheet.mock.results[0]!.value as CSSStyleSheetImpl;
+    expect(sheet.href).toBeNull();
+    const rule = sheet.cssRules.item(0)!;
+    const value = UrlValue.fromString('url', 'icon.svg', {});
+    const fetch = vi.spyOn(fetching, 'fetch').mockReturnValue(new fetching.FetchController());
+
+    // Exercise resource loading directly; property-driven image loading is still unfinished.
+    fetchStyleResource(value, rule, 'image', 'no-cors', env, vi.fn());
+
+    expect(serializeURL(fetch.mock.calls[0]![0].url)).toBe('https://modules.test/styles/icon.svg');
   });
 
   it('shares pending callbacks and publishes a cached result before running them', async () => {

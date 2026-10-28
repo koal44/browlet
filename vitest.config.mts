@@ -9,6 +9,8 @@ export default defineConfig({
         test: {
           name: 'unit',
           environment: 'node',
+          // Exercise stock Node's module backend as well as the addon implementation.
+          execArgv: ['--experimental-vm-modules'],
           isolate: false,
           include: [
             'test/lint/**/*.test.mjs',

@@ -1,5 +1,5 @@
 import { InternalError, type InternalPromise } from '../../infra/index';
-import type { CompiledScript } from '../../js-engine/index';
+import type { CompiledScript, CompiledModule, ModuleRequest } from '../../js-engine/index';
 import { idlType } from '../../web-idl/core/index';
 import { aboutBlankURL, copyURL, serializeURL, type URLRecord } from '../../url/index';
 import { CSSStyleSheetImpl } from '../../stylelet/index';
@@ -7,6 +7,7 @@ import { CSSStyleSheetImpl } from '../../stylelet/index';
 import type { BrowletEnvironment } from '../environment';
 
 import type { BrowletRealm } from './realm';
+import { JSExecutionContext } from './execution-context';
 import type { ScriptFetchOptions } from './script-fetch-options';
 import type { ModuleGraphLoadingState } from './script-fetching';
 
@@ -165,10 +166,13 @@ abstract class SyntheticModuleScript extends ModuleScript {
 export class CSSModuleScript extends SyntheticModuleScript {
   /** Construct the module's sheet and retain it as the synthetic default export. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#creating-a-css-module-script
-  constructor(source: string, env: BrowletEnvironment) {
+  constructor(source: string, baseURL: URLRecord, env: BrowletEnvironment) {
     super(env);
+    // SPEC_CLASH(css-module-base-url): Follow browsers and WPT by using the final
+    // response URL; HTML's empty constructor options instead select the document base.
+    // https://github.com/whatwg/html/issues/11629
     const sheet = CSSStyleSheetImpl.createConstructed(
-      { baseURL: null, media: '', disabled: false }, env.getAssociatedDocument()!, env,
+      { baseURL: serializeURL(baseURL), media: '', disabled: false }, env.getAssociatedDocument()!, env,
     );
     try {
       // SPEC_CLASH(css-module-imports): Follow CSSOM's replaceSync, which discards
@@ -179,10 +183,7 @@ export class CSSModuleScript extends SyntheticModuleScript {
       this.parseError = error;
       return;
     }
-    // SPEC_MISMATCH: CreateDefaultExportSyntheticModule(value) -> Synthetic Module Record
-    // Retain the implementation here; module execution must project the sheet
-    // through this realm's binding before exposing its default export to authors.
-    this.record = new JSSyntheticModuleRecord(this, sheet);
+    this.record = new JSSyntheticModuleRecord(this, env.projectCSSStyleSheet(sheet));
   }
 }
 
@@ -231,15 +232,20 @@ export class WebAssemblyModuleScript extends ModuleScript {
   }
 }
 
-/** ECMAScript's requested specifier and import attributes; parser integration remains pending. */
+/** ECMAScript's requested specifier, import attributes, and phase. */
 // https://tc39.es/ecma262/#modulerequest-record
 export class JSModuleRequest {
   specifier: string;
   attributes: { key: string; value: string; }[];
+  /** Whether the request needs source or evaluation; deferred loading remains unfinished. */
+  phase: ModuleRequest['phase'];
 
-  constructor(specifier: string, attributes: { key: string; value: string; }[] = []) {
+  constructor(
+    specifier: string, attributes: { key: string; value: string; }[] = [], phase: ModuleRequest['phase'] = 'evaluation',
+  ) {
     this.specifier = specifier;
     this.attributes = attributes;
+    this.phase = phase;
   }
 
   /** Select a supported module type, or null for an invalid type attribute. */
@@ -268,9 +274,7 @@ export class JSScriptOrModule {
   }
 }
 
-// PROVISIONAL: Browlet-owned records; module parsing, linking, and evaluation remain unconnected.
-// The kind tags retain distinct field types for each record class.
-// TODO(HTML §§8.1.4.3–4): Connect parsing/evaluation and the remaining ECMAScript fields.
+/** Retained compiled classic code and its HTML script association. */
 export class JSScriptRecord extends JSScriptOrModule {
   kind = 'script' as const;
   declare script: ClassicScript;
@@ -285,11 +289,23 @@ export class JSScriptRecord extends JSScriptOrModule {
   // https://tc39.es/ecma262/#sec-runtime-semantics-scriptevaluation
   // SPEC_MISMATCH: ScriptEvaluation(scriptRecord) -> Completion Record
   evaluate(): ScriptCompletion | null {
-    // TODO(HTML §8.1.4.4): Execute the compiled artifact in its realm and supply
-    // this record to the modeled script context. The addon exposes only source execution.
     // TODO(HTML §8.1.4.5): Coordinate actual termination and modeled-state cleanup
     // before returning null. JavaScript throws remain throw completions.
-    throw new InternalError('Retained ScriptEvaluation is not implemented');
+    const loop = this.realm.agent.eventLoop;
+    const context = new JSExecutionContext(this.realm);
+    context.scriptOrModule = this;
+    loop.executionContextStack.push(context);
+    let completion: ScriptCompletion;
+    try {
+      completion = { type: 'normal', value: this.realm.runScript(this.code) };
+    } catch (error) {
+      completion = { type: 'throw', value: error };
+    }
+    if (loop.runningExecutionContext !== context) {
+      throw new InternalError('Script execution contexts were cleaned up out of order');
+    }
+    loop.executionContextStack.pop();
+    return completion;
   }
 }
 
@@ -299,34 +315,65 @@ export type ScriptCompletion = { type: 'normal' | 'throw'; value: unknown; };
 /** ECMAScript's empty completion value, distinct from the JavaScript value undefined. */
 export const emptyCompletionValue = Symbol('empty completion value');
 
-/** Module-record operations required by HTML's graph loader; engine integration remains pending. */
+/** Engine module plus the dependency associations supplied by HTML's loader. */
 export abstract class JSModuleRecord extends JSScriptOrModule {
+  declare script: ModuleScript;
+  /** Retained module bound to this record's realm. */
+  abstract code: CompiledModule;
+  /** Engine-reported dependencies, in their linking order. */
+  requestedModules: JSModuleRequest[] = [];
+  /** Loaded records keyed by this record's requests; filled by the host module loader. */
+  // SPEC_MISMATCH: [[LoadedModules]] -> List of LoadedModuleRequest Records
+  loadedModules = new Map<JSModuleRequest, JSModuleRecord>();
+
   loadRequestedModules(_state: ModuleGraphLoadingState): InternalPromise<void> {
+    if (this.requestedModules.length === 0) {
+      return this.script.env.InternalPromise.resolve(undefined, idlType.undefined);
+    }
     // TODO(HTML §8.1.6.5): Connect dependency discovery and HostLoadImportedModule.
     throw new InternalError('Module dependency loading is not implemented');
   }
 
   link(): void {
-    // TODO(HTML §8.1.4.3): Connect the parsed module record and its Link operation.
-    throw new InternalError('Module linking is not implemented');
+    const graph = new Map<CompiledModule, CompiledModule[]>();
+    const visit = (record: JSModuleRecord): void => {
+      if (graph.has(record.code)) return;
+      const dependencies: CompiledModule[] = [];
+      graph.set(record.code, dependencies);
+      for (const request of record.requestedModules) {
+        if (request.phase !== 'evaluation') {
+          throw new InternalError('Source and deferred module loading are not implemented');
+        }
+        const dependency = record.loadedModules.get(request);
+        if (dependency === undefined) throw new InternalError('Module dependency loading is not implemented');
+        dependencies.push(dependency.code);
+        visit(dependency);
+      }
+    };
+    visit(this);
+    this.realm.linkModule(this.code, graph);
   }
 
   /** Evaluate this linked graph; null denotes termination before a promise is returned. */
   // https://tc39.es/ecma262/#sec-moduleevaluation
   // SPEC_MISMATCH: ModuleRecord.Evaluate() -> Promise
   evaluate(): InternalPromise<void> | null {
-    // TODO: Supply engine module evaluation, including dependency execution, top-level
-    // await, and script-context entry/restoration. Do not simulate it with export inputs.
-    throw new InternalError('Module evaluation is not implemented');
+    // V8 owns dependency execution and top-level await. The prepared realm context
+    // supplies HTML's entry; module-specific context entry and async restoration
+    // still need engine hooks. Do not attribute every dependency to the root script.
+    return this.script.env.InternalPromise.fromNative(this.realm.evaluateModule(this.code), () => undefined, idlType.undefined);
   }
 }
 
 export class JSSourceTextModuleRecord extends JSModuleRecord {
   kind = 'source-text-module' as const;
   declare script: JavaScriptModuleScript;
+  code: CompiledModule;
 
-  constructor(script: JavaScriptModuleScript) {
+  constructor(script: JavaScriptModuleScript, code: CompiledModule, requests: JSModuleRequest[] = []) {
     super(script.env.realm, script);
+    this.code = code;
+    this.requestedModules = requests;
   }
 }
 
@@ -335,10 +382,12 @@ export class JSSyntheticModuleRecord extends JSModuleRecord {
   declare script: SyntheticModuleScript;
   /** Value retained by CreateDefaultExportSyntheticModule's evaluation steps. */
   defaultExport: unknown;
+  code: CompiledModule;
 
   constructor(script: SyntheticModuleScript, defaultExport: unknown) {
     super(script.env.realm, script);
     this.defaultExport = defaultExport;
+    this.code = this.realm.createDefaultExportModule(defaultExport);
   }
 }
 
@@ -348,5 +397,9 @@ export class JSWebAssemblyModuleRecord extends JSModuleRecord {
 
   constructor(script: WebAssemblyModuleScript) {
     super(script.env.realm, script);
+  }
+
+  get code(): CompiledModule {
+    throw new InternalError('WebAssembly ESM parsing is not implemented');
   }
 }

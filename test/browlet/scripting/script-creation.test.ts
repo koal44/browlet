@@ -10,7 +10,7 @@ import {
 import { ScriptFetchOptions } from '../../../src/browlet/scripting/script-fetch-options';
 import { CSSStyleSheetImpl } from '../../../src/stylelet/index';
 import { serializeURL } from '../../../src/url/index';
-import { getRelevantRealm } from '../../support/browlet-binding';
+import { getRelevantRealm, unwrap } from '../../support/browlet-binding';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -49,6 +49,16 @@ describe('create a classic script', () => {
     expect(serializeURL(baseURL)).toBe('https://scripts.test/script.js');
     expect(script.originalSourceURL).toBe(originalURL);
     expect(script.mutedErrors).toBe(true);
+  });
+
+  it('recognizes compiler errors without calling an author-replaced SyntaxError.hasInstance', () => {
+    const { env, baseURL, options } = fixture();
+    const hasInstance = vi.fn(() => { throw new Error('author hasInstance'); });
+    Object.defineProperty(env.realm.SyntaxError, Symbol.hasInstance, { value: hasInstance });
+    const script = new ClassicScript('const =', env, baseURL, options);
+    expect(script.record).toBeNull();
+    expect(Object.getPrototypeOf(script.parseError)).toBe(env.realm.SyntaxError.prototype);
+    expect(hasInstance).not.toHaveBeenCalled();
   });
 
   it('parses empty source when scripting is disabled, unless explicitly bypassed', () => {
@@ -121,9 +131,9 @@ describe('create synthetic module scripts', () => {
   });
 
   it('constructs a CSS sheet without adopting it, discarding imports as replaceSync requires', () => {
-    const { browser, env } = fixture();
-    const script = new CSSModuleScript('@import "not-fetched.css"; div { color: red; }', env);
-    const sheet = script.record!.defaultExport as CSSStyleSheetImpl;
+    const { browser, env, baseURL } = fixture();
+    const script = new CSSModuleScript('@import "not-fetched.css"; div { color: red; }', baseURL, env);
+    const sheet = unwrap(script.record!.defaultExport as CSSStyleSheet) as CSSStyleSheetImpl;
     expect(sheet).toBeInstanceOf(CSSStyleSheetImpl);
     expect(sheet.cssRules.length).toBe(1);
     expect(sheet.cssRules.item(0)!.cssText).toBe('div { color: red; }');
@@ -137,30 +147,30 @@ describe('create synthetic module scripts', () => {
   });
 
   it('retains a replacement exception, but propagates implementation failures', () => {
-    const { env } = fixture();
+    const { env, baseURL } = fixture();
     const failure = new env.DOMException('replacement failed', 'NotAllowedError');
     const replace = vi.spyOn(CSSStyleSheetImpl.prototype, 'replaceSync').mockImplementation(() => { throw failure; });
-    const script = new CSSModuleScript('', env);
+    const script = new CSSModuleScript('', baseURL, env);
     expect(script.record).toBeNull();
     expect(script.parseError).toBe(failure);
     expect(script.errorToRethrow).toBeNull();
     const internal = new InternalError('replacement implementation missing');
     replace.mockImplementation(() => { throw internal; });
-    expect(() => new CSSModuleScript('', env)).toThrow(internal);
+    expect(() => new CSSModuleScript('', baseURL, env)).toThrow(internal);
   });
 
   it('does not blank CSS, JSON, or text when scripting is disabled', () => {
-    const { env } = fixture();
+    const { env, baseURL } = fixture();
     env.userAgent.scriptingEnabled = false;
     expect(new JSONModuleScript('42', env).record!.defaultExport).toBe(42);
     expect(new TextModuleScript('kept', env).record!.defaultExport).toBe('kept');
-    const css = new CSSModuleScript('div { color: red; }', env);
-    expect((css.record!.defaultExport as CSSStyleSheetImpl).cssRules.length).toBe(1);
+    const css = new CSSModuleScript('div { color: red; }', baseURL, env);
+    expect((css.record!.defaultExport as CSSStyleSheet).cssRules.length).toBe(1);
   });
 });
 
-// The parser operations below are the explicit unfinished dependencies. These tests
-// cover HTML's preparation/error handling, not JavaScript or WebAssembly parsing.
+// These handoff tests isolate HTML's preparation/error handling. Source-text engine
+// integration is covered in module-execution.test.ts; Wasm parsing remains unfinished.
 describe('module parser handoffs', () => {
   it.each([true, false])('prepares source-text modules with scripting enabled = %s', (enabled) => {
     const { env, baseURL, options } = fixture();
@@ -168,7 +178,7 @@ describe('module parser handoffs', () => {
     const parse = vi.spyOn(env.realm, 'parseModule').mockImplementation((_source, script) => {
       expect(script.baseURL).toBe(baseURL);
       expect(script.fetchOptions).toBe(options);
-      return new JSSourceTextModuleRecord(script);
+      return new JSSourceTextModuleRecord(script, env.realm.compileModule('', 'fixture.js'));
     });
     const script = new JavaScriptModuleScript('export default 1;', env, baseURL, options);
     expect(parse).toHaveBeenCalledExactlyOnceWith(enabled ? 'export default 1;' : '', script);

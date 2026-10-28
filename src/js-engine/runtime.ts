@@ -12,7 +12,7 @@ import {
   type AddonContextHandle, type AddonMicrotaskQueueHandle, type ContextEvaluationOptions,
 } from './node-addons';
 import type {
-  CollectionIteratorKind, GlobalAllocation, GlobalPrototypeKind, GlobalProxy,
+  CollectionIteratorKind, CompiledScript, GlobalAllocation, GlobalPrototypeKind, GlobalProxy,
   JSFunction, JSIteratorResult, JSRealm,
 } from './realm';
 
@@ -206,6 +206,20 @@ export function runInContext(
     return addon.runInContext(source, context, options);
   }
   return vm.runInContext(source, context, options) as unknown;
+}
+
+/** Compile without execution using the backend that owns the supplied context. */
+export function compileScript(source: string, context: VMContext, filename: string): CompiledScript {
+  if (isAddonContextHandle(context)) {
+    if (!addon.Script) throw new InternalError('Node backend does not provide Script');
+    return new addon.Script(source, { filename, displayErrors: false });
+  }
+  return new vm.Script(source, { filename });
+}
+
+/** Run retained code without reparsing it or performing a microtask checkpoint. */
+export function runScript(script: CompiledScript, context: VMContext): unknown {
+  return script.runInContext(context, { displayErrors: false });
 }
 
 export const runWithActiveRealm = getNativeRealm

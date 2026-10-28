@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { itPassesWith } from '../../test-runtime';
 
-import { InternalError, type InternalPromise } from '../../../src/infra/index';
+import type { InternalPromise } from '../../../src/infra/index';
 import { idlType } from '../../../src/web-idl/core/index';
 import { Browlet } from '../../../src/browlet/browlet';
 import type { BrowletEnvironment } from '../../../src/browlet/environment';
@@ -97,12 +98,85 @@ describe('run a classic script', () => {
     expect(report).not.toHaveBeenCalled();
   });
 
-  it('keeps a missing runtime operation explicit and still restores the stack', () => {
-    const { env, script, loop } = fixture();
-    const report = vi.spyOn(env, 'reportException');
-    expect(() => script.run()).toThrow(new InternalError('Retained ScriptEvaluation is not implemented'));
+  it('runs retained code in its existing Window and exposes the active script during execution', () => {
+    const { env, loop } = fixture();
+    const script = new ClassicScript('inspect(); var retainedCount = (typeof retainedCount === "undefined" ? 0 : retainedCount) + 1; ({ count: retainedCount })',
+      env, env.apiBaseURL, new ScriptFetchOptions());
+    const inspect = vi.fn(() => {
+      expect(loop.executionContextStack).toHaveLength(2);
+      expect(loop.executionContextStack[0]).toBe(env.realmExecutionContext);
+      expect(loop.runningExecutionContext!.realm).toBe(env.realm);
+      expect(loop.runningExecutionContext!.scriptOrModule).toBe(script.record);
+      expect(loop.runningScript).toBe(script);
+    });
+    Reflect.set(env.global, 'inspect', inspect);
+    expect(Reflect.has(env.global, 'retainedCount')).toBe(false);
+    const parse = vi.spyOn(env.realm, 'parseScript');
+    const sourceEvaluation = vi.spyOn(env.realm, 'evaluate');
+
+    const first = script.run();
+    expect(first.type).toBe('normal');
+    expect(first.value).toEqual({ count: 1 });
+    expect(Object.getPrototypeOf(first.value)).toBe(env.realm.objectPrototype);
+    expect(script.run()).toEqual({ type: 'normal', value: { count: 2 } });
+    expect(inspect).toHaveBeenCalledTimes(2);
+    expect(parse).not.toHaveBeenCalled();
+    expect(sourceEvaluation).not.toHaveBeenCalled();
     expect(loop.executionContextStack).toHaveLength(0);
-    expect(report).not.toHaveBeenCalled();
+  });
+
+  it('preserves a thrown value, restores the outer script, and can execute again', () => {
+    const { env, loop } = fixture();
+    const reason = new env.realm.Error('retained failure');
+    Reflect.set(env.global, 'reason', reason);
+    const nested = new ClassicScript('throw reason', env, env.apiBaseURL, new ScriptFetchOptions());
+    const outer = new ClassicScript('nested(); 42', env, env.apiBaseURL, new ScriptFetchOptions());
+    const invokeNested = vi.fn(() => {
+      const context = loop.runningExecutionContext;
+      expect(loop.runningScript).toBe(outer);
+      expect(() => nested.run(true)).toThrow(reason);
+      expect(loop.runningExecutionContext).toBe(context);
+      expect(loop.runningScript).toBe(outer);
+    });
+    Reflect.set(env.global, 'nested', invokeNested);
+    expect(outer.run()).toEqual({ type: 'normal', value: 42 });
+    expect(invokeNested).toHaveBeenCalledOnce();
+    const report = vi.spyOn(env, 'reportException').mockImplementation(() => {});
+    expect(nested.run()).toEqual({ type: 'throw', value: reason });
+    expect(report).toHaveBeenCalledExactlyOnceWith(reason, false, nested);
+    expect(loop.executionContextStack).toHaveLength(0);
+    expect(outer.run()).toEqual({ type: 'normal', value: 42 });
+  });
+
+  // Approved stock limitations: Node's separate global proxy and ambient queue.
+  // The source path is a control for the pre-existing global-var discrepancy.
+  itPassesWith('nativeGlobals').each(['source', 'retained'] as const)('shares global var declarations with Window globalThis (%s)', (path) => {
+    const { env } = fixture();
+    const source = 'var retainedGlobal = 42; globalThis.retainedGlobal';
+    const value = path === 'source'
+      ? env.realm.evaluate(source, 'global-var.js')
+      : new ClassicScript(source, env, env.apiBaseURL, new ScriptFetchOptions()).run().value;
+    expect(value).toBe(42);
+  });
+
+  itPassesWith('explicitQueues')('leaves script reactions for the task cleanup checkpoint', () => {
+    const { env, loop } = fixture();
+    const trace: string[] = [];
+    Reflect.set(env.global, 'record', (value: string) => { trace.push(value); });
+    const script = new ClassicScript('Promise.resolve().then(() => record("reaction")); record("script");',
+      env, env.apiBaseURL, new ScriptFetchOptions());
+    loop.queueTask(createTaskSource('retained-script-test'), env.window.document, () => {
+      const cleanup = loop.cleanUpAfterRunningScript.bind(loop);
+      vi.spyOn(loop, 'cleanUpAfterRunningScript').mockImplementationOnce((settings) => {
+        expect(trace).toEqual(['script']);
+        expect(loop.runningExecutionContext).toBe(env.realmExecutionContext);
+        cleanup(settings);
+      });
+      script.run();
+      expect(trace).toEqual(['script', 'reaction']);
+    });
+    expect(loop.runTaskTurn()).toBe(true);
+    expect(loop.executionContextStack).toHaveLength(0);
   });
 });
 
@@ -172,10 +246,12 @@ describe('run a module script', () => {
     expect(loop.executionContextStack).toHaveLength(0);
   });
 
-  it('keeps missing engine evaluation explicit instead of simulating a synthetic export', () => {
+  it('evaluates the linked synthetic record and preserves its default export', async () => {
     const { env, module, loop } = fixture();
     const report = vi.spyOn(env, 'reportException');
-    expect(() => module.run()).toThrow(new InternalError('Module evaluation is not implemented'));
+    module.record!.link();
+    await expect(observe(module.run(), env)).resolves.toBeUndefined();
+    expect(Reflect.get(env.realm.getModuleNamespace(module.record!.code), 'default')).toBe('text');
     expect(loop.executionContextStack).toHaveLength(0);
     expect(report).not.toHaveBeenCalled();
   });

@@ -5,9 +5,10 @@ import { isAbsolute } from 'node:path';
 import { InternalError } from '../infra/internal-error';
 
 import type {
-  CollectionIteratorKind, GlobalObject, GlobalPrototypeKind, GlobalProxy, JSFunction, JSIteratorResult,
+  CollectionIteratorKind, CompiledScript, GlobalObject, GlobalPrototypeKind, GlobalProxy, JSFunction, JSIteratorResult,
 } from './realm';
 import type { JSJobCallback, VMContext } from './runtime';
+import type { ModuleOptions, SourceTextModule, SourceTextModuleOptions, SyntheticModule } from './modules';
 
 /** Typed calls to the selected backend's optional engine extensions. */
 export class NodeAPI {
@@ -22,6 +23,14 @@ export class NodeAPI {
   /** Allocate the callable, undetectable object used for document.all; attach properties with setPropertyHandlers. */
   createHTMLDDA?: <Result>(context: VMContext, call: JSFunction<Result>) => JSFunction<Result>;
   createMicrotaskQueue?: () => AddonMicrotaskQueueHandle;
+  /** Node-shaped retained scripts; HTML selects the realm when running them. */
+  Script?: new (source: string, options?: ContextEvaluationOptions) => CompiledScript;
+  /** Node-shaped source-text modules bound to an existing context. */
+  SourceTextModule?: new (source: string, options: SourceTextModuleOptions) => SourceTextModule;
+  /** Node-shaped synthetic modules with named, mutable exports. */
+  SyntheticModule?: new (
+    exports: string[], evaluate: (this: SyntheticModule) => void, options: ModuleOptions,
+  ) => SyntheticModule;
   getFunctionRealm?: (value: JSFunction) => object;
   getRealm?: (value: object) => object;
   // Require the V8 iterator-brand predicates.
@@ -56,6 +65,9 @@ export class NodeAPI {
     this.createContextHandle = this.#loadMethod(backend, 'createContextHandle');
     this.createHTMLDDA = this.#loadMethod(backend, 'createHTMLDDA');
     this.createMicrotaskQueue = this.#loadMethod(backend, 'createMicrotaskQueue');
+    this.Script = this.#loadMethod(backend, 'Script');
+    this.SourceTextModule = this.#loadMethod(backend, 'SourceTextModule');
+    this.SyntheticModule = this.#loadMethod(backend, 'SyntheticModule');
     this.getFunctionRealm = this.#loadMethod(backend, 'getFunctionRealm');
     this.getRealm = this.#loadMethod(backend, 'getRealm');
     this.isArrayIterator = this.#loadMethod(backend, 'isArrayIterator');

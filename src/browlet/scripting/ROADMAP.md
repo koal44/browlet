@@ -4,9 +4,10 @@ HTML [§8](https://html.spec.whatwg.org/multipage/webappapis.html) owns Agents,
 settings, script execution, scheduling, global utilities, and timers.
 The Window scheduling kernel, controlled script/callback entries, function
 timers, and reached Fetch/Streams/Reporting consumers are implemented.
-HTML script-state contracts and modeled active-script lookup exist. Parsing,
-script/module execution, remaining checkpoint work, and other global lifecycles
-remain open.
+HTML script-state contracts and modeled active-script lookup exist. Classic
+execution and supplied source-text/synthetic module graphs are connected.
+Automatic module loading, Wasm ESM, complete module context restoration,
+remaining checkpoint work, and other global lifecycles remain open.
 
 [Project priority](../../PRIORITY.md) orders cross-subsystem work.
 [Event-loop architecture](EVENT-LOOP-ARCHITECTURE.md) owns scheduling boundaries;
@@ -16,7 +17,7 @@ Do not restart the completed task/timer foundation when adding these consumers.
 ## HTML §§8.1.1–8.1.2 audit
 
 Reviewed 2026-10-25. Continue through §8 with the specification's state and
-relationships explicit, while leaving new addon/V8 work parked on
+relationships explicit, while leaving agent execution-control research parked on
 `research/html-agent-execution`. A modeled field is not proof that the engine
 enforces it. Add tests of actual consuming behavior as that machinery arrives;
 retain approved expected failures for unsupported runtime requirements.
@@ -147,9 +148,9 @@ native API used to observe incumbent settings. Keep the original expectation
 for review, without treating this probe as a settled conformance failure.
 Revisit with the actual example pages and platform APIs when supported. The
 [native browser probe and review qualification](../../../node-compat/experimental/browser-probes/callback-incumbent/README.md)
-are retained separately from the synthetic test. Script
-and module processing, execution, and host-hook algorithms still lie ahead;
-continue in specification order. New native work remains parked.
+are retained separately from the synthetic test. The later sections below track
+script/module processing and adopted engine operations. Native interception of
+arbitrary author frames remains parked.
 
 The entry/incumbent/current/relevant audit stops before §8.1.3.4, audited separately
 below. Broader consumer regressions can follow when
@@ -210,7 +211,7 @@ JS records take their HTML script and derive the realm from its environment.
 | --- | --- |
 | Classic or module script | `Script` is the union. Both retain `env`, `record`, `parseError`, `errorToRethrow`, `fetchOptions`, and `baseURL`; classic scripts also retain `mutedErrors`. |
 | Parse failure versus evaluation failure | `record` can be null; creation retains the immediate failure in `parseError`. Classic creation also sets `errorToRethrow`; module creation leaves it null for graph loading to set. Calling scripts must consume these in §8.1.4.4. |
-| ECMAScript records | Browlet's record classes distinguish kinds and carry realm/HostDefined. Classic records retain compiled code; synthetic records retain their default-export input. Module parsing, linking, evaluation, and remaining ECMAScript fields are still missing. |
+| ECMAScript records | Browlet's record classes distinguish kinds and carry realm/HostDefined. Classic, source-text, and synthetic records retain engine artifacts. Linking supplied graphs and evaluation work; automatic loading, Wasm ESM, and complete module-specific context restoration remain missing. |
 | Module classifications | JavaScript and WebAssembly script classes have their corresponding record types. CSS/JSON/text share a synthetic-module base with null base URL and fetch options. See the creation slice below. |
 | Fetch options | `ScriptFetchOptions` owns the seven fields, their defaults, request setup, and descendant copying; see the §8.1.4.2 slice below. |
 | Active script | `EventLoop.activeScript` implements the lookup over the modeled stack: select the topmost non-null ScriptOrModule, then return its HostDefined. Built-in frames and incumbent skip counters do not change selection. |
@@ -304,12 +305,12 @@ accept the same union. The CSS check uses
 Web IDL's existing exposure predicate against the CSSStyleSheet declaration and
 target realm, not a mutable global property.
 The destination helper covers JSON, CSS, and text. These helpers live in §8.1.4.3
-but are prerequisites for the fetchers. Parser production of ModuleRequests and
-HostGetSupportedImportAttributes remain unconnected.
+but are prerequisites for the fetchers. The parser now produces ModuleRequests;
+HostGetSupportedImportAttributes remains unconnected.
 
-All five module creation operations are constructors. JavaScript and WebAssembly
-still stop at explicit parser boundaries; CSS/JSON/text retain their synthetic
-export inputs. [Module-fetch tests](../../../test/browlet/scripting/module-fetching.test.ts)
+All five module creation operations are constructors. JavaScript and CSS/JSON/text
+now retain engine modules; WebAssembly still stops at an explicit ESM parser boundary.
+[Module-fetch tests](../../../test/browlet/scripting/module-fetching.test.ts)
 replace the constructors to isolate fetching and cover request/target separation,
 top-level worker modes, creation dispatch, redirects, decoding, shared callbacks,
 cache keys, failure/retry behavior, and target-realm exposure. They do not prove
@@ -385,11 +386,12 @@ replaced; these are fetch orchestration tests, not worker/worklet startup tests.
   [event-loop pause dependency](#deferred-processing-model-tails) is not supplied by today's
   asynchronous Fetch task delivery. Do not substitute a Promise return or launch
   a fetch that cannot finish before this method returns.
-- Descendant orchestration is translated, but its module-record operations
-  `LoadRequestedModules(state)` and `Link()`, plus HostLoadImportedModule, remain
-  unfinished. Successful single-module fetches do not satisfy these dependencies.
+- Descendant orchestration is translated. `Link()` accepts previously loaded
+  dependency associations, but `LoadRequestedModules(state)` still throws for
+  imports pending HostLoadImportedModule. Dependency-free records complete this
+  path. Successful single-module fetches do not establish automatic graph loading.
 
-Calling remains §8.1.4.4; new native work remains parked.
+Calling is tracked under §8.1.4.4 below.
 
 ## HTML §8.1.4.3: creating scripts
 
@@ -399,25 +401,45 @@ remaining algorithms.
 
 | Creation | Implemented behavior and explicit boundary |
 | --- | --- |
-| Classic | Muted errors select `about:blank`; disabled scripting supplies empty source unless bypassed. Retains options, original source URL, realm, and HostDefined. Node's `vm.Script` compiles without executing. Syntax errors are allocated in the target realm and populate both error fields. |
-| JavaScript module | Applies scripting policy and initializes state, then calls `BrowletRealm.parseModule()`. That parser still throws InternalError pending integration with the actual VM context. Error lists select the first parse error without setting `errorToRethrow`. |
+| Classic | Muted errors select `about:blank`; disabled scripting supplies empty source unless bypassed. Retains options, original source URL, realm, and HostDefined. The selected backend compiles without executing: `vm.Script` for stock contexts, a native UnboundScript handle for addon contexts. Syntax errors belong to the target realm and populate both error fields. |
+| JavaScript module | Applies scripting policy, compiles in the existing VM context, and retains engine requests including attributes and phase. Syntax failures belong to the target realm and select the first parse error without setting `errorToRethrow`. |
 | WebAssembly | Disabled scripting substitutes the eight-byte empty module. Calls an explicit, unfinished ESM parser; ordinary Wasm compilation alone would not provide the required module record/linking. Parse exceptions populate only `parseError`; implementation failures propagate. |
-| CSS | Constructs a sheet with default options and calls `replaceSync`; replacement exceptions become `parseError`. Retains the sheet implementation as the synthetic default-export input. Binding must project it before module execution exposes an author value. |
+| CSS | Constructs a sheet with default options and calls `replaceSync`; replacement exceptions become `parseError`. Binding projects the sheet before the real synthetic module retains its default export. |
 | JSON | Uses the target realm's captured JSON parser, retaining the parsed value or realm-owned parse error. Does not blank source when scripting is disabled. |
 | Text | Retains the supplied string unchanged as the default-export input, also independently of scripting enablement. |
 
-Two representation boundaries remain marked for review: `JSRealm.parseScript()`
+The classic representation boundary remains marked for review: `JSRealm.parseScript()`
 returns an opaque compiled artifact instead of a complete ECMAScript Script Record;
-HTML wraps it with the realm/HostDefined. CSS retains an implementation until the
-future module-execution binding projects its export. Synthetic records are still
-models, not engine modules: their dependency-loading and linking methods throw.
-Compiled classic code likewise still needs the §8.1.4.4 execution path, including
-an addon-context execution operation and active-script metadata. No recompile or
-fallback evaluation path was added here.
+HTML wraps it with the realm/HostDefined. Module records likewise retain opaque
+engine modules. Their requested-module list comes from the engine, and a Map from
+request records to loaded records supplies the dependency associations for linking.
+This is an internal representation of ECMAScript's loaded-module relationships;
+automatic loading remains the next host-hook dependency.
+Compiled classic code now uses the §8.1.4.4 execution path through
+`JSRealm.runScript()`, without recompiling. The record supplies its modeled
+script context; complete native active-script metadata remains unfinished.
+
+Source-text and synthetic execution now uses Pip's promoted addon implementation,
+or stock Node's VM modules with `--experimental-vm-modules`. V8 handles cycles,
+live bindings, pending/rejected top-level await, and evaluation order. The native
+evaluation Promise becomes an `env.InternalPromise`; CSS projection remains a
+binding effect supplied by the environment. The runner's retained realm context
+does not identify the currently executing dependency or its resumed async body.
+Module-specific entry/restore hooks, import.meta, dynamic import, and Wasm ESM
+remain explicit work rather than being approximated by the root module.
+
+[Engine tests](../../../test/js-engine/modules.test.ts) and
+[HTML execution tests](../../../test/browlet/scripting/module-execution.test.ts)
+exercise real records, including a dependency-free inline graph through the
+HTML entry point and a supplied graph importing JSON, text, and a CSSStyleSheet
+platform object. [Native tests](../../../node-compat/test/modules.test.cjs)
+retain the original 23 engine/lifetime cases. Deferred Wasm and string-hook
+expected-failure evidence remains in Pip's experimental repository until those
+separate slices are adopted.
 
 `UserAgent.webDriver` now contains BiDi's create/prepare/ScriptEvaluation command
 sequence, stopping at explicit unfinished dependencies. `JSScriptRecord.evaluate()`
-is the retained-record execution boundary; it throws rather than recompiling source.
+is the retained-record execution boundary and runs the compiled artifact.
 ECMAScript Await must also suspend/resume the modeled context before asynchronous
 command completion can work. Browlet's local `PageEvaluation` remains separate
 until the driver is executable. The [automation boundary](../automation/README.md)
@@ -429,6 +451,20 @@ behavior despite the omitted branch in the command algorithms.
 The Long Animation Frames creation hook retains `originalSourceURL`, but frame
 timing records, pending-script entry creation, and reporting remain missing in
 [Performance](../performance/ROADMAP.md). This is not a complete timing hook.
+
+**SPEC_CLASH(css-module-base-url):** HTML §8.1.4.3 creates the sheet with empty
+constructor options, which select the document base URL. Blink, Gecko, WebKit's
+CSS-module implementation, and WPT instead use the fetched module's final URL.
+Follow that behavior: single-module fetching passes the response URL into
+`CSSModuleScript`, which supplies it as the constructed sheet's `baseURL` option.
+The synthetic module script's `baseURL` and the sheet's `href` remain null.
+[WHATWG issue #11629](https://github.com/whatwg/html/issues/11629) and
+[the proposed spec correction](https://github.com/whatwg/html/pull/11706) track
+the conflict; the issue links the relative-URL WPT and Gecko's implementation.
+The [module-fetching regression](../../../test/browlet/scripting/module-fetching.test.ts)
+uses distinct document, request, and final response URLs, then checks a relative
+resource request from the created sheet. It invokes the resource loader directly;
+property-driven image loading remains unfinished.
 
 **SPEC_CLASH(css-module-imports):** HTML's creation note says `replaceSync` throws
 for `@import`, while [CSSOM's algorithm](https://drafts.csswg.org/cssom/#dom-cssstylesheet-replacesync)
@@ -457,7 +493,7 @@ algorithms.
 | Preparation and cleanup | Existing EventLoop methods retain the realm context and task's settings set. Direct Node-host entries still have the documented nullable-task/checkpoint accommodation; uncontrolled JavaScript entries are not made observable by this audit. |
 | Running script | `EventLoop.runningScript` reads only the running context's ScriptOrModule.HostDefined. Unlike `activeScript`, it does not search lower frames. |
 | Execution timing | Explicit TODOs at both run entry points; Long Animation Frames needs document frame timing and pending-script entries. |
-| Retained execution | `JSScriptRecord.evaluate()` still throws. `JSModuleRecord.evaluate()` now supplies an explicit throwing boundary for linked graph execution, dependencies, top-level await, and context restoration. |
+| Retained execution | `JSScriptRecord.evaluate()` pushes a script context, executes its compiled code through JSRealm, converts the result/exception to a completion, and restores the stack before HTML cleanup. `JSModuleRecord.evaluate()` executes linked graphs and adapts their native Promise; module-specific context entry and restoration remain unfinished. |
 | Runtime errors | The run algorithms invoke `env.reportException`; §8.1.4.6 now supplies ErrorEvent dispatch, cancellation, and muting. Classic runners retain their script explicitly for parse errors and unwound evaluation. Source attribution and worker propagation remain unfinished. |
 | Termination | A null evaluation outcome selects the specified QuotaExceededError completion/rejected promise. Binding allocates that exception in the script's realm. Actual termination and unwinding remain §8.1.4.5/runtime work. |
 
@@ -476,13 +512,20 @@ remain the §8.1.4.5 dependency below. BiDi has an explicit unfinished terminati
 `emptyCompletionValue` distinguishes ECMAScript's empty from JavaScript undefined.
 The module operation uses the established InternalPromise contract.
 
-[Calling tests](../../../test/browlet/scripting/script-calling.test.ts) exercise
-real script creation, settings, task preparation, cleanup, and realm-owned exception
-allocation. They replace only the unfinished record evaluation and error reporter
-to inspect those handoffs. They do not prove executable compiled code, module
-graphs, termination, or browser error events. The child-document expectation was
-observed failing before applying the approved provisional behavior. No new skipped
-or expected-failure tests were introduced.
+[Calling tests](../../../test/browlet/scripting/script-calling.test.ts) now execute
+retained classic code through both backends, checking its realm, active script,
+nested restoration, thrown identity, and task-cleanup checkpoint. Control-flow
+tests still replace evaluation/reporting where needed; module graphs and
+termination remain unfinished. Native compilation, lexical bindings, independent
+queues, GC, and worker teardown have [addon regressions](../../../node-compat/test/retained-scripts.test.cjs).
+The new execution expectations first failed at the missing retained-evaluation boundary.
+
+Eric approved stock-only expected failures for the separate Window/VM global
+properties and synchronous checkpoint during a Node microtask. The global-var
+test also exercises the unchanged source evaluator as a control; these limits
+are not hidden by weakening the expected results. Native contexts/queues pass.
+The child-document expectation was previously observed failing before applying
+the approved provisional behavior.
 
 Script-element/worker startup still needs production callers for these runners.
 
@@ -578,9 +621,10 @@ accepted ownership translation. The additional final script argument is retained
 but that context's `scriptOrModule` is null, and a parse failure has no script
 record to push. Keeping the argument preserves muting without inventing a parsed
 record for a failed parse. Other callers default to the modeled running script.
-Revisit the explicit runner argument when retained-record evaluation supplies
-script contexts and their lifetime. This is a boundary in Browlet's current
-implementation, not a conclusion about which frames V8 retains.
+Retained-record evaluation now supplies and pops its script context before
+returning a completion. The explicit argument still preserves muting when the
+runner reports that completion. This is Browlet's chosen lifetime, independent
+of which frames V8 retains.
 
 **SPEC_CLASH(report-error-muting):** follow the written
 [reportError algorithm](https://html.spec.whatwg.org/multipage/webappapis.html#dom-reporterror),
@@ -811,7 +855,7 @@ script-element integration.
 | --- | --- |
 | `agents.ts` | Agent/cluster records, Window inventory, one EventLoop per Agent, observer creation counters, and batched MutationObserver/slot-change notification |
 | `realm.ts` | Relevant/incumbent ownership and controlled script/callback entry; environment bases and full browser settings live in [`../environment.ts`](../environment.ts) |
-| `execution-context.ts`, `script.ts` | Explicit contexts, HTML script state/creation, compiled classic records, synthetic export inputs, ModuleRequests, and module-parser boundaries |
+| `execution-context.ts`, `script.ts` | Explicit contexts, HTML script state/creation, compiled classic/source-text/synthetic records, ModuleRequests, supplied dependency linking, and the Wasm ESM boundary |
 | `script-fetch-options.ts`, `script-fetching.ts`, `module-map.ts` | Fetch options, classic/worker/single-module fetching, document/worker/worklet module-graph orchestration, and cached results/pending callbacks; the environment forwards fetch calls and owns integrity lookup/type permission |
 | [`../worklets/module-responses-map.ts`](../worklets/module-responses-map.ts) | Downloaded responses and pending notifications shared across a Worklet's globals; separate from their per-environment module maps |
 | `global-object.ts`, `import-map.ts` | Shared HTML global state, import-map parsing/normalization/merging, module specifier resolution, and parse-result creation; Window owns registration |
@@ -854,7 +898,7 @@ evaluation and automation do not acquire this gate automatically.
 
 | Owner | Missing contract |
 | --- | --- |
-| Script records/classic scripts | Retained compiled execution, production fetch/run callers, script-context restoration, worker-imported synchronous pause, timing, and runtime errors |
+| Script records/classic scripts | Production fetch/run callers, complete active-script/source metadata, worker-imported synchronous pause, and timing; retained compiled execution and modeled context restoration are connected |
 | Module scripts/maps | Engine parse/load/link/evaluate, import attributes, dynamic import, host hooks, and script-element callers; HTML fetch/run orchestration and import-map algorithms are present |
 | Error reporting | Source locations, complete script attribution, dedicated-worker propagation, native rejection notifications/slot queries, and checkpoint notification integration |
 | Event handlers | Content-attribute compilation, Window/body/frameset targeting, global handler mixins, and special error/beforeunload behavior |
@@ -880,8 +924,8 @@ Use bounded consumer slices within HTML's script algorithms:
 
 1. **Classic-script records and creation (§§8.1.4.1–8.1.4.3).** Fetch, MIME,
    Encoding, referrer policy, integrity, and body transport now exist. Complete
-   script preparation/readiness and connect the retained compiled code to execution.
-   Classic and synthetic creation are translated; module parsing and creation timing remain open.
+   script preparation/readiness; retained compiled execution is connected.
+   Classic/source-text/synthetic creation is connected; Wasm ESM and creation timing remain open.
    The existing evaluation entry and parser ScriptHandler do not supply it.
 2. **Calling scripts and errors (§§8.1.4.4–8.1.4.6).** Preserve implemented
    callback preparation/cleanup, task settings sets, empty-stack checkpoints,
@@ -892,7 +936,7 @@ Use bounded consumer slices within HTML's script algorithms:
    non-observing slot reads, and checkpoint environment enumeration. Node's
    process-wide events cannot supply that ownership.
 4. **Modules/import maps (§8.1.4.8 and §§8.1.5–8.1.6).** Build on the module map
-   and single-module fetchers with graph loading, engine linking/evaluation,
+   and single-module fetchers with automatic graph loading, module-specific context restoration,
    and dynamic-import hooks. Import-map parsing, merging, resolution, parse
    results, and Window registration are translated; connect script-element
    callers and module hooks to them.

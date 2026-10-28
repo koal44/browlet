@@ -241,7 +241,7 @@ async function createEnvironment(): Promise<BrowletEnvironment> {
 async function createModule() {
   const env = await createEnvironment();
   const script: JavaScriptModuleScript = createScriptState(env);
-  const record = new JSSourceTextModuleRecord(script);
+  const record = new JSSourceTextModuleRecord(script, env.realm.compileModule('', 'fixture.js'));
   script.record = record;
   const loading = env.InternalPromise.withResolvers(internalType<void>());
   const started = Promise.withResolvers<ModuleGraphLoadingState>();
