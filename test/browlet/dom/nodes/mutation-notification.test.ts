@@ -8,6 +8,8 @@ import type { MutationObserverImpl } from '../../../../src/browlet/dom/nodes/mut
 import { createManualUserAgent } from '../../../support/browlet-agent';
 import { getRelevantRealm, unwrap } from '../../../support/browlet-binding';
 import { collectGarbage } from '../../../support/garbage-collection';
+import { runInHostTask } from '../../../support/tasks';
+import { itPassesWith } from '../../../test-runtime';
 
 describe('Mutation notification ownership', () => {
   it('numbers observers across shared-Agent Windows independently of other Agents', () => {
@@ -19,7 +21,8 @@ describe('Mutation notification ownership', () => {
     expect(observers.map((observer) => observer.creationOrder)).toEqual([0, 0, 1, 2]);
   });
 
-  it('batches same-Agent Windows together while leaving a different Agent pending', () => {
+  // Stock Node shares one ambient queue, so checkpointing either Agent drains both.
+  itPassesWith('explicitQueues')('batches same-Agent Windows together while leaving a different Agent pending', () => runInHostTask(() => {
     const first = createWindow();
     const sibling = createWindow(first.realm);
     const separate = createWindow();
@@ -37,9 +40,9 @@ describe('Mutation notification ownership', () => {
     expect(order).toEqual(['0', '1']);
     separate.realm.agent.eventLoop.performMicrotaskCheckpoint();
     expect(order).toEqual(['0', '1', '2']);
-  });
+  }));
 
-  it('projects callback arrays in the callback realm while preserving platform ownership and identity', () => {
+  it('projects callback arrays in the callback realm while preserving platform ownership and identity', () => runInHostTask(() => {
     const owner = createWindow();
     const foreign = createWindow(owner.realm);
     const delivered: { receiver: unknown; records: MutationRecord[]; observer: MutationObserver; }[] = [];
@@ -61,9 +64,9 @@ describe('Mutation notification ownership', () => {
     expect(batch.records[0]).toBeInstanceOf(owner.window.MutationRecord);
     expect(batch.records[0]!.target).toBe(target);
     expect(batch.records[0]!.addedNodes).toBeInstanceOf(owner.window.NodeList);
-  });
+  }));
 
-  it('observes ordinary ancestors without crossing a shadow host', () => {
+  it('observes ordinary ancestors without crossing a shadow host', () => runInHostTask(() => {
     const { realm, window } = createWindow();
     const host = window.document.createElement('div');
     const shadow = host.attachShadow({ mode: 'open' });
@@ -81,9 +84,9 @@ describe('Mutation notification ownership', () => {
     realm.agent.eventLoop.performMicrotaskCheckpoint();
     child.setAttribute('id', 'after-notification');
     expect(inside.takeRecords()).toEqual([]);
-  });
+  }));
 
-  it('deduplicates transient registrations by source while preserving independent observations', () => {
+  it('deduplicates transient registrations by source while preserving independent observations', () => runInHostTask(() => {
     const { realm, window } = createWindow();
     const parent = window.document.createElement('div');
     const branch = window.document.createElement('section');
@@ -104,32 +107,35 @@ describe('Mutation notification ownership', () => {
     expect(observer.takeRecords()).toHaveLength(1);
     realm.agent.eventLoop.performMicrotaskCheckpoint();
     expect(childImpl.registeredObserverList).toEqual([]);
-  });
+  }));
 
-  it('does not keep unrecorded detached nodes alive while cleanup is pending', async () => {
-    const { realm, window } = createWindow();
-    const parent = window.document.createElement('div');
-    const delivered: MutationRecord[][] = [];
-    const observer = new window.MutationObserver((records) => delivered.push(records));
-    observer.observe(parent, { subtree: true, attributes: true });
-    const detached = (() => {
-      const child = window.document.createElement('span');
-      parent.append(child);
-      child.remove();
-      return new WeakRef(unwrap<ElementImpl>(child));
-    })();
+  it('does not keep unrecorded detached nodes alive', async () => {
+    const { observer, detached, delivered } = createPendingObserverCleanup();
     expect(observer.takeRecords()).toEqual([]);
     await collectGarbage([detached]);
     expect(detached.deref() === undefined).toBe(true);
-    expect(realm.agent.pendingMutationObservers.has(unwrap<MutationObserverImpl>(observer))).toBe(true);
+    expect(delivered).toEqual([]);
+    observer.disconnect();
+  });
+
+  // Stock Node drains its ambient queue during collectGarbage()'s host turns.
+  itPassesWith('explicitQueues')('keeps cleanup pending across garbage collection until its Agent checkpoints', async () => {
+    const { realm, observer, detached, delivered } = createPendingObserverCleanup();
+    const observerImpl = unwrap<MutationObserverImpl>(observer);
+    expect(observer.takeRecords()).toEqual([]);
+    expect(realm.agent.pendingMutationObservers.has(observerImpl)).toBe(true);
+    await collectGarbage([detached]);
+    expect(detached.deref() === undefined).toBe(true);
+    expect(realm.agent.pendingMutationObservers.has(observerImpl)).toBe(true);
     realm.agent.eventLoop.performMicrotaskCheckpoint();
+    expect(realm.agent.pendingMutationObservers.has(observerImpl)).toBe(false);
     expect(delivered).toEqual([]);
     observer.disconnect();
   });
 });
 
 describe('Slot-change notification', () => {
-  it('coalesces signals and delivers trusted bubbling events after observers, using the batch snapshot', () => {
+  it('coalesces signals and delivers trusted bubbling events after observers, using the batch snapshot', () => runInHostTask(() => {
     const { realm, window } = createWindow();
     const parent = window.document.createElement('div');
     const first = window.document.createElement('slot');
@@ -160,9 +166,9 @@ describe('Slot-change notification', () => {
       'observer', ['first', true, false, false, true, true], 'parent', 'between-batches',
       ['second', true, false, false, true, true], 'parent',
     ]);
-  });
+  }));
 
-  it('schedules delivery without any MutationObserver registrations', () => {
+  it('schedules delivery without any MutationObserver registrations', () => runInHostTask(() => {
     const { realm, window } = createWindow();
     const slot = window.document.createElement('slot');
     let count = 0;
@@ -170,8 +176,24 @@ describe('Slot-change notification', () => {
     unwrap<HTMLSlotElementImpl>(slot).signalSlotChange();
     realm.agent.eventLoop.performMicrotaskCheckpoint();
     expect(count).toBe(1);
-  });
+  }));
 });
+
+/** Queue transient-observer cleanup without recording or retaining the detached node. */
+function createPendingObserverCleanup() {
+  const { realm, window } = createWindow();
+  const parent = window.document.createElement('div');
+  const delivered: MutationRecord[][] = [];
+  const observer = new window.MutationObserver((records) => delivered.push(records));
+  observer.observe(parent, { subtree: true, attributes: true });
+  const detached = (() => {
+    const child = window.document.createElement('span');
+    parent.append(child);
+    child.remove();
+    return new WeakRef(unwrap<ElementImpl>(child));
+  })();
+  return { realm, observer, detached, delivered };
+}
 
 /** Construct real Window bindings, optionally sharing an existing Window's Agent. */
 function createWindow(siblingOf?: WindowRealm) {
