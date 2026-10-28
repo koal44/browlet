@@ -32,7 +32,7 @@ export const tokensAttribute: TokenListAttribute = { name: 'tokens', supportedTo
 const plainTokensAttribute: TokenListAttribute = { name: 'plaintokens', supportedTokens: null };
 const emptyTokensAttribute: TokenListAttribute = { name: 'emptytokens', supportedTokens: new Set() };
 
-const definition = defineInterface({
+const definition = defineInterface<BrowletEnvironment>({
   name: 'ReflectionElement', inherits: 'Element', exposed: 'Window',
   implementation: impl(ReflectionElementImpl),
   members: [
@@ -52,6 +52,10 @@ const definition = defineInterface({
     attr('floating', idlType.double, xattr(reflect())),
     attr('positiveFloat', idlType.double, xattr(reflectPositive({ default: 1.5 }))),
     attr('custom', idlType.USVString, xattr(reflectSetter())),
+    attr('environments', idlType.DOMString, {
+      ...xattr(reflectSetter()),
+      get(env, methodEnv) { return `${env === (this as ElementImpl).env}:${env === methodEnv}`; },
+    }),
     roAttr('tokens', reference('DOMTokenList'),
       xattr('SameObject', ['PutForwards', 'value'], reflectTokens(tokensAttribute)),
     ),
@@ -77,7 +81,7 @@ type ReflectionElement = Element & {
   camelCase: string; renamed: string; keyword: string; optionalKeyword: string | null;
   scalar: string; url: string; present: boolean; signed: number; nonnegative: number;
   unsigned: number; positive: number; fallback: number; ranged: number;
-  floating: number; positiveFloat: number; custom: string; tokens: DOMTokenList;
+  floating: number; positiveFloat: number; custom: string; environments: string; tokens: DOMTokenList;
   plainTokens: DOMTokenList; emptyTokens: DOMTokenList;
   target: Element | null; targets: readonly Element[] | null; typedTarget: ReflectionElement | null;
   typedTargets: readonly ReflectionElement[] | null; aliasTarget: ReflectionElement | null;

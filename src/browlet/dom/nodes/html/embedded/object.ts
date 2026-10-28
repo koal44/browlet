@@ -2,11 +2,12 @@ import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/core/index';
 
 import { ElementTag, ContentCategory, transparentContent } from '../../element-definitions/index';
+import type { Navigable } from '../../../../browsing/navigation/index';
 
 import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
 import type { HTMLEmbedElementImpl } from './embed';
 
-/** Object identity and exposure state used by Document's named properties. */
+/** Object exposure and retained child-navigation state. */
 // https://html.spec.whatwg.org/multipage/iframe-embed-object.html#the-object-element
 export class HTMLObjectElementImpl extends HTMLElementImpl {
   static {
@@ -19,7 +20,25 @@ export class HTMLObjectElementImpl extends HTMLElementImpl {
     this.prototype.contentModel = { childRules: [transparentContent] };
   }
 
+  /** Document destination selected by loading, with its reverse container link maintained by the accessor. */
+  #contentNavigable: Navigable | null = null;
+  /** Whether resource selection currently displays the object's fallback children. */
   #showsFallbackContent = false;
+
+  /** Child navigation destination, or null when the object is not displaying a Document. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#content-navigable
+  // TODO(HTML object loading): create/destroy the child as resource selection changes.
+  get contentNavigable(): Navigable | null {
+    return this.#contentNavigable;
+  }
+
+  set contentNavigable(value: Navigable | null) {
+    if (this.#contentNavigable === value) return;
+    const previous = this.#contentNavigable;
+    this.#contentNavigable = value;
+    previous?.setContainer(null);
+    value?.setContainer(this);
+  }
 
   /** Whether resource selection has chosen the element's fallback content. */
   // TODO(HTML §4.8.7): object loading must maintain this state as its representation changes.

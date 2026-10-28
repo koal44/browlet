@@ -1,4 +1,4 @@
-import { afterEach, assert, describe, expect, it, vi } from 'vitest';
+import { assert, describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { createDocumentState } from '../../../../src/browlet/browsing/navigation/document-state';
@@ -10,8 +10,6 @@ import { HTML_NAMESPACE } from '../../../../src/infra/index';
 import { areSameOrigin, createOpaqueOrigin, obtainURLOrigin, parseURL } from '../../../../src/url/index';
 import { unwrap } from '../../../support/browlet-binding';
 import { createTestDocument } from '../../../support/dom';
-
-afterEach(() => vi.restoreAllMocks());
 
 describe('Document ancestor origins', () => {
   it('retains separate empty lists for documents without a container', () => {
@@ -184,9 +182,7 @@ function childDocument(parent: DocumentImpl, url: string, policy: ReferrerPolicy
   const container = parent.createElementNode('iframe', HTML_NAMESPACE);
   assert.instanceOf(container, HTMLIFrameElementImpl);
   parent.documentElement!.appendChild(container);
-  // Supply the missing child-navigation association and fully-active ancestry only.
-  vi.spyOn(navigable, 'container', 'get').mockReturnValue(container);
-  vi.spyOn(document, 'isFullyActive').mockReturnValue(true);
+  container.contentNavigable = navigable;
   document.initializeAncestry(policy, navigable.containerDocument);
   return document;
 }

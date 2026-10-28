@@ -1,13 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../../src/browlet/browlet';
-import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { createWindowEnvironment } from '../../../../src/browlet/bindings';
+import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
+import { createDocumentState } from '../../../../src/browlet/browsing/navigation/document-state';
+import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
+import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { FetchRequest } from '../../../../src/fetch/request';
 import { FetchResponse } from '../../../../src/fetch/response';
 import { copyURL, createOpaqueOrigin, parseURL } from '../../../../src/url/index';
-import { project, unwrap } from '../../../support/browlet-binding';
+import { getRelevantRealm, project, unwrap } from '../../../support/browlet-binding';
 import { createTestDocument } from '../../../support/dom';
 
 afterEach(() => vi.restoreAllMocks());
@@ -85,14 +89,7 @@ describe('Document.cookie', () => {
     const browlet = await createBrowser();
     const parent = unwrap<DocumentImpl>(browlet.document);
     parent.cookie = 'directory=1';
-    const traversable = TopLevelTraversable.create(parent.env.userAgent, null, '');
-    const params = traversable.createNavigationParamsFromSource(parseURL(url).url!);
-    // Supply the inputs still owned by missing iframe/initiator navigation.
-    params.origin = parent.origin;
-    params.cookieURL = copyURL(parent.cookieURL);
-    const document = traversable.createAndInitializeDocument('html', 'text/html', params);
-    const entry = traversable.createHistoryEntry(document, params);
-    traversable.finalizeCrossDocumentNavigation('replace', params.userInvolvement, entry);
+    const document = createLocalChildDocument(parent, url);
     const platform = project(document);
 
     expect(Reflect.get(platform, 'cookie')).toBe('directory=1');
@@ -102,7 +99,6 @@ describe('Document.cookie', () => {
     base.setAttribute('href', 'https://other.test/elsewhere/');
     document.appendChild(base);
     parent.url.path = ['elsewhere', 'page'];
-    params.cookieURL.path = ['elsewhere', 'page'];
     expect(Reflect.set(platform, 'cookie', 'inherited=2')).toBe(true);
     expect(parent.cookie).toBe('directory=updated; inherited=2');
 
@@ -111,17 +107,27 @@ describe('Document.cookie', () => {
     expect(Reflect.get(platform, 'cookie')).toBe('directory=updated; inherited=2');
   });
 
+  it('copies the cookie URL selected during document initialization', async () => {
+    const browlet = await createBrowser();
+    const parent = unwrap<DocumentImpl>(browlet.document);
+    const traversable = TopLevelTraversable.create(parent.env.userAgent, null, '');
+    const params = traversable.createNavigationParamsFromSource(parseURL('about:blank').url!);
+    params.origin = parent.origin;
+    params.cookieURL = copyURL(parent.cookieURL);
+    const document = traversable.createAndInitializeDocument('html', 'text/html', params);
+
+    expect(document.cookieURL).toEqual(parent.cookieURL);
+    expect(document.cookieURL).not.toBe(params.cookieURL);
+    params.cookieURL.path = ['elsewhere', 'page'];
+    expect(document.cookieURL.path).toEqual(['dir', 'page']);
+  });
+
   // SPEC_CLASH(document-cookie-sandbox): Chromium/Firefox throw; WebKit silently denies sandboxed srcdoc access.
   it('throws for sandboxed srcdoc with an inherited HTTP cookie URL', async () => {
     const browlet = await createBrowser();
     const parent = unwrap<DocumentImpl>(browlet.document);
     parent.cookie = 'retained=1';
-    const traversable = TopLevelTraversable.create(parent.env.userAgent, null, '');
-    const params = traversable.createNavigationParamsFromSource(parseURL('about:srcdoc').url!);
-    params.cookieURL = copyURL(parent.cookieURL);
-    params.origin = createOpaqueOrigin();
-    params.finalSandboxingFlagSet.add('sandboxed-origin');
-    const document = traversable.createAndInitializeDocument('html', 'text/html', params);
+    const document = createLocalChildDocument(parent, 'about:srcdoc', true);
     const platform = project(document);
 
     expect(() => { Reflect.get(platform, 'cookie'); }).toThrow(expect.objectContaining({ name: 'SecurityError' }));
@@ -221,7 +227,7 @@ describe('Document.cookie', () => {
   });
 
   // No creator supplies an inherited cookie URL for these host-initiated navigations.
-  it.each(['about:blank', 'about:srcdoc', 'data:text/html,opaque', 'file:///example.html', 'ftp://example.test/'])(
+  it.each(['about:blank', 'data:text/html,opaque', 'file:///example.html', 'ftp://example.test/'])(
     'returns empty and ignores writes for a non-HTTP document (%s)', async (url) => {
       const browlet = await createBrowser();
       await browlet.evaluate(() => { document.cookie = 'retained=1'; });
@@ -240,6 +246,22 @@ describe('Document.cookie', () => {
       expect(document.env.userAgent.cookieStore.cookies.size).toBe(1);
     },
   );
+
+  it('returns empty and ignores writes for srcdoc with a non-HTTP inherited cookie URL', async () => {
+    const browlet = await createBrowser();
+    await browlet.evaluate(() => { document.cookie = 'retained=1'; });
+    await browlet.navigate('data:text/html,opaque');
+    const parent = unwrap<DocumentImpl>(browlet.document);
+    const document = createLocalChildDocument(parent, 'about:srcdoc');
+    const platform = project(document);
+
+    expect(Reflect.set(platform, 'cookie', 'ignored=1')).toBe(true);
+    expect(Reflect.get(platform, 'cookie')).toBe('');
+    document.origin = createOpaqueOrigin();
+    expect(Reflect.set(platform, 'cookie', 'stillIgnored=1')).toBe(true);
+    expect(Reflect.get(platform, 'cookie')).toBe('');
+    expect(parent.env.userAgent.cookieStore.cookies.size).toBe(1);
+  });
 });
 
 describe('Document.lastModified', () => {
@@ -304,4 +326,29 @@ async function createBrowser(): Promise<Browlet> {
   const browlet = new Browlet({ route: () => '<!doctype html><title>Resource metadata</title>' });
   await browlet.navigate('https://example.test/dir/page');
   return browlet;
+}
+
+/** Supply initialized child state until iframe navigation and container Permissions Policy are implemented. */
+function createLocalChildDocument(parent: DocumentImpl, url: string, sandboxed = false): DocumentImpl {
+  const creationURL = parseURL(url).url!;
+  const origin = sandboxed ? createOpaqueOrigin() : parent.origin;
+  const parentEnv = getRelevantRealm(parent).env;
+  const env = createWindowEnvironment({
+    agent: parentEnv.realm.agent, userAgent: parentEnv.userAgent, creationURL, origin, parent: parentEnv.window,
+    topLevelCreationURL: parentEnv.topLevelCreationURL!, topLevelOrigin: parentEnv.topLevelOrigin!,
+  });
+  const document = env.createDocument();
+  document.type = 'html';
+  document.url = creationURL;
+  document.origin = origin;
+  document.cookieURL = copyURL(parent.cookieURL);
+  document.policyContainer = parent.policyContainer.clone();
+  if (sandboxed) document.activeSandboxingFlagSet.add('sandboxed-origin');
+  document.browsingContext = new BrowsingContext(env.realm.windowProxy);
+  env.window.setAssociatedDocument(document);
+  env.realm.windowProxy.setAssociatedWindow(env.realm.globalObject);
+  const container = parent.createElement('iframe') as HTMLIFrameElementImpl;
+  parent.body!.appendChild(container);
+  container.contentNavigable = new Navigable(createDocumentState(document), parent.getNodeNavigable());
+  return document;
 }

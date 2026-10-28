@@ -28,6 +28,7 @@ import {
 
 import { currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../timing/index';
 import { isValidAttributeLocalName, isValidElementLocalName, validateAndExtract } from '../infra/index';
+import { ElementTag } from './element-definitions/index';
 import { DOMStringListImpl } from '../string-list';
 import {
   EventHandlerMap, ModuleMap, SpeculationRulesParseResult, type EventHandlerCallback, type SpeculationRuleSet,
@@ -46,8 +47,9 @@ import type { NavigationTimingRecord } from '../../performance/index';
 import type { WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
 import type { BrowletEnvironment } from '../../environment';
 import type { DocumentParser } from '../../html/parser/index';
+import type { SerializedRecord } from '../../scripting/structured-data/index';
 import type {
-  BrowsingContext, Navigable, NotRestoredReasonDetails, NavigationParams,
+  BrowsingContext, Navigable, NotRestoredReasonDetails, NavigationParams, HistoryHandlingBehavior,
 } from '../../browsing/navigation/index';
 import type { FocusableArea } from '../../interaction/index';
 
@@ -78,10 +80,9 @@ import { HTMLBaseElementImpl, HTMLHeadElementImpl, HTMLTitleElementImpl } from '
 import { HTMLElementImpl, HTMLScriptElementImpl } from './html/index';
 import { HTMLHtmlElementImpl } from './html/document/index';
 import { HTMLBodyElementImpl } from './html/sections/index';
-import { HTMLFrameSetElementImpl } from './html/legacy/index';
-import { HTMLAnchorElementImpl } from './html/text/index';
+import { HTMLFrameElementImpl, HTMLFrameSetElementImpl } from './html/legacy/index';
 import {
-  HTMLAreaElementImpl, HTMLEmbedElementImpl, HTMLIFrameElementImpl, HTMLImageElementImpl,
+  HTMLEmbedElementImpl, HTMLIFrameElementImpl, HTMLImageElementImpl, HTMLObjectElementImpl,
   HTMLVideoElementImpl, type HTMLMediaElementImpl,
 } from './html/embedded/index';
 import { HTMLFormElementImpl } from './html/forms/index';
@@ -361,6 +362,7 @@ export class DocumentImpl extends NodeImpl {
   // Implements the "has cross-site ancestor" query shared by Fetch settings and document.cookie.
   get hasCrossSiteAncestor(): boolean {
     const navigable = this.getNodeNavigable();
+    // SPEC_GAP(window-settings-inactive-ancestry): HTML does not handle a null navigable; retain a cross-site cookie context.
     // A detached/inactive Document has no current ancestor chain to establish a cookie site.
     if (navigable === null) return true;
     const origin = this.origin;
@@ -582,9 +584,10 @@ export class DocumentImpl extends NodeImpl {
   /** Live HTML a/area descendants with an href content attribute, including an empty one. */
   // https://html.spec.whatwg.org/multipage/dom.html#dom-document-links
   get links(): HTMLCollectionImpl {
-    return this.#links ??= HTMLCollectionImpl.fromRoot(this, (element) =>
-      (element instanceof HTMLAnchorElementImpl || element instanceof HTMLAreaElementImpl) &&
-      element.hasAttributeNS(null, 'href'));
+    return this.#links ??= HTMLCollectionImpl.fromRoot(this, (element) => {
+      const tag = element.tag;
+      return (tag === ElementTag.HTMLA || tag === ElementTag.HTMLArea) && element.hasAttributeNS(null, 'href');
+    });
   }
 
   /** Live HTML form descendants in tree order. */
@@ -1006,6 +1009,16 @@ export class DocumentImpl extends NodeImpl {
     this.appendChild(html);
     html.appendChild(head);
     html.appendChild(body);
+  }
+
+  /** Update this Document's URL and same-document session history. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#url-and-history-update-steps
+  updateURLAndHistory(
+    _newURL: URLRecord, _serializedData: SerializedRecord | null = null,
+    _historyHandling: HistoryHandlingBehavior = 'replace',
+  ): void {
+    // TODO: Update History/Navigation state and queue the shared same-document history steps.
+    throw new InternalError('URL and history updates are not implemented');
   }
 
   /** Retarget this document's browsing context to its Window and enable execution. */
@@ -1444,6 +1457,20 @@ export class DocumentImpl extends NodeImpl {
     return navigable?.activeDocument === this ? navigable : null;
   }
 
+  /** Collect the current child navigables in document tree order, excluding shadow trees. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#document-tree-child-navigables
+  getDocumentTreeChildNavigables(): Navigable[] {
+    if (this.getNodeNavigable() === null) return [];
+    const navigables: Navigable[] = [];
+    for (let node = this.firstChild; node !== null; node = node.nextDescendant(this)) {
+      if (
+        (node instanceof HTMLIFrameElementImpl || node instanceof HTMLObjectElementImpl ||
+          node instanceof HTMLFrameElementImpl) && node.contentNavigable !== null
+      ) navigables.push(node.contentNavigable);
+    }
+    return navigables;
+  }
+
   /** Whether this document is active throughout its navigable ancestry. */
   // https://html.spec.whatwg.org/#fully-active
   isFullyActive(): boolean {
@@ -1451,11 +1478,16 @@ export class DocumentImpl extends NodeImpl {
     if (navigable === null) return false;
     if (navigable.isTopLevelTraversable) return true;
 
-    // PROVISIONAL (approved): Allow an active child until the Section 7 audit
-    // supplies its container-document association and ancestor activity checks.
-    // parent.activeDocument is not a substitute: the container can remain
-    // in the inactive predecessor document after its parent navigates.
-    return true;
+    return navigable.containerDocument?.isFullyActive() ?? false;
+  }
+
+  /** Whether this Document may use a policy-controlled feature. */
+  // https://html.spec.whatwg.org/multipage/iframe-embed-object.html#allowed-to-use
+  isAllowedToUse(feature: string): boolean {
+    if (this.browsingContext === null || !this.isFullyActive()) return false;
+    // TODO(Permissions Policy): Evaluate feature enablement for this Document and its origin using permissionsPolicy.
+    // Permissions Policy §9.10: https://w3c.github.io/webappsec-permissions-policy/#is-feature-enabled
+    throw new InternalError(`Permissions Policy evaluation for ${feature} is not implemented`);
   }
 
   /** Subscribe to activity changes and return an unsubscribe function. */
@@ -1883,6 +1915,8 @@ export const documentIDL = defineInterface<BrowletEnvironment>({
   name: 'Document',
   inherits: 'Node',
   exposed: 'Window',
+  // HTML's constructor alias: https://html.spec.whatwg.org/multipage/nav-history-apis.html#htmldocument
+  ...xattr(['LegacyWindowAlias', 'HTMLDocument']),
   implementation: impl(DocumentImpl, {
     constructWith: [atArg(0, (env) => env)],
   }),

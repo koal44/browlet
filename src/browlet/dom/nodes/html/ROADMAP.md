@@ -39,8 +39,11 @@ adds concrete [`HTMLEmbedElementImpl`](embedded/embed.ts) and
 Object loading must update `showsFallbackContent`; its setter invalidates live
 collections, but no resource selection/fallback activation happens automatically.
 Their remaining attributes, loading, and rendering belong to
-§§4.8.6–4.8.7. Iframe now retains an initially-null `contentNavigable`; child
-navigation must create, associate, and clear it. Document also retains nullable
+§§4.8.6–4.8.7. Iframe, object, and legacy frame now retain initially-null
+`contentNavigable` associations for Document/Window queries. Child navigation
+must create, associate, and clear them; the
+[Window length audit](../../../browsing/window/ROADMAP.md#html-7222-indexed-access)
+does not implement those producers. Document also retains nullable
 `currentScript`; §4.12 execution must set/restore it, including null for module
 and shadow-tree execution. These state holders do not implement their producers.
 

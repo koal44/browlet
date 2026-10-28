@@ -8,9 +8,8 @@ import {
   type AttributeMember, type ConstructorMember, type OperationMember,
 } from '../../../src/web-idl/core/index';
 import { DefinitionAssembly } from '../../../src/web-idl/assembly/index';
-import type { SecurityCheckType } from '../../../src/web-idl/environment';
 import { BindingWorld } from '../../../src/web-idl/binding/world';
-import { RealmBinding } from '../../../src/web-idl/binding/realm';
+import { RealmBinding, type SecurityCheckType } from '../../../src/web-idl/binding/realm';
 import { getPlatformRecord, PlatformRecord } from '../../../src/web-idl/binding/platform';
 
 import { getInstalledInterface, getMemberBinding } from '../../support/web-idl-binding';
@@ -316,9 +315,9 @@ describe('Web IDL realm interface bindings', () => {
     const assembly = new DefinitionAssembly([interfaceIDL]);
 
     const world = new BindingWorld([]);
-    const firstRealm = new RecordingRealm();
-    const secondRealm = new RecordingRealm();
-    const first = new RealmBinding(
+    const firstRealm = new Realm();
+    const secondRealm = new Realm();
+    const first = new RecordingBinding(
       assembly,
       firstRealm,
       world,
@@ -331,7 +330,7 @@ describe('Web IDL realm interface bindings', () => {
       steps: () => undefined,
     };
     getMemberBinding(firstInterfaceBinding, operation).operationSteps = () => 'ok';
-    const second = new RealmBinding(
+    const second = new RecordingBinding(
       assembly,
       secondRealm,
       world,
@@ -350,11 +349,12 @@ describe('Web IDL realm interface bindings', () => {
     const firstPrototype = First.prototype;
 
     expect(call(firstPrototype, 'read', foreignObject)).toBe('ok');
-    expect(firstRealm.checks).toEqual([{
+    expect(first.checks).toEqual([{
       identifier: 'read',
       object: foreignObject,
       type: 'method',
     }]);
+    expect(second.checks).toEqual([]);
     expect(() => call(firstPrototype, 'read', {}, [])).toThrow(
       firstRealm.TypeError,
     );
@@ -378,8 +378,8 @@ describe('Web IDL realm interface bindings', () => {
 
     const implementation = new PrivateStateImplementation(42);
 
-    const realm = new RecordingRealm();
-    const binding = new RealmBinding(
+    const realm = new Realm();
+    const binding = new RecordingBinding(
       assembly,
       realm,
       new BindingWorld([]),
@@ -411,7 +411,7 @@ describe('Web IDL realm interface bindings', () => {
     expect(call(prototype, 'echo', object, object)).toBe(object);
     expect(binding.getConverter(binding.assembly.getIDLType(reference('SeparatedIdentity'))).jsToIDL(object)).toBe(implementation);
     expect(binding.getConverter(binding.assembly.getIDLType(reference('SeparatedIdentity'))).idlToJS(implementation)).toBe(object);
-    expect(realm.checks.map(({ object: checked }) => checked)).toEqual([
+    expect(binding.checks.map(({ object: checked }) => checked)).toEqual([
       object,
       object,
     ]);
@@ -912,7 +912,7 @@ describe('Web IDL realm interface bindings', () => {
   });
 });
 
-class RecordingRealm extends Realm {
+class RecordingBinding extends RealmBinding {
   checks: SecurityCheck[] = [];
 
   override performSecurityCheck(

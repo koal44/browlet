@@ -8,7 +8,8 @@ import {
 /** Exposes URL components for a Window; navigation operations remain unimplemented. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-location-interface
 // PROVISIONAL: URL snapshot only. Document association, navigation, ancestor
-// origins, and the platform object's exotic/security behavior await ROADMAP.md.
+// origins, and exotic property access await ROADMAP.md.
+// TODO(HTML 7.2.4): Compose CrossOriginObjectBinding when installing Location's exotic methods.
 export class LocationImpl {
   /** URL snapshot exposed by the current provisional Location implementation. */
   #url: URL;
@@ -125,10 +126,11 @@ export class LocationImpl {
 export const locationIDL = defineInterface({
   name: 'Location',
   exposed: 'Window',
+  ...xattr('CrossOriginObject'),
   implementation: impl(LocationImpl),
   members: [
     attr('href', idlType.USVString, {
-      ...xattr('LegacyUnforgeable'),
+      ...xattr('LegacyUnforgeable', ['CrossOrigin', 'Setter']),
       stringifier: true,
     }),
     roAttr('origin', idlType.USVString, xattr('LegacyUnforgeable')),
@@ -140,7 +142,10 @@ export const locationIDL = defineInterface({
     attr('search', idlType.USVString, xattr('LegacyUnforgeable')),
     attr('hash', idlType.USVString, xattr('LegacyUnforgeable')),
     op('assign', idlType.undefined, [arg('url', idlType.USVString)], xattr('LegacyUnforgeable')),
-    op('replace', idlType.undefined, [arg('url', idlType.USVString)], xattr('LegacyUnforgeable')),
+    op('replace', idlType.undefined,
+      [arg('url', idlType.USVString)],
+      xattr('LegacyUnforgeable', 'CrossOrigin'),
+    ),
     op('reload', idlType.undefined, [], xattr('LegacyUnforgeable')),
   ],
 });

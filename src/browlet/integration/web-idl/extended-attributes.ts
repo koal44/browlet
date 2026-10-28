@@ -4,6 +4,7 @@ import type { BrowletEnvironment } from '../../environment';
 
 import { prepareReflectedAttribute } from './reflection';
 import { prepareCustomElementConstructor } from './html-constructor';
+import { prepareCrossOriginSecurityCheck } from './cross-origin';
 
 /** HTML-owned annotation behavior supplied to Browlet's binding world. */
 export const htmlExtendedAttributeHooks: ExtendedAttributeHooks<BrowletEnvironment> = {
@@ -11,4 +12,5 @@ export const htmlExtendedAttributeHooks: ExtendedAttributeHooks<BrowletEnvironme
   prepareReflectedAttribute: prepareReflectedAttribute as ExtendedAttributeHooks<BrowletEnvironment>['prepareReflectedAttribute'],
   // HTML constructor declarations are exposed only in Window environments.
   prepareHTMLConstructor: prepareCustomElementConstructor as ExtendedAttributeHooks<BrowletEnvironment>['prepareHTMLConstructor'],
+  prepareSecurityCheck: prepareCrossOriginSecurityCheck,
 };

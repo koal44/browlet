@@ -2,15 +2,34 @@ import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/core/index';
 
 import { ElementTag } from '../../element-definitions/index';
+import type { Navigable } from '../../../../browsing/navigation/index';
 
 import { HTMLElementImpl } from '../html-element';
 
-/** Legacy frame identity used by named collections. */
+/** Legacy frame identity and retained child-navigation state. */
 // https://html.spec.whatwg.org/multipage/obsolete.html#frame
 export class HTMLFrameElementImpl extends HTMLElementImpl {
   static {
     this.prototype.tag = ElementTag.HTMLFrame;
     this.prototype.isAllNamedElement = true;
+  }
+
+  /** Retained child destination; the accessor keeps its reverse container link in sync. */
+  #contentNavigable: Navigable | null = null;
+
+  /** Child navigation destination, or null before creation and after destruction. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#content-navigable
+  // TODO(HTML legacy frames): create/destroy the child and maintain this association.
+  get contentNavigable(): Navigable | null {
+    return this.#contentNavigable;
+  }
+
+  set contentNavigable(value: Navigable | null) {
+    if (this.#contentNavigable === value) return;
+    const previous = this.#contentNavigable;
+    this.#contentNavigable = value;
+    previous?.setContainer(null);
+    value?.setContainer(this);
   }
 }
 

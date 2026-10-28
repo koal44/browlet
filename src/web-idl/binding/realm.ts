@@ -2,7 +2,7 @@ import {
   ExceptionRequestStamper, InternalError, InternalPromise, Stamper,
   type InternalPromiseWithResolvers, type PromiseResultType,
 } from '../../infra/index';
-import { getAssociatedRealm, isObject } from '../../js-engine/index';
+import { getAssociatedRealm, isObject, type JSFunction } from '../../js-engine/index';
 import {
   DOMExceptionImpl, type DOMExceptionConstructor,
   type ImplementationClass, type ImplementationType, type InjectedArgument, type WebIDLType,
@@ -172,6 +172,35 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   /** Whether this realm exposes the named interface, without allocating a platform object. */
   isInterfaceExposed(interfaceName: string): boolean {
     return this.assembly.interfaces.get(interfaceName)?.isExposed(this.realm) ?? false;
+  }
+
+  /** Create fresh IDL behavior in this realm, independent of author changes to installed properties. */
+  createMemberFunction(interfaceName: string, identifier: string, type: SecurityCheckType): JSFunction | undefined {
+    const assembled = this.resolveInterface(interfaceName);
+    const isMethod = type === 'method';
+    const isGetter = type === 'getter';
+    for (const owner of [...assembled.getInheritanceChain()].reverse()) {
+      const implementation = this.getImplementationBinding(owner);
+      for (const placement of ['regular', 'unforgeable'] as const) {
+        if (isMethod) {
+          const operations = owner.getOperationGroups(placement,
+            (operation, entry) => operation.name === identifier && owner.isMemberExposed(entry, this.realm),
+          ).get(`regular:${identifier}`);
+          if (operations) {
+            return implementation.getOrCreateMemberBinding(operations.callables[0]!)
+              .createOperationFunction(identifier, operations);
+          }
+        } else {
+          const entry = owner.getAttributes(placement).find((entry) =>
+            entry.member.name === identifier && owner.isMemberExposed(entry, this.realm));
+          if (!entry) continue;
+          const member = implementation.getOrCreateMemberBinding(entry.member);
+          return isGetter
+            ? member.createAttributeGetter(entry.member)
+            : member.createAttributeSetter(entry.member);
+        }
+      }
+    }
   }
 
   /** Create a platform object by interface name; return undefined if unknown or unexposed. */
@@ -678,6 +707,18 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
       record.implements(assembled);
   }
 
+  /** Invoke the actual receiver's prepared security policy in this member's binding. */
+  // https://webidl.spec.whatwg.org/#dfn-perform-a-security-check
+  performSecurityCheck(
+    platformObject: object,
+    identifier: string,
+    type: SecurityCheckType,
+  ): void {
+    const record = this.getObjectRecord(platformObject);
+    if (record?.platformObject !== platformObject) return;
+    this.world.getSecurityCheckBinding(record.assembled)?.(this, record, identifier, type);
+  }
+
   // Project adapter for the receiver and security checks in Web IDL §3.7.6 Attributes and §3.7.7 Operations.
   getReceiverRecord(
     thisArgument: unknown,
@@ -703,7 +744,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     const value = this.resolveThisValue(thisArgument);
     const record = this.#resolveReceiverRecord(value);
     if (record) {
-      this.realm.performSecurityCheck(record.platformObject!, identifier, type);
+      this.performSecurityCheck(record.platformObject!, identifier, type);
     }
     if (!record || !record.implements(assembled)) {
       if (lenient) return invalidReceiver;
@@ -723,7 +764,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     if (!isObject(value)) this.throwTypeError('Illegal invocation');
     const record = getPlatformRecord(value);
     if (record?.binding.world !== this.world) this.throwTypeError('Illegal invocation');
-    this.realm.performSecurityCheck(value, identifier, type);
+    this.performSecurityCheck(value, identifier, type);
     if (!record.implements(assembled)) this.throwTypeError('Illegal invocation');
     return record;
   }
@@ -814,6 +855,9 @@ class ExceptionRealizationStamper extends Stamper {
     return #realizedError in exception ? exception.#realizedError : undefined;
   }
 }
+
+export type SecurityCheckType = 'getter' | 'method' | 'setter';
+
 /** Supply before projecting any object that needs these interface prototypes. */
 export type GlobalObjectAllocation = {
   object: object;

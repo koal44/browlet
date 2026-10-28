@@ -24,11 +24,6 @@ export class HTMLIFrameElementImpl extends HTMLElementImpl {
     this.prototype.translatableAttributes = [...this.prototype.translatableAttributes, 'srcdoc'];
   }
 
-  /** Child navigation destination, or null before creation and after destruction. */
-  // https://html.spec.whatwg.org/multipage/document-sequences.html#content-navigable
-  // TODO(HTML child navigation): create/destroy the child and maintain this association.
-  contentNavigable: Navigable | null = null;
-
   /** Restrictions from the current sandbox attribute, used by subsequent navigations. */
   // https://html.spec.whatwg.org/multipage/browsers.html#iframe-sandboxing-flag-set
   sandboxingFlagSet = new SandboxingFlagSet();
@@ -37,6 +32,8 @@ export class HTMLIFrameElementImpl extends HTMLElementImpl {
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#lazy-load-resumption-steps
   // PROVISIONAL: revisit callbacks versus retained navigation state when loading exists; see loader/ROADMAP.md.
   lazyLoadResumptionSteps: (() => void) | null = null;
+  /** Retained child destination; the accessor keeps its reverse container link in sync. */
+  #contentNavigable: Navigable | null = null;
 
   static is(value: unknown): value is HTMLIFrameElementImpl {
     return value instanceof HTMLIFrameElementImpl;
@@ -47,6 +44,21 @@ export class HTMLIFrameElementImpl extends HTMLElementImpl {
     return embedder instanceof HTMLIFrameElementImpl
       ? referrerPolicyAttribute.getState(embedder.getAttributeNS(null, 'referrerpolicy'))!
       : '';
+  }
+
+  /** Child navigation destination, or null before creation and after destruction. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#content-navigable
+  // TODO(HTML child navigation): create/destroy the child and maintain this association.
+  get contentNavigable(): Navigable | null {
+    return this.#contentNavigable;
+  }
+
+  set contentNavigable(value: Navigable | null) {
+    if (this.#contentNavigable === value) return;
+    const previous = this.#contentNavigable;
+    this.#contentNavigable = value;
+    previous?.setContainer(null);
+    value?.setContainer(this);
   }
 
   override getDocumentNamedItemType(): DocumentNamedItemType {

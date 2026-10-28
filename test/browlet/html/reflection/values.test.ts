@@ -1,8 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { DOMTokenListImpl } from '../../../../src/browlet/dom/token-list';
-import { createReflectionFixture, tokensAttribute } from './fixture';
+import { createReflectionFixture, createReflectionWorld, tokensAttribute } from './fixture';
 
 describe('HTML reflected values through Web IDL', () => {
+  it('preserves receiver and getter environments for explicit ReflectSetter getters', () => {
+    const fixture = createReflectionWorld();
+    const first = fixture();
+    const second = fixture();
+    const prototype = Object.getPrototypeOf(first.platform) as object;
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Borrow the getter with explicit receivers.
+    const getter = Object.getOwnPropertyDescriptor(prototype, 'environments')!.get!;
+    expect(Reflect.apply(getter, first.platform, [])).toBe('true:true');
+    expect(Reflect.apply(getter, second.platform, [])).toBe('true:false');
+    first.platform.environments = 'stored';
+    expect(first.element.getAttributeNS(null, 'environments')).toBe('stored');
+  });
+
   it('selects attribute names, canonical keywords, and nullable deletion', () => {
     const { platform: element } = createReflectionFixture();
     expect([element.camelCase, element.keyword, element.optionalKeyword]).toEqual(['', '', null]);

@@ -18,6 +18,7 @@ import { monotonicClock } from '../../../../src/browlet/timing/clock';
 import { WindowProxyHandle } from '../../../../src/browlet/browsing/window/window-proxy';
 import { WindowImpl } from '../../../../src/browlet/browsing/window/window';
 import { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
+import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
 import { InternalError } from '../../../../src/infra/internal-error';
 import { FetchBody } from '../../../../src/fetch/body';
 import { FetchController } from '../../../../src/fetch/controller';
@@ -316,7 +317,7 @@ describe('navigables', () => {
     expect(activity).toEqual([false, true]);
   });
 
-  it('provisionally treats an active child as fully active until its container is modeled', () => {
+  it('requires an active container document for a child to be fully active', () => {
     const parent = TopLevelTraversable.create(
       new UserAgent(),
       null,
@@ -333,7 +334,12 @@ describe('navigables', () => {
 
     expect(childDocument.getNodeNavigable()).toBe(child);
     expect(parentDocument.isFullyActive()).toBe(true);
+    expect(childDocument.isFullyActive()).toBe(false);
+    const container = parentDocument.createElement('iframe') as HTMLIFrameElementImpl;
+    container.contentNavigable = child;
     expect(childDocument.isFullyActive()).toBe(true);
+    parentDocument.browsingContext = null;
+    expect(childDocument.isFullyActive()).toBe(false);
   });
 
   it('creates the complete initial top-level about:blank graph', () => {
@@ -426,6 +432,20 @@ describe('environment settings objects', () => {
 
     expect(env.responsibleEventLoop).toBe(agent.eventLoop);
     expect(env.executionReady).toBe(false);
+    expect(env.id).not.toBe('');
+    expect(env.targetBrowsingContext).toBeNull();
+    expect(env.activeServiceWorker).toBeNull();
+    expect(env.realmExecutionContext).toBe(env.realm.executionContext);
+    expect(env.realmExecutionContext.realm).toBe(env.realm);
+    expect(env.realm.env).toBe(env);
+
+    const other = createWindowEnvironment({
+      agent, userAgent: env.userAgent, creationURL, origin, parent: null,
+      topLevelCreationURL: creationURL, topLevelOrigin: origin,
+    });
+    expect(other.id).not.toBe(env.id);
+    expect(other.realmExecutionContext).not.toBe(env.realmExecutionContext);
+    expect(agent.eventLoop.executionContextStack).toEqual([]);
 
     env.markExecutionReady();
 
@@ -505,6 +525,34 @@ describe('navigation response inputs', () => {
     } finally {
       processLinkHeaders.mockRestore();
     }
+  });
+
+  it('reuses a Window for same-origin navigation only from the initial about:blank document', () => {
+    const traversable = TopLevelTraversable.create(new UserAgent(), null, '');
+    const window = traversable.activeWindow!;
+    const initialDocument = traversable.activeDocument!;
+    const handle = window.env.realm.windowProxy;
+    const params = traversable.createNavigationParamsFromSource(requireURL('about:blank?first'));
+    params.origin = initialDocument.origin;
+
+    const document = traversable.createAndInitializeDocument('html', 'text/html', params);
+
+    expect(document).not.toBe(initialDocument);
+    expect(getRelevantRealm(document).windowImplementation).toBe(window);
+    expect(window.document).toBe(document);
+    expect(window.env.realm.windowProxy).toBe(handle);
+    expect(initialDocument.defaultView).toBe(handle);
+    expect(document.defaultView).toBe(handle);
+
+    const entry = traversable.createHistoryEntry(document, params);
+    traversable.finalizeCrossDocumentNavigation('replace', params.userInvolvement, entry);
+    const nextParams = traversable.createNavigationParamsFromSource(requireURL('about:blank?second'));
+    nextParams.origin = document.origin;
+    const nextDocument = traversable.createAndInitializeDocument('html', 'text/html', nextParams);
+
+    expect(getRelevantRealm(nextDocument).windowImplementation).not.toBe(window);
+    expect(window.document).toBe(document);
+    expect(getRelevantRealm(nextDocument).windowProxy).toBe(handle);
   });
 
   it('prepares a document in its own environment before replacing the active document', () => {
@@ -655,6 +703,10 @@ describe('navigation lifecycle', () => {
     const handle = initialRealm.windowProxy;
     const initialWindow = unwrap<WindowImpl>(handle.associatedWindow);
     const InitialEvent = Reflect.get(windowProxy, 'Event') as unknown;
+    const browsingContext = initialDocumentImpl.browsingContext;
+    expect(initialWindow.document).toBe(initialDocumentImpl);
+    expect(initialWindow.browsingContext).toBe(browsingContext);
+    expect(initialWindow.navigable).toBe(navigable);
 
     await browlet.navigate('https://example.test/');
 
@@ -671,6 +723,11 @@ describe('navigation lifecycle', () => {
     expect(initialRealm.windowImplementation).toBe(initialWindow);
     expect(initialRealm.windowProxy).toBe(handle);
     expect(initialRealm.getAssociatedDocument()).toBe(initialDocumentImpl);
+    expect(initialWindow.document).toBe(initialDocumentImpl);
+    expect(initialWindow.browsingContext).toBe(browsingContext);
+    expect(initialWindow.navigable).toBeNull();
+    expect(window.browsingContext).toBe(browsingContext);
+    expect(window.navigable).toBe(navigable);
     expect(realm.windowProxy).toBe(handle);
     expect(realm.env.userAgent).toBe(initialRealm.env.userAgent);
     expect(realm.windowImplementation).toBe(window);

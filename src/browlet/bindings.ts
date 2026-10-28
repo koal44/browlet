@@ -46,7 +46,7 @@ import { svgIDLDefinitions } from './dom/nodes/svg/index';
 import { domIDLDefinitions } from './dom/index';
 import { performanceIDL } from './performance/index';
 import {
-  locationIDL, WindowImpl, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
+  locationIDL, barPropIDL, WindowImpl, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
   WindowProxyHandle, windowProxyDefinition,
 } from './browsing/window/index';
 import { messageEventIDL } from './communication/index';
@@ -226,6 +226,7 @@ export const browletDefinitions = [
   ...mathMLIDLDefinitions,
   originIDL,
   locationIDL,
+  barPropIDL,
   reportIDL, reportBodyIDL, integrityViolationReportBodyIDL, testReportBodyIDL,
   coepViolationReportBodyIDL, coepInheritanceViolationReportBodyIDL,
   cspViolationReportBodyIDL,

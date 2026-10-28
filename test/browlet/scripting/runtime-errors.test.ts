@@ -106,9 +106,11 @@ describe('runtime script errors', () => {
     });
   });
 
-  it('uses the receiver\'s global and event realm when reportError is borrowed', () => {
+  it('uses the receiver\'s global and event realm when reportError is borrowed', async () => {
     const first = browser();
     const second = browser();
+    await first.navigate('https://example.test/first');
+    await second.navigate('https://example.test/second');
     const firstEvents = captureErrors(first.window);
     const secondEvents = captureErrors(second.window);
 

@@ -15,12 +15,6 @@ export interface WebIDLRealm extends JSRealm {
   isGlobalPrototypeChainMutable: boolean;
   /** Whether the realm is a secure context. */
   readonly secureContext: boolean;
-  // Web IDL §3.5 Security — perform a security check.
-  performSecurityCheck(
-    platformObject: object,
-    identifier: string,
-    type: SecurityCheckType,
-  ): void;
   queueMicrotask(steps: () => void): void;
   reportException(exception: unknown): void;
 }
@@ -34,5 +28,3 @@ export interface CallbackHooks {
   prepareToRunCallback(context: object): void;
   prepareToRunScript(): void;
 }
-
-export type SecurityCheckType = 'getter' | 'method' | 'setter';

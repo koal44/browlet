@@ -107,9 +107,15 @@ function getReflectionRules(type: IDLType, reflection: ReflectionExtendedAttribu
 function createAttributeBinding<T extends ReflectedTarget>(
   member: IDLAttribute, reflection: ReflectionExtendedAttribute, accessors: AttributeBinding<BrowletEnvironment, T>,
 ): AttributeBinding<BrowletEnvironment, T> {
+  let get = accessors.get;
+  if (reflection.name === 'ReflectSetter') {
+    const customGet = member.get;
+    get = customGet
+      ? function(ctx, methodCtx) { return customGet.call(this, ctx.getEnvironment(), methodCtx.getEnvironment()); }
+      : function() { return Reflect.get(this, member.name); };
+  }
   return {
-    get: reflection.name === 'ReflectSetter'
-      ? member.get ?? function() { return Reflect.get(this, member.name); } : accessors.get,
+    get,
     set: member.readonly ? undefined : accessors.set,
   };
 }

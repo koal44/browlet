@@ -111,7 +111,11 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
     this: MemberBinding<MemberOwner>,
     attribute: IDLAttribute,
   ): JSFunction {
-    if (this.#getter) return this.#getter;
+    return this.#getter ??= this.createAttributeGetter(attribute);
+  }
+
+  /** Create another getter with the same IDL steps and this binding's realm. */
+  createAttributeGetter(this: MemberBinding<MemberOwner>, attribute: IDLAttribute): JSFunction {
     const { binding: realmBinding, assembled } = this.#implementationBinding;
     const interfaceAssembled = assembled instanceof AssembledInterface ? assembled : undefined;
     const lenient = hasExtendedAttribute(attribute.extendedAttributes, 'LegacyLenientThis');
@@ -187,7 +191,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
         }
       };
     }
-    return this.#getter = realmBinding.realm.createFunction(getterSteps, { length: 0, name: `get ${attribute.name}` });
+    return realmBinding.realm.createFunction(getterSteps, { length: 0, name: `get ${attribute.name}` });
   }
 
   /** Retain the realm-owned setter function and its prepared conversions. */
@@ -196,7 +200,11 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
     this: MemberBinding<MemberOwner>,
     attribute: IDLAttribute,
   ): JSFunction | undefined {
-    if (this.#setter) return this.#setter;
+    return this.#setter ??= this.createAttributeSetter(attribute);
+  }
+
+  /** Create another setter with the same IDL steps and this binding's realm. */
+  createAttributeSetter(this: MemberBinding<MemberOwner>, attribute: IDLAttribute): JSFunction | undefined {
     const { binding: realmBinding, assembled } = this.#implementationBinding;
     if (assembled.primary.kind === 'namespace') return;
     const interfaceAssembled = assembled instanceof AssembledInterface ? assembled : undefined;
@@ -317,7 +325,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
         return undefined;
       }`,
     );
-    return this.#setter = realmBinding.realm.createFunction(setterSteps, { length: 1, name: `set ${attribute.name}` });
+    return realmBinding.realm.createFunction(setterSteps, { length: 1, name: `set ${attribute.name}` });
   }
 
   /** Retain the realm-owned operation function and its prepared conversions. */
@@ -326,7 +334,15 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
     name: string,
     operations: AssembledOverloads<IDLOperation>,
   ): JSFunction {
-    if (this.#operation) return this.#operation;
+    return this.#operation ??= this.createOperationFunction(name, operations);
+  }
+
+  /** Create another operation function using the declared overloads and conversions. */
+  createOperationFunction(
+    this: MemberBinding<MemberOwner>,
+    name: string,
+    operations: AssembledOverloads<IDLOperation>,
+  ): JSFunction {
     const { binding: realmBinding, assembled } = this.#implementationBinding;
     const source = operations.callables[0];
     if (!source) throw new InternalError(`Operation group ${name} is empty`);
@@ -388,7 +404,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
         }
       }`,
     );
-    return this.#operation = realmBinding.realm.createFunction(operationSteps, { length: operations.minimumArgumentCount, name });
+    return realmBinding.realm.createFunction(operationSteps, { length: operations.minimumArgumentCount, name });
   }
 
   /** Retain the realm-owned stringifier function and its prepared conversions. */

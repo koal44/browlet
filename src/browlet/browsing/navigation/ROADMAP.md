@@ -25,7 +25,7 @@ outside consumers use its index, while its modules import each other directly.
 - `Navigable.checkResponseEmbedderPolicy()` implements COEP inheritance and
   owner-scoped reports. Supplied-response document creation calls it before
   changing contexts. The [COEP audit](../policy/ROADMAP.md#html-714-cross-origin-embedder-policies)
-  records the missing child-container association and Fetch navigation's CORP,
+  records the missing child-creation lifecycle and Fetch navigation's CORP,
   policy-selection, and network-error-document consumers. A rejected response
   currently throws at the explicit network-error boundary.
 - Response preparation now captures iframe referrer policy and combines iframe,
@@ -44,6 +44,40 @@ handler uses the lower-level `loader/ResourceReader` to consume bytes and
 `html/parser/HTMLDocumentParser` to parse them in the document's environment.
 
 ## Missing
+
+Window's [§7.2.2.1 entry points](../window/ROADMAP.md#html-7221-opening-and-closing-windows)
+now expose name/closed state and delegate `stop()` to `Navigable.stopLoading()`.
+That operation is explicitly unfinished: it must use the unload counter and
+ongoing-navigation state, preserve traversals, and abort the active Document
+and its descendants. `isScriptClosable` implements the history/web-creation
+predicate, but source snapshots, familiarity, sandbox navigation permission,
+and definite closing remain prerequisites for a successful `Window.close()`.
+Opening now coordinates feature processing, target selection, new/existing
+branches, and return rules. `Navigable.chooseNavigable()` handles empty, `_self`,
+`_parent`, and `_top` names; named lookup and new targets still need familiarity,
+popup/activation policy, sandbox restrictions, COOP/noopener, creator inheritance,
+and session-storage cloning. The empty-name branch applies to direct algorithm
+callers; `Window.open()` normalizes its empty target to `_blank` first.
+
+The opening flow calls explicit unfinished operations on their owners:
+`BrowsingContext.setUpFeatures()` for CSSOM View positioning/sizing,
+`DocumentImpl.updateURLAndHistory()` for the new target's about:blank URL/history
+update, and `Navigable.navigate()` for document-initiated navigation. That last
+method now accepts the URL, source Document, and all remaining specification
+inputs through `NavigateOptions`, defined beside Navigable. Its documented defaults
+will be applied as navigation is implemented; the current stub does not consume
+the options. The options arrangement is reviewed; its former `SPEC_MISMATCH` is removed. POST resources,
+responses, serialized state, form entries, and source elements retain their
+existing concrete types. `NavigationHistoryBehavior` includes `auto`, while
+resolved commit/history-update inputs use `HistoryHandlingBehavior` (`push` or
+`replace`). All three operations still throw until their effects are implemented.
+
+`navigation-api.ts` currently declares only the opaque `NavigationAPIMethodTracker`
+dependency. It has no factory or usable record implementation. §7.2.6 must supply
+the Navigation and NavigationHistoryEntry owners, tracker fields, realm-owned
+committed/finished promises, and their creation/settlement lifecycle. An arbitrary
+object does not satisfy that type. The full `navigate()` input contract does not
+make document-initiated navigation functional.
 
 | Planned source | Contract | Specification |
 | --- | --- | --- |
@@ -90,21 +124,32 @@ unload-event start/end times and supply them to the destination document;
 allocation of the record does not implement that producer.
 
 Document implements [§3.1.3 ancestor-origin snapshots](../../html/ROADMAP.md#section-313-ancestor-origins).
-Child navigation must supply the navigable/container association, fully-active
-ancestry, and captured iframe referrer policy. The §7.1.6 policy-selection operation
-and current preparation callers exist; `Navigable.container` throws for children
-until that association exists. Creation passes the known container document to
+Child navigation must populate the navigable/container association and capture
+iframe referrer policy. The §7.1.6 policy-selection operation and current preparation
+callers exist. Creation passes the known container document to
 ancestry initialization before activation, or uses the embedder's node document
 before an initial navigable exists. Do not substitute the parent navigable's
 active document for the embedding element's node document.
 
-`HTMLIFrameElementImpl.contentNavigable` now retains the initially-null child
-association for Document named access. Child creation/destruction must populate
-and clear it alongside the container relationship. `Navigable.activeWindowProxy`
+Iframe, object, and legacy frame implementations retain an initially-null
+`contentNavigable`. Document's `getDocumentTreeChildNavigables()` collects these
+associations in tree order for Window's §7.2.2.2 length getter, excluding shadow
+trees and returning an empty list when the Document has no node navigable.
+The setters maintain the reverse `Navigable.container` link for all three types,
+including clearing, replacement, and reassociation. Document full activity follows
+the actual container Document recursively; a child without a container is not
+fully active. Child creation/destruction must populate and clear these associations,
+and propagate ancestor-activity changes to child observers. `Navigable.activeWindowProxy`
 provides the active document's stable proxy once that relationship exists;
 the field and accessor alone do not create nested browsing contexts.
-Embedding inputs currently use `HTMLIFrameElementImpl`; additional navigable-container
-implementations must extend that type when their lifecycles are introduced.
+Browsing-context creation still accepts an iframe embedder; object/frame creation
+must extend those inputs when their lifecycles are introduced. Sandboxing and
+iframe referrer-policy rules remain restricted to iframe containers. Response
+preparation explicitly rejects object/frame containers pending their sandbox
+inheritance audit, rather than treating them as absent embedders. WindowProxy
+numeric access additionally needs container insertion
+order, which differs from the Document list's tree order; see the
+[Window audit](../window/ROADMAP.md#html-7222-indexed-access).
 
 The [resource metadata slice](../../html/ROADMAP.md#section-314-resource-metadata)
 retains `Document.cookieURL` independently of the document and base URLs.

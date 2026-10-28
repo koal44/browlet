@@ -1,23 +1,27 @@
-import { InternalError } from '../../../infra/index';
+import { asciiLower, InternalError } from '../../../infra/index';
 import { areSameOrigin, areSameOriginDomain, copyURL, createOpaqueOrigin, urlsEqual, type Origin, type URLRecord } from '../../../url/index';
-import { FetchResponse, type FetchPromptTarget, type fetchPromptTargetBrand } from '../../../fetch/index';
+import type { FormDataEntry } from '../../../xhr/index';
+import { FetchResponse, type FetchPromptTarget, type fetchPromptTargetBrand, type ReferrerPolicy } from '../../../fetch/index';
 
 import { coarsenedSharedCurrentTime } from '../../timing/index';
 import {
   EmbedderPolicy, OpenerPolicy, PermissionsPolicy, PolicyContainer, queueCOEPInheritanceViolation, SandboxingFlagSet,
 } from '../policy/index';
-import type { DocumentImpl, DocumentVisibilityState } from '../../dom/nodes/index';
-import { HTMLIFrameElementImpl } from '../../dom/nodes/html/embedded/index';
+import type { DocumentImpl, DocumentVisibilityState, ElementImpl } from '../../dom/nodes/index';
+import { HTMLIFrameElementImpl, type HTMLObjectElementImpl } from '../../dom/nodes/html/embedded/index';
+import type { HTMLFrameElementImpl } from '../../dom/nodes/html/legacy/index';
 import { CustomElementRegistryImpl } from '../../dom/nodes/html/custom-elements/index';
 import type { WindowImpl, WindowProxyHandle } from '../window/index';
 import { BrowletEnvironmentBase } from '../../environment';
 import { HTMLDocumentParser, type ScriptHandler } from '../../html/parser/index';
+import type { SerializedRecord } from '../../scripting/structured-data/index';
 import type { ResourceReader } from '../../loader/index';
 import type { UserAgent } from '../../user-agent';
 
 import { BrowsingContext } from './browsing-context';
-import { createDocumentState, type DocumentBackedState } from './document-state';
+import { createDocumentState, type DocumentBackedState, type PostResource } from './document-state';
 import { NavigationParams } from './params';
+import type { NavigationAPIMethodTracker } from './navigation-api';
 import { createSessionHistoryEntry, type SessionHistoryEntry } from './session-history';
 
 /** Owns a navigation destination and its current and active history entries. */
@@ -34,7 +38,10 @@ export class Navigable {
   /** Whether its navigation is delaying the container document's load event. */
   isDelayingLoadEvents = false;
 
+  /** History entry supplying the active Document, independently of the current traversal entry. */
   #activeSessionHistoryEntry: SessionHistoryEntry;
+  /** Element whose content navigable is this destination, or null while unassociated. */
+  #container: HTMLIFrameElementImpl | HTMLObjectElementImpl | HTMLFrameElementImpl | null = null;
 
   /** Create the initial history entry and associate its Document with this navigable. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#initialize-the-navigable
@@ -58,6 +65,17 @@ export class Navigable {
 
   get isTopLevelTraversable(): boolean {
     return false;
+  }
+
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#nav-target
+  get targetName(): string {
+    return this.activeSessionHistoryEntry.documentState.navigableTargetName;
+  }
+
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#script-closable
+  get isScriptClosable(): boolean {
+    return this instanceof TopLevelTraversable &&
+      (this.isCreatedByWebContent || this.sessionHistoryEntries.length === 1);
   }
 
   /** Entry whose document is active; replacement updates document activity. */
@@ -118,18 +136,60 @@ export class Navigable {
     return navigable;
   }
 
+  /** Outermost navigation destination, including across nested traversables. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#nav-top
+  get topLevelTraversable(): TopLevelTraversable {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- Walk the inclusive ancestor chain.
+    let navigable: Navigable = this;
+    while (navigable.parent !== null) navigable = navigable.parent;
+    if (!(navigable instanceof TopLevelTraversable)) throw new InternalError('A navigable needs a top-level traversable');
+    return navigable;
+  }
+
   /** The element embedding this navigable, or null when it has no container. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#nav-container
-  get container(): HTMLIFrameElementImpl | null {
-    // TODO: connect the container's content navigable when child navigables are implemented.
-    if (this.parent !== null) throw new InternalError('Child navigable container association is not implemented');
-    return null;
+  get container(): HTMLIFrameElementImpl | HTMLObjectElementImpl | HTMLFrameElementImpl | null {
+    return this.#container;
   }
 
   /** Node document of the embedding element, or null without a container. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#nav-container-document
   get containerDocument(): DocumentImpl | null {
     return this.container?.nodeDocument ?? null;
+  }
+
+  /** Update the reverse link after a container sets its content navigable. */
+  setContainer(container: HTMLIFrameElementImpl | HTMLObjectElementImpl | HTMLFrameElementImpl | null): void {
+    if (this.#container === container) return;
+    if (this.#container?.contentNavigable === this) this.#container.contentNavigable = null;
+    this.#container = container;
+  }
+
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#the-rules-for-choosing-a-navigable
+  chooseNavigable(name: string, _noopener: boolean): [navigable: Navigable | null, windowType: WindowType] {
+    const keyword = asciiLower(name);
+    if (name === '' || keyword === '_self') return [this, 'existing-or-none'];
+    if (keyword === '_parent') return [this.parent ?? this, 'existing-or-none'];
+    if (keyword === '_top') return [this.topLevelTraversable, 'existing-or-none'];
+    // TODO: Named lookup and new targets require familiarity, popup/activation policy,
+    // sandbox restrictions, COOP/noopener, creator inheritance, and storage cloning.
+    throw new InternalError('Named-target lookup and new navigable selection are not implemented');
+  }
+
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigate
+  navigate(
+    _url: URLRecord, _sourceDocument: DocumentImpl | null = null,
+    _options: NavigateOptions = {},
+  ): void {
+    // TODO: Implement navigation, including source snapshots, permissions, fetch/history, and tracker settlement.
+    throw new InternalError('Document-initiated navigation is not implemented');
+  }
+
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#nav-stop
+  stopLoading(): void {
+    // TODO: Respect the active Document's unload counter, cancel ongoing navigation
+    // without stopping traversal, then abort the Document and its descendants.
+    throw new InternalError('Navigation stopping and descendant abortion are not implemented');
   }
 
   isNavigationOrHistoryUpdateBlocked(): boolean {
@@ -158,16 +218,21 @@ export class Navigable {
     const context = this.activeBrowsingContext;
     if (context === null) throw new InternalError('Navigation requires an active browsing context');
     const env = context.activeWindow.env;
+    const container = this.container;
+    // TODO(HTML child navigation): Audit object/frame inheritance; iframe sandbox flags are not defined on them.
+    if (container !== null && !(container instanceof HTMLIFrameElementImpl)) {
+      throw new InternalError('Object and frame navigation sandboxing is not implemented');
+    }
     const params = new NavigationParams(
       response,
-      context.determineCreationSandboxingFlags(this.container),
+      context.determineCreationSandboxingFlags(container),
       coarsenedSharedCurrentTime(env.crossOriginIsolatedCapability).milliseconds,
     );
     // COEP needs the reserved environment's security decision after origin selection.
     params.policyContainer = env.userAgent.createPolicyContainerFromResponse(response, null);
     for (const flag of params.policyContainer.cspList?.getSandboxingFlags() ?? []) params.finalSandboxingFlagSet.add(flag);
     if (params.finalSandboxingFlagSet.has('sandboxed-origin')) params.origin = createOpaqueOrigin();
-    params.iframeReferrerPolicy = HTMLIFrameElementImpl.determineReferrerPolicy(this.container);
+    params.iframeReferrerPolicy = HTMLIFrameElementImpl.determineReferrerPolicy(container);
     return params;
   }
 
@@ -322,14 +387,14 @@ export class Navigable {
 
   /** Choose whether navigation appends a history entry or replaces the active one. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigate-convert-to-replace
-  resolveHistoryBehavior(url: URLRecord, origin: Origin): NavigationHistoryBehavior {
+  resolveHistoryBehavior(url: URLRecord, origin: Origin): HistoryHandlingBehavior {
     const activeDocument = this.activeDocument;
     if (activeDocument === null) {
       throw new InternalError('Navigation requires an active Document');
     }
 
     const activeURL = this.activeSessionHistoryEntry.url;
-    let historyHandling: NavigationHistoryBehavior =
+    let historyHandling: HistoryHandlingBehavior =
       urlsEqual(url, activeURL) &&
       areSameOrigin(origin, activeDocument.origin)
         ? 'replace'
@@ -348,7 +413,7 @@ export class Navigable {
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#finalize-a-cross-document-navigation
   // PROVISIONAL: commits run synchronously until the history traversal queue is implemented.
   finalizeCrossDocumentNavigation(
-    historyHandling: NavigationHistoryBehavior,
+    historyHandling: HistoryHandlingBehavior,
     userInvolvement: UserNavigationInvolvement,
     historyEntry: SessionHistoryEntry,
   ): void {
@@ -484,11 +549,38 @@ export class Navigable {
   }
 }
 
+/**
+ * Optional inputs to HTML's navigate algorithm. Nullable inputs default to null and booleans to false;
+ * historyHandling defaults to 'auto', referrerPolicy to '', and userInvolvement to 'none'.
+ */
+// https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigate
+export type NavigateOptions = {
+  documentResource?: PostResource | string | null;
+  response?: FetchResponse | null;
+  exceptionsEnabled?: boolean;
+  historyHandling?: NavigationHistoryBehavior;
+  navigationAPIState?: SerializedRecord | null;
+  formDataEntryList?: FormDataEntry[] | null;
+  referrerPolicy?: ReferrerPolicy;
+  userInvolvement?: UserNavigationInvolvement;
+  sourceElement?: ElementImpl | null;
+  initialInsertion?: boolean;
+  apiMethodTracker?: NavigationAPIMethodTracker | null;
+};
+
+/** Requested history action, before resolving the automatic behavior. */
+// https://html.spec.whatwg.org/multipage/nav-history-apis.html#navigationhistorybehavior
+export type NavigationHistoryBehavior = 'auto' | HistoryHandlingBehavior;
+
 /** History action selected after resolving a navigation's default behavior. */
-export type NavigationHistoryBehavior = 'push' | 'replace';
+// https://html.spec.whatwg.org/multipage/browsing-the-web.html#history-handling-behavior
+export type HistoryHandlingBehavior = 'push' | 'replace';
 
 /** User participation in a navigation or history traversal. */
 export type UserNavigationInvolvement = 'none' | 'activation' | 'browser UI';
+
+/** Result classification from choosing a navigable. */
+type WindowType = 'existing-or-none' | 'new-and-unrestricted' | 'new-with-no-opener';
 
 /** Coordinates session-history traversal for its descendant navigables. */
 // https://html.spec.whatwg.org/multipage/document-sequences.html#traversable-navigable

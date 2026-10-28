@@ -15,7 +15,18 @@ owns the browsing-context and session-history lifecycle.
 - The [policy audit](policy/ROADMAP.md#html-715-sandboxing) now reaches §7.1.7:
   COEP checks/reports, sandbox state and creation flags, iframe referrer policy,
   and policy-container selection/initialization. Missing lifecycle consumers
-  remain explicit; the next audit is §7.2, APIs related to navigation and session history.
+  remain explicit.
+- The [Window audit](window/ROADMAP.md#html-722-window-preamble-and-foundations)
+  now covers §7.2.1's shared cross-origin algorithms and the §7.2.2 preamble.
+  The [§7.2.2.1 slice](window/ROADMAP.md#html-7221-opening-and-closing-windows)
+  adds Window state, feature parsing, the opening flow, and existing special
+  target selection. New-target creation, navigation/history effects, closing,
+  and stopping retain explicit dependencies. [§7.2.2.2](window/ROADMAP.md#html-7222-indexed-access)
+  adds the live child-navigable list and Window length; numeric lookup remains
+  WindowProxy §7.2.3 work. [§7.2.2.3](window/ROADMAP.md#html-7223-named-access)
+  adds eligible element names, live collections, and child proxy results, with
+  HTML's origin filtering and an explicit browser disagreement. Child creation
+  and template contents remain dependencies. §§7.2.2.4–7.2.2.6 remain unaudited.
 
 ## HTML origins and sites audit
 

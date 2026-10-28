@@ -1,27 +1,32 @@
 import type { URL } from 'node:url';
 
-import { type InternalPromise, InternalError } from '../../../infra/index';
+import { type InternalPromise, InternalError, TypeError } from '../../../infra/index';
 import {
-  defineIncludes, defineInterface, definePartialInterface, idlType,
-  impl, roAttr, reference, union, xattr, type VoidFunction,
+  arg, attr, defineIncludes, defineInterface, definePartialInterface, idlType,
+  impl, nullable, op, roAttr, reference, union, xattr, type VoidFunction,
 } from '../../../web-idl/core/index';
-import type { Origin } from '../../../url/index';
+import { areSameOrigin, areSameOriginDomain, type Origin } from '../../../url/index';
 import type { FetchRequestInfo, FetchRequestInit, ResponseImpl } from '../../../fetch/index';
 import type { CSSStylePropertiesImpl } from '../../../stylelet/index';
 
+import { ElementTag } from '../../dom/nodes/element-definitions/index';
 import {
   ImportMap, mergeExistingAndNewImportMaps, domManipulationTaskSource, type ImportMapParseResult,
   type BrowletGlobalObject, type SpecifierResolutionRecord, type SpeculationRulesParseResult, type TimerAction,
 } from '../../scripting/index';
 import { type EventImpl, EventTargetImpl } from '../../dom/events/index';
 import type { TrustedTypePolicyFactoryImpl } from '../policy/trusted-types/index';
-import type { DocumentImpl, ElementImpl } from '../../dom/nodes/index';
+import { HTMLCollectionImpl, type DocumentImpl, type ElementImpl } from '../../dom/nodes/index';
+import { HTMLIFrameElementImpl, HTMLObjectElementImpl } from '../../dom/nodes/html/embedded/index';
+import { HTMLFrameElementImpl } from '../../dom/nodes/html/legacy/index';
 import type { PerformanceImpl } from '../../performance/index';
 import type { BrowletEnvironment, WindowEnvironment } from '../../environment';
 import type { WindowOrWorkerGlobalScopeMixin, TimerHandler } from '../../global-scope';
 import type { StructuredSerializeOptions } from '../../scripting/structured-data/index';
+import type { BrowsingContext, Navigable } from '../navigation/index';
 
 import { LocationImpl } from './location';
+import { BarPropImpl } from './bar-prop';
 import type { WindowProxyHandle } from './window-proxy';
 
 /** Owns a document global and forwards shared browser facilities to its global-scope mixin. */
@@ -39,8 +44,25 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   event: EventImpl | undefined = undefined;
   /** Stable Location object; Web IDL forwards author assignments to its href. */
   readonly location: LocationImpl;
+  /** Location-bar object retained even if its public attribute is replaced. */
+  readonly locationbar: BarPropImpl;
+  /** Menu-bar object retained for this Window's lifetime. */
+  readonly menubar: BarPropImpl;
+  /** Personal-bar object retained for this Window's lifetime. */
+  readonly personalbar: BarPropImpl;
+  /** Scrollbar object retained for this Window's lifetime. */
+  readonly scrollbars: BarPropImpl;
+  /** Status-bar object retained for this Window's lifetime. */
+  readonly statusbar: BarPropImpl;
+  /** Toolbar object retained for this Window's lifetime. */
+  readonly toolbar: BarPropImpl;
+  /** Last assigned status string, with no effect on browser UI. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-window-status
+  status = '';
   /** Current associated document, attached by document construction. */
   #document: DocumentImpl | null = null;
+  /** Live named collections retained for the current associated Document. */
+  #namedCollections = new Map<string, HTMLCollectionImpl>();
   /** Shared global facilities installed during environment composition. */
   #globalScopeMixin: WindowOrWorkerGlobalScopeMixin | null = null;
 
@@ -48,6 +70,12 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   constructor(url: URL, env: WindowEnvironment) {
     super(env);
     this.location = new LocationImpl(url);
+    this.locationbar = new BarPropImpl(env);
+    this.menubar = new BarPropImpl(env);
+    this.personalbar = new BarPropImpl(env);
+    this.scrollbars = new BarPropImpl(env);
+    this.statusbar = new BarPropImpl(env);
+    this.toolbar = new BarPropImpl(env);
   }
 
   /** Recognize a Window implementation by its private brand. */
@@ -55,7 +83,17 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
     return typeof value === 'object' && value !== null && #document in value;
   }
 
-  /** Handle for this Window's browsing context, preserving proxy identity across navigation. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#window-bc
+  get browsingContext(): BrowsingContext | null {
+    return this.getAssociatedDocument().browsingContext;
+  }
+
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#window-navigable
+  get navigable(): Navigable | null {
+    return this.getAssociatedDocument().getNodeNavigable();
+  }
+
+  /** Handle for this Window's realm global-this value, preserving proxy identity across navigation. */
   get window(): WindowProxyHandle {
     return this.getWindowProxy();
   }
@@ -68,6 +106,49 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   /** Current document, available after document construction attaches it. */
   get document(): DocumentImpl {
     return this.getAssociatedDocument();
+  }
+
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-name
+  get name(): string {
+    return this.navigable?.targetName ?? '';
+  }
+
+  set name(value: string) {
+    const navigable = this.navigable;
+    if (navigable !== null) navigable.activeSessionHistoryEntry.documentState.navigableTargetName = value;
+  }
+
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-window-closed
+  get closed(): boolean {
+    const navigable = this.navigable;
+    return navigable === null || navigable.isClosing;
+  }
+
+  /** Replaceable alias of the realm global-this value. */
+  get frames(): WindowProxyHandle {
+    return this.getWindowProxy();
+  }
+
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-length
+  get length(): number {
+    return this.getAssociatedDocument().getDocumentTreeChildNavigables().length;
+  }
+
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-top
+  get top(): WindowProxyHandle | null {
+    return this.navigable?.topLevelTraversable.activeWindowProxy ?? null;
+  }
+
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-opener
+  get opener(): WindowProxyHandle | null {
+    return this.browsingContext?.openerBrowsingContext?.windowProxy ?? null;
+  }
+
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-parent
+  get parent(): WindowProxyHandle | null {
+    const navigable = this.navigable;
+    if (navigable === null) return null;
+    return (navigable.parent ?? navigable).activeWindowProxy;
   }
 
   /** Whether this Window's environment is a secure context. */
@@ -95,6 +176,34 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   /** Policy factory owned by this Window's global-scope mixin. */
   get trustedTypes(): TrustedTypePolicyFactoryImpl {
     return this.getWindowOrWorkerGlobalScopeMixin().trustedTypes;
+  }
+
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-window-close
+  close(): void {
+    const traversable = this.navigable;
+    if (traversable === null || !traversable.isTopLevelTraversable || traversable.isClosing) return;
+    // TODO: Snapshot source params, then require script-closability, incumbent
+    // browsing-context familiarity, and sandbox navigation permission before
+    // setting isClosing and queueing definite closing on the DOM manipulation source.
+    throw new InternalError('Window closing authorization and lifecycle are not implemented');
+  }
+
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-window-stop
+  stop(): void {
+    this.navigable?.stopLoading();
+  }
+
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-opener
+  disownOpener(): void {
+    const context = this.browsingContext;
+    if (context !== null) context.openerBrowsingContext = null;
+  }
+
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-frameElement
+  getFrameElement(currentEnv: BrowletEnvironment): ElementImpl | null {
+    const container = this.navigable?.container ?? null;
+    if (container === null || !areSameOriginDomain(container.nodeDocument.origin, currentEnv.origin)) return null;
+    return container;
   }
 
   // https://html.spec.whatwg.org/multipage/webappapis.html#windoworworkerglobalscope
@@ -259,35 +368,55 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
     this.#globalScopeMixin = mixin;
   }
 
-  /** Retrieve a supported named element, throwing if its ID is no longer present. */
-  getNamedProperty(name: string): ElementImpl {
-    const element = this.getAssociatedDocument().getElementById(name);
-    if (!element) throw new InternalError(`Window named property ${name} disappeared`);
-    return element;
+  /** Resolve a supported name to a child WindowProxy, one element, or a stable live collection. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-window-nameditem
+  getNamedProperty(name: string): WindowProxyHandle | ElementImpl | HTMLCollectionImpl {
+    const document = this.getAssociatedDocument();
+    for (const child of document.getDocumentTreeChildNavigables()) {
+      if (child.targetName === name) return child.activeWindowProxy;
+    }
+
+    let elements = this.#namedCollections.get(name);
+    if (elements === undefined) {
+      elements = HTMLCollectionImpl.fromRoot(document, (element) =>
+        this.#getNamedElementName(element) === name || element.getAttributeNS(null, 'id') === name);
+      this.#namedCollections.set(name, elements);
+    }
+    return elements.length === 1 ? elements.item(0)! : elements;
   }
 
-  /** Collect element IDs in document order for the provisional named-property binding. */
+  /** Collect child target names, eligible name attributes, and IDs in contributing-element tree order. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#named-access-on-the-window-object
   getSupportedPropertyNames(): ReadonlySet<string> {
+    const document = this.getAssociatedDocument();
+    const childNames = this.#getChildNavigableTargetNames();
     const names = new Set<string>();
-    for (const element of this.getAssociatedDocument()
-      .getElementsByTagName('*')) {
-      const name = element.getAttribute('id');
+    for (let node = document.firstChild; node !== null; node = node.nextDescendant(document)) {
+      if (!node.isElement()) continue;
+      if (
+        (node instanceof HTMLIFrameElementImpl || node instanceof HTMLObjectElementImpl ||
+          node instanceof HTMLFrameElementImpl) && node.contentNavigable !== null
+      ) {
+        const targetName = node.contentNavigable.targetName;
+        if (childNames.has(targetName)) names.add(targetName);
+      }
+      const name = this.#getNamedElementName(node);
       if (name) names.add(name);
+      const id = node.getAttributeNS(null, 'id');
+      if (id) names.add(id);
     }
     return names;
   }
 
-  /** Return the stable proxy handle of the associated document's browsing context. */
+  /** Return this realm's stable proxy handle, even after its Document loses its browsing context. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-window
   getWindowProxy(): WindowProxyHandle {
-    const browsingContext = this.getAssociatedDocument().browsingContext;
-    if (!browsingContext) {
-      throw new InternalError('Window Document has no browsing context');
-    }
-    return browsingContext.windowProxy;
+    return this.env.realm.windowProxy;
   }
 
   /** Attach the current document and update document-dependent global facilities. */
   setAssociatedDocument(document: DocumentImpl): void {
+    if (this.#document !== document) this.#namedCollections.clear();
     this.#document = document;
     if (this.#globalScopeMixin !== null) {
       this.#globalScopeMixin.setAssociatedDocument(document);
@@ -307,6 +436,35 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   /** Apply the default-passive listener rule for Window targets. */
   protected override isDefaultPassiveTarget(): boolean {
     return true;
+  }
+
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#document-tree-child-navigable-target-name-property-set
+  #getChildNavigableTargetNames(): ReadonlySet<string> {
+    const seen = new Set<string>();
+    const names = new Set<string>();
+    for (const child of this.getAssociatedDocument().getDocumentTreeChildNavigables()) {
+      const name = child.targetName;
+      if (name === '' || seen.has(name)) continue;
+      seen.add(name);
+      const document = child.activeDocument;
+      if (document === null) throw new InternalError('A named child navigable needs an active Document');
+      // SPEC_CLASH(window-named-child-origin): follow HTML; Blink/Gecko also allow matching container names.
+      if (areSameOrigin(document.origin, this.env.origin)) names.add(name);
+    }
+    return names;
+  }
+
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-window-nameditem-filter
+  #getNamedElementName(element: ElementImpl): string | null {
+    switch (element.tag) {
+      case ElementTag.HTMLEmbed:
+      case ElementTag.HTMLForm:
+      case ElementTag.HTMLImg:
+      case ElementTag.HTMLObject:
+        return element.getAttributeNS(null, 'name');
+      default:
+        return null;
+    }
   }
 
   /** Bind a converted callback to this Window's proxy for later timer delivery. */
@@ -386,30 +544,78 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
  *   USVString targetOrigin = "/";
  * };
  */
-export const windowIDL = defineInterface({
+export const windowIDL = defineInterface<BrowletEnvironment>({
   name: 'Window',
   inherits: 'EventTarget',
   exposed: 'Window',
   ...xattr(
     ['Global', 'Window'],
     'LegacyUnenumerableNamedProperties',
+    'CrossOriginObject',
   ),
   implementation: impl(WindowImpl),
   members: [
     roAttr('window', reference('WindowProxy'),
-      xattr('LegacyUnforgeable'),
+      xattr('LegacyUnforgeable', 'CrossOrigin'),
     ),
-    roAttr('self', reference('WindowProxy'), xattr('Replaceable')),
+    roAttr('self', reference('WindowProxy'), xattr('Replaceable', 'CrossOrigin')),
     roAttr('document', reference('Document'),
       xattr('LegacyUnforgeable'),
     ),
+    attr('name', idlType.DOMString),
     roAttr('location', reference('Location'),
-      xattr(['PutForwards', 'href'], 'LegacyUnforgeable'),
+      xattr(['PutForwards', 'href'], 'LegacyUnforgeable', ['CrossOrigin', ['Getter', 'Setter']]),
+    ),
+    roAttr('locationbar', reference('BarProp'), xattr('Replaceable')),
+    roAttr('menubar', reference('BarProp'), xattr('Replaceable')),
+    roAttr('personalbar', reference('BarProp'), xattr('Replaceable')),
+    roAttr('scrollbars', reference('BarProp'), xattr('Replaceable')),
+    roAttr('statusbar', reference('BarProp'), xattr('Replaceable')),
+    roAttr('toolbar', reference('BarProp'), xattr('Replaceable')),
+    attr('status', idlType.DOMString),
+    op('close', idlType.undefined, [], xattr('CrossOrigin')),
+    roAttr('closed', idlType.boolean, xattr('CrossOrigin')),
+    op('stop', idlType.undefined),
+    roAttr('frames', reference('WindowProxy'), xattr('Replaceable', 'CrossOrigin')),
+    roAttr('length', idlType.unsignedLong, xattr('Replaceable', 'CrossOrigin')),
+    roAttr('top', nullable(reference('WindowProxy')), xattr('LegacyUnforgeable', 'CrossOrigin')),
+    attr('opener', idlType.any, {
+      ...xattr('CrossOrigin'),
+      get() { return (this as WindowImpl).opener?.platform ?? null; },
+      set(env, value) {
+        if (value === null) (this as WindowImpl).disownOpener();
+        else if (!Reflect.defineProperty(env.realm.globalObject, 'opener', {
+          value, writable: true, enumerable: true, configurable: true,
+        })) throw new TypeError('Cannot redefine property: opener');
+      },
+    }),
+    roAttr('parent', nullable(reference('WindowProxy')), xattr('Replaceable', 'CrossOrigin')),
+    roAttr('frameElement', nullable(reference('Element')), {
+      get(_env, methodEnv) { return (this as WindowImpl).getFrameElement(methodEnv); },
+    }),
+    op('open', nullable(reference('WindowProxy')),
+      [
+        arg('url', idlType.USVString, { optional: true, default: '' }),
+        arg('target', idlType.DOMString, { optional: true, default: '_blank' }),
+        arg('features', idlType.DOMString,
+          { optional: true, default: '', ...xattr('LegacyNullToEmptyString') },
+        ),
+      ],
+      {
+        invoke(env, url, target, features) {
+          const eventLoop = env.responsibleEventLoop;
+          // Direct host calls use the operation's environment, as Origin.from does.
+          const entryEnv = eventLoop.executionContextStack.length === 0
+            ? env : eventLoop.entryExecutionContext.realm.env;
+          return entryEnv.openWindow(url, target, features);
+        },
+      },
     ),
     roAttr('originAgentCluster', idlType.boolean),
     {
       kind: 'named-getter', method: 'getNamedProperty',
-      returns: reference('Element'), serializedType: idlType.object,
+      returns: union(reference('WindowProxy'), reference('Element'), reference('HTMLCollection')),
+      serializedType: idlType.object,
     },
   ],
 });

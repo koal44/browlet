@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 import { createSandboxEnvironment } from '../../../../src/browlet/bindings';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
@@ -211,8 +211,7 @@ function createChild(owner: ReturnType<typeof createOwner>) {
   const [, document] = BrowsingContext.create(null, null, owner.navigable.activeBrowsingContext!.group!);
   const child = new Navigable(createDocumentState(document), owner.navigable);
   const container = owner.window.document.createElement('iframe');
-  // Supply only the unfinished content-navigable association; documents and bindings are real.
-  vi.spyOn(child, 'container', 'get').mockReturnValue(unwrap<HTMLIFrameElementImpl>(container));
+  unwrap<HTMLIFrameElementImpl>(container).contentNavigable = child;
   return { child, container };
 }
 

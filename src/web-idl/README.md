@@ -226,6 +226,11 @@ dependencies or `methodEnv` for allocations belonging to the invoked member's
 realm. Constructors supply the same environment in both positions. Binding
 selects these owners and retains conversion, projection, and exception realization.
 
+Explicit attribute getters receive `(env, methodEnv)` for the receiver and getter
+realms. HTML's `frameElement` uses the latter for its current-origin check.
+Binding integration getters receive the corresponding two Binding Contexts;
+adapters must convert those to environments before forwarding declaration steps.
+
 Declaration callbacks obtain owner state and execution facilities through the
 selected environment. Browlet supplies bound node and AbortSignal allocation
 at its composition root; declarations do not build an allocator around Binding
@@ -439,6 +444,14 @@ fallback, and normal projection for the new or existing implementation. An
 annotated constructor requires its integration hook; it cannot silently fall
 back to ordinary implementation construction. No HTML nodes or registry state
 are imported into Web IDL.
+
+The `prepareSecurityCheck(owner)` hook prepares an annotated interface's
+invocation policy once per binding world. Receiver checks select that policy by
+the actual receiver's assembled interface, including when the invoked member
+comes from an unprotected base. `SecurityCheckBinding` receives the invoked
+function's binding context, receiver record, member identifier, and function kind.
+HTML supplies its cross-origin policy through this hook; environment construction
+does not install a separate check.
 
 Core's `reflect()`, `reflectSetter()`, `reflectURL()`, `reflectNonNegative()`,
 `reflectPositive()`, and `reflectPositiveWithFallback()` helpers record the
@@ -818,6 +831,19 @@ These are evidence for the boundary, not templates for Browlet's process model.
 Add worlds for actual isolation/runtime lifetimes, not merely for new Agent types.
 
 ## Conversion and realms
+
+`BindingContext.performSecurityCheck(object, identifier, type)` dispatches the
+receiver's prepared policy. Member and iterator invocation call the invoked
+function's binding before interface checks. Receivers without a prepared policy
+require no check. HTML's policy remains outside the realm and generic Web IDL.
+
+`BindingContext.createMemberFunction(interfaceName, identifier, type)` creates a
+fresh instance getter, setter, or operation function in the context's realm,
+including inherited members. It reuses declared IDL invocation and conversion
+steps rather than retrieving an installed property that author code can replace.
+Normal installation continues to cache its original functions. HTML uses this
+boundary for cross-origin descriptors and caches their identities itself; the
+allowlist and origin checks remain HTML-owned.
 
 | Boundary | Owner |
 | --- | --- |

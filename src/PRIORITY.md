@@ -48,8 +48,9 @@ and evaluate, with CSS exports projected through Binding. Automatic module loadi
 Wasm ESM parsing, module-specific context restoration, and creation timing retain
 explicit unfinished boundaries. Worker-imported scripts
 still need synchronous pause. §8.1.3.4 now has settings/object scripting predicates;
-§8.1.4.4 has classic/module runners and the running-script lookup. Active child
-documents provisionally pass the missing ancestor activity check until Section 7.
+§8.1.4.4 has classic/module runners and the running-script lookup. Child Document
+activity now follows retained container ancestry; automatic child lifecycle and
+ancestor-activity notifications remain unfinished.
 Retained classic and linked module evaluation are connected; termination, timing, and production
 script callers remain explicit dependencies. §8.1.4.5 now records the Agent's
 unfinished abort operation, live-disable integration, and optional resource/UI

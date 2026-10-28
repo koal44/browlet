@@ -11,6 +11,28 @@ import { installTestBindings, validateImplementationMembers } from '../../../sup
 import { TestRealm as Realm } from '../../../support/web-idl-realm';
 
 describe('Web IDL implementation attribute registration', () => {
+  it('supplies receiver and getter environments separately for borrowed getters', () => {
+    class EnvironmentHolderImpl {}
+    const definition = defineInterface<{ realm: Realm; }>({
+      name: 'EnvironmentHolder', exposed: '*', implementation: impl(EnvironmentHolderImpl),
+      members: [
+        ctor(),
+        roAttr('environments', idlType.any, {
+          get(env, methodEnv) { return [env.realm, methodEnv.realm]; },
+        }),
+      ],
+    });
+    const world = new BindingWorld([definition]);
+    const first = installTestBindings(world);
+    const second = installTestBindings(world);
+    const First = Reflect.get(first.globalObject, 'EnvironmentHolder') as new() => object;
+    const Second = Reflect.get(second.globalObject, 'EnvironmentHolder') as new() => object;
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Borrow a getter with an explicit receiver.
+    const getter = Object.getOwnPropertyDescriptor(First.prototype, 'environments')!.get!;
+    expect(Reflect.apply(getter, new First(), [])).toEqual([first.realm, first.realm]);
+    expect(Reflect.apply(getter, new Second(), [])).toEqual([second.realm, first.realm]);
+  });
+
   it('creates shared function-valued attributes with ordinary call behavior', () => {
     class AttributeFunctionImpl {}
     const callback = function(this: unknown, ...args: unknown[]) {

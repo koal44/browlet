@@ -1404,6 +1404,15 @@ export interface LocationConstructor {
   [Symbol.hasInstance](value: unknown): value is Location;
 }
 
+export interface BarProp {
+  readonly visible: boolean;
+}
+
+export interface BarPropConstructor {
+  readonly prototype: BarProp;
+  [Symbol.hasInstance](value: unknown): value is BarProp;
+}
+
 export interface Report {
   readonly type: string;
   readonly url: string;
@@ -1556,8 +1565,35 @@ export interface Window extends EventTarget {
   get self(): WindowProxy;
   set self(value: unknown);
   readonly document: Document;
+  name: string;
   get location(): Location;
   set location(value: string);
+  get locationbar(): BarProp;
+  set locationbar(value: unknown);
+  get menubar(): BarProp;
+  set menubar(value: unknown);
+  get personalbar(): BarProp;
+  set personalbar(value: unknown);
+  get scrollbars(): BarProp;
+  set scrollbars(value: unknown);
+  get statusbar(): BarProp;
+  set statusbar(value: unknown);
+  get toolbar(): BarProp;
+  set toolbar(value: unknown);
+  status: string;
+  close(): void;
+  readonly closed: boolean;
+  stop(): void;
+  get frames(): WindowProxy;
+  set frames(value: unknown);
+  get length(): number;
+  set length(value: unknown);
+  readonly top: WindowProxy | null;
+  opener: any;
+  get parent(): WindowProxy | null;
+  set parent(value: unknown);
+  readonly frameElement: Element | null;
+  open(url?: string, target?: string, features?: string): WindowProxy | null;
   readonly originAgentCluster: boolean;
   get event(): Event | undefined;
   set event(value: unknown);
@@ -1664,6 +1700,7 @@ export interface Window extends EventTarget {
   MathMLElement: MathMLElementConstructor;
   Origin: OriginConstructor;
   Location: LocationConstructor;
+  BarProp: BarPropConstructor;
   ReportBody: ReportBodyConstructor;
   IntegrityViolationReportBody: IntegrityViolationReportBodyConstructor;
   CSPViolationReportBody: CSPViolationReportBodyConstructor;
@@ -1702,6 +1739,7 @@ export interface Window extends EventTarget {
   DocumentFragment: DocumentFragmentConstructor;
   ShadowRoot: ShadowRootConstructor;
   Document: DocumentConstructor;
+  HTMLDocument: DocumentConstructor;
   XMLDocument: XMLDocumentConstructor;
   DOMImplementation: DOMImplementationConstructor;
   Element: ElementConstructor;

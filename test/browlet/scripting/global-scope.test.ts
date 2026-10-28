@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
+import { createWindowEnvironment } from '../../../src/browlet/bindings';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { performTestMicrotaskCheckpoint } from '../test-runtime';
 
@@ -118,14 +119,30 @@ describe('WindowOrWorkerGlobalScope', () => {
   });
 
   it('uses the receiver\'s secure context when another Window\'s getter is borrowed', async () => {
-    const insecure = createBrowlet();
+    const insecureParent = createBrowlet();
     const secure = createBrowlet();
     await secure.navigate('https://example.test/');
+    const secureEnv = getRelevantRealm(secure.window).env;
+    const parentEnv = getRelevantRealm(insecureParent.window).env;
+    // Same-origin Windows can differ in security because one has an insecure ancestor.
+    const insecureEnv = createWindowEnvironment({
+      agent: secureEnv.realm.agent, userAgent: secureEnv.userAgent,
+      creationURL: secureEnv.creationURL, origin: secureEnv.origin,
+      parent: parentEnv.window,
+      topLevelCreationURL: parentEnv.topLevelCreationURL!, topLevelOrigin: parentEnv.topLevelOrigin!,
+    });
+    const document = insecureEnv.createDocument();
+    document.url = secureEnv.creationURL;
+    document.origin = secureEnv.origin;
+    insecureEnv.window.setAssociatedDocument(document);
+    insecureEnv.realm.windowProxy.setAssociatedWindow(insecureEnv.realm.globalObject);
     // eslint-disable-next-line @typescript-eslint/unbound-method -- borrowing the getter tests receiver ownership
     const getter = Object.getOwnPropertyDescriptor(secure.window, 'isSecureContext')!.get!;
 
-    expect(Reflect.apply(getter, insecure.window, [])).toBe(false);
+    expect(Reflect.apply(getter, insecureEnv.realm.windowProxy.platform, [])).toBe(false);
     expect(Reflect.apply(getter, secure.window, [])).toBe(true);
+    expect(() => { Reflect.apply(getter, insecureParent.window, []); })
+      .toThrow(expect.objectContaining({ name: 'SecurityError' }));
     expect(() => { Reflect.apply(getter, {}, []); })
       .toThrow(getRelevantRealm(secure.window).TypeError);
   });

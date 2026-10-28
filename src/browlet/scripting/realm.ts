@@ -3,7 +3,7 @@ import {
   JSRealm, bindAsyncContext, getAssociatedRealm, isObject,
   type GlobalObject, type GlobalThis, type JSRealmOptions,
 } from '../../js-engine/index';
-import type { CallbackHooks, SecurityCheckType, StampedPlatformObject, WebIDLRealm } from '../../web-idl/index';
+import type { CallbackHooks, StampedPlatformObject, WebIDLRealm } from '../../web-idl/index';
 import { serializeURL } from '../../url/index';
 
 import type { Window, WindowProxy } from '../platform';
@@ -51,6 +51,7 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
   isGlobalPrototypeChainMutable: boolean;
   /** Security state retained during realm creation and replaced by the attached full environment. */
   #baseEnv: BrowletEnvironmentBase | undefined;
+  /** HTML settings object stored in this realm's modeled HostDefined slot. */
   #env: BrowletEnvironment | undefined;
 
   constructor(options: BrowletRealmOptions) {
@@ -228,15 +229,6 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
   /** Document associated with a Window global; non-Window globals have none. */
   getAssociatedDocument(): DocumentImpl | null {
     return null;
-  }
-
-  performSecurityCheck(
-    _platformObject: object,
-    _identifier: string,
-    _type: SecurityCheckType,
-  ): void {
-    // TODO(HTML cross-origin objects): Supply HTML's cross-origin access
-    // checks once Browlet has WindowProxy and Location security machinery.
   }
 
   /** Queue a task for this realm's global and its associated document. */

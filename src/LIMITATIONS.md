@@ -59,11 +59,22 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   modeled proxy/descriptor accommodations only when that path is required.
   Sources: [JSRealm](js-engine/realm.ts), [Window binding tests](../test/browlet/dom-binding.test.ts),
   [navigation tests](../test/browlet/browsing/navigation/document-lifecycle.test.ts).
+  The modeled WindowProxy now rejects preventing extensions and remains extensible
+  across navigation. This preserves its forwarding target's invariants; native
+  extensibility behavior remains separately unvalidated in this slice. See the
+  [WindowProxy audit](browlet/browsing/window/ROADMAP.md#html-723-windowproxy-foundations-and-extensibility).
 - **Browser origin security remains unfinished on every backend.** A native
   WindowProxy and Node's shared security token provide identity and embedder
-  access, not same-/cross-origin policy. The Web IDL security hook is currently
-  a no-op. Retained-realm access, nested contexts, Location checks, and complete
-  named properties await the [Window roadmap](browlet/browsing/window/ROADMAP.md).
+  access, not same-/cross-origin policy. Web IDL invocation now checks Window and
+  Location receivers, including borrowed getters/methods, using the invoked
+  function's realm. Shared cross-origin descriptors and helper algorithms are
+  implemented, but direct property interception, retained-realm proxy access,
+  caller-context selection, and cross-origin named-property access await the exotic
+  methods in the [Window roadmap](browlet/browsing/window/ROADMAP.md#html-721-cross-origin-objects).
+  Prototype lookup still exposes the associated Window's prototype across origins;
+  correct null results and immutable-prototype comparisons need the caller's realm
+  and native prototype interception. The target Window's own event loop cannot
+  identify a caller from another agent.
   Native global detachment cancels queued V8 jobs; HTML must perform its required
   checkpoint before detaching, as the current top-level path does.
 
@@ -86,11 +97,11 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   backends. Module-specific active-script attribution and restoration after await
   remain unfinished, as do production script-element callers.
   Termination is only a represented outcome; timing remains unfinished.
-  Active child documents provisionally pass the missing
-  ancestor portion of `isFullyActive()` by agreement. Documents without a browsing
-  context and inactive history entries still fail. Section 7 must supply container
-  associations and correct ancestry before nested-page task/timer/script activity
-  is complete. See the [calling audit](browlet/scripting/ROADMAP.md#html-8144-calling-scripts).
+  Child full activity now follows the retained container Document recursively;
+  unassociated children, detached Documents, and inactive history entries fail.
+  Child creation/destruction and ancestor-activity notification propagation still
+  need their lifecycle producers before nested-page task/timer/script activity is
+  complete. See the [calling audit](browlet/scripting/ROADMAP.md#html-8144-calling-scripts).
 
 - **Runtime error reporting has incomplete attribution and worker support.**
   Window reporting dispatches trusted cancelable ErrorEvents, prevents recursive
@@ -614,10 +625,37 @@ separately and do not wait for all load-delaying resources. XML parsing and
 previous-document unload timing capture remain missing; see the
 [loading-status audit](browlet/html/ROADMAP.md#section-315-document-loading-status).
 
-Nested/auxiliary creation stops at explicit missing creator-state and container
-associations. Ancestor-origin calculation and referrer-policy masking accept
+Nested/auxiliary creation stops at explicit missing creator-state inheritance and
+child lifecycle operations. Ancestor-origin calculation and referrer-policy masking accept
 the known parent document before activation; they do not complete those
 [child-navigation dependencies](browlet/html/ROADMAP.md#section-313-ancestor-origins).
+`Window.open()` supports empty-URL calls to existing `_self`, `_parent`, and `_top`
+targets. Named lookup, new-window creation, and nonempty-URL navigation still
+throw at explicit unfinished operations. Feature processing and the new/existing
+opening branches are connected, but CSSOM View geometry and URL/history effects
+remain unfinished. `close()` and `stop()` also require their lifecycle operations;
+see the [Window audit](browlet/browsing/window/ROADMAP.md#html-7221-opening-and-closing-windows).
+`Window.length` now counts current document-tree child navigables, using retained
+iframe/object/frame associations. Those associations still require internal
+creation/destruction producers; appending a container alone creates no child.
+Numeric `window[index]` lookup remains unfinished WindowProxy work, including
+container insertion order and cross-origin behavior; see the
+[indexed-access audit](browlet/browsing/window/ROADMAP.md#html-7222-indexed-access).
+`Window[name]` resolves eligible names/IDs, stable live collections, and retained
+child navigables through Web IDL's named-properties prototype. Child creation and
+template contents still need their producers. HTML's same-origin-only child-name
+rule differs from Blink/Gecko's matching-container-name allowance; Browlet follows
+HTML, as recorded in the [named-access audit](browlet/browsing/window/ROADMAP.md#html-7223-named-access).
+Related-window getters, opener assignment, six historical bars, and status are
+implemented. Container removal does not yet destroy its child browsing context.
+Bar visibility follows HTML's true result after context detachment; a retained
+context with no fully active top-level context stops at an explicit specification
+gap. See the [related-window and bar audits](browlet/browsing/window/ROADMAP.md#html-7224-accessing-related-windows).
+Window settings follow the current associated Document. Their cross-site-ancestor
+query retains a conservative true result without a navigable, a case HTML leaves
+unspecified. Concrete isolation denies capability without full Document activity,
+but still requires Permissions Policy evaluation for fully active Documents; see
+the [settings audit](browlet/browsing/window/ROADMAP.md#html-7226-script-settings-for-window-objects).
 `Location.ancestorOrigins` remains absent until relevant-document selection and
 its security check are implemented. Policy inheritance, child navigation, history disposal, and storage-shed
 cloning remain with [browsing](browlet/browsing/ROADMAP.md) and
@@ -653,7 +691,7 @@ URL-scoped queue and access reports are explicit dependencies in the
 [policy audit](browlet/browsing/policy/ROADMAP.md#html-713-cross-origin-opener-policies).
 
 COEP navigation and dedicated-worker inheritance checks and observer reports are
-implemented, but child-container association, navigation network-error handling,
+implemented, but automatic child creation/destruction, navigation network-error handling,
 and worker startup still prevent complete enforcement through those lifecycles.
 The new abstract worker globals expose no author-facing Worker API. Inheritance
 reports omit CORP's destination member and preserve local observation even with

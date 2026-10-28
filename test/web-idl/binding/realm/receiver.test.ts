@@ -57,8 +57,8 @@ describe('Web IDL direct collection and iterable receivers', () => {
       expect(Reflect.apply(ping, undefined, [])).toBe(true);
       resolveReceiver.mockClear();
 
-      const security = vi.spyOn(methodRealm, 'performSecurityCheck');
-      const receiverSecurity = vi.spyOn(receiverRealm, 'performSecurityCheck');
+      const security = vi.spyOn(methodContext, 'performSecurityCheck');
+      const receiverSecurity = vi.spyOn(receiverContext, 'performSecurityCheck');
       const checks: { method: () => unknown; name: string; type: 'getter' | 'method'; }[] = [
         { method: Reflect.get(methodOwner, 'values') as () => unknown, name: 'values', type: 'method' },
       ];

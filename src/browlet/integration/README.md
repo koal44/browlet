@@ -49,6 +49,9 @@ with its subsystem. See the [composition rules](../../ARCHITECTURE.md#choosing-a
   importing this integration; invocations use the receiver's binding context.
   Reusable HTML value rules and DOM state remain with their existing owners.
   Custom-element reaction wrapping is still pending in its owning slice.
+  Its cross-origin binding also supplies the Web IDL security hook and HTML
+  §7.2.1's shared descriptor algorithms. Full WindowProxy and Location traps
+  remain separate work; see the [Window roadmap](../browsing/window/ROADMAP.md#html-721-cross-origin-objects).
 - `xhr/` owns ProgressEvent's browser implementation, declaration, and trusted
   firing over DOM events. FileReader consumes this same implementation; the
   standalone XHR package remains independent of Browlet. Binding composition

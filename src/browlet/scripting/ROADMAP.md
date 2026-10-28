@@ -99,12 +99,14 @@ No extension registry or worker startup machinery is needed to set that flag.
 | Origin | `origin` queries the associated Document's origin. |
 | Has cross-site ancestor | `hasCrossSiteAncestor` uses the Document's live ancestry query. |
 | Policy container | `policyContainer` returns the associated Document's policies. |
-| Cross-origin isolated capability | `crossOriginIsolatedCapability` returns false outside concrete isolation. The concrete branch explicitly throws until the Permissions Policy check exists. |
+| Cross-origin isolated capability | `crossOriginIsolatedCapability` returns false outside concrete isolation. The concrete branch calls `Document.isAllowedToUse()`: a Document without a browsing context or that is not fully active returns false; fully active Documents still need Permissions Policy evaluation. |
 | Time origin | `timeOrigin` supplies the existing HRT `Moment` for navigation start. |
 | Responsible event loop | `responsibleEventLoop` returns `realm.agent.eventLoop`, the same agent that owns the associated global. |
 
-Window supplies the settings queries above. Worker/worklet settings must
-implement the same settings contract when their globals are introduced.
+Window supplies the settings queries above; its creation and live-Document
+behavior are audited in [HTML §7.2.2.6](../browsing/window/ROADMAP.md#html-7226-script-settings-for-window-objects).
+Worker/worklet settings must implement the same settings contract when their
+globals are introduced.
 [environment.test.ts](../../../test/browlet/environment.test.ts) covers the
 discard flag, while the script/callback lifecycle tests cover the existing
 entry and cleanup behavior.
@@ -500,12 +502,13 @@ algorithms.
 | Runtime errors | The run algorithms invoke `env.reportException`; §8.1.4.6 now supplies ErrorEvent dispatch, cancellation, and muting. Classic runners retain their script explicitly for parse errors and unwound evaluation. Source attribution and worker propagation remain unfinished. |
 | Termination | A null evaluation outcome selects the specified QuotaExceededError completion/rejected promise. Binding allocates that exception in the script's realm. Actual termination and unwinding remain §8.1.4.5/runtime work. |
 
-**Approved provisional activity check:** an active child Document now passes
-`isFullyActive()` until Section 7 supplies the actual container-document association
-and recursive ancestor checks. A Document with no browsing context or one that is
-not its navigable's active entry still fails. Do not use `parent.activeDocument` as
-a substitute for the embedding element's node document. This affects every existing
-consumer of `isFullyActive`, including task/timer eligibility, not just scripts.
+**Activity check:** the Section 7 related-window pass replaced the approved
+provisional child result with actual container-document associations and recursive
+ancestor checks. An unassociated child, a Document without a browsing context, or
+an inactive history entry fails. The embedding element's node Document can differ
+from `parent.activeDocument`. This affects task/timer eligibility as well as scripts.
+Automatic child creation/destruction and ancestor-activity notification propagation
+remain [navigation dependencies](../browsing/navigation/ROADMAP.md#missing).
 
 **Representation review:** the evaluation boundaries use null for termination
 without a completion/promise; ordinary author exceptions remain throw completions

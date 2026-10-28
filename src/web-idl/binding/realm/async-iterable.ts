@@ -139,7 +139,7 @@ export class AsyncIterableBinding {
   #getIteratorState(value: unknown, assembled: AssembledInterface, identifier: string): AsyncIteratorRecord {
     if (!isObject(value)) this.#throwTypeError('Illegal invocation');
     if (getPlatformRecord(value)?.binding.world === this.#binding.world) {
-      this.#binding.realm.performSecurityCheck(value, identifier, 'method');
+      this.#binding.performSecurityCheck(value, identifier, 'method');
     }
     const state = AsyncIteratorStamper.get(value);
     if (!state || state.assembled !== assembled || state.receiverBinding.world !== this.#binding.world) {

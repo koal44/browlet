@@ -46,7 +46,7 @@ import { HTMLAnchorElementImpl } from './dom/nodes/html/text/index';
 import { HTMLAreaElementImpl } from './dom/nodes/html/embedded/index';
 import type { DOMEnvironment, EventImplConstructor } from './dom/index';
 import { generateReport } from './reporting/generate';
-import { WindowImpl } from './browsing/window/index';
+import { openWindow, WindowImpl, type WindowProxyHandle } from './browsing/window/index';
 import { MessageEventImpl } from './communication/index';
 import { OriginImpl } from './browsing/index';
 import type { WindowOrWorkerGlobalScopeMixin } from './global-scope';
@@ -76,7 +76,9 @@ export class BrowletEnvironmentBase implements FetchEnvironmentBase {
   #userAgent: UserAgent | null;
   /** Creation URL; null only for internal sandboxes. */
   #creationURL: URLRecord | null;
+  /** Security classification fixed at environment creation. */
   #isSecureContext: boolean;
+  /** Whether setup has completed far enough for this environment to run scripts. */
   #executionReady = false;
 
   /** Null leaves browser-specific state unavailable for an internal sandbox. */
@@ -231,6 +233,7 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   /** Reconstruct a serialized record in this environment's realm. */
   deserialize;
 
+  /** Resolves this realm's DOMException constructor. */
   #getDOMException;
 
   constructor(realm: BrowletRealm, baseEnv: BrowletEnvironmentBase | null, initialization: BrowletEnvironmentInit) {
@@ -522,6 +525,12 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     return url === null ? null : serializeURL(url);
   }
 
+  /** Run window opening with this environment as the entry settings object. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#window-open-steps
+  openWindow(url: string, target: string, features: string): WindowProxyHandle | null {
+    return openWindow(url, target, features, this);
+  }
+
   /** Resolve using the referring script, with this environment as the current execution owner. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#resolve-a-module-specifier
   resolveModuleSpecifier(referringScript: Script | null, specifier: string): URLRecord {
@@ -753,6 +762,7 @@ export class SandboxEnvironment extends BrowletEnvironment {
 /** HTML settings whose document-dependent values follow the associated Window. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
 export class WindowEnvironment extends BrowletEnvironment {
+  /** Realm retaining this Window's global, execution context, and settings identity. */
   declare realm: WindowRealm;
 
   constructor(realm: WindowRealm, baseEnv: BrowletEnvironmentBase, initialization: BrowletEnvironmentInit) {
@@ -801,11 +811,7 @@ export class WindowEnvironment extends BrowletEnvironment {
   get crossOriginIsolatedCapability(): boolean {
     const mode = this.realm.agent.agentCluster?.crossOriginIsolationMode;
     if (mode !== 'concrete') return false;
-
-    void this.window.getAssociatedDocument().permissionsPolicy;
-    throw new InternalError(
-      'The cross-origin-isolated permissions-policy check is not implemented',
-    );
+    return this.window.getAssociatedDocument().isAllowedToUse('cross-origin-isolated');
   }
 
   get timeOrigin(): Moment {

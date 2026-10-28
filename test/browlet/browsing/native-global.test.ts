@@ -166,7 +166,8 @@ function createNativeWindow(previous?: NativeWindow): NativeWindow {
     cluster.add(agent);
   }
   const creationURL = parseURL('https://example.test/').url!;
-  const origin = createOpaqueOrigin();
+  // Reuse the origin as well as the proxy so borrowing the old getter remains permitted.
+  const origin = previous?.document.origin ?? createOpaqueOrigin();
   const env = createWindowEnvironment({
     agent, userAgent: previous?.realm.env.userAgent ?? new UserAgent(),
     creationURL, origin, parent: null,
@@ -177,6 +178,8 @@ function createNativeWindow(previous?: NativeWindow): NativeWindow {
   const context = previous?.context ?? new BrowsingContext(proxy);
   const platformWindow = project(window) as StampedPlatformObject<Window>;
   const document = realm.env.createDocument();
+  document.url = creationURL;
+  document.origin = origin;
   document.browsingContext = context;
   window.setAssociatedDocument(document);
   proxy.setAssociatedWindow(window.env.realm.globalObject);

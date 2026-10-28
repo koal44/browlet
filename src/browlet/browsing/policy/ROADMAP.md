@@ -15,7 +15,7 @@ their owning integrations. [CSP](csp/ROADMAP.md) owns its language and violation
 | COEP / navigation / workers / Fetch | Child-container lifecycle, blocked-response network errors, worker startup, and PNA/ORB; inheritance checks and reports exist (HTML §7.1.4) |
 | Sandbox / iframe / navigation | Child/popup lifecycle and flag consumers; attribute state, creation-flag union, and response preparation exist (HTML §7.1.5) |
 | Document ancestry / iframe | Child-container lifecycle; iframe referrer-policy selection, reflection, and ancestry inputs exist (HTML §7.1.6) |
-| `permissions.ts` | Declared, inherited, and container policies plus feature definitions/default allowlists (Permissions Policy; HTML §2.2) |
+| `permissions.ts` | Declared, inherited, and container policies plus feature definitions/default allowlists (Permissions Policy; HTML §2.2). `Document.isAllowedToUse()` implements HTML's browsing-context/full-activity gates; feature evaluation for fully active Documents explicitly throws. |
 | Policy containers / navigation / workers | Navigation source/target snapshots, history reconstruction, worker startup, and origin-independent empty CSP state; selection and initialization algorithms exist (HTML §7.1.7) |
 
 ## HTML 7.1.3 cross-origin opener policies
@@ -112,8 +112,8 @@ revision `9396777` above. The next Section 7 audit is §7.1.5, sandboxing.
 
 The checks are implemented; their remaining lifecycle consumers are explicit:
 
-- **Navigation:** `Navigable.container` still throws for child navigables until
-  the embedding element's content-navigable association exists. Use that element's
+- **Navigation:** iframe/object/frame content-navigable setters now retain the
+  reverse container association; child creation/destruction must populate it. Use that element's
   current node document, including after adoption, rather than the parent's active
   document or the element's creation environment. The Fetch-backed navigation loop
   must perform its CORP/inheritance checks and turn rejection into a network error.
@@ -137,8 +137,8 @@ The checks are implemented; their remaining lifecycle consumers are explicit:
 matrix, both inheritance operations, disposition ordering/endpoints, current
 container-document ownership, the blocked-document boundary, original-URL
 sanitization, and local reporting with outbound delivery disabled. Worker tests
-use concrete test subclasses of the partial globals; navigation tests supply only
-the unfinished container association. These are not worker-startup or iframe
+use concrete test subclasses of the partial globals; navigation tests connect real
+container associations without automatic child creation. These are not worker-startup or iframe
 conformance tests. [Observer tests](../../../../test/browlet/reporting/observers.test.ts)
 exercise real projection and retain the regression for the unwanted destination
 member; Fetch's [embedder tests](../../../../test/fetch/policy/embedder.test.ts)
@@ -158,7 +158,7 @@ including every flag description, token exception, and state owner, against HTML
 | Popup and active-document sets | Contexts start with an empty popup set; Documents retain independent active-flag snapshots. Later iframe attribute changes do not alter an existing document's flags. Actual popup propagation remains with auxiliary-context creation. |
 | Permitted navigator | `BrowsingContext.onePermittedSandboxedNavigator` starts null. Target selection must populate it and navigation permission checks must consume it; neither lifecycle exists yet. |
 | CSP-derived restrictions | Existing `CSPList.getSandboxingFlags()` unions enforced header policies and ignores reporting/meta policies. Keep the reviewed `SPEC_CLASH(csp-sandbox-combination)`: HTML currently retains only the last directive, whereas Browlet and all three reference engines combine restrictions. Evidence remains in the [CSP audit](csp/ROADMAP.md#retained-specification-decisions). |
-| Creation flags | `BrowsingContext.determineCreationSandboxingFlags()` copies popup flags without an embedder; with an iframe, it unions the iframe's flags and its current node Document's active flags. Child creation does not inherit the context's popup set separately. |
+| Creation flags | `BrowsingContext.determineCreationSandboxingFlags()` copies popup flags without an embedder; with an iframe, it unions the iframe's flags and its current node Document's active flags. Child creation does not inherit the context's popup set separately. Object/frame response preparation throws pending a sandbox inheritance audit: HTML's element case asks for an iframe flag set not defined on those elements. |
 | Supplied-response navigation | `createNavigationParams()` combines creation flags and response CSP before selecting an opaque origin, then document creation copies the final set. Full navigation still needs source/target snapshots and the inline-srcdoc path's inherited-CSP ordering. |
 
 Every flag's remaining enforcement owner is explicit:

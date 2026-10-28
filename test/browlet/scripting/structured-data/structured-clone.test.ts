@@ -56,9 +56,11 @@ describe('HTML structuredClone()', () => {
     expect(caught).toBe(authorError);
   });
 
-  it('uses the receiver relevant realm when a method is borrowed', () => {
+  it('uses the receiver relevant realm when a method is borrowed', async () => {
     const first = createBrowlet();
     const second = createBrowlet();
+    await first.navigate('https://example.test/first');
+    await second.navigate('https://example.test/second');
     const FirstArray = getConstructor<ArrayConstructor>(first, 'Array');
     const SecondArray = getConstructor<ArrayConstructor>(second, 'Array');
     const method = Reflect.get(

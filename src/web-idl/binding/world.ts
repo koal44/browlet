@@ -10,7 +10,7 @@ import {
 
 import { RealmBinding } from './realm';
 import { registerImplementationBindings } from './register';
-import type { AttributeBinding, ExtendedAttributeHooks, HTMLConstructorBinding } from './extended-attributes';
+import type { AttributeBinding, ExtendedAttributeHooks, HTMLConstructorBinding, SecurityCheckBinding } from './extended-attributes';
 
 /**
  * Owns definitions and platform-object identity across registered realms.
@@ -24,6 +24,8 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
   #attributeBindings = new Map<IDLAttribute, Map<AssembledInterface, AttributeBinding>>();
   /** HTML constructor rules prepared once; invocation selects the current realm. */
   #htmlConstructors = new Map<AssembledInterface, HTMLConstructorBinding>();
+  /** Invocation policies selected by the receiver's interface, independent of the member's owner. */
+  #securityChecks = new Map<AssembledInterface, SecurityCheckBinding>();
 
   constructor(definitions: Definition<Env>[], options: BindingWorldOptions<Env> = {}) {
     this.#assembly = new DefinitionAssembly([
@@ -56,6 +58,14 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
         const construct = prepareHTMLConstructor(assembled);
         // Registration enforces this world's environment contract, as for attribute bindings.
         if (construct) this.#htmlConstructors.set(assembled, construct as HTMLConstructorBinding);
+      }
+    }
+    const prepareSecurityCheck = options.extendedAttributes?.prepareSecurityCheck;
+    if (prepareSecurityCheck) {
+      for (const assembled of this.#assembly.interfaces.values()) {
+        const check = prepareSecurityCheck(assembled);
+        // Registration enforces this world's environment contract, as for attribute bindings.
+        if (check) this.#securityChecks.set(assembled, check as SecurityCheckBinding);
       }
     }
   }
@@ -92,6 +102,11 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
   /** Find HTML's prepared override for an interface in this world. */
   getHTMLConstructorBinding(owner: AssembledInterface): HTMLConstructorBinding | undefined {
     return this.#htmlConstructors.get(owner);
+  }
+
+  /** Find the prepared security check for the receiver's actual interface. */
+  getSecurityCheckBinding(owner: AssembledInterface): SecurityCheckBinding | undefined {
+    return this.#securityChecks.get(owner);
   }
 
   /** Find a realm's binding context in this world without registering it. */
@@ -135,5 +150,5 @@ export type BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> = 
   | 'install' | 'projectGlobalObject' | 'createPlatformRecord' | 'isInterfaceExposed'
   | 'jsToImpl' | 'implToJS' | 'createFrozenArray' | 'realizeException'
   | 'construct' | 'resolveArguments' | 'getObjectRecord' | 'associate' | 'project' | 'unwrap'
-  | 'getPlatformObjectPrototype'
+  | 'getPlatformObjectPrototype' | 'createMemberFunction' | 'resolveInterface' | 'performSecurityCheck'
 >;

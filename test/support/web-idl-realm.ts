@@ -1,7 +1,5 @@
 import { type JSMicrotaskQueue, JSRealm, getAssociatedRealm } from '../../src/js-engine/index';
-import type {
-  CallbackHooks, SecurityCheckType, WebIDLRealm,
-} from '../../src/web-idl/environment';
+import type { CallbackHooks, WebIDLRealm } from '../../src/web-idl/environment';
 
 /*
  * Web IDL's unit tests need a JavaScript realm, not Browlet's HTML callback
@@ -35,12 +33,6 @@ export class TestRealm extends JSRealm implements WebIDLRealm {
       prepareToRunScript: () => {},
     };
   }
-
-  performSecurityCheck(
-    _platformObject: object,
-    _identifier: string,
-    _type: SecurityCheckType,
-  ): void {}
 
   queueMicrotask(steps: () => void): void {
     this.enqueueMicrotask(steps);

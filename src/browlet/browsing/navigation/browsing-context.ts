@@ -188,6 +188,13 @@ export class BrowsingContext {
     return this.activeWindow.getAssociatedDocument();
   }
 
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#bc-tlbc
+  get topLevelBrowsingContext(): BrowsingContext | null {
+    const document = this.activeDocument;
+    if (!document.isFullyActive()) return null;
+    return document.getNodeNavigable()!.topLevelTraversable.activeBrowsingContext;
+  }
+
   /** Attach the stable proxy exactly once during context construction. */
   initializeWindowProxy(proxy: WindowProxyHandle): void {
     if (this.#windowProxy) throw new InternalError('Browsing context already has a WindowProxy');
@@ -263,6 +270,13 @@ export class BrowsingContext {
     // Source location and URL-scoped Reporting configuration are still required.
     // SPEC_CLASH(coop-access-report-type): HTML gives all six access bodies the type "access-to-opener"; pending review.
     throw new InternalError('COOP access reporting is not implemented');
+  }
+
+  /** Apply the requested window position and size features. */
+  // https://drafts.csswg.org/cssom-view-1/#set-up-browsing-context-features
+  setUpFeatures(_tokenizedFeatures: ReadonlyMap<string, string>): void {
+    // TODO(CSSOM View): Parse positioning/sizing and integrate the user agent's screen/window geometry.
+    throw new InternalError('Browsing-context feature setup is not implemented');
   }
 
   /** Associate the navigation owner, rejecting a different existing owner. */

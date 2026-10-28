@@ -12,15 +12,20 @@ import type { WindowImpl } from './window';
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-windowproxy-exotic-object
 // The handle is internal; the exposed identity is the engine proxy or the
 // plain-Node forwarding proxy, neither of which inherits from this class.
-// PROVISIONAL: the traps implement fallback forwarding, not HTML's complete
-// exotic internal methods or cross-origin access checks; see ROADMAP.md.
+// Prototype and property traps still use provisional forwarding; extensibility
+// follows HTML §§7.2.3.3–4. See ROADMAP.md for the remaining exotic methods.
 // TODO: cross-origin property access must call BrowsingContext.checkAccessShouldBeReported().
+// TODO(HTML 7.2.3): Select the accessing realm and compose CrossOriginObjectBinding into the exotic traps.
+// TODO(HTML 7.2.3): Index Document.getDocumentTreeChildNavigables() by container insertion order,
+// with the specified descriptors, property keys, and cross-origin out-of-range behavior.
 export class WindowProxyHandle implements ProxyHandler<object> {
+  /** Handles keyed by the stable author-facing proxy identity. */
   // V8 global proxies lose private-field stamps when reused for another realm.
   static #handles = new WeakMap<WindowProxy, WindowProxyHandle>();
 
   /** Stable global-this identity retained when navigation replaces the Window. */
   readonly platform: WindowProxy;
+  /** Current Window platform object, installed during realm composition and replaced on navigation. */
   #associatedWindow: StampedPlatformObject<Window> | undefined;
 
   /** Creates a handle for an engine proxy, or a new forwarding proxy when omitted. */
@@ -83,11 +88,6 @@ export class WindowProxyHandle implements ProxyHandler<object> {
 
   get(_target: object, property: string | symbol): unknown {
     const window = this.associatedWindow;
-    if (
-      windowProxyReferences.has(property) &&
-      !Reflect.has(window, property)
-    ) return this.platform;
-
     const value: unknown = Reflect.get(window, property, window);
     return value;
   }
@@ -105,16 +105,28 @@ export class WindowProxyHandle implements ProxyHandler<object> {
   }
 
   getPrototypeOf(_target: object): object | null {
+    // TODO(HTML 7.2.3.1): Select the caller's binding and return null across origins.
     return Reflect.getPrototypeOf(this.associatedWindow);
   }
 
   has(_target: object, property: string | symbol): boolean {
-    return windowProxyReferences.has(property) ||
-      Reflect.has(this.associatedWindow, property);
+    return Reflect.has(this.associatedWindow, property);
+  }
+
+  /** A WindowProxy remains extensible across navigation. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#windowproxy-isextensible
+  isExtensible(): boolean {
+    return true;
   }
 
   ownKeys(_target: object): (string | symbol)[] {
     return Reflect.ownKeys(this.associatedWindow);
+  }
+
+  /** Reject attempts to make this WindowProxy non-extensible. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#windowproxy-preventextensions
+  preventExtensions(): boolean {
+    return false;
   }
 
   set(_target: object, property: string | symbol, value: unknown): boolean {
@@ -123,6 +135,7 @@ export class WindowProxyHandle implements ProxyHandler<object> {
   }
 
   setPrototypeOf(_target: object, prototype: object | null): boolean {
+    // TODO(HTML 7.2.3.2): SetImmutablePrototype must compare with this proxy's caller-sensitive prototype.
     return Reflect.setPrototypeOf(
       this.associatedWindow,
       prototype,
@@ -137,7 +150,3 @@ export const windowProxyDefinition = defineProxyObject({
   getProxy: WindowProxyHandle.getProxy,
   resolveReceiver: WindowProxyHandle.getWindow,
 });
-
-const windowProxyReferences = new Set<PropertyKey>([
-  'frames', 'parent', 'self', 'top', 'window',
-]);

@@ -225,7 +225,7 @@ function registerDefinedAttribute(
         return owner.getImplementationBinding(assembled).getOrCreateMemberBinding(member).getAttributeFunction(member, () => createSteps.call(undefined, owner.getEnvironment()));
       }
       if (accessors) {
-        return binding.callImplementation(accessors.get, receiver?.implInst ?? null, [owner]);
+        return binding.callImplementation(accessors.get, receiver?.implInst ?? null, [owner, binding]);
       }
       if (!get) {
         throw new InternalError(
@@ -235,7 +235,7 @@ function registerDefinedAttribute(
       return binding.callImplementation(
         get,
         receiver?.implInst ?? null,
-        [owner.getEnvironment()],
+        [owner.getEnvironment(), binding.getEnvironment()],
       );
     },
   };

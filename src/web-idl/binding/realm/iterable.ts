@@ -174,7 +174,7 @@ export class SynchronousIterableBinding {
   ): JSIteratorResult {
     if (!isObject(thisArgument)) this.#throwTypeError('Illegal invocation');
     if (getPlatformRecord(thisArgument)?.binding.world === this.#binding.world) {
-      this.#binding.realm.performSecurityCheck(
+      this.#binding.performSecurityCheck(
         thisArgument,
         'next',
         'method',

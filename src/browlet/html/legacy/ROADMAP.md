@@ -24,6 +24,11 @@ lifecycle. Parser compatibility remains active from the start because parse5
 already recognizes these names; specialized public interfaces and rendering
 arrive as a bounded legacy slice.
 
+The [Window length audit](../../browsing/window/ROADMAP.md#html-7222-indexed-access)
+adds `HTMLFrameElementImpl.contentNavigable` as initially-null retained state.
+Legacy frame creation/destruction must maintain it; the field does not implement
+frame loading, public contentWindow/contentDocument, or insertion-order tracking.
+
 ## Removal condition
 
 Burn this file once every required §16 implementation feature has implemented

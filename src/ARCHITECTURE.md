@@ -44,6 +44,23 @@ arguments and implementation receivers. Binding selects the environment and owns
 conversion and projection. Reflection and HTML construction use composition-time
 binding adapters selected by declarative annotations; declarations themselves
 do not receive BindingContext.
+Explicit getters receive both the receiver's environment and the invoked getter's
+environment, keeping receiver state distinct from current-realm checks.
+
+HTML's `CrossOriginObjectBinding` lives at the same integration boundary and owns
+cross-origin descriptors. The current proof of concept uses interface
+`[CrossOriginObject]` and member `[CrossOrigin]` annotations to select its objects
+and permissions. `htmlExtendedAttributeHooks.prepareSecurityCheck` prepares each
+protected interface's invocation policy once when the binding world is assembled.
+Permission records and Window-name lookup share the assembled declarations,
+including their partials and mixins. Realm supplies allocation and execution
+facilities; the invoking member's binding selects the actual receiver's security
+policy, including when the member is inherited from an unprotected interface.
+`BindingContext.createMemberFunction()` creates fresh declared IDL
+behavior in that binding's realm; HTML retains each function's identity for the
+caller/target pair. Window and Location implementations do not receive Binding
+Context. Their full exotic access paths remain in the
+[Window roadmap](browlet/browsing/window/ROADMAP.md#html-721-cross-origin-objects).
 
 HTML's `HTMLAllCollection` declares `documentAll: true` because a JavaScript
 Proxy cannot preserve `[[IsHTMLDDA]]`. JS Engine allocates the undetectable callable;
@@ -138,6 +155,12 @@ kept in `scripting/import-map.ts`. A global's `mergeImportMap()` method likewise
 forwards to that module, operating on its import map and resolved-module set.
 Private normalization helpers stay beside the map parser; globals gain no
 additional Web IDL surface from these implementation methods.
+
+Window opening follows the same arrangement: the Window binding selects the
+entry environment and calls `env.openWindow()`. Its algorithm body and private
+feature helpers remain in `browsing/window/opening.ts` while navigation ownership
+is completed. Navigable owns target selection and navigation, Document owns
+URL/history updates, and BrowsingContext owns feature setup.
 
 ### Realm execution
 
