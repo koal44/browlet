@@ -46,10 +46,11 @@ import { HTMLAnchorElementImpl } from './dom/nodes/html/text/index';
 import { HTMLAreaElementImpl } from './dom/nodes/html/embedded/index';
 import type { DOMEnvironment, EventImplConstructor } from './dom/index';
 import { generateReport } from './reporting/generate';
+import { MessageEventImpl, type MessagePortImpl } from './communication/index';
 import { openWindow, WindowImpl, type WindowProxyHandle } from './browsing/window/index';
-import { MessageEventImpl } from './communication/index';
 import { OriginImpl } from './browsing/index';
 import type { WindowOrWorkerGlobalScopeMixin } from './global-scope';
+import type { StructuredSerializeWithTransferResult, StructuredDeserializeWithTransferResult } from './scripting/structured-data/index';
 import type { BrowsingContext, Traversable } from './browsing/navigation/index';
 import type { UserAgent } from './user-agent';
 import type { ModuleResponsesMap } from './worklets/index';
@@ -187,6 +188,12 @@ export interface BrowletEnvironmentInit {
   serialize: (value: unknown) => object;
   /** Reconstruct a serialized record in this environment's realm. */
   deserialize: (record: object) => unknown;
+  /** Serialize now and detach transferred objects, for delivery to another realm later. */
+  serializeWithTransfer: (value: unknown, transfer: object[]) => StructuredSerializeWithTransferResult;
+  /** Reconstruct the payload; transferred platform values are returned as implementations. */
+  deserializeWithTransfer: (record: StructuredSerializeWithTransferResult) => StructuredDeserializeWithTransferResult;
+  /** Resolve MessagePort identities in a transfer list without converting other objects. */
+  getMessagePorts: (transfer: object[]) => MessagePortImpl[];
 }
 
 /** Composed browser settings, allocation, and task delivery for one realm and global. */
@@ -232,6 +239,12 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   serialize;
   /** Reconstruct a serialized record in this environment's realm. */
   deserialize;
+  /** Serialize now and detach transferred objects, for delivery to another realm later. */
+  serializeWithTransfer;
+  /** Reconstruct the payload; transferred platform values are returned as implementations. */
+  deserializeWithTransfer;
+  /** Resolve MessagePort identities in a transfer list without converting other objects. */
+  getMessagePorts;
 
   /** Resolves this realm's DOMException constructor. */
   #getDOMException;
@@ -252,6 +265,9 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     this.clone = initialization.clone;
     this.serialize = initialization.serialize;
     this.deserialize = initialization.deserialize;
+    this.serializeWithTransfer = initialization.serializeWithTransfer;
+    this.deserializeWithTransfer = initialization.deserializeWithTransfer;
+    this.getMessagePorts = initialization.getMessagePorts;
     this.#getDOMException = initialization.getDOMException;
     this.timing = new EnvironmentTiming(this);
     this.realm = realm;

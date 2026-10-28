@@ -16,7 +16,7 @@ import {
 } from '../../../../src/browlet/scripting/structured-data/transfer';
 import {
   DetachedTransferableStamper,
-} from '../../../../src/browlet/scripting/structured-data/transferable';
+} from '../../../../src/browlet/scripting/transferable';
 
 describe('HTML structured transfer', () => {
   it('transfers ArrayBuffers into the target realm with graph identity', () => {

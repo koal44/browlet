@@ -55,7 +55,9 @@ export const layers = [
   ['browlet/html/reflection'],
   ['browlet/dom/abort', 'browlet/dom/nodes'],
   ['browlet/dom', 'browlet/performance'],
-  ['browlet/reporting/generate', 'browlet/browsing/window', 'browlet/communication'],
+  ['browlet/reporting/generate', 'browlet/communication'],
+  // Window forwards messaging to communication; communication retains Window types only.
+  ['browlet/browsing/window'],
   // Origin declarations name the platform implementations; environments dispatch their extraction.
   ['browlet/browsing'],
   // Full browser settings and global APIs compose the lower facilities.

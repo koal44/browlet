@@ -12,7 +12,7 @@ import { ReportingEndpoint, type ReportImpl, type ReportingObserverImpl } from '
 import { TrustedTypePolicyFactoryImpl } from './browsing/policy/trusted-types/index';
 import type { DocumentImpl } from './dom/nodes/index';
 import { PerformanceImpl } from './performance/index';
-import type { EventSourceImpl } from './communication/index';
+import type { EventSourceImpl, MessagePortImpl } from './communication/index';
 import type { BrowletEnvironment } from './environment';
 import type { StructuredSerializeOptions } from './scripting/structured-data/index';
 
@@ -21,9 +21,8 @@ import type { StructuredSerializeOptions } from './scripting/structured-data/ind
 export class WindowOrWorkerGlobalScopeMixin {
   /** Timer handles and scheduling state retained by this global. */
   timers: GlobalTimers;
-  /** Ports whose relevant global is this scope. */
-  // PROVISIONAL: MessagePort must register and unregister its global membership.
-  messagePorts: { disentangle(): void; }[] = [];
+  /** Entangled ports retained for messaging and permanent document cleanup. */
+  messagePorts = new Set<MessagePortImpl>();
   /** WebSockets registered for cleanup in this global. */
   // PROVISIONAL: WebSocket creation and registration are not implemented.
   webSockets: { makeDisappear(): void; }[] = [];

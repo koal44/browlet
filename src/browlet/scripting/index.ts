@@ -48,3 +48,4 @@ export {
   reportingTaskSource, automationTaskSource, taskSources, type QueuedTaskHandle,
 } from './tasks';
 export { GlobalTimers, type TimerAction, type GlobalTimersOptions, type TimerKey } from './timers';
+export { DetachedTransferableStamper } from './transferable';

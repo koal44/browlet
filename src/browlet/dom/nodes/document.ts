@@ -44,9 +44,9 @@ import { NodeIteratorImpl, TreeWalkerImpl, SHOW_ALL, type NodeFilterCallback } f
 // The observer retains registrations; rendering input and scheduled notification remain provisional.
 import { IntersectionObserverImpl, type IntersectionObserverEntryImpl } from '../intersection-observer/index';
 import type { NavigationTimingRecord } from '../../performance/index';
-import type { WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
 // eslint-disable-next-line browlet/dependency-direction -- DOM's legacy event factory includes HTML-defined event interfaces.
 import { MessageEventImpl } from '../../communication/index';
+import type { WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
 import type { BrowletEnvironment } from '../../environment';
 import type { DocumentParser } from '../../html/parser/index';
 import type { SerializedRecord } from '../../scripting/structured-data/index';

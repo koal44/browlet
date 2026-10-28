@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { EventSourceImpl } from '../../../src/browlet/communication/event-source';
+import { MessageChannelImpl } from '../../../src/browlet/communication/message-channel';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import { ReportingObserverImpl } from '../../../src/browlet/reporting/observer';
@@ -75,14 +76,14 @@ describe('Document destruction', () => {
   it('runs registered cleanup and removes only this document from worker ownership', () => {
     const { document, env, global } = createDocument();
     const otherDocument = createDocument().document;
-    const disentangle = vi.fn();
+    const channel = new MessageChannelImpl(env);
+    const disentangle = vi.spyOn(channel.port1, 'disentangle');
     const makeDisappear = vi.fn();
     const cleanup = vi.fn();
     const source = new EventSourceImpl('data:text/event-stream,', { withCredentials: false }, env);
     const close = vi.spyOn(source, 'close');
     const terminate = vi.fn();
     const ownerSet = new Set([document, otherDocument]);
-    global.messagePorts.push({ disentangle });
     global.webSockets.push({ makeDisappear });
     global.webTransports.push({ cleanup });
     document.ownedWorkers.push({ ownerSet });

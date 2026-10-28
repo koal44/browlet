@@ -17,6 +17,8 @@ export type TaskSourceKey = 'file' | 'network' | 'dom-manipulation' | 'report' |
 
 /** Metadata carried by a queued task. */
 export type TaskCreationOptions = {
+  /** Additional readiness condition, such as a MessagePort queue being enabled. */
+  isRunnable?: () => boolean;
   /** Nesting level inherited by timers created inside this task; absent for other work. */
   timerNestingLevel?: number;
 };

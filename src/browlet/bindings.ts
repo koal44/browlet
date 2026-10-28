@@ -46,12 +46,14 @@ import { svgIDLDefinitions } from './dom/nodes/svg/index';
 import { domIDLDefinitions } from './dom/index';
 import { performanceIDL } from './performance/index';
 import {
+  messageEventIDL, messageEventInitIDL, messageEventSourceIDL, messagePortIDL, eventSourceIDL, eventSourceInitIDL,
+  MessagePortImpl, messageChannelIDL, messageEventTargetIDL, messagePortIncludesMessageEventTargetIDL,
+  windowPostMessageOptionsIDL,
+} from './communication/index';
+import {
   locationIDL, barPropIDL, WindowImpl, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
   WindowProxyHandle, windowProxyDefinition,
 } from './browsing/window/index';
-import {
-  messageEventIDL, messageEventInitIDL, messageEventSourceIDL, messagePortIDL, eventSourceIDL, eventSourceInitIDL,
-} from './communication/index';
 import { originIDL } from './browsing/index';
 import {
   type WindowEnvironmentInit, BrowletEnvironmentBase, SandboxEnvironment, WindowEnvironment, type BrowletEnvironment,
@@ -63,7 +65,7 @@ import {
 } from './global-scope';
 import {
   structuredSerializeOptionsIDL, structuredDeserialize, type SerializedRecord, structuredSerialize,
-  structuredClone,
+  structuredClone, structuredSerializeWithTransfer, structuredDeserializeWithTransfer,
 } from './scripting/structured-data/index';
 import { serviceWorkerIDL } from './workers/index';
 import { progressEventIDL, progressEventInitIDL } from './integration/xhr/index';
@@ -202,6 +204,21 @@ export function createBrowletEnvironmentInit(context: BindingContext<BrowletEnvi
     // Associate DOMException implementations before structured serialization.
     serialize: (value) => structuredSerialize(context.realizeException(value), context),
     deserialize: (record) => structuredDeserialize(record as SerializedRecord, context),
+    serializeWithTransfer: (value, transfer) => structuredSerializeWithTransfer(value, transfer, context),
+    deserializeWithTransfer: (record) => {
+      const result = structuredDeserializeWithTransfer(record, context);
+      // Keep the message graph projected; internal delivery consumes implementation ports.
+      result.transferredValues = result.transferredValues.map((value) => context.getObjectRecord(value)?.implInst ?? value);
+      return result;
+    },
+    getMessagePorts: (transfer) => {
+      const ports: MessagePortImpl[] = [];
+      for (const value of transfer) {
+        const port = context.unwrap(value, MessagePortImpl);
+        if (port) ports.push(port);
+      }
+      return ports;
+    },
   };
 }
 
@@ -246,8 +263,12 @@ export const browletDefinitions = [
   messageEventInitIDL,
   messageEventSourceIDL,
   messagePortIDL,
+  messageChannelIDL,
+  messageEventTargetIDL,
+  messagePortIncludesMessageEventTargetIDL,
   eventSourceIDL,
   eventSourceInitIDL,
+  windowPostMessageOptionsIDL,
   serviceWorkerIDL,
   promiseRejectionEventIDL,
   promiseRejectionEventInitIDL,

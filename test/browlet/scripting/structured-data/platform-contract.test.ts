@@ -6,7 +6,7 @@ import { SandboxEnvironment, type BrowletEnvironment } from '../../../../src/bro
 import { createBrowletEnvironmentInit } from '../../../../src/browlet/bindings';
 import {
   DetachedTransferableStamper,
-} from '../../../../src/browlet/scripting/structured-data/transferable';
+} from '../../../../src/browlet/scripting/transferable';
 import {
   BindingWorld, defineDictionary, defineInterface, defineInterfaceMixin, definePartialInterface,
   impl, xattr, StructuredData, type Definition, type StampedPlatformObject,

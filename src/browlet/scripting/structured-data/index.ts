@@ -1,5 +1,5 @@
 export { structuredDeserialize } from './deserialize';
-export type { SerializedRecord } from './records';
+export type { SerializedRecord, StructuredSerializeWithTransferResult, StructuredDeserializeWithTransferResult } from './records';
 export { structuredSerialize, structuredSerializeForStorage } from './serialize';
-export { structuredClone } from './transfer';
+export { structuredClone, structuredSerializeWithTransfer, structuredDeserializeWithTransfer } from './transfer';
 export { type StructuredSerializeOptions, structuredSerializeOptionsIDL } from './web-idl';

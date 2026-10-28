@@ -20,6 +20,7 @@ import {
   type BindingContext, type ImplementationClass, type PlatformRecord,
 } from '../../../web-idl/index';
 
+import { DetachedTransferableStamper } from '../transferable';
 import type { BrowletEnvironment } from '../../environment';
 
 import {
@@ -30,7 +31,6 @@ import {
   type SerializedSet, type SerializedSharedArrayBuffer,
   type StructuredSerializeMemory,
 } from './records';
-import { DetachedTransferableStamper } from './transferable';
 
 // https://html.spec.whatwg.org/multipage/structured-data.html#structuredserialize
 export function structuredSerialize(

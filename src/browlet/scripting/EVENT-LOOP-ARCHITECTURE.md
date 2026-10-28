@@ -165,8 +165,12 @@ The remaining consumers have distinct effects:
   clearing it cannot implement script abortion or suppress author finally blocks.
 
 The [runtime boundary](#node-v8-execution-contexts) retains the limits of manually
-supplied records and the unresolved callback-observer translation. Actual script
-termination remains unsupported; see [the killing-scripts audit](ROADMAP.md#html-8145-killing-scripts).
+supplied records. The [Window.postMessage test](../../../test/browlet/communication/window-messaging.test.ts)
+is an approved expected failure: A calling a B-authored function posting to C
+reports A while expecting B. Its low-level fixture and the Binding-to-incumbent
+path remain under review. Stored-incumbent bound built-in callbacks pass separately.
+Actual script termination remains unsupported; see
+[the killing-scripts audit](ROADMAP.md#html-8145-killing-scripts).
 
 ## Host commands and callback completion
 
@@ -208,9 +212,15 @@ The [callback lifecycle tests](../../../test/browlet/scripting/callback-lifecycl
 exercise selection and restoration with explicit records. The A-to-B bound-listener
 investigation is skipped by agreement: its ordinary JavaScript `createFunction`
 observer is not an established substitute for the native API in HTML's examples.
-Revisit with the actual example pages and platform APIs when supported, rather
-than treating that probe as a settled conformance failure. Manually supplying
-records does not establish automatic tracking of author/built-in calls. Custom
+The separate [Window.postMessage test](../../../test/browlet/communication/window-messaging.test.ts)
+uses a real platform observer: when A calls a B-authored function posting to C,
+C sees A while the test expects B. This is an approved expected failure, retaining
+the assertions. The fixture uses low-level realm evaluation; its translation of
+the HTML execution path and expected sender remain under review. Binding supplies
+C's method environment, while the modeled script entry remains A. Revisit that
+path before choosing any runtime change. The bound built-in listener case passes.
+Manually supplying records does not
+establish automatic tracking of author/built-in calls. Custom
 job hooks cover their own boundaries; full Script records and active-script
 restoration also remain unfinished. Continue through the later script-processing
 and host-hook algorithms. New Node/V8 work stays parked.

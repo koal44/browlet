@@ -8,6 +8,7 @@ import {
   type BindingContext, type StampedImplInstance, type TransferSteps,
 } from '../../../web-idl/index';
 
+import { DetachedTransferableStamper } from '../transferable';
 import type { BrowletEnvironment } from '../../environment';
 
 import {
@@ -19,7 +20,6 @@ import {
 } from './records';
 import { structuredDeserialize } from './deserialize';
 import { structuredSerializeInternal } from './serialize';
-import { DetachedTransferableStamper } from './transferable';
 
 // https://html.spec.whatwg.org/multipage/structured-data.html#dom-structuredclone
 export function structuredClone(

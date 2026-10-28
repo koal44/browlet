@@ -470,6 +470,22 @@ explicit standard content-handler list used for sink metadata.
   an author-catchable exception. See the
   [clock contract](../node-compat/README.md#temporal-clock).
 
+- **Window messaging still depends on runtime and WindowProxy work.**
+  `postMessage()` clones/transfers and queues trusted delivery with target-origin
+  checks. The low-level A-to-B-to-C fixture reports A while expecting B; it remains
+  an approved expected failure pending review of the fixture and realm propagation.
+  Binding has cross-origin invocation checks and
+  caller-bound descriptor helpers, but WindowProxy property access still needs to
+  select those descriptors; `targetOrigin` filtering does not secure that access.
+  WindowEventHandlers remain unimplemented. MessagePort transfer is implemented. See the
+  [§9.3 dependencies](browlet/communication/ROADMAP.md#93-cross-document-messaging).
+
+- **Channel messaging uses modeled agents in one isolate.** MessageChannel,
+  MessagePort transfer, queued-message migration, and document cleanup work with
+  existing Window realms. Worker/AudioWorklet globals, shutdown, and cross-thread
+  transport remain separate integrations. Entangled ports and pending tasks are
+  retained conservatively; see [§9.4](browlet/communication/ROADMAP.md#94-channel-messaging).
+
 - **EventSource lifetime is conservative.** Active sources remain retained until
   `close()` or permanent Document cleanup; listener-sensitive collection is not
   implemented. Worker globals and navigation-driven destruction remain separate
@@ -677,8 +693,9 @@ cloning/delivery. `Origin.from()` supports strings, URL, Origin, and Window
 objects, including WindowProxy and entry-origin access checks. Direct host calls
 without an HTML entry use the operation environment. Worker globals remain
 unfinished. Anchor and area have nullable URL slots and extraction, but their
-href/base URL lifecycle is still a stub. MessageEvent has origin state and
-extraction, but no public constructor, complete event initialization, or delivery.
+href/base URL lifecycle is still a stub. MessageEvent has its public constructor,
+initialization, origin state, and extraction. EventSource and Window messaging
+deliver it with the remaining [communication dependencies](browlet/communication/ROADMAP.md).
 These producers remain incomplete even though extraction can consume their
 internally supplied records. The
 [origin audit](browlet/browsing/ROADMAP.md#same-origin-relaxation-origin-and-origin-keyed-clusters)

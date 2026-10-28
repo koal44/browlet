@@ -478,6 +478,7 @@ export class Task {
   steps: () => void;
   /** Nesting level inherited by timer initialization inside this task. */
   timerNestingLevel?: number;
+  #isRunnable?: () => boolean;
 
   constructor(
     source: TaskSource,
@@ -489,11 +490,12 @@ export class Task {
     this.source = source;
     this.steps = steps;
     this.timerNestingLevel = options.timerNestingLevel;
+    this.#isRunnable = options.isRunnable;
   }
 
   get isRunnable(): boolean {
-    return this.document === null ||
-      this.document.isFullyActive();
+    return (this.#isRunnable?.() ?? true) &&
+      (this.document === null || this.document.isFullyActive());
   }
 }
 

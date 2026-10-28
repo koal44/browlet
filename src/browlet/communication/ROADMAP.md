@@ -20,9 +20,8 @@ Construction does not clone the payload, transfer ports, or send a message.
 
 Dependencies brought forward:
 
-- [MessagePort](message-port.ts) supplies EventTarget identity and the declared
-  Window/Worker/AudioWorklet exposure. Entanglement, messaging, transfer steps,
-  start/close, and MessageEventTarget remain for §9.4. It has no public constructor.
+- [MessagePort](message-port.ts) supplies EventTarget identity, messaging, and
+  transfer under §9.4 below. It has no public constructor.
 - [ServiceWorker](../workers/service-worker.ts) supplies EventTarget identity for
   MessageEventSource, with secure Window/Worker exposure and no public constructor.
   Registration, lifecycle, messaging, and its remaining interface are unfinished.
@@ -70,6 +69,100 @@ Fetch with controlled transport/clock inputs, plus an actual HTTP redirect and
 stream. They cover fragmented UTF-8 and line endings, parsing, credentials/CORS,
 final-response origin, event ordering, retry headers, closure, and document cleanup.
 
+## §9.3 Cross-document messaging
+
+[Window.postMessage()](../browsing/window/window.ts) implements both overloads and
+forwards to [the posting steps](window-messaging.ts). Serialization and transfer
+run synchronously; delivery uses the target realm's posted-message task source.
+Target-origin matching runs at delivery, before reconstruction. Deserialization
+failure dispatches `messageerror`; successful delivery dispatches a trusted
+`message` with the sender's WindowProxy, origin, cloned data, and frozen ports.
+
+The environment exposes the existing serialize/deserialize-with-transfer
+operations. Binding keeps the deserialized message graph projected but resolves
+the separate transferred-values list to implementations, so delivery can select
+MessagePort implementations without depending on Binding Context. Window consumes
+communication algorithms; communication only imports Window types.
+
+Dependencies and remaining limits:
+
+- **Incumbent attribution:** controlled script entries and stored callback
+  incumbents work. The A-to-B-to-C fixture is an approved expected failure:
+  it reports A while expecting B. It uses real Web IDL `postMessage()`, unlike
+  the earlier synthetic observer, but enters through low-level realm evaluation.
+  Its translation of the HTML execution path and expected sender remain under
+  review. Binding supplies C's method environment; the modeled stack retains A.
+  Recheck the fixture and author-to-Binding-to-incumbent propagation before
+  choosing a fix; this is not a conclusion that native integration is required. See the
+  [runtime attribution notes](../scripting/EVENT-LOOP-ARCHITECTURE.md#node-v8-execution-contexts).
+  Direct Node calls without any HTML entry likewise have no incumbent;
+  use `Browlet.evaluate()` for host commands.
+- **WindowProxy:** the invoked method's environment selects the incumbent
+  lookup, independently of the target receiver. Borrowing a sender-realm method
+  proves delivery across distinct agents. Ordinary cross-origin property access
+  still needs WindowProxy to select Chapter 7's caller-bound descriptor helpers;
+  Binding's invocation checks are now installed. The current
+  proxy returns target-bound methods; across distinct agents this can leave
+  incumbent lookup on an empty target stack. Cross-origin dispatch/access is
+  not secured by `targetOrigin` filtering. The exotic methods remain Chapter 7 work.
+- **Navigation:** existing top-level navigation tests prove queued messages
+  remain attached to the old target Window and source proxies retain their
+  identity after navigation. Nested-document activity now follows Chapter 7's
+  retained container ancestry. Nested navigation and container policy setup remain
+  unfinished; this implementation does not replace that machinery.
+- **Ports:** MessagePort and ArrayBuffer transfer work. Transferred ports retain
+  queued messages and are projected in the receiving Window's realm.
+- **Handlers:** use `addEventListener('message', ...)` or `messageerror`.
+  Window's `onmessage`/`onmessageerror` await the WindowEventHandlers mixin and
+  global-handler composition; EventSource's own handlers are independent.
+
+[Focused tests](../../../test/browlet/communication/window-messaging.test.ts)
+cover overload conversion, origin/default/opaque checks, serialization timing,
+ArrayBuffer transfer, receiver-realm objects, cluster rejection, FIFO delivery,
+stored callback incumbents, inactive documents, and top-level navigation. Shared
+memory rejection supplies the existing serialization capability directly in its
+fixture; it does not establish completed Window isolation-policy setup.
+
+## §9.4 Channel messaging
+
+[MessageChannel](message-channel.ts) creates entangled
+[MessagePorts](message-port.ts). Both postMessage overloads serialize immediately,
+then deliver trusted message/messageerror events through the receiving port's
+queue. Queues begin disabled; start() or assigning onmessage enables delivery.
+[MessageEventTarget](message-event-target.ts) owns the reusable handler attributes.
+
+Unshipped ports share one FIFO task source per event loop. Task readiness keeps
+disabled queues in place, so enabling ports in a different order does not reorder
+their messages. Shipping either end gives both ends independent task sources.
+Transfer moves queued messages to a disabled receiving port, associates them with
+its Document, and reconstructs their data in its realm. A stable endpoint record
+owns the peer relationship and pending messages. Transfer removes it from the
+old port immediately, then installs it on the receiving port. While in flight,
+messages accumulate without a runnable task. This keeps both-end transfers paired
+and prevents the old object from consuming messages or closing the moved channel.
+
+Binding resolves ports in transfer lists for source/target identity checks; the
+message graph and other transferable values retain their JavaScript representation.
+The shared detached marker now lives in Scripting's lower-level transferable
+module, so close() and structured transfer use the same state.
+
+Entangled ports are retained by their relevant global and released when
+disentangled. Document destruction invokes that cleanup and removes its tasks.
+The [current specification](https://html.spec.whatwg.org/multipage/web-messaging.html#ports-and-garbage-collection)
+permits global retention. Unlike the older local HTML snapshot, it does not
+require close events or GC-triggered disentanglement. Pending tasks are retained
+conservatively until delivery, transfer, or Document destruction.
+
+Worker and AudioWorklet exposure is declared; actual globals, worker channels,
+shutdown, and cross-thread transport remain their owners' work. This implementation
+communicates across Browlet's modeled agents in one isolate. No Node/V8 changes
+or messaging stubs were added. It does not resolve §9.3's incumbent-attribution gap.
+
+[Tests](../../../test/browlet/communication/message-channel.test.ts) cover queue
+activation, shared FIFO order, microtask checkpoints, payload/port identity,
+both-end and repeated transfer, queued-task migration between agents/documents,
+errors, closure, and global cleanup. Window messaging has an end-to-end port test.
+
 ## Constraints to preserve early
 
 - Sending serializes synchronously in the sender's script context; delivery
@@ -81,11 +174,10 @@ final-response origin, event ordering, retry headers, closure, and document clea
 - Window messaging captures the incumbent sender, its origin, and corresponding
   WindowProxy, but checks the target Window's origin when the queued task runs.
   Navigation between send and delivery can therefore discard a message.
-  When this API exists, test A calling a function from B which posts to C:
-  C must observe B as `event.source`, with the sender's corresponding origin.
-  Include callback/built-in entry cases and retain expected failures for missing
-  runtime attribution. The investigation on `research/html-agent-execution`
-  is deferred evidence, not a prerequisite patch to adopt before this consumer.
+  The A-to-B-to-C expected failure above preserves the unresolved attribution test;
+  callback/built-in entry cases are separate. The investigation on
+  `research/html-agent-execution` is deferred evidence, not a prerequisite patch
+  to adopt before this consumer.
 - A MessagePort owns a movable port-message task source. Transferring a port
   moves its pending delivery tasks and reconstructs the endpoint in the target
   realm; the queue cannot be a closure permanently bound to the original
@@ -103,7 +195,8 @@ final-response origin, event ordering, retry headers, closure, and document clea
 | `event-source.ts` | `EventSource`, UTF-8 event-stream parsing, Fetch streaming, reconnection, remote-event tasks, and abort/close | HTML §9.2 |
 | `window-messaging.ts` | Window `postMessage()`, incumbent settings, target-origin checks, WindowProxy source identity, and posted-message tasks | HTML §9.3 |
 | `message-channel.ts` | `MessageChannel` construction and endpoint identity | HTML §9.4.2 |
-| `message-port.ts` | `MessagePort`, `MessageEventTarget`, entanglement, port task sources, transfer/receiving steps, start/close, and lifecycle cleanup | HTML §§9.4.3–9.4.5 |
+| `message-event-target.ts` | Shared messaging handler attributes | HTML §9.4.3 |
+| `message-port.ts` | `MessagePort`, entanglement, task sources, transfer/receiving steps, start/close, and lifecycle cleanup | HTML §§9.4.4–9.4.6 |
 | `broadcast-channel.ts` | Storage-key-scoped channel discovery, per-agent ordering, target-realm delivery, eligibility, close, and liveness | HTML §9.5; Storage |
 
 Co-locate declarations with their implementations and Window/worker contributions
@@ -119,12 +212,10 @@ later sections and the parallel browsing/scripting work.
 
 1. **§9.1 MessageEvent.** Implemented with the dependency stubs listed above.
 2. **§9.2 Server-sent events.** Implemented with the lifetime and Worker limits above.
-3. **§9.3 Cross-document messaging.** Add Window `postMessage()` with nested
-   navigables and cross-navigation WindowProxy/origin tests.
-4. **§9.4 Channel messaging.** Implement MessageChannel/MessagePort over
-   structured data and event-loop task sources. Prove port transfer, queued-task
-   migration, target-realm wrappers, and Document destruction before using ports
-   as the dedicated-worker channel.
+3. **§9.3 Cross-document messaging.** Posting/delivery implemented with the
+   incumbent, WindowProxy, handler, and port dependencies above.
+4. **§9.4 Channel messaging.** Implemented for existing Window realms and modeled
+   agents. Worker/AudioWorklet integration and actual cross-thread delivery remain.
 5. **§9.5 Broadcasting.** Build BroadcastChannel on storage keys, multi-global
    lifetime, and delivery eligibility.
 

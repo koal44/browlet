@@ -148,6 +148,11 @@ export interface EventSourceInit {
   withCredentials?: boolean;
 }
 
+export interface WindowPostMessageOptions {
+  transfer?: Iterable<object>;
+  targetOrigin?: string;
+}
+
 export interface PromiseRejectionEventInit {
   bubbles?: boolean;
   cancelable?: boolean;
@@ -1573,12 +1578,28 @@ export interface MessageEventConstructor extends Ctor<EventConstructor> {
 }
 
 export interface MessagePort extends EventTarget {
-
+  postMessage(message: any, transfer: Iterable<object>): void;
+  postMessage(message: any, options?: StructuredSerializeOptions): void;
+  start(): void;
+  close(): void;
+  onmessage: EventHandlerNonNull | null;
+  onmessageerror: EventHandlerNonNull | null;
 }
 
 export interface MessagePortConstructor extends Ctor<EventTargetConstructor> {
   readonly prototype: MessagePort;
   [Symbol.hasInstance](value: unknown): value is MessagePort;
+}
+
+export interface MessageChannel {
+  readonly port1: MessagePort;
+  readonly port2: MessagePort;
+}
+
+export interface MessageChannelConstructor {
+  readonly prototype: MessageChannel;
+  [Symbol.hasInstance](value: unknown): value is MessageChannel;
+  new (): MessageChannel;
 }
 
 export interface EventSource extends EventTarget {
@@ -1658,6 +1679,8 @@ export interface Window extends EventTarget {
   readonly frameElement: Element | null;
   open(url?: string, target?: string, features?: string): WindowProxy | null;
   readonly originAgentCluster: boolean;
+  postMessage(message: any, targetOrigin: string, transfer?: Iterable<object>): void;
+  postMessage(message: any, options?: WindowPostMessageOptions): void;
   get event(): Event | undefined;
   set event(value: unknown);
   getComputedStyle(elt: Element, pseudoElt?: string | null): CSSStyleProperties;
@@ -1773,6 +1796,7 @@ export interface Window extends EventTarget {
   ErrorEvent: ErrorEventConstructor;
   MessageEvent: MessageEventConstructor;
   MessagePort: MessagePortConstructor;
+  MessageChannel: MessageChannelConstructor;
   EventSource: EventSourceConstructor;
   ServiceWorker: ServiceWorkerConstructor;
   PromiseRejectionEvent: PromiseRejectionEventConstructor;

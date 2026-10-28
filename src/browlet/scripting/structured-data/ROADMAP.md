@@ -4,8 +4,8 @@ HTML [§2.7](https://html.spec.whatwg.org/multipage/structured-data.html) suppli
 structured serialization, storage serialization, target-realm deserialization,
 transfer, and structuredClone(). The generic algorithms, ArrayBuffer transfer,
 and the current Window API are implemented, including the October 2026
-same-agent-cluster contract. MessagePort-backed platform transfer and the remaining
-history/worker/messaging consumers are still future work.
+same-agent-cluster contract. MessagePort transfer now supplies a concrete platform
+consumer; history and worker integrations remain unfinished.
 
 ## October 2026 audit checkpoint
 
@@ -46,12 +46,12 @@ This is a source and focused-regression audit, not complete WPT certification.
 
 | Subsections | Assessment |
 | --- | --- |
-| §§2.7.1–2.7.2, serializable and transferable objects | Exact-primary hooks, nested memory, detached state, and target exposure are covered. Fixed development validation accepting these markers on partial interfaces, mixins, and dictionaries; both regressions failed before the fix. Actual platform transfer still needs MessagePort. |
+| §§2.7.1–2.7.2, serializable and transferable objects | Exact-primary hooks, nested memory, detached state, and target exposure are covered. Fixed development validation accepting these markers on partial interfaces, mixins, and dictionaries; both regressions failed before the fix. MessagePort supplies actual platform transfer, including queued messages and receiving-realm identity. |
 | §2.7.3, same-agent-cluster restriction | The preceding implementation and its regressions cover annotations, conditional restriction, storage rejection, and receiving preflight. |
 | §§2.7.4–2.7.6, serialization and storage | Audited supported value families, key/entry snapshots, getter order, cycles, buffer/view metadata, and the final storage check. Unsupported exotic brands and exact Error slots retain the engine limits below. |
 | §2.7.7, deserialization | Reconstruction, nested identity, exposure, and target prototypes are covered. Fixed SharedArrayBuffer allocation in the wrong native realm; the regression now covers fixed and growable buffers and repeated graph references. |
 | §§2.7.8–2.7.9, transfer | Validation and graph traversal precede transfer effects; receiving checks cluster and exposure first. ArrayBuffer transfer uses the captured target-realm intrinsic. Sequential partial transfers remain the previously reviewed behavior. |
-| §2.7.10, other specification consumers | Fetch abort and Streams tee use the shared operations. Synchronous author calls retain their script entry; asynchronous tee delivery uses realm-owned Promise observation and the HTML job hooks. Worker, messaging, and history integrations remain with their owning features. |
+| §2.7.10, other specification consumers | Fetch abort, Streams tee, and Window.postMessage use the shared operations. Window messaging separates serialization from later target-realm reconstruction through the environment. Synchronous author calls retain their script entry; asynchronous tee delivery uses realm-owned Promise observation and the HTML job hooks. Workers, ports, and history integrations remain with their owning features. |
 | §2.7.11, public API | The global mixin uses the receiver's environment for reconstruction; the borrowed-method regression covers that realm choice. Replaced the stale section-number comment with the algorithm URL. |
 
 The shared-buffer regression exposed that Node's host `structuredClone()` plus
@@ -70,7 +70,7 @@ this focused fix.
 | --- | --- |
 | `records.ts` | Closed record families, graph memory, and the restriction operation |
 | [Web IDL contracts](../../../web-idl/core/structured-data.ts) | Interface-owned serialization and transfer steps, with narrow nested-operation callbacks |
-| `transferable.ts` | HTML-owned detached state |
+| [`../transferable.ts`](../transferable.ts) | HTML-owned detached state shared with MessagePort.close() |
 | `serialize.ts`, `deserialize.ts` | Graph traversal, storage mode, target-realm reconstruction, and shared memory |
 | `transfer.ts` | Structured cloning, transfer-list validation, serialization/transfer order, message-wide checks, and receiving steps |
 | `web-idl.ts` | Shared StructuredSerializeOptions declaration |
@@ -167,13 +167,11 @@ The native queue/context and host-hook work does not remove these slot limitatio
 
 ## Remaining work
 
-1. **Real platform transfer.** Connect MessagePort transfer/receiving with its
-   actual entanglement and lifecycle. Platform transfer tests are synthetic;
-   ArrayBuffer success does not prove a platform consumer. Streams transfer
-   depends on the same MessagePort machinery.
-2. **Consumer integration.** History state, cross-document/channel/broadcast
-   messaging, workers, and worklets must use these operations and the specified
-   storage/realm/agent-cluster rules rather than caller-specific clone paths.
+1. **Streams transfer.** Build on the MessagePort transfer/receiving machinery,
+   with stream-specific state and backpressure handling.
+2. **Consumer integration.** Window and channel messaging use these operations.
+   History state, broadcast messaging, workers, and worklets still need their
+   specified storage/realm/agent-cluster rules rather than caller-specific clone paths.
 3. **Exposure.** Install the existing global contribution with real Worker
    settings and lifetime. Window exposure alone is not worker coverage.
 4. **Conformance.** Extend focused WPT coverage as those globals/consumers become
@@ -190,6 +188,7 @@ failures, storage differences, detached buffers, and exact failure types.
 Projected structuredClone tests cover receiver realms, serializable platforms,
 ArrayBuffer transfer, duplicate rejection, and partial-transfer ordering.
 
-A new platform type needs actual serialization/receiving and public-consumer
-proof in addition to declaring hooks. Keep the missing platform-transfer
-proof explicit until a real registered type supplies it.
+MessagePort tests exercise actual entanglement, pending-message migration,
+repeated transfer, and transfer through Window and channel messaging. Each new
+platform type still needs receiving and public-consumer coverage in addition
+to declaring hooks.

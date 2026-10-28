@@ -443,11 +443,16 @@ both backends. Chromium returns true (2026-10-27). The focused
 approved expected failure. Fix the Window/Binding identity conversion for all
 such returns; rejection notification must not special-case its event target.
 
-`Window.postMessage()` belongs on Window, with its future algorithms in
-`communication/window-messaging.ts`; it must consume the single structured-data
-implementation and the target agent's event loop. It must not add a
-Window-local cloning format. User activation and focus likewise associate state
-with Window while retaining their algorithms under `interaction/`.
+`Window.postMessage()` forwards both overloads to the
+[communication implementation](../../communication/window-messaging.ts), using
+the shared structured-data algorithms and target agent's event loop. Its
+`CrossOrigin` metadata participates in Binding's invocation checks. Full
+WindowProxy property access must select the caller-bound descriptor helpers for
+cross-origin calls; the permissive proxy currently returns the target's method instead.
+WindowEventHandlers (`onmessage`/`onmessageerror`) is still unimplemented.
+See the [§9.3 dependencies](../../communication/ROADMAP.md#93-cross-document-messaging).
+User activation and focus likewise associate state with Window while retaining
+their algorithms under `interaction/`.
 
 ## Removal condition
 

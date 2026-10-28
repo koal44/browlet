@@ -2,8 +2,8 @@ import type { URL } from 'node:url';
 
 import { type InternalPromise, InternalError, TypeError } from '../../../infra/index';
 import {
-  arg, attr, defineIncludes, defineInterface, definePartialInterface, idlType,
-  impl, nullable, op, roAttr, reference, union, xattr, type VoidFunction,
+  arg, atArg, attr, defineIncludes, defineInterface, definePartialInterface, emptyDictionary, emptySequence, idlType,
+  impl, invokeWith, nullable, op, roAttr, reference, sequence, union, xattr, type VoidFunction,
 } from '../../../web-idl/core/index';
 import { areSameOrigin, areSameOriginDomain, type Origin } from '../../../url/index';
 import type { FetchRequestInfo, FetchRequestInit, ResponseImpl } from '../../../fetch/index';
@@ -20,6 +20,7 @@ import { HTMLCollectionImpl, type DocumentImpl, type ElementImpl } from '../../d
 import { HTMLIFrameElementImpl, HTMLObjectElementImpl } from '../../dom/nodes/html/embedded/index';
 import { HTMLFrameElementImpl } from '../../dom/nodes/html/legacy/index';
 import type { PerformanceImpl } from '../../performance/index';
+import { windowPostMessage, type WindowPostMessageOptions } from '../../communication/index';
 import type { BrowletEnvironment, WindowEnvironment } from '../../environment';
 import type { WindowOrWorkerGlobalScopeMixin, TimerHandler } from '../../global-scope';
 import type { StructuredSerializeOptions } from '../../scripting/structured-data/index';
@@ -285,6 +286,18 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   ): T {
     return this.getWindowOrWorkerGlobalScopeMixin()
       .structuredClone(value, options) as T;
+  }
+
+  /** Send through either converted postMessage overload, retaining the invoking environment. */
+  postMessage(
+    message: unknown,
+    targetOriginOrOptions: string | WindowPostMessageOptions,
+    transfer: object[] = [],
+    env: BrowletEnvironment,
+  ): void {
+    const options = typeof targetOriginOrOptions === 'string'
+      ? { targetOrigin: targetOriginOrOptions, transfer } : targetOriginOrOptions;
+    windowPostMessage(this, message, options, env);
   }
 
   /** Register a parsed import map, reporting any retained parse error at this Window. */
@@ -612,6 +625,17 @@ export const windowIDL = defineInterface<BrowletEnvironment>({
       },
     ),
     roAttr('originAgentCluster', idlType.boolean),
+    op('postMessage', idlType.undefined,
+      [
+        arg('message', idlType.any), arg('targetOrigin', idlType.USVString),
+        arg('transfer', sequence(idlType.object), { optional: true, default: emptySequence }),
+      ],
+      { ...invokeWith(atArg(3, (_env, methodEnv) => methodEnv)), ...xattr('CrossOrigin') },
+    ),
+    op('postMessage', idlType.undefined,
+      [arg('message', idlType.any), arg('options', reference('WindowPostMessageOptions'), { optional: true, default: emptyDictionary })],
+      { ...invokeWith(atArg(3, (_env, methodEnv) => methodEnv)), ...xattr('CrossOrigin') },
+    ),
     {
       kind: 'named-getter', method: 'getNamedProperty',
       returns: union(reference('WindowProxy'), reference('Element'), reference('HTMLCollection')),
