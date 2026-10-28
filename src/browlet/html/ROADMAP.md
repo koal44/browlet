@@ -182,8 +182,9 @@ of browsing-context creation (creator/embedder state, inherited base/origin,
 referrer, and policy/sandbox inputs). Then connect an iframe's initial
 `about:blank` child through creation, container/parent associations, nested
 history, and removal. That work spans HTML §4.8.5 and §7.3; the present
-`Navigable.container` placeholder and embedded-sandboxing failure are explicit
-dependencies, not reasons to claim an empty iframe is complete. Follow with
+`Navigable.container` placeholder and creator/embedder-state guards remain explicit
+dependencies. The §7.1.5 audit now supplies iframe flag state and creation-flag
+union, but does not complete an empty iframe. Follow with
 `srcdoc` using the existing Document and parser machinery, preserving its
 distinct document flag and inherited base. Review further navigation, history,
 and policy gaps as they appear. Speculation-rule processing and speculative
@@ -209,8 +210,8 @@ reactions** remain explicit dependencies, not completed by attribute reflection.
 | §2.5.4 credentials translation | `getCORSSettingsCredentialsMode()` implements the always-CORS translation: No CORS/Anonymous select `same-origin`, Use Credentials selects `include`. This deliberately differs from potential-CORS request creation, where No CORS selects `include`. The helper takes the already-interpreted attribute state used by the specification's switch; the rule needs no element argument. |
 | §2.5.4 element consumers | Link and script expose nullable `crossOrigin` reflection through their actual Web IDL declarations, preserving raw text and using DOM mutation for writes/removal. Linked-resource processing (§4.2.4), script preparation/fetching (§§4.12.1/8.1.5), and image/audio/video implementations (§4.8) still need their request consumers. There is no iframe `crossorigin` attribute. `[CEReactions]` declarations and the DOM callback-enqueue hook remain visible; reaction stacks, delivery, and custom-element construction are unfinished §4.13 work. |
 | §2.5.5 keywords and defaults | `dom/nodes/html/attributes/referrer-policy.ts` reuses Fetch's policy values and `EnumeratedAttribute`. Each keyword names its state, including the empty string; absent/invalid attributes select that empty state. Matching is ASCII-insensitive without trimming or header-style comma splitting. Fetch resolves an empty request policy from its policy container. |
-| §2.5.5 reflection and request boundary | Link and script expose non-nullable `referrerPolicy` strings, limited to known values on reads while preserving assigned text. Tests carry the interpreted state through real Fetch request preparation to the outgoing Referer header. Production element loading remains with the same missing consumers as CORS; the other referrer-bearing element surfaces remain unimplemented. |
-| §2.5.5 policy delivery and precedence | The section's precedence note summarizes separate owners: hyperlink `rel=noreferrer`, element attributes, meta referrer processing, and response-header policy delivery. The header parser, redirect updates, and request calculations exist. Hyperlink activation, meta processing, and navigation response-to-Document policy association do not; `Navigable.createNavigationParams()` already marks complete policy-container selection as missing. See the [policy roadmap](../browsing/policy/ROADMAP.md#referrer-policy). |
+| §2.5.5 reflection and request boundary | Link and script expose non-nullable `referrerPolicy` strings, limited to known values on reads while preserving assigned text; §7.1.6 now adds iframe reflection through the same binding. Tests carry the interpreted state through real Fetch request preparation to the outgoing Referer header. Production element loading remains with the same missing consumers as CORS; the remaining referrer-bearing element surfaces are unimplemented. |
+| §2.5.5 policy delivery and precedence | The section's precedence note summarizes separate owners: hyperlink `rel=noreferrer`, element attributes, meta referrer processing, and response-header policy delivery. The header parser, redirect updates, and request calculations exist; §7.1.7 now connects supplied-response policy association. Hyperlink activation, meta processing, and full navigation source/history inheritance remain unfinished. See the [policy roadmap](../browsing/policy/ROADMAP.md#referrer-policy). |
 
 The CORS tests cover both the shared rules and real platform objects, including
 Web IDL conversion, null/undefined removal, namespaced-attribute isolation,

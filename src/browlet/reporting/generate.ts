@@ -5,6 +5,7 @@ import { ReportImpl, ReportBodyImpl } from './report';
 import { TestReportBodyImpl } from './test-report';
 import {
   IntegrityViolationReportBodyImpl, COEPViolationReportBodyImpl, type COEPViolationReportBody,
+  COEPInheritanceViolationReportBodyImpl, type COEPInheritanceViolationReportBody,
 } from '../browsing/policy/index';
 import type { BrowletEnvironment } from '../environment';
 
@@ -26,9 +27,13 @@ export function generateReport(data: unknown, type: string, destination: string,
       case 'integrity-violation':
         report.body = new IntegrityViolationReportBodyImpl(data as IntegrityViolationReportBody);
         break;
-      case 'coep':
-        report.body = new COEPViolationReportBodyImpl(data as COEPViolationReportBody);
+      case 'coep': {
+        const body = data as COEPViolationReportBody | COEPInheritanceViolationReportBody;
+        report.body = body.type === 'corp'
+          ? new COEPViolationReportBodyImpl(body as COEPViolationReportBody)
+          : new COEPInheritanceViolationReportBodyImpl(body);
         break;
+      }
     }
   }
   return report;

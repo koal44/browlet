@@ -1,4 +1,6 @@
-import type { FetchPolicyContainer, FetchResponse, ReferrerPolicy } from '../../../fetch/index';
+import { InternalError } from '../../../infra/index';
+import type { URLRecord } from '../../../url/index';
+import { isLocalURL, type FetchPolicyContainer, type FetchResponse, type ReferrerPolicy } from '../../../fetch/index';
 
 import type { CSPList } from './csp/index';
 
@@ -9,6 +11,7 @@ import { IntegrityPolicy } from './integrity-policy';
 // https://html.spec.whatwg.org/multipage/browsers.html#policy-container
 export class PolicyContainer implements FetchPolicyContainer {
   /** Content Security Policies; absent until the resource's origin is established. */
+  // TODO(CSP): Represent the initially empty list independently of its later self origin.
   cspList: CSPList | undefined = undefined;
   /** Enforced and report-only cross-origin embedder policy. */
   embedderPolicy = new EmbedderPolicy();
@@ -18,6 +21,33 @@ export class PolicyContainer implements FetchPolicyContainer {
   integrityPolicy: IntegrityPolicy = new IntegrityPolicy();
   /** Integrity requirements checked for reporting without blocking requests. */
   reportOnlyIntegrityPolicy: IntegrityPolicy = new IntegrityPolicy();
+
+  // https://html.spec.whatwg.org/multipage/browsers.html#requires-storing-the-policy-container-in-history
+  static requiresStorageInHistory(url: URLRecord): boolean {
+    return url.scheme !== 'blob' && isLocalURL(url);
+  }
+
+  /** Select the destination's policies in history, srcdoc, initiator, then response order. */
+  // https://html.spec.whatwg.org/multipage/browsers.html#determining-navigation-params-policy-container
+  static determineForNavigation(
+    responseURL: URLRecord, historyPolicyContainer: PolicyContainer | null,
+    initiatorPolicyContainer: PolicyContainer | null, parentPolicyContainer: PolicyContainer | null,
+    responsePolicyContainer: PolicyContainer | null,
+  ): PolicyContainer {
+    if (historyPolicyContainer !== null) {
+      if (!this.requiresStorageInHistory(responseURL)) throw new InternalError('This URL cannot restore policies from history');
+      return historyPolicyContainer.clone();
+    }
+    if (
+      responseURL.scheme === 'about' && responseURL.path === 'srcdoc' && responseURL.query === null &&
+      responseURL.username === '' && responseURL.password === '' && responseURL.host === null
+    ) {
+      if (parentPolicyContainer === null) throw new InternalError('Srcdoc policy inheritance requires a parent policy container');
+      return parentPolicyContainer.clone();
+    }
+    if (isLocalURL(responseURL) && initiatorPolicyContainer !== null) return initiatorPolicyContainer.clone();
+    return responsePolicyContainer ?? new PolicyContainer();
+  }
 
   /** Replace policies supplied by the response, preserving those whose headers are absent. */
   // https://w3c.github.io/webappsec-subresource-integrity/#parse-integrity-policy-headers-section
@@ -37,7 +67,7 @@ export class PolicyContainer implements FetchPolicyContainer {
     clone.embedderPolicy = this.embedderPolicy.clone();
     clone.referrerPolicy = this.referrerPolicy;
     clone.integrityPolicy = this.integrityPolicy.clone();
-    // Preserve both policies, as Gecko does; HTML's clone steps omit report-only integrity.
+    // SPEC_CLASH(policy-container-report-only-integrity): Preserve both policies, as Gecko does; HTML's clone steps omit report-only integrity.
     clone.reportOnlyIntegrityPolicy = this.reportOnlyIntegrityPolicy.clone();
     return clone;
   }

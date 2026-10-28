@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, assert, describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { createDocumentState } from '../../../../src/browlet/browsing/navigation/document-state';
 import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
+import { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
 import type { ReferrerPolicy } from '../../../../src/fetch/index';
 import { HTML_NAMESPACE } from '../../../../src/infra/index';
 import { areSameOrigin, createOpaqueOrigin, obtainURLOrigin, parseURL } from '../../../../src/url/index';
@@ -181,6 +182,7 @@ function childDocument(parent: DocumentImpl, url: string, policy: ReferrerPolicy
   document.browsingContext = new BrowsingContext();
   const navigable = new Navigable(createDocumentState(document), parent.getNodeNavigable());
   const container = parent.createElementNode('iframe', HTML_NAMESPACE);
+  assert.instanceOf(container, HTMLIFrameElementImpl);
   parent.documentElement!.appendChild(container);
   // Supply the missing child-navigation association and fully-active ancestry only.
   vi.spyOn(navigable, 'container', 'get').mockReturnValue(container);

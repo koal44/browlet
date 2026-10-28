@@ -191,7 +191,6 @@ export function crossOriginEmbedderPolicyAllowsCredentials(request: FetchRequest
   if (request.origin === undefined) throw new InternalError('Fetch request origin has not been resolved');
   if (request.mode !== 'no-cors' || request.client === null) return true;
   if (request.client.policyContainer.embedderPolicy.value !== 'credentialless') return true;
-  // SPEC_CLASH(coep-redirect-taint): Use same-origin; the draft's inverse is tracked in Fetch #1958/#1959.
   return areSameOrigin(request.origin, obtainURLOrigin(request.currentURL)) &&
     request.redirectTaint === 'same-origin';
 }

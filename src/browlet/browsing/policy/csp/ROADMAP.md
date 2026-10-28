@@ -157,7 +157,11 @@ documentation cleanup does not refresh those observations.
   Parser options, sanitization, script compilation, and workers remain separate
   consumer gates in that roadmap.
 - **HTML delivery:** meta policies and their directive restrictions; full
-  response/local-URL/history inheritance and policy-container selection.
+  navigation source/target capture and local-URL/history reconstruction. §7.1.7
+  now implements response policy creation and container-selection precedence.
+  `PolicyContainer` still represents an unassociated empty CSP list as absent
+  because `CSPList` requires its self origin; separate initially empty state from
+  later origin association without fabricating an opaque origin.
 - **Elements:** inline script and style-block checks, script preparation, and
   element/preload integration. Style-attribute checks are implemented above;
   parsing the remaining directives is not enforcement.

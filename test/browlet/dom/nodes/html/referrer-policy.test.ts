@@ -1,8 +1,26 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../../../src/browlet/browlet';
+import { HTMLIFrameElementImpl } from '../../../../../src/browlet/dom/nodes/html/embedded/iframe';
+import type { ElementImpl } from '../../../../../src/browlet/dom/nodes/element';
+import { unwrap } from '../../../../support/browlet-binding';
 
-describe.each(['link', 'script'] as const)('%s.referrerPolicy', (localName) => {
+describe('Determining the iframe element referrer policy', () => {
+  it('uses only an iframe embedder and returns the canonical attribute state', () => {
+    const browser = new Browlet({ route: () => '' });
+    const iframe = browser.document.createElement('iframe');
+    iframe.setAttribute('referrerpolicy', 'NO-REFERRER');
+    expect(HTMLIFrameElementImpl.determineReferrerPolicy(unwrap<ElementImpl>(iframe))).toBe('no-referrer');
+    iframe.setAttribute('referrerpolicy', ' no-referrer ');
+    expect(HTMLIFrameElementImpl.determineReferrerPolicy(unwrap<ElementImpl>(iframe))).toBe('');
+    const div = browser.document.createElement('div');
+    div.setAttribute('referrerpolicy', 'no-referrer');
+    expect(HTMLIFrameElementImpl.determineReferrerPolicy(unwrap<ElementImpl>(div))).toBe('');
+    expect(HTMLIFrameElementImpl.determineReferrerPolicy(null)).toBe('');
+  });
+});
+
+describe.each(['link', 'script', 'iframe'] as const)('%s.referrerPolicy', (localName) => {
   it('reflects one canonical keyword without changing or trimming the content attribute', async () => {
     const browser = new Browlet({ route: () => '' });
     expect(await browser.evaluate((tag) => {

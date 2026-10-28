@@ -1,13 +1,30 @@
 import { describe, expect, it } from 'vitest';
+import { Browlet } from '../../../../src/browlet/browlet';
+import { BrowletEnvironmentBase } from '../../../../src/browlet/environment';
+import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { PolicyContainer } from '../../../../src/browlet/browsing/policy/container';
 import { IntegrityPolicy } from '../../../../src/browlet/browsing/policy/integrity-policy';
 import { CSPList } from '../../../../src/browlet/browsing/policy/csp/list';
 import { ContentSecurityPolicy } from '../../../../src/browlet/browsing/policy/csp/policy';
 import { FetchResponse } from '../../../../src/fetch/response';
+import { BlobImpl } from '../../../../src/file/blob';
 import { createOpaqueOrigin } from '../../../../src/url/origin';
+import { parseURL } from '../../../../src/url/url';
+import { unwrap } from '../../../support/browlet-binding';
 
 describe('Policy containers', () => {
+  it('associates a response Referrer-Policy with the destination document', () => {
+    const browser = new Browlet({ route: () => '' });
+    const navigable = unwrap<DocumentImpl>(browser.document).getNodeNavigable()!;
+    const response = new FetchResponse();
+    response.urlList.push(parseURL('https://destination.test/').url!);
+    response.headerList.append('Referrer-Policy', 'origin, no-referrer');
+    const params = navigable.createNavigationParams(response);
+    const document = navigable.createAndInitializeDocument('html', 'text/html', params);
+    expect(document.policyContainer.referrerPolicy).toBe('no-referrer');
+  });
+
   it('creates independent default policy state', () => {
     const first = new PolicyContainer();
     const second = new UserAgent().createPolicyContainer();
@@ -17,6 +34,133 @@ describe('Policy containers', () => {
     expect(first.embedderPolicy).not.toBe(second.embedderPolicy);
     expect(first.integrityPolicy).not.toBe(second.integrityPolicy);
     expect(first.reportOnlyIntegrityPolicy).not.toBe(second.reportOnlyIntegrityPolicy);
+  });
+
+  it.each([true, false, null])('creates response policies with secure-context decision %s', (isSecureContext) => {
+    const response = makeResponse();
+    response.headerList.append('Content-Security-Policy', "default-src 'self'");
+    response.headerList.append('Content-Security-Policy-Report-Only', "img-src 'none'");
+    response.headerList.append('Cross-Origin-Embedder-Policy', 'require-corp; report-to="enforced"');
+    response.headerList.append('Cross-Origin-Embedder-Policy-Report-Only', 'credentialless; report-to="reported"');
+    response.headerList.append('Referrer-Policy', 'origin, no-referrer');
+    response.headerList.append('Integrity-Policy', 'blocked-destinations=(script)');
+    response.headerList.append('Integrity-Policy-Report-Only', 'blocked-destinations=(style)');
+    const url = response.url!;
+    const userAgent = new UserAgent();
+    const env = isSecureContext === null ? null : new BrowletEnvironmentBase({
+      userAgent, creationURL: url, topLevelCreationURL: url, topLevelOrigin: createOpaqueOrigin(),
+      targetBrowsingContext: null, isSecureContext,
+    });
+    const container = userAgent.createPolicyContainerFromResponse(response, env);
+    expect(container.cspList!.policies.map((policy) => policy.disposition)).toEqual(['enforce', 'report']);
+    expect(container.embedderPolicy).toEqual({
+      value: isSecureContext ? 'require-corp' : 'unsafe-none',
+      reportingEndpoint: isSecureContext ? 'enforced' : '',
+      reportOnlyValue: isSecureContext ? 'credentialless' : 'unsafe-none',
+      reportOnlyReportingEndpoint: isSecureContext ? 'reported' : '',
+    });
+    expect(container.referrerPolicy).toBe('no-referrer');
+    expect(container.integrityPolicy.blockedDestinations).toEqual(['script']);
+    expect(container.reportOnlyIntegrityPolicy.blockedDestinations).toEqual(['style']);
+  });
+
+  it('uses an empty referrer policy when the response supplies no policy header', () => {
+    const container = new UserAgent().createPolicyContainerFromResponse(makeResponse(), null);
+    expect(container.referrerPolicy).toBe('');
+    expect(container.cspList!.policies).toEqual([]);
+  });
+
+  it('clones a retained Blob creator policy even after revocation, ignoring response headers', () => {
+    const browser = new Browlet({ route: () => '' });
+    const document = unwrap<DocumentImpl>(browser.document);
+    const { env } = document;
+    const store = env.userAgent.blobURLStore;
+    const blobURL = store.add(new BlobImpl(['body'], {}, env), env);
+    const response = new FetchResponse();
+    response.urlList.push(env.parseURL(blobURL)!);
+    store.remove(blobURL);
+    document.policyContainer.referrerPolicy = 'no-referrer';
+    document.policyContainer.embedderPolicy.value = 'credentialless';
+    document.policyContainer.reportOnlyIntegrityPolicy.blockedDestinations.push('script');
+    response.headerList.append('Referrer-Policy', 'unsafe-url');
+    response.headerList.append('Cross-Origin-Embedder-Policy', 'unsafe-none');
+    const container = env.userAgent.createPolicyContainerFromResponse(response, null);
+    expect(container).toEqual(document.policyContainer);
+    expect(container).not.toBe(document.policyContainer);
+    expect(container.reportOnlyIntegrityPolicy).not.toBe(document.policyContainer.reportOnlyIntegrityPolicy);
+    const navigable = document.getNodeNavigable()!;
+    const params = navigable.createNavigationParams(response);
+    const destination = navigable.createAndInitializeDocument('html', 'text/html', params);
+    expect(destination.policyContainer.embedderPolicy.value).toBe('credentialless');
+    expect(destination.policyContainer.referrerPolicy).toBe('no-referrer');
+    expect(navigable.createHistoryEntry(destination, params).documentState.historyPolicyContainer).toBeNull();
+  });
+
+  it.each([
+    ['about:blank', true], ['about:srcdoc', true], ['data:text/html,body', true],
+    ['blob:https://creator.test/id', false], ['https://example.test/', false], ['file:///page.html', false],
+  ] as const)('stores policies in history for %s: %s', (input, expected) => {
+    expect(PolicyContainer.requiresStorageInHistory(parseURL(input).url!)).toBe(expected);
+  });
+
+  it('gives history precedence over srcdoc, initiator, and response policies', () => {
+    const history = new PolicyContainer();
+    history.referrerPolicy = 'no-referrer';
+    const other = new PolicyContainer();
+    const selected = PolicyContainer.determineForNavigation(parseURL('about:srcdoc').url!, history, other, other, other);
+    expect(selected).toEqual(history);
+    expect(selected).not.toBe(history);
+    expect(() => PolicyContainer.determineForNavigation(makeResponse().url!, history, null, null, null))
+      .toThrow('This URL cannot restore policies from history');
+  });
+
+  it.each(['about:srcdoc', 'about:srcdoc#fragment'])('clones the %s parent before considering an initiator or response', (input) => {
+    const parent = new PolicyContainer();
+    parent.referrerPolicy = 'same-origin';
+    const other = new PolicyContainer();
+    const url = parseURL(input).url!;
+    const selected = PolicyContainer.determineForNavigation(url, null, other, parent, other);
+    expect(selected).toEqual(parent);
+    expect(selected).not.toBe(parent);
+    expect(() => PolicyContainer.determineForNavigation(url, null, other, null, other))
+      .toThrow('Srcdoc policy inheritance requires a parent policy container');
+  });
+
+  it.each(['about:blank', 'about:srcdoc?query', 'data:text/html,body', 'blob:https://creator.test/id'])(
+    'clones the initiator for local URL %s', (input) => {
+      const initiator = new PolicyContainer();
+      initiator.referrerPolicy = 'no-referrer';
+      const selected = PolicyContainer.determineForNavigation(
+        parseURL(input).url!, null, initiator, new PolicyContainer(), new PolicyContainer(),
+      );
+      expect(selected).toEqual(initiator);
+      expect(selected).not.toBe(initiator);
+    },
+  );
+
+  it('retains response identity for a non-local URL and supplies fresh defaults without a response', () => {
+    const response = new PolicyContainer();
+    const initiator = new PolicyContainer();
+    initiator.referrerPolicy = 'no-referrer';
+    expect(PolicyContainer.determineForNavigation(makeResponse().url!, null, initiator, initiator, response)).toBe(response);
+    const url = parseURL('about:blank').url!;
+    expect(PolicyContainer.determineForNavigation(url, null, null, null, response)).toBe(response);
+    const selected = PolicyContainer.determineForNavigation(url, null, null, null, null);
+    expect(selected).toEqual(new PolicyContainer());
+    expect(selected).not.toBe(PolicyContainer.determineForNavigation(url, null, null, null, null));
+  });
+
+  it('retains the live local-document container in history and clones it on reconstruction', () => {
+    const browser = new Browlet({ route: () => '' });
+    const navigable = unwrap<DocumentImpl>(browser.document).getNodeNavigable()!;
+    const params = navigable.createNavigationParams(makeResponse('data:text/html,body'));
+    const document = navigable.createAndInitializeDocument('html', 'text/html', params);
+    const state = navigable.createHistoryEntry(document, params).documentState;
+    expect(state.historyPolicyContainer).toBe(document.policyContainer);
+    document.policyContainer.referrerPolicy = 'no-referrer';
+    const restored = PolicyContainer.determineForNavigation(params.url, state.historyPolicyContainer, null, null, null);
+    expect(restored.referrerPolicy).toBe('no-referrer');
+    expect(restored).not.toBe(document.policyContainer);
   });
 
   it('associates both response policies with the container', () => {
@@ -117,3 +261,9 @@ describe('Policy containers', () => {
     });
   });
 });
+
+function makeResponse(url = 'https://resource.test/'): FetchResponse {
+  const response = new FetchResponse();
+  response.urlList.push(parseURL(url).url!);
+  return response;
+}

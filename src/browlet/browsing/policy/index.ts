@@ -1,6 +1,7 @@
 export {
   EmbedderPolicy, type EmbedderPolicyValue, COEPViolationReportBodyImpl, type COEPViolationReportBody,
-  coepViolationReportBodyIDL,
+  coepViolationReportBodyIDL, queueCOEPInheritanceViolation,
+  COEPInheritanceViolationReportBodyImpl, type COEPInheritanceViolationReportBody, coepInheritanceViolationReportBodyIDL,
 } from './coep';
 export { PolicyContainer } from './container';
 export { OpenerPolicy, sanitizeURLForReport, type OpenerPolicyValue } from './coop';

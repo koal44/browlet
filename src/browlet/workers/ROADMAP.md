@@ -11,19 +11,37 @@ structured-clone implementation.
 - `BrowletEnvironment.fetchClassicWorkerScript()` supplies request setup, the custom fetch
   hook, response validation, and UTF-8 decoding up to the explicitly unfinished
   classic-script creation method. Its tests use existing Window settings to
-  exercise the fetch-client/target-settings boundary; worker globals, startup,
-  and production callers remain absent. See the
+  exercise the fetch-client/target-settings boundary; worker startup, projected
+  globals, and production callers remain absent. See the
   [script-fetching audit](../scripting/ROADMAP.md#html-8142-fetching-scripts).
 - `fetchModuleWorkerScriptGraph()` now fetches the root and delegates descendant
   loading/linking, retaining the outside fetch client and target worker settings.
   Its constructors and module-record operations remain explicit dependencies;
   worker startup still needs to call it. Classic `importScripts()` fetching remains
   an explicit stub until synchronous pause can be supplied.
+- `WorkerGlobalScopeImpl` is an abstract foundation for the policy container, embedder policy, and
+  HTML's common `BrowletGlobalObject` state. `DedicatedWorkerGlobalScopeImpl`
+  implements the §7.1.4 owner-policy check and inheritance reports; the base
+  exempts non-dedicated workers. Startup, settings construction, the remaining
+  worker members, Web IDL declarations, and platform projection are explicitly unfinished.
+- The §7.1.7 policy initializer clones a sole document/worker owner's container
+  for local non-Blob workers and otherwise uses the browser's response factory,
+  including Blob creator inheritance. The global now explicitly requires its
+  URL and retains its owner set. Tests use partial globals with real construction
+  environments; they do not implement worker startup or public Worker APIs.
 - `service-worker-global-scope.ts` implements the DOM legacy-listener warning
-  hook and initializes HTML's `BrowletGlobalObject` state. Error reporting,
-  rejected-promise notification, and import-map consumers remain unwired. Move
-  these initializers to `WorkerGlobalScopeImpl` when that common base exists.
+  hook and inherits the common worker state. Error reporting,
+  rejected-promise notification, and import-map consumers remain unwired.
   Full service workers are owned by the Service Workers specification, not HTML §10.
+- None of the three partial globals has a Web IDL declaration or registered
+  global binding yet. The source interfaces are HTML's
+  [WorkerGlobalScope](https://html.spec.whatwg.org/multipage/workers.html#workerglobalscope)
+  and [DedicatedWorkerGlobalScope](https://html.spec.whatwg.org/multipage/workers.html#dedicatedworkerglobalscope),
+  and Service Workers'
+  [ServiceWorkerGlobalScope](https://w3c.github.io/ServiceWorker/#serviceworkerglobalscope-interface).
+  Add declarations beside their implementations, with the specified exposure,
+  inheritance, members, and mixins. Their platform members and global setup
+  remain unfinished; the internal embedder-policy check is not an IDL operation.
 - `UserAgent.handleFetch()` is the provisional Fetch interception entry. With
   no registrations or active workers, it returns a host-owned Promise of null
   so Fetch continues to the network. Replace it with Service Workers' Handle
@@ -51,6 +69,17 @@ structured-clone implementation.
 - If worker startup fails before execution readiness, run the inside
   environment's `discard()` steps. The Service Workers client discarded flag
   exists on `BrowletEnvironmentBase`; this startup caller remains unimplemented.
+- Startup must obtain and install the response's embedder policy, then call
+  `workerGlobalScope.checkEmbedderPolicy(outsideEnv, response)` before script
+  execution. False requires a network error and failed-startup cleanup. The
+  check reports through the outside environment, including for nested workers;
+  it does not require the new worker to have a reporting queue yet. See the
+  [COEP audit](../browsing/policy/ROADMAP.md#html-714-cross-origin-embedder-policies).
+- After assigning the worker URL and owner set, startup must call
+  `initializePolicyContainer(response, env)` with the new worker's environment.
+  Worker settings must expose that same global-owned container. The separate
+  global embedder-policy initialization/check above remains required, including
+  for local workers whose container is inherited.
 - `WorkerGlobalScope` owns its URL, type, name, owner set, policy container,
   embedder policy, module map, cross-origin-isolated capability, and closing
   flag. `WorkerLocation` and `WorkerNavigator` are stable worker-global objects,

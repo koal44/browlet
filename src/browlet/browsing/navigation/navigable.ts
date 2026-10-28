@@ -3,9 +3,11 @@ import { areSameOrigin, areSameOriginDomain, copyURL, createOpaqueOrigin, urlsEq
 import { FetchResponse, type FetchPromptTarget, type fetchPromptTargetBrand } from '../../../fetch/index';
 
 import { coarsenedSharedCurrentTime } from '../../timing/index';
-import { EmbedderPolicy, OpenerPolicy, PermissionsPolicy, SandboxingFlagSet } from '../policy/index';
-import { CSPList } from '../policy/csp/index';
-import type { DocumentImpl, DocumentVisibilityState, ElementImpl } from '../../dom/nodes/index';
+import {
+  EmbedderPolicy, OpenerPolicy, PermissionsPolicy, PolicyContainer, queueCOEPInheritanceViolation, SandboxingFlagSet,
+} from '../policy/index';
+import type { DocumentImpl, DocumentVisibilityState } from '../../dom/nodes/index';
+import { HTMLIFrameElementImpl } from '../../dom/nodes/html/embedded/index';
 import { CustomElementRegistryImpl } from '../../dom/nodes/html/custom-elements/index';
 import type { WindowImpl, WindowProxyHandle } from '../window/index';
 import { BrowletEnvironmentBase } from '../../environment';
@@ -118,7 +120,7 @@ export class Navigable {
 
   /** The element embedding this navigable, or null when it has no container. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#nav-container
-  get container(): ElementImpl | null {
+  get container(): HTMLIFrameElementImpl | null {
     // TODO: connect the container's content navigable when child navigables are implemented.
     if (this.parent !== null) throw new InternalError('Child navigable container association is not implemented');
     return null;
@@ -130,25 +132,42 @@ export class Navigable {
     return this.container?.nodeDocument ?? null;
   }
 
-  allowedToPerformNavigationOrHistoryUpdate(): 'allowed' | 'blocked' {
-    return 'allowed';
+  isNavigationOrHistoryUpdateBlocked(): boolean {
+    // TODO(HTML navigation): Supply the source, target, and activation state and apply the sandbox navigation flags.
+    return false;
   }
 
-  /** Prepare response-delivered CSP and sandbox restrictions before selecting the document's realm. */
+  /** Check child-response isolation against the embedding document's enforced and report-only policies. */
+  // https://html.spec.whatwg.org/multipage/browsers.html#check-a-navigation-response's-adherence-to-its-embedder-policy
+  checkResponseEmbedderPolicy(response: FetchResponse, responsePolicy: EmbedderPolicy): boolean {
+    if (this.parent === null) return true;
+    const document = this.containerDocument;
+    if (document === null) throw new InternalError('Child navigation requires a container document');
+    const parentPolicy = document.policyContainer.embedderPolicy;
+    const compatible = EmbedderPolicy.isCompatibleWithCrossOriginIsolation(responsePolicy.value);
+    if (EmbedderPolicy.isCompatibleWithCrossOriginIsolation(parentPolicy.reportOnlyValue) && !compatible) {
+      queueCOEPInheritanceViolation(response, 'navigation', parentPolicy.reportOnlyReportingEndpoint, 'reporting', document.env);
+    }
+    if (!EmbedderPolicy.isCompatibleWithCrossOriginIsolation(parentPolicy.value) || compatible) return true;
+    queueCOEPInheritanceViolation(response, 'navigation', parentPolicy.reportingEndpoint, 'enforce', document.env);
+    return false;
+  }
+
+  /** Prepare response policies and sandbox restrictions before selecting the document's realm. */
   createNavigationParams(response: FetchResponse): NavigationParams {
     const context = this.activeBrowsingContext;
     if (context === null) throw new InternalError('Navigation requires an active browsing context');
     const env = context.activeWindow.env;
     const params = new NavigationParams(
       response,
-      new SandboxingFlagSet(context.popupSandboxingFlagSet),
+      context.determineCreationSandboxingFlags(this.container),
       coarsenedSharedCurrentTime(env.crossOriginIsolatedCapability).milliseconds,
     );
-    params.policyContainer.cspList = CSPList.parse(response);
-    for (const flag of params.policyContainer.cspList.getSandboxingFlags()) params.finalSandboxingFlagSet.add(flag);
+    // COEP needs the reserved environment's security decision after origin selection.
+    params.policyContainer = env.userAgent.createPolicyContainerFromResponse(response, null);
+    for (const flag of params.policyContainer.cspList?.getSandboxingFlags() ?? []) params.finalSandboxingFlagSet.add(flag);
     if (params.finalSandboxingFlagSet.has('sandboxed-origin')) params.origin = createOpaqueOrigin();
-    // Full navigation policy-container selection (history/local URL inheritance,
-    // referrer and integrity delivery) remains with the Fetch-backed loader.
+    params.iframeReferrerPolicy = HTMLIFrameElementImpl.determineReferrerPolicy(this.container);
     return params;
   }
 
@@ -205,6 +224,10 @@ export class Navigable {
   ): DocumentImpl {
     const { response } = params;
     this.#prepareResponsePolicy(params);
+    if (!this.checkResponseEmbedderPolicy(response, params.policyContainer.embedderPolicy)) {
+      // TODO: Fetch navigation must replace the blocked response with a network error.
+      throw new InternalError('COEP-blocked navigation requires network-error processing');
+    }
     const browsingContext = this.#obtainBrowsingContext(params);
     const permissionsPolicy = this.#createPermissionsPolicy(params);
     const creationURL = params.request?.currentURL ?? params.url;
@@ -289,6 +312,9 @@ export class Navigable {
     documentState.origin = params.origin;
     documentState.aboutBaseURL = params.aboutBaseURL;
     documentState.resource = source;
+    if (PolicyContainer.requiresStorageInHistory(params.url)) {
+      documentState.historyPolicyContainer = params.policyContainer;
+    }
     documentState.everPopulated = true;
     documentState.navigableTargetName = activeState.navigableTargetName;
     return createSessionHistoryEntry(documentState);
@@ -388,7 +414,14 @@ export class Navigable {
       isSecureContext: userAgent.isOriginPotentiallyTrustworthy(params.origin) && (parent === null || parent.isSecureContext),
     });
     if (params.coopEnforcementResult !== null) return;
-    params.policyContainer.embedderPolicy = EmbedderPolicy.obtain(params.response, params.reservedEnv);
+    if (params.url.scheme !== 'blob') {
+      params.policyContainer.embedderPolicy = EmbedderPolicy.obtain(params.response, params.reservedEnv);
+    }
+    // Supplied responses originate in browser UI, without an initiator or history restoration.
+    // TODO(HTML navigation): Supply captured source/target policy containers and history state in the full loader.
+    params.policyContainer = PolicyContainer.determineForNavigation(
+      params.url, null, null, this.containerDocument?.policyContainer ?? null, params.policyContainer,
+    );
     params.coopEnforcementResult = {
       needsBrowsingContextGroupSwitch: false,
       wouldNeedBrowsingContextGroupSwitchDueToReportOnly: false,

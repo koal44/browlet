@@ -27,7 +27,9 @@ import {
   reportIDL, reportBodyIDL, testReportBodyIDL, reportingObserverIDL, reportingObserverCallbackIDL,
   reportingObserverOptionsIDL, reportListIDL,
 } from './reporting/index';
-import { integrityViolationReportBodyIDL, coepViolationReportBodyIDL } from './browsing/policy/index';
+import {
+  integrityViolationReportBodyIDL, coepViolationReportBodyIDL, coepInheritanceViolationReportBodyIDL,
+} from './browsing/policy/index';
 import {
   cspViolationReportBodyIDL, securityPolicyViolationEventIDL, securityPolicyViolationEventInitIDL,
   securityPolicyViolationEventDispositionIDL,
@@ -225,7 +227,7 @@ export const browletDefinitions = [
   originIDL,
   locationIDL,
   reportIDL, reportBodyIDL, integrityViolationReportBodyIDL, testReportBodyIDL,
-  coepViolationReportBodyIDL,
+  coepViolationReportBodyIDL, coepInheritanceViolationReportBodyIDL,
   cspViolationReportBodyIDL,
   securityPolicyViolationEventIDL, securityPolicyViolationEventInitIDL, securityPolicyViolationEventDispositionIDL,
   reportingObserverIDL, reportingObserverCallbackIDL, reportingObserverOptionsIDL, reportListIDL,

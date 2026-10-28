@@ -3,6 +3,7 @@ import { serializeOrigin, serializeURL, type Origin, type URLRecord } from '../.
 import { StorageKey, type StorageEnvironment } from '../../../storage/index';
 import type { BlobImpl } from '../../../file/index';
 
+import type { PolicyContainer } from '../../browsing/policy/index';
 import type { UserAgent } from '../../user-agent';
 
 /** User-agent-owned registrations that retain their objects and creating environments. */
@@ -101,4 +102,6 @@ export class BlobURLEntry {
 export interface BlobURLEnvironment extends StorageEnvironment {
   /** Security origin of the creator, including inherited and opaque origins. */
   origin: Origin;
+  /** Creator policies inherited when its Blob URL supplies a document or worker. */
+  policyContainer: PolicyContainer;
 }

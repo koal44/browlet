@@ -881,6 +881,7 @@ export interface HTMLImageElementConstructor extends Ctor<HTMLElementConstructor
 }
 
 export interface HTMLIFrameElement extends HTMLElement {
+  referrerPolicy: string;
   loading: string;
 }
 
@@ -1441,6 +1442,13 @@ export interface COEPViolationReportBody extends ReportBody {
   readonly type: string;
   readonly blockedURL: string;
   readonly destination: string;
+  readonly disposition: string;
+  toJSON(): object;
+}
+
+export interface COEPInheritanceViolationReportBody extends ReportBody {
+  readonly type: string;
+  readonly blockedURL: string;
   readonly disposition: string;
   toJSON(): object;
 }

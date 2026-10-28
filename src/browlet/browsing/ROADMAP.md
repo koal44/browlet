@@ -12,6 +12,10 @@ owns the browsing-context and session-history lifecycle.
   bounded top-level navigation spine.
 - `navigation/navigable.ts` derives a node's navigable and a top-level Document's
   fully-active status from the navigable's active session-history entry.
+- The [policy audit](policy/ROADMAP.md#html-715-sandboxing) now reaches §7.1.7:
+  COEP checks/reports, sandbox state and creation flags, iframe referrer policy,
+  and policy-container selection/initialization. Missing lifecycle consumers
+  remain explicit; the next audit is §7.2, APIs related to navigation and session history.
 
 ## HTML origins and sites audit
 
@@ -285,8 +289,8 @@ propagation before auxiliary windows are added.
 
 Referrer Policy already follows a srcdoc Document's browsing context to its
 navigable's container and that element's node Document. `Navigable.container`
-provisionally returns null; replace it with the actual content-navigable
-association during child creation/destruction. The loaded-srcdoc referrer case
+returns null at the top level and throws for children; replace the latter with
+the actual content-navigable association during child creation/destruction. The loaded-srcdoc referrer case
 in `test/browlet/environment.test.ts` is an expected failure until
 this lifecycle exists. Add nested-srcdoc and inactive-container-Document cases
 at that point; `parent.activeDocument` is not an equivalent relationship.

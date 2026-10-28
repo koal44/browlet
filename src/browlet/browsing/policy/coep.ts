@@ -2,7 +2,7 @@ import { defineInterface, idlType, impl, op, roAttr, xattr } from '../../../web-
 import type { FetchEmbedderPolicy, FetchEmbedderPolicyValue, FetchResponse } from '../../../fetch/index';
 
 import { ReportBodyImpl } from '../../reporting/index';
-import type { BrowletEnvironmentBase } from '../../environment';
+import type { BrowletEnvironment, BrowletEnvironmentBase } from '../../environment';
 
 /** Cross-origin embedding requirements and their reporting endpoints. */
 // https://html.spec.whatwg.org/multipage/browsers.html#embedder-policy
@@ -54,6 +54,59 @@ export class EmbedderPolicy implements FetchEmbedderPolicy {
 }
 
 export type EmbedderPolicyValue = FetchEmbedderPolicyValue;
+
+/** Queue an inheritance report through the embedding document or worker owner's environment. */
+// https://html.spec.whatwg.org/multipage/browsers.html#queue-a-cross-origin-embedder-policy-inheritance-violation
+export function queueCOEPInheritanceViolation(
+  response: FetchResponse, type: string, endpoint: string, disposition: string, env: BrowletEnvironment,
+): void {
+  env.queueReport('coep', endpoint, { type, blockedURL: response.serializeURLForReporting(), disposition });
+}
+
+/** Observer-facing snapshot of a navigation or worker-initialization inheritance violation. */
+export class COEPInheritanceViolationReportBodyImpl extends ReportBodyImpl implements COEPInheritanceViolationReportBody {
+  type: string;
+  blockedURL: string;
+  disposition: string;
+
+  constructor(body: COEPInheritanceViolationReportBody) {
+    super();
+    this.type = body.type;
+    this.blockedURL = body.blockedURL;
+    this.disposition = body.disposition;
+  }
+}
+
+/** JSON fields supplied by HTML's COEP inheritance violation-report algorithm. */
+export type COEPInheritanceViolationReportBody = {
+  type: string;
+  blockedURL: string;
+  disposition: string;
+};
+
+// HTML defines JSON fields; use the same hidden-interface model as the CORP body below.
+/*
+ * [Exposed=(Window,Worker), LegacyNoInterfaceObject]
+ * interface COEPInheritanceViolationReportBody : ReportBody {
+ *   readonly attribute DOMString type;
+ *   readonly attribute USVString blockedURL;
+ *   readonly attribute DOMString disposition;
+ *   [Default] object toJSON();
+ * };
+ */
+export const coepInheritanceViolationReportBodyIDL = defineInterface({
+  name: 'COEPInheritanceViolationReportBody',
+  inherits: 'ReportBody',
+  exposed: ['Window', 'Worker'],
+  ...xattr('LegacyNoInterfaceObject'),
+  implementation: impl(COEPInheritanceViolationReportBodyImpl),
+  members: [
+    roAttr('type', idlType.DOMString),
+    roAttr('blockedURL', idlType.USVString),
+    roAttr('disposition', idlType.DOMString),
+    op('toJSON', idlType.object, [], xattr('Default')),
+  ],
+});
 
 /** Observer-facing snapshot of the COEP report generated for a CORP violation. */
 // https://fetch.spec.whatwg.org/#queue-a-cross-origin-embedder-policy-corp-violation-report

@@ -10,7 +10,8 @@ import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
 import type { MIMEType } from '../mime/index';
 import type { BlobImpl } from '../file/index';
 import {
-  ConnectionPool, HTTPCacheStore, CORSPreflightCache, fetch, FetchRequest, isFilteredResponse, isOkStatus,
+  ConnectionPool, HTTPCacheStore, CORSPreflightCache, fetch, FetchRequest,
+  isFilteredResponse, isOkStatus, parseReferrerPolicyFromHeader,
   type FetchEnvironment, type FetchController, type FetchResponse, type FetchUserAgent, type HTTPTransport,
   type Destination, type RequestInternalPriority, type ServiceWorkerTimingInfo,
 } from '../fetch/index';
@@ -23,12 +24,11 @@ import {
   SharedWorkerAgent, WindowAgent, WorkletAgent,
 } from './scripting/index';
 import { type ReportingEndpoint, ReportImpl } from './reporting/index';
-import {
-  PolicyContainer, HSTSStore,
-} from './browsing/policy/index';
+import { PolicyContainer, HSTSStore, EmbedderPolicy } from './browsing/policy/index';
+import { CSPList } from './browsing/policy/csp/index';
 import type { IntersectionObserverMargin } from './dom/intersection-observer/index';
 import type { DocumentImpl } from './dom/nodes/index';
-import { type BrowletEnvironment } from './environment';
+import type { BrowletEnvironment, BrowletEnvironmentBase } from './environment';
 import { WebDriver, type PageEvaluation } from './automation/index';
 import { HTTPAuthenticationStore } from './loader/index';
 import { BrowsingContextGroup, type Navigable, type TopLevelTraversable } from './browsing/navigation/index';
@@ -220,6 +220,25 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   /** Create a fresh HTML policy container, including for clientless Fetch requests. */
   createPolicyContainer(): PolicyContainer {
     return new PolicyContainer();
+  }
+
+  /** Obtain response policies, or clone a Blob URL creator's retained policies. */
+  // https://html.spec.whatwg.org/multipage/browsers.html#creating-a-policy-container-from-a-fetch-response
+  createPolicyContainerFromResponse(response: FetchResponse, env: BrowletEnvironmentBase | null): PolicyContainer {
+    const url = response.url;
+    if (url === null) throw new InternalError('Policy-container creation requires a response URL');
+    if (url.scheme === 'blob') {
+      const entry = url.blobURLEntry;
+      if (!(entry instanceof BlobURLEntry)) throw new InternalError('Blob policy inheritance requires a resolved Blob URL entry');
+      return entry.env.policyContainer.clone();
+    }
+    const result = this.createPolicyContainer();
+    result.cspList = CSPList.parse(response);
+    // SPEC_CLASH(policy-container-null-environment): HTML assigns a string to the embedder-policy record; keep the default record.
+    if (env !== null) result.embedderPolicy = EmbedderPolicy.obtain(response, env);
+    result.referrerPolicy = parseReferrerPolicyFromHeader(response);
+    result.parseIntegrityPolicyHeaders(response);
+    return result;
   }
 
   /** Shared Fetch timestamps use the same clock as HTML and High Resolution Time. */

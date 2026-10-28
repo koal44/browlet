@@ -74,6 +74,29 @@ recorded scope. Their remaining features stay with those owners; preflight is
 not a second backlog. HTML's element/preload algorithms still supply SRI inputs;
 browser policy owns Integrity-Policy parsing and reports.
 
+## HTML credentialless follow-up
+
+Added during the HTML §7.1.4 audit on 27 October 2026; this was not an omission
+recorded by the earlier WHATWG Fetch audit. [HTML's COEP preamble](https://html.spec.whatwg.org/multipage/browsers.html#coep)
+strongly encourages Private Network Access and Opaque Response Blocking before
+credentialless support. These are separate proposals, not steps in either the
+audited Fetch snapshot or the [published Fetch snapshot checked on that date](https://fetch.spec.whatwg.org/commit-snapshots/59afe349913d56898c947576216f1c2579308be7/).
+
+- [PNA §3.4](https://wicg.github.io/private-network-access/) proposes Fetch
+  changes for IP-address-space classification and private-network authorization.
+  It is a separate WICG draft; selecting its integration requires an independent audit.
+- ORB's [original proposal](https://github.com/annevk/orb) points to
+  [Fetch PR #1442](https://github.com/whatwg/fetch/pull/1442). The
+  [updated PR #1755](https://github.com/whatwg/fetch/pull/1755) is also unmerged
+  as of this check. Its response classification/blocking and HTML metadata
+  dependencies need their own audit.
+
+Neither pipeline is implemented. Existing COEP credential suppression and CORP
+checks implement their Fetch algorithms but do not supply these additional
+protections. Browlet currently grants only logical isolation, with
+`crossOriginIsolated` false. Keep this HTML follow-up separate from the known
+unfinished Fetch algorithms above.
+
 ## Retained specification decisions
 
 Identifiers match source markers. Browser observations were collected in
@@ -107,6 +130,12 @@ Revisit these decisions when the specification or implementation evidence change
 
 ### HTTP, Blob, and CORS
 
+- **`referrer-empty-policy`:** HTML §7.1.7 response association exposed the
+  missing empty-policy fallback on 27 October 2026. Referrer Policy §3.9 requires
+  strict-origin-when-cross-origin; §8.3 instead says Fetch never supplies empty
+  and omits its switch case. Follow §3.9 during calculation without rewriting
+  the retained policy. The [policy audit](../browlet/browsing/policy/ROADMAP.md#referrer-policy)
+  records the source conflict and failing-then-passing calculation/Blob/data tests.
 - **`cookie-samesite-context`:** sending and storage use distinct browser
   decisions rather than Fetch's shared SameSite mode. The approved navigation,
   client, and redirect choices and evidence stay in the
@@ -142,10 +171,13 @@ Revisit these decisions when the specification or implementation evidence change
   explicit Authorization as Fetch says ([browser exception](https://github.com/whatwg/fetch/issues/1919));
   malformed/repeated/negative max-age uses Fetch's five-second fallback. Gecko
   skips invalid caching; Blink/WebKit accept negative values as expired.
-- **`coep-redirect-taint`:** use same-origin redirect taint for credentialless
-  credentials. The draft's inverse was reported in [Fetch #1958](https://github.com/whatwg/fetch/issues/1958)
-  with [fix #1959](https://github.com/whatwg/fetch/pull/1959). Confirm publication
-  before retiring the marker; the last recorded check found the PR still open.
+- **Credentialless redirect taint, resolved:** Browlet already uses same-origin
+  redirect taint for credentials. The audited snapshot's inverse was reported in
+  [Fetch #1958](https://github.com/whatwg/fetch/issues/1958) with
+  [fix #1959](https://github.com/whatwg/fetch/pull/1959). The
+  [published algorithm](https://fetch.spec.whatwg.org/commit-snapshots/59afe349913d56898c947576216f1c2579308be7/#cross-origin-embedder-policy-allows-credentials)
+  now agrees; retired `SPEC_CLASH(coep-redirect-taint)` on 27 October 2026 without
+  changing behavior. The local audited source at `586cd2a` still has the old text.
 - **`metadata-user-boolean`:** [Sec-Fetch-User](https://w3c.github.io/webappsec-fetch-metadata/#sec-fetch-user-header)
   is a boolean in its definition/ABNF but a token in its setter. Serialize `?1`,
   matching the definition, examples, and Blink/Gecko source.

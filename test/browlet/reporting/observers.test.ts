@@ -288,6 +288,21 @@ describe('ReportingObserver', () => {
 });
 
 describe('Reporting policy integration and user control', () => {
+  it.each(['navigation', 'worker initialization'])('projects the %s inheritance report without a CORP destination', (type) => {
+    const { window, env } = createWindow();
+    const observer = new window.ReportingObserver(() => {});
+    observer.observe();
+    const body = { type, blockedURL: 'https://resource.test/document', disposition: 'enforce' };
+    env.queueReport('coep', 'reports', body);
+    const report = observer.takeRecords()[0]!;
+    expect(report.body!.toJSON()).toEqual(body);
+    expect(Object.keys(report.body!.toJSON())).toEqual(['type', 'blockedURL', 'disposition']);
+    expect(Reflect.has(report.body!, 'destination')).toBe(false);
+    expect(report.body).toBeInstanceOf(window.ReportBody);
+    expect(Object.prototype.toString.call(report.body)).toBe('[object COEPInheritanceViolationReportBody]');
+    expect(Reflect.has(window, 'COEPInheritanceViolationReportBody')).toBe(false);
+  });
+
   it.each([true, false])('reports enforced and report-only CORP violations with delivery enabled: %s', (enabled) => {
     const { window, env, scope } = createWindow();
     env.userAgent.reportDeliveryEnabled = enabled;

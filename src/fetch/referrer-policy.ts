@@ -1,6 +1,6 @@
 import { asciiLower } from '../infra/ascii';
-import { InternalError } from '../infra/internal-error';
 import { surroundingTabOrSpacePattern } from '../infra/patterns';
+import { assertNever } from '../infra/util';
 import { defineEnumeration } from '../web-idl/core/index';
 import { areSameOrigin, copyURL, obtainURLOrigin, serializeURL, type URLRecord } from '../url/index';
 
@@ -57,7 +57,7 @@ export function setRequestReferrerPolicyOnRedirect(request: FetchRequest, respon
   if (policy !== '') request.referrerPolicy = policy;
 }
 
-/** Select a referrer using the resolved policy, or null to omit it, without changing the source URL. */
+/** Select a referrer, applying the default for an empty policy, without changing the source URL. */
 // https://w3c.github.io/webappsec-referrer-policy/#determine-requests-referrer
 export function determineRequestReferrer(request: FetchRequest): URLRecord | null {
   const source = request.referrer === undefined
@@ -78,12 +78,14 @@ export function determineRequestReferrer(request: FetchRequest): URLRecord | nul
     case 'origin': return referrerOrigin;
     case 'unsafe-url': return referrerURL;
     case 'strict-origin': return downgrade ? null : referrerOrigin;
+    // SPEC_CLASH(referrer-empty-policy): Follow §3.9's default; §8.3 incorrectly says Fetch never supplies an empty policy.
+    case '':
     case 'strict-origin-when-cross-origin':
       return sameOrigin ? referrerURL : downgrade ? null : referrerOrigin;
     case 'same-origin': return sameOrigin ? referrerURL : null;
     case 'origin-when-cross-origin': return sameOrigin ? referrerURL : referrerOrigin;
     case 'no-referrer-when-downgrade': return downgrade ? null : referrerURL;
-    default: throw new InternalError('Referrer calculation requires a resolved referrer policy');
+    default: return assertNever(request.referrerPolicy);
   }
 }
 

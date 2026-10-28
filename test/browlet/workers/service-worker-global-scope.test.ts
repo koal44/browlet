@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { createSandboxEnvironment } from '../../../src/browlet/bindings';
+import { parseURL } from '../../../src/url/url';
 import {
   ServiceWorkerGlobalScopeImpl,
 } from '../../../src/browlet/workers/service-worker-global-scope';
 
 class TestServiceWorkerGlobalScope extends ServiceWorkerGlobalScopeImpl
 {
+  url = parseURL('https://worker.test/service.js').url!;
   warnings: string[] = [];
   evaluated = false;
   handledTypes = new Set<string>();

@@ -1,5 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { Browlet } from '../../../../src/browlet/browlet';
+import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
+import { createDocumentState } from '../../../../src/browlet/browsing/navigation/document-state';
+import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
 import { SandboxingFlagSet } from '../../../../src/browlet/browsing/policy/sandbox';
+import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
+import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
+import { FetchResponse } from '../../../../src/fetch/response';
+import { parseURL } from '../../../../src/url/url';
+import { unwrap } from '../../../support/browlet-binding';
 
 describe('HTML sandbox directives', () => {
   it('starts with every restriction for an empty or unrecognized token list', () => {
@@ -58,5 +67,107 @@ describe('HTML sandbox directives', () => {
       'allow-presentation', 'allow-downloads',
     ].join(' '));
     expect([...flags]).toEqual(['sandboxed-navigation', 'sandboxed-document-domain']);
+  });
+});
+
+describe('Sandbox state and creation flags', () => {
+  it('updates iframe restrictions on attribute creation, replacement, Attr mutation, and removal', () => {
+    const browser = new Browlet({ route: () => '' });
+    const iframe = browser.document.createElement('iframe');
+    const implementation = unwrap<HTMLIFrameElementImpl>(iframe);
+    expect(implementation.sandboxingFlagSet.size).toBe(0);
+    iframe.setAttribute('sandbox', '');
+    expect(implementation.sandboxingFlagSet).toEqual(SandboxingFlagSet.parse(''));
+    iframe.setAttribute('sandbox', 'allow-scripts');
+    expect(implementation.sandboxingFlagSet.has('sandboxed-scripts')).toBe(false);
+    iframe.getAttributeNode('sandbox')!.value = 'allow-same-origin';
+    expect(implementation.sandboxingFlagSet.has('sandboxed-scripts')).toBe(true);
+    expect(implementation.sandboxingFlagSet.has('sandboxed-origin')).toBe(false);
+    iframe.removeAttribute('sandbox');
+    expect(implementation.sandboxingFlagSet.size).toBe(0);
+  });
+
+  it('ignores namespaced sandbox attributes and preserves parsed restrictions when cloning', () => {
+    const browser = new Browlet({ route: () => '' });
+    const iframe = browser.document.createElement('iframe');
+    iframe.setAttributeNS('urn:other', 'x:sandbox', '');
+    expect(unwrap<HTMLIFrameElementImpl>(iframe).sandboxingFlagSet.size).toBe(0);
+    iframe.setAttribute('sandbox', 'allow-scripts');
+    const cloned = unwrap<HTMLIFrameElementImpl>(iframe.cloneNode());
+    expect(cloned.sandboxingFlagSet).toEqual(SandboxingFlagSet.parse('allow-scripts'));
+    expect(cloned.sandboxingFlagSet).not.toBe(unwrap<HTMLIFrameElementImpl>(iframe).sandboxingFlagSet);
+  });
+
+  it('copies popup flags when there is no embedder', () => {
+    const context = new BrowsingContext();
+    expect(context.onePermittedSandboxedNavigator).toBeNull();
+    expect(context.determineCreationSandboxingFlags(null).size).toBe(0);
+    context.popupSandboxingFlagSet.add('sandboxed-forms');
+    const flags = context.determineCreationSandboxingFlags(null);
+    expect([...flags]).toEqual(['sandboxed-forms']);
+    flags.clear();
+    expect(context.popupSandboxingFlagSet.has('sandboxed-forms')).toBe(true);
+  });
+
+  it('unions iframe and current node-document restrictions without the context popup flags', () => {
+    const original = new Browlet({ route: () => '' });
+    const target = new Browlet({ route: () => '' });
+    const originalDocument = unwrap<DocumentImpl>(original.document);
+    originalDocument.setActiveSandboxingFlagSet(new SandboxingFlagSet(['sandboxed-downloads']));
+    const targetDocument = unwrap<DocumentImpl>(target.document);
+    targetDocument.setActiveSandboxingFlagSet(new SandboxingFlagSet(['sandboxed-scripts']));
+    const iframe = original.document.createElement('iframe');
+    iframe.setAttribute('sandbox', 'allow-scripts allow-downloads');
+    target.document.adoptNode(iframe);
+    const implementation = unwrap<HTMLIFrameElementImpl>(iframe);
+    const context = new BrowsingContext();
+    context.popupSandboxingFlagSet.add('sandboxed-downloads');
+    const flags = context.determineCreationSandboxingFlags(implementation);
+    expect(flags.has('sandboxed-scripts')).toBe(true);
+    expect(flags.has('sandboxed-automatic-features')).toBe(false);
+    expect(flags.has('sandboxed-downloads')).toBe(false);
+    expect(flags.has('sandboxed-origin')).toBe(true);
+    flags.clear();
+    expect(targetDocument.activeSandboxingFlagSet.has('sandboxed-scripts')).toBe(true);
+    expect(implementation.sandboxingFlagSet.has('sandboxed-origin')).toBe(true);
+  });
+
+  it('keeps a document snapshot independent of later iframe attribute changes', () => {
+    const browser = new Browlet({ route: () => '' });
+    const iframe = browser.document.createElement('iframe');
+    iframe.setAttribute('sandbox', '');
+    const context = new BrowsingContext();
+    const flags = context.determineCreationSandboxingFlags(unwrap<HTMLIFrameElementImpl>(iframe));
+    const document = unwrap<DocumentImpl>(browser.document);
+    document.setActiveSandboxingFlagSet(flags);
+    iframe.removeAttribute('sandbox');
+    flags.clear();
+    expect(document.activeSandboxingFlagSet).toEqual(SandboxingFlagSet.parse(''));
+  });
+
+  it('captures iframe referrer policy and combines response, iframe, and ancestor sandbox restrictions', () => {
+    const browser = new Browlet({ route: () => '' });
+    const document = unwrap<DocumentImpl>(browser.document);
+    const parent = document.getNodeNavigable()!;
+    document.setActiveSandboxingFlagSet(new SandboxingFlagSet(['sandboxed-forms']));
+    const [, childDocument] = BrowsingContext.create(null, null, parent.activeBrowsingContext!.group!);
+    const child = new Navigable(createDocumentState(childDocument), parent);
+    const iframe = browser.document.createElement('iframe');
+    iframe.setAttribute('sandbox', 'allow-scripts allow-forms');
+    iframe.setAttribute('referrerpolicy', 'NO-REFERRER');
+    // Supply only the unfinished content-navigable association.
+    vi.spyOn(child, 'container', 'get').mockReturnValue(unwrap<HTMLIFrameElementImpl>(iframe));
+    const response = new FetchResponse();
+    response.urlList.push(parseURL('https://child.test/').url!);
+    response.headerList.append('Content-Security-Policy', 'sandbox allow-same-origin allow-forms');
+    const params = child.createNavigationParams(response);
+    expect(params.finalSandboxingFlagSet.has('sandboxed-origin')).toBe(true);
+    expect(params.finalSandboxingFlagSet.has('sandboxed-forms')).toBe(true);
+    expect(params.finalSandboxingFlagSet.has('sandboxed-scripts')).toBe(true);
+    expect(params.iframeReferrerPolicy).toBe('no-referrer');
+    iframe.removeAttribute('sandbox');
+    iframe.setAttribute('referrerpolicy', 'unsafe-url');
+    expect(params.finalSandboxingFlagSet.has('sandboxed-origin')).toBe(true);
+    expect(params.iframeReferrerPolicy).toBe('no-referrer');
   });
 });

@@ -22,6 +22,18 @@ outside consumers use its index, while its modules import each other directly.
   switches change its virtual identifier. The complete enforcement result can
   carry accumulated decisions across redirects. The [policy audit](../policy/ROADMAP.md#html-713-cross-origin-opener-policies)
   records reporting dependencies and the logical-isolation choice.
+- `Navigable.checkResponseEmbedderPolicy()` implements COEP inheritance and
+  owner-scoped reports. Supplied-response document creation calls it before
+  changing contexts. The [COEP audit](../policy/ROADMAP.md#html-714-cross-origin-embedder-policies)
+  records the missing child-container association and Fetch navigation's CORP,
+  policy-selection, and network-error-document consumers. A rejected response
+  currently throws at the explicit network-error boundary.
+- Response preparation now captures iframe referrer policy and combines iframe,
+  node-Document, and response CSP sandbox flags. It installs response referrer
+  and integrity policies and preserves Blob creator policies. Local non-Blob
+  history entries retain the destination container. The
+  [§§7.1.5–7.1.7 audit](../policy/ROADMAP.md#html-715-sandboxing) records
+  selection precedence, clone rules, and remaining consumers.
 
 The navigable survives changes of Document, Window, and environment. Preparing
 a response can create a new environment while the old document remains active;
@@ -60,7 +72,17 @@ preceding response initiated the navigation. The supplied-response adapter
 starts from the active document and browser-UI source state; it cannot reconstruct
 redirect policies from a final response alone. Sandboxed non-unsafe-none COOP
 responses require network-error processing, currently an explicit guard.
-Local-URL policy inheritance and popup creator state remain unfinished.
+Policy selection now implements history/srcdoc/initiator/response precedence,
+but full navigation must capture source/target policies and supply its actual
+history state. Inline-srcdoc creation must combine inherited CSP before selecting
+its origin. Initial blank creator inheritance, history reconstruction, and popup
+creator state remain unfinished.
+
+`isNavigationOrHistoryUpdateBlocked()` still returns a provisional false;
+it has no source/target/activation inputs and does not enforce sandbox navigation
+flags. Target selection must also populate and consult the context's
+`onePermittedSandboxedNavigator`. Popup restrictions, external protocols, dialogs,
+and download consumers remain explicit in the sandbox audit.
 
 Document now retains the §3.1.5 `previousDocumentUnloadTiming` record with zero
 defaults. The unloading/navigation algorithms must capture the old document's
@@ -69,7 +91,8 @@ allocation of the record does not implement that producer.
 
 Document implements [§3.1.3 ancestor-origin snapshots](../../html/ROADMAP.md#section-313-ancestor-origins).
 Child navigation must supply the navigable/container association, fully-active
-ancestry, and iframe referrer policy. `Navigable.container` throws for children
+ancestry, and captured iframe referrer policy. The §7.1.6 policy-selection operation
+and current preparation callers exist; `Navigable.container` throws for children
 until that association exists. Creation passes the known container document to
 ancestry initialization before activation, or uses the embedder's node document
 before an initial navigable exists. Do not substitute the parent navigable's
@@ -80,6 +103,8 @@ association for Document named access. Child creation/destruction must populate
 and clear it alongside the container relationship. `Navigable.activeWindowProxy`
 provides the active document's stable proxy once that relationship exists;
 the field and accessor alone do not create nested browsing contexts.
+Embedding inputs currently use `HTMLIFrameElementImpl`; additional navigable-container
+implementations must extend that type when their lifecycles are introduced.
 
 The [resource metadata slice](../../html/ROADMAP.md#section-314-resource-metadata)
 retains `Document.cookieURL` independently of the document and base URLs.

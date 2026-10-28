@@ -544,9 +544,11 @@ state, plus `crossOrigin` and `referrerPolicy` reflection, without its preparati
 algorithm. Link and script reflection uses the shared HTML attribute definitions,
 but element fetching and `[CEReactions]` delivery remain missing. The credentials
 mapper and potential-CORS request factory do not by themselves implement resource
-loading. Fetch applies populated referrer policies, but navigation response-header
-association, meta referrer processing, and hyperlink `rel=noreferrer` still lack
-their HTML consumers; complete referrer-policy precedence is not implemented.
+loading. Fetch applies populated referrer policies, and supplied-response navigation
+now associates the header with its document. Meta referrer processing and hyperlink
+`rel=noreferrer` still lack their HTML consumers; complete referrer-policy precedence
+is not implemented. Iframe referrer reflection and selection exist, with child
+request/navigation integration still unfinished.
 Browlet's existing parser callback still evaluates data-block scripts such as `application/json` as
 JavaScript; an approved expected-failure regression retains that limitation.
 
@@ -649,3 +651,24 @@ errors remain unfinished. COOP navigation reporting throws when a configured
 endpoint needs a report in a group shared with another context; the required
 URL-scoped queue and access reports are explicit dependencies in the
 [policy audit](browlet/browsing/policy/ROADMAP.md#html-713-cross-origin-opener-policies).
+
+COEP navigation and dedicated-worker inheritance checks and observer reports are
+implemented, but child-container association, navigation network-error handling,
+and worker startup still prevent complete enforcement through those lifecycles.
+The new abstract worker globals expose no author-facing Worker API. Inheritance
+reports omit CORP's destination member and preserve local observation even with
+an empty endpoint or outbound delivery disabled. Private Network Access and
+Opaque Response Blocking remain absent; the
+[COEP audit](browlet/browsing/policy/ROADMAP.md#html-714-cross-origin-embedder-policies)
+records these dependencies without claiming physical isolation.
+
+Sandbox parsing, iframe attribute state, and creation-flag propagation exist,
+but complete sandbox enforcement does not. Navigation permission checks still
+allow provisionally; popup/target selection, forms, pointer lock, automatic
+features, dialogs, orientation, presentation, and downloads lack their consumers.
+Policy-container response creation, inheritance selection, local history retention,
+and worker initialization are implemented independently of the missing full
+iframe/navigation/history/worker lifecycles. Unassociated containers still use
+an absent CSP list until a self origin is available. The
+[§§7.1.5–7.1.7 audit](browlet/browsing/policy/ROADMAP.md#html-715-sandboxing)
+maps every flag and remaining owner; partial worker globals still expose no IDL.

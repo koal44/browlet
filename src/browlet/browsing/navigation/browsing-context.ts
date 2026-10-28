@@ -10,6 +10,7 @@ import {
 } from '../../scripting/index';
 import { OpenerPolicy, PermissionsPolicy, SandboxingFlagSet, InsecureRequestsPolicy } from '../policy/index';
 import { DocumentMode, type DocumentImpl, type ElementImpl } from '../../dom/nodes/index';
+import { HTMLIFrameElementImpl } from '../../dom/nodes/html/embedded/index';
 import { CustomElementRegistryImpl } from '../../dom/nodes/html/custom-elements/index';
 import type { WindowProxyHandle, WindowImpl } from '../window/index';
 import type { BrowletEnvironment } from '../../environment';
@@ -29,6 +30,10 @@ export class BrowsingContext {
   openerBrowsingContext: BrowsingContext | null = null;
   /** Opener's origin captured at context creation. */
   openerOriginAtCreation: Origin | null = null;
+  /** Creator allowed to navigate an auxiliary context despite its sandboxed-navigation restriction. */
+  // https://html.spec.whatwg.org/multipage/browsers.html#one-permitted-sandboxed-navigator
+  // TODO(HTML target selection): Populate and consult this when auxiliary navigation is implemented.
+  onePermittedSandboxedNavigator: BrowsingContext | null = null;
   /** Whether this context was created as a popup. */
   isPopup = false;
   /** Whether this is an auxiliary context opened by another context. */
@@ -57,7 +62,7 @@ export class BrowsingContext {
   // https://html.spec.whatwg.org/multipage/document-sequences.html#creating-a-new-browsing-context
   static create(
     creator: DocumentImpl | null,
-    embedder: ElementImpl | null,
+    embedder: HTMLIFrameElementImpl | null,
     group: BrowsingContextGroup,
   ): [browsingContext: BrowsingContext, document: DocumentImpl] {
     const browsingContext = new BrowsingContext();
@@ -84,8 +89,7 @@ export class BrowsingContext {
     const agent = group.obtainSimilarOriginWindowAgent(origin, false);
     const creationURL = copyURL(aboutBlankURL);
     if (embedder !== null) {
-      // TODO: inherit top-level creation URL and origin from embedder.env and
-      // select the iframe referrer policy for ancestry initialization below.
+      // TODO: inherit top-level creation URL and origin from the embedder's node document environment.
       throw new InternalError('Embedder environment inheritance is not implemented');
     }
     const env = group.userAgent.createWindowEnvironment({
@@ -118,9 +122,7 @@ export class BrowsingContext {
     document.allowDeclarativeShadowRoots = true;
     document.customElementRegistry = new CustomElementRegistryImpl();
 
-    // https://html.spec.whatwg.org/multipage/browsers.html#determining-the-iframe-element-referrer-policy
-    // There is no embedding iframe for the supported top-level creation path.
-    document.initializeAncestry('', parentDocument);
+    document.initializeAncestry(HTMLIFrameElementImpl.determineReferrerPolicy(embedder), parentDocument);
 
     // https://html.spec.whatwg.org/multipage/document-sequences.html#creating-a-new-browsing-context
     // TODO: for a non-null creator, set the referrer from its URL, clone its policy
@@ -202,12 +204,9 @@ export class BrowsingContext {
 
   /** Select the sandbox flags applied when this context's initial Document is created. */
   // https://html.spec.whatwg.org/multipage/browsers.html#determining-the-creation-sandboxing-flags
-  determineCreationSandboxingFlags(embedder: ElementImpl | null): SandboxingFlagSet {
-    if (embedder !== null) {
-      // TODO: combine the iframe's flags with its node document's active flags.
-      throw new InternalError('Embedded browsing-context sandboxing is not implemented');
-    }
-    return new SandboxingFlagSet(this.popupSandboxingFlagSet);
+  determineCreationSandboxingFlags(embedder: HTMLIFrameElementImpl | null): SandboxingFlagSet {
+    if (embedder === null) return new SandboxingFlagSet(this.popupSandboxingFlagSet);
+    return new SandboxingFlagSet([...embedder.sandboxingFlagSet, ...embedder.nodeDocument.activeSandboxingFlagSet]);
   }
 
   /** Assign a fresh identity when a report-only policy would split this group. */

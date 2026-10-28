@@ -1,10 +1,13 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { attr, ctor, defineInterface, idlType, impl, reflectEnumerated, xattr } from '../../../../../web-idl/core/index';
+import type { ReferrerPolicy } from '../../../../../fetch/index';
 
 import { ElementTag, ContentCategory } from '../../element-definitions/index';
-import { loadingAttribute } from '../attributes/index';
+import { loadingAttribute, referrerPolicyAttribute } from '../attributes/index';
+import { SandboxingFlagSet } from '../../../../browsing/policy/index';
 import type { Navigable } from '../../../../browsing/navigation/index';
 
+import type { ElementImpl } from '../../element';
 import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
 
 /** Iframe loading policy and the continuation retained while navigation is deferred. */
@@ -26,6 +29,10 @@ export class HTMLIFrameElementImpl extends HTMLElementImpl {
   // TODO(HTML child navigation): create/destroy the child and maintain this association.
   contentNavigable: Navigable | null = null;
 
+  /** Restrictions from the current sandbox attribute, used by subsequent navigations. */
+  // https://html.spec.whatwg.org/multipage/browsers.html#iframe-sandboxing-flag-set
+  sandboxingFlagSet = new SandboxingFlagSet();
+
   /** Suspended navigation steps, installed by iframe attribute processing. */
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#lazy-load-resumption-steps
   // PROVISIONAL: revisit callbacks versus retained navigation state when loading exists; see loader/ROADMAP.md.
@@ -33,6 +40,13 @@ export class HTMLIFrameElementImpl extends HTMLElementImpl {
 
   static is(value: unknown): value is HTMLIFrameElementImpl {
     return value instanceof HTMLIFrameElementImpl;
+  }
+
+  // https://html.spec.whatwg.org/multipage/browsers.html#determining-the-iframe-element-referrer-policy
+  static determineReferrerPolicy(embedder: ElementImpl | null): ReferrerPolicy {
+    return embedder instanceof HTMLIFrameElementImpl
+      ? referrerPolicyAttribute.getState(embedder.getAttributeNS(null, 'referrerpolicy'))!
+      : '';
   }
 
   override getDocumentNamedItemType(): DocumentNamedItemType {
@@ -51,6 +65,9 @@ export class HTMLIFrameElementImpl extends HTMLElementImpl {
     localName: string, oldValue: string | null, value: string | null, namespace: string | null,
   ): void {
     super.attributeChanged(localName, oldValue, value, namespace);
+    if (namespace === null && localName === 'sandbox') {
+      this.sandboxingFlagSet = value === null ? new SandboxingFlagSet() : SandboxingFlagSet.parse(value);
+    }
     // https://html.spec.whatwg.org/multipage/iframe-embed-object.html#attr-iframe-loading
     if (namespace !== null || localName !== 'loading' ||
       loadingAttribute.getState(oldValue) !== 'lazy' || loadingAttribute.getState(value) !== 'eager') return;
@@ -92,6 +109,7 @@ export const htmlIFrameElementIDL = defineInterface({
   members: [
     ctor([], xattr('HTMLConstructor')),
     // PROVISIONAL: [CEReactions] entry/exit awaits HTML custom-element reaction delivery.
+    attr('referrerPolicy', idlType.DOMString, xattr('CEReactions', reflectEnumerated(referrerPolicyAttribute))),
     attr('loading', idlType.DOMString, xattr('CEReactions', reflectEnumerated(loadingAttribute))),
   ],
 });

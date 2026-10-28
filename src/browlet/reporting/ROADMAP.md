@@ -29,6 +29,12 @@ paths. Window reporting uses the associated Document's current URL, independentl
 of its base or referrer URL. Workers must supply their own source URL. Fetch's
 narrow environment contract does not need to know about the global-scope mixin.
 
+COEP inheritance reports now use their three-field hidden body interface; CORP
+reports retain the separate destination field. HTML's navigation and dedicated-worker
+checks queue through the container/owner environment, including with an empty
+endpoint so local observers still see the violation. Actual worker startup and
+child-navigation ownership remain [COEP integration work](../browsing/policy/ROADMAP.md#html-714-cross-origin-embedder-policies).
+
 A generated report retains its concrete body once. Observers and buffered replay
 share report/body identity; Web IDL preserves the derived interface through
 `Report.body`. Unknown report types can be delivered but are not exposed locally.

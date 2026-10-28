@@ -4,6 +4,7 @@ import { UserAgent } from '../../src/browlet/user-agent';
 import { BlobImpl } from '../../src/file/blob';
 import { BlobData, type BlobByteSource } from '../../src/file/blob-data';
 import type { BlobURLEnvironment } from '../../src/browlet/integration/file/blob-url';
+import { PolicyContainer } from '../../src/browlet/browsing/policy/container';
 import { InternalError } from '../../src/infra/internal-error';
 import type { StorageEnvironment, StorageUserAgent } from '../../src/storage/environment';
 import { createOpaqueOrigin } from '../../src/url/origin';
@@ -274,5 +275,5 @@ function createStore(generateUUID: () => string = () => firstUUID) {
 
 function createStorageEnvironment(url: string, userAgent: StorageUserAgent): BlobURLEnvironment {
   const creationURL = parseURL(url).url!;
-  return { creationURL, origin: obtainURLOrigin(creationURL), userAgent };
+  return { creationURL, origin: obtainURLOrigin(creationURL), userAgent, policyContainer: new PolicyContainer() };
 }

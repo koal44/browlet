@@ -107,6 +107,7 @@ describe('Request referrer calculation', () => {
   const targets = ['https://example.test/target', 'https://other.test/', 'http://other.test/'];
 
   it.each([
+    ['', [source, origin, none]],
     ['no-referrer', [none, none, none]],
     ['no-referrer-when-downgrade', [source, source, none]],
     ['same-origin', [source, none, none]],
@@ -123,6 +124,7 @@ describe('Request referrer calculation', () => {
         request.referrerPolicy = policy;
         const result = determineRequestReferrer(request);
         expect(result === null ? null : serializeURL(result)).toBe(expected[i]);
+        expect(request.referrerPolicy).toBe(policy);
       }
     },
   );
