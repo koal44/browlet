@@ -69,14 +69,16 @@ export function getDateValue(value: Date): number {
 }
 
 /** Read [[PromiseIsHandled]] without attaching a reaction or otherwise changing the promise. */
-export function isPromiseHandled(_promise: Promise<unknown>): boolean {
-  // TODO: Supply a non-observing backend query. Promise.then would mark it handled.
+export function isPromiseHandled(promise: Promise<unknown>): boolean {
+  if (addon.isPromiseHandled) return addon.isPromiseHandled(promise);
+  // Stock Node has no non-observing query; Promise.then would mark it handled.
   throw new InternalError('Reading PromiseIsHandled is not implemented');
 }
 
 /** Read [[PromiseResult]] from a settled promise without running author code. */
-export function getPromiseResult(_promise: Promise<unknown>): unknown {
-  // TODO: Supply a non-observing backend query; there is no public JavaScript accessor.
+export function getPromiseResult(promise: Promise<unknown>): unknown {
+  if (addon.getPromiseResult) return addon.getPromiseResult(promise);
+  // Stock Node has no public accessor for this internal slot.
   throw new InternalError('Reading PromiseResult is not implemented');
 }
 

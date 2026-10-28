@@ -1,9 +1,12 @@
 'use strict';
 
+const { isModuleNamespaceObject } = require('node:util').types;
+
 // Node's module object model over the addon's context handles. Loading remains
 // the host's responsibility; these objects retain supplied dependencies only.
-module.exports = native => {
+module.exports = (native, registerImport) => {
   const records = new WeakMap();
+  const wasm = require('./vm-wasm.cjs')(native);
   let nextIdentifier = 0;
 
   class Module {
@@ -38,10 +41,20 @@ module.exports = native => {
 
   class SourceTextModule extends Module {
     constructor(source, options = {}) {
-      checkOptions(options, ['context', 'identifier', 'lineOffset']);
-      const { context, lineOffset = 0, identifier = `vm:module(${nextIdentifier++})` } = options;
-      super(context, identifier, () => native.compileModule(source, context, identifier, lineOffset));
+      checkOptions(options, ['context', 'identifier', 'lineOffset', 'importModuleDynamically', 'initializeImportMeta']);
+      const { context, lineOffset = 0, identifier = `vm:module(${nextIdentifier++})`, initializeImportMeta } = options;
+      if (initializeImportMeta !== undefined) {
+        if (typeof initializeImportMeta !== 'function') throw new TypeError('Expected initializeImportMeta to be a function');
+        if (!native.setImportMetaInitializer) {
+          throw new Error('import.meta initialization in addon contexts requires the patched Node forwarding export');
+        }
+      }
+      super(context, identifier, module => native.compileModule(source, context, identifier, lineOffset,
+        registerImport(options.importModuleDynamically, module)));
       const record = recordFor(this);
+      if (initializeImportMeta !== undefined) {
+        record.initializeImportMeta = meta => Reflect.apply(initializeImportMeta, undefined, [meta, this]);
+      }
       record.requests = Object.freeze(native.moduleRequests(record.handle).map(request => Object.freeze({
         __proto__: null,
         specifier: request.specifier,
@@ -53,39 +66,38 @@ module.exports = native => {
     get moduleRequests() { return recordFor(this).requests; }
 
     linkRequests(modules) {
-      const record = recordFor(this);
-      if (this.status !== 'unlinked') throw new Error('Module must be unlinked');
-      if (!Array.isArray(modules) || modules.length !== record.requests.length) {
-        throw new TypeError('Supply one module per request, in request order');
-      }
-      for (const module of modules) {
-        if (recordFor(module).context !== record.context) {
-          throw new Error('Modules must belong to the same context');
-        }
-      }
-      record.dependencies = modules.slice();
+      linkRequests(this, modules);
     }
 
     instantiate() {
-      if (this.status !== 'unlinked') throw new Error('Module must be unlinked');
-      const graph = new Map();
-      const linkedRecords = [];
-      const visit = module => {
-        const record = recordFor(module);
-        if (graph.has(record.handle) || module.status !== 'unlinked') return;
-        const dependencies = record.dependencies ?? [];
-        if (dependencies.length !== record.requests.length) {
-          throw new Error('Supply module dependencies with linkRequests() before instantiation');
-        }
-        graph.set(record.handle, dependencies.map(dependency => recordFor(dependency).handle));
-        linkedRecords.push(record);
-        for (const dependency of dependencies) visit(dependency);
-      };
-      visit(this);
-      native.linkModule(recordFor(this).handle, graph);
-      // V8 now retains the linked graph. Host module objects need not stay alive.
-      for (const record of linkedRecords) record.dependencies = undefined;
+      instantiate(this);
     }
+  }
+
+  // Node has no public Wasm VM class. This extension uses the same lifecycle as
+  // SourceTextModule, while hiding the generated source and synthetic helper.
+  class WebAssemblyModule extends Module {
+    constructor(bytes, options = {}) {
+      checkOptions(options, ['context', 'identifier']);
+      const { context, identifier = `vm:wasm(${nextIdentifier++})` } = options;
+      const compiled = wasm.compile(bytes, context);
+      super(context, identifier, () => native.compileModule(compiled.sourceText, context, identifier, 0));
+      const record = recordFor(this);
+      record.wasm = compiled;
+      record.requests = Object.freeze(compiled.specifiers.map(specifier => Object.freeze({
+        __proto__: null, specifier, attributes: Object.freeze({ __proto__: null }), phase: 'evaluation',
+      })));
+      record.helper = new SyntheticModule(['default'], function() {
+        this.setExport('default', compiled.instantiate);
+      }, { context, identifier: `${identifier}:instantiate` });
+    }
+
+    get moduleRequests() { return recordFor(this).requests; }
+    get source() { return recordFor(this).wasm.source; }
+    get instance() { return recordFor(this).wasm.instance; }
+
+    linkRequests(modules) { linkRequests(this, modules); }
+    instantiate() { instantiate(this); }
   }
 
   class SyntheticModule extends Module {
@@ -111,6 +123,58 @@ module.exports = native => {
     }
   }
 
+  function linkRequests(module, modules) {
+    const record = recordFor(module);
+    if (module.status !== 'unlinked') throw new Error('Module must be unlinked');
+    if (!Array.isArray(modules) || modules.length !== record.requests.length) {
+      throw new TypeError('Supply one module per request, in request order');
+    }
+    for (let i = 0; i < modules.length; ++i) {
+      const dependency = recordFor(modules[i]);
+      if (dependency.context !== record.context) throw new Error('Modules must belong to the same context');
+      if (record.requests[i].phase === 'source' && dependency.wasm === undefined) {
+        throw new TypeError('A source-phase dependency must be a WebAssemblyModule');
+      }
+    }
+    record.dependencies = modules.slice();
+  }
+
+  function instantiate(module) {
+    if (module.status !== 'unlinked') throw new Error('Module must be unlinked');
+    const graph = new Map();
+    const linkedRecords = [];
+    const visit = module => {
+      const record = recordFor(module);
+      if (graph.has(record.handle) || module.status !== 'unlinked') return;
+      const dependencies = record.dependencies ?? [];
+      if (dependencies.length !== record.requests.length) {
+        throw new Error('Supply module dependencies with linkRequests() before instantiation');
+      }
+      const supplied = dependencies.map((dependency, i) => record.requests[i].phase === 'source'
+        ? recordFor(dependency).wasm.source : recordFor(dependency).handle);
+      if (record.wasm !== undefined) {
+        record.wasm.dependencies = dependencies.map(dependency => recordFor(dependency).wasm);
+        supplied.push(recordFor(record.helper).handle);
+      }
+      graph.set(record.handle, supplied);
+      linkedRecords.push(record);
+      dependencies.forEach((dependency, i) => {
+        if (record.requests[i].phase === 'evaluation') visit(dependency);
+      });
+    };
+    visit(module);
+    native.linkModule(recordFor(module).handle, graph);
+    // Namespaces exist after linking. Let V8 retain initializers and their
+    // public referrers even when only an exported function remains reachable.
+    for (const record of linkedRecords) {
+      if (record.initializeImportMeta !== undefined) {
+        native.setImportMetaInitializer(record.handle, record.initializeImportMeta);
+        record.initializeImportMeta = undefined;
+      }
+      record.dependencies = undefined;
+    }
+  }
+
   function recordFor(module) {
     const record = records.get(module);
     if (record === undefined) throw new TypeError('Expected a compatibility module');
@@ -124,5 +188,19 @@ module.exports = native => {
     }
   }
 
-  return { Module, SourceTextModule, SyntheticModule };
+  function resultForImport(value, phase) {
+    if (phase === 'source' && records.get(value)?.wasm !== undefined) return recordFor(value).wasm.source;
+    if (phase !== 'source' && isModuleNamespaceObject(value)) return value;
+    if (phase === 'source') throw new TypeError('A source-phase result must be a WebAssemblyModule');
+    if (!records.has(value)) {
+      throw Object.assign(new Error('Provided module is not an instance of Module'), {
+        code: 'ERR_VM_MODULE_NOT_MODULE',
+      });
+    }
+    if (value.status === 'errored') throw value.error;
+    return value.namespace;
+  }
+
+  return { Module, SourceTextModule, SyntheticModule, WebAssemblyModule,
+    resultForImport, captureWasmIntrinsics: wasm.captureIntrinsics };
 };

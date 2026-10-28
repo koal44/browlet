@@ -1,8 +1,8 @@
-Browlet V8 extensions for Node.js
+Browlet Node and V8 extensions
 
 Upstream: https://github.com/nodejs/node.git
 Base: 6f41e415639b5ec3dd816e44945cc73b4d7651e3
-Source: v8-patches at 06cfa7ba581c509cdee1bcbfbe088d9154b1a520
+Source: complete v8-patches branch at 3cf5241e9aed34b0e8d106adbe7accf90f43a00c
 
 diff --git a/deps/v8/include/v8-array-buffer.h b/deps/v8/include/v8-array-buffer.h
 index f70c6dd57b36b0ed8352bd6738998f5c838a80ba..981a1ef2c1b0b50d767c1e2778d8eaf47c4af7df 100644
@@ -24,10 +24,21 @@ index f70c6dd57b36b0ed8352bd6738998f5c838a80ba..981a1ef2c1b0b50d767c1e2778d8eaf4
     * Copy the contents of the ArrayBufferView's buffer to an embedder defined
     * memory without additional overhead that calling ArrayBufferView::Buffer
 diff --git a/deps/v8/include/v8-callbacks.h b/deps/v8/include/v8-callbacks.h
-index e5eba5a203b8bc4d0c05b1f0d6cbdffd352d4a06..b40b0d3db5232ecdf3f27a074d589fa5358fedb2 100644
+index e5eba5a203b8bc4d0c05b1f0d6cbdffd352d4a06..2f1d5d1e775333726b823d05dba9082e1e8754dc 100644
 --- a/deps/v8/include/v8-callbacks.h
 +++ b/deps/v8/include/v8-callbacks.h
-@@ -458,6 +458,41 @@ using HostInitializeImportMetaObjectCallback = void (*)(Local<Context> context,
+@@ -342,6 +342,10 @@ using WasmCustomDescriptorsEnabledCallback = bool (*)(Local<Context> context);
+ using SharedArrayBufferConstructorEnabledCallback =
+     bool (*)(Local<Context> context);
+ 
++// --- Callback for getting high resolution timestamps in Temporal ---
++using TemporalHostSystemUTCEpochNanosecondsCallback =
++    int64_t (*)(Local<Context> context);
++
+ /**
+  * Import phases in import requests.
+  */
+@@ -458,6 +462,41 @@ using HostInitializeImportMetaObjectCallback = void (*)(Local<Context> context,
  using HostCreateShadowRealmContextCallback =
      MaybeLocal<Context> (*)(Local<Context> initiator_context);
  
@@ -107,11 +118,38 @@ index 380999e5ee4596027d22c56c1ceeb44654b4e3a3..b42d963bee8a2bb46b833de5de02a184
  
  /**
   * An instance of the built-in array constructor (ECMA-262, 15.4.2).
+diff --git a/deps/v8/include/v8-context.h b/deps/v8/include/v8-context.h
+index 21137f628f2def19bbbd5d0f1bcc245ec74a6dd5..a91bae448a0316184bb7df21358fa7c79d5ec23d 100644
+--- a/deps/v8/include/v8-context.h
++++ b/deps/v8/include/v8-context.h
+@@ -402,6 +402,14 @@ class V8_EXPORT Context : public Data {
+                                                 Local<Context> context);
+   void SetAbortScriptExecution(AbortScriptExecutionCallback callback);
+ 
++  /**
++   * Set callback for getting high resolution timestamps in Temporal.
++   */
++  using TemporalHostSystemUTCEpochNanosecondsCallback =
++      int64_t (*)(Local<Context> context);
++  void SetTemporalHostSystemUTCEpochNanosecondsCallback(
++      TemporalHostSystemUTCEpochNanosecondsCallback callback);
++
+   /**
+    * Set or clear hooks to be invoked for promise lifecycle operations.
+    * To clear a hook, set it to an empty v8::Function. Each function will
 diff --git a/deps/v8/include/v8-internal.h b/deps/v8/include/v8-internal.h
-index fab0f3cc4909816ec13e38e15792fb0d57b83241..dcea081405d503b2a0018991ef9518e5f565ecee 100644
+index fab0f3cc4909816ec13e38e15792fb0d57b83241..cc1e1af661cbe7eed634c9c0aa1aa62e6959dc65 100644
 --- a/deps/v8/include/v8-internal.h
 +++ b/deps/v8/include/v8-internal.h
-@@ -662,6 +662,7 @@ enum ExternalPointerTag : uint16_t {
+@@ -645,6 +645,7 @@ enum ExternalPointerTag : uint16_t {
+ 
+   kApiAccessCheckCallbackTag,
+   kApiAbortScriptExecutionCallbackTag,
++  kApiTemporalHostSystemUTCEpochNanosecondsCallbackTag,
+   kSyntheticModuleTag,
+   kMicrotaskCallbackTag,
+   kMicrotaskCallbackDataTag,
+@@ -662,6 +663,7 @@ enum ExternalPointerTag : uint16_t {
    kWasmManagedDataTag,
    kWasmNativeModuleTag,
    kBackingStoreTag,
@@ -309,7 +347,7 @@ index c2fd021ed23ff6b2e6c84c871ab3f7fb24807708..03149f0f67cfb934ee267ac101838921
     * Returns true if this value is an ArrayBuffer.
     */
 diff --git a/deps/v8/src/api/api.cc b/deps/v8/src/api/api.cc
-index 48da5b35b8721e319ba6e3743c013a3092a06606..a3c76232ac77c3b5f50d6da8c4319058b2fc962b 100644
+index 48da5b35b8721e319ba6e3743c013a3092a06606..2b13481755420cd3313cc57848af5b2751701995 100644
 --- a/deps/v8/src/api/api.cc
 +++ b/deps/v8/src/api/api.cc
 @@ -3796,6 +3796,7 @@ bool Value::IsWasmNull() const { return false; }
@@ -339,7 +377,28 @@ index 48da5b35b8721e319ba6e3743c013a3092a06606..a3c76232ac77c3b5f50d6da8c4319058
  bool Value::IsMapIterator() const {
    return IsJSMapIterator(*Utils::OpenDirectHandle(this));
  }
-@@ -8366,6 +8379,15 @@ void v8::TypecheckWitness::Update(Local<Value> baseline) {
+@@ -7202,6 +7215,20 @@ void Context::SetAbortScriptExecution(
+   }
+ }
+ 
++void Context::SetTemporalHostSystemUTCEpochNanosecondsCallback(
++    Context::TemporalHostSystemUTCEpochNanosecondsCallback callback) {
++  auto context = Utils::OpenDirectHandle(this);
++  i::Isolate* i_isolate = i::Isolate::Current();
++  if (callback == nullptr) {
++    context->set_temporal_get_epoch_nanoseconds_callback(
++        i::ReadOnlyRoots(i_isolate).undefined_value());
++  } else {
++    SET_FIELD_WRAPPED(
++        i_isolate, context, set_temporal_get_epoch_nanoseconds_callback, callback,
++        internal::kApiTemporalHostSystemUTCEpochNanosecondsCallbackTag);
++  }
++}
++
+ void v8::Context::SetPromiseHooks(Local<Function> init_hook,
+                                   Local<Function> before_hook,
+                                   Local<Function> after_hook,
+@@ -8366,6 +8393,15 @@ void v8::TypecheckWitness::Update(Local<Value> baseline) {
  #endif
  }
  
@@ -355,7 +414,7 @@ index 48da5b35b8721e319ba6e3743c013a3092a06606..a3c76232ac77c3b5f50d6da8c4319058
  Local<v8::Map> v8::Map::New(Isolate* v8_isolate) {
    i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(v8_isolate);
    ApiRuntimeCallStatsScope rcs_scope(i_isolate, RCCId::kAPI_Map_New);
-@@ -9249,6 +9271,10 @@ v8::MemorySpan<uint8_t> v8::ArrayBufferView::GetContents(
+@@ -9249,6 +9285,10 @@ v8::MemorySpan<uint8_t> v8::ArrayBufferView::GetContents(
            data_view->GetByteLength()};
  }
  
@@ -366,7 +425,7 @@ index 48da5b35b8721e319ba6e3743c013a3092a06606..a3c76232ac77c3b5f50d6da8c4319058
  bool v8::ArrayBufferView::HasBuffer() const {
    auto self = Utils::OpenDirectHandle(this);
    if (!IsJSTypedArray(*self)) return true;
-@@ -9789,9 +9815,16 @@ v8::Local<v8::Context> Isolate::GetIncumbentContext() {
+@@ -9789,9 +9829,16 @@ v8::Local<v8::Context> Isolate::GetIncumbentContext() {
  }
  
  v8::MaybeLocal<v8::Data> Isolate::GetCurrentHostDefinedOptions() {
@@ -384,7 +443,7 @@ index 48da5b35b8721e319ba6e3743c013a3092a06606..a3c76232ac77c3b5f50d6da8c4319058
    return ToApiHandle<Data>(
        i::direct_handle(script->host_defined_options(), i_isolate));
  }
-@@ -10534,6 +10567,36 @@ void Isolate::SetPromiseRejectCallback(PromiseRejectCallback callback) {
+@@ -10534,6 +10581,36 @@ void Isolate::SetPromiseRejectCallback(PromiseRejectCallback callback) {
    i_isolate->SetPromiseRejectCallback(callback);
  }
  
@@ -1976,7 +2035,7 @@ index 66b0450b2eab3105845d6742e8afc4c4d8072828..2879850170a2dfd99a85e7c32c68b22d
    V(Map_Clear)                                             \
    V(Map_Delete)                                            \
 diff --git a/deps/v8/src/objects/contexts.h b/deps/v8/src/objects/contexts.h
-index 2bb6bce8c887236bb4c3e9bc0a34a03af08bc876..3c886bf370c3ca879c8aa660e576223e351121d3 100644
+index 2bb6bce8c887236bb4c3e9bc0a34a03af08bc876..d88cbf95611a70325201800be7e3b60f8ea254e4 100644
 --- a/deps/v8/src/objects/contexts.h
 +++ b/deps/v8/src/objects/contexts.h
 @@ -274,6 +274,8 @@ enum ContextLookupFlags {
@@ -1988,6 +2047,15 @@ index 2bb6bce8c887236bb4c3e9bc0a34a03af08bc876..3c886bf370c3ca879c8aa660e576223e
    V(MAP_CACHE_INDEX, Object, map_cache)                                        \
    V(MAP_KEY_ITERATOR_MAP_INDEX, Map, map_key_iterator_map)                     \
    V(MAP_KEY_VALUE_ITERATOR_MAP_INDEX, Map, map_key_value_iterator_map)         \
+@@ -315,6 +317,8 @@ enum ContextLookupFlags {
+     initial_regexp_string_iterator_prototype_map)                              \
+   V(SCRIPT_CONTEXT_TABLE_INDEX, ScriptContextTable, script_context_table)      \
+   V(SCRIPT_EXECUTION_CALLBACK_INDEX, Object, script_execution_callback)        \
++  V(TEMPORAL_GET_EPOCH_NANOSECONDS_CALLBACK_INDEX, Object,                     \
++    temporal_get_epoch_nanoseconds_callback)                                  \
+   V(SECURITY_TOKEN_INDEX, Object, security_token)                              \
+   V(SERIALIZED_OBJECTS, HeapObject, serialized_objects)                        \
+   V(SET_VALUE_ITERATOR_MAP_INDEX, Map, set_value_iterator_map)                 \
 diff --git a/deps/v8/src/objects/js-collection-iterator-inl.h b/deps/v8/src/objects/js-collection-iterator-inl.h
 index f803f0eabc2c1b757ded7ad50bb42b3622fb16df..2618e428ab7bf81ad09b709fd05e22197fcc9b70 100644
 --- a/deps/v8/src/objects/js-collection-iterator-inl.h
@@ -2065,6 +2133,60 @@ index 9c1f619fd0d75e59f5ce2a53d252bacbdbecd3c2..e7207eac84589c950775bf5a85abc601
      case JS_ASYNC_FROM_SYNC_ITERATOR_TYPE:
        return JSAsyncFromSyncIterator::kHeaderSize;
      case JS_GLOBAL_PROXY_TYPE:
+diff --git a/deps/v8/src/objects/js-temporal-objects.cc b/deps/v8/src/objects/js-temporal-objects.cc
+index b65da60d397b307e9619fafbd6d24884296bdb32..b1a0a3d6890616d96a519b993a6369664aca2d16 100644
+--- a/deps/v8/src/objects/js-temporal-objects.cc
++++ b/deps/v8/src/objects/js-temporal-objects.cc
+@@ -8,6 +8,7 @@
+ #include <optional>
+ #include <set>
+ 
++#include "src/api/api-inl.h"
+ #include "src/base/numerics/safe_conversions.h"
+ #include "src/common/globals.h"
+ #include "src/date/date.h"
+@@ -2164,7 +2165,22 @@ temporal_rs::TimeZone SystemTimeZoneIdentifier() { return UTCTimeZone(); }
+ #endif  //  V8_INTL_SUPPORT
+ 
+ // https://tc39.es/proposal-temporal/#sec-temporal-systemutcepochnanoseconds
+-temporal_rs::I128Nanoseconds SystemUTCEpochNanoseconds() {
++temporal_rs::I128Nanoseconds SystemUTCEpochNanoseconds(Isolate* isolate) {
++  DirectHandle<NativeContext> context = isolate->native_context();
++  if (!IsUndefined(context->temporal_get_epoch_nanoseconds_callback(), isolate)) {
++    v8::TemporalHostSystemUTCEpochNanosecondsCallback callback =
++        v8::ToCData<v8::TemporalHostSystemUTCEpochNanosecondsCallback,
++                    kApiTemporalHostSystemUTCEpochNanosecondsCallbackTag>(
++            isolate, context->temporal_get_epoch_nanoseconds_callback());
++    v8::Local<v8::Context> api_context = v8::Utils::ToLocal(context);
++    int64_t ns = callback(api_context);
++    // The pinned Temporal FFI uses sign and magnitude.
++    uint64_t magnitude = static_cast<uint64_t>(ns);
++    return temporal_rs::I128Nanoseconds{
++        .high = ns < 0 ? kU64HighBitMask : 0,
++        .low = ns < 0 ? uint64_t{0} - magnitude : magnitude};
++  }
++
+   double ms =
+       V8::GetCurrentPlatform()->CurrentClockTimeMillisecondsHighResolution();
+ 
+@@ -2205,7 +2221,7 @@ Maybe<std::unique_ptr<temporal_rs::ZonedDateTime>> GenericTemporalNowISO(
+   }
+ 
+   // 3. Let ns be SystemUTCEpochNanoseconds().
+-  auto ns = SystemUTCEpochNanoseconds();
++  auto ns = SystemUTCEpochNanoseconds(isolate);
+ 
+   // 4. Return ! CreateTemporalZonedDateTime(ns, timeZone, "iso8601").
+   // TODO(manishearth) we can avoid the multiple layers of allocation here
+@@ -6553,7 +6569,7 @@ MaybeDirectHandle<JSTemporalDuration> JSTemporalZonedDateTime::Since(
+ 
+ // https://tc39.es/proposal-temporal/#sec-temporal.now.instant
+ MaybeDirectHandle<JSTemporalInstant> JSTemporalInstant::Now(Isolate* isolate) {
+-  auto ns = temporal::SystemUTCEpochNanoseconds();
++  auto ns = temporal::SystemUTCEpochNanoseconds(isolate);
+   return ConstructRustWrappingType<JSTemporalInstant>(
+       isolate, temporal_rs::Instant::try_new(ns));
+ }
 diff --git a/deps/v8/src/objects/js-weak-refs.cc b/deps/v8/src/objects/js-weak-refs.cc
 index f125cc630d0f670279094e1c89653f5c244284e2..9328b41892cf2f0caeec587ae7281cd3acf21737 100644
 --- a/deps/v8/src/objects/js-weak-refs.cc
@@ -2793,3 +2915,78 @@ index 0000000000000000000000000000000000000000..5ae960455cb27afed192c813685b9a6a
 +assertNotEquals(errors[1].stack, errors[2].stack);
 +
 +Error.prepareStackTrace = undefined;
+diff --git a/src/module_wrap.cc b/src/module_wrap.cc
+index 38ac15b337f366f4d02aa6522cc8168fb775a6b8..d85eca2e2f8e077384dfd415e8f11a49ad003469 100644
+--- a/src/module_wrap.cc
++++ b/src/module_wrap.cc
+@@ -1701,6 +1701,29 @@ void ModuleWrap::RegisterExternalReferences(
+   registry->Register(ThrowIfPromiseRejected);
+ }
+ }  // namespace loader
++
++void HostInitializeImportMetaObjectCallback(v8::Local<v8::Context> context,
++                                          v8::Local<v8::Module> module,
++                                          v8::Local<v8::Object> meta) {
++  loader::ModuleWrap::HostInitializeImportMetaObjectCallback(
++      context, module, meta);
++}
++
++v8::MaybeLocal<v8::Promise> ImportModuleDynamicallyWithPhase(
++    v8::Local<v8::Context> context,
++    v8::Local<v8::Data> host_defined_options,
++    v8::Local<v8::Value> resource_name,
++    v8::Local<v8::String> specifier,
++    v8::ModuleImportPhase phase,
++    v8::Local<v8::FixedArray> import_attributes) {
++  return loader::ImportModuleDynamicallyWithPhase(context,
++                                                host_defined_options,
++                                                resource_name,
++                                                specifier,
++                                                phase,
++                                                import_attributes);
++}
++
+ }  // namespace node
+ 
+ NODE_BINDING_CONTEXT_AWARE_INTERNAL(
+diff --git a/src/node.h b/src/node.h
+index 8e7d1e6a251669b542a2cc4e8d184b68c940a596..c8d0fbba96972ffd63c70ec16a8fbe4891358f7a 100644
+--- a/src/node.h
++++ b/src/node.h
+@@ -915,6 +915,21 @@ NODE_EXTERN v8::Local<v8::Context> GetMainContext(Environment* env);
+ [[noreturn]] NODE_EXTERN void OnFatalError(const char* location,
+                                            const char* message);
+ NODE_EXTERN void PromiseRejectCallback(v8::PromiseRejectMessage message);
++NODE_EXTERN void HostInitializeImportMetaObjectCallback(
++    v8::Local<v8::Context> context,
++    v8::Local<v8::Module> module,
++    v8::Local<v8::Object> meta);
++NODE_EXTERN v8::MaybeLocal<v8::Promise> ImportModuleDynamicallyWithPhase(
++    v8::Local<v8::Context> context,
++    v8::Local<v8::Data> host_defined_options,
++    v8::Local<v8::Value> resource_name,
++    v8::Local<v8::String> specifier,
++    v8::ModuleImportPhase phase,
++    v8::Local<v8::FixedArray> import_attributes);
++NODE_EXTERN v8::ModifyCodeGenerationFromStringsResult
++ModifyCodeGenerationFromStrings(v8::Local<v8::Context> context,
++                                v8::Local<v8::Value> source,
++                                bool is_code_like);
+ NODE_EXTERN bool AllowWasmCodeGenerationCallback(v8::Local<v8::Context> context,
+                                             v8::Local<v8::String>);
+ NODE_EXTERN bool ShouldAbortOnUncaughtException(v8::Isolate* isolate);
+diff --git a/src/node_errors.h b/src/node_errors.h
+index cab1dc76dcc751d572305bf9297ab2ad8151030d..d4ff9a08d081fe7ae41b7a70dfe37ef9015c690b 100644
+--- a/src/node_errors.h
++++ b/src/node_errors.h
+@@ -370,10 +370,6 @@ class PrinterTryCatch : public v8::TryCatch {
+ 
+ }  // namespace errors
+ 
+-v8::ModifyCodeGenerationFromStringsResult ModifyCodeGenerationFromStrings(
+-    v8::Local<v8::Context> context,
+-    v8::Local<v8::Value> source,
+-    bool is_code_like);
+ }  // namespace node
+ 
+ #endif  // defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS

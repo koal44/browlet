@@ -16,10 +16,29 @@ and native callback iterators. Test capabilities, not just the `custom` label.
 Addon context handles cannot be passed directly to Node's own `vm.Script` or
 `vm.Module` classes. The addon supplies matching `Script`, `SourceTextModule`,
 and `SyntheticModule` classes for its contexts; JS Engine selects the backend.
-This supported subset excludes async linking callbacks, dynamic import,
-timeouts, and cached data. See the [VM API contract](../node-compat/README.md#contexts-globals-and-optional-facilities).
+This supported subset excludes async linking callbacks, timeouts, and cached data.
+Script and context dynamic-import callbacks require Node's patched forwarding export;
+official Node 24/26 addon contexts lack it. HTML has not connected its loader to
+that callback yet. See the [VM API contract](../node-compat/README.md#contexts-globals-and-optional-facilities).
+
+**`node-function-import-referrer`:** Identical `Function` bodies can reuse the
+first creating script's import loader on Node 26 and custom Node, reproducing
+through both the addon and Node's own VM API. The Node 24 control passes. Custom
+passes with the compilation cache disabled, which Browlet does not do in
+production. [Regression evidence](../node-compat/test/dynamic-import.test.cjs)
+retains the required distinct-loader result as an approved expected failure.
 
 ## Realm identity and global objects
+
+**`SPEC_CLASH(detached-context-promise-assimilation)`:** Browlet follows Chromium
+and Firefox: host `await`/`Promise.resolve()` can remain pending for a Promise
+from a detached context, including one already fulfilled before navigation.
+V8's `DetachGlobal()` clears the old context's microtask queue, dropping the
+thenable job. Direct host callbacks and replacement-context work still run.
+WebKit instead resolves the adopted Promises. The
+[regression](../node-compat/test/capabilities.test.cjs) asserts the accepted
+Chromium/Firefox behavior on Node 24, 26, and custom; it is no longer an expected
+failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promise-delivery).
 
 - **`node-v8-object-realms`:** Native `getRealm` and `getFunctionRealm` use
   creation contexts and stamped realm references when available. Plain Node
@@ -83,15 +102,22 @@ timeouts, and cached data. See the [VM API contract](../node-compat/README.md#co
   follows HTML's muting algorithm despite its noted Firefox disagreement. See
   the [runtime-error audit](browlet/scripting/ROADMAP.md#html-8146-runtime-script-errors).
 
-- **Automatic HTML promise-rejection reporting is not connected.**
-  PromiseRejectionEvent and HTML's tracker/notification algorithms exist, but
-  native reject/handle notifications do not reach them. Reading PromiseIsHandled
-  and PromiseResult still throws explicit unfinished-operation errors; the
-  checkpoint also lacks enumeration of its HTML environments. Ordinary rejected
-  page promises therefore retain Node's existing reporting behavior. Tests of
-  the HTML task flow substitute only the missing slot reads and call the tracker
-  directly; they do not establish end-to-end rejection delivery. See the
+- **HTML promise-rejection reporting requires the addon.** All addon bases deliver
+  native reject/handle notifications, non-observing slot reads, and HTML checkpoint
+  notifications/events. Stock Node retains its process-level reporting and throws
+  for unavailable slot queries; the integration suite keeps approved expected
+  failures. The tracker uses the existing modeled running script, so complete
+  muting/attribution across arbitrary calls and Promise jobs remains unfinished.
+  Independently replacing V8's rejection callback through another addon is
+  unsupported; the maintained bridge forwards to Node's default handler. See the
   [rejection audit](browlet/scripting/ROADMAP.md#html-8147-unhandled-promise-rejections).
+
+- **Window event-target identity is incomplete.** Event delivery reaches the
+  correct Window implementation, but `event.target === window` is false because
+  projection returns the Window target instead of its public WindowProxy. The
+  [regression](../test/browlet/browsing/window-event-target.test.ts) retains this
+  approved expected failure on both backends; Chromium returns true. Resolve
+  this at the Window/Binding boundary, not in individual event algorithms.
 
 - **Import-map algorithms still need production callers.** Parsing, normalization,
   merging, module specifier resolution, parse-result creation, and Window
@@ -106,15 +132,30 @@ timeouts, and cached data. See the [VM API contract](../node-compat/README.md#co
   without running; source-text and CSS/JSON/text creation now retain real engine
   modules. Binding projects CSS exports before author use. Stock Node requires
   `--experimental-vm-modules` and its synchronous module linking API; the addon
-  needs neither that flag nor an engine patch for static modules. WebAssembly ESM
-  parsing and Long Animation Frames creation timing remain unfinished. Module
+  needs neither that flag nor an engine patch for static modules. The addon now
+  supplies Wasm ESM graphs, but HTML's WebAssembly parser and Long Animation Frames
+  creation timing remain unfinished. Module
   graph orchestration covers document, worker, and worklet entry points, including
   shared worklet responses. Linking supplied dependencies works, but automatic
   dependency loading still throws at `LoadRequestedModules()` for imports.
-  Dynamic import and import.meta are not connected. Worker `importScripts()` fetching
+  HTML dynamic import and import.meta are not connected. The addon accepts
+  Node-shaped import and metadata callbacks with their respective forwarding
+  exports in the combined Node patch; official addon bases retain expected
+  failures for these facilities. HTML's `import.meta.url` and `resolve` still
+  await the host-hook audit. Worker `importScripts()` fetching
   requires an unavailable synchronous pause. Existing direct evaluation remains
   separate, and HTML script/worker startup does not call these fetchers yet. See the
   [script-creation audit](browlet/scripting/ROADMAP.md#html-8143-creating-scripts).
+
+- **Wasm ESM has three retained binding gaps.** The addon runs supplied mixed
+  JavaScript/Wasm graphs, but mutable globals exported to JavaScript are snapshots,
+  `v128` exports read as undefined instead of remaining uninitialized, and mutable
+  globals re-exported through JavaScript cannot be imported as Wasm globals.
+  Direct Wasm-to-Wasm imports retain their globals and memory. The
+  [expected-failure tests](../node-compat/test/wasm-gaps.test.cjs) and independent
+  [Node controls](../node-compat/test/wasm-node-gaps.test.cjs) retain all three
+  requirements. See the [bridge contract](../node-compat/README.md#webassembly-modules).
+
 - **`node-v8-agent-policy`:** `Agent.canBlock` records HTML's policy without
   enforcing it in V8. Window author code can call Atomics.wait and receive
   `"timed-out"` instead of TypeError, even with a zero timeout. The public
@@ -382,6 +423,15 @@ also rejects recursive calls that would otherwise return null before filtering.
 
 ## Trusted Types
 
+The addon can intercept native eval/Function compilation and extract source
+through a host callback while preserving Node's checks. HTML does not yet register
+CSP or TrustedScript policy with it. Official Node 24/26 lack the required forwarding
+export. Even custom Node's callback lacks compilation kind, original Function
+parameter boundaries and argument identities, and reports `Function()`'s empty
+body as CodeLike. The [four regressions](../node-compat/test/code-generation-gaps.test.cjs)
+remain approved expected failures; full Trusted Types Function support is not
+established. See the [native contract](../node-compat/README.md#string-compilation-and-source-extraction).
+
 Window exposes trusted string values, policies, factory queries, and CSP
 `trusted-types` policy-creation restrictions with violation reporting. Creating
 a trusted value does not sanitize its contents; that is the policy callback's work.
@@ -400,6 +450,14 @@ That roadmap also records the approved CSP policy-creation difference and the
 explicit standard content-handler list used for sink metadata.
 
 ## HTML integration gates
+
+- **Temporal does not yet use the environment's precision-limited wall clock.**
+  The addon supports an internal nonthrowing clock per context on custom Node;
+  official Node 24/26 lack the V8 setter. HTML registration and precision-policy
+  selection remain unfinished. The callback must return signed 64-bit bigint
+  nanoseconds; throwing or returning invalid data is a fatal internal error, not
+  an author-catchable exception. See the
+  [clock contract](../node-compat/README.md#temporal-clock).
 
 - **HTML element identities do not imply complete element APIs.** All specified
   HTML names now select their concrete or intentionally generic interface,

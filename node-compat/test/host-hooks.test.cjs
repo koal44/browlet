@@ -10,6 +10,69 @@ const vm = require('node:vm');
 const compat = require('../addon/index.cjs');
 const { itPassesWith } = require('./support/test-runtime.cjs');
 
+testInWorker('dynamic imports retain their queue through Promise-job hooks', () => {
+  const queue = compat.createMicrotaskQueue();
+  const context = compat.createContextHandle({ microtaskQueue: queue });
+  let jobs = 0, calls = 0;
+  compat.setHostHooks({
+    makeJobCallback(callback) { return { callback }; },
+    callJobCallback(record, receiver, args) {
+      calls++;
+      return Reflect.apply(record.callback, receiver, args);
+    },
+    enqueuePromiseJob(job, realm) {
+      if (realm !== context.realm) return false;
+      jobs++;
+      queue.enqueueMicrotask(job);
+    },
+  });
+  const target = new compat.SourceTextModule('export const value = 42;', { context });
+  target.linkRequests([]);
+  target.instantiate();
+  target.evaluate();
+  new compat.Script('import("value").then(ns => { globalThis.result = ns.value; });', {
+    importModuleDynamically: () => target,
+  }).runInContext(context);
+  assert.equal(context.globalProxy.result, undefined);
+  queue.runMicrotasks();
+  assert.equal(context.globalProxy.result, 42);
+  assert.ok(jobs > 0);
+  assert.ok(calls > 0);
+}, ['hostHooks', 'dynamicImport']);
+
+testInWorker('rejection tracking coexists with callback and Promise-job hooks', () => {
+  const queue = compat.createMicrotaskQueue();
+  const realm = compat.createContextHandle({ microtaskQueue: queue });
+  const events = [];
+  let jobs = 0, calls = 0;
+  compat.setPromiseRejectionTracker(realm, (promise, operation) => events.push({ promise, operation }));
+  compat.setHostHooks({
+    makeJobCallback(callback) { return { callback, hostDefined: null }; },
+    callJobCallback(record, receiver, args) {
+      calls++;
+      return Reflect.apply(record.callback, receiver, args);
+    },
+    enqueuePromiseJob(job, jobRealm) {
+      if (jobRealm !== realm.realm) return false;
+      jobs++;
+      queue.enqueueMicrotask(job);
+    },
+  });
+  const promise = compat.runInContext('Promise.resolve().then(() => { throw 42; })', realm);
+  assert.deepEqual(events, []);
+  queue.runMicrotasks();
+  assert.deepEqual(events, [{ promise, operation: 'reject' }]);
+  assert.equal(compat.getPromiseResult(promise), 42);
+  assert.equal(jobs, 1);
+  assert.equal(calls, 1);
+  realm.globalProxy.promise = promise;
+  compat.runInContext('promise.catch(() => {})', realm);
+  assert.deepEqual(events[1], { promise, operation: 'handle' });
+  queue.runMicrotasks();
+  assert.equal(jobs, 2);
+  assert.equal(calls, 2);
+});
+
 testInWorker('declined Promise jobs stay on their original explicit queue', () => {
   const queue = compat.createMicrotaskQueue();
   const handle = compat.createContextHandle({ microtaskQueue: queue });
@@ -404,9 +467,9 @@ testInWorker('generic notification, timeout scheduling and Promise reactions rem
 });
 
 // Hook configuration lasts for the isolate; each test gets a fresh one.
-function testInWorker(name, run) {
+function testInWorker(name, run, requirements = ['hostHooks']) {
   if (isMainThread) {
-    itPassesWith('hostHooks')(name, { timeout: 10000 }, async context => {
+    itPassesWith(...requirements)(name, { timeout: 10000 }, async context => {
       const worker = new Worker(__filename, { workerData: name });
       context.after(() => worker.terminate());
       let completed = false;

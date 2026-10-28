@@ -203,10 +203,12 @@ Rejected-promise state also stays on each global. The environment's
 `trackPromiseRejection()` translates HTML's rejection hook using the modeled
 running script and current settings; `notifyAboutRejectedPromises()` schedules
 the global's DOM notification task. `PromiseRejectionEvent` retains the original
-promise as an IDL object, without adopting it or installing reactions. Engine
-reject/handle delivery, non-observing Promise slot reads, and the checkpoint's
-environment enumeration remain explicit dependencies. No process-wide Node
-rejection listener substitutes for them.
+promise as an IDL object, without adopting it or installing reactions. Window
+composition registers the realm's native rejection hook after its environment
+and global are ready. All addon bases supply reject/handle notifications and
+non-observing Promise slot reads; checkpoints notify environments with pending
+rejections. Internal sandboxes remain unregistered. Stock Node retains its own
+reporting, with approved expected failures for the missing engine facilities.
 
 [`JSEnvironment`](js-engine/environment.ts) declares internal Promise creation,
 background scheduling, and task delivery directly on the existing environment.

@@ -12,6 +12,7 @@ for (const method of [
   'cloneSharedArrayBuffer', 'createContextHandle', 'createHTMLDDA', 'createMicrotaskQueue', 'getFunctionRealm',
   'getRealm', 'isContext', 'isWeakRef', 'observePromise', 'runInContext', 'setGlobalObject',
   'setPropertyDelegate', 'setPropertyHandlers',
+  'setPromiseRejectionTracker', 'isPromiseHandled', 'getPromiseResult',
 ]) {
   assert.equal(typeof compat[method], 'function', `Missing required addon capability: ${method}`);
 }

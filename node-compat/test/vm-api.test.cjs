@@ -138,7 +138,7 @@ test('reentrant evaluation rejects without reaching an invalid V8 module state',
 test('unsupported options and foreign dependencies fail explicitly', async () => {
   const { context } = fixture();
   assert.throws(() => new compat.Script('', { cachedData: Buffer.alloc(0) }), /Unsupported/u);
-  assert.throws(() => new compat.SourceTextModule('', { context, importModuleDynamically() {} }), /Unsupported/u);
+  assert.throws(() => new compat.SourceTextModule('', { context, cachedData: Buffer.alloc(0) }), /Unsupported/u);
   assert.throws(() => new compat.SyntheticModule(['a', 'a'], () => {}, { context }), /unique/u);
   const root = new compat.SourceTextModule('import "other";', { context });
   const foreign = new compat.SyntheticModule([], () => {}, { context: fixture().context });

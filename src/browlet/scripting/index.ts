@@ -10,7 +10,7 @@ export {
   createTaskSource, EventLoop, type EventLoopInit, type TaskTimingHooks, type LongTaskReporter,
   type TaskQueueSelector, Task, type TaskSource,
 } from './event-loop';
-export { installHostHooks, jsEngineTaskSource } from './host-hooks';
+export { installHostHooks, installRealmHostHooks, jsEngineTaskSource } from './host-hooks';
 export { JSExecutionContext } from './execution-context';
 export type { BrowletGlobalObject } from './global-object';
 export {

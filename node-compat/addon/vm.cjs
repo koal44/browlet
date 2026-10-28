@@ -4,13 +4,30 @@ const vm = require('node:vm');
 
 // Adapt the public options to the native context/evaluation arguments.
 module.exports = native => {
+  const { Module, SourceTextModule, SyntheticModule, WebAssemblyModule, resultForImport, captureWasmIntrinsics } =
+    require('./vm-modules.cjs')(native, registerImport);
+  const register = native.installDynamicImportRouter &&
+    require('./vm-imports.cjs')(native, resultForImport);
+
+  function registerImport(callback, referrer) {
+    checkImportCallback(callback);
+    if (callback === undefined) return undefined;
+    return register(callback, referrer);
+  }
+
+  function checkImportCallback(callback) {
+    if (callback === undefined) return;
+    if (typeof callback !== 'function') throw new TypeError('Expected importModuleDynamically to be a function');
+    if (!register) throw new Error('Dynamic imports in addon contexts require the patched Node forwarding export');
+  }
+
   class Script {
     #handle;
 
     constructor(source, options = {}) {
       if (typeof options === 'string') options = { filename: options };
       for (const key of Object.keys(options)) {
-        if (key !== 'filename' && key !== 'lineOffset' && key !== 'displayErrors') {
+        if (key !== 'filename' && key !== 'lineOffset' && key !== 'displayErrors' && key !== 'importModuleDynamically') {
           throw new TypeError(`Unsupported node-compat script option: ${key}`);
         }
       }
@@ -19,7 +36,8 @@ module.exports = native => {
       }
       // A Script is unbound. HTML realizes parser failures in its selected realm.
       this.#handle = native.compileScript(`${source}`, undefined,
-        options.filename ?? 'evalmachine.<anonymous>', options.lineOffset ?? 0);
+        options.filename ?? 'evalmachine.<anonymous>', options.lineOffset ?? 0,
+        registerImport(options.importModuleDynamically, this));
     }
 
     runInContext(context, options = {}) {
@@ -35,30 +53,41 @@ module.exports = native => {
 
   const methods = {
     Script,
-    ...require('./vm-modules.cjs')(native),
+    Module, SourceTextModule, SyntheticModule, WebAssemblyModule,
     createMicrotaskQueue: native.createMicrotaskQueue,
     createContextHandle: function createContextHandle(options = {}) {
       for (const key of Object.keys(options)) {
-        if (key !== 'microtaskQueue' && key !== 'reuseGlobalProxyFrom' && key !== 'globalPrototypeChain') {
+        if (key !== 'microtaskQueue' && key !== 'reuseGlobalProxyFrom' && key !== 'globalPrototypeChain' &&
+            key !== 'importModuleDynamically') {
           throw new TypeError(`Unsupported node-compat context option: ${key}`);
         }
       }
-      const { microtaskQueue, reuseGlobalProxyFrom, globalPrototypeChain } = options;
+      const { microtaskQueue, reuseGlobalProxyFrom, globalPrototypeChain, importModuleDynamically } = options;
+      // Validate before allocating a context or consuming a detached proxy.
+      checkImportCallback(importModuleDynamically);
       const layout = globalPrototypeChain?.map(kind => {
         const index = ['mutable', 'immutable', 'delegated'].indexOf(kind);
         if (index === -1) throw new TypeError(`Unknown prototype kind: ${kind}`);
         return index;
       });
-      return native.createContextHandle(microtaskQueue, reuseGlobalProxyFrom, layout);
+      const context = native.createContextHandle(microtaskQueue, reuseGlobalProxyFrom, layout);
+      captureWasmIntrinsics(context);
+      if (importModuleDynamically !== undefined) {
+        native.setContextImportLoader(context, register(importModuleDynamically, context));
+      }
+      return context;
     },
     runInContext: function runInContext(source, handle, options = {}) {
       for (const key of Object.keys(options)) {
-        if (key !== 'filename' && key !== 'lineOffset' && key !== 'displayErrors') {
+        if (key !== 'filename' && key !== 'lineOffset' && key !== 'displayErrors' && key !== 'importModuleDynamically') {
           throw new TypeError(`Unsupported node-compat evaluation option: ${key}`);
         }
       }
       if (options.displayErrors !== undefined && options.displayErrors !== false) {
         throw new TypeError('node-compat does not implement displayErrors annotation');
+      }
+      if (options.importModuleDynamically !== undefined) {
+        return new Script(source, options).runInContext(handle);
       }
       return native.evaluate(source, handle, options.filename ?? 'node-compat.js',
         options.lineOffset ?? 0);

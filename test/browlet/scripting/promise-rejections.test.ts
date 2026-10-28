@@ -56,9 +56,10 @@ describe('PromiseRejectionEvent', () => {
 });
 
 // These tests drive HTML's tracker and notification task explicitly. Only the
-// missing engine slot reads are substituted; native rejection delivery is not
-// connected yet. Pending real Promises preserve object identity without causing
-// unrelated unhandled rejections in Node or installing a handler to suppress them.
+// engine slot reads are substituted to isolate the HTML algorithms. The separate
+// integration suite exercises native delivery. Pending real Promises preserve
+// object identity without causing unrelated unhandled rejections in Node or
+// installing a handler to suppress them.
 describe('HTML rejected-promise notification', () => {
   it('does not queue a task for an empty pending list', () => {
     const { env, loop } = fixture();
@@ -174,8 +175,9 @@ describe('HTML rejected-promise notification', () => {
     env.notifyAboutRejectedPromises();
     loop.runTaskTurn();
     expect(reasons).toEqual(['first']);
-    expect(env.globalImplementation.aboutToBeNotifiedRejectedPromises).toHaveLength(1);
-    env.notifyAboutRejectedPromises();
+    // Task cleanup now performs the next checkpoint and queues notification.
+    expect(env.globalImplementation.aboutToBeNotifiedRejectedPromises).toHaveLength(0);
+    expect(loop.getTaskQueue(domManipulationTaskSource).size).toBe(1);
     loop.runTaskTurn();
     expect(reasons).toEqual(['first', 'next']);
   });

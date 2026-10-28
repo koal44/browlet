@@ -18,7 +18,7 @@ import type { CSSStyleSheet, QuotaExceededError, Window } from './platform';
 import { domHighResTimeStampIDL, epochTimeStampIDL } from './timing/index';
 import {
   EventLoop, SandboxAgent, eventHandlerIDL, eventHandlerNonNullIDL,
-  BrowletRealm, WindowRealm,
+  BrowletRealm, WindowRealm, installRealmHostHooks,
 } from './scripting/index';
 import {
   EventImpl, errorEventIDL, errorEventInitIDL, promiseRejectionEventIDL, promiseRejectionEventInitIDL,
@@ -151,6 +151,7 @@ export function createWindowEnvironment(
   });
   if (reservedEnv !== null) reservedEnv.id = '';
   realm.windowImplementation.setWindowOrWorkerGlobalScopeMixin(new WindowOrWorkerGlobalScopeMixin(env));
+  installRealmHostHooks(env);
   return env;
 }
 

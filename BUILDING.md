@@ -75,6 +75,12 @@ git switch --detach 6f41e415639b5ec3dd816e44945cc73b4d7651e3
 git apply "/path/to/browlet/vendor/_patches/node-v8.patch"
 ```
 
+This single patch contains the complete `v8-patches` branch, including Node's
+forwarding exports and V8 facilities not yet consumed by Browlet. No second patch
+is needed for dynamic imports. The addon detects the forwarding export in the
+selected headers; builds without it retain classic/static module execution but
+reject dynamic-import callback options.
+
 Build on Windows:
 
 ```powershell

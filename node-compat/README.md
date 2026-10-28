@@ -6,10 +6,13 @@ the scheduling and browser policy applied through those engine facilities.
 
 Stock Node runs through JS Engine's fallback paths. On supported official Node
 builds, the addon supplies explicit queues, native contexts and globals, realm
-lookup, and Promise observation. The [V8 patch set](../vendor/_patches/node-v8.patch)
+lookup, Promise observation, and rejection tracking. The [V8 patch set](../vendor/_patches/node-v8.patch)
 adds callback/job hooks, native collection iterators, and further object, iterator,
-and buffer-view inspection. The patch includes engine regressions and records its
-upstream Node revision. [Known limitations](../src/LIMITATIONS.md) describes
+and buffer-view inspection. The single patch snapshots the complete `v8-patches`
+branch, including the Temporal clock hook and Node's code-generation, import.meta,
+and dynamic-import forwarding exports. Some facilities still await addon/HTML
+integration. It includes engine regressions and records its upstream Node revision.
+[Known limitations](../src/LIMITATIONS.md) describes
 the observable constraints of each runtime.
 
 ## Code and regressions
@@ -19,9 +22,12 @@ the observable constraints of each runtime.
 | Contexts, globals, and microtask queues | [vm.cc](addon/vm.cc), [JavaScript adapters](addon/vm.cjs); [queue tests](test/capabilities.test.cjs), [browser global tests](../test/browlet/browsing/native-global.test.ts) |
 | Retained classic scripts | [vm.cc](addon/vm.cc), [JavaScript adapters](addon/vm.cjs); [compilation, execution, and lifetime tests](test/retained-scripts.test.cjs) |
 | Source-text and synthetic modules | [vm-modules.cc](addon/vm-modules.cc), [module classes](addon/vm-modules.cjs); [Node API comparisons](test/vm-api.test.cjs), [native linking and lifetime tests](test/modules.test.cjs) |
+| Dynamic-import callbacks | [vm-imports.cc](addon/vm-imports.cc), [loader registration](addon/vm-imports.cjs); [routing, queue, and lifetime tests](test/dynamic-import.test.cjs) |
 | Realm identity and lookup | [realm.cc](addon/realm.cc); [realm tests](test/capabilities.test.cjs) |
 | Promise observation | [promise.cc](addon/promise.cc); [Promise tests](test/capabilities.test.cjs) |
+| Promise rejection tracking and slot reads | [promise.cc](addon/promise.cc); [native lifecycle/Node forwarding tests](test/promise-rejections.test.cjs), [HTML event integration](../test/browlet/scripting/promise-rejection-integration.test.ts) |
 | Callback and job hooks | [host-hooks.cc](addon/host-hooks.cc), [JavaScript adapter](addon/host-hooks.cjs); [native hook tests](test/host-hooks.test.cjs), [HTML Promise jobs](../test/browlet/scripting/promise-jobs.test.ts) |
+| Temporal context clock | [temporal.cc](addon/temporal.cc); [clock, lifetime, and contract tests](test/temporal.test.cjs) |
 | Native property interception | [property-delegate.cc](addon/property-delegate.cc), [JavaScript adapters](addon/property-delegate.cjs); [property tests](test/html-dda.test.cjs) |
 | Native value inspection and iteration | [iterators.cc](addon/iterators.cc), [array-buffer.cc](addon/array-buffer.cc); [iterator predicates](test/iterator-predicates.test.cjs), [buffer views](test/array-buffer.test.cjs), [collection iterators](test/collection-iterator.test.cjs) |
 | Object-brand predicates | [object-types.cc](addon/object-types.cc); [brand tests](test/object-types.test.cjs) |
@@ -39,21 +45,37 @@ The [native addon suite](test/) also covers lifetime, garbage collection, and ru
 
 ## Contexts, globals, and optional facilities
 
+`setPromiseRejectionTracker(context, tracker)` installs a synchronous
+`tracker(promise, operation)` for code executing in that context; operation is
+`'reject'` or `'handle'`. Passing undefined clears it. `isPromiseHandled()` and
+`getPromiseResult()` read native slots without reactions or author property access;
+the result query rejects pending promises. These are baseline addon operations
+on all three bases, independent of the patched job hooks.
+
+The context retains its callback through GC-traced state. Reusing a global proxy
+does not move the callback to the replacement context. Node's default handler
+receives unregistered-context notifications and matching late-handler updates
+across the Node/Browlet boundary. Cleanup restores Node's handler. Independently
+replacing the same isolate callback with another addon is unsupported: V8 has
+no getter for a previous replacement. Tracker callbacks must not throw; failures
+use Node's fatal-exception reporting. HTML owns muting, notification timing,
+event dispatch, and console reporting.
+
 `createMicrotaskQueue()` supplies enqueue/checkpoint operations.
 `createContextHandle()` creates a native V8 context registered with Node;
 `runInContext()` evaluates there. These are not `node:vm` Contextify objects.
-The supported options are queue selection, `reuseGlobalProxyFrom`, and
-`globalPrototypeChain`; evaluation accepts filename, lineOffset, and
-`displayErrors: false`. Unsupported options fail explicitly. Dynamic-import
-callbacks, interoperability with Node's own contextified objects, timeouts, and automatic afterEvaluate
+The supported options are queue selection, `reuseGlobalProxyFrom`,
+`globalPrototypeChain`, and `importModuleDynamically`; evaluation accepts filename,
+lineOffset, and `displayErrors: false`, plus the optional import callback described below.
+Unsupported options fail explicitly. Interoperability with Node's own contextified objects, timeouts, and automatic afterEvaluate
 checkpoints remain outside this API.
 
 The addon exports a supported subset of Node's VM object API:
 
 | API | Contract |
 | --- | --- |
-| `new Script(source, { filename, lineOffset, displayErrors: false })` | Compiles without a context or execution; `.runInContext(handle)` binds the retained code to an existing context. Compilation errors originate in the host realm; HTML realizes them in its selected realm. |
-| `new SourceTextModule(source, { context, identifier, lineOffset })` | Compiles in the supplied addon context. `.moduleRequests` exposes frozen requests with specifiers, attribute records, and phases. |
+| `new Script(source, { filename, lineOffset, displayErrors: false, importModuleDynamically })` | Compiles without a context or execution; `.runInContext(handle)` binds the retained code to an existing context. Compilation errors originate in the host realm; HTML realizes them in its selected realm. The optional import callback requires the forwarding export below. |
+| `new SourceTextModule(source, { context, identifier, lineOffset, importModuleDynamically, initializeImportMeta })` | Compiles in the supplied addon context. `.moduleRequests` exposes frozen requests with specifiers, attribute records, and phases. The optional callbacks require their respective Node forwarding exports below. |
 | `source.linkRequests(dependencies)`; `source.instantiate()` | Supply dependencies in request order for each source module, then instantiate from the root. Instantiation links the graph without running it. |
 | `new SyntheticModule(names, callback, { context, identifier })` | Creates an already instantiated module, like current Node. Evaluation calls the callback with `this.setExport(name, value)` available; exports retain identity and remain mutable. The callback's return value is ignored. |
 | `module.evaluate()` | Returns the engine's completion Promise without a checkpoint. Admission errors instead reject a host Promise, as Node does. |
@@ -67,18 +89,18 @@ Module loading remains the host's responsibility. HTML's default-export helper
 uses `SyntheticModule`; the addon itself supports arbitrary named exports.
 
 This is not the complete `node:vm` API. Modules require an explicit context;
-async `link(linker)`, import callbacks, cached data, timeouts, column offsets,
+async `link(linker)`, cached data, timeouts, column offsets,
 and display-error annotation remain unsupported. Unknown options are rejected.
-The public linker accepts evaluation-phase module dependencies; the native
-source-phase Wasm regression remains below that surface. No operation performs
+The public linker accepts evaluation-phase modules and source-phase
+WebAssemblyModule dependencies. No operation performs
 an automatic checkpoint. GC-traced fields retain module/context state without
 per-module native roots, and evaluation releases synthetic callbacks.
 
 Static modules require no Node/V8 patch. Stock JS Engine uses Node's VM module
 API and requires `--experimental-vm-modules` plus its synchronous linking API
 (present on all supported runtime bases). Unit tests enable that flag; addon
-modules themselves do not need it. HTML dependency fetching, import.meta and
-dynamic-import routing, and Wasm ESM integration remain separate work. The
+modules themselves do not need it. HTML dependency fetching, import.meta,
+`HostLoadImportedModule`, and connecting HTML's Wasm parser remain separate work. The
 [promoted module tests](test/modules.test.cjs) preserve Pip's lifetime and engine
 behavior cases through the private bridge. The synthetic evaluation callback
 retains its handle until assigning the export; the lifetime test checks collection
@@ -86,11 +108,228 @@ after that callback. [Public API tests](test/vm-api.test.cjs) cover the matching
 Node call path, callback collection, and live exports. Remaining probes stay in
 `experimental/module-records/`.
 
+### WebAssembly modules
+
+`new WebAssemblyModule(bytes, { context, identifier })` is an addon extension:
+Node does not expose a corresponding public VM class. It shares the Module
+lifecycle and `moduleRequests`, `linkRequests(dependencies)`, `instantiate()`,
+`evaluate()`, and namespace access with SourceTextModule. The host supplies
+dependencies; it does not use Node's filesystem/package loader.
+
+```js
+const wasm = new compat.WebAssemblyModule(bytes, { context, identifier: 'answer.wasm' });
+const root = new compat.SourceTextModule(
+  'import { answer } from "./answer.wasm"; export default answer();', { context });
+wasm.linkRequests([]);
+root.linkRequests([wasm]);
+root.instantiate();
+const completion = root.evaluate();
+queue.runMicrotasks(); // The host owns the checkpoint, as for other modules.
+```
+
+Compilation retains a realm-owned `WebAssembly.Module` in `.source`. `.instance`
+is undefined until evaluation instantiates Wasm; compilation and linking never
+run its start function. A source-phase dependency takes the same WebAssemblyModule
+object but returns only its compiled source, without linking or executing its
+dependencies. `.moduleRequests` includes only the Wasm imports, with empty
+attributes and evaluation phase. The internal instantiation helper is hidden.
+
+The implementation captures Wasm constructors and accessors at context creation,
+before author code can replace them. It generates a source-text module and a
+private synthetic leaf; V8 supplies ordering, cycles, top-level await, linking
+errors, and the evaluation Promise. Direct Wasm-to-Wasm imports retain original
+global, memory, and table identities. The source uses the draft's string builtin
+compile options and rejects reserved names. All retained state is GC-traced;
+there are no new native roots, isolate callbacks, or engine patches for static
+Wasm graphs. `vm-wasm.cjs` owns the translation, while `vm-modules.cjs` owns the
+public module identity and linking.
+
+Three requirements from the [ESM integration draft](https://webassembly.github.io/esm-integration/js-api/index.html#execute-module)
+remain approved expected failures:
+
+| Requirement | Current limitation |
+| --- | --- |
+| Mutable globals stay live in JavaScript bindings | The JavaScript export keeps its initial value after Wasm changes the global. |
+| `v128` exports stay uninitialized | Reading the export returns undefined instead of throwing ReferenceError. Other exports work. |
+| Mutable globals re-exported through JavaScript retain their Wasm binding | A consuming Wasm module receives the JavaScript value and fails with LinkError. Direct Wasm imports work. |
+
+[Wasm regressions](test/wasm.test.cjs) exercise ordinary functionality and lifetime.
+[Gap tests](test/wasm-gaps.test.cjs) preserve the required behavior and reject
+unexpected passes. The [Node-only controls](test/wasm-node-gaps.test.cjs) reproduce
+the same three failures without loading the addon. No binding emulation or
+additional V8 patch is proposed for these gaps. Deferred imports,
+`import(moduleObject)`, module-source reflection, and `WebAssembly.namespaceInstance()`
+remain outside this slice. JS Engine/HTML's Wasm parser and automatic loading
+are still explicit dependencies, ready to consume this bridge during integration.
+
+### Dynamic imports
+
+With the Node forwarding export in the [combined patch](../vendor/_patches/node-v8.patch),
+`Script`, `SourceTextModule`, `runInContext()`, and `createContextHandle()` accept Node's
+`importModuleDynamically(specifier, referrer, attributes, phase)` option.
+The referrer is the public Script, SourceTextModule, or context handle for its
+respective callback. Attributes are a null-prototype record, and the supported
+phases are `'evaluation'` and `'source'`.
+For evaluation, the callback returns a Module or module namespace, optionally
+through a Promise.
+For source imports it returns a WebAssemblyModule, optionally through a Promise;
+the bridge returns that module's retained `.source` without instantiating it.
+The host owns resolution, loading, linking, and waiting for evaluation, including
+top-level await. Returning a Module does not evaluate it automatically.
+
+The import Promise belongs to the executing context. Callback exceptions and
+rejections retain identity; asynchronous result conversion uses that context's
+queue. The addon never checkpoints it. Compilation metadata or context state and
+a weak association keep the callback and public referrer alive while code can still import; otherwise
+their cycles are collectible. This deliberately retains the public referrer to
+satisfy Node's callback contract, unlike the experimental raw-handle API.
+
+An explicit script/module callback takes precedence. When compilation metadata
+is absent, the importing context supplies its fallback callback, including for
+indirect eval invoked by a Promise reaction. Foreign metadata remains Node's
+responsibility, even when the generated code executes in an addon context.
+The fallback belongs to the context, so reusing its global proxy neither copies
+the old callback nor changes the loader of retained functions from the old realm.
+
+The addon forwards unrelated Node/VM requests to Node and restores its handler at
+environment cleanup. Another addon's competing replacement of the isolate-wide
+callback is unsupported. Official Node 24/26 do not export the forwarding handler,
+so supplying the option there fails explicitly; the integration tests remain
+approved expected failures. The build checks headers for the export, independently
+of the job-hook patches. Ordinary Node VM import callbacks still work there.
+
+The regression for identical `Function` bodies finds the first script's loader
+reused on Node 26 and custom Node, including through Node's own VM API. Node 24
+passes its control. Disabling V8's compilation cache makes both custom paths pass;
+production retains caching and the regression is an approved expected failure.
+Direct and indirect eval routing pass. Source and deferred phases and HTML
+loading integration remain unfinished.
+
+### import.meta initialization
+
+`SourceTextModule` accepts Node's `initializeImportMeta(meta, module)` constructor
+option. V8 creates a null-prototype object on first access and caches it after
+successful initialization. The callback receives the public module object;
+its return value is ignored. Thrown values retain identity, and a later access
+retries initialization with a fresh object. No checkpoint is performed.
+Without an initializer, addon modules receive an empty object. The addon does
+not supply HTML's `url` or `resolve`; those belong to the later host-hook audit.
+
+After graph instantiation, each module's namespace privately retains its
+initializer and public referrer. Exported functions can therefore initialize
+metadata after the host drops its module reference. Discarded cycles collect
+without native persistent roots. Initialization runs the supplied callback as
+an ordinary function, so objects it creates belong to that function's realm.
+
+The isolate callback forwards unrelated modules to
+`node::HostInitializeImportMetaObjectCallback`, preserving Node file/data metadata
+and VM initializers, and restores Node's callback at environment cleanup.
+Another addon's competing callback replacement is unsupported. The forwarding
+export is already in the [combined patch](../vendor/_patches/node-v8.patch);
+the build detects it independently of dynamic imports. Official Node 24/26 lack
+it and reject the option explicitly. Their initializer cases are approved
+expected failures; ordinary modules and Node's own metadata checks pass.
+
+The [regressions](test/import-meta.test.cjs) cover lazy identity, cyclic graphs,
+realm ownership, retry and rejection, nested Node entry, dynamic-import
+coexistence, callback lifetime, collection, and worker teardown.
+
+### String compilation and source extraction
+
+`setModifyCodeGenerationFromStringsCallback(realmReference, callback)` registers
+one callback for an existing context. Pass `context.realm` for an addon context,
+or `getRealm(object)` for an object from a Node VM context. The callback receives
+V8's `(source, isCodeLike)` inputs: a string result supplies replacement source,
+`false` blocks compilation, and `undefined` delegates unchanged. Other results
+throw TypeError. This combines the engine interception needed by
+`HostEnsureCanCompileStrings` and `HostGetCodeForEval`; it is not their complete
+HTML contract. HTML policy and actual TrustedScript recognition remain deferred.
+
+Registration forces cached and uncached eval/Function compilation through the
+callback. Ordinary Script/module compilation is unaffected. Allowed or extracted
+source still goes through Node's permission and generated-source-map handling;
+the callback cannot override a Node context's disabled-code policy. Native eval
+retains direct lexical scope, and ordinary objects remain unchanged when the
+host supplies no source. V8 can consult the callback more than once for an object.
+
+Registering again replaces the callback. Passing `undefined` removes it and
+restores the context's original V8 string-compilation flag. Private context state
+retains callbacks without native roots, survives retained functions, and stays
+with the original context when its global proxy is reused. Context/callback
+cycles collect. Unregistered contexts delegate to Node, and environment cleanup
+restores Node's isolate callback. Competing addon callback replacement is unsupported.
+
+This facility requires the Node `ModifyCodeGenerationFromStrings` forwarding
+export already in the combined patch. The build checks it independently; the
+setter is unavailable on official Node 24/26. Their functional cases are approved
+expected failures. The [functional suite](test/code-generation.test.cjs) covers
+scope, permissions, source maps, exceptions, reentrancy, replacement/removal,
+collection, proxy reuse, queues, and teardown. The [gap suite](test/code-generation-gaps.test.cjs)
+retains four approved expected failures even on custom Node:
+
+- Distinguishing eval from Function when their source text is identical.
+- Recovering original Function parameter boundaries.
+- Recognizing original TrustedScript Function arguments after stringification.
+- Rejecting the implicit untrusted empty body of `Function()` despite its CodeLike flag.
+
+No native TrustedScript branding or additional engine patches are introduced.
+
+### Temporal clock
+
+`setTemporalHostSystemUTCEpochNanosecondsCallback(realmReference, callback)` installs
+one internal clock for a context. Pass `context.realm`, or `getRealm(object)` for
+an object from a Node VM context. The callback receives no arguments and returns
+Unix-epoch nanoseconds as a signed 64-bit `bigint`. Registering again replaces it;
+passing `undefined` removes it and restores V8's platform clock for that context.
+Other contexts and Date clocks are unaffected. Native Temporal methods retain
+their identity and use their own realm's clock when borrowed.
+
+The callback is synchronous and **must not throw**. V8's native API returns
+`int64_t` without an exception result. Chromium's native callbacks read and coarsen
+time after selecting precision during context initialization; Firefox reads its
+native Date clock, and WebKit reads its native nanosecond clock. These paths do
+not invoke author JavaScript. Browser sources:
+[Chromium](https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/bindings/core/v8/v8_initializer.cc),
+[Firefox](https://searchfox.org/mozilla-central/source/js/src/builtin/temporal/TemporalNow.cpp),
+[WebKit](https://github.com/WebKit/WebKit/blob/main/Source/JavaScriptCore/runtime/ISO8601.cpp).
+
+The [experimental probe](experimental/temporal-callback/README.md) demonstrates
+why returning a placeholder timestamp after a JavaScript exception is unsafe:
+author code can continue past the Temporal call. The maintained bridge treats
+a thrown exception, a non-bigint result, or an out-of-range result as a fatal
+internal contract violation and terminates the process. It does not promise an
+author-catchable clock exception or substitute an uncoarsened timestamp.
+Invalid registration arguments still throw ordinary TypeErrors.
+
+Private context state retains callbacks without native roots and stays with the
+original context across global-proxy reuse. Replacement/removal releases the old
+callback; discarded context/callback cycles collect. The
+[regressions](test/temporal.test.cjs) cover these lifetimes, signed endpoints,
+all Temporal.Now clock readers, explicit queues, and worker teardown.
+
+The build detects V8's context setter, already present in the combined patch.
+Official Node 24/26 headers lack it, and Node 24 leaves Temporal disabled by
+default. Their clock tests remain approved expected failures. HTML's
+`HostSystemUTCEpochNanoseconds` hookup,
+environment precision selection, and millisecond-to-nanosecond conversion remain
+for the host-hook audit. Resolve policy prerequisites before installing an
+infallible clock; recheck that ownership after navigation work is integrated.
+
+### Context lifetime
+
 A handle separates its stable realm reference from its reusable global proxy.
 Detachment allows that proxy to transfer once to a fresh context. Retaining the
 realm reference keeps the old realm alive; `.global` is not its identity.
 `getRealm(object)` reports creation context, while `getFunctionRealm(callable)`
 follows bound/proxy targets without traps and rejects revoked callable proxies.
+
+`SPEC_CLASH(detached-context-promise-assimilation)`: follow Chromium and Firefox:
+host `await`/`Promise.resolve()` can remain pending for Promises from a detached
+context. V8 clears the old context's microtask queue; direct observation through
+a host callback and work in the replacement context still run. WebKit instead
+resolves the adopted Promises. This is an ordinary passing lifecycle regression
+on all addon bases, not an expected failure. See the
+[browser evidence](../src/js-engine/ROADMAP.md#detached-context-promise-delivery).
 
 `globalPrototypeChain` preallocates an immutable global proxy/target and ordered
 `mutable`, `immutable`, or `delegated` prototype layers. Reuse requires the same

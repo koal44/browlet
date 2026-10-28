@@ -553,6 +553,17 @@ export class JSRealm {
     observePromise(this, promise, onFulfilled, onRejected);
   }
 
+  /**
+   * Install HostPromiseRejectionTracker for code executing in this realm.
+   * The callback must not throw. Stock Node leaves reporting with Node because
+   * it cannot supply these synchronous notifications without the addon.
+   */
+  setPromiseRejectionTracker(
+    tracker: ((promise: Promise<unknown>, operation: 'reject' | 'handle') => void) | undefined,
+  ): void {
+    addon.setPromiseRejectionTracker?.(this.#vmContext, tracker);
+  }
+
   /** Compile without execution, allocating any syntax failure in this realm. */
   // https://tc39.es/ecma262/#sec-parse-script
   // SPEC_MISMATCH: ParseScript(sourceText, realm, hostDefined) -> Script Record or a List of SyntaxError objects

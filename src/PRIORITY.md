@@ -59,9 +59,9 @@ do not pursue addon termination work or a worker migration for this audit.
 and classic-script muting. Source diagnostics, complete script attribution,
 dedicated-worker propagation, and special onerror handlers remain explicit
 dependencies. §8.1.4.7 now supplies PromiseRejectionEvent and the HTML rejection
-tracker/notification algorithms. Engine reject/handle notifications, read-only
-Promise slot queries, and checkpoint environment enumeration remain explicit
-dependencies; ordinary page rejections are not yet connected. §8.1.4.8 now
+tracker/notification algorithms, with native reject/handle notifications,
+non-observing slot queries, and checkpoint delivery connected on all addon bases.
+Stock Node retains explicit expected failures for that engine boundary. §8.1.4.8 now
 supplies import-map parse results and Window registration. §8.1.4.9 now supplies
 speculation-rule parse-result creation, Document registration state, and Window
 registration/removal/replacement with synchronous or queued parse-error reporting.

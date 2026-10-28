@@ -1,6 +1,7 @@
 #include <node.h>
 #include "vm-modules.h"
 #include "vm.h"
+#include "vm-imports.h"
 
 #include <unordered_map>
 #include <vector>
@@ -10,6 +11,7 @@ namespace {
 using namespace v8;
 
 struct ModuleData {
+  Isolate* isolate;
   Global<External> vm_data;
   Global<Private> module_key;
   Global<ObjectTemplate> module_template;
@@ -81,8 +83,10 @@ void CompileModule(const FunctionCallbackInfo<Value>& args) {
   Local<Module> module;
   {
     Context::Scope scope(realm);
+    Local<v8::Data> import_options;
+    if (!DynamicImportOptions(isolate, args[4]).ToLocal(&import_options)) return;
     ScriptOrigin origin(args[2], args[3].As<Int32>()->Value(), 0,
-                        false, -1, {}, false, false, true);
+                        false, -1, {}, false, false, true, import_options);
     ScriptCompiler::Source source(args[0].As<String>(), origin);
     if (!ScriptCompiler::CompileModule(isolate, &source).ToLocal(&module)) return;
   }
@@ -90,6 +94,46 @@ void CompileModule(const FunctionCallbackInfo<Value>& args) {
   if (!CreateModuleHolder(args, module).ToLocal(&holder)) return;
   args.GetReturnValue().Set(holder);
 }
+
+#ifdef NODE_COMPAT_IMPORT_META
+Local<Private> ImportMetaInitializerKey(Isolate* isolate) {
+  return Private::ForApi(isolate, Text(isolate, "browlet.module-records.importMetaInitializer"));
+}
+
+void InitializeImportMeta(Local<Context> context, Local<Module> module,
+                          Local<Object> meta) {
+  auto isolate = Isolate::GetCurrent();
+  Local<Value> initializer;
+  if (!module->GetModuleNamespace().As<Object>()->GetPrivate(context,
+          ImportMetaInitializerKey(isolate)).ToLocal(&initializer)) return;
+  if (!initializer->IsFunction()) {
+    node::HostInitializeImportMetaObjectCallback(context, module, meta);
+    return;
+  }
+  Local<Value> argument = meta;
+  // V8 owns lazy creation, successful caching, and retry after a thrown value.
+  if (initializer.As<Function>()->Call(context, Undefined(isolate), 1, &argument).IsEmpty()) return;
+}
+
+void SetImportMetaInitializer(const FunctionCallbackInfo<Value>& args) {
+  auto isolate = args.GetIsolate();
+  Local<Object> holder;
+  if (!GetModuleHolder(args, args[0]).ToLocal(&holder)) return;
+  auto module = CompiledModule(holder);
+  if (module->GetStatus() < Module::kInstantiated) {
+    Fail(isolate, "ERR_MODULE_NOT_LINKED", "Link the module before registering its import.meta initializer");
+    return;
+  }
+  if (!args[1]->IsFunction()) {
+    Fail(isolate, "ERR_INVALID_ARG_TYPE", "Expected an import.meta initializer");
+    return;
+  }
+  // A private namespace property is traced with the module, without a native
+  // registry rooting otherwise discarded callbacks, modules, or contexts.
+  if (module->GetModuleNamespace().As<Object>()->SetPrivate(isolate->GetCurrentContext(),
+          ImportMetaInitializerKey(isolate), args[1]).IsNothing()) return;
+}
+#endif
 
 Local<Private> SyntheticStepsKey(Isolate* isolate) {
   return Private::ForApi(isolate, Text(isolate, "browlet.module-records.syntheticSteps"));
@@ -377,17 +421,25 @@ void InitializeVmModules(v8::Local<v8::Object> exports,
                          v8::Local<v8::External> vm_data) {
   using namespace v8;
   auto isolate = Isolate::GetCurrent();
-  auto data = new ModuleData;
+  auto data = new ModuleData{isolate};
   data->vm_data.Reset(isolate, vm_data);
   data->module_key.Reset(isolate, Private::New(isolate));
   auto module_template = ObjectTemplate::New(isolate);
   module_template->SetInternalFieldCount(kModuleFieldCount);
   data->module_template.Reset(isolate, module_template);
   node::AddEnvironmentCleanupHook(isolate, [](void* pointer) {
-    delete static_cast<ModuleData*>(pointer);
+    auto data = static_cast<ModuleData*>(pointer);
+#ifdef NODE_COMPAT_IMPORT_META
+    data->isolate->SetHostInitializeImportMetaObjectCallback(
+        node::HostInitializeImportMetaObjectCallback);
+#endif
+    delete data;
   }, data);
   auto external = External::New(isolate, data);
 
+#ifdef NODE_COMPAT_IMPORT_META
+  isolate->SetHostInitializeImportMetaObjectCallback(InitializeImportMeta);
+#endif
   const struct { const char* name; FunctionCallback callback; } methods[] = {
     {"compileModule", CompileModule},
     {"moduleRequests", ModuleRequests},
@@ -398,6 +450,9 @@ void InitializeVmModules(v8::Local<v8::Object> exports,
     {"moduleNamespace", ModuleNamespace},
     {"moduleStatus", ModuleStatus},
     {"moduleError", ModuleError},
+#ifdef NODE_COMPAT_IMPORT_META
+    {"setImportMetaInitializer", SetImportMetaInitializer},
+#endif
   };
   for (const auto& method : methods) {
     Local<Function> function;

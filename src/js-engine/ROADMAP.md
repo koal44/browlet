@@ -61,22 +61,20 @@ constructor correctness alone does not settle incumbent/script selection.
 
 ### Promise rejection lifecycle
 
-HTML now translates `HostPromiseRejectionTracker` as
-`BrowletEnvironment.trackPromiseRejection()` and supplies the queued
-`unhandledrejection`/`rejectionhandled` event algorithms. The engine still must
-deliver reject/handle notifications at their specified boundary, with current
-settings and running-script attribution. Existing job hooks do not do so.
+Pip's rejection bridge is integrated on all addon bases. The executing context
+selects `BrowletEnvironment.trackPromiseRejection(promise, operation)` through
+the realm hook installation. Native `isPromiseHandled()` and `getPromiseResult()`
+read slots without installing reactions. HTML schedules notification at its
+checkpoint and delivers `unhandledrejection`/`rejectionhandled` as global tasks.
+Internal sandboxes and unrelated Node contexts retain Node's reporting.
 
-`isPromiseHandled()` and `getPromiseResult()` in `built-in-primitives.ts` mark
-the missing non-observing slot queries with explicit throws. Do not implement
-them by attaching Promise reactions: that changes handled state and can affect
-species, scheduling, and rejection reporting. HTML's tests substitute these
-reads while exercising its real event bindings and tasks; they do not establish
-native delivery. Checkpoint environment enumeration remains HTML's dependency.
-
-Node's process-wide rejection events do not supply HTML's required per-realm
-context. Test unrelated Node rejections and runner shutdown as well as page
-events; routing diagnostics onto an HTML queue previously prevented exit.
+Stock Node still lacks these facilities; its integration assertions are approved
+expected failures. Complete running-script attribution across uncontrolled
+function calls and Promise jobs remains with the execution-context work; the
+tracker uses the modeled running script when present, including classic muting.
+Keep Node forwarding, collection, worker teardown, and job-hook coexistence tests
+when extending this boundary. Another addon's replacement rejection callback
+cannot be recovered through V8's public API.
 
 ### Modules and dynamic import
 
@@ -90,29 +88,121 @@ top-level await, realm ownership, collection, and teardown. The addon now expose
 the supported Node-shaped `Script`, `SourceTextModule`, and `SyntheticModule`
 classes; the compatibility implementation needs no Node association patch.
 The [supported surface](../../node-compat/README.md#contexts-globals-and-optional-facilities)
-does not yet include Node's async linker, import callbacks, or execution timeouts.
+does not yet include Node's async linker or execution timeouts.
+
+The addon accepts Node-shaped `importModuleDynamically` options on Script,
+SourceTextModule, runInContext, and createContextHandle when Node exports its default import handler.
+The forwarding export in the [combined patch](../../vendor/_patches/node-v8.patch)
+preserves Node's own imports. This is an addon facility: JS Engine/HTML do not yet register
+loaders through it. The callback's Module or namespace result is normalized on
+the importing queue, without an automatic checkpoint. Tests preserve async/TLA
+completion, callback exceptions, synthetic exports, referrer lifetime, collection,
+and worker/Node/job-hook coexistence.
+
+Official addon bases lack the export and retain approved expected failures.
+Identical Function-created bodies also select the first script's loader on
+Node 26/custom, including Node's VM API. Node 24 passes the control; custom passes
+with the compilation cache disabled. Keep this as an approved expected failure
+and investigate the engine separately, without disabling production caching.
+
+The addon also accepts Node's `SourceTextModule` option
+`initializeImportMeta(meta, module)`. V8 supplies lazy object creation, successful
+caching, and retry after a thrown value. Private namespace state retains the
+initializer and public module referrer while exported code is reachable; unused
+cycles collect. The Node forwarding export already in the combined patch keeps
+Node ESM and VM metadata working. Official addon bases reject the option and
+retain approved expected failures. See the [callback contract and tests](../../node-compat/README.md#importmeta-initialization).
+JS Engine/HTML do not yet register initializers; HTML's `url` and `resolve`
+behavior remains for the host-hook audit.
 
 Connect these operations with automatic HTML dependency loading, module maps,
 Fetch, import attributes, `import.meta`, and classic/worker/module consumers.
 Wire `HostLoadImportedModule`, `HostGetImportMetaProperties`, and
 `HostGetSupportedImportAttributes` through that pipeline.
 `LoadRequestedModules()` still throws for records with imports; Wasm ESM parsing
-also remains explicit. Module-specific active-script entry and restoration after
+also remains explicit in HTML/JS Engine. The addon now supplies WebAssemblyModule
+compilation, supplied-graph linking, execution, and source-phase access; connect
+that bridge to the existing record/parser when resuming the HTML audit.
+Module-specific active-script entry and restoration after
 await need engine metadata/hooks: the current HTML runner supplies the retained
 realm context, not a fictitious root-script context for every dependency.
 
-The addon still lacks context-level dynamic-import callbacks. Re-enable the
-approved skipped case in [capabilities.test.cjs](../../node-compat/test/capabilities.test.cjs)
-when that contract exists. Node's existing `Promise.resolve(...).then(eval)`
-module tests do not prove backup-incumbent restoration: they also pass without
-our hook patches.
+The context callback supplies the fallback when importing code has no compilation
+metadata. Explicit script/module callbacks take precedence; foreign metadata
+still routes through Node. Context state retains the fallback independently of a
+reusable global proxy. The replacement-realm indirect-eval regression in
+[capabilities.test.cjs](../../node-compat/test/capabilities.test.cjs) is enabled.
+These `Promise.resolve(...).then(eval)` cases do not prove backup-incumbent
+restoration: they also pass without our job-hook patches.
+
+### Detached-context Promise delivery
+
+`SPEC_CLASH(detached-context-promise-assimilation)`: follow Chromium and Firefox;
+adopting a detached realm's Promise can stay pending. The original expected-failure
+classification assumed adoption should complete. Browser comparison did not
+support treating that expectation as an established conformance requirement.
+Eric accepted the Chromium/Firefox behavior on 2026-10-27; leave the runtime unchanged.
+
+The 2026-10-27 Playwright probe retained an already fulfilled Promise and a
+function returning a Promise from a same-origin iframe, then navigated that
+iframe and waited for its replacement's load event. The WindowProxy stayed
+identical. Both values resolved before navigation. After navigation:
+
+| Browser | Parent `Promise.resolve()` of either old-realm Promise | Direct parent `.then()` callback | Replacement-realm Promise |
+| --- | --- | --- | --- |
+| Chromium 156.0.8078.4 | Pending after 150 ms | Fulfilled | Fulfilled |
+| Firefox 157.0 | Pending after 150 ms | Fulfilled | Fulfilled |
+| WebKit 27.2 | Fulfilled | Fulfilled | Fulfilled |
+
+Chromium's `WindowProxy::ClearForNavigation()` calls `DisposeContext()` with
+`kGlobalObjectIsDetached`; `LocalWindowProxy::DisposeContext()` calls
+`ScriptState::DetachGlobalObject()`, which invokes V8's `Context::DetachGlobal()`.
+V8 clears the old context's microtask queue, and `EnqueueMicrotask` drops the
+thenable job when that queue is absent. Direct reactions use the live handler's
+realm. This explains the observed distinction; it is not specific to imports.
+
+The [native regression](../../node-compat/test/capabilities.test.cjs) now checks
+pending adoption, direct host delivery, and the replacement context as ordinary
+passing expectations on all three addon bases. Keep the browser difference
+recorded; reconsider the choice if implementations converge. Navigation owns
+the point of detachment, independently of import-loader routing.
 
 ## Other engine hooks and facts
 
 Adopt Pip's completed native experiments in bounded slices. Retained classic
-execution and source-text/synthetic modules are integrated; import.meta/dynamic-import
-routing, rejection notifications, and string-compilation policy remain separate
-integration work. Preserve Node's own dispatch and each experiment's lifetime tests.
+execution, source-text/synthetic modules, script/context dynamic-import callbacks,
+import.meta initialization, the shared string-compilation/extraction bridge,
+the per-context Temporal clock, and the Wasm module bridge are adopted. HTML
+dynamic loading, import.meta properties, string-compilation policy, and the browser clock hookup remain separate
+integration work. Preserve Node's own dispatch and each
+experiment's lifetime tests. The Wasm bridge is an addon extension with the
+existing Node-shaped module lifecycle; Node has no equivalent public VM class.
+It remains below the JS Engine/HTML parser boundary. Static graphs require no
+patch on any of the three addon bases. Dynamic source and evaluation imports use
+the existing forwarding export, retaining official-base expected failures.
+
+The addon exposes `setModifyCodeGenerationFromStringsCallback(realmReference, callback)`
+with V8's `(source, isCodeLike)` inputs and string/false/undefined results.
+Per-context private state supports replacement, removal, collection, and retained
+functions across global-proxy reuse. Allowed/extracted code still passes Node's
+checks and source-map handling. The forwarding export is in the existing patch;
+official addon bases retain approved expected failures for its absence. JS Engine
+and HTML do not register policies yet. Connect CSP and Binding-owned TrustedScript
+recognition during the host-hook audit; do not infer full HTML inputs from source
+prefixes. See the [contract and regressions](../../node-compat/README.md#string-compilation-and-source-extraction).
+
+Temporal's addon callback is an internal, synchronous, nonthrowing clock returning
+signed 64-bit bigint nanoseconds. This follows the native clock boundary in the
+browser implementations; it does not supply general JavaScript exception
+propagation. Violating the callback contract is a fatal internal error, with no
+fabricated reading. Context ownership, removal, collection, signed timestamps,
+and native-method identity are covered by the maintained tests. See the
+[clock contract and browser evidence](../../node-compat/README.md#temporal-clock).
+At the HTML hookup, connect the owning environment's wall clock and resolve
+precision policy before registering the callback. Recheck the isolation-capability
+getter after Ged's navigation work is integrated; the current branch still has an
+explicit permissions-policy dependency. Do not silently bypass that dependency
+inside the clock read.
 
 Eric approved retaining demonstrated gaps as expected failures during adoption,
 without expanding this work into further engine patches. Carry over the three
@@ -121,19 +211,25 @@ global live bindings, v128 export initialization, and mutable globals re-exporte
 through JavaScript. Keep their Node-only controls, which reproduce all three.
 Likewise retain the four [string-compilation hook failures](../../node-compat/experimental/compile-strings/README.md):
 eval/Function distinction, original parameter boundaries, TrustedScript argument
-identity, and the implicit untrusted empty body. Keep specification expectations,
-record the responsible boundary, and revisit them with the relevant consumer or
-upstream API change. Their experimental assertions remain intact until that adoption.
+identity, and the implicit untrusted empty body. These now run as approved expected
+failures in the maintained [gap suite](../../node-compat/test/code-generation-gaps.test.cjs).
+Keep specification expectations, record the responsible boundary, and revisit
+them with the relevant consumer or upstream API change. Wasm's three assertions
+and their Node-only controls now run in the maintained
+[gap suites](../../node-compat/test/wasm-gaps.test.cjs). The
+[addon contract](../../node-compat/README.md#webassembly-modules) records the
+generated-module mechanism and its limits; ordinary imports, functions, immutable
+globals, memory/tables, cycles, top-level await, and collection have passing tests.
 
 Implement these with their consuming feature, rather than adding inert hooks:
 
 | Missing boundary | Consumer and completion condition |
 | --- | --- |
-| `HostEnsureCanCompileStrings` | CSP checks for eval/Function-family compilation; existing CSP algorithms need an engine interception point, not just a coarse VM switch |
-| `HostGetCodeForEval` | TrustedScript extraction when Trusted Types and its engine hook are available |
+| `HostEnsureCanCompileStrings` | Connect CSP checks to the adopted interception callback; preserve the four documented engine-input gaps |
+| `HostGetCodeForEval` | Connect Binding-owned TrustedScript identity/data to the adopted extraction callback |
 | `HostEnqueueFinalizationRegistryCleanupJob` | HTML cleanup tasks and script bracketing; capturing a registry callback does not control collection or cleanup scheduling |
 | Kept-object cleanup control | Native checkpoints already clear kept objects; resolve HTML's [ordering and Agent isolation questions](../browlet/scripting/EVENT-LOOP-ARCHITECTURE.md#node-v8-checkpoint) |
-| `HostSystemUTCEpochNanoseconds` | Temporal's relevant-settings clock; the current host clock does not install this engine hook |
+| `HostSystemUTCEpochNanoseconds` | Connect the relevant environment's wall clock to the adopted nonthrowing Temporal callback; resolve precision policy before installation |
 | Active function and arbitrary execution stack | Custom-element construction and script context; only controlled entries/NewTarget are currently visible |
 | Exact Promise primitives | Patch V8 to expose reaction attachment without a result Promise, then use it in the addon's `observePromise`; expose the existing `MarkAsHandled` API and remove constructor/species fallbacks |
 | Buffer and exotic internal slots | Non-destructive detach-key checks and exact exotic/Error state needed by structured data |

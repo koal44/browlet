@@ -1,12 +1,15 @@
 #include <node.h>
 #include "array-buffer.h"
+#include "code-generation.h"
 #include "host-hooks.h"
 #include "html-all-collection.h"
 #include "iterators.h"
 #include "object-types.h"
 #include "promise.h"
 #include "realm.h"
+#include "temporal.h"
 #include "vm.h"
+#include "vm-imports.h"
 #include "vm-modules.h"
 
 namespace node_compat {
@@ -16,11 +19,14 @@ void Initialize(v8::Local<v8::Object> exports, v8::Local<v8::Value>,
                 v8::Local<v8::Context> context) {
   auto vm_data = InitializeVm(exports, context);
   if (vm_data.IsEmpty()) return;
+  InitializeVmImports(exports, context, vm_data);
   InitializeVmModules(exports, context, vm_data);
+  InitializeCodeGeneration(exports);
+  InitializeTemporal(exports);
   InitializeArrayBuffer(exports, context, vm_data);
   InitializeRealm(exports, context);
   InitializeHostHooks(exports, context);
-  InitializePromise(exports);
+  InitializePromise(exports, context, vm_data);
   InitializeObjectTypes(exports);
   InitializeIterators(exports, context, vm_data);
   InitializeHTMLAllCollection(exports, context, vm_data);

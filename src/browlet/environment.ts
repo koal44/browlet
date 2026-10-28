@@ -30,7 +30,8 @@ import {
   fetchExternalModuleScriptGraph, fetchModulepreloadModuleScriptGraph, fetchInlineModuleScriptGraph,
   fetchModuleWorkerScriptGraph, fetchWorkletScriptGraph,
   fetchSingleModuleScript, fetchSingleImportedModuleScript, resolveModuleSpecifier,
-  ClassicScript, DedicatedWorkerAgent, SandboxAgent, BrowletRealm, taskSources, domManipulationTaskSource, type Script,
+  ClassicScript, DedicatedWorkerAgent, SandboxAgent, BrowletRealm,
+  taskSources, domManipulationTaskSource, type Script,
   type ScriptFetchOptions, type ModuleMap, type ModuleType,
   type JSModuleRequest, type ModuleFetchCallback, type PerformScriptFetch,
   type EventLoop, type WindowRealm, type WindowAgent, type JSExecutionContext, type BrowletGlobalObject,
@@ -394,10 +395,8 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     console.error(exception);
   }
 
-  /** Track rejection changes using this current environment and the modeled running script. */
+  /** HTML's HostPromiseRejectionTracker, bound to the executing realm's environment. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#the-hostpromiserejectiontracker-implementation
-  // TODO: Call from the engine's HostPromiseRejectionTracker notification. Existing
-  // job hooks and Node's later process-wide events do not supply that boundary.
   trackPromiseRejection(promise: Promise<unknown>, operation: 'reject' | 'handle'): void {
     const script = this.responsibleEventLoop.runningScript;
     if (script instanceof ClassicScript && script.mutedErrors) return;
@@ -405,6 +404,7 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     const global = env.globalImplementation;
     if (operation === 'reject') {
       global.aboutToBeNotifiedRejectedPromises.push(promise);
+      env.responsibleEventLoop.scheduleRejectedPromiseNotification(env);
       return;
     }
 

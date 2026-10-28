@@ -22,6 +22,11 @@ if (native.installHostHooks) {
 exports.getRealm = native.getRealm;
 exports.getFunctionRealm = native.getFunctionRealm;
 exports.observePromise = native.observePromise;
+exports.setPromiseRejectionTracker = native.setPromiseRejectionTracker;
+exports.setModifyCodeGenerationFromStringsCallback = native.setModifyCodeGenerationFromStringsCallback;
+exports.setTemporalHostSystemUTCEpochNanosecondsCallback = native.setTemporalHostSystemUTCEpochNanosecondsCallback;
+exports.isPromiseHandled = native.isPromiseHandled;
+exports.getPromiseResult = native.getPromiseResult;
 exports.isArrayIterator = native.isArrayIterator;
 exports.isStringIterator = native.isStringIterator;
 exports.isRegExpStringIterator = native.isRegExpStringIterator;

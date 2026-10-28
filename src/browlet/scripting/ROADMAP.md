@@ -117,7 +117,7 @@ claim that the engine supplies a record for every actual function invocation.
 
 | Requirement | Present model and remaining dependency |
 | --- | --- |
-| Global state | `BrowletGlobalObject` requires the error-reporting flag, both rejected-promise collections, import map, and resolved module set. Window and the service-worker global skeleton initialize them; future worker/worklet globals must do so too. Error reporting and the translated rejection algorithms consume their state; engine rejection delivery and import-map processing remain unwired. |
+| Global state | `BrowletGlobalObject` requires the error-reporting flag, both rejected-promise collections, import map, and resolved module set. Window and the service-worker global skeleton initialize them; future worker/worklet globals must do so too. Runtime errors, native rejection delivery on addon backends, and import-map algorithms consume this state; script-element import-map callers remain unfinished. |
 | Realm creation | `createBrowletRealm()` and production Window composition share `BrowletRealm.initialize()`: bracket global creation with the retained context, pop it, then remove SharedArrayBuffer when required. The ordinary factory accepts omitted customizations and returns the retained context. |
 | Retained context | `BrowletRealm.executionContext` is stable for the realm's lifetime. Environment settings return that same record. The existing VM context and `env` facilities are separate. |
 | Entry | `entryExecutionContext` selects the most recently pushed retained realm context, including a nested HTML entry. Its `.realm` supplies entry realm, `.realm.env` entry settings, and `.realm.globalObject` entry global. Missing entry context throws. |
@@ -403,7 +403,7 @@ remaining algorithms.
 | --- | --- |
 | Classic | Muted errors select `about:blank`; disabled scripting supplies empty source unless bypassed. Retains options, original source URL, realm, and HostDefined. The selected backend compiles without executing: `vm.Script` for stock contexts, a native UnboundScript handle for addon contexts. Syntax errors belong to the target realm and populate both error fields. |
 | JavaScript module | Applies scripting policy, compiles in the existing VM context, and retains engine requests including attributes and phase. Syntax failures belong to the target realm and select the first parse error without setting `errorToRethrow`. |
-| WebAssembly | Disabled scripting substitutes the eight-byte empty module. Calls an explicit, unfinished ESM parser; ordinary Wasm compilation alone would not provide the required module record/linking. Parse exceptions populate only `parseError`; implementation failures propagate. |
+| WebAssembly | Disabled scripting substitutes the eight-byte empty module. The addon now supplies a WebAssemblyModule bridge, but this parser still needs its JSRealm/HTML connection. Parse exceptions populate only `parseError`; implementation failures propagate. |
 | CSS | Constructs a sheet with default options and calls `replaceSync`; replacement exceptions become `parseError`. Binding projects the sheet before the real synthetic module retains its default export. |
 | JSON | Uses the target realm's captured JSON parser, retaining the parsed value or realm-owned parse error. Does not blank source when scripting is disabled. |
 | Text | Retains the supplied string unchanged as the default-export input, also independently of scripting enablement. |
@@ -433,9 +433,12 @@ remain explicit work rather than being approximated by the root module.
 exercise real records, including a dependency-free inline graph through the
 HTML entry point and a supplied graph importing JSON, text, and a CSSStyleSheet
 platform object. [Native tests](../../../node-compat/test/modules.test.cjs)
-retain the original 23 engine/lifetime cases. Deferred Wasm and string-hook
-expected-failure evidence remains in Pip's experimental repository until those
-separate slices are adopted.
+retain the original 23 engine/lifetime cases. Pip's Wasm and string-hook bridges
+are now adopted in the addon; their HTML connections remain separate work.
+The maintained [Wasm gaps](../../../node-compat/test/wasm-gaps.test.cjs),
+[independent Node controls](../../../node-compat/test/wasm-node-gaps.test.cjs), and
+[string-hook gaps](../../../node-compat/test/code-generation-gaps.test.cjs)
+retain the approved expected failures.
 
 `UserAgent.webDriver` now contains BiDi's create/prepare/ScriptEvaluation command
 sequence, stopping at explicit unfinished dependencies. `JSScriptRecord.evaluate()`
@@ -651,16 +654,19 @@ tests do not claim retained-script execution or worker propagation.
 `BrowletEnvironment.notifyAboutRejectedPromises()` translates this section's
 notification algorithm. `trackPromiseRejection()` supplies the corresponding
 HTML §8.1.6.4 hook body, treating its receiver as the current settings and using
-the modeled running script when present. Neither currently receives automatic
-engine notifications. Global state remains on the global implementation.
+the modeled running script when present. Window composition calls
+`installRealmHostHooks()` to bind this two-argument tracker once the environment
+and global are ready. Internal sandboxes do not register HTML hooks; future worker
+composition must do so explicitly. All addon bases deliver native notifications;
+global state remains on the global implementation.
 
 | Requirement | Implementation or explicit dependency |
 | --- | --- |
 | Rejection notification | Clone and clear the pending list, then queue a DOM-manipulation task for the global. Skip handled promises, fire a trusted cancelable `unhandledrejection`, optionally report an uncanceled reason to the console, and retain still-unhandled promises in the weak set. Recheck handled state after listeners run. |
-| HostPromiseRejectionTracker | Ignore a muted running classic script; otherwise select its settings or the current settings. Reject appends to the pending list. Handle removes an unnotified promise, or removes a previously reported promise from the weak set and queues a noncancelable `rejectionhandled` event. The native notification entry remains unwired in `installHostHooks()`. |
+| HostPromiseRejectionTracker | Ignore a muted running classic script; otherwise select its settings or the current settings. Reject appends to the pending list. Handle removes an unnotified promise, or removes a previously reported promise from the weak set and queues a noncancelable `rejectionhandled` event. Native registration is per realm, independent of the patched job hooks. |
 | PromiseRejectionEvent | The DOM event implementation and HTML IDL declarations expose `promise` as an opaque object and `reason` as any. Constructor conversion requires an object-valued promise but deliberately does not adopt thenables or require an actual Promise. Omitted reason is undefined. |
-| Engine slot reads | `isPromiseHandled()` and `getPromiseResult()` explicitly throw until JS Engine provides non-observing reads. Attaching a reaction to learn the result would itself change handled state. |
-| Checkpoint integration | §8.1.7.3 requires notification for each settings object's global served by the loop. That enumeration and the production caller remain explicit TODOs; no new environment registry is introduced for this slice. |
+| Engine slot reads | `isPromiseHandled()` and `getPromiseResult()` use V8's non-observing reads on every addon base; stock Node explicitly throws. Neither attaches reactions nor reads author properties. |
+| Checkpoint integration | After draining microtasks, notify environments with pending rejections. The loop retains only those environments until the checkpoint; notifying all other environments would be a no-op. Listener-created rejections receive a later notification task. |
 | Global lifecycle | Window event delivery is exercised. Worker/worklet globals and their lifetime integration remain with their owners; notification dispatch currently requires an EventTarget global. Event-handler attributes remain §8.1.8 work. |
 
 The outstanding weak set has no implementation-specific capacity limit. No
@@ -674,8 +680,14 @@ call the tracker and notification operation using pending native Promises as
 identity-bearing fixtures; they do not claim native rejection tracking. Cases
 cover early/late handling, handling during notification, cancellation,
 rejections added during dispatch, script-selected settings, and muted scripts.
-The native dependency is the stopping point for this audit; no addon changes
-are part of this slice. Window and WorkerGlobalScope inherit EventTarget;
+The separate [integration suite](../../../test/browlet/scripting/promise-rejection-integration.test.ts)
+uses real native rejections, slot reads, checkpoints, event bindings, and
+`Browlet.evaluate()`. Stock-only expected failures preserve the missing engine
+boundary. Native tests also cover Node forwarding, collection, worker teardown,
+and callback/job-hook coexistence. Complete running-script restoration in jobs
+remains separate. The [Window event-target regression](../../../test/browlet/browsing/window-event-target.test.ts)
+records an independent approved binding failure, also present for ordinary events.
+Window and WorkerGlobalScope inherit EventTarget;
 WorkletGlobalScope does not. Keep the common global-state contract independent
 of EventTarget and review worklet rejection delivery with its eventual consumer.
 
@@ -900,7 +912,7 @@ evaluation and automation do not acquire this gate automatically.
 | --- | --- |
 | Script records/classic scripts | Production fetch/run callers, complete active-script/source metadata, worker-imported synchronous pause, and timing; retained compiled execution and modeled context restoration are connected |
 | Module scripts/maps | Engine parse/load/link/evaluate, import attributes, dynamic import, host hooks, and script-element callers; HTML fetch/run orchestration and import-map algorithms are present |
-| Error reporting | Source locations, complete script attribution, dedicated-worker propagation, native rejection notifications/slot queries, and checkpoint notification integration |
+| Error reporting | Source locations, complete script attribution, and dedicated-worker propagation; native rejection notifications, slot queries, and checkpoint delivery are connected on addon bases |
 | Event handlers | Content-attribute compilation, Window/body/frameset targeting, global handler mixins, and special error/beforeunload behavior |
 | DOM checkpoint consumers | Custom-element reactions; MutationObserver and signal-slot delivery already use the existing checkpoint |
 | Task routing/lifecycle | Element-task wrapper using the relevant global, worker restrictions, and complete loop teardown |
@@ -932,9 +944,9 @@ Use bounded consumer slices within HTML's script algorithms:
    ErrorEvent dispatch, and muting. Complete active-script/source provenance and
    dedicated-worker propagation with their consumers. Forced termination stays deferred.
 3. **Rejected promises (§8.1.4.7).** The HTML tracker, notification tasks, and
-   PromiseRejectionEvent are translated. Connect the rejection engine hook,
-   non-observing slot reads, and checkpoint environment enumeration. Node's
-   process-wide events cannot supply that ownership.
+   PromiseRejectionEvent are connected to native notifications, slot reads, and
+   checkpoints on addon bases. Preserve stock-only expected failures and finish
+   script attribution and worker/worklet integration with their consumers.
 4. **Modules/import maps (§8.1.4.8 and §§8.1.5–8.1.6).** Build on the module map
    and single-module fetchers with automatic graph loading, module-specific context restoration,
    and dynamic-import hooks. Import-map parsing, merging, resolution, parse

@@ -175,6 +175,13 @@ can differ from a handlerless reaction's null specification realm. Returning
 false preserves the original V8 queue. Generic/timeout enqueue hooks transfer
 all scheduling and have no per-job fallback. HTML chooses settings and task policy.
 
+`JSRealm.setPromiseRejectionTracker()` installs a two-argument reject/handle
+callback for the executing context. It works on every addon base without the
+job-hook patches. Internal sandboxes remain unregistered. `isPromiseHandled()`
+and `getPromiseResult()` read native slots without changing handled state or
+consulting author properties. Stock Node retains Node reporting and explicitly
+throws for those unavailable slot reads; it does not substitute process events.
+
 Each realm supplies an `InternalPromise` constructor extending
 Infra's [`InternalPromise`](../infra/promises.ts) with realm-owned observation. Static creation
 methods and instance chaining retain that constructor. `InternalPromise.fromInternal()`

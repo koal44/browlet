@@ -18,9 +18,6 @@ let installed = false;
 // https://html.spec.whatwg.org/multipage/webappapis.html#javascript-specification-host-hooks
 export function installHostHooks(): void {
   if (installed || !setHostHooks) return;
-  // TODO(HTML HostPromiseRejectionTracker): Forward engine reject/handle
-  // notifications to the current environment's trackPromiseRejection().
-  // The existing addon job-hook contract does not expose rejection tracking.
   // TODO(HTML §8.1.6.5): HostLoadImportedModule and import.meta.resolve must call
   // env.resolveModuleSpecifier() with the referring script.
   // §8.1.5's resolver exists; engine module hooks are not installed here yet.
@@ -32,6 +29,14 @@ export function installHostHooks(): void {
     enqueueTimeoutJob,
   });
   installed = true;
+}
+
+/** Install realm hooks during composition, once the HTML environment and global are ready. */
+export function installRealmHostHooks(env: BrowletEnvironment): void {
+  // Unlike the patched job hooks, rejection tracking uses public V8 APIs on
+  // every addon base. Bind the executing environment without adding an argument
+  // to HTML's HostPromiseRejectionTracker(promise, operation).
+  env.realm.setPromiseRejectionTracker(env.trackPromiseRejection.bind(env));
 }
 
 type JobCallback = JSJobCallback<BrowletEnvironment | null>;

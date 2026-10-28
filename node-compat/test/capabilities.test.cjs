@@ -140,10 +140,7 @@ test('a live reused proxy does not retain the previous realm', async () => {
   assert.equal(compat.runInContext('globalThis', second), second.globalProxy);
 });
 
-// Deferred to module-loading integration; see src/js-engine/ROADMAP.md.
-test('indirect eval uses the replacement realm dynamic-import callback', {
-  skip: 'Deferred: context-level dynamic-import callbacks are not implemented',
-}, async () => {
+itPassesWith('dynamicImport')('indirect eval uses the replacement realm dynamic-import callback', async () => {
   // Adapted from 07301f053's import regression. The promise invokes realm-owned
   // eval, which creates the importing script in that realm.
   const calls = [];
@@ -155,6 +152,7 @@ test('indirect eval uses the replacement realm dynamic-import callback', {
   });
   const source = `Promise.resolve("import('specifier')").then(eval)`;
   await assert.rejects(compat.runInContext(source, first), /realm 1/);
+  const retained = compat.runInContext(`() => import('specifier')`, first);
   first.detachGlobal();
   const second = compat.createContextHandle({
     reuseGlobalProxyFrom: first,
@@ -165,7 +163,38 @@ test('indirect eval uses the replacement realm dynamic-import callback', {
   });
   assert.equal(second.globalProxy, first.globalProxy);
   await assert.rejects(compat.runInContext(source, second), /realm 2/);
-  assert.deepEqual(calls, ['realm 1', 'realm 2']);
+  // Observe directly: assimilating a detached realm's Promise is a separate
+  // lifecycle case below, independent of selecting this import callback.
+  await assert.rejects(new Promise((resolve, reject) => retained().then(resolve, reject)), /realm 1/);
+  second.detachGlobal();
+  const third = compat.createContextHandle({ reuseGlobalProxyFrom: second });
+  await assert.rejects(compat.runInContext(source, third), { code: 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING' });
+  assert.deepEqual(calls, ['realm 1', 'realm 2', 'realm 1']);
+});
+
+test('detached contexts stop Promise assimilation while live-context reactions still run', async () => {
+  // SPEC_CLASH(detached-context-promise-assimilation): follow Chromium/Firefox; WebKit still assimilates these Promises.
+  // Browser evidence and the accepted lifecycle choice: src/js-engine/ROADMAP.md.
+  const first = compat.createContextHandle();
+  const createPromise = compat.runInContext('() => Promise.resolve(42)', first);
+  const savedPromise = createPromise();
+  assert.equal(await savedPromise, 42);
+  first.detachGlobal();
+  const second = compat.createContextHandle({ reuseGlobalProxyFrom: first });
+  assert.equal(second.globalProxy, first.globalProxy);
+  const adopted = ['pending', 'pending'];
+  const observed = [];
+  for (const [index, promise] of [savedPromise, createPromise()].entries()) {
+    Promise.resolve(promise).then(
+      () => { adopted[index] = 'fulfilled'; },
+      () => { adopted[index] = 'rejected'; },
+    );
+    promise.then(value => { observed.push(value); });
+  }
+  assert.equal(await compat.runInContext('Promise.resolve(43)', second), 43);
+  await nextTurn();
+  assert.deepEqual(adopted, ['pending', 'pending']);
+  assert.deepEqual(observed, [42, 42]);
 });
 
 test('realm-owned errors carry evaluation filename and line offset', () => {

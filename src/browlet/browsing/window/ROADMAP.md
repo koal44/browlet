@@ -49,6 +49,13 @@ The generated `WindowProxy` type aliases the declared Window platform surface;
 `WindowProxyHandle` retains the internal proxy state. Undeclared compatibility
 properties and the missing Window members above are not promised by the types.
 
+Window values returned through EventTarget projection currently expose the target
+object instead of the public WindowProxy: `event.target === window` is false on
+both backends. Chromium returns true (2026-10-27). The focused
+[regression](../../../../test/browlet/browsing/window-event-target.test.ts) is an
+approved expected failure. Fix the Window/Binding identity conversion for all
+such returns; rejection notification must not special-case its event target.
+
 `Window.postMessage()` belongs on Window, with its future algorithms in
 `communication/window-messaging.ts`; it must consume the single structured-data
 implementation and the target agent's event loop. It must not add a

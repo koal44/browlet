@@ -1,5 +1,6 @@
 #include <node.h>
 #include "vm.h"
+#include "vm-imports.h"
 #include "realm.h"
 #include "property-delegate.h"
 
@@ -299,7 +300,10 @@ void CompileScript(const FunctionCallbackInfo<Value>& args) {
     // Syntax errors belong to the supplied realm. The unbound result can
     // subsequently execute in any attached context in this isolate.
     Context::Scope scope(realm);
-    ScriptOrigin origin(args[2], args[3].As<Int32>()->Value());
+    Local<v8::Data> import_options;
+    if (!DynamicImportOptions(isolate, args[4]).ToLocal(&import_options)) return;
+    ScriptOrigin origin(args[2], args[3].As<Int32>()->Value(), 0,
+                        false, -1, {}, false, false, false, import_options);
     ScriptCompiler::Source source(args[0].As<String>(), origin);
     if (!ScriptCompiler::CompileUnboundScript(isolate, &source).ToLocal(&compiled)) return;
   }

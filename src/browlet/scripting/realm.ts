@@ -163,8 +163,8 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
 
   /** Parse a WebAssembly ESM record, including its imports, in this realm. */
   parseWebAssemblyModule(_bodyBytes: Uint8Array, _script: WebAssemblyModuleScript): JSWebAssemblyModuleRecord {
-    // TODO: Supply WebAssembly's ESM integration. Compiling a WebAssembly.Module
-    // alone does not provide its Module Record or JavaScript linking behavior.
+    // TODO: Connect node-compat's adopted WebAssemblyModule through JSRealm here.
+    // Automatic dependency loading remains the separate HostLoadImportedModule boundary.
     throw new InternalError('WebAssembly ESM parsing is not implemented');
   }
 

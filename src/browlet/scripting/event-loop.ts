@@ -31,6 +31,9 @@ export class EventLoop {
   #turnRequested = false;
   #taskQueues = new Set<Set<Task>>();
   #taskQueueBySource = new Map<TaskSource, Set<Task>>();
+  // Notifying an environment with an empty pending list is a no-op. Retain only
+  // environments needing this checkpoint, rather than every environment forever.
+  #rejectedPromiseEnvironments = new Set<BrowletEnvironment>();
 
   /** Retain host scheduling and accounting dependencies for the loop's lifetime. */
   constructor(init: EventLoopInit) {
@@ -284,9 +287,13 @@ export class EventLoop {
     try {
       this.microtaskQueue.performMicrotaskCheckpoint();
 
-      // TODO(HTML §8.1.7.3): Call env.notifyAboutRejectedPromises() for each HTML
-      // environment served by this loop, once environment enumeration and the
-      // rejection tracker are connected. Clean up IndexedDB transactions too.
+      if (this.#rejectedPromiseEnvironments.size !== 0) {
+        const rejectedPromiseEnvironments = this.#rejectedPromiseEnvironments;
+        this.#rejectedPromiseEnvironments = new Set();
+        for (const env of rejectedPromiseEnvironments) env.notifyAboutRejectedPromises();
+      }
+
+      // TODO(HTML §8.1.7.3): Clean up IndexedDB transactions.
       // Native checkpoints already clear kept objects; review ordering and isolation
       // with those consumers (EVENT-LOOP-ARCHITECTURE.md#node-v8-checkpoint).
     } finally {
@@ -294,6 +301,11 @@ export class EventLoop {
     }
 
     // TODO(HTML section 8.1.7.3): Record microtask-checkpoint timing.
+  }
+
+  /** Include this environment's pending rejections in the next checkpoint. */
+  scheduleRejectedPromiseNotification(env: BrowletEnvironment): void {
+    this.#rejectedPromiseEnvironments.add(env);
   }
 
   queueMicrotask(

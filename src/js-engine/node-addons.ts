@@ -51,6 +51,13 @@ export class NodeAPI {
     promise: Promise<unknown>, realmAnchor: JSFunction | PromiseConstructor,
     onFulfilled?: JSFunction, onRejected?: JSFunction,
   ) => Promise<unknown>;
+  /** Read engine slots without reactions, species lookup, or author property access. */
+  isPromiseHandled?: (promise: Promise<unknown>) => boolean;
+  getPromiseResult?: (promise: Promise<unknown>) => unknown;
+  /** Receive synchronous reject/handle notifications in the executing context. */
+  setPromiseRejectionTracker?: (
+    context: VMContext, tracker: ((promise: Promise<unknown>, operation: 'reject' | 'handle') => void) | undefined,
+  ) => void;
   runInContext?: (
     source: string, context: VMContext, options?: ContextEvaluationOptions,
   ) => unknown;
@@ -79,6 +86,9 @@ export class NodeAPI {
     this.isFinalizationRegistry = this.#loadMethod(backend, 'isFinalizationRegistry');
     this.makePrototypeImmutable = this.#loadMethod(backend, 'makePrototypeImmutable');
     this.observePromise = this.#loadMethod(backend, 'observePromise');
+    this.isPromiseHandled = this.#loadMethod(backend, 'isPromiseHandled');
+    this.getPromiseResult = this.#loadMethod(backend, 'getPromiseResult');
+    this.setPromiseRejectionTracker = this.#loadMethod(backend, 'setPromiseRejectionTracker');
     this.runInContext = this.#loadMethod(backend, 'runInContext');
     this.setGlobalObject = this.#loadMethod(backend, 'setGlobalObject');
     this.setHostHooks = this.#loadMethod(backend, 'setHostHooks');
