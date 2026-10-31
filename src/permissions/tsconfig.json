@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "module": "preserve",
+    "moduleResolution": "Bundler",
+    "outDir": "../../dist/.typecheck/permissions",
+    "tsBuildInfoFile": "../../dist/.typecheck/permissions.tsbuildinfo"
+  },
+  "include": ["./**/*.ts"],
+  "references": [
+    { "path": "../infra" },
+    { "path": "../js-engine" },
+    { "path": "../web-idl/core" },
+    { "path": "../url" }
+  ]
+}

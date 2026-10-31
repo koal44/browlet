@@ -67,7 +67,6 @@ export interface ClientEnvironment extends FetchEnvironment, TestEnvironment {
 export function createFetchUserAgent(): FetchUserAgent {
   return {
     ...createStorageUserAgent(),
-    HostPromise: NodePromise,
     httpTransport: {
       dispatch() { throw new Error('This fixture has no network transport'); },
       async close() {},

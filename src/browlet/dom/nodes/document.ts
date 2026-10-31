@@ -1537,6 +1537,12 @@ export class DocumentImpl extends NodeImpl {
     for (const observer of this.#fullyActiveObservers) {
       observer(fullyActive);
     }
+    // Permission updates are suppressed while inactive; reconcile when this Document returns.
+    if (fullyActive) {
+      for (const status of this.env.userAgent.permissionStatuses.values()) {
+        if (status.env.getAssociatedDocument() === this) status.queueUpdate();
+      }
+    }
   }
 
   /** Prevent restoration from history and retain the reason for that decision. */

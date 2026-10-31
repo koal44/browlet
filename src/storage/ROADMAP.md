@@ -8,24 +8,28 @@ owns the user-agent and traversable storage instances.
 **Status:** §§1–4.8 are reviewed; endpoints, keys, shed ownership, legacy
 session cloning, shelf/bucket creation, bottle-map acquisition, and proxy-map
 forwarding are implemented, with storage tasks using HTML's event loop.
+§5 supplies origin-wide persistence decisions, permission-gated bucket
+protection, and revocation through the shared Permissions store. Host consent,
+public permission queries, and change notifications are connected.
 §6 supplies Web Storage usage estimates and a configurable fixed shelf quota.
 §7's opening rules supply whole-bucket clearing and removal of empty shelves.
 §7.1 connects session cleanup to final traversable removal; automatic storage
-pressure eviction and §5 persistence permission remain deferred.
+pressure eviction remains a host dependency.
 §7.2's UI guidance is reviewed; coordinated site-data controls remain host work.
-§8's public StorageManager API remains deferred.
+§8 exposes `navigator.storage.persisted()`, `persist()`, and `estimate()` in secure
+Window globals. WorkerNavigator integration remains unimplemented.
 
 ## Sources and boundaries
 
 Local source: `whatwg-storage/storage.bs`.
 §§1–3 establish scope and dependencies; their API examples are defined later.
 Infra, HTML, and Web IDL already supply the shared terminology and browser
-integration. Permissions integration is a dependency of the deferred §5
-persistence permission and §8 `persist()` algorithm.
+integration. Permissions supplies state lookup, host consent, revocation, and
+query notifications for §5 and §8's `persist()` algorithm.
 
-The current pass supplies the in-memory model needed by HTML Web Storage,
-including applicable quota and clearing rules from §§6–7. Disk backing,
-persistence permission, and the public StorageManager API remain deferred.
+The implementation target is the full Storage Standard. The current backend
+is in memory; disk durability, host UI, and unfinished endpoint APIs remain
+explicit dependencies rather than prerequisites for its shared algorithms.
 
 - [File API](../file/ROADMAP.md#blob-url-integration)
   owns Blob URL entries, authorization, revocation, and cleanup.
@@ -66,8 +70,10 @@ reserved environments supply their creation URL.
 Its `StorageUserAgent` contract supplies the local storage shed, `storageEnabled`
 read at acquisition time, the fixed `storageQuotaBytes` budget, and `generateUUID()`
 used by File's user-agent-owned Blob URL store.
-`StorageEnvironment` extends the base with the full owner's storage maps and
-task delivery. There is no separate environment object.
+The same user agent also supplies the permission store and host consent needed
+for persistence. `StorageEnvironment` extends the base with the full owner's
+realm, internal promises, permission inputs, and storage task delivery. There
+is no separate environment object or manager-specific environment contract.
 
 The current standard defines an origin-only key and explicitly anticipates
 partitioning changes. Keep comparisons through `StorageKey.equals()`, including
@@ -186,8 +192,96 @@ use the DOM-manipulation source instead.
 
 **Exit proof:** browser tests cover delivery across agents, FIFO ordering with
 microtasks between tasks, Document destruction, and old Window destinations
-versus a retargeted WindowProxy. StorageManager and worker/cross-thread consumers
-remain outside this slice.
+versus a retargeted WindowProxy. StorageManager uses this task source for its
+results; worker/cross-thread consumers remain pending.
+
+## Persistence permission
+
+§5's `StoragePersistence` in `persistence.ts` belongs to UserAgent. Its
+origin-keyed decisions live in `UserAgent.permissionStore`, separate from buckets,
+and default to `prompt`.
+Same-origin environments share consent; other origins and browser instances
+do not. This is recorded host consent, not `navigator.permissions.query()`
+or that API's secure-context checks.
+
+`setPermission(origin, state)` records a host decision. Granting permission
+alone does not change retention: `persist(origin)` protects an already-obtained
+default local bucket only with a grant and allowed storage access. Changing
+permission to `denied` or `prompt` restores `best-effort` without deleting data.
+Removing data leaves permission intact; replacement buckets start best-effort.
+
+Revocation uses the origin and UserAgent's
+shed instead of obtaining a shelf through current settings. This works without
+a live Document and removes protection even while storage access is disabled.
+An absent bucket needs no allocation because its initial mode is best-effort.
+
+**SPEC_GAP(storage-revocation-shelf-failure):** §5 does not handle failure from
+shelf acquisition, which §4.4 permits when storage access is disabled or the
+origin is opaque. Browlet removes protection from existing storage regardless
+of author access. WebKit's browser-side
+[`resetStoragePersistedState()`](https://github.com/WebKit/WebKit/blob/c526785513ba334a7a24e5cc649c99f11336038a/Source/WebKit/NetworkProcess/storage/NetworkStorageManager.cpp)
+can remove persistence markers without a Window; Chromium's
+[`PersistentStoragePermissionContext`](https://github.com/chromium/chromium/blob/dad9a76bb4b1e220df566cbda7ce3aded8a60359/chrome/browser/storage/persistent_storage_permission_context.cc)
+records consent by origin in the browser profile. These support browser-owned
+state, but do not establish identical handling of this failure case.
+
+Public `persist()` consumes Permissions' host consent callback; the host can also
+set/reset decisions explicitly. PermissionStatus refresh and change delivery use
+the same store. Automatic expiry, prompt cancellation, and concurrent-decision
+coordination remain [Permissions host dependencies](../permissions/ROADMAP.md#remaining-integration).
+Persistent mode models retention protection; the in-memory backend does not
+survive browser/process destruction.
+
+Permissions supplies state types/defaults, feature definitions, the general
+user-agent store, and effective-state lookup. Storage supplies
+`persistentStoragePermission` with requesting-origin keys. Its former private
+decision map has been replaced by this store; the existing host setter retains
+Storage revocation side effects. Permissions §5.4 now also invokes that cleanup
+through the feature hook bound by UserAgent. The origin-based host getter reads recorded
+consent; the environment-based Permissions lookup also checks secure-context and
+applicable Document policy eligibility.
+
+`SPEC_CLASH(storage-permission-revocation-order)`: Permissions §5.4 calls cleanup
+before deleting the saved grant, while Storage's cleanup first returns if the
+state is granted. The explicit revocation path treats the known withdrawal as
+authoritative: `revokeProtection(origin)` drops protection from the retained
+default bucket, and the permission store then removes the decision. The host
+setter calls this same helper only after writing a non-granted decision. Neither
+path deletes data or requires a live Document. §5.4's defaults and outstanding
+prompt/decision coordination are documented in the [Permissions roadmap](../permissions/ROADMAP.md#54-permission-revocation).
+
+`SPEC_CLASH(storage-permission-origin-key)`: Storage §5 defaults the permission
+algorithms except state and revocation, while requiring the same state for every
+settings object with a given security origin. Permissions §4's default key is
+the top-level origin; using it literally would share decisions between unrelated
+embedded origins and split one embedded origin's decisions between top-level
+sites. The feature definition keeps Browlet's existing requesting-origin scope,
+consistent with the origin-based Chromium persistence context linked above.
+Revisit the key rule if the two standards clarify this interaction.
+
+Browser source review (30 October 2026; not a runtime interoperability probe):
+
+| Engine | Saved decision and request eligibility |
+| --- | --- |
+| [Chromium](https://github.com/chromium/chromium/blob/dad9a76bb4b1e220df566cbda7ce3aded8a60359/chrome/browser/storage/persistent_storage_permission_context.cc) | `UpdateSetting()` saves the decision for the requesting origin. `DecidePermission()` refuses a new grant when requesting and embedding origins differ. |
+| [Firefox](https://github.com/mozilla-firefox/firefox/blob/8cb684579322de325458ff1ed240f38b00ad4a40/extensions/permissions/PermissionDelegateHandler.cpp) | Uses the requesting principal for this feature; its separate `ePersistDeniedCrossOrigin` rule rejects cross-origin requests and reports denied for cross-origin permission queries. |
+| [WebKit](https://github.com/WebKit/WebKit/blob/c526785513ba334a7a24e5cc649c99f11336038a/Source/WebKit/NetworkProcess/storage/NetworkStorageManager.cpp) | Carries both origins in `ClientOrigin`, associates the persisted marker with that storage identity, and returns false from `persist()` when top and client origins differ. |
+
+These support separating saved consent from request eligibility, not an assertion
+that all three engines have our exact key model. Keep requesting-origin consent;
+Permissions §5.2 now declines new cross-origin persistence requests without
+overwriting that origin's saved decision. Like Chromium's `DecidePermission()`,
+this gate applies after the existing-state short circuit, so an existing grant
+still returns granted. `SPEC_CLASH(storage-persist-cross-origin)` records that
+`StorageManager.persist()` follows Storage's permission-request result, without
+WebKit's additional operation-level rejection for a cross-origin caller with saved
+consent. Firefox's query restriction also differs from Storage's literal origin-wide
+state rule. Browlet's internal state lookup and public Permissions API follow that
+rule, subject to the generic secure-context/policy checks.
+
+**Exit proof:** tests cover grants, denial/reset, origin and browser isolation,
+navigation, disabled storage, live map preservation, session-data isolation,
+and permission independence from bucket removal/recreation.
 
 ## Storage usage
 
@@ -228,7 +322,7 @@ The policy stays on UserAgent rather than being copied into individual shelves.
 Endpoint quotas remain separate: localStorage and sessionStorage still carry
 their recommended 5 MiB bottle limits. HTML §12's `Storage.setItem()` must enforce
 both bottle and shelf limits before mutation; the internal maps do not do that.
-The deferred StorageManager API will expose shelf usage and this quota estimate.
+`StorageManager.estimate()` exposes shelf usage and this quota estimate.
 
 **Exit proof:** browser tests cover default/custom/zero budgets, invalid host
 configuration, navigation lifetime, independent origins and browser instances,
@@ -306,15 +400,71 @@ The standard intentionally leaves the meaning of an individual website to UI
 policy. No grouping policy is selected here; origin-only storage keys do not
 settle which related origins, cookie domains, or network partitions to clear.
 
+## StorageManager API
+
+§8 supplies the `NavigatorStorage` declaration and one
+`StorageManagerImpl` per settings object. HTML owns the minimal Navigator
+identity and forwards `storage` to that settings-owned object. Web IDL supplies
+secure-context exposure, `[SameObject]`, Promise projection, and realm errors.
+`WorkerNavigator` still depends on worker creation and its Navigator binding.
+
+`persisted()` obtains the local shelf synchronously, reads the default bucket's
+mode in parallel, then resolves on the relevant global's storage task source.
+Unavailable storage rejects with TypeError; an internal bucket-read error yields
+false. It queries protection already recorded by §5, so it needs no permission
+request. The data remains in memory regardless of the bucket's protection mode.
+
+`persist()` is Window-only. It obtains the local shelf before background work,
+requests `persistent-storage` permission, then protects the captured shelf's
+default bucket when granted. It uses the returned decision directly: the task
+saving a fresh grant can still be pending. The existing host-only
+`StoragePersistence.persist(origin)` instead requires an already-recorded grant.
+The public result reports the bucket's mode and resolves on the relevant global's
+storage task source. Missing/failed storage-key acquisition rejects with TypeError;
+internal bucket read/write failures return false. Host prompt errors return through
+the storage task source before rejecting, without being recorded as a denial.
+Borrowed methods retain the receiver's environment.
+
+`estimate()` captures the local shelf synchronously, reads its current usage and
+the configured shelf quota in background work, then delivers a fresh
+`StorageEstimate` dictionary through the storage task source. Binding allocates
+the Promise, result object, and errors in the receiver's realm. Later storage
+writes do not change earlier results, and editing a returned dictionary does not
+affect backing storage. Session data belongs to a separate shed and is excluded.
+Unavailable storage rejects with TypeError immediately; usage/quota failures
+queue rejection with TypeError. Estimates report the existing UTF-16 payload
+accounting and fixed quota policy, including usage above quota. Write-time quota
+enforcement remains with HTML §12.
+
+**Dependencies:** permission expiry, coalescing concurrent consent requests, and
+cancellation of outstanding prompts remain with Permissions/host lifecycle work.
+Storage §8 explicitly warns that concurrent prompts for the same origin are not
+handled by its algorithm. Queued results retain ordinary Document task ownership;
+this slice adds no cancellation result for a destroyed global. Disk durability
+and WorkerNavigator integration remain separate work; `persist()` itself is not
+exposed to workers.
+IndexedDB, Cache Storage, and service-worker registrations still need their own
+endpoint accounting. Empty bottles contribute zero; populated bottles without
+accounting make `estimate()` reject instead of underreporting usage.
+
+**Exit proof:** author-code tests cover identities, secure exposure, realm
+Promises/errors, permission versus bucket mode, revocation, disabled/opaque
+storage, navigation, borrowed methods, asynchronous grant/denial, retained consent,
+cross-origin request eligibility, storage/host errors, and independent permission
+and storage task sequencing. Estimate tests cover default/custom/zero quotas,
+live local usage, session exclusion, snapshots, origin/browser isolation, realm
+ownership, and queued failures including missing endpoint accounting.
+
 ## Later substrate slices
 
-1. **§5 persistence permission:** deferred with disk backing and permission integration.
+1. **Permissions host lifecycle:** permission expiry, prompt cancellation,
+   and coordination of concurrent or superseded decisions.
 2. **§7.1 lifecycle/host dependencies:** finish closing in HTML; defer host
    pressure detection, eviction policy, and persistent-storage prompts.
 3. **§7.2 host controls:** choose site grouping and coordinate network/storage
    cleanup when a user-facing site-data operation is introduced.
-4. **§8 browser API integration:** scope StorageManager/navigator exposure
-   with its browser owner before adding declarations or implementation objects.
+4. **Worker API integration:** include NavigatorStorage when WorkerNavigator
+   exists; `persist()` remains Window-only.
 
 Each later slice needs its consumer's identity, isolation, failure, and
 lifecycle tests. Do not create empty service layers merely to reserve these

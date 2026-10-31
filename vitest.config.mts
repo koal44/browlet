@@ -25,6 +25,7 @@ export default defineConfig({
             'test/file/**/*.test.ts',
             'test/fetch/**/*.test.ts',
             'test/url/**/*.test.ts',
+            'test/permissions/**/*.test.ts',
             'test/storage/**/*.test.ts',
             'test/web-idl/**/*.test.ts',
             'test/stylelet/unit/**/*.test.ts',

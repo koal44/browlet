@@ -4,6 +4,11 @@ HTML §8.10 defines `Navigator` as a per-global facade assembled from multiple
 capability mixins. It should not become a miscellaneous owner for the network,
 cookies, permissions, or host platform; those subsystems supply its answers.
 
+The current slice supplies Window's stable Navigator identity, its
+`clientInformation` alias, a forwarding `storage` getter, and its retained
+`permissions` object. The capabilities
+listed below remain pending except for this identity and its IDL composition.
+
 | Planned source | Contract | Specification |
 | --- | --- | --- |
 | `navigator.ts` | Stable Window `navigator` identity and common Navigator object state | HTML §8.10.1 |
@@ -21,6 +26,16 @@ cookies, permissions, or host platform; those subsystems supply its answers.
 Navigator object. Worker-global creation owns its lazy/stable instance;
 `navigator/` owns the common capability answers. Additional specifications
 contribute their own members through Browlet's ordinary Web IDL assembly.
+
+Storage Standard §8 contributes `NavigatorStorage` and `StorageManager.persisted()`;
+the [Storage roadmap](../../storage/ROADMAP.md#storagemanager-api) tracks the
+remaining methods and worker integration. Permissions §6.1 contributes the
+`permissions` partial; the environment owns `PermissionsImpl`, Navigator returns
+it, and Binding supplies its platform identity. Querying, status updates, and
+remaining dependencies are covered in the
+[Permissions roadmap](../../permissions/ROADMAP.md#61-navigator-permissions).
+WorkerNavigator must expose its environment's object and assemble the exported
+Worker partial when implemented. Storage's `persist()` uses the same permission owner.
 
 For `NavigatorID.userAgent`, call Fetch's `getEnvironmentDefaultUserAgent()`
 with this Navigator's relevant settings object, as HTML prescribes. Browlet's

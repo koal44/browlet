@@ -9,8 +9,10 @@
   },
   "include": ["./**/*.ts"],
   "references": [
+    { "path": "../permissions" },
     { "path": "../infra" },
     { "path": "../js-engine" },
+    { "path": "../web-idl/core" },
     { "path": "../url" }
   ]
 }

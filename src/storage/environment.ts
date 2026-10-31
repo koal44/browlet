@@ -1,5 +1,6 @@
-import type { GlobalObject } from '../js-engine/index';
+import type { GlobalObject, JSEnvironment } from '../js-engine/index';
 import type { Origin, URLRecord } from '../url/index';
+import type { PermissionEnvironment, PermissionUserAgent } from '../permissions/index';
 
 import type { StorageShed } from './sheds';
 
@@ -13,9 +14,9 @@ export interface StorageEnvironmentBase {
   origin?: Origin;
 }
 
-/** The full owning environment, including storage maps and task delivery. */
-export interface StorageEnvironment extends StorageEnvironmentBase {
-  /** Browser owner supplying storage state and policy. */
+/** The full owning environment, including storage maps, task delivery, and permission requests. */
+export interface StorageEnvironment extends StorageEnvironmentBase, JSEnvironment, PermissionEnvironment {
+  /** One browser owner supplies both storage state and permission decisions. */
   userAgent: StorageUserAgent;
   /** Security origin of the initialized environment. */
   origin: Origin;
@@ -26,7 +27,7 @@ export interface StorageEnvironment extends StorageEnvironmentBase {
 }
 
 /** Browser facilities shared by storage environments and their Blob URL store. */
-export interface StorageUserAgent {
+export interface StorageUserAgent extends PermissionUserAgent {
   /** Local storage shared by this browser's environments. */
   storageShed: StorageShed;
   /** Whether storage APIs may obtain a key. Non-storage checks ignore this preference. */

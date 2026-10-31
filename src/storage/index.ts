@@ -1,6 +1,11 @@
 export { StorageEndpoint, WebStorageEndpoint, registeredStorageEndpoints } from './endpoints';
 export type { StorageIdentifier, StorageType } from './endpoints';
 export { StorageKey } from './keys';
+export { StoragePersistence, PersistentStoragePermission, persistentStoragePermission } from './persistence';
+export type { StoragePermissionState } from './persistence';
+export { StorageManagerImpl } from './manager';
+export type { StorageEstimate } from './manager';
+export { storageIDLDefinitions } from './web-idl';
 export { StorageShed, StorageShelf } from './sheds';
 export { StorageBucket, LocalStorageBucket, SessionStorageBucket } from './buckets';
 export { StorageBottle, StorageProxyMap } from './bottles';

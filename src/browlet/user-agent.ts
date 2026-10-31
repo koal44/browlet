@@ -2,11 +2,17 @@ import { InternalError, internalType, WeakOrderedSet, type InternalPromise, type
 import { randomUUID } from '../js-engine/index';
 import type { SelectletUserAgent } from '../selectlet/index';
 import {
-  areSameOrigin, type Origin, type TupleOrigin, obtainURLOrigin, parseURL,
+  areSameOrigin, type Origin, type TupleOrigin, obtainURLOrigin, parseURL, serializeOrigin,
   type BlobURLEntry as URLBlobURLEntry, type URLRecord, type URLUserAgent,
 } from '../url/index';
+import {
+  PermissionStore, type PermissionDescriptor, type PermissionState, type PermissionUserAgent, type PermissionEnvironment,
+  type PermissionChoiceRequest, type PermissionSelection,
+} from '../permissions/index';
 import { CookieStore } from '../http/index';
-import { StorageShed, type StorageEnvironmentBase, type StorageUserAgent } from '../storage/index';
+import {
+  StoragePersistence, StorageShed, PersistentStoragePermission, type StorageEnvironmentBase, type StorageUserAgent,
+} from '../storage/index';
 import type { MIMEType } from '../mime/index';
 import type { BlobImpl } from '../file/index';
 import {
@@ -35,13 +41,15 @@ import { HTTPAuthenticationStore } from './loader/index';
 import { BrowsingContextGroup, type Navigable, type TopLevelTraversable } from './browsing/navigation/index';
 import { NodeHTTPTransport, createContentDecoder, supportedContentCodings } from './integration/network/index';
 import { BlobURLEntry, BlobURLStore } from './integration/file/index';
+import type { PermissionStatusImpl } from './integration/permissions/index';
 import {
   NodePromise, queueNodeTask, nodeTimerHost, browletDOM,
 } from './integration/index';
 import { createSandboxEnvironment, createWindowEnvironment } from './bindings';
 
 /** Owns browsing contexts and shared browser services that outlive individual documents. */
-export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent, StyleletUserAgent, SelectletUserAgent {
+export class UserAgent implements
+  FetchUserAgent, StorageUserAgent, PermissionUserAgent, URLUserAgent, StyleletUserAgent, SelectletUserAgent {
   /** WebDriver BiDi command implementation; separate from Browlet's convenience API. */
   webDriver = new WebDriver(this);
   /** Local clients notified of document replacement; not WebDriver session state. */
@@ -56,6 +64,8 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   topLevelTraversableSet = new Set<TopLevelTraversable>();
   /** Discover live broadcast channels in creation order without retaining their globals. */
   broadcastChannels = new WeakOrderedSet<BroadcastChannelImpl>();
+  /** Discover queried permission results without keeping unobserved objects or their globals alive. */
+  permissionStatuses = new WeakOrderedSet<PermissionStatusImpl>();
   /** Execution created with this user agent for work that can outlive pages. */
   sandbox: BrowletEnvironment;
   /** Browser binding factory used by browsing algorithms to create Window environments. */
@@ -95,6 +105,13 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   /** Local storage owned by this user agent across its environments. */
   // https://storage.spec.whatwg.org/#user-agent-storage-shed
   storageShed = new StorageShed();
+  /** Remembered feature decisions shared by this user agent's environments. */
+  // https://w3c.github.io/permissions/#permission-store
+  permissionStore = new PermissionStore([
+    new PersistentStoragePermission((origin) => { this.storagePersistence.revokeProtection(origin); }),
+  ], (name) => { this.notifyPermissionStateChanged(name); });
+  /** Origin-wide persistence decisions, independent of individual documents and stored data. */
+  storagePersistence = new StoragePersistence(this);
   /** Controls both sending and accepting cookies without clearing the store. */
   cookiesEnabled = true;
   /** Allows storage APIs to obtain keys; Blob URL access checks remain available. */
@@ -135,6 +152,57 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
 
   constructor() {
     this.sandbox = createSandboxEnvironment(this);
+  }
+
+  /** Node host consent hook; a browser without a configured prompt declines new requests. */
+  // TODO(Permissions host integration): cancel still-open prompts when their requesting global is destroyed.
+  onPermissionPrompt: PermissionPrompt = () => false;
+
+  /** Node host chooser; absent UI denies selection. Pending UI cancellation is the same dependency as prompting. */
+  onPermissionChoice: PermissionChooser = () => 'denied';
+
+  /** Recheck live results after a decision or feature-specific constraint changes. */
+  // TODO(Permissions Policy/feature APIs): call this when enablement or other permission inputs change.
+  notifyPermissionStateChanged(name: string): void {
+    for (const status of this.permissionStatuses.values()) {
+      if (status.name === name) status.queueUpdate();
+    }
+  }
+
+  /** Apply an automation decision to the supplied candidate environments for this browser. */
+  // TODO(WebDriver): Obtain the complete environment list from the selected user context.
+  // The caller must currently supply that list; browsing-context traversal alone omits other globals.
+  setPermission(
+    descriptor: PermissionDescriptor, state: PermissionState, key: unknown, envs: Iterable<PermissionEnvironment>,
+  ): InternalPromise<void> {
+    return this.permissionStore.setPermission(descriptor, state, key, envs, this);
+  }
+
+  /** Adapt the Node host's consent result to browser-owned continuations without recording it. */
+  promptForPermission(descriptor: PermissionDescriptor, env: PermissionEnvironment): InternalPromise<boolean> {
+    const P = this.HostPromise;
+    return P.try(() => {
+      if (env.topLevelOrigin === null) throw new InternalError('Permission prompt requires a top-level origin');
+      const answer = this.onPermissionPrompt({
+        descriptor, origin: serializeOrigin(env.origin), topLevelOrigin: serializeOrigin(env.topLevelOrigin),
+      });
+      return P.fromValue(answer, NativePromise, internalType<boolean>()).then((allowed) => {
+        if (typeof allowed !== 'boolean') throw new InternalError('Permission prompt must return a boolean');
+        return allowed;
+      });
+    }, internalType<boolean>());
+  }
+
+  /** Adapt host selection to browser continuations; the chooser algorithm validates the returned options. */
+  choosePermissionOptions<T>(request: PermissionChoiceRequest<T>, env: PermissionEnvironment): InternalPromise<PermissionSelection<T>> {
+    const P = this.HostPromise;
+    return P.try(() => {
+      if (env.topLevelOrigin === null) throw new InternalError('Permission chooser requires a top-level origin');
+      const answer = this.onPermissionChoice({
+        ...request, origin: serializeOrigin(env.origin), topLevelOrigin: serializeOrigin(env.topLevelOrigin),
+      });
+      return P.fromValue(answer, NativePromise, internalType<PermissionSelection<T>>());
+    }, internalType<PermissionSelection<T>>());
   }
 
   /** Create an Agent with its own microtask queue and running browser event loop. */
@@ -548,3 +616,24 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
 
 /** Outcome of one delivery attempt; the caller applies endpoint bookkeeping. */
 export type ReportDeliveryResult = 'success' | 'remove-endpoint' | 'failure';
+
+// eslint-disable-next-line no-restricted-globals -- Permission consent is supplied by the Node host.
+const NativePromise = Promise;
+
+/** Answer a new permission request; true grants it, false denies it. */
+export type PermissionPrompt = (request: {
+  /** Converted descriptor; the host must not mutate it. */
+  descriptor: PermissionDescriptor;
+  /** Serialized requesting origin. */
+  origin: string;
+  /** Serialized top-level origin, which may differ for embedded requests. */
+  topLevelOrigin: string;
+}) => boolean | Promise<boolean>;
+
+/** Present a feature's options; return original values, an empty selection, or denied. */
+export type PermissionChooser = <T>(request: PermissionChoiceRequest<T> & {
+  /** Serialized requesting origin. */
+  origin: string;
+  /** Serialized top-level origin. */
+  topLevelOrigin: string;
+}) => PermissionSelection<T> | Promise<PermissionSelection<T>>;

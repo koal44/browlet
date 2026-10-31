@@ -22,6 +22,7 @@
     { "path": "../src/mime" },
     { "path": "../src/url/core" },
     { "path": "../src/url" },
+    { "path": "../src/permissions" },
     { "path": "../src/storage" },
     { "path": "../src/web-idl/core" },
     { "path": "../src/web-idl" },

@@ -1,0 +1,37 @@
+import { atArg, defineInterface, impl } from '../../web-idl/core/index';
+import type { PermissionsImpl } from '../../permissions/index';
+import type { StorageManagerImpl } from '../../storage/index';
+
+import type { BrowletEnvironment } from '../environment';
+
+/** Stable Window navigator identity; independent specifications contribute its capabilities. */
+// https://html.spec.whatwg.org/multipage/system-state.html#the-navigator-object
+// TODO(HTML §8.10): Identification, language, online state, protocol handlers, cookies, and plugins.
+export class NavigatorImpl {
+  /** Relevant settings, shared with this Navigator's owning Window. */
+  env: BrowletEnvironment;
+
+  constructor(env: BrowletEnvironment) {
+    this.env = env;
+  }
+
+  /** Return this Navigator's Permissions object in its relevant environment. */
+  // https://w3c.github.io/permissions/#dom-navigator-permissions
+  get permissions(): PermissionsImpl {
+    return this.env.permissions;
+  }
+
+  /** Return the StorageManager associated with this Navigator's relevant settings. */
+  // https://storage.spec.whatwg.org/#dom-navigatorstorage-storage
+  get storage(): StorageManagerImpl {
+    return this.env.storageManager;
+  }
+}
+
+// [Exposed=Window] interface Navigator { };
+export const navigatorIDL = defineInterface<BrowletEnvironment>({
+  name: 'Navigator',
+  exposed: 'Window',
+  implementation: impl(NavigatorImpl, { constructWith: [atArg(0, (env) => env)] }),
+  members: [],
+});

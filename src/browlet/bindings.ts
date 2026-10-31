@@ -3,12 +3,14 @@ import { EOL } from 'node:os';
 import { InternalError } from '../infra/index';
 import { addon, isObject } from '../js-engine/index';
 import {
-  BindingWorld, QuotaExceededErrorImpl, type GlobalObjectAllocation,
+  BindingWorld, QuotaExceededErrorImpl, reference, type GlobalObjectAllocation,
   type BindingContext, type ImplementationClass, type StampedPlatformObject,
 } from '../web-idl/index';
 import { streamsIDLDefinitions } from '../streams/index';
 import { encodingIDLDefinitions } from '../encoding/index';
 import { urlIDLDefinitions } from '../url/index';
+import { permissionsIDLDefinitions, type PermissionDescriptor } from '../permissions/index';
+import { storageIDLDefinitions } from '../storage/index';
 import { fileIDLDefinitions } from '../file/index';
 import { xhrIDLDefinitions } from '../xhr/index';
 import { fetchIDLDefinitions } from '../fetch/index';
@@ -45,6 +47,7 @@ import { mathMLIDLDefinitions } from './dom/nodes/mathml/index';
 import { svgIDLDefinitions } from './dom/nodes/svg/index';
 import { DOMStringListImpl, domIDLDefinitions } from './dom/index';
 import { performanceIDL } from './performance/index';
+import { navigatorIDLDefinitions } from './navigator/index';
 import {
   messageEventIDL, messageEventInitIDL, messageEventSourceIDL, messagePortIDL, eventSourceIDL, eventSourceInitIDL,
   MessagePortImpl, messageChannelIDL, messageEventTargetIDL, messagePortIncludesMessageEventTargetIDL,
@@ -71,6 +74,7 @@ import { serviceWorkerIDL } from './workers/index';
 import { progressEventIDL, progressEventInitIDL } from './integration/xhr/index';
 import { htmlExtendedAttributeHooks } from './integration/web-idl/index';
 import { fileReaderIDL, objectURLIDL } from './integration/file/index';
+import { PermissionStatusImpl, permissionStatusIDL } from './integration/permissions/index';
 import { queueNodeTask } from './integration/index';
 import type { UserAgent } from './user-agent';
 
@@ -216,6 +220,20 @@ export function createBrowletEnvironmentInit(context: BindingContext<BrowletEnvi
     createQuotaExceededError: () =>
       context.project(QuotaExceededErrorImpl, new QuotaExceededErrorImpl()) as StampedPlatformObject<QuotaExceededError>,
     projectCSSStyleSheet: (sheet) => context.project(CSSStyleSheetImpl, sheet) as StampedPlatformObject<CSSStyleSheet>,
+    convertPermissionDescriptor: (value, type) => context.jsToImpl(value, reference(type)) as PermissionDescriptor,
+    // https://w3c.github.io/permissions/#creating-instances
+    createPermissionStatus: (descriptor) => {
+      const feature = context.getEnvironment().userAgent.permissionStore.getFeature(descriptor.name);
+      if (!feature) throw new InternalError('PermissionStatus requires a supported feature');
+      const status = context.createPlatformRecord(feature.resultType)?.implInst;
+      if (!(status instanceof PermissionStatusImpl)) {
+        throw new InternalError(`Permission result type must extend PermissionStatus: ${feature.resultType}`);
+      }
+      status.query = descriptor;
+      status.name = descriptor.name;
+      status.env.userAgent.permissionStatuses.add(new WeakRef(status));
+      return status;
+    },
     createAbortController: () => context.construct(AbortControllerImpl),
     createDependentAbortSignal: (signals) => AbortSignalImpl.any(
       context.construct(AbortSignalImpl), signals as AbortSignalImpl[],
@@ -275,6 +293,7 @@ export const browletDefinitions = [
   domHighResTimeStampIDL,
   epochTimeStampIDL,
   performanceIDL,
+  ...navigatorIDLDefinitions,
   eventHandlerNonNullIDL,
   eventHandlerIDL,
   errorEventIDL,
@@ -307,6 +326,9 @@ export const browletDefinitions = [
   ...streamsIDLDefinitions,
   ...encodingIDLDefinitions,
   ...fileIDLDefinitions,
+  ...permissionsIDLDefinitions,
+  permissionStatusIDL,
+  ...storageIDLDefinitions,
   fileReaderIDL,
   objectURLIDL,
   ...xhrIDLDefinitions,

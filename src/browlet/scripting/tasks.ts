@@ -26,6 +26,9 @@ export const fileTaskSource = createTaskSource('file reading');
 // https://storage.spec.whatwg.org/#task-source
 export const storageTaskSource = createTaskSource('storage');
 
+// https://w3c.github.io/permissions/#dfn-permissions-task-source
+export const permissionsTaskSource = createTaskSource('permissions');
+
 // Reporting leaves the task source unnamed; WebKit likewise gives it a distinct source.
 export const reportingTaskSource = createTaskSource('reporting');
 
@@ -39,6 +42,7 @@ export const taskSources: Record<TaskSourceKey, TaskSource> = {
   timer: timerTaskSource,
   file: fileTaskSource,
   storage: storageTaskSource,
+  permissions: permissionsTaskSource,
   report: reportingTaskSource,
   automation: automationTaskSource,
 };

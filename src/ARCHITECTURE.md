@@ -166,7 +166,8 @@ handling can remain at the end of the call.
 | Contract or class | What it supplies |
 | --- | --- |
 | [`StorageEnvironmentBase`](storage/environment.ts) | UserAgent, creation URL, and an origin when available; usable before realm creation |
-| [`StorageEnvironment`](storage/environment.ts) | Full owner with storage maps and task delivery; HTML resolves session ownership and the destination global's event loop |
+| [`StorageEnvironment`](storage/environment.ts) | Full owner with realm, promises, storage maps, permission requests, and task delivery; HTML resolves session ownership and the destination global's event loop |
+| [`PermissionEnvironment`](permissions/environment.ts) | One Permissions owner, policy/activity answers, descriptor conversion, result allocation, and task delivery |
 | [`FetchEnvironmentBase`](fetch/environment.ts) | Extends the Storage view with top-level partition inputs and `determineNetworkPartitionKey()` |
 | HTML [`BrowletEnvironmentBase`](browlet/environment.ts) | Shared browser state before and after realm creation: identity, owner, creation/security state, readiness, and partition derivation |
 | [`JSEnvironment`](js-engine/environment.ts) | `realm: JSRealm`, `InternalPromise`, background work, and task delivery for an existing owner |
@@ -177,6 +178,60 @@ handling can remain at the end of the call.
 | [`BrowletEnvironment`](browlet/environment.ts) | Full browser environment; extends BrowletEnvironmentBase and satisfies JS Engine, DOM, Fetch, Storage, Stylelet, and Selectlet contracts |
 | `WindowEnvironment` | Specializes BrowletEnvironment with its Window and live queries of the associated Document |
 | `SandboxEnvironment` | Implements the same binding contract for internal execution; unavailable browser client settings throw explicitly |
+
+UserAgent owns `StoragePersistence` alongside its local storage shed. Persistence
+decisions are keyed by security origin, independently of bucket lifetime and
+storage partitioning; revocation updates retained buckets without requiring a live realm.
+
+`UserAgent.permissionStore` owns the general [Permissions store](permissions/ROADMAP.md).
+The user agent supplies `PermissionFeature` instances once; the store selects
+comparison rules by descriptor name. Each feature owns its key rules, defaults,
+query algorithm, and revocation cleanup. The environment's `PermissionsImpl`
+owns state lookup, requests, and choosing options. Its single environment contract
+supplies policy and activity answers; HTML resolves the associated Document.
+State lookup applies secure-context and applicable policy checks before reading
+the store. Missing entries use the feature default and
+constraints; lookup does not prompt or mutate decisions. Storage's consent API
+uses the same store and preserves requesting-origin scope. Its host setter still
+applies Storage revocation. `PermissionStore.revoke()` runs the installed feature
+cleanup before removing its decision; UserAgent binds Storage cleanup to that
+browser's persistence owner. Direct store writes/removals notify the browser to
+refresh queried statuses, but do not run feature revocation cleanup.
+
+Permission requests reuse that lookup, then ask the Node host through
+`BrowletConfig.permissionPrompt` when new consent is allowed. A browser-owned
+`InternalPromise` carries the answer; a separate task on the requesting global's
+permissions task source records it. Feature request restrictions do not overwrite
+saved origin decisions. Public permission querying uses the same state lookup;
+Storage's `persist()` consumes the returned decision to protect its captured
+local bucket, independently of the queued permission-store write, then reports
+the bucket's mode through a storage task.
+
+Permission choices use `BrowletConfig.permissionChooser` to select original values
+from a feature's offered set. They return a selection or denial without updating
+the store; feature APIs own device discovery, presentation details, and use of the
+selected values. The host is consulted even for an existing permission grant.
+
+The environment owns one `PermissionsImpl`, and Navigator returns that same
+implementation. Permissions supplies the interface and Navigator partials; HTML
+provides the getter on its primary implementation. Binding preserves
+the object's identity and receiver realm. Querying converts descriptors through
+Binding, creates a fresh EventTarget-derived `PermissionStatusImpl` in the browser
+integration layer, and resolves on the receiver global's permissions task source.
+The invoked method's environment supplies current settings and result allocation.
+UserAgent weakly tracks status results; each global strongly retains those with
+change listeners. Updates reuse the feature query algorithm, suppress inactive
+Documents, and queue trusted change events on the result's global. Document
+reactivation rechecks its results. WorkerNavigator integration and non-store
+invalidation from unfinished Permissions Policy/feature APIs remain pending.
+
+`UserAgent.setPermission()` forwards automation to `PermissionStore.setPermission()`
+with a resolved key and explicit candidate environments. Matching globals queue
+permission tasks; the shared store applies
+the decision and feature cleanup once, and HostPromise completion waits for all
+target tasks. Without a matching global, the same store records the decision
+immediately for future environments. WebDriver session lookup, input conversion,
+environment enumeration, and cancellation remain separate dependencies.
 
 [`BrowletRealm`](browlet/scripting/realm.ts) extends `JSRealm` with HTML ownership,
 callback lifecycle, and task routing; `WindowRealm` specializes it for a Window global.

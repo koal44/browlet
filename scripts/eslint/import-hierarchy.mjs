@@ -19,6 +19,7 @@ export const layers = [
   ['streams', 'selectlet'],
   ['encoding'],
   ['url'],
+  ['permissions'],
   ['http', 'storage'],
   ['mime'],
   ['file'],
@@ -54,7 +55,7 @@ export const layers = [
   // HTML reflection reuses DOM operations through supplied nodes, without loading their classes.
   ['browlet/html/reflection'],
   ['browlet/dom/abort', 'browlet/dom/nodes'],
-  ['browlet/dom', 'browlet/performance'],
+  ['browlet/dom', 'browlet/performance', 'browlet/navigator'],
   ['browlet/reporting/generate', 'browlet/communication'],
   // Window forwards messaging to communication; communication retains Window types only.
   ['browlet/browsing/window'],

@@ -14,7 +14,8 @@ import {
   obtainSite, obtainURLOrigin, serializeURL, urlsEqual, URLImpl,
   type Origin, type URLRecord,
 } from '../url/index';
-import type { StorageEnvironment, StorageShed } from '../storage/index';
+import { PermissionsImpl, type PermissionEnvironment, type PermissionDescriptor } from '../permissions/index';
+import { StorageManagerImpl, type StorageEnvironment, type StorageShed } from '../storage/index';
 import {
   FetchGroup,
   type FetchEnvironment, type FetchEnvironmentBase, type FetchRequest,
@@ -53,6 +54,7 @@ import { OriginImpl } from './browsing/index';
 import type { WindowOrWorkerGlobalScopeMixin } from './global-scope';
 import type { StructuredSerializeWithTransferResult, StructuredDeserializeWithTransferResult } from './scripting/structured-data/index';
 import type { BrowsingContext, Traversable } from './browsing/navigation/index';
+import type { PermissionStatusImpl } from './integration/permissions/index';
 import type { UserAgent } from './user-agent';
 import type { ModuleResponsesMap } from './worklets/index';
 
@@ -185,6 +187,10 @@ export interface BrowletEnvironmentInit {
   createQuotaExceededError: () => QuotaExceededError;
   /** Project a constructed sheet for an author-visible CSS module export. */
   projectCSSStyleSheet: (sheet: CSSStyleSheetImpl) => CSSStyleSheet;
+  /** Apply the selected permission dictionary's Web IDL conversion. */
+  convertPermissionDescriptor: (value: object, type: string) => PermissionDescriptor;
+  /** Allocate and initialize a feature's PermissionStatus in this environment's realm. */
+  createPermissionStatus: (descriptor: PermissionDescriptor) => PermissionStatusImpl;
   /** Clone into this environment's realm, optionally transferring objects. */
   clone: (value: unknown, transferList?: object[]) => unknown;
   /** Serialize through this environment's binding. */
@@ -202,13 +208,19 @@ export interface BrowletEnvironmentInit {
 /** Composed browser settings, allocation, and task delivery for one realm and global. */
 // HTML's environment settings object.
 export abstract class BrowletEnvironment extends BrowletEnvironmentBase implements
-  JSEnvironment, DOMEnvironment, FetchEnvironment, StorageEnvironment, StyleletEnvironment, SelectletEnvironment {
+  JSEnvironment, DOMEnvironment, FetchEnvironment, PermissionEnvironment,
+  StorageEnvironment, StyleletEnvironment, SelectletEnvironment {
   /** JavaScript realm associated with this browser environment. */
   realm: BrowletRealm;
   /** Browser timing relative to this environment's time origin. */
   timing: EnvironmentTiming;
   /** Requests tracked for this environment's lifetime. */
   fetchGroup = new FetchGroup();
+  /** One StorageManager per settings object, independent of same-origin bucket sharing. */
+  // https://storage.spec.whatwg.org/#api
+  storageManager = new StorageManagerImpl(this);
+  /** Permission algorithms and the object exposed by this environment's Navigator. */
+  permissions: PermissionsImpl = new PermissionsImpl(this);
   /** Upgrade policy and navigation targets inherited or enabled for this environment. */
   insecureRequestsPolicy = new InsecureRequestsPolicy();
   /** Host line ending used for Blob string parts. */
@@ -237,6 +249,10 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   createQuotaExceededError;
   /** Project a constructed sheet for an author-visible CSS module export. */
   projectCSSStyleSheet;
+  /** Apply the selected permission dictionary's Web IDL conversion. */
+  convertPermissionDescriptor;
+  /** Allocate a feature's status with this environment's binding ownership. */
+  createPermissionStatus;
 
   /** Clone into this environment's realm, optionally transferring objects. */
   clone;
@@ -258,6 +274,8 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     super(baseEnv);
     this.InternalPromise = initialization.InternalPromise;
     this.projectCSSStyleSheet = initialization.projectCSSStyleSheet;
+    this.convertPermissionDescriptor = initialization.convertPermissionDescriptor;
+    this.createPermissionStatus = initialization.createPermissionStatus;
     this.nativeLineEnding = initialization.nativeLineEnding;
     this.runInParallel = initialization.runInParallel;
     this.createDocument = initialization.createDocument;
@@ -363,6 +381,16 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   /** The owning global's Document, when this is a Window environment. */
   getAssociatedDocument(): DocumentImpl | null {
     return this.realm.getAssociatedDocument();
+  }
+
+  /** Apply the associated Document's feature policy; non-Document globals skip that check. */
+  isAllowedToUse(feature: string): boolean {
+    return this.getAssociatedDocument()?.isAllowedToUse(feature) ?? true;
+  }
+
+  /** Whether this environment's associated Document exists and is fully active. */
+  isAssociatedDocumentFullyActive(): boolean {
+    return this.getAssociatedDocument()?.isFullyActive() ?? false;
   }
 
   /** Extract an origin using this environment for the caller's access check. */

@@ -11,7 +11,7 @@ import { PageEvaluation } from './automation/index';
 import type { AuthenticationPrompt } from './loader/index';
 import { TopLevelTraversable } from './browsing/navigation/index';
 import { browletBindingWorld } from './bindings';
-import { UserAgent } from './user-agent';
+import { UserAgent, type PermissionPrompt, type PermissionChooser } from './user-agent';
 
 /** Hosts one top-level browsing session with navigation and page evaluation. */
 export class Browlet {
@@ -41,6 +41,8 @@ export class Browlet {
     }
     this.#userAgent.reportDeliveryEnabled = config.reporting ?? true;
     if (config.authentication) this.#userAgent.httpAuthentication.onPrompt = config.authentication;
+    if (config.permissionPrompt) this.#userAgent.onPermissionPrompt = config.permissionPrompt;
+    if (config.permissionChooser) this.#userAgent.onPermissionChoice = config.permissionChooser;
     this.#traversable = TopLevelTraversable.create(
       this.#userAgent,
       null,
@@ -201,4 +203,8 @@ export type BrowletConfig = {
   reporting?: boolean;
   /** Answer HTTP authentication challenges; omitted prompts are declined. */
   authentication?: AuthenticationPrompt;
+  /** Answer new permission requests; omitted prompts are denied. */
+  permissionPrompt?: PermissionPrompt;
+  /** Select from feature-provided options; omitted choosers deny selection. */
+  permissionChooser?: PermissionChooser;
 };

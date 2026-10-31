@@ -45,7 +45,7 @@ export { SpeculationRulesParseResult, SpeculationRuleSet } from './speculation-r
 export {
   domManipulationTaskSource, userInteractionTaskSource, networkingTaskSource,
   navigationAndTraversalTaskSource, renderingTaskSource, fileTaskSource, timerTaskSource,
-  storageTaskSource, reportingTaskSource, automationTaskSource, taskSources, type QueuedTaskHandle,
+  storageTaskSource, permissionsTaskSource, reportingTaskSource, automationTaskSource, taskSources, type QueuedTaskHandle,
 } from './tasks';
 export { GlobalTimers, type TimerAction, type GlobalTimersOptions, type TimerKey } from './timers';
 export { DetachedTransferableStamper } from './transferable';

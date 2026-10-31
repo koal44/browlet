@@ -18,6 +18,7 @@ import { HTMLCollectionImpl, type DocumentImpl, type ElementImpl } from '../../d
 import { HTMLIFrameElementImpl, HTMLObjectElementImpl } from '../../dom/nodes/html/embedded/index';
 import { HTMLFrameElementImpl } from '../../dom/nodes/html/legacy/index';
 import type { PerformanceImpl } from '../../performance/index';
+import { NavigatorImpl } from '../../navigator/index';
 import { windowPostMessage, type WindowPostMessageOptions } from '../../communication/index';
 import type { BrowletEnvironment, WindowEnvironment } from '../../environment';
 import type { WindowOrWorkerGlobalScopeMixin, TimerHandler } from '../../global-scope';
@@ -55,6 +56,8 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   readonly statusbar: BarPropImpl;
   /** Toolbar object retained for this Window's lifetime. */
   readonly toolbar: BarPropImpl;
+  /** Stable Navigator object for this Window and its clientInformation alias. */
+  readonly navigator: NavigatorImpl;
   /** Last assigned status string, with no effect on browser UI. */
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-window-status
   status = '';
@@ -75,11 +78,18 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
     this.scrollbars = new BarPropImpl(env);
     this.statusbar = new BarPropImpl(env);
     this.toolbar = new BarPropImpl(env);
+    this.navigator = new NavigatorImpl(env);
   }
 
   /** Recognize a Window implementation by its private brand. */
   static is(value: unknown): value is WindowImpl {
     return typeof value === 'object' && value !== null && #document in value;
+  }
+
+  /** Legacy alias for this Window's Navigator object. */
+  // https://html.spec.whatwg.org/multipage/system-state.html#dom-navigator
+  get clientInformation(): NavigatorImpl {
+    return this.navigator;
   }
 
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#window-bc
@@ -637,6 +647,8 @@ export const windowIDL = defineInterface<BrowletEnvironment>({
         },
       },
     ),
+    roAttr('navigator', reference('Navigator')),
+    roAttr('clientInformation', reference('Navigator'), xattr('Replaceable')),
     roAttr('originAgentCluster', idlType.boolean),
     op('postMessage', idlType.undefined,
       [

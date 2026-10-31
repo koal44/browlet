@@ -21,6 +21,8 @@ export type ReadableStreamReaderMode = "byob";
 
 export type EndingType = "transparent" | "native";
 
+export type PermissionState = "granted" | "denied" | "prompt";
+
 export type RequestDestination = "" | "audio" | "audioworklet" | "document" | "embed" | "font" | "frame" | "iframe" | "image" | "json" | "manifest" | "object" | "paintworklet" | "report" | "script" | "sharedworker" | "style" | "text" | "track" | "video" | "worker" | "xslt";
 
 export type RequestMode = "navigate" | "same-origin" | "no-cors" | "cors";
@@ -323,6 +325,15 @@ export interface FilePropertyBag {
   endings?: EndingType;
   type?: string;
   lastModified?: number;
+}
+
+export interface PermissionDescriptor {
+  name: string;
+}
+
+export interface StorageEstimate {
+  quota?: number;
+  usage?: number;
 }
 
 export interface ProgressEventInit {
@@ -1551,6 +1562,16 @@ export interface PerformanceConstructor extends Ctor<EventTargetConstructor> {
   [Symbol.hasInstance](value: unknown): value is Performance;
 }
 
+export interface Navigator {
+  readonly permissions: Permissions;
+  readonly storage: StorageManager;
+}
+
+export interface NavigatorConstructor {
+  readonly prototype: Navigator;
+  [Symbol.hasInstance](value: unknown): value is Navigator;
+}
+
 export interface ErrorEvent extends Event {
   readonly message: string;
   readonly filename: string;
@@ -1695,6 +1716,9 @@ export interface Window extends EventTarget {
   set parent(value: unknown);
   readonly frameElement: Element | null;
   open(url?: string, target?: string, features?: string): WindowProxy | null;
+  readonly navigator: Navigator;
+  get clientInformation(): Navigator;
+  set clientInformation(value: unknown);
   readonly originAgentCluster: boolean;
   postMessage(message: any, targetOrigin: string, transfer?: Iterable<object>): void;
   postMessage(message: any, options?: WindowPostMessageOptions): void;
@@ -1810,6 +1834,7 @@ export interface Window extends EventTarget {
   SecurityPolicyViolationEvent: SecurityPolicyViolationEventConstructor;
   ReportingObserver: ReportingObserverConstructor;
   Performance: PerformanceConstructor;
+  Navigator: NavigatorConstructor;
   ErrorEvent: ErrorEventConstructor;
   MessageEvent: MessageEventConstructor;
   MessagePort: MessagePortConstructor;
@@ -1889,6 +1914,9 @@ export interface Window extends EventTarget {
   Blob: BlobConstructor;
   File: FileConstructor;
   FileList: FileListConstructor;
+  Permissions: PermissionsConstructor;
+  PermissionStatus: PermissionStatusConstructor;
+  StorageManager: StorageManagerConstructor;
   FileReader: FileReaderConstructor;
   FormData: FormDataConstructor;
   ProgressEvent: ProgressEventConstructor;
@@ -3107,6 +3135,37 @@ export interface FileListConstructor {
   [Symbol.hasInstance](value: unknown): value is FileList;
 }
 
+export interface Permissions {
+  query(permissionDesc: object): Promise<PermissionStatus>;
+}
+
+export interface PermissionsConstructor {
+  readonly prototype: Permissions;
+  [Symbol.hasInstance](value: unknown): value is Permissions;
+}
+
+export interface PermissionStatus extends EventTarget {
+  readonly state: PermissionState;
+  readonly name: string;
+  onchange: EventHandlerNonNull | null;
+}
+
+export interface PermissionStatusConstructor extends Ctor<EventTargetConstructor> {
+  readonly prototype: PermissionStatus;
+  [Symbol.hasInstance](value: unknown): value is PermissionStatus;
+}
+
+export interface StorageManager {
+  persisted(): Promise<boolean>;
+  persist(): Promise<boolean>;
+  estimate(): Promise<StorageEstimateResult>;
+}
+
+export interface StorageManagerConstructor {
+  readonly prototype: StorageManager;
+  [Symbol.hasInstance](value: unknown): value is StorageManager;
+}
+
 export interface FileReader extends EventTarget {
   readAsArrayBuffer(blob: Blob): void;
   readAsBinaryString(blob: Blob): void;
@@ -3371,4 +3430,9 @@ export interface ReadableStreamReadResultResult {
 export interface TextEncoderEncodeIntoResultResult {
   read?: number;
   written?: number;
+}
+
+export interface StorageEstimateResult {
+  quota?: number;
+  usage?: number;
 }

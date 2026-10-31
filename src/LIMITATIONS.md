@@ -515,6 +515,60 @@ integrations retain the separate gates in the [Trusted Types roadmap](browlet/br
 That roadmap also records the approved CSP policy-creation difference and the
 explicit standard content-handler list used for sink metadata.
 
+## Permissions
+
+The general permission store, feature definitions/defaults, permissions task
+source, and §§5.1–5.4 state lookup, requests, choices, and revocation are present. Only
+`persistent-storage` is installed.
+Reads apply secure-context and applicable Document policy checks, then use a
+stored decision or constrained feature default. Storage shares that store.
+New consent is supplied by `BrowletConfig.permissionPrompt` (default: deny),
+then saved in a separate permissions task. Cross-origin storage requests cannot
+ask for new consent, but existing decisions retain §5.2's short circuit. There
+is no built-in prompt UI or cancellation of a still-open prompt on global
+destruction. `BrowletConfig.permissionChooser` supplies single/multiple option
+selection without changing permission state. It is called even when permission
+is granted; no silent-choice cache is implemented. Device APIs supplying actual
+options remain dependencies, as does cancellation of an outstanding chooser.
+Revocation runs feature cleanup and removes the decision; Storage drops bucket
+protection without deleting data. Pending host answers and queued decision writes
+are not canceled by this operation; prompt-lifecycle coordination remains.
+`navigator.permissions` now supplies a stable Permissions object, including in
+insecure contexts. `query()` returns a fresh PermissionStatus with initial name
+and state for installed features. Results refresh after store changes and on
+Document reactivation, with trusted change events and listener-based retention.
+Future Permissions Policy and feature-specific constraints must notify the
+UserAgent when non-store inputs change. The WorkerNavigator partial awaits HTML
+worker integration. Extra permission data and automatic expiry also remain
+unimplemented. Future features must register their descriptor/result declarations
+and supply any additional query behavior and state implications for ordered
+descriptor aspects.
+[Permissions Policy](browlet/browsing/policy/ROADMAP.md) evaluation is also
+unfinished; the permission store does not bypass that policy check.
+Appendix B has an internal queued permission setter for caller-supplied settings,
+keys, and one UserAgent. It does not provide WebDriver commands, session lookup,
+protocol conversion, or automatic settings enumeration. Inactive target tasks
+wait; a discarded task leaves completion pending until driver cancellation is
+implemented. With no matching settings, decisions are stored for future
+environments, following Chromium and Firefox rather than the appendix's task-only
+application of state.
+See the [Permissions roadmap](permissions/ROADMAP.md).
+
+## Storage
+
+Storage persistence decisions use the origin-wide permission store.
+`navigator.storage.persisted()` reads bucket protection in secure Window globals;
+`persist()` requests host consent and protects the default local bucket when granted.
+`estimate()` reports local payload usage and the configured shelf quota. Populated
+endpoints without accounting reject with TypeError; IndexedDB, Cache Storage, and
+service-worker registration accounting still await those implementations.
+Write-time quota enforcement belongs to the pending HTML Web Storage API.
+WorkerNavigator integration, permission expiry, and outstanding-prompt
+cancellation/concurrent-decision coordination remain unimplemented.
+A granted decision permits explicit bucket protection; it does not provide disk
+durability. The backend remains in memory.
+See the [Storage roadmap](storage/ROADMAP.md#persistence-permission).
+
 ## HTML integration gates
 
 - **Temporal does not yet use the environment's precision-limited wall clock.**
