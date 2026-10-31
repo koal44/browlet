@@ -6,6 +6,7 @@ export {
 export {
   eventHandlerAttr, EventHandlerMap, eventHandlerNonNullIDL, eventHandlerIDL, type EventHandlerCallback,
 } from './event-handlers';
+export { WindowEventHandlersMixin, windowEventHandlersIDL } from './window-event-handlers';
 export {
   createTaskSource, EventLoop, type EventLoopInit, type TaskTimingHooks, type LongTaskReporter,
   type TaskQueueSelector, Task, type TaskSource,

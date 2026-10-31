@@ -35,6 +35,7 @@ import { CSPList } from './browsing/policy/csp/index';
 import type { IntersectionObserverMargin } from './dom/intersection-observer/index';
 import type { DocumentImpl } from './dom/nodes/index';
 import type { BroadcastChannelImpl } from './communication/index';
+import type { StorageImpl } from './storage/index';
 import type { BrowletEnvironment, BrowletEnvironmentBase } from './environment';
 import { WebDriver, type PageEvaluation } from './automation/index';
 import { HTTPAuthenticationStore } from './loader/index';
@@ -64,8 +65,6 @@ export class UserAgent implements
   topLevelTraversableSet = new Set<TopLevelTraversable>();
   /** Discover live broadcast channels in creation order without retaining their globals. */
   broadcastChannels = new WeakOrderedSet<BroadcastChannelImpl>();
-  /** Discover queried permission results without keeping unobserved objects or their globals alive. */
-  permissionStatuses = new WeakOrderedSet<PermissionStatusImpl>();
   /** Execution created with this user agent for work that can outlive pages. */
   sandbox: BrowletEnvironment;
   /** Browser binding factory used by browsing algorithms to create Window environments. */
@@ -98,27 +97,34 @@ export class UserAgent implements
   corsPreflightCache = new CORSPreflightCache();
   /** Stored cookies shared by this browser's documents and requests. */
   cookieStore = new CookieStore();
+  /** Controls both sending and accepting cookies without clearing the store. */
+  cookiesEnabled = true;
   /** Remembered HTTPS requirements shared by this user agent's browsing contexts. */
   hstsStore = new HSTSStore();
   /** Blob URL registrations shared by this user agent's environments. */
   blobURLStore = new BlobURLStore(this);
-  /** Local storage owned by this user agent across its environments. */
-  // https://storage.spec.whatwg.org/#user-agent-storage-shed
-  storageShed = new StorageShed();
+
   /** Remembered feature decisions shared by this user agent's environments. */
   // https://w3c.github.io/permissions/#permission-store
   permissionStore = new PermissionStore([
     new PersistentStoragePermission((origin) => { this.storagePersistence.revokeProtection(origin); }),
   ], (name) => { this.notifyPermissionStateChanged(name); });
+  /** Discover queried permission results without keeping unobserved objects or their globals alive. */
+  permissionStatuses = new WeakOrderedSet<PermissionStatusImpl>();
+
+  /** Local storage owned by this user agent across its environments. */
+  // https://storage.spec.whatwg.org/#user-agent-storage-shed
+  storageShed = new StorageShed();
+  /** Discover storage-event recipients without retaining Storage objects or their globals. */
+  storageObjects = new WeakOrderedSet<StorageImpl>();
   /** Origin-wide persistence decisions, independent of individual documents and stored data. */
   storagePersistence = new StoragePersistence(this);
-  /** Controls both sending and accepting cookies without clearing the store. */
-  cookiesEnabled = true;
   /** Allows storage APIs to obtain keys; Blob URL access checks remain available. */
   storageEnabled = true;
   /** Fixed per-shelf byte budget; independent of usage and available device space. */
   // https://storage.spec.whatwg.org/#storage-quota
   storageQuotaBytes = 64 * 2 ** 20;
+
   /** Allows outbound report queues and delivery; local ReportingObservers remain enabled. */
   reportDeliveryEnabled = true;
   /** User preference for scripting; Browlet itself always has JavaScript support. */

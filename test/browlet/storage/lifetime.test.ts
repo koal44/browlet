@@ -75,7 +75,7 @@ function putSession(shed: StorageShed, url: string) {
   const shelf = StorageShelf.create('session');
   const bottle = shelf.bucketMap.get('default')!.bottleMap.get('sessionStorage')!;
   bottle.map.set('saved', 'session');
-  const view = new StorageProxyMap(bottle.map);
+  const view = new StorageProxyMap(bottle, shelf);
   bottle.proxyMapReferenceSet.add(view);
   shed.set(keyFor(url), shelf);
   return { shelf, view };

@@ -57,7 +57,7 @@ describe('Storage §5: persistence permission', () => {
     const bucket = createBucket(userAgent.storageShed, origin);
     const otherBucket = createBucket(userAgent.storageShed, otherOrigin);
     for (const bottle of bucket.bottleMap.values()) bottle.map.set('saved', 'value');
-    const view = new StorageProxyMap(bucket.bottleMap.get('localStorage')!.map);
+    const view = new StorageProxyMap(bucket.bottleMap.get('localStorage')!, userAgent.storageShed.get(new StorageKey(origin))!);
     for (const key of [origin, otherOrigin]) {
       persistence.setPermission(key, 'granted');
       expect(persistence.persist(key)).toBe(true);

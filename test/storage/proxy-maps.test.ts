@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { StorageProxyMap } from '../../src/storage/bottles';
+import { StorageShelf } from '../../src/storage/sheds';
 
 describe('Storage §4.7: proxy maps', () => {
   it('forwards map operations and preserves insertion order', () => {
     const backing = new Map<unknown, unknown>();
-    const proxy = new StorageProxyMap(backing);
+    const proxy = createProxy(backing);
     expect(proxy.size).toBe(0);
     expect(proxy.set('a', 1)).toBe(proxy);
     proxy.set('b', undefined);
@@ -28,7 +29,7 @@ describe('Storage §4.7: proxy maps', () => {
   it('uses a replacement backing map for subsequent reads, writes, and iteration', () => {
     const original = new Map<unknown, unknown>([['old', 1]]);
     const replacement = new Map<unknown, unknown>([['new', 2]]);
-    const proxy = new StorageProxyMap(original);
+    const proxy = createProxy(original);
     proxy.backingMap = replacement;
     expect(proxy.has('old')).toBe(false);
     expect(proxy.get('new')).toBe(2);
@@ -57,8 +58,8 @@ describe('Storage §4.7: proxy maps', () => {
   it('retargets one proxy without redirecting other views of the original map', () => {
     const original = new Map<unknown, unknown>([['saved', 'original']]);
     const replacement = new Map<unknown, unknown>([['saved', 'replacement']]);
-    const first = new StorageProxyMap(original);
-    const second = new StorageProxyMap(original);
+    const first = createProxy(original);
+    const second = new StorageProxyMap(first.bottle, first.shelf);
     first.backingMap = replacement;
 
     expect(first.get('saved')).toBe('replacement');
@@ -76,3 +77,10 @@ describe('Storage §4.7: proxy maps', () => {
     expect(original.size).toBe(2);
   });
 });
+
+function createProxy(backing: Map<unknown, unknown>) {
+  const shelf = StorageShelf.create('local');
+  const bottle = shelf.bucketMap.get('default')!.bottleMap.get('localStorage')!;
+  bottle.map = backing;
+  return new StorageProxyMap(bottle, shelf);
+}

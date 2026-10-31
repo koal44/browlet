@@ -84,8 +84,8 @@ describe('Storage §4.3: legacy-clone a traversable storage shed', () => {
     const target = new StorageShed();
     const bottle = putSession(source, 'https://example.test/', [['saved', 'value']]);
     bottle.quota = 123;
-    bottle.proxyMapReferenceSet.add(new StorageProxyMap(bottle.map));
     const shelf = source.get(keyFor('https://example.test/'))!;
+    bottle.proxyMapReferenceSet.add(new StorageProxyMap(bottle, shelf));
     const defaultBucket = shelf.bucketMap.get('default')!;
     defaultBucket.bottleMap.set('anotherEndpoint', new StorageBottle(new StorageEndpoint('anotherEndpoint', new Set(['session']), null)));
     shelf.bucketMap.set('anotherBucket', StorageBucket.create('session'));

@@ -9,7 +9,8 @@ import type { CSSStylePropertiesImpl } from '../../../stylelet/index';
 
 import { ElementTag } from '../../dom/nodes/element-definitions/index';
 import {
-  ImportMap, mergeExistingAndNewImportMaps, domManipulationTaskSource, type ImportMapParseResult,
+  ImportMap, mergeExistingAndNewImportMaps, domManipulationTaskSource, WindowEventHandlersMixin, type EventHandlerCallback,
+  type ImportMapParseResult,
   type BrowletGlobalObject, type SpecifierResolutionRecord, type SpeculationRulesParseResult, type TimerAction,
 } from '../../scripting/index';
 import { type EventImpl, EventTargetImpl } from '../../dom/events/index';
@@ -20,6 +21,7 @@ import { HTMLFrameElementImpl } from '../../dom/nodes/html/legacy/index';
 import type { PerformanceImpl } from '../../performance/index';
 import { NavigatorImpl } from '../../navigator/index';
 import { windowPostMessage, type WindowPostMessageOptions } from '../../communication/index';
+import { WindowSessionStorageMixin, WindowLocalStorageMixin, type StorageImpl } from '../../storage/index';
 import type { BrowletEnvironment, WindowEnvironment } from '../../environment';
 import type { WindowOrWorkerGlobalScopeMixin, TimerHandler } from '../../global-scope';
 import type { StructuredSerializeOptions } from '../../scripting/structured-data/index';
@@ -67,6 +69,12 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   #namedCollections = new Map<string, HTMLCollectionImpl>();
   /** Shared global facilities installed during environment composition. */
   #globalScopeMixin: WindowOrWorkerGlobalScopeMixin | null = null;
+  /** HTML event-handler attributes backed by this Window's listener registrations. */
+  #windowEventHandlersMixin: WindowEventHandlersMixin;
+  /** Session-storage access for this Window's current Document. */
+  #windowSessionStorageMixin: WindowSessionStorageMixin;
+  /** Local-storage access for this Window's current Document. */
+  #windowLocalStorageMixin: WindowLocalStorageMixin;
 
   /** Create Window state before composition attaches its document and global facilities. */
   constructor(env: WindowEnvironment) {
@@ -79,6 +87,9 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
     this.statusbar = new BarPropImpl(env);
     this.toolbar = new BarPropImpl(env);
     this.navigator = new NavigatorImpl(env);
+    this.#windowEventHandlersMixin = new WindowEventHandlersMixin(this);
+    this.#windowSessionStorageMixin = new WindowSessionStorageMixin(this);
+    this.#windowLocalStorageMixin = new WindowLocalStorageMixin(this);
   }
 
   /** Recognize a Window implementation by its private brand. */
@@ -186,6 +197,20 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   get trustedTypes(): TrustedTypePolicyFactoryImpl {
     return this.getWindowOrWorkerGlobalScopeMixin().trustedTypes;
   }
+
+  /** Forward session-storage access to this Window's mixin. */
+  get sessionStorage(): StorageImpl {
+    return this.#windowSessionStorageMixin.sessionStorage;
+  }
+
+  /** Forward local-storage access to this Window's mixin. */
+  get localStorage(): StorageImpl {
+    return this.#windowLocalStorageMixin.localStorage;
+  }
+
+  /** Handler for changes made through other matching Storage objects. */
+  get onstorage(): EventHandlerCallback | null { return this.#windowEventHandlersMixin.onstorage; }
+  set onstorage(callback: EventHandlerCallback | null) { this.#windowEventHandlersMixin.onstorage = callback; }
 
   /** Whether this Window currently has unconsumed transient user activation. */
   // https://html.spec.whatwg.org/multipage/interaction.html#transient-activation
@@ -696,4 +721,9 @@ export const windowEventIDL = definePartialInterface({
 export const windowIncludesWindowOrWorkerGlobalScopeIDL = defineIncludes({
   interface: windowIDL.name,
   mixin: 'WindowOrWorkerGlobalScope',
+});
+
+export const windowIncludesWindowEventHandlersIDL = defineIncludes({
+  interface: windowIDL.name,
+  mixin: 'WindowEventHandlers',
 });

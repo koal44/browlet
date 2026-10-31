@@ -41,8 +41,8 @@ describe('Storage §6: storage usage', () => {
   it('tracks overwrites, deletion, clearing, and replacement without counting proxy references', () => {
     const shelf = StorageShelf.create('local');
     const bottle = shelf.bucketMap.get('default')!.bottleMap.get('localStorage')!;
-    const first = new StorageProxyMap(bottle.map);
-    const second = new StorageProxyMap(bottle.map);
+    const first = new StorageProxyMap(bottle, shelf);
+    const second = new StorageProxyMap(bottle, shelf);
     bottle.proxyMapReferenceSet.add(first);
     bottle.proxyMapReferenceSet.add(second);
 

@@ -146,7 +146,9 @@ supporting both types. Later registry changes leave existing bottle quotas intac
 `StorageBottle.obtainMap(type, env, identifier)` implements §4.6, with local
 and session convenience methods. Each successful call returns a fresh
 `StorageProxyMap` over the selected bottle's data and records that proxy in the
-bottle's reference set. Invalid storage keys return null without adding proxies.
+bottle's reference set. Each view also retains its bottle and shelf so consumers
+can enforce their quotas without re-acquiring storage after navigation.
+Invalid storage keys return null without adding proxies.
 The identifier must name an endpoint registered for the requested type.
 
 `StorageEnvironment` describes the full owning environment rather than reserved
@@ -165,12 +167,17 @@ ancestors, separate tabs, and data retained through Document replacement.
 
 ## Storage proxy maps
 
-The §4.7 review required no runtime changes. `StorageProxyMap` forwards map
+`StorageProxyMap` forwards map
 operations to its current backing map. It is an internal record, not a
 JavaScript Proxy or the author-facing `Storage` object. Replacing one view's
 backing map leaves other views unchanged; copying entries uses the current
 backing map. The operation that decides when to redirect views belongs to
 the consuming specification.
+
+Quota owners are captured at acquisition. A future consumer redirecting a live
+view to another storage area must also update its bottle/shelf associations;
+no production consumer currently performs that transition. The Storage Access
+API remains a separate dependency.
 
 `StorageBottle<K, V>` and `StorageProxyMap<K, V>` retain their endpoint's key and
 value types. Known local/session Web Storage map acquisition and
@@ -302,7 +309,7 @@ Empty maps contribute zero. Populated bottles without an estimator throw an
 internal error rather than underreporting usage. IndexedDB, Cache Storage,
 and service-worker registration accounting remain dependencies of those
 unimplemented endpoints. No generic serialization or author coercion is used
-to guess their size. Mutation-time quota enforcement remains unfinished;
+to guess their size. HTML Web Storage checks usage before growing writes;
 this getter does not clamp usage to a bottle's quota.
 
 **Exit proof:** tests cover ASCII, non-ASCII, surrogate pairs and lone
@@ -320,8 +327,10 @@ Quota does not depend on device capacity or currently available space.
 
 The policy stays on UserAgent rather than being copied into individual shelves.
 Endpoint quotas remain separate: localStorage and sessionStorage still carry
-their recommended 5 MiB bottle limits. HTML §12's `Storage.setItem()` must enforce
-both bottle and shelf limits before mutation; the internal maps do not do that.
+their recommended 5 MiB bottle limits. HTML §12's `Storage.setItem()` enforces
+both bottle and shelf limits before growing the data; internal map operations
+remain unrestricted. Non-growing changes remain allowed if policy has lowered
+a quota below existing usage, matching Chromium's Web Storage behavior.
 `StorageManager.estimate()` exposes shelf usage and this quota estimate.
 
 **Exit proof:** browser tests cover default/custom/zero budgets, invalid host

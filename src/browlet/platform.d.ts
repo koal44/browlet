@@ -336,6 +336,17 @@ export interface StorageEstimate {
   usage?: number;
 }
 
+export interface StorageEventInit {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+  key?: string | null;
+  newValue?: string | null;
+  oldValue?: string | null;
+  storageArea?: Storage | null;
+  url?: string;
+}
+
 export interface ProgressEventInit {
   bubbles?: boolean;
   cancelable?: boolean;
@@ -1738,6 +1749,9 @@ export interface Window extends EventTarget {
   set performance(value: unknown);
   readonly trustedTypes: TrustedTypePolicyFactory;
   fetch(input: Request | string, init?: RequestInit): Promise<Response>;
+  onstorage: EventHandlerNonNull | null;
+  readonly sessionStorage: Storage;
+  readonly localStorage: Storage;
   DOMException: DOMExceptionConstructor;
   QuotaExceededError: QuotaExceededErrorConstructor;
   HTMLAllCollection: HTMLAllCollectionConstructor;
@@ -1917,6 +1931,8 @@ export interface Window extends EventTarget {
   Permissions: PermissionsConstructor;
   PermissionStatus: PermissionStatusConstructor;
   StorageManager: StorageManagerConstructor;
+  Storage: StorageConstructor;
+  StorageEvent: StorageEventConstructor;
   FileReader: FileReaderConstructor;
   FormData: FormDataConstructor;
   ProgressEvent: ProgressEventConstructor;
@@ -3164,6 +3180,35 @@ export interface StorageManager {
 export interface StorageManagerConstructor {
   readonly prototype: StorageManager;
   [Symbol.hasInstance](value: unknown): value is StorageManager;
+}
+
+export interface Storage {
+  readonly length: number;
+  key(index: number): string | null;
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+  clear(): void;
+}
+
+export interface StorageConstructor {
+  readonly prototype: Storage;
+  [Symbol.hasInstance](value: unknown): value is Storage;
+}
+
+export interface StorageEvent extends Event {
+  readonly key: string | null;
+  readonly oldValue: string | null;
+  readonly newValue: string | null;
+  readonly url: string;
+  readonly storageArea: Storage | null;
+  initStorageEvent(type: string, bubbles?: boolean, cancelable?: boolean, key?: string | null, oldValue?: string | null, newValue?: string | null, url?: string, storageArea?: Storage | null): void;
+}
+
+export interface StorageEventConstructor extends Ctor<EventConstructor> {
+  readonly prototype: StorageEvent;
+  [Symbol.hasInstance](value: unknown): value is StorageEvent;
+  new (type: string, eventInitDict?: StorageEventInit): StorageEvent;
 }
 
 export interface FileReader extends EventTarget {

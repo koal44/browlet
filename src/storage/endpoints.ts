@@ -29,6 +29,11 @@ export class WebStorageEndpoint extends StorageEndpoint<string, string> {
     super(`${type}Storage`, new Set([type]), 5 * 2 ** 20);
   }
 
+  /** Payload bytes for one converted Web Storage entry, including its key. */
+  static entrySize(key: string, value: string): number {
+    return 2 * (key.length + value.length);
+  }
+
   /** Count two bytes per UTF-16 code unit, excluding map and engine overhead. */
   override estimateUsage(map: Map<string, string>): number {
     let usage = 0;
@@ -36,7 +41,7 @@ export class WebStorageEndpoint extends StorageEndpoint<string, string> {
       if (typeof key !== 'string' || typeof value !== 'string') {
         throw new InternalError('Web Storage maps require string keys and values');
       }
-      usage += 2 * (key.length + value.length);
+      usage += WebStorageEndpoint.entrySize(key, value);
     }
     return usage;
   }

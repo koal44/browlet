@@ -580,12 +580,28 @@ Storage persistence decisions use the origin-wide permission store.
 `estimate()` reports local payload usage and the configured shelf quota. Populated
 endpoints without accounting reject with TypeError; IndexedDB, Cache Storage, and
 service-worker registration accounting still await those implementations.
-Write-time quota enforcement belongs to the pending HTML Web Storage API.
+HTML Web Storage enforces bottle and shelf quotas for growing writes.
 WorkerNavigator integration, permission expiry, and outstanding-prompt
 cancellation/concurrent-decision coordination remain unimplemented.
 A granted decision permits explicit bucket protection; it does not provide disk
 durability. The backend remains in memory.
 See the [Storage roadmap](storage/ROADMAP.md#persistence-permission).
+
+HTML's `Storage` interface supports reads and named-property lookup over acquired
+maps. `StorageEvent` supports construction and legacy initialization. Window's
+`localStorage`/`sessionStorage` getters acquire and cache per-Document holders,
+rejecting opaque origins and denied acquisition with `SecurityError`.
+Removal, named deletion, and clearing queue storage events for other matching
+objects, with delivery gated by Document activity. `setItem()` and named writes
+check bottle and shelf quotas before mutation and broadcast changed values.
+Window's IDL `onstorage` receives these changes; its callback receiver still hits
+the shared Window/WindowProxy identity limitation. Body/frameset handler aliases,
+inline handler compilation, and storage synchronization across separate
+threads/processes remain pending.
+Storage keys are origin-only; third-party partitioning/blocking, expiry,
+per-site storage access policies, and coordinated cookie/storage clearing
+remain unimplemented privacy-policy integrations.
+See the [Web Storage roadmap](browlet/storage/ROADMAP.md).
 
 ## HTML integration gates
 

@@ -1013,6 +1013,24 @@ specializations form one component in `browlet/dom/events`; its implementation
 modules import each other directly. XHR's ProgressEvent lives in browser
 integration and reuses that event machinery.
 
+Web Storage's `storage/events` is a separate component below DOM nodes and
+`storage`. Document's legacy event factory imports that narrow entry point;
+StorageEvent retains only a type reference to Storage. The feature's higher-level
+`storage/web-idl.ts` collects the event, Storage, and Window mixin declarations.
+Window composes `WindowSessionStorageMixin` and `WindowLocalStorageMixin` and
+forwards its storage getters to them. The mixins acquire the substrate's bottle
+maps and retain the resulting Storage objects in the associated Document's
+holders. Document's Storage dependency remains type-only. Acquired maps retain
+their bottle and shelf for quota accounting; writes check those owners before
+mutation without re-acquiring storage through the Window's current settings.
+UserAgent weakly tracks live Storage objects for broadcast discovery, including
+objects retained after Document replacement. Mutations queue recipient-owned
+StorageEvents through the existing DOM-manipulation task source; the registry
+does not retain storage maps or introduce another scheduler.
+Window composes `WindowEventHandlersMixin` for its `onstorage` IDL attribute.
+The mixin reuses `EventHandlerMap` for callbacks and listener registration;
+it does not create storage objects or add another delivery path.
+
 Policy and CSP sit below the node implementations that construct and retain their
 state. Their event and report implementations depend on DOM events and shared
 Reporting, which sit below policy. CSP keeps type references to supplied Documents

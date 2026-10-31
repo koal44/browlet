@@ -32,7 +32,7 @@ export class StorageBottle<K = unknown, V = unknown> {
     const shelf = StorageShelf.obtain(shed, env, type);
     if (shelf === null) return null;
     const bottle = shelf.bucketMap.get('default')!.getBottle(identifier)!;
-    const proxyMap = new StorageProxyMap(bottle.map);
+    const proxyMap = new StorageProxyMap(bottle, shelf);
     bottle.proxyMapReferenceSet.add(proxyMap);
     return proxyMap;
   }
@@ -65,9 +65,15 @@ export class StorageBottle<K = unknown, V = unknown> {
 export class StorageProxyMap<K = unknown, V = unknown> {
   /** Current endpoint data; individual views can be redirected independently. */
   backingMap: Map<K, V>;
+  /** Bottle whose quota applies to this acquired view. */
+  bottle: StorageBottle<K, V>;
+  /** Shelf supplying shared quota accounting, retained across navigation. */
+  shelf: StorageShelf;
 
-  constructor(backingMap: Map<K, V>) {
-    this.backingMap = backingMap;
+  constructor(bottle: StorageBottle<K, V>, shelf: StorageShelf) {
+    this.backingMap = bottle.map;
+    this.bottle = bottle;
+    this.shelf = shelf;
   }
 
   get size(): number {

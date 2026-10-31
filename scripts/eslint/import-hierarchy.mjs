@@ -47,6 +47,8 @@ export const layers = [
   ['browlet/scripting'],
   // Policy consumes event/report primitives; documents construct and retain policy state.
   ['browlet/dom/events', 'browlet/reporting'],
+  // Feature event payloads can serve Document's legacy factory without loading their producers.
+  ['browlet/storage/events'],
   ['browlet/browsing/policy'],
   ['browlet/browsing/policy/csp'],
   ['browlet/browsing/policy/trusted-types'],
@@ -56,7 +58,7 @@ export const layers = [
   ['browlet/html/reflection'],
   ['browlet/dom/abort', 'browlet/dom/nodes'],
   ['browlet/dom', 'browlet/performance', 'browlet/navigator'],
-  ['browlet/reporting/generate', 'browlet/communication'],
+  ['browlet/reporting/generate', 'browlet/communication', 'browlet/storage'],
   // Window forwards messaging to communication; communication retains Window types only.
   ['browlet/browsing/window'],
   // Origin declarations name the platform implementations; environments dispatch their extraction.

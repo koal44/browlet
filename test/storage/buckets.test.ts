@@ -3,6 +3,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 import { registeredStorageEndpoints, StorageEndpoint } from '../../src/storage/endpoints';
 import { StorageBucket, LocalStorageBucket, SessionStorageBucket } from '../../src/storage/buckets';
 import { StorageProxyMap } from '../../src/storage/bottles';
+import { StorageShelf } from '../../src/storage/sheds';
 
 describe('Storage §4.5: creating storage buckets', () => {
   it('selects the bucket type and includes only endpoints supporting that type', () => {
@@ -23,7 +24,8 @@ describe('Storage §4.5: creating storage buckets', () => {
   });
 
   it('keeps bottle data and proxy references independent across endpoints and buckets', () => {
-    const first = StorageBucket.create('local');
+    const shelf = StorageShelf.create('local');
+    const first = shelf.bucketMap.get('default')!;
     const second = StorageBucket.create('local');
     const local = first.bottleMap.get('localStorage')!;
     const indexedDB = first.bottleMap.get('indexedDB')!;
@@ -32,7 +34,7 @@ describe('Storage §4.5: creating storage buckets', () => {
     expect(local.proxyMapReferenceSet.size).toBe(0);
 
     local.map.set('saved', 'value');
-    local.proxyMapReferenceSet.add(new StorageProxyMap(local.map));
+    local.proxyMapReferenceSet.add(new StorageProxyMap(local, shelf));
     expect(indexedDB.map.size).toBe(0);
     expect(indexedDB.proxyMapReferenceSet.size).toBe(0);
     expect(otherLocal.map.size).toBe(0);

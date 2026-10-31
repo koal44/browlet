@@ -34,6 +34,7 @@ import {
   EventHandlerMap, ModuleMap, SpeculationRulesParseResult, type EventHandlerCallback, type SpeculationRuleSet,
 } from '../../scripting/index';
 import { EventImpl, CustomEventImpl, type EventTargetImpl } from '../events/index';
+import { StorageEventImpl } from '../../storage/events/index';
 import {
   InsecureRequestsPolicy, PolicyContainer, OpenerPolicy, PermissionsPolicy, SandboxingFlagSet,
   type SandboxingFlag,
@@ -46,6 +47,7 @@ import { IntersectionObserverImpl, type IntersectionObserverEntryImpl } from '..
 import type { NavigationTimingRecord } from '../../performance/index';
 // eslint-disable-next-line browlet/dependency-direction -- DOM's legacy event factory includes HTML-defined event interfaces.
 import { MessageEventImpl } from '../../communication/index';
+import type { StorageImpl } from '../../storage/index';
 import type { LocationImpl, WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
 import type { BrowletEnvironment } from '../../environment';
 import type { DocumentParser } from '../../html/parser/index';
@@ -108,6 +110,12 @@ export class DocumentImpl extends NodeImpl {
   mode = DocumentMode.NoQuirks;
   /** Invalidates live collections after any tree or attribute mutation in this document. */
   collectionVersion = 0;
+  /** Cached session Storage object for this Document, acquired on first successful access. */
+  // https://html.spec.whatwg.org/multipage/webstorage.html#session-storage-holder
+  sessionStorageHolder: StorageImpl | null = null;
+  /** Cached local Storage object for this Document, acquired on first successful access. */
+  // https://html.spec.whatwg.org/multipage/webstorage.html#local-storage-holder
+  localStorageHolder: StorageImpl | null = null;
   /** MIME type of the document's content. */
   contentType = 'application/xml';
   /** Encoding name exposed by characterSet and its legacy aliases. */
@@ -1913,6 +1921,7 @@ export class DocumentImpl extends NodeImpl {
 const legacyEventConstructors = new Map([
   ['event', EventImpl], ['events', EventImpl], ['htmlevents', EventImpl],
   ['customevent', CustomEventImpl], ['messageevent', MessageEventImpl],
+  ['storageevent', StorageEventImpl],
 ]);
 
 /*

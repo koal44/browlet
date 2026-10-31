@@ -30,7 +30,7 @@ This introduction inventories consumers; it does not define a new dispatcher.
 | --- | --- |
 | HTML script elements | [Script state](../dom/nodes/html/scripting/script.ts), parser handoff, and [Browlet's script handler](../browlet.ts) exist. Formal classic/module records, preparation/readiness, script fetching, and execution checks remain §§4.12 and 8.1.4 work. |
 | `javascript:` navigation | The [navigation path](../browsing/navigation/ROADMAP.md) is missing; do not treat generic evaluation as its implementation. |
-| Event listeners and handlers | DOM listeners and the [IDL-handler core](event-handlers.ts) run callbacks. Content-attribute compilation, global handler surfaces, and special error/beforeunload rules remain §8.1.8 work. |
+| Event listeners and handlers | DOM listeners and the [IDL-handler core](event-handlers.ts) run callbacks. Window composes [WindowEventHandlersMixin](window-event-handlers.ts) for `onstorage`. Other global handlers, body/frameset forwarding, content-attribute compilation, and special error/beforeunload rules remain §8.1.8 work. |
 | SVG scripting | [SVGScriptElement](../dom/nodes/svg/script-element.ts) supplies identity only. Its attributes, preparation, loading, and execution remain SVG-owned dependencies. |
 
 ### §8.1.2: agent state and allocation
