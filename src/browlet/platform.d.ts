@@ -1421,6 +1421,7 @@ export interface Location {
   assign(url: string): void;
   replace(url: string): void;
   reload(): void;
+  readonly ancestorOrigins: DOMStringList;
 }
 
 export interface LocationConstructor {
@@ -2430,6 +2431,8 @@ export interface Document extends Node {
   createRange(): Range;
   createNodeIterator(root: Node, whatToShow?: number, filter?: NodeFilter | null): NodeIterator;
   createTreeWalker(root: Node, whatToShow?: number, filter?: NodeFilter | null): TreeWalker;
+  get location(): Location | null;
+  set location(value: string);
   domain: string;
   readonly referrer: string;
   cookie: string;

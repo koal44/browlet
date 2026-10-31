@@ -1,6 +1,6 @@
 export { BrowsingContext, BrowsingContextGroup } from './browsing-context';
 export {
-  Navigable, type NavigateOptions, type NavigationHistoryBehavior, type HistoryHandlingBehavior,
+  Navigable, type NavigateOptions, type ReloadOptions, type NavigationHistoryBehavior, type HistoryHandlingBehavior,
   type UserNavigationInvolvement, Traversable, TopLevelTraversable, SessionHistoryTraversalQueue,
 } from './navigable';
 export { NavigationParams, type OpenerPolicyEnforcementResult } from './params';

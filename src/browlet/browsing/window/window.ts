@@ -1,5 +1,3 @@
-import type { URL } from 'node:url';
-
 import { type InternalPromise, InternalError, TypeError } from '../../../infra/index';
 import {
   arg, atArg, attr, defineIncludes, defineInterface, definePartialInterface, emptyDictionary, emptySequence, idlType,
@@ -68,9 +66,9 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   #globalScopeMixin: WindowOrWorkerGlobalScopeMixin | null = null;
 
   /** Create Window state before composition attaches its document and global facilities. */
-  constructor(url: URL, env: WindowEnvironment) {
+  constructor(env: WindowEnvironment) {
     super(env);
-    this.location = new LocationImpl(url);
+    this.location = new LocationImpl(env);
     this.locationbar = new BarPropImpl(env);
     this.menubar = new BarPropImpl(env);
     this.personalbar = new BarPropImpl(env);
@@ -177,6 +175,13 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   /** Policy factory owned by this Window's global-scope mixin. */
   get trustedTypes(): TrustedTypePolicyFactoryImpl {
     return this.getWindowOrWorkerGlobalScopeMixin().trustedTypes;
+  }
+
+  /** Whether this Window currently has unconsumed transient user activation. */
+  // https://html.spec.whatwg.org/multipage/interaction.html#transient-activation
+  hasTransientActivation(): boolean {
+    // TODO(HTML 6.4): Track activation timestamps, expiry, notification, and consumption.
+    throw new InternalError('Window transient activation is not implemented');
   }
 
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-window-close

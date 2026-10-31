@@ -17,7 +17,14 @@ export type ExtendedAttributeHooks<Env extends WebIDLEnvironment = WebIDLEnviron
   prepareHTMLConstructor?: (owner: AssembledInterface) => HTMLConstructorBinding<Env> | undefined;
   /** Prepare an annotated interface's invocation policy, selected by the actual receiver. */
   prepareSecurityCheck?: (owner: AssembledInterface) => SecurityCheckBinding<Env> | undefined;
+  /** Prepare additional creation steps after own IDL members, before platform identity is attached. */
+  preparePlatformObject?: (owner: AssembledInterface) => PlatformObjectBinding<Env> | undefined;
 };
+
+/** Finish an allocation, optionally replacing it with a specification-owned exotic object. */
+export type PlatformObjectBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> = (
+  ctx: BindingContext<Env>, object: object,
+) => object;
 
 /** A security check receives the invoked function's binding and the actual platform receiver's record. */
 export type SecurityCheckBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> = (

@@ -1,7 +1,9 @@
+import { RangeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
 import { serializeURL, serializeURLPath, hasOpaquePath, includesCredentials } from './core/url';
 import { serializeHost } from './core/host';
 import type { BlobURLEntry, Host, Origin, URLRecord } from './core/index';
+import { getEncoding, getOutputEncoding } from '../encoding/index';
 
 import {
   domainToUnicode, obtainRegistrableDomain, parseHost,
@@ -110,7 +112,6 @@ export function parseBasicURL(
   const url = suppliedURL ?? createURL();
   const base = options.base ?? null;
   const stateOverride = options.stateOverride;
-  let encoding = options.encoding ?? 'UTF-8';
 
   if (suppliedURL === undefined) {
     const stripped = trimC0ControlOrSpace(input);
@@ -122,6 +123,9 @@ export function parseBasicURL(
   input = input.replace(/[\t\n\r]/gu, '');
 
   let state: URLParserState = stateOverride ?? 'scheme start';
+  const encodingName = options.encoding === undefined ? 'UTF-8' : getEncoding(options.encoding);
+  if (encodingName === null) throw new RangeError(`Unknown encoding: ${options.encoding}`);
+  let encoding = getOutputEncoding(encodingName);
   let buffer = '';
   let atSignSeen = false;
   let insideBrackets = false;
@@ -568,7 +572,7 @@ export function parseBasicURL(
 
       case 'query':
         if (
-          encoding.toUpperCase() !== 'UTF-8' &&
+          encoding !== 'UTF-8' &&
           (!isSpecialURL(url) || url.scheme === 'ws' || url.scheme === 'wss')
         ) {
           encoding = 'UTF-8';

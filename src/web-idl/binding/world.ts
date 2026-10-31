@@ -10,7 +10,9 @@ import {
 
 import { RealmBinding } from './realm';
 import { registerImplementationBindings } from './register';
-import type { AttributeBinding, ExtendedAttributeHooks, HTMLConstructorBinding, SecurityCheckBinding } from './extended-attributes';
+import type {
+  AttributeBinding, ExtendedAttributeHooks, HTMLConstructorBinding, PlatformObjectBinding, SecurityCheckBinding,
+} from './extended-attributes';
 
 /**
  * Owns definitions and platform-object identity across registered realms.
@@ -26,6 +28,8 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
   #htmlConstructors = new Map<AssembledInterface, HTMLConstructorBinding>();
   /** Invocation policies selected by the receiver's interface, independent of the member's owner. */
   #securityChecks = new Map<AssembledInterface, SecurityCheckBinding>();
+  /** Additional platform creation steps owned by the interface's specification. */
+  #platformObjects = new Map<AssembledInterface, PlatformObjectBinding>();
   /** Host lookup shared by this world's registered realm bindings. */
   #incumbentEnvironment?: (methodEnv: WebIDLEnvironment) => WebIDLEnvironment | undefined;
 
@@ -71,6 +75,17 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
         const check = prepareSecurityCheck(assembled);
         // Registration enforces this world's environment contract, as for attribute bindings.
         if (check) this.#securityChecks.set(assembled, check as SecurityCheckBinding);
+      }
+    }
+    const preparePlatformObject = options.extendedAttributes?.preparePlatformObject;
+    if (preparePlatformObject) {
+      for (const assembled of this.#assembly.interfaces.values()) {
+        const create = preparePlatformObject(assembled);
+        if (create) {
+          if (assembled.isGlobal()) throw new InternalError('Global objects require explicit global allocation');
+          // Registration enforces this world's environment contract.
+          this.#platformObjects.set(assembled, create as PlatformObjectBinding);
+        }
       }
     }
   }
@@ -120,6 +135,11 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
     return this.#securityChecks.get(owner);
   }
 
+  /** Find additional creation steps for a non-global platform object. */
+  getPlatformObjectBinding(owner: AssembledInterface): PlatformObjectBinding | undefined {
+    return this.#platformObjects.get(owner);
+  }
+
   /** Find a realm's binding context in this world without registering it. */
   getBindingContext(realm: Env['realm']): BindingContext<Env> | undefined {
     // Registration checked the environment retained by this realm's binding.
@@ -159,7 +179,7 @@ export type BindingWorldOptions<Env extends WebIDLEnvironment = WebIDLEnvironmen
 
 /** Public operations of a realm binding; this type does not introduce another runtime object. */
 export type BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> = Pick<RealmBinding<Env>,
-  | 'realm' | 'InternalPromise' | 'DOMException' | 'getEnvironment'
+  | 'realm' | 'InternalPromise' | 'DOMException' | 'getEnvironment' | 'getBindingContext'
   | 'install' | 'projectGlobalObject' | 'createPlatformRecord' | 'isInterfaceExposed'
   | 'jsToImpl' | 'implToJS' | 'createFrozenArray' | 'realizeException'
   | 'construct' | 'resolveArguments' | 'getObjectRecord' | 'associate' | 'project' | 'unwrap'

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseURL, setURLPassword, setURLUsername } from '../../src/url/url';
+import { parseBasicURL, parseURL, setURLPassword, setURLUsername } from '../../src/url/url';
 import { serializeURL } from '../../src/url/core/index';
 import { urlAlgorithms, type URLSnapshot } from './contract';
 
@@ -150,6 +150,14 @@ describe('URL Standard section 4.4: URL parsing', () => {
     setURLPassword(url, 'p/ss');
 
     expect(serializeURL(url)).toBe('https://a%20b:p%2Fss@example.org/');
+  });
+
+  it.each(['UTF-16LE', 'UTF-16BE', 'replacement'])('uses the UTF-8 output encoding for %s', (encoding) => {
+    const parsed = parseURL('https://example.org/?q=\u00e9', null, encoding).url!;
+    expect(serializeURL(parsed)).toBe('https://example.org/?q=%C3%A9');
+    parsed.query = '';
+    const updated = parseBasicURL('next=\u00e9', { url: parsed, stateOverride: 'query', encoding }).url!;
+    expect(serializeURL(updated)).toBe('https://example.org/?next=%C3%A9');
   });
 });
 

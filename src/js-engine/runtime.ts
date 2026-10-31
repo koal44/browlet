@@ -12,12 +12,19 @@ import {
   type AddonContextHandle, type AddonMicrotaskQueueHandle, type ContextEvaluationOptions,
 } from './node-addons';
 import type {
-  CollectionIteratorKind, CompiledScript, GlobalAllocation, GlobalIndexedProperties, GlobalPrototypeKind, GlobalProxy,
+  CollectionIteratorKind, CompiledScript, ExoticObjectHandlers, GlobalAllocation, GlobalIndexedProperties, GlobalPrototypeKind, GlobalProxy,
   JSFunction, JSIteratorResult, JSRealm,
 } from './realm';
 import type { ImportModuleDynamically } from './modules';
 
 const getNativeRealm = addon.getRealm;
+
+/** Select handlers using the engine's current realm before entering JavaScript trap functions. */
+export function createExoticObject(
+  realmAnchor: object, select: (realm: JSRealm | undefined) => ExoticObjectHandlers,
+): object | undefined {
+  return addon.createExoticObject?.(realmAnchor, (reference) => select(RealmStamper.get(reference)));
+}
 
 export function createMicrotaskQueue(): JSMicrotaskQueue {
   return jsRuntime.createMicrotaskQueue();

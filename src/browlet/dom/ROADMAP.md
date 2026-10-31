@@ -67,11 +67,13 @@ the list and determines whether it changes; replacing the owner's array variable
 does not replace the retained list. New APIs should use sequences instead.
 
 Document's ancestor-origins creation takes a fresh list of serialized origins and
-retains a DOMStringList over that snapshot. Current top-level initialization
-creates an empty list; nested ancestry still throws explicitly until its origin
-chain and referrer-policy rules are implemented. The
-[Window roadmap](../browsing/window/ROADMAP.md) records the separate
-`Location.ancestorOrigins` getter and security integration.
+retains a DOMStringList over that snapshot. `env.createDOMStringList()` establishes
+its binding ownership at creation, including when an older Location first exposes
+the active Document's list. Location keeps a separate empty list for disconnection.
+Referrer-policy masking and explicit-parent ancestry creation are implemented;
+automatic child lifecycle remains unfinished. The
+[Window roadmap](../browsing/window/ROADMAP.md#html-724-first-slice-document-association-and-reads)
+records the public `Location.ancestorOrigins` getter and entry-origin checks.
 
 Web IDL supplies conversion, readonly indexed properties, iteration, receiver
 checks, realm ownership, and the non-constructible Window/Worker interface object.

@@ -545,7 +545,7 @@ describe('Browlet DOM binding', () => {
     ]);
   });
 
-  it('implements attributes through the realm prototypes', async () => {
+  it('places ordinary attributes on realm prototypes and unforgeable attributes on instances', async () => {
     const browlet = new Browlet({
       route: () => '<!doctype html><main></main>',
     });
@@ -558,7 +558,12 @@ describe('Browlet DOM binding', () => {
     element.setAttribute('id', 'target');
     const attribute = element.attributes[0]!;
 
-    expect(Object.keys(document)).toEqual([]);
+    // HTML's Document.location is [LegacyUnforgeable]; ordinary DOM attributes remain inherited.
+    expect(Object.keys(document)).toEqual(['location']);
+    expect(Object.getOwnPropertyDescriptor(document, 'location')).toMatchObject({
+      get: expect.any(Function) as unknown, set: expect.any(Function) as unknown,
+      enumerable: true, configurable: false,
+    });
     expect(Object.keys(element)).toEqual([]);
     expect(Object.keys(text)).toEqual([]);
     expect(Object.keys(comment)).toEqual([]);

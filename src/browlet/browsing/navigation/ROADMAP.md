@@ -79,6 +79,38 @@ committed/finished promises, and their creation/settlement lifecycle. An arbitra
 object does not satisfy that type. The full `navigate()` input contract does not
 make document-initiated navigation functional.
 
+Location's [href/assign/replace handoff](../window/ROADMAP.md#html-724-third-slice-href-assign-replace-and-navigation-handoff)
+now calls that same `navigate()` entry with an entry-parsed URL, the incumbent
+Window's associated Document, exceptions enabled, and automatic/replacement
+history handling. Navigation still owns permissions, source snapshots, fetching,
+and history effects. Window transient activation remains an explicit §6.4
+dependency for writes before complete loading. Retained Locations target the live
+relevant Document's node navigable when the old Window is inactive; this accepted
+resolution of HTML's missing target rule is documented with Location.
+Location's component setters use the same handoff with a parsed copy of the live
+Document URL; the [component audit](../window/ROADMAP.md#html-724-fourth-slice-url-component-setters)
+records their parsing and encoding rules.
+
+Location's [reload handoff](../window/ROADMAP.md#html-724-fifth-slice-reload-preparation)
+now checks its entry origin and calls the live Document's `Navigable.reload()`.
+That operation accepts all optional spec inputs through `ReloadOptions`, beside
+`NavigateOptions`: serialized Navigation API state (default null), user involvement
+(default `none`), and API method tracker (default null). The options-record
+translation has a pending `SPEC_MISMATCH`; the current stub does not consume them.
+
+Reload coordination remains explicitly unfinished. HTML first selects the active
+Window's Navigation object and history-entry Navigation API state, then fires a
+cancelable reload navigate event (except for browser-UI involvement). Only after
+that event permits continuation may it set `reloadPending` and append traversal
+steps that apply the reload history step. The Navigation object/event/state,
+traversal queue, reload history application, and method-tracker lifecycle are
+missing. `SessionHistoryTraversalQueue` is still an empty identity class and
+`SessionHistoryEntry` does not yet have Navigation API state. The coordinator
+therefore throws `Navigable reload coordination is not implemented` without
+setting `reloadPending`. It does not substitute ordinary URL navigation for a
+reload. Fetch/revalidation, unloading, document replacement, and restoration stay
+with the later history and navigation algorithms.
+
 | Planned source | Contract | Specification |
 | --- | --- | --- |
 | `history.ts` | `History`, `ScrollRestoration`, state serialization through `scripting/structured-data/`, length/state/go/back/forward, and push/replace state | HTML §7.2.5 and §2.7 |

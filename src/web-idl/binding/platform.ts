@@ -83,8 +83,16 @@ export class PlatformRecord<T extends object = object> {
     if (this.platformObject !== undefined) {
       throw new InternalError('Implementation object is already associated with another owner or platform object');
     }
-    this.platformObject = PlatformObjectStamper.stamp(platformObject, this);
     const { assembled, binding } = this;
+    for (const ancestorAssembled of assembled.getInheritanceChain()) {
+      // https://webidl.spec.whatwg.org/#js-platform-objects
+      // Additional creation steps receive every inherited unforgeable member.
+      const descriptors = binding.getImplementationBinding(ancestorAssembled).getUnforgeableDescriptors();
+      if (descriptors) Object.defineProperties(platformObject, descriptors);
+    }
+    const create = binding.world.getPlatformObjectBinding(assembled);
+    if (create) platformObject = create(binding, platformObject);
+    this.platformObject = PlatformObjectStamper.stamp(platformObject, this);
     const implInst: StampedImplInstance = this.implInst;
     const member = assembled.getCollectionMember(true);
     if (member?.kind === 'maplike') this.mapEntries ??= new Map();
@@ -94,10 +102,6 @@ export class PlatformRecord<T extends object = object> {
       if (ancestorAssembled.implementations.some(({ implClass }) => implClass === DOMExceptionImpl)) {
         DOMExceptionStamper.stamp(platformObject, implInst as StampedImplInstance<DOMExceptionImpl>);
       }
-      // https://webidl.spec.whatwg.org/#js-platform-objects
-      // Copy each interface's unforgeable properties onto the new platform object.
-      const descriptors = binding.getImplementationBinding(ancestorAssembled).getUnforgeableDescriptors();
-      if (descriptors) Object.defineProperties(platformObject, descriptors);
     }
     return this.platformObject;
   }

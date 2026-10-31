@@ -143,6 +143,19 @@ Backend selection is configured before loading the module. Native facilities and
 build instructions belong to
 [Node compatibility](../../node-compat/README.md).
 
+`JSRealm.createExoticObject(selectHandlers)` optionally allocates an extensible,
+noncallable exotic object. Native trap lookup observes the actual accessing
+realm before entering JavaScript, including calls through borrowed builtins;
+the selector receives that JSRealm, or undefined for an unregistered Node host.
+Its private native target uses the selected descriptor/key view to validate
+Proxy results. The host retains one ordinary property store and supplies all
+internal methods; engine code owns no HTML origin policy. The target argument
+is private machinery and must never be exposed or mutated. Descriptor and key
+handlers must be side-effect-free views, since Proxy validation can invoke them
+again. Allocation anchors to a retained intrinsic prototype rather than an
+attached context handle, allowing creation after global detachment. Stock Node
+returns undefined; consumers own their explicitly limited fallback.
+
 With native lookup, ordinary objects use their creation context and function
 lookup follows bound/proxy targets without author traps. Context realm references
 are stamped with the JSRealm and remain distinct across global-proxy reuse.

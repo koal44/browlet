@@ -24,7 +24,7 @@ try {
   const addon = resolve(root, 'node-compat/addon');
   const build = target.build;
   const sources = [
-    'addon.cc', 'array-buffer.cc', 'code-generation.cc', 'exception-reporting.cc', 'function-entry.cc',
+    'addon.cc', 'array-buffer.cc', 'code-generation.cc', 'exception-reporting.cc', 'exotic-object.cc', 'function-entry.cc',
     'host-hooks.cc', 'html-all-collection.cc', 'iterators.cc', 'object-types.cc', 'promise.cc', 'property-delegate.cc', 'realm.cc',
     'temporal.cc', 'vm.cc', 'vm-modules.cc', 'vm-imports.cc',
   ].map(name => resolve(addon, name));

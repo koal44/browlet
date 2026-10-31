@@ -3,7 +3,10 @@ import {
   arg, attr, ctor, defineInterface, idlType, impl, iter, nullable, op, record, reference, roAttr,
   sequence, staticOp, stringifier, union, xattr,
 } from '../web-idl/core/index';
-import { serializeHost, serializeURL, serializeURLPath, type Origin, type URLRecord } from './core/index';
+import {
+  cannotHaveUsernamePasswordPort, hasOpaquePath, serializeHost, serializeURL, serializeURLPath,
+  type Origin, type URLRecord,
+} from './core/index';
 
 import { serializeOrigin } from './origin';
 import {
@@ -499,12 +502,4 @@ export function parseAPIURL(input: string, base?: string): URLRecord | null {
     if (parsedBase === null) return null;
   }
   return parseBasicURL(input, { base: parsedBase }).url;
-}
-
-function cannotHaveUsernamePasswordPort(url: URLRecord): boolean {
-  return url.host === null || url.host.kind === 'empty' || url.scheme === 'file';
-}
-
-function hasOpaquePath(url: URLRecord): boolean {
-  return typeof url.path === 'string';
 }

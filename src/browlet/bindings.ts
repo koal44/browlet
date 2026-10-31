@@ -8,7 +8,7 @@ import {
 } from '../web-idl/index';
 import { streamsIDLDefinitions } from '../streams/index';
 import { encodingIDLDefinitions } from '../encoding/index';
-import { urlIDLDefinitions, serializeURL } from '../url/index';
+import { urlIDLDefinitions } from '../url/index';
 import { fileIDLDefinitions } from '../file/index';
 import { xhrIDLDefinitions } from '../xhr/index';
 import { fetchIDLDefinitions } from '../fetch/index';
@@ -43,7 +43,7 @@ import {
 import { htmlIDLDefinitions } from './dom/nodes/html/index';
 import { mathMLIDLDefinitions } from './dom/nodes/mathml/index';
 import { svgIDLDefinitions } from './dom/nodes/svg/index';
-import { domIDLDefinitions } from './dom/index';
+import { DOMStringListImpl, domIDLDefinitions } from './dom/index';
 import { performanceIDL } from './performance/index';
 import {
   messageEventIDL, messageEventInitIDL, messageEventSourceIDL, messagePortIDL, eventSourceIDL, eventSourceInitIDL,
@@ -127,7 +127,7 @@ export function createWindowEnvironment(
         env.topLevelOrigin = topLevelOrigin;
         return env;
       });
-      const window = new WindowImpl(new URL(serializeURL(creationURL)), env);
+      const window = new WindowImpl(env);
       realm.windowImplementation = window;
       if (!useAddonGlobals) return projectWindow(context, window);
 
@@ -206,6 +206,7 @@ export function createBrowletEnvironmentInit(context: BindingContext<BrowletEnvi
       return context.construct(implementation, argumentsList);
     },
     createDocument: () => context.construct(DocumentImpl),
+    createDOMStringList: (strings) => context.construct(DOMStringListImpl, [strings]),
     createEvent: (EventConstructor = EventImpl) => {
       const event = context.construct(EventConstructor, ['', {}]);
       event.isTrusted = true;

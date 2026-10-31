@@ -16,7 +16,7 @@ import {
 } from './modules';
 import {
   associateContext, associateGlobalRealm, associateObjectRealm, cloneSharedArrayBuffer, compileScript,
-  createCollectionIterator, createContext, createFunctionWithIncumbent, createMicrotaskQueue, detachContext,
+  createCollectionIterator, createContext, createExoticObject, createFunctionWithIncumbent, createMicrotaskQueue, detachContext,
   getContextGlobalAllocation, getContextGlobalProxy,
   makePrototypeImmutable, observePromise, runInContext, runScript, runWithActiveRealm,
   setGlobalObject, setPropertyDelegate, type JSMicrotaskQueue, type VMContext,
@@ -121,12 +121,20 @@ export class JSRealm {
   jsonStringify;
   /** Captured Map iterator next method. */
   mapIteratorNext;
+  /** Captured Object.prototype.valueOf method. */
+  objectValueOf;
   /** Captured Promise.reject method. */
   promiseReject;
   /** Captured Promise.prototype.then method. */
   promiseThen;
   /** Captured Reflect.get function. */
   reflectGet;
+  /** Captured descriptor lookup, preserving this realm through exotic dispatch. */
+  reflectGetOwnPropertyDescriptor;
+  /** Captured Reflect.set, preserving this realm through receiver definition. */
+  reflectSet;
+  /** Captured Reflect.has, preserving this realm through exotic prototypes. */
+  reflectHas;
   /** Captured Set iterator next method. */
   setIteratorNext;
 
@@ -243,9 +251,14 @@ export class JSRealm {
     const JSON_ = Reflect.get(this.#globalProxy, 'JSON') as JSON;
     this.jsonParse = JSON_.parse as (text: string) => JSONValue;
     this.jsonStringify = JSON_.stringify as (value: unknown) => string | undefined;
+    this.objectValueOf = Reflect.get(this.Object.prototype, 'valueOf') as JSMethod;
     this.promiseReject = Reflect.get(this.NativePromise, 'reject') as JSMethod;
     this.promiseThen = Reflect.get(this.NativePromise.prototype, 'then') as JSMethod;
-    this.reflectGet = (Reflect.get(this.#globalProxy, 'Reflect') as typeof Reflect).get;
+    const reflect = Reflect.get(this.#globalProxy, 'Reflect') as typeof Reflect;
+    this.reflectGet = reflect.get;
+    this.reflectGetOwnPropertyDescriptor = reflect.getOwnPropertyDescriptor;
+    this.reflectSet = reflect.set;
+    this.reflectHas = reflect.has;
     this.errorPrototype = this.Error.prototype as object;
     this.functionPrototype = this.Function.prototype as object;
     this.objectPrototype = this.Object.prototype as object;
@@ -400,6 +413,12 @@ export class JSRealm {
       throw new InternalError('Node backend does not provide createHTMLDDA');
     }
     return addon.createHTMLDDA(this.#vmContext, call);
+  }
+
+  /** Allocate an extensible exotic object with entry-time accessing-realm selection, if supported. */
+  createExoticObject(select: (realm: JSRealm | undefined) => ExoticObjectHandlers): object | undefined {
+    // Intrinsic prototypes retain their creation realm even after global-proxy reuse.
+    return createExoticObject(this.objectPrototype, select);
   }
 
   /** Parse JSON with this realm's captured intrinsic and allocation prototypes. */
@@ -808,6 +827,15 @@ export class JSRealm {
 export interface CompiledScript {
   runInContext(context: VMContext, options?: { displayErrors?: boolean; }): unknown;
 }
+
+/**
+ * Complete dispatch for an extensible, noncallable native exotic object.
+ * The target argument is private engine machinery; never expose or mutate it.
+ * Descriptor/key queries must be side-effect-free views of the same property store.
+ */
+export type ExoticObjectHandlers = Required<Omit<ProxyHandler<object>, 'apply' | 'construct' | 'ownKeys'>> & {
+  ownKeys(target: object): (string | symbol)[];
+};
 
 export type CollectionIteratorKind = 'map' | 'set';
 

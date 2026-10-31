@@ -67,6 +67,12 @@ Direct incumbent lookup stays in the lint-allowlisted composition, Binding, and
 callback-lifecycle modules. Binding callback parameters through the incumbent cannot
 have defaults or rest syntax, because capture selection uses declared arity.
 
+Specification-owned platform creation uses `preparePlatformObject` at the same
+composition boundary. Web IDL installs the own members first; HTML can then add
+Location's conversion safeguards or return an exotic object. Binding attaches
+identity only to the final object. Implementations do not retain the allocation
+or its binding context.
+
 HTML's `CrossOriginObjectBinding` lives at the same integration boundary and owns
 cross-origin descriptors. The current proof of concept uses interface
 `[CrossOriginObject]` and member `[CrossOrigin]` annotations to select its objects
@@ -94,6 +100,18 @@ trap retains its duplicate-key accommodation.
 They require an explicitly selected binding; automatic proxy interception still
 needs the current caller. Descriptor accommodation for JavaScript Proxy invariants
 belongs at the stock proxy trap, not in these algorithms.
+Location's creation hook retains one ordinary property store and attaches the
+platform record only to its final exotic object. Native Proxy-handler lookup
+captures the accessing realm before entering JavaScript; the binding selects that
+realm's existing context through its BindingWorld. HTML's caller-bound algorithms
+take the public Location and its ordinary storage separately, avoiding recursive
+descriptor lookup. Captured caller-realm Reflect operations preserve the realm
+through inherited lookup and receiver definition. The Proxy's private native
+target exposes the same descriptor/key view for invariant checking, without
+copying or owning author properties. This supports foreign visibility of frozen
+defaults while preserving exact receivers. Allocation uses a retained intrinsic
+prototype as its realm anchor, so lazy projection also works after navigation
+detaches the old context. Stock Node retains its explicit caller/visibility gap.
 Realm supplies allocation and execution
 facilities; the invoking member's binding selects the actual receiver's security
 policy, including when the member is inherited from an unprotected interface.

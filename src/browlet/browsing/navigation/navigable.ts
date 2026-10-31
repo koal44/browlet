@@ -185,6 +185,15 @@ export class Navigable {
     throw new InternalError('Document-initiated navigation is not implemented');
   }
 
+  /** Reload this destination after its cancelable navigate event and through the traversal queue. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#reload
+  // SPEC_MISMATCH: reload(navigable, navigationAPIState = null, userInvolvement = "none", apiMethodTracker = null)
+  reload(_options: ReloadOptions = {}): void {
+    // TODO(HTML 7.2.6, 7.4): Supply Navigation API state/event cancellation, then
+    // set reloadPending and queue the reload history step and tracker settlement.
+    throw new InternalError('Navigable reload coordination is not implemented');
+  }
+
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#nav-stop
   stopLoading(): void {
     // TODO: Respect the active Document's unload counter, cancel ongoing navigation
@@ -565,6 +574,14 @@ export type NavigateOptions = {
   userInvolvement?: UserNavigationInvolvement;
   sourceElement?: ElementImpl | null;
   initialInsertion?: boolean;
+  apiMethodTracker?: NavigationAPIMethodTracker | null;
+};
+
+/** Optional reload inputs: state and tracker default to null; user involvement defaults to 'none'. */
+// https://html.spec.whatwg.org/multipage/browsing-the-web.html#reload
+export type ReloadOptions = {
+  navigationAPIState?: SerializedRecord | null;
+  userInvolvement?: UserNavigationInvolvement;
   apiMethodTracker?: NavigationAPIMethodTracker | null;
 };
 

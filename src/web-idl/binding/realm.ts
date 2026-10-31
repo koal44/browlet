@@ -2,7 +2,7 @@ import {
   ExceptionRequestStamper, InternalError, InternalPromise, Stamper,
   type InternalPromiseWithResolvers, type PromiseResultType,
 } from '../../infra/index';
-import { getAssociatedRealm, isObject, type JSFunction } from '../../js-engine/index';
+import { getAssociatedRealm, isObject, type JSFunction, type JSRealm } from '../../js-engine/index';
 import {
   DOMExceptionImpl, type DOMExceptionConstructor,
   type ImplementationClass, type ImplementationType, type InjectedArgument, type WebIDLType,
@@ -218,6 +218,12 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   getObjectRecord(value: unknown): Readonly<PlatformRecord> | undefined {
     const record = getPlatformRecord(value) ?? getImplementationRecord(value);
     return record?.binding.world === this.world ? record : undefined;
+  }
+
+  /** Find the accessing realm's existing binding in this world without registering it. */
+  getBindingContext(realm: JSRealm): BindingContext<Env> | undefined {
+    // Registration enforces one environment contract throughout this binding world.
+    return this.world.getRealmBinding(realm) as BindingContext<Env> | undefined;
   }
 
   /** Construct an implementation using its own or its nearest declared base's interface and dependencies. */

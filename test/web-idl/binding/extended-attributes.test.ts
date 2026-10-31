@@ -10,6 +10,85 @@ import { TestRealm } from '../../support/web-idl-realm';
 import { getInstalledInterface } from '../../support/web-idl-binding';
 
 describe('Web IDL extended-attribute integration', () => {
+  it('finishes own members before attaching the final platform identity on every construction path', () => {
+    class CreatedBaseImpl { inherited = 3; }
+    class CreatedImpl extends CreatedBaseImpl { value = 7; }
+    const base = defineInterface({
+      name: 'CreatedBase', implementation: impl(CreatedBaseImpl),
+      members: [attr('inherited', idlType.long, xattr('LegacyUnforgeable'))],
+    });
+    const definition = defineInterface({
+      name: 'Created', inherits: 'CreatedBase', implementation: impl(CreatedImpl),
+      members: [ctor(), attr('value', idlType.long, xattr('LegacyUnforgeable'))],
+    });
+    let preparations = 0;
+    const allocations: object[] = [];
+    const world = new BindingWorld([base, definition], {
+      extendedAttributes: {
+        preparePlatformObject(owner) {
+          if (owner.primary.name !== 'Created') return;
+          preparations++;
+          return (ctx, object) => {
+            expect(Object.getOwnPropertyDescriptor(object, 'value')).toMatchObject({
+              get: expect.any(Function) as unknown, configurable: false,
+            });
+            expect(Object.getOwnPropertyDescriptor(object, 'inherited')).toMatchObject({
+              get: expect.any(Function) as unknown, configurable: false,
+            });
+            expect(world.unwrap(object)).toBeUndefined();
+            expect(Reflect.getPrototypeOf(object)).toBe(ctx.getPlatformObjectPrototype(owner));
+            allocations.push(object);
+            return new Proxy(object, {});
+          };
+        },
+      },
+    });
+    for (let index = 0; index < 2; index++) {
+      const ctx = world.register(new TestRealm(), (binding) => ({ realm: binding.realm }));
+      const installed = world.getRealmBinding(ctx.realm)!.installDefinitions();
+      const Constructor = getInstalledInterface(installed, 'Created');
+      const implementation = ctx.construct(CreatedImpl);
+      const lazy = world.project(implementation)!;
+      const constructed = Reflect.construct(Constructor, []) as object;
+      const internal = ctx.createPlatformRecord('Created')!.platformObject!;
+      expect(world.project(implementation)).toBe(lazy);
+      for (const object of [lazy, constructed, internal]) {
+        expect(allocations).not.toContain(object);
+        expect(world.getRealm(object)).toBe(ctx.realm);
+        expect(world.unwrap(object)).toBeInstanceOf(CreatedImpl);
+        expect(Reflect.get(object, 'value')).toBe(7);
+        expect(Reflect.get(object, 'inherited')).toBe(3);
+        expect(Reflect.set(object, 'value', 9)).toBe(true);
+        expect(ctx.unwrap(object, CreatedImpl)?.value).toBe(9);
+      }
+    }
+    expect(preparations).toBe(1);
+    expect(allocations).toHaveLength(6);
+    for (const object of allocations) expect(world.unwrap(object)).toBeUndefined();
+  });
+
+  it('can retry projection when additional creation steps fail before identity is attached', () => {
+    let fail = true;
+    const world = new BindingWorld(definitions, {
+      extendedAttributes: {
+        preparePlatformObject(owner) {
+          if (owner.primary.name !== 'Example') return;
+          return (_ctx, object) => {
+            if (fail) throw new Error('Creation failed');
+            return object;
+          };
+        },
+      },
+    });
+    const ctx = world.register(new TestRealm(), (binding) => ({ realm: binding.realm }));
+    const implementation = ctx.construct(ExampleImpl);
+    expect(() => world.project(implementation)).toThrow('Creation failed');
+    fail = false;
+    const object = world.project(implementation)!;
+    expect(world.unwrap(object)).toBe(implementation);
+    expect(world.project(implementation)).toBe(object);
+  });
+
   it('prepares resolved members once per world and uses the receiver environment across realms', () => {
     let preparations = 0;
     const invocations: WebIDLEnvironment[] = [];

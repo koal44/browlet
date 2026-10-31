@@ -29,6 +29,7 @@ the observable constraints of each runtime.
 | Callback and job hooks | [host-hooks.cc](addon/host-hooks.cc), [JavaScript adapter](addon/host-hooks.cjs); [native hook tests](test/host-hooks.test.cjs), [HTML Promise jobs](../test/browlet/scripting/promise-jobs.test.ts) |
 | Temporal context clock | [temporal.cc](addon/temporal.cc); [clock, lifetime, and contract tests](test/temporal.test.cjs) |
 | Native property interception | [property-delegate.cc](addon/property-delegate.cc), [JavaScript adapters](addon/property-delegate.cjs); [property tests](test/html-dda.test.cjs) |
+| Realm-selected exotic objects | [exotic-object.cc](addon/exotic-object.cc); [caller, descriptors, receiver, and lifetime tests](test/exotic-object.test.cjs), [Location integration](../test/browlet/browsing/window/location-exotic.test.ts) |
 | Native value inspection and iteration | [iterators.cc](addon/iterators.cc), [array-buffer.cc](addon/array-buffer.cc); [iterator predicates](test/iterator-predicates.test.cjs), [buffer views](test/array-buffer.test.cjs), [collection iterators](test/collection-iterator.test.cjs) |
 | Object-brand predicates | [object-types.cc](addon/object-types.cc); [brand tests](test/object-types.test.cjs) |
 | Callable, undetectable objects | [html-all-collection.cc](addon/html-all-collection.cc); [native object tests](test/html-dda.test.cjs) |
@@ -399,6 +400,29 @@ property-access receiver; global handlers receive undefined. The collection path
 does not use that receiver argument.
 
 ## Native function entry
+
+### Exotic object access
+
+`createExoticObject(realmAnchor, selectHandlers)` creates an extensible,
+noncallable Proxy with native handler lookup. V8 supplies the accessing context
+while resolving each trap, before calling its JavaScript function. The selector
+receives the existing realm reference; this is the current realm, not the
+incumbent or outermost entry. Borrowed Reflect methods therefore select their
+own realm. A stable intrinsic prototype is a suitable allocation anchor; a
+reused global proxy is not. Allocation also works after the original context
+handle is detached.
+
+The native target holds no author properties. Its descriptor and key
+interceptors expose the same selected view for Proxy invariant checking,
+allowing foreign views to hide nonconfigurable properties or return a distinct
+callable. The host owns the sole ordinary property store and every policy
+decision. Supply all noncallable Proxy handlers; descriptor/key handlers must
+be pure views and ownKeys must return an array. Never expose or mutate the
+private target passed to handlers. Native internal fields trace the selector
+and its storage without persistent roots. This facility uses public V8 APIs
+on all supported addon bases; no new Node/V8 patch is required.
+
+### Incumbent-sensitive functions
 
 `createFunctionWithIncumbent(context, steps)` creates a nonconstructible native
 function in the supplied context. It calls `steps(incumbent, receiver, args)`

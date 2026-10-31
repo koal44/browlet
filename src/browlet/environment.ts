@@ -44,7 +44,7 @@ import type { AbortControllerImpl, AbortSignalImpl } from './dom/abort/index';
 import { NodeImpl, type DocumentImpl } from './dom/nodes/index';
 import { HTMLAnchorElementImpl } from './dom/nodes/html/text/index';
 import { HTMLAreaElementImpl } from './dom/nodes/html/embedded/index';
-import type { DOMEnvironment, EventImplConstructor } from './dom/index';
+import type { DOMEnvironment, DOMStringListImpl, EventImplConstructor } from './dom/index';
 import { generateReport } from './reporting/generate';
 import { MessageEventImpl, type MessagePortImpl } from './communication/index';
 import { openWindow, WindowImpl, type WindowProxyHandle } from './browsing/window/index';
@@ -165,6 +165,8 @@ export interface BrowletEnvironmentInit {
   getDOMException: () => DOMExceptionConstructor;
   /** Allocate a Document with this environment's binding ownership. */
   createDocument: () => DocumentImpl;
+  /** Allocate a DOMStringList with this environment's ownership before it crosses realms. */
+  createDOMStringList: (strings: string[]) => DOMStringListImpl;
   /** Allocate a node implementation with this environment's binding ownership. */
   constructNode: <T extends object>(
     implementation: abstract new (...argumentsList: never[]) => T,
@@ -218,6 +220,8 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
 
   /** Allocate a Document with this environment's binding ownership. */
   createDocument;
+  /** Allocate a DOMStringList with binding ownership before its first projection. */
+  createDOMStringList;
   /** Allocate a node implementation with this environment's binding ownership. */
   constructNode;
   /** Create a trusted event in this environment's realm. */
@@ -256,6 +260,7 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     this.nativeLineEnding = initialization.nativeLineEnding;
     this.runInParallel = initialization.runInParallel;
     this.createDocument = initialization.createDocument;
+    this.createDOMStringList = initialization.createDOMStringList;
     this.constructNode = initialization.constructNode;
     this.createEvent = initialization.createEvent;
     this.createAbortController = initialization.createAbortController;

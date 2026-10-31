@@ -450,7 +450,7 @@ retain their concrete element owners.
 | §2.6.4.1 HTMLAllCollection | [Document-owned live collection](../dom/nodes/html-all-collection.ts) and native callable binding. The [nodes roadmap](../dom/nodes/ROADMAP.md#htmlallcollection) retains the unsupported-backend policy and browser/specification clashes. |
 | §2.6.4.2 HTMLFormControlsCollection and RadioNodeList | [Form collections](../dom/nodes/html/forms/form-controls-collection.ts) implement named lookup and radio values; form membership and radio-group exclusion remain explicit [owner dependencies](../dom/nodes/html/forms/ROADMAP.md#missing-owner-algorithms). |
 | §2.6.4.3 HTMLOptionsCollection | [Options collection](../dom/nodes/html/forms/options-collection.ts) implements length/indexed mutations, add/remove, and selected-index forwarding. Automatic selection, selectedcontent, mutation hooks, and custom-element reactions remain with the [owners](../dom/nodes/html/forms/ROADMAP.md#missing-owner-algorithms). |
-| §2.6.5 DOMStringList | [Independent string list](../dom/string-list.ts), retained by Document ancestry initialization. Its [DOM roadmap](../dom/ROADMAP.md#domstringlist) records the list contract; nested ancestry and [Location's getter/security integration](../browsing/window/ROADMAP.md) remain pending. |
+| §2.6.5 DOMStringList | [Independent string list](../dom/string-list.ts), retained with creation-realm ownership by Document ancestry initialization. Its [DOM roadmap](../dom/ROADMAP.md#domstringlist) records the list contract; [Location's getter and entry-origin checks](../browsing/window/ROADMAP.md#html-724-first-slice-document-association-and-reads) are connected. Automatic child lifecycle remains pending. |
 
 The three approved form-membership, radio-group, and automatic-selection
 regressions remain expected failures. These collection interfaces do not complete
@@ -492,7 +492,7 @@ to the existing `all`, `head`, read-only `body`, `write`, and `defaultView` surf
 | §3.1 opening requirements | Document URL/origin/referrer state; both DOMImplementation factories now set the post-load-ready flag | URL and origin changes during later navigation/history/domain algorithms remain with those owners. |
 | §3.1.1 Document | Required initial state, about-base-URL cloning hook, declaration types, and concrete dialog/SVG-script identities | Dialog lifecycle and the remaining HTML partial members are explicitly assigned below. |
 | §3.1.2 DocumentOrShadowRoot | HTML partial declaration and shared `activeElement` getter, including retargeting and body/document-element fallback; Selectlet uses the same getter | `Document.focusedArea` is an explicit throwing dependency until §6.6 supplies focus state and its lifecycle. |
-| §3.1.3 ancestor origins | Both list-creation algorithms, referrer-policy masking, retained string snapshots, and explicit parent input before activation | Child navigable/container association and fully-active ancestry remain explicit dependencies. `Location.ancestorOrigins` still needs its §7.2.4 relevant-document/security behavior. |
+| §3.1.3 ancestor origins | Both list-creation algorithms, referrer-policy masking, retained string snapshots, and explicit parent input before activation | Automatic child lifecycle remains an explicit dependency. `Location.ancestorOrigins` now selects the relevant Document, checks entry-origin access, and preserves the list's realm and identity. |
 | §3.1.4 resource metadata | Referrer, non-HTTP access to the shared cookie store, retained response modification time, and local-time `lastModified` formatting | File navigation must supply filesystem modification times. The source-only route has no response headers; its modification time remains unknown. Cookie-averse browser differences are recorded below. |
 | §3.1.5 loading status | Readiness-update algorithm, `readystatechange` dispatch/handler, HTML/XML parser lifecycle contract, load/unload timing records, and redirect flag | XML parser implementation and previous-document unload capture remain missing. Existing HTML routes use the shared transitions; full §13 completion scheduling remains provisional. |
 | §3.1.6 render blocking | Document blocking set, HTML-content/body eligibility, timeout predicate, element block/unblock operations, disconnection/attribute cleanup, and rendering-opportunity filtering | Element preparation/loading must register and release actual pending work and populate Fetch request flags. Production rendering remains unfinished; script-blocking stylesheets remain a separate mechanism. |
@@ -535,7 +535,7 @@ are all its members and contributions, with the current implementation boundary:
 | --- | --- |
 | `DocumentReadyState`, `DocumentVisibilityState`, `HTMLOrSVGScriptElement` | Registered in this slice; SVG script's remaining URI/attribute/execution dependencies are in its [roadmap](../dom/nodes/svg/ROADMAP.md). |
 | `parseHTMLUnsafe`, `parseHTML` | Missing §8.5 parsing and §8.6 sanitization algorithms. `ParseHTMLUnsafeOptions`, `TrustedHTMLParserOptions`, and `SetHTMLOptions` remain undeclared dependencies. TrustedHTML values already exist; parser-specific policy/options processing does not. |
-| `location` | Missing §7.2 relevant-document and navigation/security behavior. Existing Location is still a URL snapshot; retain PutForwards/LegacyUnforgeable requirements when connecting it. |
+| `location` | Declared with PutForwards/LegacyUnforgeable; the getter returns the relevant Window's Location only while fully active. Location's live Document reads and entry-origin checks are implemented; setters still reach the explicit navigation dependency. |
 | `domain` | §7.1.1.2 getter, validation, and origin-keyed no-op are implemented; cross-origin DOM enforcement remains with Window/Location. See the [browsing audit](../browsing/ROADMAP.md#same-origin-relaxation-origin-and-origin-keyed-clusters). |
 | `referrer` | Implemented projection over existing Document state. |
 | `cookie`, `lastModified` | Implemented §3.1.4 accessors over the shared cookie store and retained source metadata; file metadata awaits its loader. |
@@ -638,9 +638,10 @@ The focused tests cover all four specification examples, every referrer-policy
 value, opaque identity, origin-domain distinctions, snapshots, container
 ownership after parent navigation, and creation before activation or navigable
 initialization. They supply only the missing container
-association and fully-active child state. `Location.ancestorOrigins` remains
-absent pending its [§7.2.4 integration](../browsing/window/ROADMAP.md); these tests
-do not claim working iframe navigation or public Location access.
+association and fully-active child state. Public `Location.ancestorOrigins` is now
+covered by the [§7.2.4 integration](../browsing/window/ROADMAP.md#html-724-first-slice-document-association-and-reads),
+including live Document selection and entry-origin checks. Working iframe
+navigation remains a separate dependency.
 
 ### Section 3.1.4 resource metadata
 

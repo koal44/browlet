@@ -747,8 +747,43 @@ query retains a conservative true result without a navigable, a case HTML leaves
 unspecified. Concrete isolation denies capability without full Document activity,
 but still requires Permissions Policy evaluation for fully active Documents; see
 the [settings audit](browlet/browsing/window/ROADMAP.md#html-7226-script-settings-for-window-objects).
-`Location.ancestorOrigins` remains absent until relevant-document selection and
-its security check are implemented. Policy inheritance, child navigation, history disposal, and storage-shed
+Location now reads its browsing context's active Document and checks the entry
+origin before exposing URL components or ancestor origins. `Document.location`
+returns null for inactive Documents; retained Location reads and detachment follow
+HTML's live-Document/about:blank rules despite browser disagreement. Ancestor lists
+retain their creation realm even when first exposed through an older Location.
+Location creation now installs the realm's captured intrinsic `valueOf` and an own
+undefined `Symbol.toPrimitive`, protecting string conversion from inherited author
+replacements. The accepted `SPEC_CLASH(location-default-properties)` follows browsers:
+initial properties are nonconfigurable, unchanged definitions succeed, and replacement
+or deletion fails. HTML's descriptor rewriting and `[[DefaultProperties]]` are
+deliberately omitted. Location's physical prototype is now immutable and it stays
+extensible: Reflect.preventExtensions returns false, while Object.preventExtensions,
+seal, and freeze throw. Caller-bound prototype algorithms expose null to a foreign
+caller and compare against that visible prototype. The addon now connects all
+Location internal methods automatically: prototype reflection, descriptors,
+definitions, Get/Set, deletion, keys, and ordinary HasProperty use the accessing
+realm. Native handler lookup captures that realm before JavaScript trap entry,
+including borrowed reflection methods. Stock Node cannot capture this input or
+change frozen-property visibility; its 12 automatic-dispatch regressions retain
+approved expected-failure status. Href, assign, and replace parse
+against entry settings. Component setters parse copies of the current URL;
+search uses UTF-8 regardless of Document encoding and hash suppresses unchanged
+fragments. Navigation requests target the live relevant Document's node navigable
+with the incumbent source Document, including through a retained
+Location whose old Window is inactive. Disconnected Locations return without
+navigation. The specification gap and browser disagreement are recorded with
+Location. Actual navigation remains unfinished; writes before complete loading
+also require Window transient activation. Reload now returns for a null relevant
+Document, checks the entry origin, and calls the live Document's navigable.
+Its coordinator still throws explicitly: Navigation API cancellation and queued
+reload history processing remain unfinished. Stock Node still needs an explicit
+modeled incumbent for calls through another realm's author function. The [navigation slice](browlet/browsing/window/ROADMAP.md#html-724-third-slice-href-assign-replace-and-navigation-handoff)
+records these dependencies; the [component setter audit](browlet/browsing/window/ROADMAP.md#html-724-fourth-slice-url-component-setters)
+records the accepted parsing/encoding clashes and browser evidence. The [decision review](browlet/browsing/window/ROADMAP.md#location-descriptor-decision-review)
+records the evidence and rejected alternatives; the [native dispatch slice](browlet/browsing/window/ROADMAP.md#html-724-native-location-dispatch)
+records the delivered engine connection and integration boundary.
+Policy inheritance, child navigation, history disposal, and storage-shed
 cloning remain with [browsing](browlet/browsing/ROADMAP.md) and
 [navigation](browlet/browsing/navigation/ROADMAP.md). Custom-element registry
 identity is present; reactions and upgrade behavior remain with

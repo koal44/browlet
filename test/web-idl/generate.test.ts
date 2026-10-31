@@ -636,6 +636,25 @@ describe('platform declaration generation', () => {
     `)).toEqual([]);
   });
 
+  it('models nullable forwarded attributes with the target setter input type', () => {
+    const assembly = new DefinitionAssembly([
+      defineInterface({ name: 'Location', members: [attr('href', idlType.USVString)] }),
+      defineInterface({
+        name: 'Document', members: [
+          roAttr('location', nullable(reference('Location')), xattr(['PutForwards', 'href'])),
+        ],
+      }),
+    ]);
+    expect(compile(generatePlatformTypes(assembly), `
+      import type { Document, Location } from './platform';
+      declare const document: Document;
+      const location: Location | null = document.location;
+      document.location = '/next';
+      // @ts-expect-error nullable getter does not widen the forwarded setter's input
+      document.location = null;
+    `)).toEqual([]);
+  });
+
   it('models readonly proxy indices without adding an iterator or an interface object', () => {
     const assembly = new DefinitionAssembly([
       defineInterface({ name: 'FrameHost', members: [roAttr('self', reference('FrameProxy'))] }),

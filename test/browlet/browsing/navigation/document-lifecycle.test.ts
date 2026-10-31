@@ -130,7 +130,7 @@ describe('browsing context groups', () => {
   it('rejects reassignment of a Window realm\'s Window implementation', () => {
     const realm = getRelevantRealm(new Browlet({ route: () => '' }).window);
     const window = realm.windowImplementation;
-    const replacement = new WindowImpl(new URL('about:blank'), realm.env);
+    const replacement = new WindowImpl(realm.env);
 
     expect(() => { realm.windowImplementation = replacement; })
       .toThrow('Realm Window implementation is already initialized');

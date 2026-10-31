@@ -19,6 +19,7 @@ export class CrossOriginObjectBinding {
   // Weak keys retain cached function identity while both the object and caller remain observable.
   static #descriptorMaps = new WeakMap<Readonly<PlatformRecord>, CrossOriginPropertyDescriptorMap>();
 
+  /** Binding of the realm performing the internal operation. */
   #context: BindingContext<BrowletEnvironment>;
 
   constructor(context: BindingContext<BrowletEnvironment>) {
@@ -137,6 +138,88 @@ export class CrossOriginObjectBinding {
     return keys.concat(tail);
   }
 
+  /** Resolve this caller's Location prototype from its ordinary [[Prototype]] input. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#location-getprototypeof
+  // SPEC_MISMATCH: Location.[[GetPrototypeOf]] ()
+  getLocationPrototypeOf(location: object, ordinaryPrototype: object | null): object | null {
+    // The engine must supply ordinary storage without re-entering the exotic operation.
+    return this.isPlatformObjectSameOrigin(location) ? ordinaryPrototype : null;
+  }
+
+  /** Compare with the caller-visible prototype without changing Location's ordinary storage. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#location-setprototypeof
+  // SPEC_MISMATCH: Location.[[SetPrototypeOf]] (V)
+  setLocationPrototypeOf(prototype: object | null, location: object, ordinaryPrototype: object | null): boolean {
+    // SPEC_CLASH(location-foreign-prototype): follow HTML's visible-null comparison; Chromium throws for foreign proposals.
+    // https://tc39.es/ecma262/#sec-set-immutable-prototype
+    return prototype === this.getLocationPrototypeOf(location, ordinaryPrototype);
+  }
+
+  /** Select Location's own descriptor without recursively reading its public exotic object. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#location-getownproperty
+  // SPEC_MISMATCH: Location.[[GetOwnProperty]] (P)
+  getLocationOwnProperty(property: string | symbol, location: object, storage: object): PropertyDescriptor | undefined {
+    // SPEC_CLASH(location-default-properties): retain browser nonconfigurable defaults, instead of HTML's configurable view.
+    if (this.isPlatformObjectSameOrigin(location)) return Reflect.getOwnPropertyDescriptor(storage, property);
+    return this.crossOriginGetOwnPropertyHelper(location, property, storage) ?? this.crossOriginPropertyFallback(property);
+  }
+
+  /** Define a same-origin Location property in its sole ordinary store. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#location-defineownproperty
+  // SPEC_MISMATCH: Location.[[DefineOwnProperty]] (P, Desc)
+  defineLocationOwnProperty(
+    property: string | symbol, descriptor: PropertyDescriptor, location: object, storage: object,
+  ): boolean {
+    if (!this.isPlatformObjectSameOrigin(location)) {
+      throw new this.#context.DOMException('Cross-origin property definition is denied', 'SecurityError');
+    }
+    // SPEC_CLASH(location-default-properties): ordinary rules accept compatible no-op redefinitions; HTML rejects all initial keys.
+    return Reflect.defineProperty(storage, property, descriptor);
+  }
+
+  /** Read Location with the supplied receiver and the accessing realm's ordinary Get. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#location-get
+  // SPEC_MISMATCH: Location.[[Get]] (P, Receiver)
+  getLocation(property: string | symbol, receiver: unknown, location: object, storage: object): unknown {
+    if (this.isPlatformObjectSameOrigin(location)) return this.#context.realm.reflectGet(storage, property, receiver);
+    return this.#crossOriginGetWithDescriptor(this.getLocationOwnProperty(property, location, storage), receiver);
+  }
+
+  /** Write Location without changing the receiver or the realm used for nested property operations. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#location-set
+  // SPEC_MISMATCH: Location.[[Set]] (P, V, Receiver)
+  setLocation(property: string | symbol, value: unknown, receiver: unknown, location: object, storage: object): boolean {
+    if (this.isPlatformObjectSameOrigin(location)) return this.#context.realm.reflectSet(storage, property, value, receiver);
+    return this.#crossOriginSetWithDescriptor(this.getLocationOwnProperty(property, location, storage), value, receiver);
+  }
+
+  /** Delete only same-origin ordinary properties; frozen defaults retain their accepted browser behavior. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#location-delete
+  // SPEC_MISMATCH: Location.[[Delete]] (P)
+  deleteLocationProperty(property: string | symbol, location: object, storage: object): boolean {
+    if (!this.isPlatformObjectSameOrigin(location)) {
+      throw new this.#context.DOMException('Cross-origin property deletion is denied', 'SecurityError');
+    }
+    // SPEC_CLASH(location-default-properties): browser defaults remain nonconfigurable and cannot be deleted.
+    return Reflect.deleteProperty(storage, property);
+  }
+
+  /** Enumerate Location's ordinary keys or its specified foreign names and fallback symbols. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#location-ownpropertykeys
+  // SPEC_MISMATCH: Location.[[OwnPropertyKeys]] ()
+  getLocationOwnPropertyKeys(location: object, storage: object): (string | symbol)[] {
+    return this.isPlatformObjectSameOrigin(location) ? Reflect.ownKeys(storage) : this.crossOriginOwnPropertyKeys(location);
+  }
+
+  /** OrdinaryHasProperty using Location's selected own descriptor and visible prototype. */
+  // https://tc39.es/ecma262/#sec-ordinaryhasproperty
+  // SPEC_MISMATCH: OrdinaryHasProperty (O, P)
+  hasLocationProperty(property: string | symbol, location: object, storage: object): boolean {
+    if (this.getLocationOwnProperty(property, location, storage) !== undefined) return true;
+    const prototype = this.getLocationPrototypeOf(location, Reflect.getPrototypeOf(storage));
+    return prototype !== null && this.#context.realm.reflectHas(prototype, property);
+  }
+
   /** Whether a string is one of Window's cross-origin names, including array indices. */
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#cross-origin-accessible-window-property-name
   isCrossOriginAccessibleWindowPropertyName(name: string): boolean {
@@ -211,7 +294,8 @@ export class CrossOriginObjectBinding {
   }
 
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#crossorigingetownpropertyhelper-(-o,-p-)
-  crossOriginGetOwnPropertyHelper(object: object, property: string | symbol): PropertyDescriptor | undefined {
+  // SPEC_MISMATCH: CrossOriginGetOwnPropertyHelper (O, P)
+  crossOriginGetOwnPropertyHelper(object: object, property: string | symbol, storage = object): PropertyDescriptor | undefined {
     const entry = this.crossOriginProperties(object).find((entry) => entry.property === property);
     if (!entry) return undefined;
 
@@ -224,9 +308,8 @@ export class CrossOriginObjectBinding {
     const cached = descriptors.get(property);
     if (cached) return cached;
 
-    // TODO(HTML 7.2.4): Supply OrdinaryGetOwnProperty access when Location gains exotic traps.
-    // O is the ordinary Window/Location target, never its exotic forwarding proxy.
-    const original = Reflect.getOwnPropertyDescriptor(object, property);
+    // Location supplies its private store; Window still supplies its ordinary platform target.
+    const original = Reflect.getOwnPropertyDescriptor(storage, property);
     let descriptor: PropertyDescriptor;
     if (entry.needsGetter === undefined && entry.needsSetter === undefined) {
       if (!original) {
@@ -250,12 +333,14 @@ export class CrossOriginObjectBinding {
 
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#crossoriginget-(-o,-p,-receiver-)
   crossOriginGet(object: object, property: string | symbol, receiver: unknown): unknown {
-    return this.#crossOriginGetWithDescriptor(Reflect.getOwnPropertyDescriptor(object, property), receiver);
+    const descriptor = this.#context.realm.reflectGetOwnPropertyDescriptor(object, property);
+    return this.#crossOriginGetWithDescriptor(descriptor, receiver);
   }
 
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#crossoriginset-(-o,-p,-v,-receiver-)
   crossOriginSet(object: object, property: string | symbol, value: unknown, receiver: unknown): boolean {
-    return this.#crossOriginSetWithDescriptor(Reflect.getOwnPropertyDescriptor(object, property), value, receiver);
+    const descriptor = this.#context.realm.reflectGetOwnPropertyDescriptor(object, property);
+    return this.#crossOriginSetWithDescriptor(descriptor, value, receiver);
   }
 
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#crossoriginownpropertykeys-(-o-)

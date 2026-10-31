@@ -5,7 +5,7 @@ import { isAbsolute } from 'node:path';
 import { InternalError } from '../infra/internal-error';
 
 import type {
-  CollectionIteratorKind, CompiledScript, GlobalIndexedProperties, GlobalObject, GlobalPrototypeKind, GlobalProxy,
+  CollectionIteratorKind, CompiledScript, ExoticObjectHandlers, GlobalIndexedProperties, GlobalObject, GlobalPrototypeKind, GlobalProxy,
   JSFunction, JSIteratorResult,
 } from './realm';
 import type { JSJobCallback, VMContext } from './runtime';
@@ -25,6 +25,10 @@ export class NodeAPI {
     context: VMContext, kind: CollectionIteratorKind, next: () => JSIteratorResult<Value>,
   ) => MapIterator<Value> | SetIterator<Value>;
   createContextHandle?: (options?: AddonContextOptions) => AddonContextHandle;
+  /** Allocate an exotic object whose trap lookup captures the actual accessing realm. */
+  createExoticObject?: (
+    realmAnchor: object, select: (realm: object) => ExoticObjectHandlers,
+  ) => object;
   /** Allocate a nonconstructible native function that captures incumbent identity before calling host steps. */
   createFunctionWithIncumbent?: <Result>(
     context: VMContext,
@@ -87,6 +91,7 @@ export class NodeAPI {
   constructor(backend: object) {
     this.createCollectionIterator = this.#loadMethod(backend, 'createCollectionIterator');
     this.createContextHandle = this.#loadMethod(backend, 'createContextHandle');
+    this.createExoticObject = this.#loadMethod(backend, 'createExoticObject');
     this.createFunctionWithIncumbent = this.#loadMethod(backend, 'createFunctionWithIncumbent');
     this.createHTMLDDA = this.#loadMethod(backend, 'createHTMLDDA');
     this.createMicrotaskQueue = this.#loadMethod(backend, 'createMicrotaskQueue');

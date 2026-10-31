@@ -94,6 +94,12 @@ export function includesCredentials(url: URLRecord): boolean {
   return url.username !== '' || url.password !== '';
 }
 
+/** Whether the URL's host or scheme excludes credentials and a port. */
+// https://url.spec.whatwg.org/#cannot-have-a-username-password-port
+export function cannotHaveUsernamePasswordPort(url: URLRecord): boolean {
+  return url.host === null || url.host.kind === 'empty' || url.scheme === 'file';
+}
+
 export function hasOpaquePath(url: URLRecord): url is URLRecord & { path: string; } {
   return typeof url.path === 'string';
 }

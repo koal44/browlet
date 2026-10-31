@@ -297,8 +297,9 @@ class PlatformTypeGenerator {
       hasExtendedAttribute(member.extendedAttributes, 'LegacyLenientSetter')) return 'unknown';
     const forwards = member.extendedAttributes?.find((attribute) => attribute.kind === 'identifier' && attribute.name === 'PutForwards');
     if (forwards?.kind === 'identifier') {
-      if (member.type.kind !== 'interface') throw new InternalError(`PutForwards needs an interface: ${member.name}`);
-      for (const ancestor of member.type.assembled.getInheritanceChain().toReversed()) {
+      const target = member.type.kind === 'nullable' ? member.type.innerType : member.type;
+      if (target.kind !== 'interface') throw new InternalError(`PutForwards needs an interface: ${member.name}`);
+      for (const ancestor of target.assembled.getInheritanceChain().toReversed()) {
         for (const entry of ancestor.members) {
           if (entry.member.kind === 'attribute' && entry.member.name === forwards.value) {
             return this.#attributeInput(entry.member, seen);

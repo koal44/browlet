@@ -21,6 +21,7 @@ if (native.installHostHooks) {
 }
 exports.getRealm = native.getRealm;
 exports.getFunctionRealm = native.getFunctionRealm;
+exports.createExoticObject = native.createExoticObject;
 exports.createFunctionWithIncumbent = native.createFunctionWithIncumbent;
 exports.observePromise = native.observePromise;
 exports.setPromiseRejectionTracker = native.setPromiseRejectionTracker;

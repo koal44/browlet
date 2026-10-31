@@ -29,7 +29,7 @@ import {
 import { currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../timing/index';
 import { isValidAttributeLocalName, isValidElementLocalName, validateAndExtract } from '../infra/index';
 import { ElementTag } from './element-definitions/index';
-import { DOMStringListImpl } from '../string-list';
+import type { DOMStringListImpl } from '../string-list';
 import {
   EventHandlerMap, ModuleMap, SpeculationRulesParseResult, type EventHandlerCallback, type SpeculationRuleSet,
 } from '../../scripting/index';
@@ -46,7 +46,7 @@ import { IntersectionObserverImpl, type IntersectionObserverEntryImpl } from '..
 import type { NavigationTimingRecord } from '../../performance/index';
 // eslint-disable-next-line browlet/dependency-direction -- DOM's legacy event factory includes HTML-defined event interfaces.
 import { MessageEventImpl } from '../../communication/index';
-import type { WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
+import type { LocationImpl, WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
 import type { BrowletEnvironment } from '../../environment';
 import type { DocumentParser } from '../../html/parser/index';
 import type { SerializedRecord } from '../../scripting/structured-data/index';
@@ -326,6 +326,16 @@ export class DocumentImpl extends NodeImpl {
   // https://html.spec.whatwg.org/#dom-document-defaultview
   get defaultView(): WindowProxyHandle | null {
     return this.browsingContext?.windowProxy ?? null;
+  }
+
+  /** Relevant Window's Location while fully active, otherwise null. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-document-location
+  get location(): LocationImpl | null {
+    // SPEC_CLASH(location-document-access): follow HTML/Chromium/Gecko; WebKit retains Location for inactive Documents.
+    if (!this.isFullyActive()) return null;
+    const window = this.getRelevantGlobalObject();
+    if (window === null) throw new InternalError('A fully active Document needs a Window');
+    return window.location;
   }
 
   /** Effective security domain; assignment can relax a site-keyed tuple origin. */
@@ -1000,7 +1010,7 @@ export class DocumentImpl extends NodeImpl {
     // SPEC_CLASH(ancestor-origins-before-activation): HTML creates ancestry before activation, but its container lookup requires an active document.
     // The creation caller already knows the container document; passing it preserves activation timing.
     this.internalAncestorOriginObjectsList = this.#createAncestorOriginObjects(referrerPolicy, parentDocument);
-    this.ancestorOriginsList = new DOMStringListImpl(this.internalAncestorOriginObjectsList.map(serializeOrigin));
+    this.ancestorOriginsList = this.env.createDOMStringList(this.internalAncestorOriginObjectsList.map(serializeOrigin));
   }
 
   /** Populate the synchronously available element tree of an about:blank document. */
@@ -2130,7 +2140,7 @@ export const htmlDocumentIDL = definePartialInterface({
   // The complete member/dependency inventory is in html/ROADMAP.md#section-311-document-state-and-declarations.
   members: [
     // TODO(HTML §§8.5–8.6): parseHTMLUnsafe and parseHTML need parser/sanitizer option types and algorithms.
-    // TODO(HTML §7.2): location needs relevant-document navigation/security algorithms.
+    roAttr('location', nullable(reference('Location')), xattr(['PutForwards', 'href'], 'LegacyUnforgeable')),
     attr('domain', idlType.USVString),
     roAttr('referrer', idlType.USVString),
     attr('cookie', idlType.USVString),

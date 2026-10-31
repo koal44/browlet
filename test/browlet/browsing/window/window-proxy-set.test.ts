@@ -138,11 +138,11 @@ describe('Caller-bound WindowProxy Set', () => {
     const { binding, handle } = createPair();
     const receiver = otherReceiver ? new Browlet({ route: () => '' }).window : handle.platform;
     // Capture the unfinished navigation boundary; conversion and receiver resolution remain real.
-    const setter = vi.spyOn(LocationImpl.prototype, 'href', 'set').mockImplementation(() => {});
+    const setter = vi.spyOn(LocationImpl.prototype, 'setHref').mockImplementation(() => {});
     const convert = vi.fn(() => '/next/\uD800');
     expect(binding.setWindowProxy('location', { toString: convert }, receiver, handle)).toBe(true);
     expect(convert).toHaveBeenCalledOnce();
-    expect(setter).toHaveBeenCalledExactlyOnceWith('/next/\uFFFD');
+    expect(setter).toHaveBeenCalledExactlyOnceWith('/next/\uFFFD', expect.any(Object), expect.any(Object));
     expect(setter.mock.contexts[0]).toBe(unwrap<LocationImpl>(receiver.location));
   });
 
@@ -200,7 +200,7 @@ describe('WindowProxy Set COOP reporting order', () => {
     const other = new Browlet({ route: () => '' });
     const order: string[] = [];
     const reports = vi.spyOn(OpenerPolicy, 'queueAccessReports').mockImplementation(() => { order.push('report'); });
-    const setter = vi.spyOn(LocationImpl.prototype, 'href', 'set').mockImplementation(() => { order.push('setter'); });
+    const setter = vi.spyOn(LocationImpl.prototype, 'setHref').mockImplementation(() => { order.push('setter'); });
     const value = { toString() { order.push('convert'); return '/next'; } };
     expect(binding.setWindowProxy('location', value, other.window, handle)).toBe(true);
     expect(order).toEqual(['report', 'convert', 'setter']);

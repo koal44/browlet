@@ -493,6 +493,21 @@ function's binding context, receiver record, member identifier, and function kin
 HTML supplies its cross-origin policy through this hook; environment construction
 does not install a separate check.
 
+The `preparePlatformObject(owner)` hook prepares additional creation steps for a
+non-global interface. Its `PlatformObjectBinding` receives the owning binding
+and the allocation after all inherited unforgeable members have been installed,
+but before the platform identity is stamped. It can finish that object or return
+a specification-owned exotic object instead. Only the returned object is paired
+with the implementation; the backing allocation does not acquire a second platform
+identity. Global objects retain their explicit allocation path. Browlet uses this
+hook for Location's own intrinsic conversion properties and native exotic
+dispatch. Its ordinary allocation remains the sole property store. The final
+Location receives the platform identity; private native descriptor/key adapters
+have no additional Binding identity. `BindingContext.getBindingContext(realm)`
+selects an already registered accessing realm within the same world, without
+creating another registry or environment. HTML owns the origin checks and
+passes the public identity and ordinary store separately to its algorithms.
+
 Core's `reflect()`, `reflectSetter()`, `reflectURL()`, `reflectNonNegative()`,
 `reflectPositive()`, and `reflectPositiveWithFallback()` helpers record the
 corresponding HTML annotations. Their optional `name` selects the content
@@ -833,8 +848,9 @@ Interface references and unwrapping still name declared classes; an internal
 subclass does not create another IDL type or author-visible constructor.
 
 Lazy projection asks the owning realm binding to allocate an object, then attaches
-it directly to the existing record. Attachment initializes collection storage,
-exception recognition, and unforgeable properties. New construction and global
+it to the existing record. Attachment installs unforgeable properties, runs any
+additional creation steps, and stamps the returned object. It also initializes
+collection storage and exception recognition. New construction and global
 adoption validate the platform object before creating or reusing that same record.
 
 `ctx.associate(Impl, value)` establishes that record without projection, reusing
