@@ -319,11 +319,14 @@ all Temporal.Now clock readers, explicit queues, and worker teardown.
 
 The build detects V8's context setter, already present in the combined patch.
 Official Node 24/26 headers lack it, and Node 24 leaves Temporal disabled by
-default. Their clock tests remain approved expected failures. HTML's
-`HostSystemUTCEpochNanoseconds` hookup,
-environment precision selection, and millisecond-to-nanosecond conversion remain
-for the host-hook audit. Resolve policy prerequisites before installing an
-infallible clock; recheck that ownership after navigation work is integrated.
+default. Their clock tests remain approved expected failures. JS Engine exposes
+the setter on `JSRealm`; HTML installs its environment-owned clock for Windows
+outside concretely isolated AgentClusters. The HTML regressions cover live
+coarsened readings, borrowed native methods, and retained clocks after navigation.
+Concrete isolation still requires the policy construction and feature query
+listed in the [HTML clock audit](../src/browlet/scripting/ROADMAP.md#8165-temporal-clock-calculation-and-installation-boundary).
+The signed-int64 native range (roughly 1677–2262) remains an accepted limit;
+HTML's wider Instant clamp is unchanged. This connection adds no native code.
 
 ### Context lifetime
 

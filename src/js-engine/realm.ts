@@ -259,6 +259,11 @@ export class JSRealm {
     this.reflectGetOwnPropertyDescriptor = reflect.getOwnPropertyDescriptor;
     this.reflectSet = reflect.set;
     this.reflectHas = reflect.has;
+    // V8's lazy Temporal initializers use the calling context. Initialize both
+    // properties through this realm's Reflect intrinsic before Node can inspect
+    // them. Runtimes without Temporal simply have neither property.
+    this.reflectGetOwnPropertyDescriptor(this.#globalProxy, 'Temporal');
+    this.reflectGetOwnPropertyDescriptor(this.Date.prototype, 'toTemporalInstant');
     this.errorPrototype = this.Error.prototype as object;
     this.functionPrototype = this.Function.prototype as object;
     this.objectPrototype = this.Object.prototype as object;
@@ -637,6 +642,16 @@ export class JSRealm {
     addon.setModifyCodeGenerationFromStringsCallback?.(this.Object, callback);
   }
 
+  /**
+   * Install this realm's internal Temporal clock, or remove it with undefined.
+   * The callback must not throw and must return signed-64-bit bigint nanoseconds.
+   * Backends without the setter retain their engine clock. A captured intrinsic
+   * keeps registration on this context even after global-proxy reuse.
+   */
+  setTemporalHostSystemUTCEpochNanosecondsCallback(callback: (() => bigint) | undefined): void {
+    addon.setTemporalHostSystemUTCEpochNanosecondsCallback?.(this.Object, callback);
+  }
+
   /** Compile without execution, allocating any syntax failure in this realm. */
   // https://tc39.es/ecma262/#sec-parse-script
   // SPEC_MISMATCH: ParseScript(sourceText, realm, hostDefined) -> Script Record or a List of SyntaxError objects
@@ -800,10 +815,8 @@ export class JSRealm {
         Object.hasOwn(this.#globalObject, property)
       ) continue;
 
-      const descriptor = Reflect.getOwnPropertyDescriptor(
-        this.#globalProxy,
-        property,
-      );
+      // Lazy engine properties must be read through the owning realm's intrinsic.
+      const descriptor = this.reflectGetOwnPropertyDescriptor(this.#globalProxy, property);
       if (
         descriptor &&
         !Reflect.defineProperty(this.#globalObject, property, descriptor)

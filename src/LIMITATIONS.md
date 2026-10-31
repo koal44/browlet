@@ -577,14 +577,15 @@ See the [Storage roadmap](storage/ROADMAP.md#persistence-permission).
 
 ## HTML integration gates
 
-- **Temporal does not yet use the environment's precision-limited wall clock.**
-  The addon supports an internal nonthrowing clock per context on custom Node;
-  official Node 24/26 lack the V8 setter. HTML's environment clock calculation is
-  implemented, but automatic registration remains blocked by the throwing
-  Permissions Policy prerequisite for active, concretely isolated Windows. The
-  callback must return signed 64-bit bigint nanoseconds, which cannot represent
-  Temporal's full Instant range; throwing or returning invalid data is a fatal
-  internal error, not an author-catchable exception. See the
+- **Temporal's HTML clock requires custom Node with the addon.** Ordinary Windows
+  install their environment's live, precision-limited wall clock. Stock mode and
+  official Node 24/26 retain the engine clock; Node 24 also disables Temporal by
+  default. Concrete isolation remains unconnected until Permissions Policy's
+  inherited/header/container state and document feature query are implemented.
+  The callback accepts signed 64-bit bigint nanoseconds (roughly 1677–2262),
+  narrower than Temporal's full Instant range. An out-of-range system clock or a
+  throwing internal callback is a fatal contract violation, not an author-catchable
+  exception. The HTML calculation retains its specified full-range clamp. See the
   [HTML audit](browlet/scripting/ROADMAP.md#8165-temporal-clock-calculation-and-installation-boundary) and
   [clock contract](../node-compat/README.md#temporal-clock).
 

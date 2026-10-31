@@ -18,6 +18,36 @@ their owning integrations. [CSP](csp/ROADMAP.md) owns its language and violation
 | `permissions.ts` | Declared, inherited, and container policies plus feature definitions/default allowlists (Permissions Policy; HTML §2.2). `Document.isAllowedToUse()` implements HTML's browsing-context/full-activity gates; feature evaluation for fully active Documents explicitly throws. |
 | Policy containers / navigation / workers | Navigation source/target snapshots, history reconstruction, worker startup, and origin-independent empty CSP state; selection and initialization algorithms exist (HTML §7.1.7) |
 
+## Permissions Policy clock prerequisite
+
+Temporal's concrete-isolation precision depends on
+`Document.isAllowedToUse('cross-origin-isolated')`. Its HTML activity gates exist;
+the remaining query and policy state are not implemented. This is separate from
+the Permissions API used by Storage. The dependency is specified, not a gap:
+
+- [HTML's feature definition](https://html.spec.whatwg.org/multipage/infrastructure.html#cross-origin-isolated-feature)
+  supplies the `self` default allowlist. Permissions Policy needs feature records,
+  [declared/inherited policies](https://w3c.github.io/webappsec-permissions-policy/#policies),
+  and [allowlist matching](https://w3c.github.io/webappsec-permissions-policy/#allowlists).
+- [§§9.1–9.3](https://w3c.github.io/webappsec-permissions-policy/#process-response-policy)
+  process response headers; [§9.4](https://w3c.github.io/webappsec-permissions-policy/#process-policy-attributes)
+  processes iframe attributes. Navigation must retain those inputs on the Document.
+- [§9.5](https://w3c.github.io/webappsec-permissions-policy/#create-for-navigable),
+  [§9.6](https://w3c.github.io/webappsec-permissions-policy/#create-from-response), and
+  [§§9.7–9.8](https://w3c.github.io/webappsec-permissions-policy/#define-inherited-policy-in-container)
+  construct policy and derive inherited values through the container ancestry.
+  `PermissionsPolicy.create()` currently supplies only an empty top-level identity.
+- [§9.9](https://w3c.github.io/webappsec-permissions-policy/#check-permissions-policy)
+  evaluates that state; [§9.10](https://w3c.github.io/webappsec-permissions-policy/#is-feature-enabled)
+  supplies the document query, including report-only state and violation reporting
+  when requested (§§9.11 and 9.13).
+
+Implementing only the final query would leave its inputs absent. Keep this as a
+separate policy/navigation slice. The [HTML clock integration](../../scripting/ROADMAP.md#8165-temporal-clock-calculation-and-installation-boundary)
+therefore installs its nonthrowing callback only for non-concrete isolation.
+Composition precedes Document attachment; any future cached precision decision
+must wait for the associated Document and its policy state.
+
 ## HTML 7.1.3 cross-origin opener policies
 
 Audited the complete [COOP section](https://html.spec.whatwg.org/multipage/browsers.html#cross-origin-opener-policies),

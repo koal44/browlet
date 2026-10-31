@@ -163,6 +163,30 @@ describe('JavaScript Realm', () => {
     );
   });
 
+  // Node 24 leaves Temporal disabled by default (the approved availability gap).
+  itPassesWith('v26+')('initializes lazy Temporal globals in their owning realm before copying bindings', () => {
+    const realm = new ConfigurableRealm();
+    const initialTemporal = Reflect.get(realm.globalObject, 'Temporal') as typeof Temporal;
+    expect(Object.getPrototypeOf(initialTemporal.Now.instant)).toBe(realm.functionPrototype);
+    const globalObject = {};
+    realm.setGlobalObjects(globalObject, {});
+    const temporal = Reflect.get(globalObject, 'Temporal') as typeof Temporal;
+
+    expect(temporal).toBe(initialTemporal);
+    expect(Object.getPrototypeOf(temporal)).toBe(realm.objectPrototype);
+    expect(Object.getPrototypeOf(temporal.Now.instant)).toBe(realm.functionPrototype);
+    expect(Object.getPrototypeOf(temporal.Instant)).toBe(realm.functionPrototype);
+  });
+
+  itPassesWith('v26+')('retains the Date method realm when Node reads its descriptor first', () => {
+    const realm = new JSRealm();
+    const descriptor = Reflect.getOwnPropertyDescriptor(realm.Date.prototype, 'toTemporalInstant')!;
+
+    expect(Object.getPrototypeOf(descriptor.value)).toBe(realm.functionPrototype);
+    const instant = Reflect.apply(descriptor.value as Date['toTemporalInstant'], new realm.Date(0), []);
+    expect(Object.getPrototypeOf(instant)).toBe(realm.evaluate('Temporal.Instant.prototype', 'instant-prototype.js'));
+  });
+
   itPassesWith('functionRealms')('keeps a function realm after its prototype chain changes', () => {
     const first = new JSRealm();
     const second = new JSRealm();

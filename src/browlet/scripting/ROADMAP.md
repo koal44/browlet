@@ -947,18 +947,17 @@ It does not treat reaching §8.1.7 as completion of the earlier dependencies.
 
 | Area | Current implementation | Remaining work and disposition |
 | --- | --- | --- |
-| Temporal clock (§8.1.6.5) | The addon has a per-context clock callback; `BrowletEnvironment.getSystemUTCEpochNanoseconds()` implements the HTML calculation. | The setter is not exposed through JS Engine's typed API or installed by Window composition. Concrete isolation still reaches the throwing Permissions Policy query; the native callback also accepts only signed-int64 nanoseconds. Review the ordinary supported hookup next using the existing addon, with policy and range decisions explicit. |
+| Temporal clock (§8.1.6.5) | Window composition installs `BrowletEnvironment.getSystemUTCEpochNanoseconds()` through JS Engine and the existing addon for non-concrete isolation. Author clock reads, borrowing, and navigation are covered. | Concrete isolation needs Permissions Policy's inherited/header/container state and document feature query; the native callback accepts only signed-int64 nanoseconds. The bounded hookup retains these explicit limits; see §8.1.6.5 below. |
 | String compilation (§8.1.6.2) | Binding-owned TrustedScript extraction is connected through `HostGetCodeForEval`; Node's own checks remain in force. | CSP's `EnsureCSPDoesNotBlockStringCompilation` algorithm and its host-hook connection are missing. The four approved engine-input limitations remain separate from that TypeScript algorithm work. This is an earlier-section dependency on CSP, not a later event-loop algorithm. |
 | Execution attribution | Job registration captures compilation identity and restores the associated HTML script; direct `reportError` selection now has an accepted compatibility limitation. | The bounded rejection probe below reproduces caller-based muting on all addon bases, contrary to the intended Chromium/Firefox behavior; WebKit and the literal built-in-context reading differ too. Keep the two ordinary failures while the fix is deferred; no runtime change. Constructor incumbent capture and borrowed-Function import-error realms retain their already approved expected failures. Do not turn these into an unbounded goal of mirroring every author frame. |
 | WebAssembly modules | The addon supplies module compilation and supplied-graph execution. | `BrowletRealm.parseWebAssemblyModule()` still throws; source/deferred graph phases are also rejected. Keep the JSRealm/HTML/Wasm ESM integration on hold for its separate standards slice. |
 | Other adopted hooks | Promise rejection delivery, job routing, module imports, import metadata, and cleanup-exception reporting have their documented integrations. | Keep the existing private-element choice, unrelated-Node generic/timeout ownership limit, and unaudited whole-registry cleanup scheduling explicit. No new demonstrated cleanup scheduling failure justifies another native handoff. |
 
-Temporal and CSP remain genuine unfinished work. Permissions Policy is a
-different dependency from the implemented Permissions API used by Storage;
-`Document.isAllowedToUse()` still throws for an active Document. The suggested
-next bounded slice is the Temporal connection review, preserving the existing
-nonthrowing native contract and avoiding additional native code unless a concrete
-requirement demonstrates its necessity. Event-loop implementation has not resumed.
+Temporal's ordinary Window connection is complete; its concrete-isolation and
+range limits remain explicit. Permissions Policy is a different dependency from
+the implemented Permissions API used by Storage; `Document.isAllowedToUse()`
+still throws for an active Document. CSP's compilation policy remains the other
+unconnected earlier-section algorithm. Event-loop implementation has not resumed.
 
 ### §§8.1.6.1–8.1.6.3: private elements and string compilation
 
@@ -1081,31 +1080,55 @@ reading to integer nanoseconds, and clamps it to Temporal's full Instant range
 multiplying the whole Number reading would lose low bits at today's epoch.
 The fractional millisecond remainder is rounded to the nearest nanosecond.
 
-The [calculation tests](../../../test/browlet/scripting/temporal-clock.test.ts)
+The [tests](../../../test/browlet/scripting/temporal-clock.test.ts)
 cover live readings, both precision policies, signed rounding, present-day epoch
-precision, and both range endpoints and out-of-range inputs. These are HTML
-algorithm tests, not evidence that author `Temporal.Now` uses the new operation.
+precision, and both range endpoints and out-of-range inputs. Author calls to
+native `Temporal.Now` now exercise automatic registration, live coarsening,
+method-realm ownership when borrowed, and retained clocks after navigation.
+`installRealmHostHooks()` registers the environment method through `JSRealm`
+using the existing addon. No additional native code is needed. The integration
+exposed and corrected lazy global descriptor capture: collecting Temporal's
+descriptor in Node initialized its methods in Node's realm. JS Engine now
+uses its captured realm-owned Reflect intrinsic for default descriptors and
+initializes both Temporal and `Date.prototype.toTemporalInstant` before host
+inspection. The latter also has a regression for page-visible Instant identity.
 
-Automatic native installation remains deliberately unfinished at
-`installRealmHostHooks()`. Two dependencies need review before connecting it:
+Eric accepted the bounded hookup and these remaining limits on 2026-10-31:
 
-- An active Window in a concretely isolated AgentCluster reaches
-  `Document.isAllowedToUse('cross-origin-isolated')`, whose Permissions Policy
-  evaluation still throws. The existing Window-settings tests demonstrate this
-  prerequisite. The native clock contract cannot propagate that exception: it
-  terminates the process. Do not hide the policy dependency with a catch/default
-  clock or register a callback which can reach this unfinished operation.
-- The adopted native callback returns signed 64-bit nanoseconds, a smaller range
-  than Temporal's Instant range. Today's timestamps fit; the algorithm's full
-  range does not. The native contract tests already reject overflow as fatal.
-  Keep the HTML range intact and resolve this engine boundary separately instead
-  of silently clamping the HTML result to int64.
+- **Concrete isolation is not connected.** HTML's
+  [Window settings algorithm](https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object)
+  returns false without a policy query for non-concrete isolation. Concrete
+  isolation calls `Document.isAllowedToUse('cross-origin-isolated')`, whose
+  [HTML gates](https://html.spec.whatwg.org/multipage/iframe-embed-object.html#allowed-to-use)
+  exist but whose Permissions Policy query still throws. Precisely missing are
+  [§9.9 Check permissions policy](https://w3c.github.io/webappsec-permissions-policy/#check-permissions-policy)
+  and [§9.10 Is feature enabled in document for origin?](https://w3c.github.io/webappsec-permissions-policy/#is-feature-enabled),
+  including the declared/inherited policy records they read. Those records must
+  be populated by response/header processing (§§9.1–9.3), iframe attributes (§9.4),
+  and creation/inheritance (§§9.5–9.8), with feature defaults and allowlist matching.
+  See the [policy dependency checklist](../browsing/policy/ROADMAP.md#permissions-policy-clock-prerequisite).
+  This is missing implementation, not a specification gap or the Permissions API.
+  The query alone is small; supplying its inputs is a separate policy/navigation
+  slice. Hook installation also precedes Document attachment, so a future
+  precision snapshot must be taken after policy construction. The current callback
+  reads live environment state and is installed only for non-concrete clusters.
+- **Native timestamps must fit int64** (roughly 1677–2262). HTML specifies rounding
+  and clamping to ±8.64 × 10²¹ ns; this is not a gap. The existing engine callback
+  returns signed 64-bit nanoseconds, just like Chromium's callbacks in
+  [V8Initializer](https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/bindings/core/v8/v8_initializer.cc).
+  Today's timestamps fit, but the full HTML range requires an engine-boundary
+  extension. Preserve the HTML clamp instead of silently narrowing it or
+  fabricating a timestamp. The native contract tests cover both int64 endpoints
+  and fatal overflow/throw behavior. No new patch is proposed for this limit.
 
-Sources: HTML `#hostsystemutcepochnanoseconds`, Temporal's
+Sources: [HTML HostSystemUTCEpochNanoseconds](https://html.spec.whatwg.org/multipage/webappapis.html#hostsystemutcepochnanoseconds),
+[High Resolution Time coarsening](https://w3c.github.io/hr-time/#dfn-coarsen-time), Temporal's
 [Instant range](https://tc39.es/proposal-temporal/#sec-temporal-instant-range), and
 the [native clock contract](../../../node-compat/README.md#temporal-clock).
-Official-base clock-setter gaps retain their approved expected failures in the
-native suite; this slice introduces no new failure classifications.
+Official Node 24/26 lack the setter, and stock mode does not load it. Their HTML
+clock assertions retain the approved backend limitation as expected failures.
+Node 24's disabled-by-default Temporal also retains that approved availability
+limit; namespace ownership passes wherever native Temporal is enabled.
 
 Validation: all 26 calculation, HRT, and Window-settings tests pass on
 custom/compat, including the existing concrete-isolation prerequisite check.

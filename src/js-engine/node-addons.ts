@@ -80,6 +80,10 @@ export class NodeAPI {
     realmReference: object,
     callback: ((source: unknown, isCodeLike: boolean) => string | false | undefined) | undefined,
   ) => void;
+  /** Install an internal nonthrowing clock returning signed-64-bit Unix-epoch nanoseconds. */
+  setTemporalHostSystemUTCEpochNanosecondsCallback?: (
+    realmReference: object, callback: (() => bigint) | undefined,
+  ) => void;
   runInContext?: (
     source: string, context: VMContext, options?: ContextEvaluationOptions,
   ) => unknown;
@@ -115,6 +119,7 @@ export class NodeAPI {
     this.setPromiseRejectionTracker = this.#loadMethod(backend, 'setPromiseRejectionTracker');
     this.setExceptionReporter = this.#loadMethod(backend, 'setExceptionReporter');
     this.setModifyCodeGenerationFromStringsCallback = this.#loadMethod(backend, 'setModifyCodeGenerationFromStringsCallback');
+    this.setTemporalHostSystemUTCEpochNanosecondsCallback = this.#loadMethod(backend, 'setTemporalHostSystemUTCEpochNanosecondsCallback');
     this.runInContext = this.#loadMethod(backend, 'runInContext');
     this.setGlobalObject = this.#loadMethod(backend, 'setGlobalObject');
     this.setHostHooks = this.#loadMethod(backend, 'setHostHooks');

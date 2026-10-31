@@ -194,8 +194,9 @@ Adopt Pip's completed native experiments in bounded slices. Retained classic
 execution, source-text/synthetic modules, script/context dynamic-import callbacks,
 import.meta initialization, the shared string-compilation/extraction bridge,
 the per-context Temporal clock, and the Wasm module bridge are adopted. HTML
-Wasm parsing, string-compilation policy, and the browser clock hookup remain separate
-integration work. Preserve Node's own dispatch and each
+Wasm parsing and string-compilation policy remain separate integration work.
+The browser clock is connected for ordinary Windows within the limits below.
+Preserve Node's own dispatch and each
 experiment's lifetime tests. The Wasm bridge is an addon extension with the
 existing Node-shaped module lifecycle; Node has no equivalent public VM class.
 It remains below the JS Engine/HTML parser boundary. Static graphs require no
@@ -223,12 +224,28 @@ propagation. Violating the callback contract is a fatal internal error, with no
 fabricated reading. Context ownership, removal, collection, signed timestamps,
 and native-method identity are covered by the maintained tests. See the
 [clock contract and browser evidence](../../node-compat/README.md#temporal-clock).
-HTML now implements its environment-owned wall-clock calculation, including
-precision selection, nanosecond rounding, and the full Temporal Instant clamp.
-Automatic registration remains blocked: the concrete-isolation capability getter
-still reaches unfinished Permissions Policy evaluation, which throws for an active
-Document. That cannot run inside a nonthrowing native callback. The full Temporal
-Instant range also exceeds the callback's signed-int64 result. See the
+`JSRealm` exposes the existing setter using a captured intrinsic as its context
+anchor. HTML installs its environment-owned wall-clock calculation for Windows
+outside concretely isolated AgentClusters, including live precision selection,
+nanosecond rounding, and the full Temporal Instant clamp. Default global
+descriptors are read through the realm's captured Reflect intrinsic: collecting
+Temporal's lazy descriptor through Node's Reflect initialized Node-owned methods,
+which read Node's clock despite installation on the Window context.
+The regression verifies namespace and function prototypes on stock and addon
+backends where Temporal is enabled. HTML tests cover borrowing and navigation.
+The [VM-only follow-up](../../node-compat/experimental/temporal-callback/README.md#lazy-initialization-and-realm-ownership)
+also reproduces wrong-realm initialization of `Date.prototype.toTemporalInstant`
+when Node inspects its lazy descriptor, even after Temporal's global was initialized
+correctly. `JSRealm` now initializes both known lazy Temporal properties through
+its captured `reflectGetOwnPropertyDescriptor` during construction, before Node
+can inspect them. No additional VM script, native bridge, or prototype traversal
+is needed. Regressions cover host inspection and page-visible Instant identity;
+Node 24 retains its approved disabled-Temporal availability failures. The raw
+Node reproducers remain ordinary failures, alongside passing realm-owned Reflect
+controls, to distinguish the upstream behavior from Browlet's correction.
+Concrete isolation still reaches unfinished Permissions Policy evaluation,
+which cannot run inside a nonthrowing native callback. The full Temporal
+Instant range exceeds the callback's accepted signed-int64 result. See the
 [HTML clock audit](../browlet/scripting/ROADMAP.md#8165-temporal-clock-calculation-and-installation-boundary).
 Do not bypass the policy query or silently replace the specified clamp with int64.
 
@@ -256,7 +273,7 @@ Implement these with their consuming feature, rather than adding inert hooks:
 | `HostEnsureCanCompileStrings` | Connect CSP checks to the adopted interception callback; preserve the four documented engine-input gaps |
 | `HostEnqueueFinalizationRegistryCleanupJob` | Context exception reporters repair the confirmed cleanup reporting defect on addon bases; stock mode and the official fallback's abort flag retain expected failures. V8 retains queued cleanup and cell ownership; broader HTML integration has no separate demonstrated author-visible scheduling failure. Require behavioral evidence before adding an engine handoff; see the [HTML audit](../browlet/scripting/ROADMAP.md#81662-finalizationregistry-cleanup-scheduling) |
 | Kept-object cleanup control | Native checkpoints already clear kept objects; resolve HTML's [ordering and Agent isolation questions](../browlet/scripting/EVENT-LOOP-ARCHITECTURE.md#node-v8-checkpoint) |
-| `HostSystemUTCEpochNanoseconds` | HTML calculation exists; resolve throwing Permissions Policy evaluation and the native int64 range before automatic clock registration |
+| `HostSystemUTCEpochNanoseconds` | Ordinary Windows install the HTML clock through the existing setter; concrete isolation needs Permissions Policy, and timestamps must fit the native int64 range |
 | Active function and arbitrary execution stack | Custom-element construction and script context; only controlled entries/NewTarget are currently visible |
 | Exact Promise primitives | Patch V8 to expose reaction attachment without a result Promise, then use it in the addon's `observePromise`; expose the existing `MarkAsHandled` API and remove constructor/species fallbacks |
 | Buffer and exotic internal slots | Non-destructive detach-key checks and exact exotic/Error state needed by structured data |

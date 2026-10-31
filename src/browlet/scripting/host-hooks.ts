@@ -52,15 +52,23 @@ export function installRealmHostHooks(
   // Unlike the patched job hooks, rejection tracking uses public V8 APIs on
   // every addon base. Bind the executing environment without adding an argument
   // to HTML's HostPromiseRejectionTracker(promise, operation).
-  env.realm.setPromiseRejectionTracker(env.trackPromiseRejection.bind(env));
+  env.realm.setPromiseRejectionTracker((promise, operation) => env.trackPromiseRejection(promise, operation));
   // V8 reports native cleanup errors in the registry's context, which can differ
   // from the cleanup callback's realm. Capture the owning environment here.
-  env.realm.setExceptionReporter(env.reportException.bind(env));
-  // TODO(HTML §8.1.6.5): Register env.getSystemUTCEpochNanoseconds once the clock
-  // read is nonthrowing. Concrete Window isolation still reaches the unfinished
-  // Permissions Policy query; throwing through the native callback is fatal.
-  // Also resolve the native signed-int64 range versus Temporal's full Instant
-  // range. Keep installation absent rather than substituting a clock/policy.
+  env.realm.setExceptionReporter((exception) => env.reportException(exception));
+  // https://html.spec.whatwg.org/multipage/webappapis.html#hostsystemutcepochnanoseconds
+  // Non-concrete isolation returns false without querying the Document's policy.
+  // TODO(Permissions Policy): Before enabling concrete isolation, implement
+  // #is-feature-enabled and its inherited/header/container policy inputs (§§9.1–9.10):
+  // https://w3c.github.io/webappsec-permissions-policy/#is-feature-enabled
+  // Composition precedes Document attachment, so do not eagerly query its policy
+  // here. A later callback must also never reach the current throwing placeholder.
+  // TODO(Temporal range): The existing native callback accepts int64 nanoseconds
+  // (roughly 1677–2262), not HTML's full Instant range. Preserve the HTML clamp;
+  // see the roadmap for the accepted native clock limit and Chromium evidence.
+  if (env.realm.agent.agentCluster?.crossOriginIsolationMode !== 'concrete') {
+    env.realm.setTemporalHostSystemUTCEpochNanosecondsCallback(() => env.getSystemUTCEpochNanoseconds());
+  }
 }
 
 type JobCallback = JSJobCallback<{

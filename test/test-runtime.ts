@@ -31,6 +31,7 @@ const supported = {
   platformEntries: !!addon.createFunctionWithIncumbent,
   promiseRejections: !!addon.setPromiseRejectionTracker &&
     !!addon.isPromiseHandled && !!addon.getPromiseResult,
+  temporalClock: !!addon.setTemporalHostSystemUTCEpochNanosecondsCallback,
   'v24+': nodeMajor >= 24,
   'v26+': nodeMajor >= 26,
 };
