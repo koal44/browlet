@@ -2,8 +2,32 @@ import { describe, expect, it } from 'vitest';
 
 import { JSRealm, createMicrotaskQueue, type CompiledModule } from '../../src/js-engine/index';
 import { runInHostTask } from '../support/tasks';
+import { itPassesWith } from '../test-runtime';
 
 describe('retained engine modules', () => {
+  itPassesWith('importMeta')('passes lazy import.meta initialization its Node-shaped metadata and module arguments', async () => {
+    await runInHostTask(() => {
+      const { realm, queue } = fixture();
+      const calls: unknown[] = [];
+      const module = realm.compileModule('export function read() { return import.meta; }', 'meta.js', {
+        initializeImportMeta(meta, referrer) {
+          calls.push({ meta, referrer });
+          Object.defineProperty(meta, 'identifier', { value: referrer.identifier });
+        },
+      });
+      realm.linkModule(module, new Map());
+      const result = observe(realm, module);
+      queue.performMicrotaskCheckpoint();
+      expect(result.state).toBe('fulfilled');
+      expect(calls).toEqual([]);
+      const namespace = realm.getModuleNamespace(module) as { read(): { identifier: string; }; };
+      const meta = namespace.read();
+      expect(meta.identifier).toBe('meta.js');
+      expect(namespace.read()).toBe(meta);
+      expect(calls).toEqual([{ meta, referrer: module }]);
+    });
+  });
+
   it('reports requests and links without executing source', async () => {
     await runInHostTask(() => {
       const { realm, queue } = fixture();

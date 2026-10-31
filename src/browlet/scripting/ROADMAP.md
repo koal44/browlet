@@ -5,8 +5,8 @@ settings, script execution, scheduling, global utilities, and timers.
 The Window scheduling kernel, controlled script/callback entries, function
 timers, and reached Fetch/Streams/Reporting consumers are implemented.
 HTML script-state contracts and modeled active-script lookup exist. Classic
-execution and supplied source-text/synthetic module graphs are connected.
-Automatic module loading, Wasm ESM, complete module context restoration,
+execution and static/dynamic source-text/synthetic graph loading are connected.
+Wasm ESM, complete module context restoration,
 remaining checkpoint work, and other global lifecycles remain open.
 
 [Project priority](../../PRIORITY.md) orders cross-subsystem work.
@@ -351,8 +351,9 @@ accept the same union. The CSS check uses
 Web IDL's existing exposure predicate against the CSSStyleSheet declaration and
 target realm, not a mutable global property.
 The destination helper covers JSON, CSS, and text. These helpers live in §8.1.4.3
-but are prerequisites for the fetchers. The parser now produces ModuleRequests;
-HostGetSupportedImportAttributes remains unconnected.
+but are prerequisites for the fetchers. The parser now produces ModuleRequests.
+HostGetSupportedImportAttributes supplies the shared supported-key policy and the
+fetcher asserts it; loader rejection remains with §8.1.6.7.3 below.
 
 All five module creation operations are constructors. JavaScript and CSS/JSON/text
 now retain engine modules; WebAssembly still stops at an explicit ESM parser boundary.
@@ -374,16 +375,17 @@ The shared descendant algorithm retains root parse errors and link exceptions on
 the script. A dependency loading rejection returns null unless the host loading
 state records an error to rethrow, in which case the script carries that error.
 `ModuleGraphLoadingState` retains the destination, optional custom fetch hook,
-fetch client, and error slot for the later HostLoadImportedModule algorithm.
+fetch client, and error slot consumed by HostLoadImportedModule.
 
-`JSModuleRecord.loadRequestedModules()` and `link()` are explicit throwing
-dependencies. They do not walk imports, invent parsed records, or call V8.
-Promise completion uses the record's existing `InternalPromise` observation path.
+`JSModuleRecord.loadRequestedModules()` now traverses static dependencies through
+HostLoadImportedModule, and `link()` supplies the retained graph to the engine.
+Promise completion uses the owning environment's `InternalPromise` observation path.
 Internal implementation errors remain explicit rather than becoming author
 link errors. [Graph tests](../../../test/browlet/scripting/module-graphs.test.ts)
-replace the unfinished record operations and verify completion ordering,
+replace record operations to isolate completion ordering,
 fetch-client propagation, and the distinction between loading and module errors.
-These tests establish orchestration only, not working module graphs.
+These tests establish orchestration only; the static-loader tests below exercise
+actual parsing, fetching, linking, and evaluation.
 
 ### Worker and worklet module graphs
 
@@ -421,7 +423,7 @@ and detailed algorithm agree.
 use real Fetch with a controlled transport. They cover separate request/target
 environments, credentials/default options, retained descendant hooks, simultaneous
 and later consumers, per-global completion tasks, and cached HTTP/body/MIME failures.
-Only script creation and the still-unimplemented module-record operations are
+Only script creation and module-record operations are
 replaced; these are fetch orchestration tests, not worker/worklet startup tests.
 
 **Remaining implementation dependencies:**
@@ -432,10 +434,9 @@ replaced; these are fetch orchestration tests, not worker/worklet startup tests.
   [event-loop pause dependency](#deferred-processing-model-tails) is not supplied by today's
   asynchronous Fetch task delivery. Do not substitute a Promise return or launch
   a fetch that cannot finish before this method returns.
-- Descendant orchestration is translated. `Link()` accepts previously loaded
-  dependency associations, but `LoadRequestedModules(state)` still throws for
-  imports pending HostLoadImportedModule. Dependency-free records complete this
-  path. Successful single-module fetches do not establish automatic graph loading.
+- Descendant loading now connects static/dynamic JavaScript/CSS/JSON/text graphs through
+  HostLoadImportedModule. Source/deferred requests, Wasm parsing,
+  and actual script/worker/worklet startup callers remain unfinished.
 
 Calling is tracked under §8.1.4.4 below.
 
@@ -460,7 +461,7 @@ HTML wraps it with the realm/HostDefined. Module records likewise retain opaque
 engine modules. Their requested-module list comes from the engine, and a Map from
 request records to loaded records supplies the dependency associations for linking.
 This is an internal representation of ECMAScript's loaded-module relationships;
-automatic loading remains the next host-hook dependency.
+automatic static and dynamic loading now supplies those associations.
 Compiled classic code now uses the §8.1.4.4 execution path through
 `JSRealm.runScript()`, without recompiling. The record supplies its modeled
 script context; complete native active-script metadata remains unfinished.
@@ -471,8 +472,10 @@ live bindings, pending/rejected top-level await, and evaluation order. The nativ
 evaluation Promise becomes an `env.InternalPromise`; CSS projection remains a
 binding effect supplied by the environment. The runner's retained realm context
 does not identify the currently executing dependency or its resumed async body.
-Module-specific entry/restore hooks, import.meta, dynamic import, and Wasm ESM
-remain explicit work rather than being approximated by the root module.
+Module-specific entry/restore hooks and Wasm ESM remain explicit
+work rather than being approximated by the root module. `import.meta` instead
+retains its exact module record through Node's lazy initializer; §8.1.6.7.1 below
+supplies `url` and `resolve` without reconstructing the active script.
 
 [Engine tests](../../../test/js-engine/modules.test.ts) and
 [HTML execution tests](../../../test/browlet/scripting/module-execution.test.ts)
@@ -886,9 +889,9 @@ retains a pending `SPEC_MISMATCH` for that signature repair.
 
 - §4.12.1 script preparation must create/register import maps. Existing tests call
   the real parse-result and Window registration path explicitly.
-- §8.1.6 module hooks must call the resolver for static/dynamic dependencies and
-  `import.meta.resolve`. Module parser, dependency loading, linking, and engine
-  evaluation remain separate unfinished boundaries; no addon changes were made.
+- §8.1.6 module hooks now call the resolver for static dependencies;
+  `import.meta.resolve` is connected through `HostGetImportMetaProperties`.
+  Dynamic-import routing remains unfinished.
 - Normalization routes warnings through `env.reportConsoleWarning()`. Console's
   internal Printer/output is still provisional, so those warnings are not visible.
   Optional merge warnings are omitted.
@@ -1298,10 +1301,11 @@ throws, thenable receivers, scriptless jobs, and unrelated Node callbacks.
 
 The existing provenance limits remain: native script metadata is not mapped to
 HTML script records, and ordinary author calls/module resumptions are not fully
-represented on our stack. The exact dynamic-import examples still depend on
-`HostLoadImportedModule`; the event-handler example additionally needs compiled
-content handlers. This audit does not substitute an import test with synthetic
-loader behavior or claim those consumers are connected.
+represented on our stack. The later HostLoadImportedModule slice now supplies
+native import callbacks with exact retained referrers; it does not reconstruct
+all active-script frames. The event-handler example additionally needs compiled
+content handlers. This callback audit used error reporting, not a synthetic
+loader, to test its registering-script restoration.
 
 Validation: the callback and Promise-job suites pass in all six configurations.
 Custom/compat has 18 ordinary passes; each official compat base has six ordinary
@@ -1310,8 +1314,189 @@ passes and 13 approved expected failures. There are no skips or new failure
 classifications. Typechecking, declaration contracts, touched-file ESLint, and
 diff checks pass.
 
-The next bounded section is §8.1.6.7.1, `HostGetImportMetaProperties`, starting
-the module-related host hooks.
+### §8.1.6.7.1: Import metadata
+
+`JSSourceTextModuleRecord.getImportMetaProperties()` implements
+`HostGetImportMetaProperties(moduleRecord)`. It returns the serialized module
+base URL and a realm-owned, non-constructible `resolve` function with length one.
+The function performs ToString, calls the module environment's existing specifier
+resolver, and serializes its result. This uses the module's base and current import
+map, ignores the receiver, preserves author-thrown values, and does not fetch.
+Resolution records still constrain later import-map merges.
+
+`BrowletRealm.parseModule()` installs these properties through Node's
+`initializeImportMeta(meta, module)` option. The closure retains the exact HTML
+record; Node/V8 creates and caches the metadata lazily, including in exported
+functions and after top-level await. ECMAScript's property-creation steps remain
+in the adapter, separate from HTML's list of key/value records. No active-script
+guess, extra execution context, or C++/V8 change is required.
+
+Custom/compat and stock VM modules support this path. Official addon bases lack
+the already documented Node forwarding export. `realm.supportsImportMeta` keeps
+ordinary compilation available there without an initializer; metadata remains
+empty, and the approved expected failures retain the required assertions.
+
+The [HTML regressions](../../../test/browlet/scripting/import-meta.test.ts) cover
+metadata identity/descriptors, lazy initialization, equal-URL records, relative
+and scoped import-map resolution, conversion/errors, cross-Window calls, and a
+dependency's own metadata after top-level await. The
+[engine regression](../../../test/js-engine/modules.test.ts) checks Node's callback
+arguments and lazy invocation. Graphs are supplied explicitly; these tests do not
+claim automatic loading or general active-script restoration.
+
+Validation: the four focused suites have 50 ordinary passes on custom/compat and
+each stock base. Each official compat base has 43 ordinary passes and seven
+approved expected failures, with no skips or new failure classifications. The
+native suite exits successfully on all three bases with its existing expected
+failures; custom skips the official-runtime installer control. Typechecking, declaration contracts,
+touched-file ESLint, and diff checks pass.
+
+### §8.1.6.7.2: Supported import attributes
+
+`getSupportedImportAttributes()` implements `HostGetSupportedImportAttributes()`
+with the list containing only `"type"`. The existing single-imported-module fetcher
+now obtains its assertion policy from this hook. This is name validation, separate
+from `JSModuleRequest.getModuleType()` and the target environment's module-type
+permission check. A supported key with an unsupported value still fails type
+selection; a differently cased or otherwise unknown key fails the key check.
+
+Node's VM API and the addon expose parsed attribute records without installing
+HTML's loading policy. The parser preserves unknown names in imports and
+re-exports, rather than reporting them as parse errors. ECMAScript's
+`AllImportAttributesSupported` calls this host hook from two loading paths:
+
+- `InnerModuleLoading` rejects an unsupported key with a `SyntaxError` before
+  loading that request. HTML's next hook also preflights the full request list
+  when it receives the first static request, before starting dependency fetches.
+- Dynamic `import()` rejects its Promise with a `TypeError` before the host load
+  call. Its option access, value checks, and abrupt-completion ordering must be
+  preserved when connecting the existing native import callback.
+
+The static and dynamic error-completion paths are now connected in the loader slices below.
+The fetcher's `InternalError` is a specification
+assertion for internal callers, not an author-facing substitute for either rejection.
+The attribute hook itself adds no native hook or engine patch.
+
+[Parser tests](../../../test/browlet/scripting/module-execution.test.ts) retain
+unknown attributes from imports, named re-exports, and star re-exports.
+[Fetcher tests](../../../test/browlet/scripting/module-fetching.test.ts) cover
+unsupported names before side effects, accepted names/values, rejected values,
+and requests without attributes. Both suites pass on all six runtime
+configurations: 60 ordinary passes each, without skips or expected failures.
+Typechecking, declaration contracts, touched-file ESLint, and diff checks pass.
+
+### §8.1.6.7.3: Static HostLoadImportedModule
+
+`loadImportedModule()` in [module-loading.ts](module-loading.ts) resolves each static
+request with its referring module's environment and base URL. Its first call for
+a cyclic record preflights every request's attribute keys, specifier, and allowed
+module type before fetching any dependency. Descendant options inherit the
+referrer's settings, select integrity from its import map, and reset fetch priority.
+The existing single-imported-module fetcher retains the separate fetch client,
+destination, custom fetch operation, and target module map supplied by HTML.
+
+[module-loading.ts](module-loading.ts) supplies ECMAScript's GraphLoadingState,
+InnerModuleLoading, and ContinueModuleLoading bookkeeping. This is separate from
+HTML's ModuleGraphLoadingState (fetch options and first error). Pending visits and
+a visited set close cycles and wait for all dependencies. Node's `unlinked` status
+covers both ECMAScript's `new` and `unlinked` states, so each record additionally
+retains `requestedModulesLoaded` after a successful traversal. V8 still owns
+linking, live bindings, evaluation, and top-level await.
+
+`finishLoadingImportedModule()` retains successful request/record
+associations even when their traversal has already failed. Later completions do
+not restart or settle that traversal again. Equivalent requests compare specifiers
+and attribute entries by value, independently of attribute order, while retaining
+the native request phase. A later attempt can reuse downloaded records and retry
+failed fetches through the existing module map.
+
+Failure categories retain the existing HTML contract: fetch/MIME failures return
+null without setting ErrorToRethrow; preflight and parse failures retain the first
+exception on the graph's script; link exceptions are retained after successful
+loading. ECMAScript rejects an unsupported key on the first request before entering
+the HTML hook, so that specific rejection does not populate HTML's error slot.
+The regression checks the SyntaxError directly at LoadRequestedModules rather than
+mistaking the fetcher's assertion for an author exception.
+
+**Callable shapes:** LoadRequestedModules accepts optional HTML load state and
+returns `env.InternalPromise`. HostLoadImportedModule and FinishLoadingImportedModule
+accept Script/Module/Realm referrers and static or dynamic completion payloads.
+Source/deferred imports and the HTML Wasm parser remain explicit throwing
+boundaries. Script elements and worker/worklet startup must still invoke the
+graph entry points; these loader slices do not implement those owners.
+
+[Static-loader tests](../../../test/browlet/scripting/module-loading.test.ts)
+exercise transitive graphs, cycles and diamonds, concurrent graphs sharing pending
+fetches, preflight failures, parse/link errors, late completion and retry, redirected
+bases and scoped maps, inherited options with separate clients, synthetic exports,
+and equivalent requests. An external-root case uses real Fetch with only HTTP
+transport controlled. The existing graph/fetch suites retain their narrower
+orchestration checks. No Node, addon, or V8 changes are required.
+
+Validation: the six focused module loading/execution/fetching/graph/import-map
+suites pass on custom Node, 24.19.0, and 26.8.1, each in stock and compat mode:
+127 ordinary passes per configuration, with no skips or expected failures.
+Typechecking, declaration contracts, touched-file ESLint, and diff checks pass.
+
+### §8.1.6.7.3: Dynamic HostLoadImportedModule
+
+Node-shaped `importModuleDynamically` callbacks now connect native `import()` to
+the same HTML hook. Classic/source-text compilation captures the exact retained
+record; context and direct-evaluation callbacks supply a Realm referrer and use
+the environment's base URL. HostLoadImportedModule selects default fetch options,
+client, destination, and referrer when HTML load state is absent. Dynamically
+loaded descendants also retain absent load state, as ECMAScript requires.
+Worklet/ServiceWorker environment predicates reject dynamic imports before Fetch;
+their actual global implementations and startup remain unfinished.
+
+The VM performs import-expression evaluation, ToString, and attribute-value
+conversion. The boundary then rejects unsupported attribute names with TypeError,
+without disturbing native getter/abrupt-completion ordering. Unsupported module
+types, resolution, Fetch, parse, link, and evaluation failures reject the import.
+They do not become HTML runtime script-error reports.
+
+`DynamicModuleImport` supplies ContinueDynamicImport's descendant loading, linking,
+and evaluation wait through `env.InternalPromise`. Node owns the import Promise
+and final namespace resolution, so the adapter returns a native Promise for the
+evaluated engine Module. Pending SPEC_MISMATCH markers identify that representation
+and Node's callback inputs. Returning a Module avoids an additional adoption of
+a namespace's exported `then` function. Successful associations are retained on
+Script/Module/Realm records, independently of the HTML module map.
+
+The [dynamic regressions](../../../test/browlet/scripting/dynamic-import.test.ts)
+cover actual Fetch graphs, classic/module/evaluation entry points, cross-Window
+calls after await, generated Function provenance, concurrent imports, cached
+evaluation, top-level await fulfillment/rejection, JSON exports, namespace `then`,
+failure categories, attribute evaluation order, and global restrictions.
+The Node-owned Function control matters: calling a Window's constructor from
+Node does not erase Node's active-script metadata. That import must keep Node's
+loader; it is not a missing-metadata context-fallback case.
+
+One new regression is an approved expected failure: a script in A borrowing B's
+Function constructor produces an unsupported-attribute TypeError in A instead of
+B. Compilation metadata correctly retains A as the referrer, but Node's callback
+does not separately expose B as the executing realm. This is a missing runtime
+input, not a specification gap. The hook also marks the initial current-settings
+selection needed by future worker/worklet globals. Do not infer that input from
+the script's filename or rewrite the expected error prototype. Resolve the
+boundary separately before expanding the addon API.
+
+Custom/compat and stock VM contexts support these callbacks. Official addon
+bases lack the previously recorded forwarding export; their integration cases
+retain the approved expected failures. No C++ or Node/V8 changes are needed.
+Module-specific active-script restoration, source/deferred phases, and HTML Wasm
+parsing remain separate dependencies. Continue the audit at §8.1.7 event loops.
+
+Validation: dynamic-import regressions have 22 ordinary passes and one approved
+expected failure on custom/compat and all three stock configurations. Each
+official compat base has two ordinary passes and 21 approved expected failures,
+including its unavailable forwarding export. The existing module suites pass in
+all six configurations, and native suites pass on all three addon bases.
+The full custom/compat unit run passes with four workers: 16,362 ordinary passes,
+18 expected failures, 16 existing skips, and one existing TODO. An initial run
+alongside the matrix timed out the finalization subprocess; it passed alone and
+in the bounded full rerun. No timeout or regression classification was changed.
+Typechecking, declaration contracts, touched-file ESLint, and diff checks pass.
 
 ## Present
 
@@ -1321,11 +1506,12 @@ the module-related host hooks.
 | `realm.ts` | Relevant/incumbent ownership and controlled script/callback entry; environment bases and full browser settings live in [`../environment.ts`](../environment.ts) |
 | `execution-context.ts`, `script.ts` | Explicit contexts, HTML script state/creation, compiled classic/source-text/synthetic records, ModuleRequests, supplied dependency linking, and the Wasm ESM boundary |
 | `script-fetch-options.ts`, `script-fetching.ts`, `module-map.ts` | Fetch options, classic/worker/single-module fetching, document/worker/worklet module-graph orchestration, and cached results/pending callbacks; the environment forwards fetch calls and owns integrity lookup/type permission |
+| `module-loading.ts` | HostLoadImportedModule and supported import attributes, graph pending/visited state, and static/dynamic completion; separate from HTML fetch state |
 | [`../worklets/module-responses-map.ts`](../worklets/module-responses-map.ts) | Downloaded responses and pending notifications shared across a Worklet's globals; separate from their per-environment module maps |
 | `global-object.ts`, `import-map.ts` | Shared HTML global state, import-map parsing/normalization/merging, module specifier resolution, and parse-result creation; Window owns registration |
 | [`../environment.ts`](../environment.ts), [`../dom/events/error-event.ts`](../dom/events/error-event.ts) | Global exception reporting and ErrorEvent; the realm callback and global-scope operation delegate to the environment |
 | `event-loop.ts`, `tasks.ts` | Task records, source/queue associations, fully-active gating, deterministic turns, checkpoints, incumbent stack, timing hooks, and coalesced wake-ups |
-| `host-hooks.ts` | Native TrustedScript extraction and rejection installation; custom-engine make/call hooks plus Promise, generic, and timeout job delivery |
+| `host-hooks.ts` | Native callback installation for TrustedScript extraction, rejection and exception reporting; custom-engine make/call hooks plus Promise, generic, and timeout job delivery |
 | [`../global-scope.ts`](../global-scope.ts), `timers.ts` | Higher-level global API composition; lower-level active-time waits and Window function timers |
 | `rendering-opportunity.ts` | Independent opportunity producer, Document render-blocking filter, and ordered rendering pipeline seams |
 | `speculation-rules.ts` | Parse-result creation and an empty-only rule-set record with an explicit parser boundary; Document owns registered sets and Window owns registration/removal/replacement |
@@ -1400,10 +1586,9 @@ Use bounded consumer slices within HTML's script algorithms:
    checkpoints on addon bases. Preserve stock-only expected failures and finish
    script attribution and worker/worklet integration with their consumers.
 4. **Modules/import maps (§8.1.4.8 and §§8.1.5–8.1.6).** Build on the module map
-   and single-module fetchers with automatic graph loading, module-specific context restoration,
-   and dynamic-import hooks. Import-map parsing, merging, resolution, parse
-   results, and Window registration are translated; connect script-element
-   callers and module hooks to them.
+   and static/dynamic graph loader with module-specific context restoration and
+   the remaining source/Wasm paths. Import-map parsing, merging, resolution, parse
+   results, and Window registration are translated; connect script-element callers.
 5. **Speculation rules (§8.1.4.9).** Creation/error capture and Window registration,
    removal, and replacement are translated. Complete the §7.6 rule model/parser
    and Document's speculative-load processing, then connect §4.12.1 script

@@ -45,6 +45,28 @@ describe('HTML module records and engine execution', () => {
     expect(env.responsibleEventLoop.executionContextStack).toEqual([]);
   });
 
+  it.each([
+    'import value from "./data.json"',
+    'export { default as value } from "./data.json"',
+    'export * from "./data.json"',
+  ])('retains unknown attribute names for loading, not parsing: %s', (declaration) => {
+    const { env, baseURL, options } = fixture();
+    const script = new JavaScriptModuleScript(
+      `${declaration} with { type: "json", integrity: "kept" };`, env, baseURL, options,
+    );
+    expect(script.parseError).toBeNull();
+    expect(script.errorToRethrow).toBeNull();
+    expect(script.record!.requestedModules).toHaveLength(1);
+    const request = script.record!.requestedModules[0]!;
+    expect(request.specifier).toBe('./data.json');
+    expect(request.attributes).toHaveLength(2);
+    expect(request.attributes).toEqual(expect.arrayContaining([
+      { key: 'type', value: 'json' }, { key: 'integrity', value: 'kept' },
+    ]));
+    // Type selection does not stand in for the separate supported-name check.
+    expect(request.getModuleType()).toBe('json');
+  });
+
   it('imports JSON, text, and a projected stylesheet from supplied records', async () => {
     await runInHostTask(() => {
       const { browser, env, baseURL, options } = fixture();
@@ -80,13 +102,20 @@ describe('HTML module records and engine execution', () => {
     });
   });
 
-  it('leaves dependency fetching explicit instead of inventing a resolution policy', () => {
-    const { env, baseURL, options } = fixture();
-    const script = new JavaScriptModuleScript('import "missing";', env, baseURL, options);
-    expect(() => script.record!.loadRequestedModules({
-      errorToRethrow: null, destination: 'script', performFetch: null, fetchClient: env,
-    })).toThrow('Module dependency loading is not implemented');
-    expect(() => script.record!.link()).toThrow('Module dependency loading is not implemented');
+  it('rejects unresolved static imports before fetching and cannot link an incomplete graph', async () => {
+    await runInHostTask(() => {
+      const { env, baseURL, options } = fixture();
+      const script = new JavaScriptModuleScript('import "missing";', env, baseURL, options);
+      const rejected = vi.fn();
+      const fetch = vi.spyOn(env, 'fetchSingleImportedModuleScript');
+      script.record!.loadRequestedModules({
+        errorToRethrow: null, destination: 'script', performFetch: null, fetchClient: env,
+      }).observe(() => { throw new Error('An unresolved import must reject'); }, rejected);
+      env.responsibleEventLoop.performMicrotaskCheckpoint();
+      expect(rejected).toHaveBeenCalledExactlyOnceWith(expect.any(env.realm.TypeError));
+      expect(fetch).not.toHaveBeenCalled();
+      expect(() => script.record!.link()).toThrow('Module dependency loading is not implemented');
+    });
   });
 
   it.each(['fulfill', 'reject'] as const)('delivers top-level await %s through the owning environment', async (outcome) => {

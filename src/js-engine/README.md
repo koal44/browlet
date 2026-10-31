@@ -122,6 +122,14 @@ classes with `--experimental-vm-modules`. HTML owns URL resolution, loading, its
 records, and conversion of the evaluation Promise to `env.InternalPromise`.
 CSS exports are projected by Binding before entering the synthetic module.
 
+`compileModule()` also accepts Node's optional `initializeImportMeta(meta, module)`
+callback. Node/V8 invokes it lazily with the engine-created object and that module;
+it does not run during compilation or linking. `realm.supportsImportMeta` reports
+whether this context supports the callback. HTML closes over its source-text
+record to supply `url` and `resolve`, independently of active-script tracking.
+Stock VM contexts support it; official addon bases require a missing forwarding
+export and retain their approved expected failures.
+
 One private `JSRuntime` per module instance owns isolate-level associations and
 the ambient queue. Consumers use named functions; realm-owned operations stay
 on `JSRealm`. Hosts subclass JSRealm to add policy. Node workers load independent

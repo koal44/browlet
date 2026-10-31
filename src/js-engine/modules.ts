@@ -45,7 +45,19 @@ export interface ModuleOptions {
 export interface SourceTextModuleOptions extends ModuleOptions {
   /** Offset added to reported source line numbers. */
   lineOffset?: number;
+  /** Populate the engine-created metadata object lazily, using Node's callback shape. */
+  initializeImportMeta?: (meta: object, module: SourceTextModule) => void;
+  /** Load, link, and evaluate a dependency using Node's dynamic-import callback contract. */
+  importModuleDynamically?: ImportModuleDynamically<SourceTextModule>;
 }
+
+/** Node's import callback; returning a Module leaves namespace conversion to the backend. */
+export type ImportModuleDynamically<Referrer extends object> = (
+  specifier: string, referrer: Referrer, attributes: Record<string, string>, phase: ModuleRequest['phase'],
+) => CompiledModule | Promise<CompiledModule>;
+
+/** Node module options other than the context and source identifier already supplied by the realm. */
+export type ModuleCompilationOptions = Omit<SourceTextModuleOptions, keyof ModuleOptions>;
 
 /** A dependency reported by the engine, before host resolution and loading. */
 export interface ModuleRequest {
@@ -57,13 +69,19 @@ export interface ModuleRequest {
   phase: 'source' | 'evaluation' | 'defer';
 }
 
-export function compileModule(source: string, context: VMContext, filename: string): SourceTextModule {
+export function compileModule(
+  source: string, context: VMContext, filename: string, options: ModuleCompilationOptions = {},
+): SourceTextModule {
   if (isAddonContextHandle(context)) {
     if (!addon.SourceTextModule) throw new InternalError('Node backend does not provide SourceTextModule');
-    return new addon.SourceTextModule(source, { context, identifier: filename });
+    return new addon.SourceTextModule(source, { ...options, context, identifier: filename });
   }
   requireVMModules();
-  return new vm.SourceTextModule(source, { context, identifier: filename }) as unknown as SourceTextModule;
+  // @types/node predates phases and synchronous linking. Both supported Node
+  // bases implement this Node-shaped subset; no callback argument rewriting is needed.
+  const SourceTextModuleConstructor = vm.SourceTextModule as unknown as
+    new (source: string, options: SourceTextModuleOptions) => SourceTextModule;
+  return new SourceTextModuleConstructor(source, { ...options, context, identifier: filename });
 }
 
 export function createDefaultExportModule(value: unknown, context: VMContext): CompiledModule {

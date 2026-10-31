@@ -99,7 +99,7 @@ per-module native roots, and evaluation releases synthetic callbacks.
 Static modules require no Node/V8 patch. Stock JS Engine uses Node's VM module
 API and requires `--experimental-vm-modules` plus its synchronous linking API
 (present on all supported runtime bases). Unit tests enable that flag; addon
-modules themselves do not need it. HTML dependency fetching, import.meta,
+modules themselves do not need it. Automatic HTML dependency loading,
 `HostLoadImportedModule`, and connecting HTML's Wasm parser remain separate work. The
 [promoted module tests](test/modules.test.cjs) preserve Pip's lifetime and engine
 behavior cases through the private bridge. The synthetic evaluation callback
@@ -195,15 +195,20 @@ The addon forwards unrelated Node/VM requests to Node and restores its handler a
 environment cleanup. Another addon's competing replacement of the isolate-wide
 callback is unsupported. Official Node 24/26 do not export the forwarding handler,
 so supplying the option there fails explicitly; the integration tests remain
-approved expected failures. The build checks headers for the export, independently
+approved expected failures. `supportsDynamicImport` reports this forwarding
+capability to JS Engine; HTML omits unavailable callbacks while preserving ordinary
+compilation on those bases. The build checks headers for the export, independently
 of the job-hook patches. Ordinary Node VM import callbacks still work there.
 
 The regression for identical `Function` bodies finds the first script's loader
 reused on Node 26 and custom Node, including through Node's own VM API. Node 24
 passes its control. Disabling V8's compilation cache makes both custom paths pass;
 production retains caching and the regression is an approved expected failure.
-Direct and indirect eval routing pass. Source and deferred phases and HTML
-loading integration remain unfinished.
+Direct and indirect eval routing pass. HTML now connects evaluation-phase imports
+to its resolver, Fetch, module map, and graph loader, including top-level await.
+Its callback returns an evaluated Module through a native Promise; graph operations
+use `env.InternalPromise`. HTML source/deferred imports and its Wasm parser remain
+unfinished, separately from the addon's existing Wasm source-import support.
 
 ### import.meta initialization
 
@@ -213,7 +218,7 @@ successful initialization. The callback receives the public module object;
 its return value is ignored. Thrown values retain identity, and a later access
 retries initialization with a fresh object. No checkpoint is performed.
 Without an initializer, addon modules receive an empty object. The addon does
-not supply HTML's `url` or `resolve`; those belong to the later host-hook audit.
+not supply HTML's `url` or `resolve`; HTML now supplies those through this callback.
 
 After graph instantiation, each module's namespace privately retains its
 initializer and public referrer. Exported functions can therefore initialize
@@ -229,6 +234,10 @@ export is already in the [combined patch](../vendor/_patches/node-v8.patch);
 the build detects it independently of dynamic imports. Official Node 24/26 lack
 it and reject the option explicitly. Their initializer cases are approved
 expected failures; ordinary modules and Node's own metadata checks pass.
+The exported `supportsImportMeta` boolean reports whether the native forwarding
+operation exists. JS Engine uses it for addon contexts; HTML omits the initializer
+on unsupported bases so ordinary compilation still works with empty metadata.
+Stock VM contexts use Node's own initializer and do not need this addon export.
 
 The [regressions](test/import-meta.test.cjs) cover lazy identity, cyclic graphs,
 realm ownership, retry and rejection, nested Node entry, dynamic-import

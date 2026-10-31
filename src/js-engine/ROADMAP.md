@@ -96,8 +96,8 @@ does not yet include Node's async linker or execution timeouts.
 The addon accepts Node-shaped `importModuleDynamically` options on Script,
 SourceTextModule, runInContext, and createContextHandle when Node exports its default import handler.
 The forwarding export in the [combined patch](../../vendor/_patches/node-v8.patch)
-preserves Node's own imports. This is an addon facility: JS Engine/HTML do not yet register
-loaders through it. The callback's Module or namespace result is normalized on
+preserves Node's own imports. JS Engine forwards these options, and HTML registers
+its loader when `realm.supportsDynamicImport` is true. The callback's Module or namespace result is normalized on
 the importing queue, without an automatic checkpoint. Tests preserve async/TLA
 completion, callback exceptions, synthetic exports, referrer lifetime, collection,
 and worker/Node/job-hook coexistence.
@@ -115,15 +115,30 @@ initializer and public module referrer while exported code is reachable; unused
 cycles collect. The Node forwarding export already in the combined patch keeps
 Node ESM and VM metadata working. Official addon bases reject the option and
 retain approved expected failures. See the [callback contract and tests](../../node-compat/README.md#importmeta-initialization).
-JS Engine/HTML do not yet register initializers; HTML's `url` and `resolve`
-behavior remains for the host-hook audit.
+JSRealm compilation forwards the optional initializer, and
+`realm.supportsImportMeta` exposes its availability for that context. HTML now
+registers its exact source-text record's `HostGetImportMetaProperties` operation,
+supplying `url` and `resolve` lazily. Stock VM modules and custom/compat pass the
+integration tests; official compat bases preserve ordinary compilation without
+the unavailable initializer and retain the approved expected failures.
 
-Connect these operations with automatic HTML dependency loading, module maps,
-Fetch, import attributes, `import.meta`, and classic/worker/module consumers.
-Wire `HostLoadImportedModule`, `HostGetImportMetaProperties`, and
-`HostGetSupportedImportAttributes` through that pipeline.
-`LoadRequestedModules()` still throws for records with imports; Wasm ESM parsing
-also remains explicit in HTML/JS Engine. The addon now supplies WebAssemblyModule
+HTML's static `HostLoadImportedModule` now connects module maps, specifier
+resolution, Fetch, import attributes, and supplied-graph linking. The modeled
+graph loader retains pending/visited state and successful dependency records;
+its `InternalPromise` completion enters the existing HTML graph algorithms. HTML's
+`HostGetSupportedImportAttributes` now declares `"type"` support; the VM API and
+addon preserve parsed attributes for the host's loading checks. Static loading
+rejects unsupported keys; the dynamic callback rejects unsupported keys after
+native argument evaluation and attribute-value conversion have completed.
+Import metadata needs no active-script reconstruction: its initializer
+retains the module record even when called after top-level await.
+Dynamic-import routing now retains the exact Script/Module referrer or uses a
+realm fallback, then loads, links, and waits for evaluation through internal
+promises. A native Promise for the engine Module crosses the Node callback boundary;
+Node owns the final namespace conversion. Host-created Function/eval code with
+Node metadata continues to use Node's loader, even with a Window-owned constructor.
+Source/deferred imports and Wasm ESM parsing remain explicit dependencies in
+HTML/JS Engine. The addon now supplies WebAssemblyModule
 compilation, supplied-graph linking, execution, and source-phase access; connect
 that bridge to the existing record/parser when resuming the HTML audit.
 Module-specific active-script entry and restoration after
@@ -176,7 +191,7 @@ Adopt Pip's completed native experiments in bounded slices. Retained classic
 execution, source-text/synthetic modules, script/context dynamic-import callbacks,
 import.meta initialization, the shared string-compilation/extraction bridge,
 the per-context Temporal clock, and the Wasm module bridge are adopted. HTML
-dynamic loading, import.meta properties, string-compilation policy, and the browser clock hookup remain separate
+Wasm parsing, string-compilation policy, and the browser clock hookup remain separate
 integration work. Preserve Node's own dispatch and each
 experiment's lifetime tests. The Wasm bridge is an addon extension with the
 existing Node-shaped module lifecycle; Node has no equivalent public VM class.

@@ -17,6 +17,7 @@ import {
 } from './script';
 import { ScriptFetchOptions } from './script-fetch-options';
 import type { ModuleFetchCallback } from './module-map';
+import { getSupportedImportAttributes } from './module-loading';
 
 /** Fetch and decode a classic script, then hand its source to script creation. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-classic-script
@@ -302,7 +303,8 @@ export function fetchSingleImportedModuleScript(
   env: BrowletEnvironment, referrer: URLRecord | 'client' | 'no-referrer', moduleRequest: JSModuleRequest,
   onComplete: ModuleFetchCallback, performFetch?: PerformScriptFetch,
 ): void {
-  if (moduleRequest.attributes.some((attribute) => attribute.key !== 'type')) {
+  const supportedAttributes = getSupportedImportAttributes();
+  if (moduleRequest.attributes.some((attribute) => !supportedAttributes.includes(attribute.key))) {
     throw new InternalError('Unsupported import attributes must be rejected before fetching an imported module');
   }
   const moduleType = moduleRequest.getModuleType();

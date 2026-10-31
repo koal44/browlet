@@ -227,8 +227,25 @@ reads namespaces; V8 owns bindings, cycles, and top-level await. HTML converts
 the native completion Promise through `env.InternalPromise`. CSS module creation
 uses the environment's binding-supplied `projectCSSStyleSheet()` before retaining
 the author-visible export. This does not change Stylelet's host-neutral state.
-Automatic dependency loading and module-specific context/async restoration are
-still explicit dependencies; supplying a graph does not implement those hooks.
+Import metadata uses Node's lazy `initializeImportMeta` callback, installed during
+HTML source-text compilation. The initializer retains the exact HTML module
+record and installs its `HostGetImportMetaProperties` results; its realm-owned
+resolver uses that module's environment and base URL, without active-script lookup.
+`module-loading.ts` owns HTML's `HostLoadImportedModule` and supported-attribute
+policy. Static traversal calls it directly; the realm's installed dynamic-import
+callbacks reach the same operation. `host-hooks.ts` owns engine callback installation
+and its callback implementations. Loading uses the existing specifier resolver,
+module map, and script fetchers. A modeled graph traversal
+owns pending visits and cycles separately from HTML's fetch state; successful
+loading supplies the dependency associations to the engine's linker. Completion
+uses `env.InternalPromise`. Dynamic import uses the same hook with absent HTML
+fetch state. Node-shaped compilation callbacks retain the exact classic/module
+record; context and direct-evaluation callbacks supply the realm referrer.
+ContinueDynamicImport loads descendants, links, and waits for evaluation through
+internal promises. Only the Node callback boundary returns a native Promise for
+the evaluated engine Module; Node converts it to a namespace and resolves the
+author's import Promise. This avoids adopting a namespace's exported `then` twice.
+Module-specific context/async restoration remains a separate dependency.
 
 `BrowletEnvironment.reportException()` combines that global's reporting flag with
 DOM ErrorEvent dispatch. The realm's existing reporting callback and Window's

@@ -1,9 +1,5 @@
 import { InternalError } from '../../infra/index';
-import { setHostHooks } from '../../js-engine/index';
-import type {
-  JSJobCallback, JSJobRegistration, JSFunction,
-  JSRealm,
-} from '../../js-engine/index';
+import { setHostHooks, type JSJobCallback, type JSJobRegistration, type JSFunction, type JSRealm } from '../../js-engine/index';
 
 import type { BrowletEnvironment } from '../environment';
 
@@ -27,9 +23,9 @@ export function installHostHooks(): void {
   // only surround individual callbacks after their cells have been removed. Broader HTML task
   // integration is unaudited, but no separate author-visible scheduling failure
   // has been demonstrated. See the roadmap before adding an engine handoff.
-  // TODO(HTML §8.1.6.7.3): HostLoadImportedModule and import.meta.resolve must call
-  // env.resolveModuleSpecifier() with the referring script.
-  // §8.1.5's resolver exists; engine module hooks are not installed here yet.
+  // HostGetImportMetaProperties is installed per source-text module by parseModule().
+  // HostLoadImportedModule lives in module-loading.ts. The graph loader calls it
+  // directly; BrowletRealm's Node-shaped callbacks route dynamic imports to it.
   setHostHooks({
     makeJobCallback,
     callJobCallback,

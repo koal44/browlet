@@ -301,6 +301,11 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     return false;
   }
 
+  /** Worklet environments must override this when their global/settings are implemented. */
+  get isWorklet(): boolean {
+    return false;
+  }
+
   /** Only a Window with a top-level navigable can fetch its own Blob URL across partitions. */
   get isTopLevelWindow(): boolean {
     return false;

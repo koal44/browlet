@@ -38,5 +38,7 @@ exports.isLengthTrackingArrayBufferView = native.isLengthTrackingArrayBufferView
 exports.cloneSharedArrayBuffer = native.cloneSharedArrayBuffer;
 exports.createCollectionIterator = native.createCollectionIterator;
 exports.createHTMLDDA = native.createHTMLDDA;
+exports.supportsImportMeta = typeof native.setImportMetaInitializer === 'function';
+exports.supportsDynamicImport = typeof native.installDynamicImportRouter === 'function';
 Object.assign(exports, require('./vm.cjs')(native));
 Object.assign(exports, require('./property-delegate.cjs')(native));

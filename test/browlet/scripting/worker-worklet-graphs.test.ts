@@ -246,7 +246,8 @@ async function createModule() {
   const loading = env.InternalPromise.withResolvers(internalType<void>());
   const started = Promise.withResolvers<ModuleGraphLoadingState>();
   const load = vi.spyOn(record, 'loadRequestedModules').mockImplementation((state) => {
-    started.resolve(state);
+    expect(state).toBeDefined();
+    started.resolve(state!);
     return loading.promise;
   });
   const link = vi.spyOn(record, 'link').mockImplementation(() => {});

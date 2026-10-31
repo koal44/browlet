@@ -9,10 +9,10 @@ import {
   type ByteSequence, type JSBufferView, type JSBufferViewName,
 } from './buffers';
 import { isObject } from './abstract-operations';
-import { addon } from './node-addons';
+import { addon, isAddonContextHandle } from './node-addons';
 import {
   compileModule, createDefaultExportModule, moduleRequests, linkModule, evaluateModule, moduleNamespace,
-  type CompiledModule, type ModuleRequest,
+  type CompiledModule, type ImportModuleDynamically, type ModuleCompilationOptions, type ModuleRequest,
 } from './modules';
 import {
   associateContext, associateGlobalRealm, associateObjectRealm, cloneSharedArrayBuffer, compileScript,
@@ -160,6 +160,8 @@ export class JSRealm {
   /** Nonconstructible native entries, using the ordinary callable factory when unavailable. */
   #incumbentFunctionFactory: RealmFunctionFactory;
   #constructibleFunctionFactory: RealmFunctionFactory;
+  /** Uses this context as the referrer for source-string evaluation. */
+  #importModuleDynamically: ImportModuleDynamically<CompiledScript> | undefined;
   #fallbackIteratorNext: Partial<Record<CollectionIteratorKind, JSFunction>> = {};
 
   /**
@@ -173,6 +175,7 @@ export class JSRealm {
     options: JSRealmOptions = {},
   ) {
     this.#microtaskQueue = microtaskQueue;
+    const { importModuleDynamically } = options;
     const reuseGlobalProxyFrom = options.reuseGlobalProxyFrom === undefined
       ? undefined
       : options.reuseGlobalProxyFrom.#vmContext;
@@ -180,7 +183,12 @@ export class JSRealm {
       microtaskQueue,
       reuseGlobalProxyFrom,
       options.globalPrototypeChain,
+      importModuleDynamically,
     );
+    this.#importModuleDynamically = importModuleDynamically
+      ? (specifier, _script, attributes, phase) =>
+        importModuleDynamically(specifier, this.#vmContext, attributes, phase)
+      : undefined;
     this.#globalAllocation = getContextGlobalAllocation(this.#vmContext);
     if (options.globalPrototypeChain && !this.#globalAllocation) {
       throw new InternalError('The Node backend did not allocate the requested global prototypes');
@@ -320,6 +328,16 @@ export class JSRealm {
       throw new InternalError('Realm has no preallocated global object and prototypes');
     }
     return this.#globalAllocation;
+  }
+
+  /** Whether modules in this context can initialize import.meta. */
+  get supportsImportMeta(): boolean {
+    return !isAddonContextHandle(this.#vmContext) || addon.supportsImportMeta;
+  }
+
+  /** Whether this context's backend accepts dynamic-import callbacks. */
+  get supportsDynamicImport(): boolean {
+    return !isAddonContextHandle(this.#vmContext) || addon.supportsDynamicImport;
   }
 
   /** Detach the native proxy for reuse; the host must finish pending work first. */
@@ -596,9 +614,11 @@ export class JSRealm {
   // https://tc39.es/ecma262/#sec-parse-script
   // SPEC_MISMATCH: ParseScript(sourceText, realm, hostDefined) -> Script Record or a List of SyntaxError objects
   // HTML supplies its Script Record and HostDefined around this unbound compiled code.
-  parseScript(source: string, filename: string): CompiledScript | SyntaxError[] {
+  parseScript(
+    source: string, filename: string, importModuleDynamically?: ImportModuleDynamically<CompiledScript>,
+  ): CompiledScript | SyntaxError[] {
     try {
-      return compileScript(source, this.#vmContext, filename);
+      return compileScript(source, this.#vmContext, filename, importModuleDynamically);
     } catch (error) {
       // The compiler's fresh error has the intrinsic prototype; instanceof could
       // invoke an author-defined Symbol.hasInstance on the realm constructor.
@@ -617,8 +637,8 @@ export class JSRealm {
   }
 
   /** Compile module source in this realm without linking or executing it. */
-  compileModule(source: string, filename: string): CompiledModule {
-    return compileModule(source, this.#vmContext, filename);
+  compileModule(source: string, filename: string, options: ModuleCompilationOptions = {}): CompiledModule {
+    return compileModule(source, this.#vmContext, filename, options);
   }
 
   /** Retain a prepared author value as a synthetic module's default export. */
@@ -653,6 +673,7 @@ export class JSRealm {
         displayErrors: false,
         filename,
         lineOffset,
+        importModuleDynamically: this.#importModuleDynamically,
       }));
   }
 
@@ -820,6 +841,8 @@ export type JSRealmOptions = {
   reuseGlobalProxyFrom?: JSRealm;
   /** Native prototype layers, ordered from the global's immediate prototype outward. */
   globalPrototypeChain?: GlobalPrototypeKind[];
+  /** Loader for code without script/module metadata and direct realm evaluation. */
+  importModuleDynamically?: ImportModuleDynamically<VMContext>;
 };
 
 export type GlobalPrototypeKind = 'mutable' | 'immutable' | 'delegated';

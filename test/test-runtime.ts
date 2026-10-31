@@ -13,6 +13,7 @@ const nodeMajor = Number(process.versions.node.split('.')[0]);
 const supported = {
   codeGeneration: !!addon.setModifyCodeGenerationFromStringsCallback,
   collectionIterators: !!addon.createCollectionIterator,
+  dynamicImport: !addon.createContextHandle || addon.supportsDynamicImport,
   errorIsError: typeof Reflect.get(Error, 'isError') === 'function',
   errorStackAccessor: !!Reflect.getOwnPropertyDescriptor(Error.prototype, 'stack')?.get,
   exceptionReporting: !!addon.setExceptionReporter,
@@ -21,6 +22,7 @@ const supported = {
   functionRealms: !!addon.getFunctionRealm,
   htmlDDA: addon.supportsHTMLDDA,
   hostHooks: !!setHostHooks,
+  importMeta: !addon.createContextHandle || addon.supportsImportMeta,
   iteratorPredicates: !!addon.isArrayIterator &&
     !!addon.isStringIterator && !!addon.isRegExpStringIterator,
   lengthTracking: !!addon.isLengthTrackingArrayBufferView,

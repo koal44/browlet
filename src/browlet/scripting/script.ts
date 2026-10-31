@@ -8,6 +8,7 @@ import type { BrowletEnvironment } from '../environment';
 
 import type { BrowletRealm } from './realm';
 import { JSExecutionContext } from './execution-context';
+import { JSModuleGraphLoadingState } from './module-loading';
 import type { ScriptFetchOptions } from './script-fetch-options';
 import type { ModuleGraphLoadingState } from './script-fetching';
 
@@ -55,13 +56,13 @@ export class ClassicScript extends ScriptBase {
     // TODO(Long Animation Frames): Create the classic-script entry point on the
     // document's frame timing info. Frame records and pending-script timing are not implemented.
 
-    const result = env.realm.parseScript(source, serializeURL(baseURL));
+    const result = env.realm.parseClassicScript(source, this);
     if (Array.isArray(result)) {
       this.parseError = result[0];
       this.errorToRethrow = result[0];
       return;
     }
-    this.record = new JSScriptRecord(this, result);
+    this.record = result;
   }
 
   /** Run this classic script, optionally rethrowing its exception to the caller. */
@@ -248,6 +249,15 @@ export class JSModuleRequest {
     this.phase = phase;
   }
 
+  /** Compare specifiers and attributes by value, independently of attribute order. */
+  // https://tc39.es/ecma262/#sec-ModuleRequestsEqual
+  equals(other: JSModuleRequest): boolean {
+    if (this.specifier !== other.specifier || this.phase !== other.phase ||
+      this.attributes.length !== other.attributes.length) return false;
+    return this.attributes.every((attribute) => other.attributes.some((candidate) =>
+      attribute.key === candidate.key && attribute.value === candidate.value));
+  }
+
   /** Select a supported module type, or null for an invalid type attribute. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#module-type-from-module-request
   // Recognize supported names here; the environment separately checks realm exposure.
@@ -276,9 +286,10 @@ export class JSScriptOrModule {
 
 /** Retained compiled classic code and its HTML script association. */
 export class JSScriptRecord extends JSScriptOrModule {
-  kind = 'script' as const;
   declare script: ClassicScript;
   code: CompiledScript;
+  /** Dynamic imports retained for this classic record, independently of its URL. */
+  loadedModules = new Map<JSModuleRequest, JSModuleRecord>();
 
   constructor(script: ClassicScript, code: CompiledScript) {
     super(script.env.realm, script);
@@ -321,16 +332,30 @@ export abstract class JSModuleRecord extends JSScriptOrModule {
   abstract code: CompiledModule;
   /** Engine-reported dependencies, in their linking order. */
   requestedModules: JSModuleRequest[] = [];
+  /** Whether a successful traversal completed this record's dependency loading. */
+  // Node's "unlinked" status covers ECMAScript's new and unlinked states; this
+  // flag retains the loading transition that the VM module API does not expose.
+  requestedModulesLoaded = false;
   /** Loaded records keyed by this record's requests; filled by the host module loader. */
   // SPEC_MISMATCH: [[LoadedModules]] -> List of LoadedModuleRequest Records
   loadedModules = new Map<JSModuleRequest, JSModuleRecord>();
 
-  loadRequestedModules(_state: ModuleGraphLoadingState): InternalPromise<void> {
-    if (this.requestedModules.length === 0) {
-      return this.script.env.InternalPromise.resolve(undefined, idlType.undefined);
+  /** Load this graph using optional HTML fetch state and an internal completion promise. */
+  // https://tc39.es/ecma262/#sec-LoadRequestedModules
+  // SPEC_MISMATCH: ModuleRecord.LoadRequestedModules(hostDefined) -> Promise
+  // HTML uses an internal completion; native dynamic import is adapted at the VM callback boundary.
+  loadRequestedModules(state?: ModuleGraphLoadingState): InternalPromise<void> {
+    const loading = new JSModuleGraphLoadingState(state, this.script.env);
+    loading.load(this);
+    return loading.promise;
+  }
+
+  /** Find the retained record for an equivalent request, including a fresh request object. */
+  getLoadedModule(request: JSModuleRequest): JSModuleRecord | undefined {
+    for (const [loadedRequest, module] of this.loadedModules) {
+      if (loadedRequest.equals(request)) return module;
     }
-    // TODO(HTML §8.1.6.5): Connect dependency discovery and HostLoadImportedModule.
-    throw new InternalError('Module dependency loading is not implemented');
+    return undefined;
   }
 
   link(): void {
@@ -343,7 +368,7 @@ export abstract class JSModuleRecord extends JSScriptOrModule {
         if (request.phase !== 'evaluation') {
           throw new InternalError('Source and deferred module loading are not implemented');
         }
-        const dependency = record.loadedModules.get(request);
+        const dependency = record.getLoadedModule(request);
         if (dependency === undefined) throw new InternalError('Module dependency loading is not implemented');
         dependencies.push(dependency.code);
         visit(dependency);
@@ -365,7 +390,6 @@ export abstract class JSModuleRecord extends JSScriptOrModule {
 }
 
 export class JSSourceTextModuleRecord extends JSModuleRecord {
-  kind = 'source-text-module' as const;
   declare script: JavaScriptModuleScript;
   code: CompiledModule;
 
@@ -374,10 +398,26 @@ export class JSSourceTextModuleRecord extends JSModuleRecord {
     this.code = code;
     this.requestedModules = requests;
   }
+
+  /** Supply this module's URL and resolver when the engine first creates import.meta. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#hostgetimportmetaproperties
+  getImportMetaProperties(): { key: string; value: unknown; }[] {
+    const { script, realm } = this;
+    if (script.baseURL === null) throw new InternalError('A JavaScript module requires a base URL');
+    const urlString = serializeURL(script.baseURL);
+    const resolve = realm.createFunction((_receiver, [specifier]) => {
+      // ToString rejects primitive Symbols; String() has a special case for
+      // them. All other conversion, including author hooks and realm-owned
+      // failures, is performed by the captured constructor.
+      if (typeof specifier === 'symbol') throw new realm.TypeError('Cannot convert a Symbol value to a string');
+      const url = script.env.resolveModuleSpecifier(script, realm.String(specifier));
+      return serializeURL(url);
+    }, { name: 'resolve', length: 1 });
+    return [{ key: 'url', value: urlString }, { key: 'resolve', value: resolve }];
+  }
 }
 
 export class JSSyntheticModuleRecord extends JSModuleRecord {
-  kind = 'synthetic-module' as const;
   declare script: SyntheticModuleScript;
   /** Value retained by CreateDefaultExportSyntheticModule's evaluation steps. */
   defaultExport: unknown;
@@ -391,7 +431,6 @@ export class JSSyntheticModuleRecord extends JSModuleRecord {
 }
 
 export class JSWebAssemblyModuleRecord extends JSModuleRecord {
-  kind = 'webassembly-module' as const;
   declare script: WebAssemblyModuleScript;
 
   constructor(script: WebAssemblyModuleScript) {

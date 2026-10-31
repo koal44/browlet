@@ -44,8 +44,9 @@ now supplies fetch options, classic-script/classic-worker fetchers, and single-m
 fetching with shared module-map callbacks, plus document/worker/worklet graph
 orchestration and shared worklet responses. §8.1.4.3 now creates compiled classic
 scripts and real source-text/CSS/JSON/text engine modules. Supplied graphs link
-and evaluate, with CSS exports projected through Binding. Automatic module loading,
-Wasm ESM parsing, module-specific context restoration, and creation timing retain
+and evaluate, with CSS exports projected through Binding. §8.1.6.7.3 now connects
+static and dynamic graph loading to the resolver and fetchers. Wasm ESM
+parsing, module-specific context restoration, and creation timing retain
 explicit unfinished boundaries. Worker-imported scripts
 still need synchronous pause. §8.1.3.4 now has settings/object scripting predicates;
 §8.1.4.4 has classic/module runners and the running-script lookup. Child Document
@@ -70,9 +71,10 @@ The §7.6 rule model/parser and speculative-load processing remain unfinished,
 as do script-element callers. [§8.1.5](browlet/scripting/ROADMAP.md#html-815-module-specifier-resolution)
 now supplies module specifier resolution and import-map parsing, normalization,
 and merging. The approved merge conflicts follow Chromium/WebKit, with Firefox's
-differences recorded. Script-element callers, module host-hook integration, and
-console warning output remain explicit dependencies. The next section is §8.1.6,
-JavaScript specification host hooks.
+differences recorded. Script-element callers and console warning output remain
+explicit dependencies. The §8.1.6 host-hook audit has connected static and dynamic
+evaluation-phase `HostLoadImportedModule`; continue with §8.1.7 event loops.
+Source/deferred imports and the HTML Wasm parser remain explicit boundaries.
 Later host-hook algorithms must be connected before judging
 the complete model; the uncertain cross-realm observer test is skipped.
 The [environment audit](browlet/scripting/ROADMAP.md#html-81318132-audit) maps

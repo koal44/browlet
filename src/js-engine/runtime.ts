@@ -15,6 +15,7 @@ import type {
   CollectionIteratorKind, CompiledScript, GlobalAllocation, GlobalPrototypeKind, GlobalProxy,
   JSFunction, JSIteratorResult, JSRealm,
 } from './realm';
+import type { ImportModuleDynamically } from './modules';
 
 const getNativeRealm = addon.getRealm;
 
@@ -127,11 +128,12 @@ export function createContext(
   microtaskQueue: JSMicrotaskQueue,
   reuseGlobalProxyFrom?: VMContext,
   globalPrototypeChain?: GlobalPrototypeKind[],
+  importModuleDynamically?: ImportModuleDynamically<VMContext>,
 ): VMContext {
   const handle = microtaskQueue instanceof AddonMicrotaskQueue
     ? microtaskQueue.handle
     : undefined;
-  const options = handle ? { microtaskQueue: handle } : undefined;
+  const options = { microtaskQueue: handle, importModuleDynamically };
 
   if (addon.createContextHandle && addon.runInContext) {
     const context: unknown = addon.createContextHandle({
@@ -214,16 +216,18 @@ export function runInContext(
     isAddonContextHandle(context)) {
     return addon.runInContext(source, context, options);
   }
-  return vm.runInContext(source, context, options) as unknown;
+  return vm.runInContext(source, context, options as vm.RunningScriptOptions) as unknown;
 }
 
 /** Compile without execution using the backend that owns the supplied context. */
-export function compileScript(source: string, context: VMContext, filename: string): CompiledScript {
+export function compileScript(
+  source: string, context: VMContext, filename: string, importModuleDynamically?: ImportModuleDynamically<CompiledScript>,
+): CompiledScript {
   if (isAddonContextHandle(context)) {
     if (!addon.Script) throw new InternalError('Node backend does not provide Script');
-    return new addon.Script(source, { filename, displayErrors: false });
+    return new addon.Script(source, { filename, displayErrors: false, importModuleDynamically });
   }
-  return new vm.Script(source, { filename });
+  return new vm.Script(source, { filename, importModuleDynamically } as vm.ScriptOptions);
 }
 
 /** Run retained code without reparsing it or performing a microtask checkpoint. */

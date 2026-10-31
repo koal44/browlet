@@ -18,8 +18,10 @@ Addon context handles cannot be passed directly to Node's own `vm.Script` or
 and `SyntheticModule` classes for its contexts; JS Engine selects the backend.
 This supported subset excludes async linking callbacks, timeouts, and cached data.
 Script and context dynamic-import callbacks require Node's patched forwarding export;
-official Node 24/26 addon contexts lack it. HTML has not connected its loader to
-that callback yet. See the [VM API contract](../node-compat/README.md#contexts-globals-and-optional-facilities).
+official Node 24/26 addon contexts lack it. HTML dynamic imports work on custom/compat
+and stock VM contexts; official compat bases retain the approved expected failures
+in [dynamic-import tests](../test/browlet/scripting/dynamic-import.test.ts).
+See the [VM API contract](../node-compat/README.md#contexts-globals-and-optional-facilities).
 
 **`node-function-import-referrer`:** Identical `Function` bodies can reuse the
 first creating script's import loader on Node 26 and custom Node, reproducing
@@ -27,6 +29,15 @@ through both the addon and Node's own VM API. The Node 24 control passes. Custom
 passes with the compilation cache disabled, which Browlet does not do in
 production. [Regression evidence](../node-compat/test/dynamic-import.test.cjs)
 retains the required distinct-loader result as an approved expected failure.
+
+**`dynamic-import-executing-realm`:** If a script in Window A borrows Window B's
+`Function` constructor, the generated function executes in B while retaining A's
+Script referrer. Node's import callback supplies the referrer, not a separate
+executing realm. An unsupported import attribute currently rejects with A's
+TypeError instead of B's. The [focused regression](../test/browlet/scripting/dynamic-import.test.ts)
+retains B's prototype as an approved expected failure. Discuss the boundary before
+extending the addon API. Future Worklet/ServiceWorker restrictions also need the
+current settings before HTML selects the referring script's settings.
 
 ## Realm identity and global objects
 
@@ -132,9 +143,11 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
 
 - **Import-map algorithms still need production callers.** Parsing, normalization,
   merging, module specifier resolution, parse-result creation, and Window
-  registration work when explicitly invoked. Script-element preparation and
-  module host hooks do not yet call them; `<script type="importmap">`, dynamic
-  import, and `import.meta.resolve` are not established by those algorithm tests.
+  registration work when explicitly invoked. `import.meta.resolve` now calls the
+  resolver through the real engine initializer, and static module loading now
+  resolves dependencies and their integrity through the module's environment.
+  Dynamic imports use the same resolver and fetchers. Script-element preparation,
+  including `<script type="importmap">`, remains an unfinished consumer.
   Internal console warning output also remains provisional. Approved merge
   choices follow Chromium/WebKit where HTML and Firefox disagree; see the
   [import-map audit](browlet/scripting/ROADMAP.md#html-815-module-specifier-resolution).
@@ -147,13 +160,16 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   supplies Wasm ESM graphs, but HTML's WebAssembly parser and Long Animation Frames
   creation timing remain unfinished. Module
   graph orchestration covers document, worker, and worklet entry points, including
-  shared worklet responses. Linking supplied dependencies works, but automatic
-  dependency loading still throws at `LoadRequestedModules()` for imports.
-  HTML dynamic import and import.meta are not connected. The addon accepts
+  shared worklet responses. Static JavaScript/CSS/JSON/text dependencies now fetch,
+  link, and evaluate through the existing graph entry points. Source/deferred
+  imports remain unfinished. Dynamic evaluation-phase imports load, link, and
+  wait for evaluation through HTML, including top-level await. The addon accepts
   Node-shaped import and metadata callbacks with their respective forwarding
   exports in the combined Node patch; official addon bases retain expected
-  failures for these facilities. HTML's `import.meta.url` and `resolve` still
-  await the host-hook audit. Worker `importScripts()` fetching
+  failures for these facilities. HTML's `import.meta.url` and `resolve` work on
+  custom/compat and stock VM modules; official compat bases still receive empty
+  metadata. The [integration tests](../test/browlet/scripting/import-meta.test.ts)
+  retain those expected failures. Worker `importScripts()` fetching
   requires an unavailable synchronous pause. Existing direct evaluation remains
   separate, and HTML script/worker startup does not call these fetchers yet. See the
   [script-creation audit](browlet/scripting/ROADMAP.md#html-8143-creating-scripts).

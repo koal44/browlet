@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { InternalError } from '../../../src/infra/index';
 import { Browlet } from '../../../src/browlet/browlet';
 import * as scriptClasses from '../../../src/browlet/scripting/script';
 import { JSModuleRequest, type ModuleScript, type ModuleType } from '../../../src/browlet/scripting/script';
@@ -307,6 +308,24 @@ describe('fetch a single module script', () => {
 });
 
 describe('fetch a single imported module script', () => {
+  it.each(['integrity', 'Type', '__proto__', ''])('asserts that unsupported key "%s" was rejected before fetching', async (key) => {
+    const { env, url } = await createFixture();
+    const complete = vi.fn();
+    const performFetch = vi.fn<PerformScriptFetch>();
+    const request = new JSModuleRequest('./module', [
+      { key: 'type', value: 'json' }, { key, value: 'ignored' },
+    ]);
+
+    // This is the fetcher's specification assertion, not the author-facing
+    // loading rejection. The future graph loader must reject before this call.
+    expect(() => env.fetchSingleImportedModuleScript(
+      url, env, 'script', new ScriptFetchOptions(), 'client', request, complete, performFetch,
+    )).toThrow(InternalError);
+    expect(complete).not.toHaveBeenCalled();
+    expect(performFetch).not.toHaveBeenCalled();
+    expect(env.moduleMap.entries).toHaveLength(0);
+  });
+
   it.each(['json', 'css', 'text'])('sets up a %s descendant and keeps the perform-fetch hook', async (type) => {
     const { env, url } = await createFixture();
     const performFetch = vi.fn<PerformScriptFetch>((request, topLevel) => {

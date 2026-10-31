@@ -8,12 +8,16 @@ import type {
   CollectionIteratorKind, CompiledScript, GlobalObject, GlobalPrototypeKind, GlobalProxy, JSFunction, JSIteratorResult,
 } from './realm';
 import type { JSJobCallback, VMContext } from './runtime';
-import type { ModuleOptions, SourceTextModule, SourceTextModuleOptions, SyntheticModule } from './modules';
+import type { ImportModuleDynamically, ModuleOptions, SourceTextModule, SourceTextModuleOptions, SyntheticModule } from './modules';
 
 /** Typed calls to the selected backend's optional engine extensions. */
 export class NodeAPI {
   /** Whether this backend supports native document.all allocation and property handling. */
   supportsHTMLDDA: boolean;
+  /** Whether addon modules can install Node-shaped import.meta initializers. */
+  supportsImportMeta: boolean;
+  /** Whether addon contexts and compiled code can install Node-shaped import callbacks. */
+  supportsDynamicImport: boolean;
 
   // Requires the V8 iterator-factory patch.
   createCollectionIterator?: <Value>(
@@ -110,6 +114,8 @@ export class NodeAPI {
     this.setPropertyDelegate = this.#loadMethod(backend, 'setPropertyDelegate');
     this.setPropertyHandlers = this.#loadMethod(backend, 'setPropertyHandlers');
     this.supportsHTMLDDA = this.createHTMLDDA !== undefined && this.setPropertyHandlers !== undefined;
+    this.supportsImportMeta = Reflect.get(backend, 'supportsImportMeta') === true;
+    this.supportsDynamicImport = Reflect.get(backend, 'supportsDynamicImport') === true;
   }
 
   #loadMethod<Name extends keyof AddonMethods>(backend: object, name: Name): AddonMethods[Name] {
@@ -125,7 +131,7 @@ export class NodeAPI {
 export const addon = new NodeAPI(loadNodeApi());
 
 // Derive the operation signatures from the public properties rather than listing them twice.
-type AddonMethods = Omit<NodeAPI, 'supportsHTMLDDA'>;
+type AddonMethods = Omit<NodeAPI, 'supportsHTMLDDA' | 'supportsImportMeta' | 'supportsDynamicImport'>;
 
 /**
  * Supply intercepted properties for a native object.
@@ -172,6 +178,7 @@ type AddonContextOptions = {
   microtaskQueue?: AddonMicrotaskQueueHandle;
   reuseGlobalProxyFrom?: VMContext;
   globalPrototypeChain?: GlobalPrototypeKind[];
+  importModuleDynamically?: ImportModuleDynamically<VMContext>;
 };
 
 /** Evaluation options shared by node:vm and the compatibility addon. */
@@ -179,6 +186,8 @@ export type ContextEvaluationOptions = {
   displayErrors?: boolean;
   filename?: string;
   lineOffset?: number;
+  /** Callback attached to this compilation, independently of its diagnostic filename. */
+  importModuleDynamically?: ImportModuleDynamically<CompiledScript>;
 };
 
 type AddonHostHooks<HostDefined> = {

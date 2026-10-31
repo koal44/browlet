@@ -75,7 +75,7 @@ describe('module script graph entry points', () => {
       const complete = vi.fn();
       load.mockImplementation((state) => {
         expect(complete).toHaveBeenCalledExactlyOnceWith(script);
-        expect(state.destination).toBe('script');
+        expect(state?.destination).toBe('script');
         return loading.promise;
       });
 
@@ -141,7 +141,7 @@ describe('fetch descendants and link a module script', () => {
     const error = new SyntaxError('Dependency parse error');
     const complete = vi.fn();
     fetchDescendantsAndLink(script, env, 'script', complete);
-    if (hasModuleError) load.mock.calls[0]![0].errorToRethrow = error;
+    if (hasModuleError) load.mock.calls[0]![0]!.errorToRethrow = error;
 
     loading.reject(new Error('Loading rejected'));
     await runInHostTask(() => { env.realm.agent.eventLoop.performMicrotaskCheckpoint(); });
