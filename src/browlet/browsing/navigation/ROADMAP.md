@@ -15,6 +15,14 @@ outside consumers use its index, while its modules import each other directly.
   the history step and clears forward entries.
 - `session-history.ts` models entries and nested histories for the active
   top-level traversable; `document-state.ts` retains their document/reload state.
+- `Traversable` owns its session-storage shed across Document replacements.
+  Top-level creation clones the opener's top-level shed through the
+  [Storage substrate](../../../storage/ROADMAP.md#storage-sheds); auxiliary
+  browsing-context creation still blocks the full opener flow.
+  Final `UserAgent.removeTopLevelTraversable()` clears that traversable's session
+  data after document teardown. Definite closing must reach this step only after
+  unload cancellation and history/descendant destruction; those callers remain
+  unfinished. Do not clear the session at close entry or Document destruction.
 - `params.ts` carries response, policies, and timing. The destination is the
   Navigable receiving those inputs, so params need no reference back to it.
 - Supplied responses reserve the destination environment and apply COOP before
@@ -55,8 +63,8 @@ and definite closing remain prerequisites for a successful `Window.close()`.
 Opening now coordinates feature processing, target selection, new/existing
 branches, and return rules. `Navigable.chooseNavigable()` handles empty, `_self`,
 `_parent`, and `_top` names; named lookup and new targets still need familiarity,
-popup/activation policy, sandbox restrictions, COOP/noopener, creator inheritance,
-and session-storage cloning. The empty-name branch applies to direct algorithm
+popup/activation policy, sandbox restrictions, COOP/noopener, and creator inheritance.
+The empty-name branch applies to direct algorithm
 callers; `Window.open()` normalizes its empty target to `_blank` first.
 
 The opening flow calls explicit unfinished operations on their owners:

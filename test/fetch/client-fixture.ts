@@ -12,6 +12,7 @@ import { CookieStore } from '../../src/http/index';
 import { utf8Decode, utf8Encode } from '../../src/encoding/index';
 import { obtainSite, type Origin } from '../../src/url/index';
 import { obtainURLOrigin, parseURL } from '../../src/url/url';
+import { createStorageUserAgent } from '../support/storage';
 import { createEnvironment, type TestEnvironment } from '../support/environment';
 import type { TestRealm } from '../support/web-idl-realm';
 
@@ -65,6 +66,7 @@ export interface ClientEnvironment extends FetchEnvironment, TestEnvironment {
 
 export function createFetchUserAgent(): FetchUserAgent {
   return {
+    ...createStorageUserAgent(),
     HostPromise: NodePromise,
     httpTransport: {
       dispatch() { throw new Error('This fixture has no network transport'); },
@@ -105,8 +107,6 @@ export function createFetchUserAgent(): FetchUserAgent {
     cookieStore: new CookieStore(),
     cookiesEnabled: true,
     reportDeliveryEnabled: true,
-    storageEnabled: true,
-    generateUUID: () => crypto.randomUUID(),
     parseURL(input, base, encoding) { return parseURL(input, base, encoding).url; },
     // Blob URL tests use Browlet's actual store and acquisition boundary.
     obtainBlobObject: () => null,

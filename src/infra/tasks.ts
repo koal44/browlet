@@ -13,7 +13,7 @@ export const nativeTimerHost: TimerHost = {
 };
 
 /** Shared task sources understood by environments; hosts own their queues. */
-export type TaskSourceKey = 'file' | 'network' | 'dom-manipulation' | 'report' | 'automation' | 'timer';
+export type TaskSourceKey = 'file' | 'network' | 'dom-manipulation' | 'report' | 'automation' | 'timer' | 'storage';
 
 /** Metadata carried by a queued task. */
 export type TaskCreationOptions = {

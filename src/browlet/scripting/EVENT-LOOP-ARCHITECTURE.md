@@ -49,7 +49,7 @@ Rendering's independent producer records an opportunity and queues the ordered
 update pipeline; the host refresh source does not run author callbacks directly.
 
 `env.queueTask(source, steps, options?)` queues work for the execution owner
-using the shared source keys in Infra. `scripting/tasks.ts` maps those keys to HTML
+using the shared source keys in Infra. `scripting/tasks.ts` maps those keys to
 source identities. `BrowletRealm.queueGlobalTask()` captures the global's associated
 Document and routes through its Agent. Options carry timer nesting metadata.
 Low-level queueing can instead select an explicit loop and Document.
@@ -62,6 +62,10 @@ stream's owner. Fetch's `queueFetchTask()` selects a parallel queue or calls
 the destination global's BrowletRealm.
 Work performed in parallel re-enters the intended owner's task before touching
 realm-bound state.
+
+Storage's `env.queueStorageTask(global, steps)` likewise selects the destination
+global's realm, using the storage task source. Web Storage's `storage` events
+use the DOM-manipulation source, as required by HTML.
 
 The global-scope mixin owns GlobalTimers. Its active-time waits and execution's
 `timer` task delivery serve both AbortSignal.timeout and Window function timers.

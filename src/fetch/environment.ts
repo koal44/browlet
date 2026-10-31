@@ -5,7 +5,7 @@ import type { GlobalObject } from '../js-engine/index';
 import type { DOMExceptionConstructor } from '../web-idl/core/index';
 import type { BlobURLEntry, Host, Origin, URLRecord } from '../url/index';
 import type { CookieStore } from '../http/index';
-import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
+import type { StorageEnvironmentBase, StorageUserAgent } from '../storage/index';
 import type { MIMEType } from '../mime/index';
 import type { BlobImpl, FileEnvironment } from '../file/index';
 
@@ -163,7 +163,7 @@ export interface FetchCSPList {
 export type FetchEmbedderPolicyValue = 'unsafe-none' | 'require-corp' | 'credentialless';
 
 /** The HTML environment, including reserved clients that do not yet have a realm. */
-export interface FetchEnvironmentBase extends StorageEnvironment {
+export interface FetchEnvironmentBase extends StorageEnvironmentBase {
   /** Shared user agent owning this environment's networking state. */
   userAgent: FetchUserAgent;
   /** Top-level origin used for network partitioning, or null when it must be derived. */
@@ -254,7 +254,7 @@ export interface FetchUserAgent extends StorageUserAgent {
   /** Acquire an already-captured File API entry with the caller-selected access context. */
   obtainBlobObject(
     entry: BlobURLEntry | null,
-    env: StorageEnvironment | 'top-level-navigation' | 'top-level-self-fetch',
+    env: StorageEnvironmentBase | 'top-level-navigation' | 'top-level-self-fetch',
   ): BlobImpl | null;
 }
 

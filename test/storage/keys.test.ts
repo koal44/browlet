@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { StorageKey } from '../../src/storage/keys';
-import type { StorageUserAgent } from '../../src/storage/environment';
+import { createStorageUserAgent as createUserAgent } from '../support/storage';
 import { createOpaqueOrigin } from '../../src/url/origin';
 import type { TupleOrigin } from '../../src/url/core/index';
 import { obtainURLOrigin, parseURL } from '../../src/url/url';
@@ -134,8 +134,4 @@ function createStorageEnvironment(url: string) {
   return {
     creationURL, origin: obtainURLOrigin(creationURL), userAgent: createUserAgent(),
   };
-}
-
-function createUserAgent(storageEnabled = true): StorageUserAgent {
-  return { storageEnabled, generateUUID: () => crypto.randomUUID() };
 }

@@ -1,6 +1,6 @@
 import { InternalError } from '../../../infra/index';
 import { serializeOrigin, serializeURL, type Origin, type URLRecord } from '../../../url/index';
-import { StorageKey, type StorageEnvironment } from '../../../storage/index';
+import { StorageKey, type StorageEnvironmentBase } from '../../../storage/index';
 import type { BlobImpl } from '../../../file/index';
 
 import type { PolicyContainer } from '../../browsing/policy/index';
@@ -42,7 +42,7 @@ export class BlobURLStore {
 
   /** Revoke an author-supplied URL when its registration belongs to the caller's storage partition. */
   // https://w3c.github.io/FileAPI/#dfn-revokeObjectURL
-  revoke(url: string, env: StorageEnvironment): void {
+  revoke(url: string, env: StorageEnvironmentBase): void {
     const record = this.#userAgent.parseURL(url);
     if (record === null || record.scheme !== 'blob') return;
     const entry = record.blobURLEntry;
@@ -84,14 +84,14 @@ export class BlobURLEntry {
    * A caller-established top-level exemption bypasses that check.
    */
   // https://w3c.github.io/FileAPI/#blob-url-obtain-object
-  obtainObject(env: StorageEnvironment | 'top-level-navigation' | 'top-level-self-fetch'): BlobImpl | null {
+  obtainObject(env: StorageEnvironmentBase | 'top-level-navigation' | 'top-level-self-fetch'): BlobImpl | null {
     if (env === 'top-level-navigation' || env === 'top-level-self-fetch') return this.#object;
     return this.isSamePartition(env) ? this.#object : null;
   }
 
   /** Whether another environment may fetch or revoke this entry; disabled storage does not deny access. */
   // https://w3c.github.io/FileAPI/#check-for-same-partition-blob-url-usage
-  isSamePartition(env: StorageEnvironment): boolean {
+  isSamePartition(env: StorageEnvironmentBase): boolean {
     const blobStorageKey = StorageKey.obtainForNonStoragePurposes(this.env);
     const envStorageKey = StorageKey.obtainForNonStoragePurposes(env);
     return blobStorageKey.equals(envStorageKey);
@@ -99,7 +99,7 @@ export class BlobURLEntry {
 }
 
 /** The actual creating settings object; Blob URL registration requires its security origin. */
-export interface BlobURLEnvironment extends StorageEnvironment {
+export interface BlobURLEnvironment extends StorageEnvironmentBase {
   /** Security origin of the creator, including inherited and opaque origins. */
   origin: Origin;
   /** Creator policies inherited when its Blob URL supplies a document or worker. */

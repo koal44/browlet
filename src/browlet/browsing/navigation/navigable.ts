@@ -1,5 +1,6 @@
 import { asciiLower, InternalError } from '../../../infra/index';
 import { areSameOrigin, areSameOriginDomain, copyURL, createOpaqueOrigin, urlsEqual, type Origin, type URLRecord } from '../../../url/index';
+import { StorageShed } from '../../../storage/index';
 import type { FormDataEntry } from '../../../xhr/index';
 import { FetchResponse, type FetchPromptTarget, type fetchPromptTargetBrand, type ReferrerPolicy } from '../../../fetch/index';
 
@@ -614,6 +615,9 @@ export class Traversable extends Navigable implements FetchPromptTarget {
   systemVisibilityState: DocumentVisibilityState = 'visible';
   /** Whether web content, rather than the user, created this traversable. */
   isCreatedByWebContent = false;
+  /** Session storage retained across this traversable's Documents. */
+  // https://storage.spec.whatwg.org/#traversable-navigable-storage-shed
+  storageShed = new StorageShed();
   /** Type-only identification as an eligible Fetch prompt destination. */
   declare [fetchPromptTargetBrand]: true;
 
@@ -685,7 +689,9 @@ export class TopLevelTraversable extends Traversable {
     traversable.sessionHistoryEntries.push(initialHistoryEntry);
 
     if (opener !== null) {
-      legacyCloneTraversableStorageShed(opener, traversable);
+      const openerNavigable = opener.activeDocument.getNodeNavigable();
+      if (openerNavigable === null) throw new InternalError('An opener needs an active navigable');
+      openerNavigable.topLevelTraversable.storageShed.cloneSessionStorageInto(traversable.storageShed);
     }
 
     userAgent.appendTopLevelTraversable(traversable);
@@ -711,15 +717,4 @@ function requireTopLevelTraversable(navigable: Navigable): TopLevelTraversable {
     throw new InternalError('Nested navigable history is not implemented');
   }
   return navigable;
-}
-
-/** Copy the opener's session-storage data into the new traversable. */
-// https://storage.spec.whatwg.org/#legacy-clone-a-traversable-storage-shed
-// SPEC_MISMATCH: (sourceTraversable, targetTraversable) -> undefined
-// TODO: Resolve the opener's top-level traversable when session-storage sheds are implemented.
-function legacyCloneTraversableStorageShed(
-  _opener: BrowsingContext,
-  _traversable: TopLevelTraversable,
-): void {
-  throw new InternalError('Traversable storage cloning is not implemented');
 }

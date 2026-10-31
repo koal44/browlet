@@ -6,7 +6,7 @@ import { BlobData, type BlobByteSource } from '../../src/file/blob-data';
 import type { BlobURLEnvironment } from '../../src/browlet/integration/file/blob-url';
 import { PolicyContainer } from '../../src/browlet/browsing/policy/container';
 import { InternalError } from '../../src/infra/internal-error';
-import type { StorageEnvironment, StorageUserAgent } from '../../src/storage/environment';
+import type { StorageEnvironmentBase, StorageUserAgent } from '../../src/storage/environment';
 import { createOpaqueOrigin } from '../../src/url/origin';
 import { obtainURLOrigin, parseURL } from '../../src/url/url';
 import { serializeURL } from '../../src/url/core/index';
@@ -164,7 +164,7 @@ describe('File API §§8.2 and 8.3.2: Blob URL object acquisition', () => {
   it('uses a reserved environment\'s creation URL to allow or deny acquisition', () => {
     const { store, userAgent } = createStore();
     const creator = createStorageEnvironment('https://example.test/first', userAgent);
-    const consumer: StorageEnvironment = {
+    const consumer: StorageEnvironmentBase = {
       userAgent, creationURL: parseURL('https://example.test/second').url!,
     };
     const blob = new BlobImpl([], {}, blobEnv);

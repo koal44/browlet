@@ -34,6 +34,9 @@ Browlet supplies the browser lifetime and policy even when backing is in memory.
 - Opaque origins and denied policy produce `SecurityError`; inability to store
   a value produces `QuotaExceededError`. Quota, persistence, partitioning, and
   user policy belong below the HTML facade.
+  `setItem()` must check the bottle quota and the browser's per-shelf
+  `storageQuotaBytes` budget before changing data. Shared internal maps do not
+  enforce these limits; a rejected write must leave the old value intact.
 - HTML deliberately supplies no cross-agent locking guarantee for
   `localStorage`. Do not invent one as observable API behavior merely because
   an in-process implementation can serialize access.
@@ -59,10 +62,11 @@ copy its multiprocess IPC architecture into Browlet.
 
 ## Delivery order
 
-1. Connect the shared key/map operations when their browser consumers exist;
-   follow the substrate roadmap for implementing those operations.
-2. Connect traversable session-storage ownership and opener cloning with
-   auxiliary browsing contexts.
+1. Use the implemented local/session bottle-map acquisition and retain each
+   returned proxy in its per-Document Storage holder.
+2. Complete auxiliary browsing-context creation. Traversable shed ownership
+   and the opener-clone call are implemented; the earlier navigation stub still
+   prevents that flow from running end to end.
 3. Build realm-bound Storage objects over the substrate's local/session maps;
    add Web IDL named properties, policy/quota errors, and cross-global events.
 4. Integrate substrate persistence/quota results with the same synchronous

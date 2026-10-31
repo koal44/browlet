@@ -6,7 +6,7 @@ import {
   type BlobURLEntry as URLBlobURLEntry, type URLRecord, type URLUserAgent,
 } from '../url/index';
 import { CookieStore } from '../http/index';
-import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
+import { StorageShed, type StorageEnvironmentBase, type StorageUserAgent } from '../storage/index';
 import type { MIMEType } from '../mime/index';
 import type { BlobImpl } from '../file/index';
 import {
@@ -92,10 +92,16 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   hstsStore = new HSTSStore();
   /** Blob URL registrations shared by this user agent's environments. */
   blobURLStore = new BlobURLStore(this);
+  /** Local storage owned by this user agent across its environments. */
+  // https://storage.spec.whatwg.org/#user-agent-storage-shed
+  storageShed = new StorageShed();
   /** Controls both sending and accepting cookies without clearing the store. */
   cookiesEnabled = true;
   /** Allows storage APIs to obtain keys; Blob URL access checks remain available. */
   storageEnabled = true;
+  /** Fixed per-shelf byte budget; independent of usage and available device space. */
+  // https://storage.spec.whatwg.org/#storage-quota
+  storageQuotaBytes = 64 * 2 ** 20;
   /** Allows outbound report queues and delivery; local ReportingObservers remain enabled. */
   reportDeliveryEnabled = true;
   /** User preference for scripting; Browlet itself always has JavaScript support. */
@@ -164,8 +170,14 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
     this.topLevelTraversableSet.add(traversable);
   }
 
+  /** Unregister a destroyed traversable and clear its session storage; document teardown must already be complete. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#destroy-a-top-level-traversable
+  // https://storage.spec.whatwg.org/#storage-pressure
   removeTopLevelTraversable(traversable: TopLevelTraversable): void {
-    this.topLevelTraversableSet.delete(traversable);
+    if (!this.topLevelTraversableSet.delete(traversable)) return;
+    for (const [key, shelf] of traversable.storageShed) {
+      for (const name of shelf.bucketMap.keys()) traversable.storageShed.removeBucket(key, name);
+    }
   }
 
   removeBrowsingContextGroup(group: BrowsingContextGroup): void {
@@ -214,7 +226,7 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   /** Acquire a captured Blob entry without resolving its URL again after revocation. */
   obtainBlobObject(
     entry: URLBlobURLEntry | null,
-    env: StorageEnvironment | 'top-level-navigation' | 'top-level-self-fetch',
+    env: StorageEnvironmentBase | 'top-level-navigation' | 'top-level-self-fetch',
   ): BlobImpl | null {
     if (!(entry instanceof BlobURLEntry)) return null;
     return entry.obtainObject(env);

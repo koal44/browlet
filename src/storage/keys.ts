@@ -1,6 +1,6 @@
 import { areSameOrigin, obtainURLOrigin, type Origin } from '../url/index';
 
-import type { StorageEnvironment } from './environment';
+import type { StorageEnvironmentBase } from './environment';
 
 /** Identifies the storage partition selected for an environment. */
 // https://storage.spec.whatwg.org/#storage-keys
@@ -14,7 +14,7 @@ export class StorageKey {
 
   /** Obtain a storage key, or null for an opaque origin or disabled storage. */
   // https://storage.spec.whatwg.org/#obtain-a-storage-key
-  static obtain(env: StorageEnvironment): StorageKey | null {
+  static obtain(env: StorageEnvironmentBase): StorageKey | null {
     const key = StorageKey.obtainForNonStoragePurposes(env);
     if (key.origin.kind === 'opaque') return null;
     if (!env.userAgent.storageEnabled) return null;
@@ -23,7 +23,7 @@ export class StorageKey {
 
   /** Obtain an access-check key even when storage is disabled or the origin is opaque. */
   // https://storage.spec.whatwg.org/#obtain-a-storage-key-for-non-storage-purposes
-  static obtainForNonStoragePurposes(env: StorageEnvironment): StorageKey {
+  static obtainForNonStoragePurposes(env: StorageEnvironmentBase): StorageKey {
     const origin = env.origin ?? obtainURLOrigin(env.creationURL);
     return new StorageKey(origin);
   }

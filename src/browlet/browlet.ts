@@ -25,6 +25,13 @@ export class Browlet {
     this.#route = config.route;
     this.#userAgent = new UserAgent();
     if (config.systemColors !== undefined) this.#userAgent.systemColors = config.systemColors;
+    if (config.storageQuotaBytes !== undefined) {
+      if (!Number.isSafeInteger(config.storageQuotaBytes) || config.storageQuotaBytes < 0) {
+        // eslint-disable-next-line no-restricted-globals -- This is validation of the Node-facing host API.
+        throw new RangeError('storageQuotaBytes must be a non-negative safe integer');
+      }
+      this.#userAgent.storageQuotaBytes = config.storageQuotaBytes;
+    }
     if (config.userAgent !== undefined) {
       if (!isHeaderValue(config.userAgent)) {
         // eslint-disable-next-line no-restricted-globals -- This is validation of the Node-facing host API.
@@ -184,6 +191,8 @@ export type BrowletRoute = (url: string) => string;
 
 export type BrowletConfig = {
   route: BrowletRoute;
+  /** Per-shelf storage budget in bytes, independent for each origin and local/session shelf. Defaults to 64 MiB. */
+  storageQuotaBytes?: number;
   /** Complete CSS system-color palette; defaults to Stylelet's fixed light palette. */
   systemColors?: SystemColorPalette;
   /** Default User-Agent header value; defaults to Mozilla/5.0 (compatible; Browlet). */

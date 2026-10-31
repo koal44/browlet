@@ -14,6 +14,7 @@ import {
   obtainSite, obtainURLOrigin, serializeURL, urlsEqual, URLImpl,
   type Origin, type URLRecord,
 } from '../url/index';
+import type { StorageEnvironment, StorageShed } from '../storage/index';
 import {
   FetchGroup,
   type FetchEnvironment, type FetchEnvironmentBase, type FetchRequest,
@@ -201,7 +202,7 @@ export interface BrowletEnvironmentInit {
 /** Composed browser settings, allocation, and task delivery for one realm and global. */
 // HTML's environment settings object.
 export abstract class BrowletEnvironment extends BrowletEnvironmentBase implements
-  JSEnvironment, DOMEnvironment, FetchEnvironment, StyleletEnvironment, SelectletEnvironment {
+  JSEnvironment, DOMEnvironment, FetchEnvironment, StorageEnvironment, StyleletEnvironment, SelectletEnvironment {
   /** JavaScript realm associated with this browser environment. */
   realm: BrowletRealm;
   /** Browser timing relative to this environment's time origin. */
@@ -343,6 +344,14 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     const targetRealm = BrowletRealm.getAssociatedRealm(global);
     if (!targetRealm) throw new InternalError('A Fetch task destination must have an HTML realm');
     targetRealm.queueGlobalTask(taskSources.network, steps);
+  }
+
+  /** Deliver storage work to the specified global, which can differ from this environment's. */
+  // https://storage.spec.whatwg.org/#queue-a-storage-task
+  queueStorageTask(global: GlobalObject, steps: () => void): void {
+    const targetRealm = BrowletRealm.getAssociatedRealm(global);
+    if (!targetRealm) throw new InternalError('A storage task destination must have an HTML realm');
+    targetRealm.queueGlobalTask(taskSources.storage, steps);
   }
 
   /** Report a request's policy violation for this client. */
@@ -727,6 +736,12 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     return null;
   }
 
+  /** Session storage belongs to a Window's traversable; other globals cannot acquire it. */
+  // https://storage.spec.whatwg.org/#obtain-a-storage-bottle-map
+  getSessionStorageShed(): StorageShed {
+    throw new InternalError('Session storage requires a Window environment');
+  }
+
   /** Existing state shared by all consumers of this environment's global scope. */
   abstract getWindowOrWorkerGlobalScopeMixin(): WindowOrWorkerGlobalScopeMixin;
 
@@ -909,6 +924,14 @@ export class WindowEnvironment extends BrowletEnvironment {
   // https://fetch.spec.whatwg.org/#populate-request-from-client
   override getTraversableForUserPrompts(): Traversable | null {
     return this.window.getAssociatedDocument().getNodeNavigable()?.traversable ?? null;
+  }
+
+  /** Resolve session ownership through the associated Document at acquisition time. */
+  // https://storage.spec.whatwg.org/#obtain-a-storage-bottle-map
+  override getSessionStorageShed(): StorageShed {
+    const navigable = this.window.getAssociatedDocument().getNodeNavigable();
+    if (navigable === null) throw new InternalError('Session storage requires a node navigable');
+    return navigable.traversable.storageShed;
   }
 }
 

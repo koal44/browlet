@@ -17,11 +17,14 @@ export const navigationAndTraversalTaskSource =
 export const renderingTaskSource =
   createTaskSource('rendering');
 
+// https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html#timer-task-source
+export const timerTaskSource = createTaskSource('timer');
+
 // https://w3c.github.io/FileAPI/#task-source
 export const fileTaskSource = createTaskSource('file reading');
 
-// https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html#timer-task-source
-export const timerTaskSource = createTaskSource('timer');
+// https://storage.spec.whatwg.org/#task-source
+export const storageTaskSource = createTaskSource('storage');
 
 // Reporting leaves the task source unnamed; WebKit likewise gives it a distinct source.
 export const reportingTaskSource = createTaskSource('reporting');
@@ -31,12 +34,13 @@ export const automationTaskSource = createTaskSource('automation');
 
 /** Shared source identities selected by an owner's execution facilities. */
 export const taskSources: Record<TaskSourceKey, TaskSource> = {
-  file: fileTaskSource,
-  network: networkingTaskSource,
   'dom-manipulation': domManipulationTaskSource,
+  network: networkingTaskSource,
+  timer: timerTaskSource,
+  file: fileTaskSource,
+  storage: storageTaskSource,
   report: reportingTaskSource,
   automation: automationTaskSource,
-  timer: timerTaskSource,
 };
 
 /** Reference to a queued task that its owner can cancel. */
