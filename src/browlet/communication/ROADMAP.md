@@ -162,6 +162,33 @@ activation, shared FIFO order, microtask checkpoints, payload/port identity,
 both-end and repeated transfer, queued-task migration between agents/documents,
 errors, closure, and global cleanup. Window messaging has an end-to-end port test.
 
+## §9.5 BroadcastChannel
+
+[BroadcastChannel](broadcast-channel.ts) serializes once and queues independent
+target-realm reconstructions on the DOM manipulation task source. Discovery uses
+the existing non-storage StorageKey operation and equality, exact channel names,
+and fully active Documents. It excludes the sender and preserves creation order
+within each agent. Close suppresses queued deliveries; reconstruction failures
+produce messageerror with the captured source origin.
+
+Each UserAgent owns a weak, creation-ordered channel registry. Separate UserAgents
+cannot communicate through it. Globals strongly retain open channels with message
+or messageerror listeners; EventTarget's existing change hook handles removal,
+once, abort signals, and handler attributes. Closing releases that retention and
+discovery. Queued tasks retain their destinations until delivery or Document
+destruction removes those tasks; inactive Documents follow normal task gating.
+
+Window realms and modeled agents in one isolate are supported. Worker exposure
+is declared, but eligibility throws explicitly until worker settings, closing,
+and suspendable state exist. Worker shutdown and actual cross-thread transport
+remain §10 dependencies. StorageKey currently compares origins, including opaque
+identity; additional browser privacy partitioning remains Storage policy work.
+No Node/V8 changes or new cloning/binding adapters are needed.
+
+[Tests](../../../test/browlet/communication/broadcast-channel.test.ts) cover
+author-code delivery, storage/UserAgent isolation, target-realm identity, ordering,
+serialization reentrancy, activity, closure, messageerror, and listener retention.
+
 ## Constraints to preserve early
 
 - Sending serializes synchronously in the sender's script context; delivery
@@ -215,8 +242,8 @@ later sections and the parallel browsing/scripting work.
    incumbent, WindowProxy, handler, and port dependencies above.
 4. **§9.4 Channel messaging.** Implemented for existing Window realms and modeled
    agents. Worker/AudioWorklet integration and actual cross-thread delivery remain.
-5. **§9.5 Broadcasting.** Build BroadcastChannel on storage keys, multi-global
-   lifetime, and delivery eligibility.
+5. **§9.5 Broadcasting.** Implemented for Window realms using existing storage
+   keys. Worker eligibility/lifecycle and actual cross-thread delivery remain.
 
 The WebSockets interface has moved to the separate WebSockets Standard. It may
 reuse `MessageEvent`, but it is not owned by this directory.

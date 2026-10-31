@@ -48,7 +48,7 @@ import { performanceIDL } from './performance/index';
 import {
   messageEventIDL, messageEventInitIDL, messageEventSourceIDL, messagePortIDL, eventSourceIDL, eventSourceInitIDL,
   MessagePortImpl, messageChannelIDL, messageEventTargetIDL, messagePortIncludesMessageEventTargetIDL,
-  windowPostMessageOptionsIDL,
+  windowPostMessageOptionsIDL, broadcastChannelIDL,
 } from './communication/index';
 import {
   locationIDL, barPropIDL, WindowImpl, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
@@ -286,6 +286,7 @@ export const browletDefinitions = [
   messageChannelIDL,
   messageEventTargetIDL,
   messagePortIncludesMessageEventTargetIDL,
+  broadcastChannelIDL,
   eventSourceIDL,
   eventSourceInitIDL,
   windowPostMessageOptionsIDL,

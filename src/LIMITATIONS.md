@@ -538,6 +538,12 @@ explicit standard content-handler list used for sink metadata.
   WindowEventHandlers remain unimplemented. MessagePort transfer is implemented. See the
   [§9.3 dependencies](browlet/communication/ROADMAP.md#93-cross-document-messaging).
 
+- **BroadcastChannel supports Window realms in one UserAgent.** Worker eligibility
+  remains explicit unfinished work, with worker closing/suspension and cross-thread
+  delivery still absent. Routing uses the existing origin-based StorageKey; it does
+  not add browser-specific privacy partitioning. See the
+  [§9.5 dependencies](browlet/communication/ROADMAP.md#95-broadcastchannel).
+
 - **Channel messaging uses modeled agents in one isolate.** MessageChannel,
   MessagePort transfer, queued-message migration, and document cleanup work with
   existing Window realms. Worker/AudioWorklet globals, shutdown, and cross-thread

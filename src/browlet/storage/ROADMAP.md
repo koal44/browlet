@@ -8,8 +8,8 @@ Browlet supplies the browser lifetime and policy even when backing is in memory.
 ## Early constraints
 
 - The public `Storage` API itself is not part of the first Document lifecycle.
-  Shared storage keys arrive first for Blob URLs; shared-worker discovery and
-  `BroadcastChannel` are later consumers of that same substrate.
+  Shared storage keys serve Blob URLs and `BroadcastChannel`; shared-worker
+  discovery remains a later consumer of that same substrate.
 - `sessionStorage` is scoped to an origin within one top-level traversable.
   Creating an auxiliary top-level traversable with an opener legacy-clones the
   opener's traversable storage shed. Browsing triggers that transition; the

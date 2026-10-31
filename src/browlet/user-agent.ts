@@ -1,4 +1,4 @@
-import { InternalError, internalType, type InternalPromise, type TimerHost } from '../infra/index';
+import { InternalError, internalType, WeakOrderedSet, type InternalPromise, type TimerHost } from '../infra/index';
 import { randomUUID } from '../js-engine/index';
 import type { SelectletUserAgent } from '../selectlet/index';
 import {
@@ -28,6 +28,7 @@ import { PolicyContainer, HSTSStore, EmbedderPolicy } from './browsing/policy/in
 import { CSPList } from './browsing/policy/csp/index';
 import type { IntersectionObserverMargin } from './dom/intersection-observer/index';
 import type { DocumentImpl } from './dom/nodes/index';
+import type { BroadcastChannelImpl } from './communication/index';
 import type { BrowletEnvironment, BrowletEnvironmentBase } from './environment';
 import { WebDriver, type PageEvaluation } from './automation/index';
 import { HTTPAuthenticationStore } from './loader/index';
@@ -53,6 +54,8 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   browsingContextGroupSet = new Set<BrowsingContextGroup>();
   /** Top-level windows or tabs owned by this browser. */
   topLevelTraversableSet = new Set<TopLevelTraversable>();
+  /** Discover live broadcast channels in creation order without retaining their globals. */
+  broadcastChannels = new WeakOrderedSet<BroadcastChannelImpl>();
   /** Execution created with this user agent for work that can outlive pages. */
   sandbox: BrowletEnvironment;
   /** Browser binding factory used by browsing algorithms to create Window environments. */

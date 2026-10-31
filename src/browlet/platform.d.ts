@@ -1605,6 +1605,20 @@ export interface MessageChannelConstructor {
   new (): MessageChannel;
 }
 
+export interface BroadcastChannel extends EventTarget {
+  readonly name: string;
+  postMessage(message: any): void;
+  close(): void;
+  onmessage: EventHandlerNonNull | null;
+  onmessageerror: EventHandlerNonNull | null;
+}
+
+export interface BroadcastChannelConstructor extends Ctor<EventTargetConstructor> {
+  readonly prototype: BroadcastChannel;
+  [Symbol.hasInstance](value: unknown): value is BroadcastChannel;
+  new (name: string): BroadcastChannel;
+}
+
 export interface EventSource extends EventTarget {
   readonly url: string;
   readonly withCredentials: boolean;
@@ -1800,6 +1814,7 @@ export interface Window extends EventTarget {
   MessageEvent: MessageEventConstructor;
   MessagePort: MessagePortConstructor;
   MessageChannel: MessageChannelConstructor;
+  BroadcastChannel: BroadcastChannelConstructor;
   EventSource: EventSourceConstructor;
   ServiceWorker: ServiceWorkerConstructor;
   PromiseRejectionEvent: PromiseRejectionEventConstructor;

@@ -169,8 +169,8 @@ The native queue/context and host-hook work does not remove these slot limitatio
 
 1. **Streams transfer.** Build on the MessagePort transfer/receiving machinery,
    with stream-specific state and backpressure handling.
-2. **Consumer integration.** Window and channel messaging use these operations.
-   History state, broadcast messaging, workers, and worklets still need their
+2. **Consumer integration.** Window, channel, and broadcast messaging use these operations.
+   History state, workers, and worklets still need their
    specified storage/realm/agent-cluster rules rather than caller-specific clone paths.
 3. **Exposure.** Install the existing global contribution with real Worker
    settings and lifetime. Window exposure alone is not worker coverage.
