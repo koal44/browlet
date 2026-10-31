@@ -1,4 +1,4 @@
-export { JSRealm, type JSRealmOptions, type CompiledScript } from './realm';
+export { JSRealm, type JSRealmOptions, type CompiledCode, type CompiledScript } from './realm';
 export type { CompiledModule, ImportModuleDynamically, ModuleCompilationOptions, ModuleRequest } from './modules';
 export type { JSEnvironment } from './environment';
 export { addon } from './node-addons';

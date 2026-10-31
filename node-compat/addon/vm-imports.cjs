@@ -12,9 +12,14 @@ module.exports = (native, resultForImport) => {
     return Reflect.apply(callback, undefined, [specifier, referrer, attributes, phase]);
   }, resultForImport);
 
-  return (callback, referrer) => {
-    const id = Symbol();
-    loaders.set(id, { callback, referrer });
-    return id;
+  return {
+    register(callback, referrer) {
+      const id = Symbol();
+      loaders.set(id, { callback, referrer });
+      return id;
+    },
+    // The native compilation metadata retains our loader symbol at index 1.
+    // Only our own weakly registered identities can resolve to a VM object.
+    getReferrer(options) { return loaders.get(options[1])?.referrer ?? null; },
   };
 };

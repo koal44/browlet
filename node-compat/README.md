@@ -454,8 +454,13 @@ Each callback is optional; omitted enqueue hooks leave that job kind with V8.
 | `enqueueTimeoutJob(job, realm, milliseconds)` | Schedule no earlier than the delay; currently Atomics.waitAsync deadlines. Calling a cancelled timeout once is harmless. |
 
 Registration/enqueue snapshots contain current, entered, and incumbent realm
-references plus opaque `hostDefinedOptions`. The addon does not interpret script
-metadata. Make defaults to `{ callback, hostDefined: undefined }`, call to
+references plus opaque `hostDefinedOptions`. Registration additionally resolves
+the addon's retained import-loader identity to `compiledCode`: a compiled
+`Script`/`SourceTextModule`, null for unrecognized metadata, or undefined when
+the native snapshot has no metadata. The VM adapter owns this weak association;
+HTML script records and fallback policy remain outside the addon. Compilations
+without an import callback do not acquire this identity. Make defaults to
+`{ callback, hostDefined: undefined }`, call to
 `Reflect.apply`; either can be supplied independently.
 
 Jobs take no arguments and must run asynchronously in the required order.

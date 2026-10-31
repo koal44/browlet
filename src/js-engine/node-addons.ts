@@ -5,7 +5,8 @@ import { isAbsolute } from 'node:path';
 import { InternalError } from '../infra/internal-error';
 
 import type {
-  CollectionIteratorKind, CompiledScript, ExoticObjectHandlers, GlobalIndexedProperties, GlobalObject, GlobalPrototypeKind, GlobalProxy,
+  CollectionIteratorKind, CompiledCode, CompiledScript, ExoticObjectHandlers, GlobalIndexedProperties,
+  GlobalObject, GlobalPrototypeKind, GlobalProxy,
   JSFunction, JSIteratorResult,
 } from './realm';
 import type { JSJobCallback, VMContext } from './runtime';
@@ -199,7 +200,7 @@ export type ContextEvaluationOptions = {
 type AddonHostHooks<HostDefined> = {
   makeJobCallback?(
     callback: JSFunction,
-    registration: { incumbent: object | null; hostDefinedOptions: unknown[]; },
+    registration: { incumbent: object | null; compiledCode: CompiledCode | null | undefined; },
   ): JSJobCallback<HostDefined>;
   callJobCallback?(
     record: JSJobCallback<HostDefined>, receiver: unknown, argumentsList: unknown[],

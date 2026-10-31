@@ -15,9 +15,10 @@ if (builtFor.version !== process.versions.node || builtFor.modules !== process.v
     `running ${process.versions.node} (${process.arch}). ${hint}`);
 }
 const native = require(join(build, 'node-compat.node'));
+const vm = require('./vm.cjs')(native);
 
 if (native.installHostHooks) {
-  exports.setHostHooks = require('./host-hooks.cjs')(native);
+  exports.setHostHooks = require('./host-hooks.cjs')(native, vm.getCompiledCode);
 }
 exports.getRealm = native.getRealm;
 exports.getFunctionRealm = native.getFunctionRealm;
@@ -41,5 +42,5 @@ exports.createCollectionIterator = native.createCollectionIterator;
 exports.createHTMLDDA = native.createHTMLDDA;
 exports.supportsImportMeta = typeof native.setImportMetaInitializer === 'function';
 exports.supportsDynamicImport = typeof native.installDynamicImportRouter === 'function';
-Object.assign(exports, require('./vm.cjs')(native));
+Object.assign(exports, vm.methods);
 Object.assign(exports, require('./property-delegate.cjs')(native));

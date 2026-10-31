@@ -4,7 +4,7 @@ const { AsyncLocalStorage } = require('node:async_hooks');
 const names = ['makeJobCallback', 'callJobCallback', 'enqueuePromiseJob',
   'enqueueGenericJob', 'enqueueTimeoutJob'];
 
-module.exports = native => function setHostHooks(hooks) {
+module.exports = (native, getCompiledCode) => function setHostHooks(hooks) {
   if (hooks === null || typeof hooks !== 'object') throw new TypeError('Expected host hooks');
   for (const key of Object.keys(hooks)) {
     if (!names.includes(key)) throw new TypeError('Unknown host hook: ' + key);
@@ -31,6 +31,7 @@ module.exports = native => function setHostHooks(hooks) {
       return record;
     };
     capture = (kind, snapshot, callback, onRejected) => {
+      snapshot.compiledCode = getCompiledCode(snapshot.hostDefinedOptions);
       const records = kind === 'reaction'
         ? { fulfill: typeof callback === 'function' ? make(callback, snapshot) : undefined,
           reject: typeof onRejected === 'function' ? make(onRejected, snapshot) : undefined }

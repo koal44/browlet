@@ -12,7 +12,8 @@ import {
   type AddonContextHandle, type AddonMicrotaskQueueHandle, type ContextEvaluationOptions,
 } from './node-addons';
 import type {
-  CollectionIteratorKind, CompiledScript, ExoticObjectHandlers, GlobalAllocation, GlobalIndexedProperties, GlobalPrototypeKind, GlobalProxy,
+  CollectionIteratorKind, CompiledCode, CompiledScript, ExoticObjectHandlers, GlobalAllocation, GlobalIndexedProperties,
+  GlobalPrototypeKind, GlobalProxy,
   JSFunction, JSIteratorResult, JSRealm,
 } from './realm';
 import type { ImportModuleDynamically } from './modules';
@@ -108,7 +109,7 @@ export const setHostHooks = setNativeHostHooks && getNativeRealm
       makeJobCallback: (callback, registration) => hooks.makeJobCallback(callback, {
         incumbent: registration.incumbent === null ? null :
           RealmStamper.get(registration.incumbent) ?? null,
-        hostDefinedOptions: registration.hostDefinedOptions,
+        compiledCode: registration.compiledCode,
       }),
       callJobCallback: hooks.callJobCallback,
       enqueuePromiseJob: (job, realm) => {
@@ -407,8 +408,14 @@ export type JSJobCallback<HostDefined> = {
 };
 
 export type JSJobRegistration = {
+  /** Incumbent observed before entering host JavaScript. */
   incumbent: JSRealm | null;
-  hostDefinedOptions: unknown[];
+  /**
+   * Retained VM compilation. Undefined means no metadata was observed, allowing
+   * fallback to saved execution state. Null means metadata was present but
+   * unrecognized, so it must not inherit an unrelated host script.
+   */
+  compiledCode: CompiledCode | null | undefined;
 };
 
 export type JSMicrotaskQueue = {

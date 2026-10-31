@@ -819,6 +819,9 @@ export class JSRealm {
   }
 }
 
+/** Retained VM compilation, distinct from HTML's associated Script/Module record. */
+export type CompiledCode = CompiledScript | CompiledModule;
+
 /**
  * Retained code from JSRealm.parseScript(): a Node.js vm.Script or the addon's
  * matching Script object. Both keep compilation separate from context selection.

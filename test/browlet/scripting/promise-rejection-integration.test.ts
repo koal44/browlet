@@ -73,6 +73,28 @@ describe('native HostPromiseRejectionTracker to HTML events', () => {
     expect(f.events.map((event) => event.reason as unknown)).toEqual(muted ? [] : [42]);
   });
 
+  // SPEC_CLASH(promise-rejection-script-selection): Chromium/Firefox select the
+  // defining script for this primitive reason; WebKit reports both cases. Target
+  // Chromium/Firefox, retaining ordinary failures while the fix is deferred.
+  // This is a compatibility choice, not an unambiguous specification requirement.
+  it.each([false, true])('matches Chromium/Firefox rejection muting through an ordinary call (%s)', (muted) => {
+    const f = fixture();
+    const definition = new ClassicScript(
+      'function rejectFromDefinition() { return Promise.reject(42); }',
+      f.env, f.env.apiBaseURL, new ScriptFetchOptions(), muted,
+    );
+    expect(definition.run().type).toBe('normal');
+    const caller = new ClassicScript(
+      'rejectFromDefinition()', f.env, f.env.apiBaseURL, new ScriptFetchOptions(), !muted,
+    );
+    const completion = caller.run();
+    expect(completion.type).toBe('normal');
+    f.promises.push(completion.value as Promise<unknown>);
+    f.loop.performMicrotaskCheckpoint();
+    f.loop.runTaskTurn();
+    expect(f.events.map((event) => event.reason as unknown)).toEqual(muted ? [] : [42]);
+  });
+
   it('does not retain a promise handled during its unhandledrejection event', () => {
     const f = fixture();
     f.window.addEventListener('unhandledrejection', (event) => f.handle((event as PromiseRejectionEvent).promise as Promise<unknown>));

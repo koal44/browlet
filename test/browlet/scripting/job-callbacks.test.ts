@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import type { ErrorEvent } from '../../../src/browlet/platform';
 import type { JSExecutionContext } from '../../../src/browlet/scripting/execution-context';
-import { ClassicScript, type Script } from '../../../src/browlet/scripting/script';
+import { ClassicScript, JavaScriptModuleScript, type Script } from '../../../src/browlet/scripting/script';
 import { ScriptFetchOptions } from '../../../src/browlet/scripting/script-fetch-options';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { mockEventLoopTurns } from '../../support/browlet-agent';
@@ -18,6 +18,65 @@ const testJob = itPassesWith('hostHooks');
 afterEach(() => vi.restoreAllMocks());
 
 describe('HTML HostMakeJobCallback and HostCallJobCallback', () => {
+  for (const muted of [true, false]) {
+    // Missing hooks already leave errors unmuted, so that control passes everywhere.
+    const testRegistration = muted ? testJob : it;
+    testRegistration(`keeps the registering function's muting instead of its caller's (muted: ${muted})`, async () => {
+      await runInHostTask(() => {
+        const f = fixture();
+        const other = createSiblingWindow(f.browser);
+        const events: ErrorEvent[] = [];
+        other.addEventListener('error', (event) => {
+          event.preventDefault();
+          events.push(event as ErrorEvent);
+        });
+        Reflect.set(f.realm.globalObject, 'report', other.reportError.bind(other));
+        const definingScript = f.script(`
+          globalThis.register = () => Promise.resolve('private message').then(report);
+        `, muted);
+        expect(definingScript.run().type).toBe('normal');
+        const callingScript = f.script('register()', !muted);
+        expect(callingScript.run().type).toBe('normal');
+        f.loop.performMicrotaskCheckpoint();
+
+        expect(events.map(({ message }) => message)).toEqual([muted ? 'Script error.' : 'private message']);
+        expect(events[0]!.error).toBe(muted ? null : 'private message');
+        expect(f.loop.executionContextStack).toEqual([]);
+        expect(f.loop.backupIncumbentEnvironmentStack).toEqual([]);
+      });
+    });
+  }
+
+  testJob('captures a module registering callbacks before and after top-level await', async () => {
+    await runInHostTask(() => {
+      const f = fixture();
+      const observations: (Script | null)[] = [];
+      const gate = f.realm.NativePromise.withResolvers<void>();
+      Reflect.set(f.realm.globalObject, 'gate', gate.promise);
+      Reflect.set(f.realm.globalObject, 'observe', () => observations.push(f.loop.activeScript));
+      const script = new JavaScriptModuleScript(`
+        Promise.resolve().then(() => observe());
+        await gate;
+        Promise.resolve().then(() => observe());
+      `, f.env, f.env.apiBaseURL, new ScriptFetchOptions());
+      script.record!.link();
+      let completed = false;
+      const rejected = vi.fn();
+      script.run(true).observe(() => { completed = true; }, rejected);
+      f.loop.performMicrotaskCheckpoint();
+      expect(rejected).not.toHaveBeenCalled();
+      expect(completed).toBe(false);
+      expect(observations.map((value) => value === script)).toEqual([true]);
+
+      gate.resolve();
+      f.loop.performMicrotaskCheckpoint();
+      expect(completed).toBe(true);
+      expect(observations.map((value) => value === script)).toEqual([true, true]);
+      expect(f.loop.executionContextStack).toEqual([]);
+      expect(f.loop.backupIncumbentEnvironmentStack).toEqual([]);
+    });
+  });
+
   testJob('retains each script independently when the same platform method is registered twice', async () => {
     await runInHostTask(() => {
       const f = fixture();

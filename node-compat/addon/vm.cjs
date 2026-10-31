@@ -6,19 +6,19 @@ const vm = require('node:vm');
 module.exports = native => {
   const { Module, SourceTextModule, SyntheticModule, WebAssemblyModule, resultForImport, captureWasmIntrinsics } =
     require('./vm-modules.cjs')(native, registerImport);
-  const register = native.installDynamicImportRouter &&
+  const imports = native.installDynamicImportRouter &&
     require('./vm-imports.cjs')(native, resultForImport);
 
   function registerImport(callback, referrer) {
     checkImportCallback(callback);
     if (callback === undefined) return undefined;
-    return register(callback, referrer);
+    return imports.register(callback, referrer);
   }
 
   function checkImportCallback(callback) {
     if (callback === undefined) return;
     if (typeof callback !== 'function') throw new TypeError('Expected importModuleDynamically to be a function');
-    if (!register) throw new Error('Dynamic imports in addon contexts require the patched Node forwarding export');
+    if (!imports) throw new Error('Dynamic imports in addon contexts require the patched Node forwarding export');
   }
 
   class Script {
@@ -73,7 +73,7 @@ module.exports = native => {
       const context = native.createContextHandle(microtaskQueue, reuseGlobalProxyFrom, layout);
       captureWasmIntrinsics(context);
       if (importModuleDynamically !== undefined) {
-        native.setContextImportLoader(context, register(importModuleDynamically, context));
+        native.setContextImportLoader(context, imports.register(importModuleDynamically, context));
       }
       return context;
     },
@@ -100,5 +100,13 @@ module.exports = native => {
   if (typeof vm.makePrototypeImmutable === 'function') {
     methods.makePrototypeImmutable = vm.makePrototypeImmutable;
   }
-  return methods;
+  return {
+    methods,
+    // Distinguish absent metadata from foreign code; the host decides whether
+    // it has a saved script context to restore when metadata is absent.
+    getCompiledCode(options) {
+      if (options.length === 0) return undefined;
+      return imports ? imports.getReferrer(options) : null;
+    },
+  };
 };

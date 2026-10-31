@@ -1,5 +1,5 @@
 import { InternalError, type InternalPromise } from '../../infra/index';
-import type { CompiledScript, CompiledModule, ModuleRequest } from '../../js-engine/index';
+import type { CompiledCode, CompiledScript, CompiledModule, ModuleRequest } from '../../js-engine/index';
 import { idlType } from '../../web-idl/core/index';
 import { aboutBlankURL, copyURL, serializeURL, type URLRecord } from '../../url/index';
 import { CSSStyleSheetImpl } from '../../stylelet/index';
@@ -273,14 +273,23 @@ export class JSModuleRequest {
 /** The portion of ECMAScript Script and Module records used by HTML's context model. */
 // TODO(HTML §§8.1.4.3–4): Supply complete records from script creation and evaluation.
 export class JSScriptOrModule {
+  /** HTML records retained only while their compiled code remains reachable. */
+  static #compiledRecords = new WeakMap<CompiledCode, JSScriptOrModule>();
+
   realm: BrowletRealm;
   /** The HTML script; null for a provisional entry without a parsed HTML script. */
   // ECMAScript's [[HostDefined]] field.
   script: Script | null;
 
-  constructor(realm: BrowletRealm, script: Script | null) {
+  constructor(realm: BrowletRealm, script: Script | null, code?: CompiledCode) {
     this.realm = realm;
     this.script = script;
+    if (code !== undefined) JSScriptOrModule.#compiledRecords.set(code, this);
+  }
+
+  /** Recover the HTML association of code observed at an engine boundary. */
+  static fromCompiledCode(code: CompiledCode): JSScriptOrModule | null {
+    return JSScriptOrModule.#compiledRecords.get(code) ?? null;
   }
 }
 
@@ -292,7 +301,7 @@ export class JSScriptRecord extends JSScriptOrModule {
   loadedModules = new Map<JSModuleRequest, JSModuleRecord>();
 
   constructor(script: ClassicScript, code: CompiledScript) {
-    super(script.env.realm, script);
+    super(script.env.realm, script, code);
     this.code = code;
   }
 
@@ -394,7 +403,7 @@ export class JSSourceTextModuleRecord extends JSModuleRecord {
   code: CompiledModule;
 
   constructor(script: JavaScriptModuleScript, code: CompiledModule, requests: JSModuleRequest[] = []) {
-    super(script.env.realm, script);
+    super(script.env.realm, script, code);
     this.code = code;
     this.requestedModules = requests;
   }

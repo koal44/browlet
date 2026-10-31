@@ -273,12 +273,40 @@ testInWorker('registration captures the caller realm and script metadata before 
   for (const snapshot of snapshots) {
     assert.equal(snapshot.current, compat.getRealm(source));
     assert.equal(snapshot.incumbent, realm);
+    assert.equal(snapshot.compiledCode, null, 'Node metadata is not an addon compilation');
   }
   const ids = snapshots.map(snapshot => snapshot.hostDefinedOptions.find(value => typeof value === 'symbol'));
   assert.ok(ids.every(id => typeof id === 'symbol'));
   assert.notEqual(ids[0], ids[1]);
   assert.equal(ids[0], ids[2]);
 });
+
+testInWorker('registration resolves retained addon compilations independently of filenames', () => {
+  const snapshots = [];
+  const context = compat.createContextHandle();
+  const callback = () => {};
+  context.globalProxy.callback = callback;
+  compat.setHostHooks({
+    makeJobCallback(fn, registration) {
+      if (fn === callback) snapshots.push(registration.compiledCode);
+      return { callback: fn };
+    },
+  });
+  const options = { filename: 'same.js', importModuleDynamically() {} };
+  const first = new compat.Script('globalThis.register = () => Promise.resolve().then(callback)', options);
+  const second = new compat.Script('register()', options);
+  first.runInContext(context);
+  second.runInContext(context);
+  const module = new compat.SourceTextModule('Promise.resolve().then(callback)', {
+    context, identifier: 'same.js', importModuleDynamically() {},
+  });
+  module.linkRequests([]);
+  module.instantiate();
+  module.evaluate();
+  // No compilation metadata is distinct from another VM's unrecognized metadata.
+  compat.runInContext('Promise.resolve().then(callback)', context);
+  assert.deepEqual(snapshots, [first, module, undefined]);
+}, ['hostHooks', 'dynamicImport']);
 
 testInWorker('FinalizationRegistry retains its construction record for every cleanup invocation', async () => {
   const made = [];

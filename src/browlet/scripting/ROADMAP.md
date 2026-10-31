@@ -679,12 +679,39 @@ returning a completion. The explicit argument still preserves muting when the
 runner reports that completion. This is Browlet's chosen lifetime, independent
 of which frames V8 retains.
 
+**SPEC_CLASH(report-error-script-selection):** retain the explicitly supplied
+script when a runner reports an exception; otherwise use the modeled running
+script, or null. HTML leaves this selection implementation-defined. If classic
+script A defines a function that calls `reportError('private message')` and script
+B invokes it, Browlet consequently uses B's muted-errors flag. The
+[runtime-error regressions](../../../test/browlet/scripting/runtime-errors.test.ts)
+give A and B opposite flags and preserve the browser expectation in both
+directions. Eric approved skipping these comparisons on 2026-10-31: matching
+that behavior is not a chosen requirement. Keep the runtime unchanged and add
+no native capture for these cases.
+
+Live pages with same-origin and cross-origin script loads in Chromium
+156.0.8078.4, Firefox 157.0, and WebKit 27.2 all used A for that string case.
+The behavior is not a general executing-script rule: when B creates an Error
+object and A reports it, Chromium and WebKit use B's error origin, while Firefox
+exposes the Error details even for a cross-origin B. Firefox's sanitized string
+events also retain the filename and use undefined for the error; Chromium and
+WebKit use an empty filename and null. Uncaught-throw and direct-report controls
+confirmed that the script loads exercised muting.
+
+These cases document compatibility differences, not an unmet normative demand
+for broader execution-stack tracking. Job-registration compilation identity
+remains a separate, implemented host-hook requirement. The comparison previously
+observed both differences in all six configurations (custom/24.19.0/26.8.1,
+each stock and compat). The two cases are now intentionally idle; their skipped
+status is not evidence of browser alignment.
+
 **SPEC_CLASH(report-error-muting):** follow the written
 [reportError algorithm](https://html.spec.whatwg.org/multipage/webappapis.html#dom-reporterror),
 including classic-script muting. Its note reports that Firefox does not mute,
 whereas Chrome and Safari do. Eric approved following the algorithm on
-2026-10-26. This records the specification's browser evidence, not a new browser
-comparison performed by this audit.
+2026-10-26. The live comparison above narrows that note: Firefox also mutes the
+string case, but differs for the reported Error object and sanitized event fields.
 
 Window's special five-argument `onerror` callback and return-true cancellation
 remain §8.1.8.1 work. `addEventListener('error', ...)` and `preventDefault()` work
@@ -913,6 +940,28 @@ script-element integration.
 
 ## HTML §8.1.6: JavaScript host-hook audit
 
+### Outstanding connections before event loops (2026-10-31)
+
+This snapshot distinguishes adopted engine facilities from HTML connections.
+It does not treat reaching §8.1.7 as completion of the earlier dependencies.
+
+| Area | Current implementation | Remaining work and disposition |
+| --- | --- | --- |
+| Temporal clock (§8.1.6.5) | The addon has a per-context clock callback; `BrowletEnvironment.getSystemUTCEpochNanoseconds()` implements the HTML calculation. | The setter is not exposed through JS Engine's typed API or installed by Window composition. Concrete isolation still reaches the throwing Permissions Policy query; the native callback also accepts only signed-int64 nanoseconds. Review the ordinary supported hookup next using the existing addon, with policy and range decisions explicit. |
+| String compilation (§8.1.6.2) | Binding-owned TrustedScript extraction is connected through `HostGetCodeForEval`; Node's own checks remain in force. | CSP's `EnsureCSPDoesNotBlockStringCompilation` algorithm and its host-hook connection are missing. The four approved engine-input limitations remain separate from that TypeScript algorithm work. This is an earlier-section dependency on CSP, not a later event-loop algorithm. |
+| Execution attribution | Job registration captures compilation identity and restores the associated HTML script; direct `reportError` selection now has an accepted compatibility limitation. | The bounded rejection probe below reproduces caller-based muting on all addon bases, contrary to the intended Chromium/Firefox behavior; WebKit and the literal built-in-context reading differ too. Keep the two ordinary failures while the fix is deferred; no runtime change. Constructor incumbent capture and borrowed-Function import-error realms retain their already approved expected failures. Do not turn these into an unbounded goal of mirroring every author frame. |
+| WebAssembly modules | The addon supplies module compilation and supplied-graph execution. | `BrowletRealm.parseWebAssemblyModule()` still throws; source/deferred graph phases are also rejected. Keep the JSRealm/HTML/Wasm ESM integration on hold for its separate standards slice. |
+| Other adopted hooks | Promise rejection delivery, job routing, module imports, import metadata, and cleanup-exception reporting have their documented integrations. | Keep the existing private-element choice, unrelated-Node generic/timeout ownership limit, and unaudited whole-registry cleanup scheduling explicit. No new demonstrated cleanup scheduling failure justifies another native handoff. |
+
+Temporal and CSP remain genuine unfinished work. Permissions Policy is a
+different dependency from the implemented Permissions API used by Storage;
+`Document.isAllowedToUse()` still throws for an active Document. The suggested
+next bounded slice is the Temporal connection review, preserving the existing
+nonthrowing native contract and avoiding additional native code unless a concrete
+requirement demonstrates its necessity. Event-loop implementation has not resumed.
+
+### §§8.1.6.1–8.1.6.3: private elements and string compilation
+
 The first slice implements §8.1.6.3 `HostGetCodeForEval`. Window composition
 supplies Binding-owned TrustedScript recognition to the realm's native
 source-extraction callback. Binding unwraps a genuine platform object in the
@@ -979,9 +1028,48 @@ that active-script context across callbacks; the old TODO incorrectly suggested
 that parsed script records themselves were still missing. This does not close
 complete author-function provenance or the existing Worker/global lifecycle gates.
 
-Validation: both rejection suites pass across all six runtime configurations:
+At the original hook audit, both rejection suites passed across all six runtime configurations:
 29 passing tests on each addon base; 16 passing and 13 approved expected failures
 in each stock configuration. Touched-file ESLint and `git diff --check` pass.
+
+#### Ordinary-call rejection attribution probe (31 October 2026)
+
+SPEC_CLASH(promise-rejection-script-selection): Chromium/Firefox mute by the defining script in this probe; WebKit never mutes it, while Browlet currently mutes by the outer calling script. Chromium/Firefox is the intended compatibility target; the runtime correction is deferred.
+
+Script A defines `function rejectFromDefinition() { return Promise.reject(42); }`;
+script B calls it. The native integration regression gives A and B opposite
+`mutedErrors` values. All three addon bases fail both Chromium/Firefox comparison
+expectations: muted A/unmuted B emits `[42]`, while unmuted A/muted B emits `[]`.
+Eric approved retaining these as ordinary failing tests on 31 October 2026;
+they are neither expected failures nor skips on the addon paths. No runtime or
+addon code changed. Stock mode lacks the already-documented tracking facility.
+
+The reproducible [browser probe](../../../node-compat/experimental/browser-probes/html/promise-rejection-attribution.mjs)
+uses two HTTP origins and external classic scripts without CORS. Chromium
+156.0.8078.4 and Firefox 157.0 select A's muting in all four A/B combinations.
+WebKit 27.2 delivers `[42]` whether A and B are both unmuted, only A is muted,
+only B is muted, or both are muted. The probe checks that both scripts ran;
+the rejection reason is a primitive, so this result does not establish a general
+policy for Error objects, async resumptions, or cross-realm reporting.
+
+There is a specification boundary to settle before adopting more native code.
+[HTML's hook](https://html.spec.whatwg.org/multipage/webappapis.html#the-hostpromiserejectiontracker-implementation)
+uses the [running context's ScriptOrModule](https://html.spec.whatwg.org/multipage/webappapis.html#running-script),
+but ECMAScript's [BuiltinCallOrConstruct](https://tc39.es/ecma262/#sec-builtincallorconstruct)
+sets that field to null. `Promise.reject` calls a built-in rejecting function
+before entering the hook. Reading those steps literally therefore selects no
+script here, rather than either author script. The browser comparison alone
+does not justify treating the defining-script expectation as a settled normative
+requirement.
+
+The current native notification supplies only the promise and operation to the
+executing realm's tracker. Our modeled stack still names B when its ordinary call
+enters A's function; realm identity cannot distinguish two scripts in one realm.
+Matching Chromium/Firefox needs additional engine attribution at rejection, not
+just the existing callback-registration restoration. An addon bridge extension
+appears necessary with the current inputs; this investigation does not establish
+that a Node/V8 patch is needed. Reassess the boundary after Ged's current work is
+integrated, before proposing native changes or broader execution-stack work.
 
 ### §8.1.6.5: Temporal clock calculation and installation boundary
 
@@ -1024,8 +1112,8 @@ custom/compat, including the existing concrete-isolation prerequisite check.
 Typechecking, declaration contracts, touched-file ESLint, and `git diff --check`
 pass. This pure-algorithm slice changes neither native code nor hook registration.
 
-The Temporal installation and CSP compilation boundaries remain parked while
-the numbered host-hook audit continues.
+The installation and CSP compilation boundaries remain open in the
+[outstanding-connections audit](#outstanding-connections-before-event-loops-2026-10-31).
 
 ### §8.1.6.6.1 and §8.1.6.6.6: JobCallback invocation and capture
 
@@ -1049,13 +1137,11 @@ thenable receivers, nested registration, scriptless callbacks, and unrelated
 Node Promise progress. Unsupported backends retain the existing approved
 missing-host-hook expectations; the uncertain ABC listener test remains skipped.
 
-The native registration snapshot still supplies incumbent identity. Active-script
-capture uses the modeled HTML stack; native `hostDefinedOptions` are not mapped
-back to HTML script records. Arbitrary author calls and module-specific entry,
-including resumption after top-level await, remain explicit provenance limits.
-This slice neither reconstructs those frames nor connects dynamic import.
-The spec's `Promise.resolve('import(...)').then(eval)` consumer still awaits
-`HostLoadImportedModule`; restoring its known script state is now in place.
+The native registration snapshot supplies incumbent identity. The later
+[active-script capture follow-up](#active-script-capture-at-job-registration)
+also maps compilation metadata to HTML records. Neither reconstructs arbitrary
+author frames. The later HostLoadImportedModule slice connects dynamic import,
+including the retained referrer used by the spec's built-in eval example.
 
 Validation: the callback, Promise-job, lifecycle, and runtime-error suites pass
 across all six configurations (custom/compat: 41 passing and one existing skip;
@@ -1299,13 +1385,13 @@ survives the built-in callback and is not replaced by the settling script.
 Existing tests cover distinct registrations, fresh context identity, callback
 throws, thenable receivers, scriptless jobs, and unrelated Node callbacks.
 
-The existing provenance limits remain: native script metadata is not mapped to
-HTML script records, and ordinary author calls/module resumptions are not fully
-represented on our stack. The later HostLoadImportedModule slice now supplies
-native import callbacks with exact retained referrers; it does not reconstruct
-all active-script frames. The event-handler example additionally needs compiled
-content handlers. This callback audit used error reporting, not a synthetic
-loader, to test its registering-script restoration.
+The later [active-script capture follow-up](#active-script-capture-at-job-registration)
+uses native compilation metadata at registration. Ordinary author calls/module
+resumptions remain incompletely represented outside that boundary. The later
+HostLoadImportedModule slice supplies native import callbacks with exact retained
+referrers; it does not reconstruct all active-script frames. The event-handler
+example additionally needs compiled content handlers. This callback audit used
+error reporting to test its registering-script restoration.
 
 Validation: the callback and Promise-job suites pass in all six configurations.
 Custom/compat has 18 ordinary passes; each official compat base has six ordinary
@@ -1313,6 +1399,36 @@ passes and 12 approved expected failures; each stock base has five ordinary
 passes and 13 approved expected failures. There are no skips or new failure
 classifications. Typechecking, declaration contracts, touched-file ESLint, and
 diff checks pass.
+
+### Active-script capture at job registration
+
+The cross-script regression exposed a real muting error: muted script A defines
+a function which registers a Promise callback, and unmuted script B calls it.
+The hook previously captured B from the outer modeled stack, exposing the private
+message through a foreign `reportError` callback. The reverse muting case is also
+covered, so registration does not merely inherit whichever script is muted.
+
+The existing native snapshot already carries the compilation's import-loader
+identity. The VM adapter resolves it to retained Script/SourceTextModule code;
+JS Engine supplies that code to the HTML hook, where `JSScriptOrModule` owns its
+weak association with the HTML record. No new C++ or V8 hooks are required.
+Missing metadata preserves the modeled-stack fallback needed by built-ins;
+foreign metadata or code without an HTML association does not inherit that script.
+HTML's retained classic and source-text compilations install import callbacks on
+the custom backend, so their identities are available at this boundary.
+
+Tests cover both muting directions, independent same-filename compilations,
+foreign/missing metadata, and module registrations before and after top-level
+await. This resolves registration-time capture; it does not add arbitrary author
+frames to the modeled stack or supply direct platform calls with script attribution.
+Official/stock backends retain the approved missing-host-hook expectations.
+
+Validation: the six focused scripting suites have no unexpected failures across
+all six configurations: custom/compat has 78 ordinary passes and one existing
+expected failure; official compat has 44 passes and 35 expected failures; stock
+has 50 passes and 29 expected failures. The unmuted control passes ordinarily on
+every backend. All three native suites, typechecking, declaration contracts,
+touched-file ESLint, and diff checks pass with existing native limitations retained.
 
 ### §8.1.6.7.1: Import metadata
 

@@ -297,9 +297,12 @@ capture. A `JSExecutionContext` scopes that observation on the same stack with
 the method's current realm and the observed `incumbentEnv`, but no
 ScriptOrModule. It leaves retained entry selection and active-script provenance
 unchanged; callback skipping applies to the observation as well as script records.
-`Window.postMessage()` is the first consumer. JobCallback records now retain
-incumbent settings plus a fresh context for the modeled active script; make/call
-hooks restore that context across invocation and unwind it on return or throw.
+`Window.postMessage()` is the first consumer. JobCallback records retain
+incumbent settings plus a fresh context for the active script. The addon resolves
+its compilation metadata to retained VM code, and `JSScriptOrModule` owns the weak
+association from that code to its HTML record. Absent metadata uses the modeled
+stack; foreign/unassociated code does not inherit its script. Make/call hooks
+restore the captured context across invocation and unwind it on return or throw.
 Other binding surfaces and complete script provenance remain separate work.
 The A-to-B callback-registration investigation is skipped pending
 review of its observer and translation of HTML's examples; see the

@@ -6,6 +6,7 @@ import type { BrowletEnvironment } from '../environment';
 import { createTaskSource } from './event-loop';
 import { JSExecutionContext } from './execution-context';
 import { BrowletRealm } from './realm';
+import { JSScriptOrModule } from './script';
 
 export const jsEngineTaskSource = createTaskSource('JavaScript engine');
 
@@ -85,16 +86,19 @@ function makeJobCallback(
   const env = incumbent.env;
   // Steps 2–4 select the active script independently of incumbent settings and
   // the callback's realm. Capture a new context, not the frame's skip counter.
-  const activeScript = env.responsibleEventLoop.activeScript;
+  const code = registration.compiledCode;
+  const activeScript = code === undefined ? env.responsibleEventLoop.activeScript :
+    code === null ? null : JSScriptOrModule.fromCompiledCode(code)?.script ?? null;
   let activeScriptContext: JSExecutionContext | null = null;
   if (activeScript !== null) {
     activeScriptContext = new JSExecutionContext({
       realm: activeScript.env.realm, scriptOrModule: activeScript.record,
     });
   }
-  // TODO(HTML active-script provenance): This captures records visible to our
-  // modeled stack. Ordinary author calls and module evaluation still need their
-  // script association; the native registration metadata is not mapped to it.
+  // The metadata identifies the registering code, not the callback's code or
+  // the outer modeled script. Built-ins without metadata retain HTML's saved
+  // context; foreign code must not inherit it. This observes registration only,
+  // not every author call or module resumption on the modeled stack.
   return {
     callback,
     hostDefined: { incumbentEnv: env, activeScriptContext },

@@ -6,6 +6,7 @@ import { ClassicScript } from '../../../src/browlet/scripting/script';
 import { ScriptFetchOptions } from '../../../src/browlet/scripting/script-fetch-options';
 import { JSExecutionContext } from '../../../src/browlet/scripting/execution-context';
 import { getRelevantRealm } from '../../support/browlet-binding';
+import { runInHostTask } from '../../support/tasks';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -102,6 +103,33 @@ describe('runtime script errors', () => {
     expect(events[0]).toMatchObject({
       message: muted ? 'Script error.' : 'private message',
       error: muted ? null : 'private message',
+    });
+  });
+
+  // SPEC_CLASH(report-error-script-selection): Browsers use the reporting function's
+  // script for strings; Browlet uses the available modeled script. Eric approved
+  // skipping this comparison (2026-10-31): matching it is not a chosen requirement.
+  it.skip.each([false, true])('uses the reporting function\'s muting for a string instead of its caller\'s (%s)', async (muted) => {
+    await runInHostTask(() => {
+      const { window } = browser();
+      const env = getRelevantRealm(window).env;
+      const events = captureErrors(window);
+      const definingScript = new ClassicScript(
+        'globalThis.reportFromA = () => reportError("private message")',
+        env, env.apiBaseURL, new ScriptFetchOptions(), muted,
+      );
+      expect(definingScript.run().type).toBe('normal');
+      const callingScript = new ClassicScript(
+        'reportFromA()', env, env.apiBaseURL, new ScriptFetchOptions(), !muted,
+      );
+      expect(callingScript.run().type).toBe('normal');
+
+      expect(env.responsibleEventLoop.executionContextStack).toEqual([]);
+      expect(events).toHaveLength(1);
+      expect(events.map(({ message, error }) => ({ message, error: error as unknown }))).toEqual([{
+        message: muted ? 'Script error.' : 'private message',
+        error: muted ? null : 'private message',
+      }]);
     });
   });
 

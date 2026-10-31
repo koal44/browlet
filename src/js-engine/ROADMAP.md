@@ -48,11 +48,14 @@ Production script-element callers and complete source/active-script metadata
 remain integration work; source evaluation does not recompile
 retained artifacts.
 
-Custom hooks expose incumbent registration and opaque script metadata. HTML now
-captures the active script visible on its modeled stack into each JobCallback
-and restores its context around invocation, including exception cleanup. Native
-script metadata is not yet associated with those records; the HTML stack mirrors
-controlled entries, not every arbitrary V8 frame or module continuation.
+Custom hooks expose the incumbent and retained VM compilation at registration.
+The addon resolves its private import-loader identity; JS Engine passes the code
+object without exposing the opaque metadata to HTML. HTML associates classic and
+source-text compilations with their records, saves that script in each JobCallback,
+and restores its context around invocation, including exception cleanup. Missing
+metadata uses the modeled stack; foreign/unassociated code does not inherit its
+script. This observes registration, including after module await, without tracking
+every arbitrary V8 frame or module continuation on the HTML stack.
 
 An opt-in native function entry now captures the incumbent before the JavaScript
 helper behind a Web IDL operation runs. `Window.postMessage()` uses it on all addon

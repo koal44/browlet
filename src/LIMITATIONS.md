@@ -228,9 +228,15 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   expected failures on all backends, with passing A-only controls. See the
   [constructor evidence](browlet/scripting/ROADMAP.md#constructor-callback-incumbent).
   Later Promise/async-sequence conversions depend on their own callback/job context.
-  Job callbacks now restore the registering script when it was present in the
-  modeled stack; arbitrary author calls and module continuations still lack
-  complete script attribution.
+  Job callbacks now recover the registering classic/source-text script from
+  native compilation metadata, including registration after module await.
+  Missing metadata still uses the modeled stack. Arbitrary author calls and
+  module continuations outside that registration boundary still lack complete
+  script attribution. A direct `reportError()` call from a function defined by
+  script A while script B runs uses B's muted-errors flag; both opposite-flag
+  comparisons are skipped by agreement, not classified as defects to fix. HTML leaves that
+  script selection implementation-defined; Browlet retains explicit runner
+  attribution and the modeled-script fallback without additional native capture.
   The A-to-B bound-listener
   investigation is skipped by agreement: its JavaScript observer's equivalence to
   the native API in HTML's examples is uncertain. Revisit with the actual example
