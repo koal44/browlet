@@ -772,6 +772,15 @@ allocation. A sandbox can register for internal allocations without installing
 author interfaces. [Browlet's composition root](../browlet/bindings.ts) demonstrates
 both the sandbox and Window paths.
 
+`GlobalObjectAllocation.registerAttributeGetter` optionally tells the engine
+allocation which original functions implement global IDL attributes. Binding
+registers them as it prepares the getters; it does not replace the functions,
+cache their results, or notify implementations when a Document changes. Browlet's
+native Window allocation uses this identity to preserve bare attribute access on
+a retired Window after its public proxy is reused. Ordinary author accessors and
+explicit or borrowed getter calls retain their actual receivers. The allocation
+owns that engine behavior; Web IDL continues to own receiver checks and projection.
+
 Interfaces attach HTML's `serialSteps` and `transferSteps` directly to their
 declarations. The steps live with the owning implementation and run for the exact
 primary interface; inherited state must be included explicitly. Both directions

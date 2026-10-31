@@ -653,8 +653,8 @@ describe('navigation lifecycle', () => {
     await browlet.navigate('https://example.test/');
     const nextRealm = getRelevantRealm(browlet.document);
     expect(browlet.window).toBe(proxy);
-    expect(nextRealm).not.toBe(firstRealm);
-    expect(nextRealm.globalObject).not.toBe(firstRealm.globalObject);
+    expect(nextRealm === firstRealm).toBe(false);
+    expect(nextRealm.globalObject === firstRealm.globalObject).toBe(false);
     expect(Object.getPrototypeOf(nextRealm.windowImplementation))
       .toBe(WindowImpl.prototype);
     expect(oldState()).toEqual([2, firstDocument, proxy]);

@@ -32,10 +32,14 @@ inheriting from Window. This is the `node-vm-global-proxy` accommodation, not
 caller-realm selection.
 Native globals receive indexed descriptors and keys at Window composition through
 `JSRealm.setGlobalIndexedProperties()`. Both backends use Window's child lookup and
-WindowProxy's descriptor helper. Each native delegate retains its original Window
-for ordinary bindings and child lookup; public proxy reuse selects the replacement
-context's delegate. Native ordinary accessor receivers and automatic origin-sensitive
-dispatch remain unfinished.
+WindowProxy's descriptor helper. Native ordinary properties live in V8's actual
+per-context global; a stable host view reflects into that store after proxy reuse.
+Ordinary author accessors receive V8's original receiver. Binding registers global
+attribute getters through `GlobalObjectAllocation.registerAttributeGetter`, without
+replacing their functions. A retired context uses its original host view for bare
+IDL attribute access; explicit public-proxy access selects the replacement Window.
+Each indexed delegate likewise retains its original Window. Automatic
+origin-sensitive dispatch remains unfinished.
 Untyped `any` and `object` values keep their JavaScript representation.
 
 One private binding record connects those identities without changing the

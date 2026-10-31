@@ -338,7 +338,7 @@ export class JSRealm {
   }
 
   /**
-   * Global target and prototypes allocated by the Node compatibility add-on.
+   * Stable ordinary-global view and prototypes allocated by the Node compatibility add-on.
    * Throws if globalPrototypeChain was omitted.
    */
   get globalAllocation(): GlobalAllocation {
@@ -374,6 +374,14 @@ export class JSRealm {
       throw new InternalError('Indexed global delegation requires a native global allocation');
     }
     setGlobalObject(this.#vmContext, this.#globalObject, properties);
+  }
+
+  /** Keep a native global attribute bound to its original owner after proxy reuse. */
+  registerGlobalGetter(getter: JSFunction): void {
+    if (!addon.registerGlobalGetter || this.#globalAllocation === undefined) {
+      throw new InternalError('Global getter registration requires native global support');
+    }
+    addon.registerGlobalGetter(this.#vmContext, getter);
   }
 
   /** Create a realm-owned function that forwards calls and optional construction to host steps. */
@@ -752,14 +760,7 @@ export class JSRealm {
       if (globalObject !== this.#globalAllocation.object || globalThis !== this.#globalProxy) {
         throw new InternalError('Native global initialization requires its allocated object and proxy');
       }
-      // Intrinsics have been copied to the per-realm target. Remove configurable
-      // backing properties before installing delegation so deletion/ownKeys do
-      // not reveal an obsolete second copy on V8's hidden global object.
-      for (const key of Reflect.ownKeys(this.#globalProxy)) {
-        if (Reflect.getOwnPropertyDescriptor(this.#globalProxy, key)?.configurable) {
-          Reflect.deleteProperty(this.#globalProxy, key);
-        }
-      }
+      // The allocated host view and the public proxy share the actual global's properties.
       setGlobalObject(this.#vmContext, globalObject);
     } else {
       /*
@@ -899,7 +900,7 @@ export type JSRealmOptions = {
 
 export type GlobalPrototypeKind = 'mutable' | 'immutable' | 'delegated';
 
-/** Global target and its prototype objects, allocated together for the host to populate. */
+/** Stable ordinary-global view and prototypes, allocated together for the host to populate. */
 export type GlobalAllocation = {
   object: GlobalObject;
   /** Ordered from the target's immediate prototype outward, excluding Object.prototype. */
@@ -912,7 +913,7 @@ export type GlobalObject = object;
 /** Host-selected value of the realm's global this binding. */
 export type GlobalThis = object;
 
-/** Live indexed reads supplied by the owner of a native global's ordinary property target. */
+/** Live indexed reads supplied by the owner of a native global's ordinary property store. */
 export type GlobalIndexedProperties = {
   /** Describe a supported index; undefined preserves ordinary lookup for an unsupported index. */
   getOwnPropertyDescriptor(index: number): PropertyDescriptor | undefined;

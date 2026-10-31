@@ -351,18 +351,55 @@ resolves the adopted Promises. This is an ordinary passing lifecycle regression
 on all addon bases, not an expected failure. See the
 [browser evidence](../src/js-engine/ROADMAP.md#detached-context-promise-delivery).
 
-`globalPrototypeChain` preallocates an immutable global proxy/target and ordered
+### Native global property storage
+
+`globalPrototypeChain` preallocates an immutable global proxy and ordered
 `mutable`, `immutable`, or `delegated` prototype layers. Reuse requires the same
 layout. Web IDL populates them; `setPropertyDelegate()` attaches named-property
-behavior and `setGlobalObject()` selects the Window target. Node's shared VM
+behavior. Node's shared VM
 security token permits embedder access; it does not implement browser cross-origin policy.
-`setGlobalObject(handle, object, indexedProperties)` optionally supplements that
-target with live indexed descriptors and keys. Indexed reads, descriptors, and
+
+The context's `globalObject` is a stable host view of V8's actual ordinary global
+storage, not a second property store. Host definitions and script declarations
+therefore describe the same properties. The host view stays with its original
+context when `globalProxy` moves to a replacement. Ordinary author reads/writes
+use V8's dispatch, preserving explicit receivers and Binding's receiver checks.
+`setGlobalObject(handle, object, indexedProperties)` accepts that allocated view
+and optionally supplies live indexed descriptors and keys. Indexed reads, descriptors, and
 presence checks consult the supplied callbacks; enumeration merges their keys
-without duplicates. Ordinary properties remain on the original per-context target,
-including when a retained function runs after proxy reuse. The callbacks do not
-implement caller selection, cross-origin filtering, or the remaining indexed
-mutation rules. Global accessor receiver preservation is still separate work.
+without duplicates. Host storage reflection excludes these synthetic indices;
+getters run outside that reflection scope so nested child access remains live.
+
+Native global delegates query own properties on their original store after proxy
+reuse. Node 24 requires the original native holder for this query as well as for
+delegate selection; its public holder follows the replacement Window. The focused
+`global-object.test.cjs` regression checks both old-only and replacement-only names.
+
+`registerGlobalGetter(handle, getter)` records the original global IDL getter
+function. After detachment, that context's interceptor invokes registered
+attributes through the original host view for bare global lookup. It does not
+replace getters or cache results. Explicit lookup on the reused public proxy and
+borrowed calls keep their supplied receivers. This preserves original-Window
+ownership under `SPEC_CLASH(retained-window-attributes)`; browser evidence and the
+specification rationale live in the [Window roadmap](../src/browlet/browsing/window/ROADMAP.md#native-window-property-storage-and-receivers).
+
+Original-global capture is private to `global-object.cc`. A temporary native
+property and retained reader capture the native accessor holder before and after
+`DetachGlobal()`: Node 24 exposes the hidden original global (never returned to
+JavaScript), while Node 26/custom expose its permanent API proxy after detachment.
+The native callback must actually run; own-property collisions, lexical shadows,
+and lexical TDZ cause selection of another name. The temporary property is removed
+before returning. Capture and detachment are synchronous, with no author callback
+between preparation and completion. All ownership state is V8-traced, with no
+per-context strong native root. The native tests cover name collisions, TDZ,
+live retained state, and collection after reuse. This is a version-sensitive
+public-V8-API technique, not an engine patch or a general exposed capture API.
+
+Caller selection, cross-origin filtering, caller-dependent prototypes, and the
+remaining indexed mutation rules are separate work. The ordinary receiver repair
+does not make direct foreign-Document access safe.
+
+### Other addon operations
 
 | Optional operation | Availability and contract |
 | --- | --- |
@@ -399,8 +436,8 @@ An optional `getPropertyAttributes` supplies V8's lookup flags independently of
 the public descriptor (default: `getOwnPropertyDescriptor`). Web IDL uses this
 to permit named-property assignment on a separate receiver while its public
 descriptor stays read-only and replacement on the collection remains rejected.
-The [property regressions](test/html-dda.test.cjs) cover both paths. The older
-global/prototype delegate adapter is unchanged. These interceptors are not a
+The [property regressions](test/html-dda.test.cjs) cover both paths. Prototype
+forwarding remains separate from the global-storage view above. These interceptors are not a
 complete Proxy API: Node 26+ supplies the holder rather than the original
 property-access receiver; global handlers receive undefined. The collection path
 does not use that receiver argument.

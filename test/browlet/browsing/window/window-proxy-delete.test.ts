@@ -64,7 +64,8 @@ describe('Caller-bound WindowProxy Delete', () => {
     callerDocument.origin = targetDocument.origin;
     const child = createChild(targetDocument, 'child');
     const descriptor = binding.getWindowProxyOwnProperty('0', handle);
-    expect(descriptor).toMatchObject({ value: child.navigable.activeWindowProxy.platform, configurable: true });
+    expect(descriptor?.value).toBe(child.navigable.activeWindowProxy.platform);
+    expect(descriptor?.configurable).toBe(true);
     expect(binding.deleteWindowProxyProperty('0', handle)).toBe(false);
     expect(binding.getWindowProxyOwnProperty('0', handle)).toEqual(descriptor);
     expect(targetDocument.getDocumentTreeChildNavigables()).toEqual([child.navigable]);
@@ -156,7 +157,7 @@ describe('Caller-bound WindowProxy Delete', () => {
     const currentWindow = handle.associatedWindow;
     Object.defineProperty(currentWindow, 'ordinary', { value: 'current', configurable: true });
     expect(handle.platform).toBe(proxy);
-    expect(currentWindow).not.toBe(oldWindow);
+    expect(currentWindow === oldWindow).toBe(false);
     expect(() => binding.deleteWindowProxyProperty('ordinary', handle)).toThrow(context.DOMException);
     expect(Reflect.get(currentWindow, 'ordinary')).toBe('current');
     callerDocument.origin = unwrap<DocumentImpl>(target.document).origin;

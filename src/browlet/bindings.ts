@@ -143,6 +143,7 @@ export function createWindowEnvironment(
       // With add-on globals, supply the engine-allocated global object and prototypes to Web IDL.
       return projectWindow(context, window, {
         object,
+        registerAttributeGetter: (getter) => realm.registerGlobalGetter(getter),
         prototypes: new Map([
           ['Window', windowPrototype],
           ['EventTarget', eventTargetPrototype],
@@ -161,8 +162,8 @@ export function createWindowEnvironment(
     },
   });
   if (useAddonGlobals) {
-    // Native callbacks select their original context. Keep ordinary properties
-    // and indexed children bound to that Window, not the handle's movable target.
+    // Native callbacks select their original context. Keep child lookup bound
+    // to that Window, independently of the handle's movable target.
     const window = realm.windowImplementation;
     realm.setGlobalIndexedProperties({
       getOwnPropertyDescriptor: (index) => WindowProxyHandle.getIndexedOwnProperty(window, index),

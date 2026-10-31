@@ -111,7 +111,13 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
     this: MemberBinding<MemberOwner>,
     attribute: IDLAttribute,
   ): JSFunction {
-    return this.#getter ??= this.createAttributeGetter(attribute);
+    if (this.#getter) return this.#getter;
+    const getter = this.createAttributeGetter(attribute);
+    const { binding, assembled } = this.#implementationBinding;
+    if (assembled instanceof AssembledInterface && assembled.isGlobal()) {
+      binding.globalAllocation?.registerAttributeGetter?.(getter);
+    }
+    return this.#getter = getter;
   }
 
   /** Create another getter with the same IDL steps and this binding's realm. */

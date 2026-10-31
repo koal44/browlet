@@ -15,7 +15,9 @@ if (builtFor.version !== process.versions.node || builtFor.modules !== process.v
     `running ${process.versions.node} (${process.arch}). ${hint}`);
 }
 const native = require(join(build, 'node-compat.node'));
-const vm = require('./vm.cjs')(native);
+const properties = require('./property-delegate.cjs')(native);
+const { initializeGlobalObject, ...globals } = require('./global-object.cjs')(properties.setPropertyHandlers);
+const vm = require('./vm.cjs')(native, initializeGlobalObject);
 
 if (native.installHostHooks) {
   exports.setHostHooks = require('./host-hooks.cjs')(native, vm.getCompiledCode);
@@ -42,5 +44,4 @@ exports.createCollectionIterator = native.createCollectionIterator;
 exports.createHTMLDDA = native.createHTMLDDA;
 exports.supportsImportMeta = typeof native.setImportMetaInitializer === 'function';
 exports.supportsDynamicImport = typeof native.installDynamicImportRouter === 'function';
-Object.assign(exports, vm.methods);
-Object.assign(exports, require('./property-delegate.cjs')(native));
+Object.assign(exports, vm.methods, properties, globals);

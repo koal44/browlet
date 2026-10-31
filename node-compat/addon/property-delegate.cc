@@ -1,4 +1,5 @@
 #include "property-delegate.h"
+#include "global-object.h"
 #include <node_version.h>
 
 namespace node_compat {
@@ -20,6 +21,7 @@ bool Call(const PropertyCallbackInfo<T>& info, const char* name, int count,
   auto context = isolate->GetCurrentContext();
   Local<Object> storage;
   if (info.Data()->IsTrue()) {
+    if (IsGlobalObjectReflection()) return false;
     Local<Context> owner;
 #if NODE_MAJOR_VERSION >= 26
     // Newer V8 preserves the detached context in the callback's holder proxy.
@@ -50,7 +52,8 @@ bool Call(const PropertyCallbackInfo<T>& info, const char* name, int count,
 template <typename T>
 Local<Value> DelegateReceiver(const PropertyCallbackInfo<T>& info) {
   // Contextual global receivers can be hidden objects. Only ordinary prototype
-  // delegation needs a JS receiver; global delegation uses its bound target.
+  // delegation needs a JS receiver; global delegation handles indices and
+  // original-owner IDL access. Ordinary global access declines interception.
   if (info.Data()->IsTrue()) return Undefined(info.GetIsolate());
 #if NODE_MAJOR_VERSION >= 26
   // Property callbacks no longer expose This(). Browlet's named-properties
@@ -64,7 +67,14 @@ Local<Value> DelegateReceiver(const PropertyCallbackInfo<T>& info) {
 template <typename T>
 Local<Boolean> HasOwn(const PropertyCallbackInfo<T>& info, Local<Name> key) {
   auto isolate = info.GetIsolate();
-  return Boolean::New(isolate, info.HolderV2()
+#if NODE_MAJOR_VERSION < 26
+  // A retired global's public holder follows reuse into the replacement context.
+  // Query its original store, as Call does when selecting the delegate above.
+  auto holder = info.Data()->IsTrue() ? info.Holder() : info.HolderV2();
+#else
+  auto holder = info.HolderV2();
+#endif
+  return Boolean::New(isolate, holder
       ->HasRealNamedProperty(isolate->GetCurrentContext(), key).FromMaybe(false));
 }
 

@@ -468,9 +468,9 @@ existing tree-order collection stays unchanged for named access and other consum
 Native global proxies bypass these JavaScript traps. Both backends use Window's
 child lookup and length, with WindowProxy supplying indexed descriptors. Window
 composition supplies callbacks retaining the original Window; ordinary globals
-continue to use that Window's target across navigation. Caller-realm integration,
-origin-sensitive filtering, indexed mutation rules, and ordinary accessor receiver
-preservation remain separate work. The indexed-access suite covers both backends.
+use V8's per-context store and preserve their receivers as described below.
+Caller-realm integration, origin-sensitive filtering, and indexed mutation rules
+remain separate work. The indexed-access suite covers both backends.
 Automatic child creation/destruction remains with the element/navigation owners;
 tests connect real children at the existing content-navigable association.
 The generated `WindowProxy` type now adds a readonly numeric index to the declared
@@ -516,8 +516,98 @@ Five enumeration regressions initially missed the child-key prefix. Two receiver
 regressions initially observed the underlying Window as `this` and mutations of
 Window even when the supplied receiver was frozen. Tests now cover these behaviors,
 live key order, navigation, overlapping numeric keys, exact VM-global aliases, and
-rejection of derived objects as IDL receivers. Native proxies still bypass these
-traps and require their own implementation and validation.
+rejection of derived objects as IDL receivers. Native proxies bypass these traps;
+the native repair below covers their ordinary receivers separately.
+
+## Native Window property storage and receivers
+
+31 October 2026. The maintained native path now stores ordinary properties on
+V8's actual per-context global. Binding installs into a stable host view of that
+same store; global declarations, descriptors, definitions, deletion, and keys no
+longer pass through a separate Window target. Ordinary author accessors execute
+with V8's actual receiver, including an explicit `Reflect.get`/`Reflect.set`
+receiver. The existing WindowProxy regressions first reproduced two native
+failures: accessor `this` was replaced with the internal target, and a derived
+receiver incorrectly passed the `document` getter's brand check.
+
+The view retains its original global across public-proxy reuse. Binding registers
+the original global IDL getter functions through the allocation contract. Only
+retired-context attribute access uses this registration: bare names select the
+old Window, while `window.document` and borrowed getter calls with the reused
+proxy select the replacement. Author-created getters keep their ordinary receiver.
+No getter-result cache, Document association notification, or WindowImpl hook is
+needed. The native capture mechanism and its lifetime constraints are documented
+in [Node compatibility](../../../../node-compat/README.md#native-global-property-storage).
+
+`SPEC_CLASH(retained-window-attributes)`: preserve original-Window ownership,
+as Eric selected. ECMAScript's [Object Environment Record GetBindingValue](https://tc39.es/ecma262/multipage/executable-code-and-execution-contexts.html#sec-object-environment-records-getbindingvalue-n-s)
+reads its binding object; SetMutableBinding writes that same object. Combined
+with HTML's per-Window [status](https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-window-status)
+and [navigator](https://html.spec.whatwg.org/multipage/system-state.html#dom-navigator)
+attributes and Web IDL's [receiver-based attribute getter](https://webidl.spec.whatwg.org/#dfn-attribute-getter),
+Browlet interprets retained bare lookup as access to the original Window. This
+does not change the receiver of explicit access through a retained public proxy.
+
+An iframe replacement-document probe on 31 October produced:
+
+| Browser | Retained bare `status` | Retained bare `navigator` | Retained bare status write |
+| --- | --- | --- | --- |
+| Chromium 156 | Replacement value | Replacement object | Updates replacement Window |
+| Firefox 157 | Throws `NS_ERROR_XPC_SECURITY_MANAGER_VETO` | Neither saved object | Throws the same veto |
+| WebKit 27.2 | Original value | Original object | Updates original Window |
+
+All three retained the original bare `document`. The browser-only probe is
+`node-compat/experimental/window-property-store/retained-attributes.mjs`; the
+maintained regression is `test/browlet/browsing/native-global.test.ts`. The native
+fixture independently exercises ordinary storage, exact receivers, retained
+Document access paths, live old-owner state, capture-name collisions and TDZ, and
+collection of retired/replacement contexts and views.
+
+This slice does not connect automatic cross-origin dispatch. The experimental
+foreign-Document regression still expects both direct and borrowed access to
+throw `SecurityError`; direct property access currently returns a Document.
+The access guard must run before ordinary global property lookup. Caller-dependent
+prototype reflection, COOP access reports, and full indexed mutation rules also
+remain open. The property-store repair requires addon rebuilds, not a Node/V8 patch.
+
+Validation on Windows used all six runtime configurations, with four Vitest
+workers. All **579 unit files** passed in each configuration:
+
+| Runtime | Passing assertions | Existing expected failures |
+| --- | --- | --- |
+| Node 24.19.0, compat | 17,091 | 81 |
+| Node 26.8.1, compat | 17,095 | 77 |
+| Custom Node 27.0.0-pre, compat | 17,151 | 21 |
+| Each of the three bases, stock | 17,003 | 169 |
+
+Each run also retained 16 existing skips and one TODO. The full native addon
+suite passed on all three bases: 277 cases on each official runtime, and 276
+plus one existing skip on custom, including existing expected-failure controls.
+Typecheck, type contracts, scoped ESLint, and whitespace checks passed. Initial
+single-worker full-suite attempts exhausted the worker's 4 GiB heap; the completed
+matrix distributed the same tests across four workers. No assertions were removed
+or newly classified as expected failures.
+
+### Access guard follow-up
+
+The 31 October guard refresh in `node-compat/experimental/window-guard/` now uses
+this maintained store directly. It blocks the actual foreign-Document regression
+on all three native bases, including warmed lookup. It also exposed a Node 24
+own-property query that followed the reused public proxy instead of the original
+global. The maintained native regression reproduces that wrong query without the
+guard; `property-delegate.cc` now selects the original holder consistently.
+The guard itself remains experimental. Its foreign receiver and mutation paths
+now follow the selected Chromium behavior on all three addon bases, using V8's
+public failed-access callback without an engine patch. Its README records browser
+differences, isolate-wide callback ownership, and the Promise-observation,
+trusted-compilation, and PutForwards dependencies needed for production adoption.
+
+For this query correction, the four affected Window suites pass on all six
+configurations: 73 assertions on each compat base, and 67 plus six existing
+expected failures on each stock base. The full native suites pass with 278 tests
+on each official base and 277 plus one existing skip on custom. Type contracts,
+focused lint, and whitespace checks pass. These results are separate from the
+preceding property-store slice's full-unit validation.
 
 ## HTML §7.2.3: indexed platform types
 

@@ -270,7 +270,7 @@ describe('WindowProxy indexed reads', () => {
     newDocument.body!.appendChild(newChild.container);
     expect(browser.window).toBe(proxy);
     expect(proxy[0]).toBe(newChild.navigable.activeWindowProxy.platform);
-    expect(proxy[0]).not.toBe(oldChild.navigable.activeWindowProxy.platform);
+    expect(proxy[0] === oldChild.navigable.activeWindowProxy.platform).toBe(false);
   });
 });
 

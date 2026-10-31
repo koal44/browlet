@@ -870,6 +870,8 @@ export type SecurityCheckType = 'getter' | 'method' | 'setter';
 export type GlobalObjectAllocation = {
   object: object;
   prototypes: ReadonlyMap<string, object>;
+  /** Retain global attribute ownership when the engine can detach and reuse its public proxy. */
+  registerAttributeGetter?: (getter: JSFunction) => void;
   namedProperties?: {
     object: object;
     setDelegate(delegate: object): void;

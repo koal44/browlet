@@ -164,17 +164,21 @@ Plain Node uses allocation stamps plus incomplete prototype/evaluation evidence;
 evaluating a known foreign value must not overwrite its existing association.
 
 Native context handles separate the replaceable realm from the reusable global
-proxy. A requested `globalAllocation` holds the engine-created global target and
-prototype objects for Web IDL to populate; accessing it without requesting a
-prototype layout throws. `globalObject` is the installed global, while `globalThis`
+proxy. A requested `globalAllocation` holds a stable host view of the actual
+per-context global and prototype objects for Web IDL to populate; accessing it
+without requesting a prototype layout throws. `globalObject` is the installed global, while `globalThis`
 is the host-selected this value. `GlobalObject` and `GlobalThis` name those roles
 without requiring a particular property shape. Plain Node keeps the modeled
 global bridge. Neither path supplies browser cross-origin security. Detachment
 cancels queued V8 work, so HTML owns the checkpoint-before-reuse boundary.
 The addon preserves the detached context's existing embedder token for retained
 functions accessing a reused proxy. `setGlobalIndexedProperties()` supplements a
-native realm's fixed ordinary-property target with owner-supplied indexed reads
-and keys; it does not replace the target with a movable global-this object.
+native realm's ordinary property store with owner-supplied indexed reads and keys.
+`registerGlobalGetter()` identifies global IDL attribute functions so retired bare
+lookup can invoke them with their original Window view. Explicit public-proxy
+lookup and author accessors use V8's ordinary receivers. Original-global capture
+is private to the addon, uses no engine patch, and is described in its
+[allocation contract](../../node-compat/README.md#native-global-property-storage).
 
 Captured host intrinsics can throw host-realm errors. Buffer metadata operations
 translate detached/out-of-bounds DataView failures into Infra TypeError requests;

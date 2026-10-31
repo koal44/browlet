@@ -200,8 +200,8 @@ describe('cross-origin opener policy navigation', () => {
     expect(second.browsingContext).toBe(first.browsingContext);
     expect(browser.window).toBe(firstProxy);
     const third = navigate(browser, {});
-    expect(third.browsingContext!.group).not.toBe(first.browsingContext!.group);
-    expect(browser.window).not.toBe(firstProxy);
+    expect(third.browsingContext!.group === first.browsingContext!.group).toBe(false);
+    expect(browser.window === firstProxy).toBe(false);
     expect(first.browsingContext!.group!.browsingContextSet.has(first.browsingContext!)).toBe(true);
   });
 

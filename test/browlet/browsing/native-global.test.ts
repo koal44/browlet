@@ -70,17 +70,35 @@ describe('Window global allocation', () => {
       var pageState = 1;
       () => [++pageState, globalThis];
     `, 'old-state.js') as () => [number, object];
+    first.window.status = 'old';
+    const oldNavigator = first.platformWindow.navigator;
+    const oldAttributes = first.realm.evaluate(`
+      ({ status: () => status, navigator: () => navigator, setStatus: value => { status = value; } });
+    `, 'old-attributes.js') as { status(): string; navigator(): Navigator; setStatus(value: string): void; };
     first.realm.agent.eventLoop.performMicrotaskCheckpoint();
     const second = createNativeWindow(first);
     expect(second.context.windowProxy).toBe(handle);
     expect(second.realm.windowProxy).toBe(handle);
     expect(second.realm.globalThis).toBe(proxy);
-    expect(second.platformWindow).not.toBe(first.platformWindow);
+    // Vitest's negated toBe also walks properties to prepare a deep-equality hint.
+    expect(second.platformWindow === first.platformWindow).toBe(false);
     expect(second.realm.Object).not.toBe(first.realm.Object);
     expect(oldClosure()).toBe(42);
     expect(unwrap(oldDocument())).toBe(first.document);
     expect(unwrap(currentDocument())).toBe(second.document);
     expect(oldState()).toEqual([2, proxy]);
+    second.window.status = 'new';
+    // SPEC_CLASH(retained-window-attributes): Keep bare IDL access on the original
+    // Window, as WebKit does. Chromium follows the replacement; Firefox differs.
+    expect(oldAttributes.navigator()).toBe(oldNavigator);
+    expect(oldAttributes.status()).toBe('old');
+    oldAttributes.setStatus('retained');
+    expect(first.window.status).toBe('retained');
+    expect(second.window.status).toBe('new');
+    expect(Reflect.get(first.platformWindow, 'pageState')).toBe(2);
+    Reflect.defineProperty(first.platformWindow, 'pageState', { value: 7 });
+    expect(oldState()).toEqual([8, proxy]);
+    expect(Reflect.has(second.platformWindow, 'pageState')).toBe(false);
     expect(second.realm.evaluate('typeof pageState', 'new-state.js')).toBe('undefined');
     expect(unwrap(first.platformWindow)).toBe(first.window);
     expect(unwrap(second.platformWindow)).toBe(second.window);

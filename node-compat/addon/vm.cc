@@ -3,6 +3,7 @@
 #include "vm-imports.h"
 #include "realm.h"
 #include "property-delegate.h"
+#include "global-object.h"
 
 #include <memory>
 #include <unordered_set>
@@ -228,17 +229,11 @@ void CreateContext(const FunctionCallbackInfo<Value>& args) {
       static_cast<PropertyAttribute>(ReadOnly | DontDelete)).Check();
   if (!args[2]->IsUndefined()) {
     InitializePropertyDelegate(realm, realm->Global(), true);
-    // Allocate a distinct, realm-owned global target with the same observable
-    // prototype as the global proxy. The JS binding owns its association with
-    // the implementation; the proxy can later move to another context.
+    Local<Object> object;
+    if (!CreateGlobalObject(realm).ToLocal(&object)) return;
+    // The JS adapter adds exact-receiver get/set traps before freezing this slot.
+    holder->DefineOwnProperty(host, Text(isolate, "globalObject"), object, ReadOnly).Check();
     Context::Scope scope(realm);
-    auto object_constructor_template = FunctionTemplate::New(isolate);
-    object_constructor_template->InstanceTemplate()->SetImmutableProto();
-    auto constructor = object_constructor_template->GetFunction(realm).ToLocalChecked();
-    constructor->Set(realm, Text(isolate, "prototype"), realm->Global()->GetPrototypeV2()).Check();
-    auto object = constructor->NewInstance(realm).ToLocalChecked();
-    holder->DefineOwnProperty(host, Text(isolate, "globalObject"), object,
-        static_cast<PropertyAttribute>(ReadOnly | DontDelete)).Check();
     auto chain = Array::New(isolate, static_cast<int>(prototype_kinds.size()));
     auto prototype = realm->Global()->GetPrototypeV2();
     for (uint32_t i = 0; i < prototype_kinds.size(); ++i) {
@@ -282,6 +277,7 @@ void Detach(const FunctionCallbackInfo<Value>& args) {
   }
   auto realm = handle->context.Get(isolate);
   auto proxy = realm->Global();
+  if (!PrepareGlobalObjectDetach(realm)) return;
   auto security_token = realm->GetSecurityToken();
   realm->DetachGlobal();
   // Detachment can replace the embedder token. Retained functions must still
@@ -289,6 +285,7 @@ void Detach(const FunctionCallbackInfo<Value>& args) {
   // HTML origin checks remain the binding's responsibility.
   realm->SetSecurityToken(security_token);
   handle->state = ContextHandle::kDetached;
+  if (!FinishGlobalObjectDetach(realm)) return;
   args.GetReturnValue().Set(proxy);
 }
 

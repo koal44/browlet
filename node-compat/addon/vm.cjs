@@ -3,7 +3,7 @@
 const vm = require('node:vm');
 
 // Adapt the public options to the native context/evaluation arguments.
-module.exports = native => {
+module.exports = (native, initializeGlobalObject) => {
   const { Module, SourceTextModule, SyntheticModule, WebAssemblyModule, resultForImport, captureWasmIntrinsics } =
     require('./vm-modules.cjs')(native, registerImport);
   const imports = native.installDynamicImportRouter &&
@@ -71,6 +71,7 @@ module.exports = native => {
         return index;
       });
       const context = native.createContextHandle(microtaskQueue, reuseGlobalProxyFrom, layout);
+      initializeGlobalObject(context);
       captureWasmIntrinsics(context);
       if (importModuleDynamically !== undefined) {
         native.setContextImportLoader(context, imports.register(importModuleDynamically, context));

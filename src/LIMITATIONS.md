@@ -78,9 +78,12 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   in container insertion order. Own keys include the live child-index prefix;
   ordinary keys still follow it without foreign-caller filtering. Automatic indexed
   writes/deletion and missing-index security checks remain unfinished. Native global proxies
-  use owner-supplied indexed callbacks alongside their original per-context Window
-  target. Native accessor receiver forwarding remains incorrect: explicit receivers
-  are replaced by that Window target, including invalid derived receivers.
+  use owner-supplied indexed callbacks alongside V8's ordinary global storage.
+  Native ordinary accessor access now preserves explicit receivers and rejects
+  invalid derived IDL receivers. A stable host view retains each original global's
+  properties across reuse; registered IDL attributes retain original-Window bare
+  lookup, as recorded by `SPEC_CLASH(retained-window-attributes)` in the
+  [Window roadmap](browlet/browsing/window/ROADMAP.md#native-window-property-storage-and-receivers).
   Stock get/set forwarding preserves the receiver, with exact associated VM globals
   mapped to the public proxy so free global names still reach Window bindings.
   Retired VM globals remain weakly recognized across navigation. Other receivers,
