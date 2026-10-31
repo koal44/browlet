@@ -431,37 +431,49 @@ The HTML integration follows Chromium's foreign receiver and mutation choices;
 see the [Window audit](../src/browlet/browsing/window/ROADMAP.md#native-window-access-guard).
 Same-origin COOP reporting and indexed mutation rules remain separate work.
 
-**Node 24 import boundary:** a Function made with a guarded Window's constructor
-but a Node-owned referrer/loader rejects its import with `TypeError: no access`.
-The native regression reproduces this even with an allow-all selector; a separate
-probe without `observePromise()` also rejects. Ordinary host Promise adoption
-works. Node 26/custom pass the required import assertion. Node 24's case is an
-approved expected failure; this does not change the separate unsupported HTML
-dynamic-import status on official addon bases.
+**Node 24 Promise workaround:** the first successful guarded-context creation
+initializes a JavaScript workaround in [vm.cjs](addon/vm.cjs). It briefly replaces
+and restores `Promise.prototype.then` in a disposable VM realm, invalidating V8's
+isolate-wide `PromiseThenLookupChain` protector. Host and Window intrinsic
+functions/descriptors remain unchanged. Ordinary addon loading, unguarded
+contexts, failed context creation, and Node 26/custom do not activate it. Further
+guarded contexts reuse that state; each worker initializes independently.
 
-The [isolated import probe](experimental/window-guard/node24-import.cjs) now
+Without this workaround, a guarded Window's Function using a Node-owned loader
+rejects its import with `TypeError: no access`, and rejecting loaders can leak
+unhandled rejections. The [isolated probe](experimental/window-guard/node24-import.cjs)
 narrows this to V8's native `JSPromise::Resolve` fast path. In
 [Node 24.19.0](https://github.com/nodejs/node/blob/v24.19.0/deps/v8/src/objects/objects.cc),
 it selects the current context's `promise_then()` when adopting an intrinsic
 Promise from another realm. [Node 26.8.1](https://github.com/nodejs/node/blob/v26.8.1/deps/v8/src/objects/objects.cc)
-selects that Promise prototype's creation context instead. Node's import bridge
-adopts its host loader Promise into the importing Window, exposing the wrong
-realm choice and subsequent Promise-constructor access denial. The loader runs;
-the Window guard callback is not invoked. This is independent of Holder/HolderV2.
-Returning a namespace, Module, or host Promise all reproduces the Node 24 failure.
-The probe's `--invalidate-then` diagnostic disables that lookup optimization and
-restores the original intrinsic; all three then succeed with the guard enabled.
-This changes optimization state for the whole isolate and is not installed in
-production. A backport of the engine correction remains preferable to a global
-optimization workaround; no Node/V8 source is changed here.
+selects that Promise prototype's creation context instead. This is independent
+of Holder/HolderV2, native Promise observation, and the Window guard selector.
+The native success/rejection and HTML Node-owned import assertions now run
+normally on every supported base. Official addon bases still lack the separate
+HTML dynamic-import forwarding export; their existing expected failures remain.
 
-When that Node loader rejects (including the missing-callback default), its
-original rejection can also remain unhandled. The Node 24/addon HTML import suite
-therefore still reports unhandled errors; these are not suppressed or counted as
-passing acceptance. The import rejection tests verify that HTML's loader was
-actually reached, so an unrelated native TypeError cannot satisfy their realm
-expectations. Resolving this Node-owned continuation boundary remains follow-up;
-the guard is not disabled and no Node/V8 patch is added here.
+Node's module-evaluation repair in [24.9.0](https://github.com/nodejs/node/releases/tag/v24.9.0)
+returns an outer-context Promise for `module.evaluate()` with `afterEvaluate`.
+It is present in 24.19.0 and does not fix this V8 path: both 24.9.0 and 24.19.0
+retain the wrong-realm optimization. Remove the workaround after backporting
+[V8 commit 626b689](https://github.com/v8/v8/commit/626b689e9a9845b584fbbdd0917fb19cdc43f1f4)
+and validating the affected Node releases. No Node/V8 source or native behavior
+is changed by this workaround.
+
+Invalidation lasts for the isolate's lifetime and affects host application code
+as well as Browlet. The [experiment](experimental/promise-then-workaround/README.md)
+measured roughly 27% extra time in a tight host `Promise.all` loop, 10% in Promise
+adoption, and 16% in cross-realm adoption, with about 1.3 ms initial setup. Browlet
+DOM/async workloads showed no clear slowdown within measured variation. The
+workaround preserves access checks; it trades this optimization cost for correct
+import completion and rejection delivery until the engine fix is available.
+
+**Addon reload dependency:** deleting the JavaScript entry point's require-cache
+entry and loading it again on custom Node reinstalls the import router's cleanup
+hook and aborts. The strict regression is an approved expected failure on runtimes
+with that router. Ordinary repeated context creation and worker teardown pass.
+Making router initialization reusable, including retained loaders, remains separate
+work in `vm-imports.cjs`/`vm-imports.cc`.
 
 ### Other addon operations
 

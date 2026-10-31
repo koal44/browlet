@@ -227,8 +227,6 @@ void CreateContext(const FunctionCallbackInfo<Value>& args) {
   if (node::InitializeContext(realm).IsNothing()) return;
   node::RegisterContext(data->environment, realm, "node-compat");
   // Guarded globals keep distinct tokens so cross-context access reaches the host policy.
-  // TODO(node24-guarded-import): Node 24's own import continuation fails across
-  // these tokens; a rejected loader result can also remain unhandled (see README).
   if (global_access) PrepareGlobalAccess(realm);
   else realm->SetSecurityToken(host->GetSecurityToken());
 

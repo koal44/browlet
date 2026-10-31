@@ -19,6 +19,8 @@ exports.itPassesWith = function itPassesWith(...requirements) {
 };
 
 const supported = {
+  // Approved gap: reloading the JS facade reinstalls the patched import router's cleanup hook.
+  addonReload: typeof native.installDynamicImportRouter !== 'function',
   collectionIterators: typeof compat.createCollectionIterator === 'function',
   dynamicImport: typeof native.installDynamicImportRouter === 'function',
   importMeta: typeof native.setImportMetaInitializer === 'function',

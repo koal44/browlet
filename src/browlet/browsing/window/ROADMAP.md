@@ -625,36 +625,42 @@ Confirmed addon-dependent assertions remain strict expected failures only with
 the addon disabled, as approved. Same-origin COOP reporting, same-origin indexed
 mutation, missing Window declarations, and navigation remain separate work.
 
-The full matrix also exposed a Node 24 import boundary: a Window-created Function
-with a Node-owned loader rejects with `TypeError: no access`, even with an allow-all
-native selector and without Browlet observation. Its strict assertion is an approved
-Node-24/addon expected failure. Rejecting loaders additionally leak an unhandled
-Node rejection; the full Node 24/addon run remains failing for those diagnostics.
-Node 26/custom pass this boundary. The [addon notes](../../../../node-compat/README.md#native-global-access-checks)
-record it separately from the earlier official-base HTML import dependency.
-The isolated probe subsequently identified V8's native Promise-resolution fast
-path selecting the importing context's `.then` for a host Promise on Node 24.
-Node 26 selects the Promise's own realm. Disabling that optimization makes the
-probe succeed without changing origin policy; it is diagnostic evidence, not a
-production workaround or a completed full-suite repair. Holder/HolderV2 is not
-involved. The addon notes link the exact versioned sources and reproduction.
+Node 24's native Promise-resolution fast path selects the importing context's
+`.then` for a host Promise. This caused Node-owned imports to reject with
+`TypeError: no access` and leak rejected loader results. The first guarded global
+now initializes a temporary workaround entirely inside `node-compat`: invalidate
+the shared Promise lookup optimization in a disposable realm. Access checks and
+host/Window intrinsics remain unchanged. The import assertions run normally and
+the leaked rejections are repaired. Node 26/custom do not activate the workaround.
+The [addon notes](../../../../node-compat/README.md#native-global-access-checks)
+record the isolate-wide performance cost, exact upstream backport target, and
+the distinct module-evaluation repair already present in Node 24.19.0. The
+official-base HTML import-forwarding dependency remains separate.
 
 Production guard validation on 31 October 2026:
 
 | Full unit configuration | Passing assertions | Expected failures | Run result |
 | --- | --- | --- | --- |
-| Node 24.19.0, compat | 17,122 | 82 | Fails: 22 unhandled Node import rejections |
+| Node 24.19.0, compat | 17,123 | 81 | Pass; no unhandled import rejections |
 | Node 26.8.1, compat | 17,127 | 77 | Pass |
 | Custom Node 27.0.0-pre, compat | 17,183 | 21 | Pass |
 | Each of the three bases, stock | 17,008 | 196 | Pass |
 
 Each run also retains 16 skips and one TODO. The full native suites complete with
-296 cases on each official base, and 295 plus one existing skip on custom; their
-counts include approved expected-failure controls. All 18 guard cases execute on
-each native base, including the new Node 24 import expected failure. Package builds
-and all ten artifact checks pass on each of the six configurations. Typecheck,
-type contracts, changed-file ESLint, and whitespace checks pass. The Node 24
-unhandled errors remain visible; this is not a completely passing integration.
+304 cases on each official base, and 303 plus one existing skip on custom; their
+counts include approved expected-failure controls. All 26 guard cases execute on
+each native base. Import success and rejection now pass normally. A separate
+JavaScript addon reload regression remains an approved expected failure on custom:
+deleting the entry point's require cache reinstalls the import-router cleanup hook
+and aborts. Router initialization/lifetime repair remains separate work.
+
+The rebuilt Browlet package and all ten artifact checks pass on each of the six
+configurations. Typecheck, type contracts, changed-file ESLint, and whitespace
+checks pass. One Node 26/stock Headers test hit its five-second timeout during
+concurrent matrix runs; its isolated suite and the complete serial rerun passed
+without changing assertions or timeouts. The Node 24 workaround clears the 22
+previously unhandled import rejections; the separate expected failures above
+remain explicit dependencies.
 
 ## HTML §7.2.3: indexed platform types
 

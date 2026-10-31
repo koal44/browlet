@@ -25,6 +25,35 @@ test('global access is opt-in and validates the native target before registratio
   assert.equal(target.globalProxy.answer, 42);
 });
 
+for (const stage of ['load', 'ordinary', 'invalid', 'guarded', 'repeated']) {
+  test(`Promise lookup workaround is restricted to guarded Node 24 globals: ${stage}`, () => {
+    const child = spawnSync(process.execPath, ['--trace-protector-invalidation', '-e', `
+      const assert = require('node:assert/strict');
+      const descriptor = Object.getOwnPropertyDescriptor(Promise.prototype, 'then');
+      const compat = require(process.argv[1]);
+      const stage = process.argv[2];
+      if (stage === 'ordinary') compat.createContextHandle({ globalPrototypeChain: ['immutable'] });
+      if (stage === 'invalid') assert.throws(() => compat.createContextHandle({ globalAccess: true }));
+      if (stage === 'guarded' || stage === 'repeated') {
+        const options = { globalPrototypeChain: ['immutable'], globalAccess: true };
+        const first = compat.createContextHandle(options);
+        const then = first.globalProxy.Promise.prototype.then;
+        if (stage === 'repeated') {
+          const second = compat.createContextHandle(options);
+          assert.equal(first.globalProxy.Promise.prototype.then, then);
+          assert.equal(second.globalProxy.Function.prototype.toString.call(second.globalProxy.Promise.prototype.then),
+            'function then() { [native code] }');
+        }
+      }
+      assert.deepEqual(Object.getOwnPropertyDescriptor(Promise.prototype, 'then'), descriptor);
+    `, require.resolve('../addon/index.cjs'), stage], { encoding: 'utf8' });
+    assert.equal(child.status, 0, child.stderr);
+    const invalidations = (child.stdout + child.stderr).match(/Invalidating protector cell PromiseThenLookupChain/g) ?? [];
+    const affected = process.versions.node.startsWith('24.') && (stage === 'guarded' || stage === 'repeated');
+    assert.equal(invalidations.length, affected ? 1 : 0, child.stdout + child.stderr);
+  });
+}
+
 test('unconnected guarded globals fail closed for another context', () => {
   const caller = compat.createContextHandle();
   caller.globalProxy.target = guarded().globalProxy;
@@ -174,6 +203,17 @@ test('repeated addon initialization in one isolate can tear down cleanly', () =>
   assert.equal(child.status, 0, child.stderr);
 });
 
+itPassesWith('addonReload')('reloading the JavaScript addon entry point preserves context creation', () => {
+  const child = spawnSync(process.execPath, ['-e', `
+    const entry = process.argv[1];
+    const options = { globalPrototypeChain: ['immutable'], globalAccess: true };
+    require(entry).createContextHandle(options);
+    delete require.cache[require.resolve(entry)];
+    require(entry).createContextHandle(options);
+  `, require.resolve('../addon/index.cjs')], { encoding: 'utf8' });
+  assert.equal(child.status, 0, child.stderr);
+});
+
 test('observes a host Promise using a guarded Window queue', () => {
   const queue = compat.createMicrotaskQueue();
   const context = guarded({ microtaskQueue: queue });
@@ -213,8 +253,7 @@ test('host reactions can allocate a Promise owned by another guarded Window', ()
   assert.deepEqual(seen, [42]);
 });
 
-// Approved Node 24 gap: Node's own loader continuation fails across distinct tokens.
-itPassesWith('v26+')('retains a Node-owned import loader in a guarded Window Function', async () => {
+test('retains a Node-owned import loader in a guarded Window Function', async () => {
   const queue = compat.createMicrotaskQueue();
   const context = guarded({ microtaskQueue: queue });
   compat.setGlobalAccess(context.globalProxy, () => ({ allow: true }));
@@ -234,6 +273,25 @@ itPassesWith('v26+')('retains a Node-owned import loader in a guarded Window Fun
   }
   assert.equal(result?.reason, undefined);
   assert.equal(result?.value.answer, 42);
+});
+
+test('preserves a Node-owned import rejection across a guarded Window', async () => {
+  const queue = compat.createMicrotaskQueue();
+  const context = guarded({ microtaskQueue: queue });
+  compat.setGlobalAccess(context.globalProxy, () => ({ allow: true }));
+  const reason = new Error('loader rejection');
+  const construct = vm.compileFunction('return make("return import(\'host-rejection\');");', ['make'], {
+    importModuleDynamically: () => { throw reason; },
+  });
+  const load = construct(context.globalProxy.Function);
+  let result;
+  compat.observePromise(load(), context.globalProxy.Promise,
+    value => { result = { value }; }, reason => { result = { reason }; });
+  for (let turn = 0; turn < 10 && !result; turn++) {
+    await new Promise(setImmediate);
+    queue.runMicrotasks();
+  }
+  assert.equal(result?.reason, reason);
 });
 
 test('observes host rejection on a guarded Window queue and preserves a thrown reason', () => {

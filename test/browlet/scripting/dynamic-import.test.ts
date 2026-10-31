@@ -72,8 +72,7 @@ describe('HTML dynamic import', () => {
     expect(env.realm.loadedModules.size).toBe(0);
   });
 
-  // Approved Node 24/addon gap: Node's import continuation rejects across distinct tokens.
-  itPassesWith('guardedNodeImport')('leaves a host-created Function with its Node referrer and loader', async () => {
+  it('leaves a host-created Function with its Node referrer and loader', async () => {
     const { env, fetch } = await fixture({});
     const target = new vm.SyntheticModule(['answer'], function() { this.setExport('answer', 42); });
     await target.link(() => { throw new Error('Synthetic modules have no imports'); });

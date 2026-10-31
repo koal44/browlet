@@ -20,8 +20,6 @@ const supported = {
   explicitQueues: !!addon.createMicrotaskQueue,
   finalizationRegistryPredicate: !!addon.isFinalizationRegistry,
   functionRealms: !!addon.getFunctionRealm,
-  // Node 24's own import loader rejects across a guarded native global boundary.
-  guardedNodeImport: !addon.createContextHandle || nodeMajor >= 26,
   htmlDDA: addon.supportsHTMLDDA,
   hostHooks: !!setHostHooks,
   importMeta: !addon.createContextHandle || addon.supportsImportMeta,

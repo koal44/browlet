@@ -2,6 +2,8 @@
 
 const vm = require('node:vm');
 
+let needsPromiseThenWorkaround = process.versions.node.startsWith('24.');
+
 // Adapt the public options to the native context/evaluation arguments.
 module.exports = (native, initializeGlobalObject) => {
   const { Module, SourceTextModule, SyntheticModule, WebAssemblyModule, resultForImport, captureWasmIntrinsics } =
@@ -71,6 +73,18 @@ module.exports = (native, initializeGlobalObject) => {
         return index;
       });
       const context = native.createContextHandle(microtaskQueue, reuseGlobalProxyFrom, layout, globalAccess);
+      if (globalAccess && needsPromiseThenWorkaround) {
+        // Node 24 lacks https://github.com/v8/v8/commit/626b689e9a9845b584fbbdd0917fb19cdc43f1f4.
+        // Invalidate the isolate-wide Promise lookup optimization in a disposable
+        // realm, preserving host/Window intrinsics. Remove after the V8 backport.
+        const disposable = vm.createContext(vm.constants.DONT_CONTEXTIFY);
+        vm.runInContext(`
+          const then = Promise.prototype.then;
+          Promise.prototype.then = function () {};
+          Promise.prototype.then = then;
+        `, disposable);
+        needsPromiseThenWorkaround = false;
+      }
       initializeGlobalObject(context);
       captureWasmIntrinsics(context);
       if (importModuleDynamically !== undefined) {

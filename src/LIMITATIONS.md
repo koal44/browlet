@@ -101,11 +101,14 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   [Window roadmap](browlet/browsing/window/ROADMAP.md#native-window-access-guard).
   The failed-access callback is isolate-wide and must have one addon owner; it
   cannot independently coexist with another embedder replacing the same hook.
-  On Node 24/addon, a Window-created Function using a Node-owned import loader
-  rejects with `TypeError: no access`; a rejecting loader can also leak its
-  original unhandled rejection. The native import assertion is an approved
-  expected failure, while the full unit run still exposes the unhandled errors.
-  Node 26/custom pass. See the [native import boundary](../node-compat/README.md#native-global-access-checks).
+  Node 24/addon applies a temporary Promise-lookup optimization workaround on its
+  first guarded global. It repairs Node-owned imports and rejection delivery while
+  preserving access checks, but affects the entire isolate: a tight host
+  `Promise.all` benchmark takes about 27% longer. Node 26/custom do not activate it.
+  Separately, reloading the JavaScript addon entry point after deleting its require
+  cache aborts on custom Node because import-router cleanup is registered twice;
+  the retained regression is an approved expected failure. See the
+  [native import boundary](../node-compat/README.md#native-global-access-checks).
   Native global detachment cancels queued V8 jobs; HTML must perform its required
   checkpoint before detaching, as the current top-level path does.
 
