@@ -401,11 +401,11 @@ export function impl<Env = unknown, Class extends ImplementationClass = Implemen
 
 /**
  * Supply an injected value at a final constructor or operation argument index.
- * Resolvers receive receiver and method environments; constructors use the same environment for both.
+ * Declare a third positional parameter to request the incumbent environment.
  */
 export function atArg<Env = unknown>(
   index: number,
-  resolve: InjectedArgument<Env>['resolve'],
+  resolve: (env: Env, methodEnv: Env, incumbentEnv: Env | undefined) => unknown,
 ): InjectedArgument<Env> {
   if (!Number.isSafeInteger(index) || index < 0) {
     throw new InternalError('An injected argument index must be a nonnegative integer');
@@ -413,7 +413,7 @@ export function atArg<Env = unknown>(
   return { index, resolve };
 }
 
-/** Supply implementation-only arguments to an automatically bound operation. */
+/** Supply implementation-only arguments to a bound method. */
 export function invokeWith<Env = unknown>(
   ...argumentsList: InjectedArgument<Env>[]
 ): Pick<OperationOptions<Env>, 'invokeWith'> {

@@ -247,8 +247,10 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     const result: unknown[] = [];
     const env = this.getEnvironment();
     const methodEnv = methodContext.getEnvironment();
+    const incumbentEnv = injectedArguments.some(({ resolve }) => resolve.length >= 3)
+      ? this.world.getIncumbentEnvironment(methodEnv) : undefined;
     for (const { index, resolve } of injectedArguments) {
-      result[index] = resolve(env, methodEnv);
+      result[index] = resolve(env, methodEnv, incumbentEnv);
     }
 
     let index = 0;

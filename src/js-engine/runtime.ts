@@ -35,6 +35,15 @@ export function associateContext(context: VMContext, realm: JSRealm): void {
   if (isAddonContextHandle(context)) RealmStamper.stamp(context.realm, realm);
 }
 
+/** Capture at native function entry; an unregistered Node caller has no associated JSRealm. */
+export function createFunctionWithIncumbent<Result>(
+  context: VMContext,
+  steps: (incumbent: JSRealm | undefined, receiver: unknown, argumentsList: unknown[]) => Result,
+): JSFunction<Result> | undefined {
+  return addon.createFunctionWithIncumbent?.(context, (reference, receiver, argumentsList) =>
+    steps(reference === null ? undefined : RealmStamper.get(reference), receiver, argumentsList));
+}
+
 /** Retain the registration's host async context for a later task handoff. */
 export function bindAsyncContext<T>(steps: () => T): () => T {
   return AsyncLocalStorage.bind(steps);

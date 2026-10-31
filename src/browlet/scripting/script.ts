@@ -292,8 +292,7 @@ export class JSScriptRecord extends JSScriptOrModule {
     // TODO(HTML §8.1.4.5): Coordinate actual termination and modeled-state cleanup
     // before returning null. JavaScript throws remain throw completions.
     const loop = this.realm.agent.eventLoop;
-    const context = new JSExecutionContext(this.realm);
-    context.scriptOrModule = this;
+    const context = new JSExecutionContext({ realm: this.realm, scriptOrModule: this });
     loop.executionContextStack.push(context);
     let completion: ScriptCompletion;
     try {

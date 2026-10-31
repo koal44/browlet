@@ -1,8 +1,8 @@
-import { assert, describe, expect, it } from 'vitest';
+import { assert, describe, expect, it, vi } from 'vitest';
 
 import {
   attr, attrFn, onError, ctor, defineEnumeration, defineInterface, idlType, impl, nullable, roAttr,
-  reference, op, staticOp, stringifier,
+  reference, op, staticOp, stringifier, xattr,
 } from '../../../../src/web-idl/core/index';
 import { getImplementationObject } from '../../../../src/web-idl/binding/platform';
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
@@ -31,6 +31,83 @@ describe('Web IDL implementation attribute registration', () => {
     const getter = Object.getOwnPropertyDescriptor(First.prototype, 'environments')!.get!;
     expect(Reflect.apply(getter, new First(), [])).toEqual([first.realm, first.realm]);
     expect(Reflect.apply(getter, new Second(), [])).toEqual([second.realm, first.realm]);
+  });
+
+  it('supplies receiver and setter environments separately after conversion', () => {
+    class EnvironmentHolderImpl {}
+    const values: unknown[] = [];
+    const definition = defineInterface<{ realm: Realm; }>({
+      name: 'EnvironmentHolder', exposed: '*', implementation: impl(EnvironmentHolderImpl),
+      members: [
+        ctor(),
+        attr('value', idlType.DOMString, {
+          get() { return ''; },
+          set(env, value, methodEnv) { values.push([this, env.realm, value, methodEnv.realm]); },
+        }),
+      ],
+    });
+    const world = new BindingWorld([definition]);
+    const first = installTestBindings(world);
+    const second = installTestBindings(world);
+    const First = Reflect.get(first.globalObject, 'EnvironmentHolder') as new() => object;
+    const Second = Reflect.get(second.globalObject, 'EnvironmentHolder') as new() => object;
+    const receiver = new Second();
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Borrow a setter with an explicit receiver.
+    const setter = Object.getOwnPropertyDescriptor(First.prototype, 'value')!.set!;
+    const convert = vi.fn(() => 'converted');
+    Reflect.apply(setter, receiver, [{ toString: convert }]);
+    expect(values).toEqual([[getImplementationObject(receiver), second.realm, 'converted', first.realm]]);
+    expect(convert).toHaveBeenCalledOnce();
+  });
+
+  it('derives capture from accessor inputs through forwarding without converting twice', () => {
+    const incumbent = { realm: new Realm() };
+    const received: unknown[] = [];
+    class DestinationImpl {
+      value = '';
+      read() { return this.value; }
+      write(value: string, env: unknown) { this.value = value; received.push(env); }
+    }
+    class ForwarderImpl {
+      destination = new DestinationImpl();
+      read(env: unknown) { received.push(env); return 'read'; }
+    }
+    const world = new BindingWorld([
+      defineInterface({
+        name: 'Destination', exposed: '*', implementation: impl(DestinationImpl),
+        members: [ctor(), attr('value', idlType.DOMString, {
+          get() { return (this as DestinationImpl).read(); },
+          set(_env, value, _methodEnv, incumbentEnv) { (this as DestinationImpl).write(value as string, incumbentEnv); },
+        })],
+      }),
+      defineInterface({
+        name: 'Forwarder', exposed: '*', implementation: impl(ForwarderImpl),
+        members: [
+          ctor(),
+          roAttr('destination', reference('Destination'), {
+            ...xattr(['PutForwards', 'value']),
+          }),
+          roAttr('read', idlType.DOMString, {
+            get(_env, _methodEnv, incumbentEnv) { return (this as ForwarderImpl).read(incumbentEnv); },
+          }),
+        ],
+      }),
+    ], { getIncumbentEnvironment: () => incumbent });
+    const realm = new Realm();
+    const create = vi.spyOn(realm, 'createFunction');
+    try {
+      const { globalObject } = installTestBindings(world, realm);
+      const Forwarder = Reflect.get(globalObject, 'Forwarder') as new() => { destination: { value: string; }; };
+      const object = new Forwarder();
+      const conversions = vi.fn(() => 'forwarded');
+      Reflect.set(object, 'destination', { toString: conversions });
+      expect(object.destination.value).toBe('forwarded');
+      expect(conversions).toHaveBeenCalledOnce();
+      expect(Reflect.get(object, 'read')).toBe('read');
+      expect(received).toEqual([incumbent, incumbent]);
+      const captured = create.mock.calls.filter(([, options]) => options.captureIncumbent).map(([, options]) => options.name);
+      expect(captured).toEqual(['set value', 'set destination', 'get read']);
+    } finally { create.mockRestore(); }
   });
 
   it('creates shared function-valued attributes with ordinary call behavior', () => {

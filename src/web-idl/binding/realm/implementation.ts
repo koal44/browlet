@@ -71,6 +71,9 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     );
     const overridden = this.overriddenConstructor;
     const resolve = createOverloadResolver(constructors, realmBinding, `${assembled.primary.name}:constructor`);
+    // TODO: Capture the incumbent at constructible entry. The MutationObserver regression in
+    // test/browlet/communication/window-messaging.test.ts saves outer A instead of constructor caller B.
+    // SPEC_CLASH(mutation-observer-callback-incumbent): expect caller B per Web IDL and Chromium/Firefox; WebKit saves outer A.
     const object: JSFunction = realmBinding.realm.createFunction(
       (_thisArgument, argumentsList, newTarget) => {
         if (overridden) {
@@ -164,6 +167,8 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
 
     const overloads = assembled.getLegacyFactoryOverloads(name);
     const resolve = createOverloadResolver(overloads, realmBinding, `${assembled.primary.name}.${name}:factory`);
+    // TODO: Capture the incumbent at constructible entry, as for interface objects. The callback-taking
+    // legacy factory fixture in test/browlet/communication/window-messaging.test.ts also saves A instead of B.
     const function_ = realmBinding.realm.createFunction(
       (_thisArgument, argumentsList, newTarget) => {
         if (!newTarget) {

@@ -26,8 +26,13 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
   #htmlConstructors = new Map<AssembledInterface, HTMLConstructorBinding>();
   /** Invocation policies selected by the receiver's interface, independent of the member's owner. */
   #securityChecks = new Map<AssembledInterface, SecurityCheckBinding>();
+  /** Host lookup shared by this world's registered realm bindings. */
+  #incumbentEnvironment?: (methodEnv: WebIDLEnvironment) => WebIDLEnvironment | undefined;
 
   constructor(definitions: Definition<Env>[], options: BindingWorldOptions<Env> = {}) {
+    // Registration enforces Env, as for the other composition callbacks retained here.
+    this.#incumbentEnvironment = options.getIncumbentEnvironment as
+      ((methodEnv: WebIDLEnvironment) => WebIDLEnvironment | undefined) | undefined;
     this.#assembly = new DefinitionAssembly([
       ...webIDLCommonDefinitions,
       // BindingWorld restricts registration to the environment required by these callbacks.
@@ -94,6 +99,12 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
     return binding;
   }
 
+  /** Retrieve the host incumbent; direct host invocations may have none. */
+  getIncumbentEnvironment(methodEnv: Env): Env | undefined {
+    if (!this.#incumbentEnvironment) throw new InternalError('BindingWorld has no incumbent environment provider');
+    return this.#incumbentEnvironment(methodEnv) as Env | undefined;
+  }
+
   /** Find this world's prepared accessors for a member on its declaring or including interface. */
   getAttributeBinding(member: IDLAttribute, owner: AssembledInterface): AttributeBinding | undefined {
     return this.#attributeBindings.get(member)?.get(owner);
@@ -142,6 +153,8 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
 /** Cross-specification integrations supplied by the composition root owning this world. */
 export type BindingWorldOptions<Env extends WebIDLEnvironment = WebIDLEnvironment> = {
   extendedAttributes?: ExtendedAttributeHooks<Env>;
+  /** Required by declarations requesting an incumbent input; supplied by the host composition root. */
+  getIncumbentEnvironment?: (methodEnv: Env) => Env | undefined;
 };
 
 /** Public operations of a realm binding; this type does not introduce another runtime object. */

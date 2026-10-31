@@ -16,7 +16,7 @@ import {
 } from './modules';
 import {
   associateContext, associateGlobalRealm, associateObjectRealm, cloneSharedArrayBuffer, compileScript,
-  createCollectionIterator, createContext, createMicrotaskQueue, detachContext,
+  createCollectionIterator, createContext, createFunctionWithIncumbent, createMicrotaskQueue, detachContext,
   getContextGlobalAllocation, getContextGlobalProxy,
   makePrototypeImmutable, observePromise, runInContext, runScript, runWithActiveRealm,
   setGlobalObject, setPropertyDelegate, type JSMicrotaskQueue, type VMContext,
@@ -157,6 +157,8 @@ export class JSRealm {
   #globalThis: GlobalThis;
 
   #callableFunctionFactory: RealmFunctionFactory;
+  /** Nonconstructible native entries, using the ordinary callable factory when unavailable. */
+  #incumbentFunctionFactory: RealmFunctionFactory;
   #constructibleFunctionFactory: RealmFunctionFactory;
   #fallbackIteratorNext: Partial<Record<CollectionIteratorKind, JSFunction>> = {};
 
@@ -278,6 +280,9 @@ export class JSRealm {
       callableFunctionFactorySource,
       this.#vmContext,
     ) as RealmFunctionFactory;
+    this.#incumbentFunctionFactory = (steps) =>
+      createFunctionWithIncumbent(this.#vmContext, (incumbent, receiver, argumentsList) =>
+        this.callWithIncumbent(incumbent, steps, receiver, argumentsList)) ?? this.#callableFunctionFactory(steps);
     this.#constructibleFunctionFactory = runInContext(
       constructibleFunctionFactorySource,
       this.#vmContext,
@@ -334,7 +339,9 @@ export class JSRealm {
   ): JSFunction<Result> {
     const factory = options.constructible
       ? this.#constructibleFunctionFactory
-      : this.#callableFunctionFactory;
+      : options.captureIncumbent
+        ? this.#incumbentFunctionFactory
+        : this.#callableFunctionFactory;
     const function_ = factory(steps);
 
     Object.defineProperties(function_, {
@@ -628,6 +635,14 @@ export class JSRealm {
       }));
   }
 
+  /** Let the host scope its own bookkeeping around a captured native function entry. */
+  protected callWithIncumbent<Result>(
+    _incumbent: JSRealm | undefined, steps: RealmFunctionSteps<Result>,
+    receiver: unknown, argumentsList: unknown[],
+  ): Result {
+    return steps(receiver, argumentsList, undefined);
+  }
+
   /** Enqueue on the supplied queue without running a checkpoint. */
   protected enqueueMicrotask(steps: () => void): void {
     this.#microtaskQueue.enqueueMicrotask(steps);
@@ -816,6 +831,8 @@ export type RealmFunctionOptions = {
   name: string;
   length: number;
   constructible?: boolean;
+  /** Use a native entry for incumbent-sensitive, nonconstructible platform functions when supported. */
+  captureIncumbent?: boolean;
 };
 
 export type RealmFunctionSteps<Result = unknown> = (

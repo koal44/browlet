@@ -293,11 +293,13 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
     message: unknown,
     targetOriginOrOptions: string | WindowPostMessageOptions,
     transfer: object[] = [],
-    env: BrowletEnvironment,
+    methodEnv: BrowletEnvironment,
+    incumbentEnv: WindowEnvironment | undefined,
   ): void {
+    if (incumbentEnv === undefined) throw new InternalError('postMessage requires an incumbent environment');
     const options = typeof targetOriginOrOptions === 'string'
       ? { targetOrigin: targetOriginOrOptions, transfer } : targetOriginOrOptions;
-    windowPostMessage(this, message, options, env);
+    windowPostMessage(this, message, options, methodEnv, incumbentEnv);
   }
 
   /** Register a parsed import map, reporting any retained parse error at this Window. */
@@ -630,11 +632,17 @@ export const windowIDL = defineInterface<BrowletEnvironment>({
         arg('message', idlType.any), arg('targetOrigin', idlType.USVString),
         arg('transfer', sequence(idlType.object), { optional: true, default: emptySequence }),
       ],
-      { ...invokeWith(atArg(3, (_env, methodEnv) => methodEnv)), ...xattr('CrossOrigin') },
+      {
+        ...invokeWith(atArg(3, (_env, methodEnv) => methodEnv), atArg(4, (_env, _methodEnv, incumbentEnv) => incumbentEnv)),
+        ...xattr('CrossOrigin'),
+      },
     ),
     op('postMessage', idlType.undefined,
       [arg('message', idlType.any), arg('options', reference('WindowPostMessageOptions'), { optional: true, default: emptyDictionary })],
-      { ...invokeWith(atArg(3, (_env, methodEnv) => methodEnv)), ...xattr('CrossOrigin') },
+      {
+        ...invokeWith(atArg(3, (_env, methodEnv) => methodEnv), atArg(4, (_env, _methodEnv, incumbentEnv) => incumbentEnv)),
+        ...xattr('CrossOrigin'),
+      },
     ),
     {
       kind: 'named-getter', method: 'getNamedProperty',

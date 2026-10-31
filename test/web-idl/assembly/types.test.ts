@@ -1,13 +1,36 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  annotated, arg, defineCallbackFunction, defineCallbackInterface, defineDictionary, defineEnumeration,
+  annotated, arg, asyncSequence, defineCallbackFunction, defineCallbackInterface, defineDictionary, defineEnumeration,
   defineInterface, defineNamespace, defineTypedef, frozenArray, idlType,
-  nullable, op, record, reference, roAttr, sequence, union, xattr,
+  nullable, observableArray, op, promise, record, reference, roAttr, sequence, union, xattr,
 } from '../../../src/web-idl/core/index';
 import { DefinitionAssembly } from '../../../src/web-idl/assembly/index';
 
 describe('Web IDL types', () => {
+  it('finds callback context capture through synchronous containers and recursive dictionaries', () => {
+    const callback = reference('Callback');
+    const assembly = new DefinitionAssembly([
+      defineCallbackFunction({ name: 'Callback', arguments: [], returns: idlType.undefined }),
+      defineCallbackInterface({ name: 'Listener', members: [op('handle', idlType.undefined)] }),
+      defineInterface({ name: 'Ordinary', members: [] }),
+      defineDictionary({ name: 'Parent', members: [{ name: 'listener', type: reference('Listener') }] }),
+      defineDictionary({ name: 'Options', inherits: 'Parent', members: [{ name: 'next', type: reference('Other') }] }),
+      defineDictionary({ name: 'Other', members: [{ name: 'next', type: nullable(reference('Options')) }] }),
+      defineDictionary({ name: 'Plain', members: [{ name: 'next', type: sequence(reference('Plain')) }] }),
+      defineTypedef({ name: 'Alias', type: nullable(callback) }),
+    ]);
+    for (const type of [
+      callback, reference('Listener'), reference('Alias'), reference('Options'), reference('Other'),
+      sequence(callback), frozenArray(callback), observableArray(callback),
+      record(idlType.DOMString, callback), union(idlType.DOMString, callback),
+    ]) expect(assembly.getIDLType(type).capturesCallbackContext).toBe(true);
+    for (const type of [
+      idlType.any, idlType.object, reference('Ordinary'), reference('Plain'),
+      promise(callback), asyncSequence(callback), sequence(idlType.DOMString),
+    ]) expect(assembly.getIDLType(type).capturesCallbackContext).toBe(false);
+  });
+
   it('links named targets and container elements without retaining unresolved runtime types', () => {
     const assembly = new DefinitionAssembly([
       defineDictionary({ name: 'Options', members: [{ name: 'next', type: nullable(reference('Options')) }] }),

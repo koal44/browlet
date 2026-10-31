@@ -187,9 +187,8 @@ describe('HTML rejected-promise notification', () => {
     const { promise } = reject(42);
     env.globalImplementation.aboutToBeNotifiedRejectedPromises.length = 0;
     const otherEnv = getRelevantRealm(browser().window).env;
-    const context = new JSExecutionContext(otherEnv.realm);
     const script = new ClassicScript('', env, env.apiBaseURL, new ScriptFetchOptions());
-    context.scriptOrModule = script.record;
+    const context = new JSExecutionContext({ realm: otherEnv.realm, scriptOrModule: script.record });
     otherEnv.responsibleEventLoop.executionContextStack.push(context);
     try { otherEnv.trackPromiseRejection(promise, 'reject'); }
     finally { otherEnv.responsibleEventLoop.executionContextStack.pop(); }
@@ -202,8 +201,7 @@ describe('HTML rejected-promise notification', () => {
     const { promise } = reject(42);
     const pending = [...env.globalImplementation.aboutToBeNotifiedRejectedPromises];
     const script = new ClassicScript('', env, env.apiBaseURL, new ScriptFetchOptions(), true);
-    const context = new JSExecutionContext(env.realm);
-    context.scriptOrModule = script.record;
+    const context = new JSExecutionContext({ realm: env.realm, scriptOrModule: script.record });
     loop.executionContextStack.push(context);
     try { env.trackPromiseRejection(promise, operation); }
     finally { loop.executionContextStack.pop(); }

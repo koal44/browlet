@@ -29,10 +29,13 @@ export type HTMLConstructorBinding<Env extends WebIDLEnvironment = WebIDLEnviron
   ctx: BindingContext<Env>, newTarget: JSFunction | undefined, activeFunction: JSFunction,
 ) => object;
 
-/** Accessors receive the validated receiver and its binding; getters also receive the method binding. */
+/** Prepared extended-attribute accessors, called after receiver validation and value conversion. */
 export type AttributeBinding<Env = unknown, Receiver extends object | null = object | null> = {
+  /** May forward a custom declaration getter, including its method and incumbent environments (ReflectSetter). */
   get: (
     this: Receiver, ctx: BindingContext<Env & WebIDLEnvironment>, methodCtx: BindingContext<Env & WebIDLEnvironment>,
+    incumbentEnv: Env | undefined,
   ) => unknown;
+  /** Runs the prepared reflection setter; custom declaration setters use AttributeMember.set instead. */
   set?: (this: Receiver, ctx: BindingContext<Env & WebIDLEnvironment>, value: unknown) => void;
 };

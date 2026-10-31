@@ -188,7 +188,19 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
 - **`node-v8-execution-contexts`:** Custom job hooks capture controlled Promise
   callback/job boundaries; official engines lack those hooks. Neither exposes
   the entire execution stack or supplies HTML Script records. Browlet's explicit
-  JavaScript context model tracks controlled entries only. The A-to-B bound-listener
+  JavaScript context model tracks controlled entries and scoped native platform
+  observations. Addon-backed `postMessage()` captures the author incumbent before
+  Binding runs, including A-to-B-to-C calls and reentry. Stock Node lacks that
+  native entry; the sender-attribution regressions remain expected failures there.
+  Capture is selected from declared inputs, synchronous callback conversion, and
+  forwarding dependencies; it does not reconstruct missing ScriptOrModule provenance.
+  Constructors still lack native incumbent capture. When A calls B to construct
+  C's MutationObserver, the converted callback incorrectly saves A instead of B.
+  A callback-taking legacy factory fixture fails the same way; both are approved
+  expected failures on all backends, with passing A-only controls. See the
+  [constructor evidence](browlet/scripting/ROADMAP.md#constructor-callback-incumbent).
+  Later Promise/async-sequence conversions depend on their own callback/job context.
+  The A-to-B bound-listener
   investigation is skipped by agreement: its JavaScript observer's equivalence to
   the native API in HTML's examples is uncertain. Revisit with the actual example
   pages and platform APIs when supported. Manual stack selection/restoration tests
@@ -472,8 +484,8 @@ explicit standard content-handler list used for sink metadata.
 
 - **Window messaging still depends on runtime and WindowProxy work.**
   `postMessage()` clones/transfers and queues trusted delivery with target-origin
-  checks. The low-level A-to-B-to-C fixture reports A while expecting B; it remains
-  an approved expected failure pending review of the fixture and realm propagation.
+  checks. Native entry now fixes the A-to-B-to-C sender fixture on addon backends;
+  stock Node still reports A while expecting B and retains the expected failure.
   Binding has cross-origin invocation checks and
   caller-bound descriptor helpers, but WindowProxy property access still needs to
   select those descriptors; `targetOrigin` filtering does not secure that access.

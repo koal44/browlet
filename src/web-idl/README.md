@@ -82,6 +82,42 @@ objects enter as parameters. Exposed functions still come from the owning realm'
 function factory. Generated bodies require runtime coverage because TypeScript
 checks only the surrounding contracts.
 
+The composition root supplies `BindingWorld`'s `getIncumbentEnvironment(methodEnv)`
+callback. Injected argument resolvers and attribute getters request that input by
+declaring a third positional parameter; setters declare a fourth. For example,
+`atArg(index, (_env, _methodEnv, incumbentEnv) => incumbentEnv)` forwards it to an
+implementation. There is no input descriptor or capture flag. The lookup runs
+after successful argument conversion and only when requested. A missing provider
+is a composition error; a provider can return `undefined` for a direct host call
+without an incumbent. Location's binding uses its existing method-environment
+accommodation in that case; postMessage requires an incumbent.
+
+Declared arity is an authoring convention, not analysis of the callback body.
+The `binding-input-arity` lint rule rejects defaults and rest parameters through
+the incumbent position on contextually typed binding callbacks. Keep those
+callbacks typed by the declaration contract so the rule can check them.
+
+Binding derives native capture when preparing a callable function. It examines
+declared inputs and synchronous callback conversions, including nested dictionaries
+and containers. `[PutForwards]` carries the requirement through its getter and
+target setter, including aliases, nullable interfaces, inheritance, and forwarding
+chains. The generated forwarding code still performs ordinary JavaScript Get/Set.
+Overloads share one entry, so any applicable declaration requiring capture selects
+that factory for the group. Ordinary functions keep the cheaper callable factory.
+
+On addon backends, capture precedes conversion and lasts for the complete invocation.
+It changes neither receiver ownership nor HTML Script provenance. Stock Node retains
+its missing-entry limitation. Constructors still need a constructible native entry;
+this change does not add one. Promise fulfillment and async-sequence element
+conversion happen later and need their own callback/job context, not the original
+member's entry. The [constructor regressions](../../test/browlet/communication/window-messaging.test.ts)
+demonstrate the missing native entry: A calling B to construct C's MutationObserver
+saves A instead of B for its callback. A callback-taking legacy factory fixture
+fails the same way; both are approved expected failures on all backends, with
+passing A-only controls. Direct
+incumbent lookup is lint-restricted to the composition root, Binding dispatch,
+realm callback-lifecycle, and event-loop modules; implementations receive the input.
+
 Assembled interfaces, namespaces, and callback interfaces answer exposure queries
 using `WebIDLRealm`'s global names, secure-context status, and cross-origin-isolation
 status. The queries read the existing declarations; bindings supply their realm.
@@ -221,14 +257,17 @@ Declaring it at both levels, even as an empty list, is a validation error.
 Operation-specific dependencies use `invokeWith()`.
 Keep implementation-only arguments last when translating a spec
 signature. Ordinary implementations receive `env`, never the Binding Context.
-An `atArg()` resolver receives `(env, methodEnv)`. Select `env` for receiver-owned
+An `atArg()` resolver receives `(env, methodEnv, incumbentEnv)`. Select `env` for receiver-owned
 dependencies or `methodEnv` for allocations belonging to the invoked member's
 realm. Constructors supply the same environment in both positions. Binding
 selects these owners and retains conversion, projection, and exception realization.
 
-Explicit attribute getters receive `(env, methodEnv)` for the receiver and getter
+Explicit attribute getters receive `(env, methodEnv, incumbentEnv)` for the receiver and getter
 realms. HTML's `frameElement` uses the latter for its current-origin check.
-Binding integration getters receive the corresponding two Binding Contexts;
+Explicit setters receive `(env, value, methodEnv, incumbentEnv)`, with `value` already converted;
+Location uses the setter environment to select the entry, and receives the incumbent
+from Binding. Binding integration getters receive the corresponding two Binding
+Contexts and the requested incumbent environment;
 adapters must convert those to environments before forwarding declaration steps.
 
 Declaration callbacks obtain owner state and execution facilities through the

@@ -76,10 +76,10 @@ export type AttributeMember<Env = unknown> = {
   enabled?: boolean;
 
   // Project metadata: member steps, returned function creation, and callback exception policy.
-  /** Read using the receiver and getter environments; `this` is the implementation or null for static access. */
-  get?: (this: object | null, env: Env, methodEnv: Env) => unknown;
-  /** Store a converted value using the owner's environment; `this` is the implementation or null for static access. */
-  set?: (this: object | null, env: Env, value: unknown) => void;
+  /** Read with receiver and getter environments; declare a third positional parameter to request the incumbent. */
+  get?: (this: object | null, env: Env, methodEnv: Env, incumbentEnv: Env | undefined) => unknown;
+  /** Store the converted value; declare a fourth positional parameter to request the incumbent. */
+  set?: (this: object | null, env: Env, value: unknown, methodEnv: Env, incumbentEnv: Env | undefined) => void;
   /** Create the steps for a cached realm-owned function returned by this attribute. */
   attributeFunction?: (this: undefined, env: Env) => AttributeFunctionSteps;
   /** Report or rethrow exceptions from an author callback assigned to this attribute. */

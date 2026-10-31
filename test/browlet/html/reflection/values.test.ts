@@ -16,6 +16,19 @@ describe('HTML reflected values through Web IDL', () => {
     expect(first.element.getAttributeNS(null, 'environments')).toBe('stored');
   });
 
+  it('passes the supplied incumbent through ReflectSetter without replacing receiver or getter environments', () => {
+    const fixture = createReflectionWorld([], () => second.env);
+    const first = fixture();
+    const second = fixture();
+    const prototype = Object.getPrototypeOf(first.platform) as object;
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Borrow the getter with explicit receivers.
+    const getter = Object.getOwnPropertyDescriptor(prototype, 'incumbentEnvironments')!.get!;
+    expect(Reflect.apply(getter, first.platform, [])).toBe('false:false');
+    expect(Reflect.apply(getter, second.platform, [])).toBe('true:false');
+    second.platform.incumbentEnvironments = 'stored';
+    expect(second.element.getAttributeNS(null, 'incumbentenvironments')).toBe('stored');
+  });
+
   it('selects attribute names, canonical keywords, and nullable deletion', () => {
     const { platform: element } = createReflectionFixture();
     expect([element.camelCase, element.keyword, element.optionalKeyword]).toEqual(['', '', null]);

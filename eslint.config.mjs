@@ -8,6 +8,8 @@ import subsystemImports from './scripts/eslint/subsystem-imports.mjs';
 import noAncestorBarrelImports from './scripts/eslint/no-ancestor-barrel-imports.mjs';
 import importOrder from './scripts/eslint/import-order.mjs';
 import dependencyDirection from './scripts/eslint/dependency-direction.mjs';
+import incumbentLookup from './scripts/eslint/incumbent-lookup.mjs';
+import bindingInputArity from './scripts/eslint/binding-input-arity.mjs';
 
 const runtimeGlobals = [
   { name: 'Promise', message: 'Use the supplied InternalPromise constructor for implementation continuations.' },
@@ -61,6 +63,8 @@ export default defineConfig(
           'no-ancestor-barrel-imports': noAncestorBarrelImports,
           'import-order': importOrder,
           'dependency-direction': dependencyDirection,
+          'incumbent-lookup': incumbentLookup,
+          'binding-input-arity': bindingInputArity,
         },
       },
     },
@@ -275,10 +279,19 @@ export default defineConfig(
   {
     files: ['src/**/*.ts'],
     rules: {
+      'browlet/binding-input-arity': 'error',
       'browlet/subsystem-imports': ['error', {
         unrestrictedSubsystems: ['infra'],
         entryPoints: subsystemEntryPoints,
       }],
+      'browlet/incumbent-lookup': ['error', [
+        'src/browlet/bindings.ts',
+        'src/browlet/scripting/realm.ts',
+        'src/browlet/scripting/event-loop.ts',
+        'src/web-idl/binding/world.ts',
+        'src/web-idl/binding/realm.ts',
+        'src/web-idl/binding/register.ts',
+      ]],
     },
   },
 

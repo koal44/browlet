@@ -217,6 +217,8 @@ function registerDefinedAttribute(
   const createSteps = member.attributeFunction;
   const get = member.get;
   const set = member.set;
+  const getterNeedsIncumbent = (get?.length ?? 0) >= 3;
+  const setterNeedsIncumbent = (set?.length ?? 0) >= 4;
   const steps: AttributeSteps = {
     // Invoke a declared getter or obtain its realm-owned attribute function.
     get(receiver) {
@@ -224,8 +226,10 @@ function registerDefinedAttribute(
       if (createSteps) {
         return owner.getImplementationBinding(assembled).getOrCreateMemberBinding(member).getAttributeFunction(member, () => createSteps.call(undefined, owner.getEnvironment()));
       }
+      const methodEnv = binding.getEnvironment();
+      const incumbentEnv = getterNeedsIncumbent ? binding.world.getIncumbentEnvironment(methodEnv) : undefined;
       if (accessors) {
-        return binding.callImplementation(accessors.get, receiver?.implInst ?? null, [owner, binding]);
+        return binding.callImplementation(accessors.get, receiver?.implInst ?? null, [owner, binding, incumbentEnv]);
       }
       if (!get) {
         throw new InternalError(
@@ -235,7 +239,7 @@ function registerDefinedAttribute(
       return binding.callImplementation(
         get,
         receiver?.implInst ?? null,
-        [owner.getEnvironment(), binding.getEnvironment()],
+        [owner.getEnvironment(), methodEnv, incumbentEnv],
       );
     },
   };
@@ -250,12 +254,15 @@ function registerDefinedAttribute(
         binding.callImplementation(accessors.set, receiver?.implInst ?? null, [operationBinding, converted]);
         return;
       }
+      const methodEnv = binding.getEnvironment();
       binding.callImplementation(
         set!,
         receiver?.implInst ?? null,
         [
           operationBinding.getEnvironment(),
           converted,
+          methodEnv,
+          setterNeedsIncumbent ? binding.world.getIncumbentEnvironment(methodEnv) : undefined,
         ],
       );
     };

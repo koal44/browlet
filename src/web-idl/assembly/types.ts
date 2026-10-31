@@ -32,6 +32,8 @@ abstract class Type {
   #conversionKey?: string;
   /** Completed JSON classification, evaluated only after member assembly has finished. */
   #jsonType?: boolean;
+  /** Whether synchronous input conversion captures a callback context, after assembly finishes. */
+  #capturesCallbackContext?: boolean;
 
   constructor(attributes: ExtendedAttribute[] = []) {
     this.attributes = attributes;
@@ -96,6 +98,28 @@ abstract class Type {
   // https://webidl.spec.whatwg.org/#dfn-json-types
   get isJSON(): boolean {
     return this.#jsonType ??= this.#checkJSONType(new Set());
+  }
+
+  /** Whether converting an author value now can capture its incumbent for a callback. */
+  get capturesCallbackContext(): boolean {
+    return this.#capturesCallbackContext ??= this.#checkCallbackContext(new Set());
+  }
+
+  // Cache only complete root answers: recursive dictionaries can return to an unfinished path.
+  #checkCallbackContext(seen: Set<IDLType>): boolean {
+    const type = this as IDLType;
+    if (seen.has(type)) return false;
+    seen.add(type);
+    switch (type.kind) {
+      case 'callback-function': case 'callback-interface': return true;
+      case 'nullable': return type.innerType.#checkCallbackContext(seen);
+      case 'sequence': case 'frozen-array': case 'observable-array': return type.elementType.#checkCallbackContext(seen);
+      case 'union': return type.memberTypes.some((member) => member.#checkCallbackContext(seen));
+      case 'record': return type.valueType.#checkCallbackContext(seen);
+      case 'dictionary': return type.assembled.members.some((member) => member.type.#checkCallbackContext(seen));
+      // Promise fulfillment and async-sequence elements are converted later, outside this invocation.
+      default: return false;
+    }
   }
 
   // Recursive answers depend on the current dictionary path; only the root getter caches its result.

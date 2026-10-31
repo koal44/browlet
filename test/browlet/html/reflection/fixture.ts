@@ -56,6 +56,10 @@ const definition = defineInterface<BrowletEnvironment>({
       ...xattr(reflectSetter()),
       get(env, methodEnv) { return `${env === (this as ElementImpl).env}:${env === methodEnv}`; },
     }),
+    attr('incumbentEnvironments', idlType.DOMString, {
+      ...xattr(reflectSetter()),
+      get(env, methodEnv, incumbentEnv) { return `${incumbentEnv === env}:${incumbentEnv === methodEnv}`; },
+    }),
     roAttr('tokens', reference('DOMTokenList'),
       xattr('SameObject', ['PutForwards', 'value'], reflectTokens(tokensAttribute)),
     ),
@@ -81,7 +85,7 @@ type ReflectionElement = Element & {
   camelCase: string; renamed: string; keyword: string; optionalKeyword: string | null;
   scalar: string; url: string; present: boolean; signed: number; nonnegative: number;
   unsigned: number; positive: number; fallback: number; ranged: number;
-  floating: number; positiveFloat: number; custom: string; environments: string; tokens: DOMTokenList;
+  floating: number; positiveFloat: number; custom: string; environments: string; incumbentEnvironments: string; tokens: DOMTokenList;
   plainTokens: DOMTokenList; emptyTokens: DOMTokenList;
   target: Element | null; targets: readonly Element[] | null; typedTarget: ReflectionElement | null;
   typedTargets: readonly ReflectionElement[] | null; aliasTarget: ReflectionElement | null;
@@ -90,12 +94,16 @@ type ReflectionElement = Element & {
 };
 
 /** Isolate test-only declarations in one world, retaining real Browlet realms and environments. */
-export function createReflectionWorld(additionalDefinitions: Definition[] = []) {
+export function createReflectionWorld(
+  additionalDefinitions: Definition[] = [],
+  getIncumbentEnvironment: (methodEnv: BrowletEnvironment) => BrowletEnvironment | undefined = () => undefined,
+) {
   const world = new BindingWorld<BrowletEnvironment>([
     ...browletDefinitions, definition,
     defineTypedef({ name: 'ReflectionElementAlias', type: reference(ReflectionElementImpl) }),
     ...additionalDefinitions,
   ], {
+    getIncumbentEnvironment,
     extendedAttributes: {
       ...htmlExtendedAttributeHooks,
       prepareAttribute(member, owners) {

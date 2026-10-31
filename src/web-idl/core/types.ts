@@ -369,8 +369,8 @@ export type CallbackExceptionBehavior = 'report' | 'rethrow';
 export type InjectedArgument<Env = unknown> = {
   /** Zero-based index in the final implementation argument list. */
   index: number;
-  /** Select a dependency from receiver and method environments; constructors supply the same environment twice. */
-  resolve: (env: Env, methodEnv: Env) => unknown;
+  /** Declare a third positional parameter to request the incumbent; absent on direct host calls. */
+  resolve: (env: Env, methodEnv: Env, incumbentEnv: Env | undefined) => unknown;
 };
 
 /** The converted callback identity and invocation contract available to an implementation adapter. */

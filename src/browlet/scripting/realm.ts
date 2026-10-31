@@ -1,7 +1,7 @@
 import { InternalError, type TaskCreationOptions } from '../../infra/index';
 import {
   JSRealm, bindAsyncContext, getAssociatedRealm, isObject,
-  type GlobalObject, type GlobalThis, type JSRealmOptions,
+  type GlobalObject, type GlobalThis, type JSRealmOptions, type RealmFunctionSteps,
 } from '../../js-engine/index';
 import type { CallbackHooks, StampedPlatformObject, WebIDLRealm } from '../../web-idl/index';
 import { serializeURL } from '../../url/index';
@@ -61,7 +61,7 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
       reuseGlobalProxyFrom: options.reuseGlobalProxyFrom,
     });
     this.agent = agent;
-    this.executionContext = new JSExecutionContext(this);
+    this.executionContext = new JSExecutionContext({ realm: this });
     this.crossOriginIsolated = options.crossOriginIsolated ?? false;
     this.globalNames = new Set(options.globalNames ?? []);
     this.isGlobalPrototypeChainMutable =
@@ -256,6 +256,19 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
     if (!this.isGlobalPrototypeChainMutable) {
       this.makeHostGlobalPrototypeImmutable();
     }
+  }
+
+  protected override callWithIncumbent<Result>(
+    incumbent: JSRealm | undefined, steps: RealmFunctionSteps<Result>,
+    receiver: unknown, argumentsList: unknown[],
+  ): Result {
+    // Unregistered Node callers have no author observation. Keep explicit HTML
+    // script entries and callback backups authoritative for those host calls.
+    if (this.#env === undefined || !(incumbent instanceof BrowletRealm) || !incumbent.hasEnvironment) {
+      return steps(receiver, argumentsList, undefined);
+    }
+    return this.#env.responsibleEventLoop.runPlatformCall(this, incumbent.env,
+      () => steps(receiver, argumentsList, undefined));
   }
 
   #getCallbackEnvironment(

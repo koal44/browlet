@@ -9,9 +9,13 @@ import type { MessageEvent, Window } from '../../../src/browlet/platform';
 import { AgentCluster, WindowAgent } from '../../../src/browlet/scripting/agents';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { createOpaqueOrigin, obtainURLOrigin, parseURL } from '../../../src/url/index';
+import { arg, defineCallbackFunction, defineInterface, idlType, impl, onError, op, reference } from '../../../src/web-idl/core/index';
+import { BindingWorld } from '../../../src/web-idl/binding/world';
 import type { StampedPlatformObject } from '../../../src/web-idl/index';
 import { createManualEventLoop, createManualUserAgent } from '../../support/browlet-agent';
 import { getBindingContext } from '../../support/browlet-binding';
+import { runInHostTask } from '../../support/tasks';
+import { itPassesWith } from '../../test-runtime';
 
 afterEach(() => { vi.restoreAllMocks(); });
 
@@ -310,15 +314,13 @@ describe('Window.postMessage (§9.3)', () => {
     expect(target.events[0]!.origin).toBe('https://sender.test');
   });
 
-  it.fails('attributes A calling a B-authored function posting to C to B', () => {
+  // The approved attribution failure now remains only on stock Node, without native entry capture.
+  itPassesWith('platformEntries')('attributes A calling a B-authored function posting to C to B', () => {
     const a = createWindow('https://example.test/a');
     const b = createWindow('https://example.test/b', a.agent);
     const c = createWindow('https://example.test/c', a.agent);
-    // Expected failure by agreement: this low-level realm-evaluation fixture
-    // receives A as event.source. It calls real Web IDL postMessage, but its
-    // translation of the HTML execution path and B expectation still need review.
-    // Binding supplies C's method environment; the modeled script entry remains A.
-    // Revisit author -> Binding -> incumbent propagation before any runtime change.
+    // Binding supplies C's method environment; the outer script entry remains A.
+    // Ordinary author calls enter B without another HTML prepare-to-run-script.
     const send = b.env.realm.evaluate('(target) => target.postMessage("from B", "*")', 'b.js');
     Reflect.set(a.env.realm.globalObject, 'send', send);
     Reflect.set(a.env.realm.globalObject, 'target', c.window);
@@ -326,6 +328,117 @@ describe('Window.postMessage (§9.3)', () => {
     c.drain();
     expect(c.events[0]!.source === b.window, 'event.source must be B, not the outer A entry').toBe(true);
     expect(c.events[0]!.origin).toBe('https://example.test');
+  });
+
+  // Approved expected failures: constructor entry cannot yet capture B across the ordinary A-to-B call.
+  // Keep A-only controls passing and execute the required B assertions on every backend.
+  for (const caller of ['A', 'B']) {
+    const constructorTest = caller === 'B' ? it.fails : it;
+    constructorTest(`retains ${caller} as incumbent when its author function constructs a MutationObserver from C`, () => runInHostTask(() => {
+      const a = createWindow('https://example.test/a');
+      const b = createWindow('https://example.test/b', a.agent);
+      const c = createWindow('https://example.test/c', a.agent);
+      const source = caller === 'A' ? a : b;
+      // Bound platform callbacks expose the captured callback context without another author function.
+      const callback = a.env.realm.evaluate('postMessage.bind(globalThis, "mutation", "*", [])', 'callback.js');
+      const construct = source.env.realm.evaluate(`(Constructor, callback, target) => {
+        const observer = new Constructor(callback);
+        observer.observe(target, { attributes: true });
+        return observer;
+      }`, 'constructor.js');
+      const target = a.window.document.createElement('div');
+      Reflect.set(a.env.realm.globalObject, 'construct', construct);
+      Reflect.set(a.env.realm.globalObject, 'Constructor', Reflect.get(c.env.realm.globalObject, 'MutationObserver'));
+      Reflect.set(a.env.realm.globalObject, 'callback', callback);
+      Reflect.set(a.env.realm.globalObject, 'target', target);
+      const observer = a.env.realm.evaluate('construct(Constructor, callback, target)', 'a.js') as MutationObserver;
+      target.setAttribute('data-probe', 'changed');
+      a.agent.eventLoop.performMicrotaskCheckpoint();
+      a.drain();
+      observer.disconnect();
+      expect(a.events.map((event): unknown => event.data)).toEqual(['mutation']);
+      // Chromium and Firefox preserve B here; WebKit currently reports A (see the browser probe).
+      const sourceIndex = [a.window, b.window, c.window].findIndex((window) => window === a.events[0]!.source);
+      expect(['A', 'B', 'C'][sourceIndex], 'the constructor caller must supply the callback incumbent').toBe(caller);
+      expect(a.agent.eventLoop.executionContextStack).toEqual([]);
+    }));
+
+    constructorTest(`retains ${caller} as incumbent through a callback-taking legacy factory fixture from C`, () => {
+      const a = createWindow('https://example.test/a');
+      const b = createWindow('https://example.test/b', a.agent);
+      const c = createWindow('https://example.test/c', a.agent);
+      const source = caller === 'A' ? a : b;
+      // Image, Audio and Option have no callback arguments. Exercise the shared legacy path with a fixture.
+      class CallbackHolder {
+        callback: () => void;
+        constructor(callback: () => void) { this.callback = callback; }
+        notify() { this.callback(); }
+      }
+      const world = new BindingWorld([
+        defineCallbackFunction({ name: 'Notify', arguments: [], returns: idlType.undefined }),
+        defineInterface({
+          name: 'CallbackHolder', exposed: '*', implementation: impl(CallbackHolder),
+          extendedAttributes: [{
+            kind: 'named-arguments', name: 'LegacyFactoryFunction', value: 'LegacyHolder',
+            arguments: [arg('callback', reference('Notify'), onError('rethrow'))],
+          }],
+          members: [op('notify', idlType.undefined)],
+        }),
+      ]);
+      world.register(c.env.realm, () => c.env);
+      const binding = world.getRealmBinding(c.env.realm)!;
+      const assembled = binding.resolveInterface('CallbackHolder');
+      const factory = assembled.getLegacyFactoryOverloads('LegacyHolder').callables[0]!;
+      const convert = binding.implementationConverter.createArgumentConverter(factory)!;
+      binding.getImplementationBinding(assembled).getOrCreateMemberBinding(factory).constructorBehavior = {
+        kind: 'construct', steps: (values) => new CallbackHolder(convert(values, binding)[0] as () => void),
+      };
+      binding.install(c.env.realm.globalObject);
+      const callback = a.env.realm.evaluate('postMessage.bind(globalThis, "legacy", "*")', 'callback.js');
+      const construct = source.env.realm.evaluate('(Constructor, callback) => new Constructor(callback)', 'constructor.js');
+      Reflect.set(a.env.realm.globalObject, 'construct', construct);
+      Reflect.set(a.env.realm.globalObject, 'Constructor', Reflect.get(c.env.realm.globalObject, 'LegacyHolder'));
+      Reflect.set(a.env.realm.globalObject, 'callback', callback);
+      const holder = a.env.realm.evaluate('construct(Constructor, callback)', 'a.js') as { notify(): void; };
+      holder.notify();
+      a.drain();
+      expect(a.events.map((event): unknown => event.data)).toEqual(['legacy']);
+      const sourceIndex = [a.window, b.window, c.window].findIndex((window) => window === a.events[0]!.source);
+      expect(['A', 'B', 'C'][sourceIndex], 'the legacy factory caller must supply the callback incumbent').toBe(caller);
+      expect(a.agent.eventLoop.executionContextStack).toEqual([]);
+    });
+  }
+
+  itPassesWith('platformEntries')('restores the incumbent after platform return, reentry, and throwing conversion', () => {
+    const a = createWindow('https://example.test/a');
+    const b = createWindow('https://example.test/b', a.agent);
+    const c = createWindow('https://example.test/c', a.agent);
+    const d = createWindow('https://example.test/d', a.agent);
+    const nested = d.env.realm.evaluate('(target) => target.postMessage("nested D", "*")', 'd.js');
+    Reflect.set(b.env.realm.globalObject, 'nested', nested);
+    const send = b.env.realm.evaluate(`(target) => {
+      target.postMessage('outer B', { get targetOrigin() {
+        nested(target);
+        return '*';
+      } });
+      try {
+        target.postMessage('not sent', { get targetOrigin() { throw new Error('conversion'); } });
+      } catch (error) {
+        if (error.message !== 'conversion') throw error;
+      }
+      target.postMessage('after throw B', '*');
+    }`, 'b.js');
+    Reflect.set(a.env.realm.globalObject, 'send', send);
+    Reflect.set(a.env.realm.globalObject, 'target', c.window);
+    a.env.realm.evaluate('send(target); target.postMessage("after return A", "*")', 'a.js');
+    expect(a.agent.eventLoop.executionContextStack).toEqual([]);
+    c.drain();
+    expect(c.events.map((event): unknown => event.data)).toEqual([
+      'nested D', 'outer B', 'after throw B', 'after return A',
+    ]);
+    expect(c.events.map((event) =>
+      [a.window, b.window, c.window, d.window].indexOf(event.source as Window),
+    )).toEqual([3, 1, 1, 0]);
   });
 });
 

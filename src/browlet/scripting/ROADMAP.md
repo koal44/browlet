@@ -113,9 +113,9 @@ entry and cleanup behavior.
 
 ## HTML §8.1.3.3: explicit context experiment
 
-The current approach follows HTML's records and stack operations in JavaScript,
-without adding Node/V8 hooks. It models the entries Browlet controls; it does not
-claim that the engine supplies a record for every actual function invocation.
+HTML's records and stack operations remain in JavaScript, with native incumbent
+observations at opted-in platform entries. This models the entries Browlet
+controls; the engine does not supply a record for every function invocation.
 
 | Requirement | Present model and remaining dependency |
 | --- | --- |
@@ -123,7 +123,7 @@ claim that the engine supplies a record for every actual function invocation.
 | Realm creation | `createBrowletRealm()` and production Window composition share `BrowletRealm.initialize()`: bracket global creation with the retained context, pop it, then remove SharedArrayBuffer when required. The ordinary factory accepts omitted customizations and returns the retained context. |
 | Retained context | `BrowletRealm.executionContext` is stable for the realm's lifetime. Environment settings return that same record. The existing VM context and `env` facilities are separate. |
 | Entry | `entryExecutionContext` selects the most recently pushed retained realm context, including a nested HTML entry. Its `.realm` supplies entry realm, `.realm.env` entry settings, and `.realm.globalObject` entry global. Missing entry context throws. |
-| Incumbent | The topmost non-null ScriptOrModule and its skip counter select script settings or the backup stack; missing backup settings throw. Callback preparation/cleanup maintain the counter and backup settings. Callback capture uses its binding environment for direct Node-host calls when both modeled stacks are empty; that accommodation stays outside the specification lookup. |
+| Incumbent | The latest script context or native platform observation and its skip counter select settings or the backup stack; missing backup settings throw. Callback preparation/cleanup maintain the counter and backup settings. Callback capture uses its binding environment for direct Node-host calls when both modeled stacks are empty; that accommodation stays outside the specification lookup. |
 | Current | `runningExecutionContext.realm` gives the top modeled realm; that realm's `.env` and `.globalObject` supply current settings and global. It is only current for the transitions recorded in this stack; arbitrary author/built-in calls do not yet maintain it. |
 | Relevant | A platform object's `PlatformRecord.realm` supplies its relevant realm independently of the stack; that realm's `.env` and `.globalObject` supply relevant settings and global. The binding records ownership, so changing the object's prototype does not change it. |
 
@@ -133,6 +133,27 @@ work; the temporary record in `runScriptEvaluation()` has null `script`
 until script creation and execution supply a parsed HTML script.
 The generic realm factory alone does not construct an HTML global implementation
 or attach settings; Window/worker/worklet composition owns those steps.
+
+Native platform entry is now an additional incumbent source: a dependency-selected Binding
+captures before JavaScript implementation frames, and a `JSExecutionContext`
+scopes the observed environment in `incumbentEnv` on the HTML stack. Selection and
+callback skip counters include these entries; retained entry and active-script
+lookup do not change. `Window.postMessage()` passes the ABC and nested return/throw regressions
+on every addon base. Stock Node keeps the approved attribution failures. This
+does not supply a ScriptOrModule for the observed author function; active-script
+capture/restoration in HostMakeJobCallback and HostCallJobCallback remains for
+the host-hook audit.
+
+Binding now derives capture from the incumbent parameter on injected resolvers and
+accessors, synchronous callback conversion, and `[PutForwards]` dependencies. Browlet
+supplies the event-loop lookup once when composing BindingWorld; Binding passes the
+input after conversion. Location retains its explicit direct-host accommodation;
+postMessage remains strict. The event-loop lookup remains public, with production
+references lint-restricted to composition, Binding dispatch, and callback lifecycle.
+Defaults/rest parameters that hide a binding callback's arity are lint errors.
+Constructors still lack native incumbent capture; the [constructor regressions](#constructor-callback-incumbent)
+now demonstrate the gap. Promise/async-sequence
+conversions that run later rely on their own job/callback context.
 
 [Callback lifecycle tests](../../../test/browlet/scripting/callback-lifecycle.test.ts)
 cover creation/deletion ordering, distinct entry/incumbent/current/relevant realms,
@@ -157,6 +178,29 @@ arbitrary author frames remains parked.
 The entry/incumbent/current/relevant audit stops before §8.1.3.4, audited separately
 below. Broader consumer regressions can follow when
 [Window messaging](../communication/ROADMAP.md) exists.
+
+### Constructor callback incumbent
+
+The [regressions](../../../test/browlet/communication/window-messaging.test.ts) run
+A's script calling an ordinary B-authored function that constructs C's
+MutationObserver. Its callback is A's bound `postMessage`, so delivery exposes the
+saved callback context through `MessageEvent.source` without an intervening author
+function. Web IDL [callback conversion](https://webidl.spec.whatwg.org/#js-callback-function)
+saves the incumbent at construction; [callback invocation](https://webidl.spec.whatwg.org/#invoke-a-callback-function)
+restores that context. The expected source is B, independently of the A entry,
+A callback realm, and C constructor realm.
+
+All six runtime configurations report A. A-only controls pass. A separate
+callback-taking legacy factory fixture exposes the same constructor boundary;
+current HTML legacy factories (Image, Audio, Option) have no callback arguments.
+These two regressions are approved expected failures on all backends; their
+A-only controls remain ordinary passing tests. Fixing the gap requires a
+constructible native entry and constructor dependency selection.
+
+`SPEC_CLASH(mutation-observer-callback-incumbent)`: the expected result follows
+Web IDL and Chromium/Firefox (B); WebKit reports A. The
+[browser-only reproduction](../../../test/browlet/probes/constructor-incumbent.mjs)
+confirmed the split on 2026-10-30, with A-only controls passing in all three.
 
 ## HTML §8.1.3.4 enabling and disabling scripting
 

@@ -299,4 +299,9 @@ export const browletDefinitions = [
 /** Main world for composition and host API projection; implementations use their supplied environment. */
 export const browletBindingWorld = new BindingWorld<BrowletEnvironment>(browletDefinitions, {
   extendedAttributes: htmlExtendedAttributeHooks,
+  getIncumbentEnvironment(methodEnv) {
+    const loop = methodEnv.responsibleEventLoop;
+    if (loop.executionContextStack.length === 0 && loop.backupIncumbentEnvironmentStack.length === 0) return undefined;
+    return loop.getIncumbentEnvironment();
+  },
 });

@@ -88,7 +88,7 @@ Every realm retains one context; settings return that same identity. Direct
 `BrowletRealm.evaluate()` supplies a temporary task when necessary, pushes the
 retained context followed by a script context, and checkpoints after the last
 context exits. Entry selection finds the most recent retained context; incumbent
-selection finds the topmost ScriptOrModule or uses the backup stack. Per-entry
+selection finds the latest script or scoped native observation, or uses the backup stack. Per-entry
 task associations stay separate because nested entries reuse the retained context.
 Active-script lookup uses the topmost non-null ScriptOrModule's HostDefined,
 without incumbent skip counters. Direct evaluation still supplies null HostDefined;
@@ -166,9 +166,9 @@ The remaining consumers have distinct effects:
 
 The [runtime boundary](#node-v8-execution-contexts) retains the limits of manually
 supplied records. The [Window.postMessage test](../../../test/browlet/communication/window-messaging.test.ts)
-is an approved expected failure: A calling a B-authored function posting to C
-reports A while expecting B. Its low-level fixture and the Binding-to-incumbent
-path remain under review. Stored-incumbent bound built-in callbacks pass separately.
+now captures B at native platform entry when A calls a B-authored function
+posting to C. It passes on addon backends and remains an approved expected
+failure on stock Node. Stored-incumbent bound built-in callbacks pass separately.
 Actual script termination remains unsupported; see
 [the killing-scripts audit](ROADMAP.md#html-8145-killing-scripts).
 
@@ -204,7 +204,7 @@ the modeled stack empties within a controlled task or script entry. A nested
 checkpoint clears HTML's current task, so the loop separately tracks whether an
 outer task turn is still running. A null task alone cannot identify an uncontrolled
 engine entry. Incumbent selection follows the model's script/backup-incumbent
-records and asserts that backup settings exist when required. Callback capture
+records and scoped platform observations, asserting that backup settings exist when required. Callback capture
 uses its binding environment for direct Node-host calls when both modeled stacks
 are empty; the specification lookup itself has no fallback.
 
@@ -213,17 +213,27 @@ exercise selection and restoration with explicit records. The A-to-B bound-liste
 investigation is skipped by agreement: its ordinary JavaScript `createFunction`
 observer is not an established substitute for the native API in HTML's examples.
 The separate [Window.postMessage test](../../../test/browlet/communication/window-messaging.test.ts)
-uses a real platform observer: when A calls a B-authored function posting to C,
-C sees A while the test expects B. This is an approved expected failure, retaining
-the assertions. The fixture uses low-level realm evaluation; its translation of
-the HTML execution path and expected sender remain under review. Binding supplies
-C's method environment, while the modeled script entry remains A. Revisit that
-path before choosing any runtime change. The bound built-in listener case passes.
-Manually supplying records does not
-establish automatic tracking of author/built-in calls. Custom
-job hooks cover their own boundaries; full Script records and active-script
-restoration also remain unfinished. Continue through the later script-processing
-and host-hook algorithms. New Node/V8 work stays parked.
+uses real Web IDL `postMessage()` with a native entry on addon backends. V8's
+`GetIncumbentContext()` is read before calling JavaScript Binding steps, so
+A calling a B-authored function posting to C captures B rather than the host
+implementation or method realm. No Node/V8 patch is required.
+
+`JSExecutionContext` carries method realm C in `realm` and observed incumbent B
+in `incumbentEnv`, with null ScriptOrModule. EventLoop pushes it around the complete
+binding invocation and pops it in `finally`; it is not a retained HTML entry and
+does not checkpoint.
+Incumbent lookup and callback skip counters include these observations. Entry
+selection remains A, and active-script lookup retains only known Script records.
+Nested native entries override outer observations and restore them on return or
+throw. An unregistered Node caller adds no observation, leaving the existing
+modeled script or callback backup in charge. The native capture is opt-in;
+`postMessage()` is the first production consumer, not universal call tracking.
+
+ABC and reentry regressions pass on every addon base and retain their required
+results as expected failures on stock Node. The bound built-in listener case
+also passes. HostMakeJobCallback/HostCallJobCallback still need active-script
+capture/restoration in the upcoming host-hook audit. Native incumbent identity
+does not identify an HTML Script record or complete the engine's execution stack.
 
 ### `node-v8-microtask-queue`
 

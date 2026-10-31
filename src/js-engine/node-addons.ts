@@ -20,6 +20,11 @@ export class NodeAPI {
     context: VMContext, kind: CollectionIteratorKind, next: () => JSIteratorResult<Value>,
   ) => MapIterator<Value> | SetIterator<Value>;
   createContextHandle?: (options?: AddonContextOptions) => AddonContextHandle;
+  /** Allocate a nonconstructible native function that captures incumbent identity before calling host steps. */
+  createFunctionWithIncumbent?: <Result>(
+    context: VMContext,
+    steps: (incumbent: object | null, receiver: unknown, argumentsList: unknown[]) => Result,
+  ) => JSFunction<Result>;
   /** Allocate the callable, undetectable object used for document.all; attach properties with setPropertyHandlers. */
   createHTMLDDA?: <Result>(context: VMContext, call: JSFunction<Result>) => JSFunction<Result>;
   createMicrotaskQueue?: () => AddonMicrotaskQueueHandle;
@@ -70,6 +75,7 @@ export class NodeAPI {
   constructor(backend: object) {
     this.createCollectionIterator = this.#loadMethod(backend, 'createCollectionIterator');
     this.createContextHandle = this.#loadMethod(backend, 'createContextHandle');
+    this.createFunctionWithIncumbent = this.#loadMethod(backend, 'createFunctionWithIncumbent');
     this.createHTMLDDA = this.#loadMethod(backend, 'createHTMLDDA');
     this.createMicrotaskQueue = this.#loadMethod(backend, 'createMicrotaskQueue');
     this.Script = this.#loadMethod(backend, 'Script');

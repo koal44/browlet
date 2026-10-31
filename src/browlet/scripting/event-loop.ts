@@ -6,6 +6,7 @@ import type { DocumentImpl } from '../dom/nodes/index';
 import type { BrowletEnvironment } from '../environment';
 
 import { JSExecutionContext } from './execution-context';
+import type { BrowletRealm } from './realm';
 import { JSScriptOrModule, type Script } from './script';
 
 // Task-source/queue associations stay private so scheduling can coalesce
@@ -65,6 +66,13 @@ export class EventLoop {
   // https://html.spec.whatwg.org/multipage/webappapis.html#topmost-script-having-execution-context
   get topmostScriptHavingExecutionContext(): JSExecutionContext | null {
     return this.executionContextStack.findLast((context) => context.scriptOrModule !== null) ?? null;
+  }
+
+  /** Latest modeled script or native incumbent observation; callback skipping applies to either. */
+  private get incumbentExecutionContext(): JSExecutionContext | null {
+    return this.executionContextStack.findLast((context) =>
+      context.scriptOrModule !== null || context.incumbentEnv !== null,
+    ) ?? null;
   }
 
   /** The HTML script of the topmost ScriptOrModule, independently of incumbent skipping. */
@@ -156,20 +164,28 @@ export class EventLoop {
     return true;
   }
 
-  /** Find the incumbent environment from the active script or backup settings. */
+  /** Find the incumbent for Binding and callback lifecycle code; API implementations receive it explicitly. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#incumbent-settings-object
   getIncumbentEnvironment(): BrowletEnvironment {
-    const context = this.topmostScriptHavingExecutionContext;
+    const context = this.incumbentExecutionContext;
     if (
       context !== null &&
       context.skipWhenDeterminingIncumbent === 0
     ) {
-      return context.realm.env;
+      return context.incumbentEnv ?? context.realm.env;
     }
 
     const backup = this.backupIncumbentEnvironmentStack.at(-1);
     if (backup !== undefined) return backup;
     throw new InternalError('The backup incumbent settings stack is empty');
+  }
+
+  /** Scope a native entry observation; retained HTML entry and ScriptOrModule selection stay unchanged. */
+  runPlatformCall<Result>(realm: BrowletRealm, incumbentEnv: BrowletEnvironment, steps: () => Result): Result {
+    const context = new JSExecutionContext({ realm, incumbentEnv });
+    this.executionContextStack.push(context);
+    try { return steps(); }
+    finally { this.#popExecutionContext(context); }
   }
 
   /** Push the callback environment and hide the active script from incumbent selection. */
@@ -180,14 +196,14 @@ export class EventLoop {
     }
 
     this.backupIncumbentEnvironmentStack.push(env);
-    const context = this.topmostScriptHavingExecutionContext;
+    const context = this.incumbentExecutionContext;
     if (context !== null) context.skipWhenDeterminingIncumbent++;
   }
 
   /** Restore incumbent selection after the matching callback entry. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#clean-up-after-running-a-callback
   cleanUpAfterRunningCallback(env: BrowletEnvironment): void {
-    const context = this.topmostScriptHavingExecutionContext;
+    const context = this.incumbentExecutionContext;
     if (context !== null) {
       if (context.skipWhenDeterminingIncumbent === 0) {
         throw new InternalError('A callback incumbent counter is already zero');
@@ -260,13 +276,14 @@ export class EventLoop {
 
     try {
       this.prepareToRunScript(env);
-      const context = new JSExecutionContext(env.realm);
-      context.scriptOrModule = new JSScriptOrModule(env.realm, null);
+      const context = new JSExecutionContext({
+        realm: env.realm, scriptOrModule: new JSScriptOrModule(env.realm, null),
+      });
       this.executionContextStack.push(context);
       try {
         return steps();
       } finally {
-        this.#popScriptExecutionContext(context);
+        this.#popExecutionContext(context);
         this.cleanUpAfterRunningScript(env);
       }
     } finally {
@@ -387,9 +404,9 @@ export class EventLoop {
     return queue;
   }
 
-  #popScriptExecutionContext(context: JSExecutionContext): void {
+  #popExecutionContext(context: JSExecutionContext): void {
     if (this.runningExecutionContext !== context) {
-      throw new InternalError('Script execution contexts were cleaned up out of order');
+      throw new InternalError('Execution contexts were cleaned up out of order');
     }
     this.executionContextStack.pop();
   }

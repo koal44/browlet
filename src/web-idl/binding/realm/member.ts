@@ -191,7 +191,9 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
         }
       };
     }
-    return realmBinding.realm.createFunction(getterSteps, { length: 0, name: `get ${attribute.name}` });
+    return realmBinding.realm.createFunction(getterSteps, {
+      length: 0, name: `get ${attribute.name}`, captureIncumbent: this.#attributeNeedsIncumbent(attribute, 'get'),
+    });
   }
 
   /** Retain the realm-owned setter function and its prepared conversions. */
@@ -232,6 +234,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
       : inputConverter.getJSToIDLSteps();
     const steps = this.attributeSteps;
     // Select ordinary assignment once, as with ordinary attribute getters.
+    const captureIncumbent = this.#attributeNeedsIncumbent(attribute, 'set');
     if (!replaceable && !putForwards && !lenientSetter && !observableArrayElementType && steps?.set) {
       const setterSteps = compileSteps<RealmFunctionSteps>(`${assembled.primary.name}.${attribute.name}:set`,
         { realmBinding, interfaceAssembled, attribute, lenient, invalidReceiver, convertInput, enumeration, steps },
@@ -247,7 +250,9 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
           return undefined;
         }`,
       );
-      return this.#setter = realmBinding.realm.createFunction(setterSteps, { length: 1, name: `set ${attribute.name}` });
+      return this.#setter = realmBinding.realm.createFunction(setterSteps, {
+        length: 1, name: `set ${attribute.name}`, captureIncumbent,
+      });
     }
     const setterSteps = compileSteps<RealmFunctionSteps>(`${assembled.primary.name}.${attribute.name}:set`,
       {
@@ -325,7 +330,9 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
         return undefined;
       }`,
     );
-    return realmBinding.realm.createFunction(setterSteps, { length: 1, name: `set ${attribute.name}` });
+    return realmBinding.realm.createFunction(setterSteps, {
+      length: 1, name: `set ${attribute.name}`, captureIncumbent,
+    });
   }
 
   /** Retain the realm-owned operation function and its prepared conversions. */
@@ -404,7 +411,13 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
         }
       }`,
     );
-    return realmBinding.realm.createFunction(operationSteps, { length: operations.minimumArgumentCount, name });
+    return realmBinding.realm.createFunction(operationSteps, {
+      length: operations.minimumArgumentCount, name,
+      captureIncumbent: operations.callables.some((operation) =>
+        operation.invokeWith?.some(({ resolve }) => resolve.length >= 3) ||
+        operation.arguments.some((argument) =>
+          argument.type.capturesCallbackContext || argument.callbackDictionary?.capturesCallbackContext)),
+    });
   }
 
   /** Retain the realm-owned stringifier function and its prepared conversions. */
@@ -456,8 +469,49 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
         }
         return realmBinding.getConverter(realmBinding.assembly.builtinTypes.DOMString).idlToJS(value);
       },
-      { length: 0, name: 'toString' },
+      {
+        length: 0, name: 'toString',
+        captureIncumbent: stringifier.kind === 'attribute' && this.#attributeNeedsIncumbent(stringifier, 'get'),
+      },
     );
+  }
+
+  // Derive entry requirements once, while creating the accessor. Forwarding still uses ordinary Get/Set.
+  #attributeNeedsIncumbent(
+    this: MemberBinding<MemberOwner>,
+    attribute: IDLAttribute,
+    accessor: 'get' | 'set',
+    owner: MemberOwner = this.#implementationBinding.assembled,
+    seen = new Set<IDLAttribute>(),
+  ): boolean {
+    if (accessor === 'get') {
+      while (attribute.inherit && owner instanceof AssembledInterface) {
+        attribute = owner.getInheritedAttribute(attribute);
+        do { owner = owner.parentAssembled!; }
+        while (!owner.members.some((entry) => entry.member === attribute));
+      }
+      return (attribute.get?.length ?? 0) >= 3;
+    }
+    if (seen.has(attribute)) return false;
+    seen.add(attribute);
+    if (hasExtendedAttribute(attribute.extendedAttributes, 'Replaceable')) return false;
+    const forwards = getIdentifierAttribute(attribute, 'PutForwards');
+    if (forwards !== undefined) {
+      if (this.#attributeNeedsIncumbent(attribute, 'get', owner)) return true;
+      const type = attribute.type.kind === 'nullable' ? attribute.type.innerType : attribute.type;
+      // An untyped object target supplies no declared member dependency to propagate.
+      if (type.kind !== 'interface') return false;
+      for (let target: AssembledInterface | undefined = type.assembled; target; target = target.parentAssembled) {
+        const entry = target.members.findLast(({ member }) =>
+          member.kind === 'attribute' && member.name === forwards && !member.static);
+        if (entry?.member.kind === 'attribute') {
+          return this.#attributeNeedsIncumbent(entry.member, 'set', target, seen);
+        }
+      }
+      return false;
+    }
+    if (attribute.readonly) return false;
+    return attribute.type.capturesCallbackContext || (attribute.set?.length ?? 0) >= 4;
   }
 
   // Extracted from Web IDL §3.7.6 Attributes and §3.7.7 Operations — reject promise results when invocation

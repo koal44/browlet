@@ -24,6 +24,7 @@ const supported = {
   lengthTracking: !!addon.isLengthTrackingArrayBufferView,
   nativeGlobals: !!addon.createContextHandle &&
     !!addon.setGlobalObject && !!addon.setPropertyDelegate,
+  platformEntries: !!addon.createFunctionWithIncumbent,
   promiseRejections: !!addon.setPromiseRejectionTracker &&
     !!addon.isPromiseHandled && !!addon.getPromiseResult,
   'v24+': nodeMajor >= 24,

@@ -44,8 +44,17 @@ arguments and implementation receivers. Binding selects the environment and owns
 conversion and projection. Reflection and HTML construction use composition-time
 binding adapters selected by declarative annotations; declarations themselves
 do not receive BindingContext.
-Explicit getters receive both the receiver's environment and the invoked getter's
-environment, keeping receiver state distinct from current-realm checks.
+Explicit accessors receive both the receiver's environment and the invoked
+accessor's environment, keeping receiver state distinct from current-realm checks.
+Setters receive the converted value before the method environment. Injected argument
+resolvers and getters request the incumbent by declaring a third positional parameter;
+setters declare a fourth. Browlet supplies the lookup when composing BindingWorld.
+Binding derives entry capture from these parameters, callback conversions, and
+forwarding targets; declarations do not repeat a capture flag. Location's bindings
+select entry and incumbent inputs separately before calling its implementation.
+Direct incumbent lookup stays in the lint-allowlisted composition, Binding, and
+callback-lifecycle modules. Binding callback parameters through the incumbent cannot
+have defaults or rest syntax, because capture selection uses declared arity.
 
 HTML's `CrossOriginObjectBinding` lives at the same integration boundary and owns
 cross-origin descriptors. The current proof of concept uses interface
@@ -177,10 +186,16 @@ counter. Each `BrowletRealm` retains one context; the environment's
 `realmExecutionContext` query returns it. EventLoop owns the agent's modeled
 stack and backup incumbent stack. Controlled script entries push the retained
 context followed by a script context. This does not intercept arbitrary author
-function calls. The A-to-B callback-registration investigation is skipped pending
+function calls. Incumbent-sensitive platform bindings can opt into native entry
+capture. A `JSExecutionContext` scopes that observation on the same stack with
+the method's current realm and the observed `incumbentEnv`, but no
+ScriptOrModule. It leaves retained entry selection and active-script provenance
+unchanged; callback skipping applies to the observation as well as script records.
+`Window.postMessage()` is the first consumer. Other binding surfaces and the
+host-hook audit remain separate work. The A-to-B callback-registration investigation is skipped pending
 review of its observer and translation of HTML's examples; see the
 [audit record](browlet/scripting/ROADMAP.md#html-8133-explicit-context-experiment).
-Native interception of arbitrary author frames remains parked.
+There is no native interception of arbitrary author frames.
 
 `UserAgent.webDriver` owns the BiDi remote-end command algorithms, whose completion
 uses `InternalPromise` through `UserAgent.HostPromise`. `PageEvaluation`

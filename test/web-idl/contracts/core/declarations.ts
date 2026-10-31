@@ -6,6 +6,15 @@ import {
 } from '../../../../src/web-idl/core/index';
 
 class Example {}
+attr<{ id: number; }>('bound', idlType.DOMString, {
+  get(_env, _methodEnv, incumbentEnv) { return incumbentEnv?.id; },
+  set(_env, _value, _methodEnv, incumbentEnv) { const id: number | undefined = incumbentEnv?.id; void id; },
+});
+atArg<{ id: number; }>(0, (_env, _methodEnv, incumbentEnv) => incumbentEnv?.id);
+// @ts-expect-error Capture follows the input dependency, not a separate accessor flag.
+attr('manual', idlType.DOMString, { captureIncumbent: { set: true } });
+// @ts-expect-error Operations likewise declare inputs instead of a capture flag.
+op('manual', idlType.undefined, [], { captureIncumbent: true });
 defineInterface({ name: 'Example', implementation: impl(Example), members: [] });
 defineInterface({
   name: 'HTMLAllCollection', documentAll: true, implementation: impl(Example),

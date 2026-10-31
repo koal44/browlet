@@ -87,13 +87,12 @@ communication algorithms; communication only imports Window types.
 Dependencies and remaining limits:
 
 - **Incumbent attribution:** controlled script entries and stored callback
-  incumbents work. The A-to-B-to-C fixture is an approved expected failure:
-  it reports A while expecting B. It uses real Web IDL `postMessage()`, unlike
-  the earlier synthetic observer, but enters through low-level realm evaluation.
-  Its translation of the HTML execution path and expected sender remain under
-  review. Binding supplies C's method environment; the modeled stack retains A.
-  Recheck the fixture and author-to-Binding-to-incumbent propagation before
-  choosing a fix; this is not a conclusion that native integration is required. See the
+  incumbents work. Native `postMessage()` entry now captures the author caller
+  before Binding runs and scopes it in `JSExecutionContext.incumbentEnv`. The
+  A-to-B-to-C regression reports B on all addon bases. Reentry and throwing-conversion
+  tests prove restoration to the enclosing caller; stock Node retains the approved
+  attribution failure and its reentry variant. The observation has no
+  ScriptOrModule and does not complete Promise job provenance. See the
   [runtime attribution notes](../scripting/EVENT-LOOP-ARCHITECTURE.md#node-v8-execution-contexts).
   Direct Node calls without any HTML entry likewise have no incumbent;
   use `Browlet.evaluate()` for host commands.
@@ -102,8 +101,8 @@ Dependencies and remaining limits:
   proves delivery across distinct agents. Ordinary cross-origin property access
   still needs WindowProxy to select Chapter 7's caller-bound descriptor helpers;
   Binding's invocation checks are now installed. The current
-  proxy returns target-bound methods; across distinct agents this can leave
-  incumbent lookup on an empty target stack. Cross-origin dispatch/access is
+  proxy returns target-bound methods; without native capture, calls across
+  distinct agents can leave incumbent lookup on an empty target stack. Cross-origin dispatch/access is
   not secured by `targetOrigin` filtering. The exotic methods remain Chapter 7 work.
 - **Navigation:** existing top-level navigation tests prove queued messages
   remain attached to the old target Window and source proxies retain their
@@ -156,7 +155,7 @@ conservatively until delivery, transfer, or Document destruction.
 Worker and AudioWorklet exposure is declared; actual globals, worker channels,
 shutdown, and cross-thread transport remain their owners' work. This implementation
 communicates across Browlet's modeled agents in one isolate. No Node/V8 changes
-or messaging stubs were added. It does not resolve §9.3's incumbent-attribution gap.
+or messaging stubs were added. §9.3 owns the separate native incumbent integration.
 
 [Tests](../../../test/browlet/communication/message-channel.test.ts) cover queue
 activation, shared FIFO order, microtask checkpoints, payload/port identity,
@@ -174,8 +173,8 @@ errors, closure, and global cleanup. Window messaging has an end-to-end port tes
 - Window messaging captures the incumbent sender, its origin, and corresponding
   WindowProxy, but checks the target Window's origin when the queued task runs.
   Navigation between send and delivery can therefore discard a message.
-  The A-to-B-to-C expected failure above preserves the unresolved attribution test;
-  callback/built-in entry cases are separate. The investigation on
+  The A-to-B-to-C regression above passes with native entry and remains an
+  expected failure on stock Node; callback/built-in entry cases are separate. The investigation on
   `research/html-agent-execution` is deferred evidence, not a prerequisite patch
   to adopt before this consumer.
 - A MessagePort owns a movable port-message task source. Transferring a port

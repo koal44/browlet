@@ -151,10 +151,12 @@ describe('HTML callback and script-entry lifecycle', () => {
     const loop = agent.eventLoop;
     // Supply the script and built-in records explicitly: this tests selection,
     // not interception of the real calls in HTML's four-page example.
-    const script = new JSExecutionContext(b.realm);
-    script.scriptOrModule = new JSScriptOrModule(b.realm, null);
-    const builtin = new JSExecutionContext(c.realm);
-    builtin.function = c.realm.createFunction(() => {}, { name: 'builtin', length: 0 });
+    const script = new JSExecutionContext({
+      realm: b.realm, scriptOrModule: new JSScriptOrModule(b.realm, null),
+    });
+    const builtin = new JSExecutionContext({
+      realm: c.realm, function: c.realm.createFunction(() => {}, { name: 'builtin', length: 0 }),
+    });
     loop.prepareToRunScript(a.env);
     loop.executionContextStack.push(script, builtin);
     try {
@@ -229,6 +231,48 @@ describe('HTML callback and script-entry lifecycle', () => {
     expect(() => loop.getIncumbentEnvironment()).toThrow('backup incumbent settings stack is empty');
   });
 
+  it('scopes a platform observation without replacing entry or active-script provenance', () => {
+    const checkpoint = vi.fn();
+    const agent = new TestAgent(createTestMicrotaskQueue(checkpoint));
+    const a = createTestRealm(agent, 'a');
+    const b = createTestRealm(agent, 'b');
+    const c = createTestRealm(agent, 'c');
+    const loop = agent.eventLoop;
+    const script = createScriptState(a.env);
+    const error = new Error('platform call failed');
+    checkpoint.mockClear();
+    loop.runScriptEvaluation(a.env, () => {
+      const scriptContext = loop.runningExecutionContext!;
+      scriptContext.scriptOrModule = new JSScriptOrModule(a.realm, script);
+      expect(() => loop.runPlatformCall(c.realm, b.env, () => {
+        expect(loop.entryExecutionContext === a.realm.executionContext).toBe(true);
+        expect(loop.runningExecutionContext?.realm).toBe(c.realm);
+        expect(loop.runningExecutionContext?.scriptOrModule).toBeNull();
+        expect(loop.getIncumbentEnvironment()).toBe(b.env);
+        expect(loop.activeScript).toBe(script);
+        expect(loop.runningScript).toBeNull();
+        loop.prepareToRunCallback(a.env);
+        try {
+          expect(loop.getIncumbentEnvironment()).toBe(a.env);
+          loop.runPlatformCall(c.realm, b.env, () => {
+            expect(loop.getIncumbentEnvironment()).toBe(b.env);
+          });
+          expect(loop.getIncumbentEnvironment()).toBe(a.env);
+        } finally {
+          loop.cleanUpAfterRunningCallback(a.env);
+        }
+        expect(loop.getIncumbentEnvironment()).toBe(b.env);
+        throw error;
+      })).toThrow('platform call failed');
+      expect(loop.runningExecutionContext).toBe(scriptContext);
+      expect(loop.getIncumbentEnvironment()).toBe(a.env);
+      expect(loop.backupIncumbentEnvironmentStack).toEqual([]);
+      expect(checkpoint).not.toHaveBeenCalled();
+    });
+    expect(loop.executionContextStack).toEqual([]);
+    expect(checkpoint).toHaveBeenCalledOnce();
+  });
+
   it('distinguishes the active script from the running frame and incumbent skipping', () => {
     const agent = new TestAgent(createTestMicrotaskQueue());
     const a = createTestRealm(agent, 'a');
@@ -238,12 +282,11 @@ describe('HTML callback and script-entry lifecycle', () => {
     const module: JavaScriptModuleScript = createScriptState(b.env);
     module.baseURL = b.env.apiBaseURL;
     module.record = new JSSourceTextModuleRecord(module, b.realm.compileModule('', 'fixture.js'));
-    const classicContext = new JSExecutionContext(a.realm);
-    classicContext.scriptOrModule = classic.record;
-    const moduleContext = new JSExecutionContext(b.realm);
-    moduleContext.scriptOrModule = module.record;
-    const builtin = new JSExecutionContext(a.realm);
-    builtin.function = a.realm.createFunction(() => {}, { name: 'builtin', length: 0 });
+    const classicContext = new JSExecutionContext({ realm: a.realm, scriptOrModule: classic.record });
+    const moduleContext = new JSExecutionContext({ realm: b.realm, scriptOrModule: module.record });
+    const builtin = new JSExecutionContext({
+      realm: a.realm, function: a.realm.createFunction(() => {}, { name: 'builtin', length: 0 }),
+    });
 
     expect(loop.activeScript).toBeNull();
     expect(loop.runningScript).toBeNull();
@@ -392,7 +435,7 @@ describe('HTML callback and script-entry lifecycle', () => {
           task: agent.eventLoop.currentlyRunningTask,
         };
       },
-      { length: 0, name: 'observe' },
+      { length: 0, name: 'observe', captureIncumbent: true },
     );
     Reflect.set(callbackRealm.realm.globalObject, 'observe', observe);
     const callback = callbackRealm.realm.evaluate(

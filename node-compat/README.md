@@ -378,6 +378,22 @@ complete Proxy API: Node 26+ supplies the holder rather than the original
 property-access receiver; global handlers receive undefined. The collection path
 does not use that receiver argument.
 
+## Native function entry
+
+`createFunctionWithIncumbent(context, steps)` creates a nonconstructible native
+function in the supplied context. It calls `steps(incumbent, receiver, args)`
+after capturing V8's incumbent realm reference, before any JavaScript binding
+frame can obscure the author caller. Return values and exceptions pass through.
+This uses public V8 APIs on all supported addon bases; no engine patch is needed.
+
+JS Engine maps the reference to a registered realm. Browlet's opt-in Web IDL
+`captureIncumbent` binding currently serves `Window.postMessage()`. HTML scopes
+the observation on its own stack; the addon neither supplies ScriptOrModule
+records nor traces every author call. Stock Node keeps the existing JavaScript
+factory and its approved attribution failures. See
+[function-entry tests](test/function-entry.test.cjs) and the
+[HTML stack boundary](../src/browlet/scripting/EVENT-LOOP-ARCHITECTURE.md#node-v8-execution-contexts).
+
 ## Host hooks
 
 The hooks correspond to ECMAScript's [job operations](https://tc39.es/ecma262/multipage/executable-code-and-execution-contexts.html#sec-jobs).

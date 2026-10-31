@@ -11,6 +11,7 @@ for (const method of [
   'Script', 'Module', 'SourceTextModule', 'SyntheticModule',
   'cloneSharedArrayBuffer', 'createContextHandle', 'createHTMLDDA', 'createMicrotaskQueue', 'getFunctionRealm',
   'getRealm', 'isContext', 'isWeakRef', 'observePromise', 'runInContext', 'setGlobalObject',
+  'createFunctionWithIncumbent',
   'setPropertyDelegate', 'setPropertyHandlers',
   'setPromiseRejectionTracker', 'isPromiseHandled', 'getPromiseResult',
 ]) {

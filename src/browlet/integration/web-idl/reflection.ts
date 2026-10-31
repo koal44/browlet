@@ -111,7 +111,9 @@ function createAttributeBinding<T extends ReflectedTarget>(
   if (reflection.name === 'ReflectSetter') {
     const customGet = member.get;
     get = customGet
-      ? function(ctx, methodCtx) { return customGet.call(this, ctx.getEnvironment(), methodCtx.getEnvironment()); }
+      ? function(ctx, methodCtx, incumbentEnv) {
+        return customGet.call(this, ctx.getEnvironment(), methodCtx.getEnvironment(), incumbentEnv);
+      }
       : function() { return Reflect.get(this, member.name); };
   }
   return {

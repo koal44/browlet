@@ -52,12 +52,12 @@ Custom hooks expose incumbent registration and opaque script metadata. Connect
 those to actual Script records and restore them around callbacks. The existing
 HTML stack mirrors controlled entries, not every arbitrary V8 frame.
 
-A separate unresolved boundary is the JavaScript helper behind a Web IDL
-operation: browsers enter a built-in function without adding an author script
-frame, while Browlet's helper can become the topmost script-having realm.
-Investigate a genuine built-in entry or transparent host-frame treatment.
-Preserve borrowed/cross-realm, bound/proxy, native-entry, and reentrant cases;
-constructor correctness alone does not settle incumbent/script selection.
+An opt-in native function entry now captures the incumbent before the JavaScript
+helper behind a Web IDL operation runs. `Window.postMessage()` uses it on all addon
+bases; stock Node retains its attribution limit. The host scopes the observation
+on its modeled stack without inventing ScriptOrModule provenance. Other platform
+surfaces, implicit author calls, and complete callback/job restoration still need
+their own consumers and regressions; this is not arbitrary frame interception.
 
 ### Promise rejection lifecycle
 

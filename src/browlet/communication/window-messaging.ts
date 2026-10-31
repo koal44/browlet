@@ -15,21 +15,19 @@ export function windowPostMessage(
   targetWindow: WindowImpl,
   message: unknown,
   options: WindowPostMessageOptions,
-  env: BrowletEnvironment,
+  methodEnv: BrowletEnvironment,
+  sourceEnv: WindowEnvironment,
 ): void {
   const targetRealm = targetWindow.env.realm;
-  // Window references are only available to Window globals. Incumbent lookup
-  // belongs to the invoking agent, not necessarily the receiving Window's agent.
-  const sourceEnv = env.responsibleEventLoop.getIncumbentEnvironment() as WindowEnvironment;
   let targetOrigin: Origin | '*' = '*';
   if (options.targetOrigin === '/') {
     targetOrigin = sourceEnv.origin;
   } else if (options.targetOrigin !== '*') {
-    const { url } = parseURL(options.targetOrigin, null, 'UTF-8', env.userAgent);
+    const { url } = parseURL(options.targetOrigin, null, 'UTF-8', methodEnv.userAgent);
     if (url === null) throw new DOMExceptionImpl('Invalid target origin', 'SyntaxError');
     targetOrigin = obtainURLOrigin(url);
   }
-  const serialized = env.serializeWithTransfer(message, options.transfer);
+  const serialized = methodEnv.serializeWithTransfer(message, options.transfer);
   targetRealm.queueGlobalTask(postedMessageTaskSource, () => {
     if (targetOrigin !== '*' && !areSameOrigin(targetWindow.document.origin, targetOrigin)) return;
     const origin = sourceEnv.origin;
