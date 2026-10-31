@@ -10,7 +10,7 @@ import { runInHostTask } from '../support/tasks';
 
 describe('JavaScript runtime', () => {
   itPassesWith('explicitQueues')(
-    'reuses a detached global proxy in a replacement Realm',
+    'detaches and reuses the prior realm global proxy in a replacement realm',
     () => {
       assert(addon.getRealm);
       const microtaskQueue = createMicrotaskQueue();
@@ -20,7 +20,7 @@ describe('JavaScript runtime', () => {
         nested: object;
       };
       const firstReference = addon.getRealm(retained.nested);
-      const globalProxy = first.detachGlobal();
+      const globalProxy = first.globalProxy;
 
       expectTypeOf(globalProxy).toEqualTypeOf<GlobalProxy>();
       expect(first.globalProxy).toBe(globalProxy);

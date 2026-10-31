@@ -57,12 +57,12 @@ module.exports = (native, initializeGlobalObject) => {
     createMicrotaskQueue: native.createMicrotaskQueue,
     createContextHandle: function createContextHandle(options = {}) {
       for (const key of Object.keys(options)) {
-        if (key !== 'microtaskQueue' && key !== 'reuseGlobalProxyFrom' && key !== 'globalPrototypeChain' &&
+        if (key !== 'microtaskQueue' && key !== 'reuseGlobalProxyFrom' && key !== 'globalPrototypeChain' && key !== 'globalAccess' &&
             key !== 'importModuleDynamically') {
           throw new TypeError(`Unsupported node-compat context option: ${key}`);
         }
       }
-      const { microtaskQueue, reuseGlobalProxyFrom, globalPrototypeChain, importModuleDynamically } = options;
+      const { microtaskQueue, reuseGlobalProxyFrom, globalPrototypeChain, globalAccess, importModuleDynamically } = options;
       // Validate before allocating a context or consuming a detached proxy.
       checkImportCallback(importModuleDynamically);
       const layout = globalPrototypeChain?.map(kind => {
@@ -70,7 +70,7 @@ module.exports = (native, initializeGlobalObject) => {
         if (index === -1) throw new TypeError(`Unknown prototype kind: ${kind}`);
         return index;
       });
-      const context = native.createContextHandle(microtaskQueue, reuseGlobalProxyFrom, layout);
+      const context = native.createContextHandle(microtaskQueue, reuseGlobalProxyFrom, layout, globalAccess);
       initializeGlobalObject(context);
       captureWasmIntrinsics(context);
       if (importModuleDynamically !== undefined) {

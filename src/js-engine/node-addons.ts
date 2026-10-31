@@ -5,7 +5,7 @@ import { isAbsolute } from 'node:path';
 import { InternalError } from '../infra/internal-error';
 
 import type {
-  CollectionIteratorKind, CompiledCode, CompiledScript, ExoticObjectHandlers, GlobalIndexedProperties,
+  CollectionIteratorKind, CompiledCode, CompiledScript, ExoticObjectHandlers, GlobalAccessHandlers, GlobalIndexedProperties,
   GlobalObject, GlobalPrototypeKind, GlobalProxy,
   JSFunction, JSIteratorResult,
 } from './realm';
@@ -88,6 +88,8 @@ export class NodeAPI {
     source: string, context: VMContext, options?: ContextEvaluationOptions,
   ) => unknown;
   setGlobalObject?: (context: VMContext, object: object, indexedProperties?: GlobalIndexedProperties) => void;
+  /** Supply caller-selected access policy for an opt-in native global. */
+  setGlobalAccess?: (target: GlobalProxy, select: (realm: object) => GlobalAccessHandlers) => void;
   /** Preserve an original global's IDL attribute receiver after proxy reuse. */
   registerGlobalGetter?: (context: VMContext, getter: JSFunction) => void;
   // Requires the V8 host-hook patches.
@@ -124,6 +126,7 @@ export class NodeAPI {
     this.setTemporalHostSystemUTCEpochNanosecondsCallback = this.#loadMethod(backend, 'setTemporalHostSystemUTCEpochNanosecondsCallback');
     this.runInContext = this.#loadMethod(backend, 'runInContext');
     this.setGlobalObject = this.#loadMethod(backend, 'setGlobalObject');
+    this.setGlobalAccess = this.#loadMethod(backend, 'setGlobalAccess');
     this.registerGlobalGetter = this.#loadMethod(backend, 'registerGlobalGetter');
     this.setHostHooks = this.#loadMethod(backend, 'setHostHooks');
     this.setPropertyDelegate = this.#loadMethod(backend, 'setPropertyDelegate');
@@ -193,6 +196,7 @@ type AddonContextOptions = {
   microtaskQueue?: AddonMicrotaskQueueHandle;
   reuseGlobalProxyFrom?: VMContext;
   globalPrototypeChain?: GlobalPrototypeKind[];
+  globalAccess?: boolean;
   importModuleDynamically?: ImportModuleDynamically<VMContext>;
 };
 

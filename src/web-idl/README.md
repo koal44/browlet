@@ -77,7 +77,9 @@ once. Core's compact `simple` declaration syntax does not survive assembly.
 
 Member dispatch, single-callable argument conversion, and dictionary input conversion
 compile specialized JavaScript when their existing binding or conversion plan is
-prepared. Declaration strings enter generated bodies as encoded literals; runtime
+prepared. JS Engine's trusted host compiler keeps lazy preparation independent of
+the author realm's access checks and code-generation policy. Declaration strings
+enter generated bodies as encoded literals; runtime
 objects enter as parameters. Exposed functions still come from the owning realm's
 function factory. Generated bodies require runtime coverage because TypeScript
 checks only the surrounding contracts.
@@ -101,7 +103,8 @@ Binding derives native capture when preparing a callable function. It examines
 declared inputs and synchronous callback conversions, including nested dictionaries
 and containers. `[PutForwards]` carries the requirement through its getter and
 target setter, including aliases, nullable interfaces, inheritance, and forwarding
-chains. The generated forwarding code still performs ordinary JavaScript Get/Set.
+chains. Forwarding uses the setter realm's captured ordinary Reflect Get/Set so
+nested exotic access preserves the caller and navigation source.
 Overloads share one entry, so any applicable declaration requiring capture selects
 that factory for the group. Ordinary functions keep the cheaper callable factory.
 

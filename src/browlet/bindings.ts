@@ -1,7 +1,7 @@
 import { EOL } from 'node:os';
 
 import { InternalError } from '../infra/index';
-import { addon, isObject } from '../js-engine/index';
+import { isObject } from '../js-engine/index';
 import {
   BindingWorld, QuotaExceededErrorImpl, reference, type GlobalObjectAllocation,
   type BindingContext, type ImplementationClass, type StampedPlatformObject,
@@ -72,7 +72,7 @@ import {
 } from './scripting/structured-data/index';
 import { serviceWorkerIDL } from './workers/index';
 import { progressEventIDL, progressEventInitIDL } from './integration/xhr/index';
-import { htmlExtendedAttributeHooks } from './integration/web-idl/index';
+import { htmlExtendedAttributeHooks, getWindowProxyAccess } from './integration/web-idl/index';
 import { fileReaderIDL, objectURLIDL } from './integration/file/index';
 import { PermissionStatusImpl, permissionStatusIDL } from './integration/permissions/index';
 import { queueNodeTask } from './integration/index';
@@ -106,23 +106,20 @@ export function createWindowEnvironment(
     isSecureContext: userAgent.isOriginPotentiallyTrustworthy(origin) &&
       (parent === null || parent.isSecureContext),
   });
-  const useAddonGlobals = !!(
-    addon.createContextHandle && addon.runInContext &&
-    addon.setPropertyDelegate && addon.setGlobalObject
-  );
-  if (useAddonGlobals) previousRealm?.detachGlobal();
-  const realm = new WindowRealm({
-    agent,
-    baseEnv,
-    reuseGlobalProxyFrom: useAddonGlobals ? previousRealm : undefined,
-    // Window.prototype -> named properties -> EventTarget.prototype.
-    globalPrototypeChain: useAddonGlobals ? ['immutable', 'delegated', 'immutable'] : undefined,
-  });
   // This new realm is registered exactly once; composition runs synchronously.
   let env!: WindowEnvironment;
+  let context!: BindingContext<BrowletEnvironment>;
+  const realm: WindowRealm = new WindowRealm({
+    agent,
+    baseEnv,
+    reuseGlobalProxyFrom: previousRealm,
+    // Window.prototype -> named properties -> EventTarget.prototype.
+    globalPrototypeChain: ['immutable', 'delegated', 'immutable'],
+    globalAccess: (callerRealm) => getWindowProxyAccess(context, realm.windowProxy, callerRealm),
+  });
   realm.initialize({
     createGlobalObject: () => {
-      const context = browletBindingWorld.register(realm, (binding) => {
+      context = browletBindingWorld.register(realm, (binding) => {
         // https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
         // All consumers retain this environment; its realm supplies the installed global.
         env = new WindowEnvironment(realm, baseEnv, createBrowletEnvironmentInit(binding));
@@ -133,14 +130,15 @@ export function createWindowEnvironment(
       });
       const window = new WindowImpl(env);
       realm.windowImplementation = window;
-      if (!useAddonGlobals) return projectWindow(context, window);
+      const allocation = realm.globalAllocation;
+      if (!allocation) return projectWindow(context, window);
 
-      const { object, prototypeChain } = realm.globalAllocation;
+      const { object, prototypeChain } = allocation;
       const [windowPrototype, namedProperties, eventTargetPrototype] = prototypeChain;
       if (!windowPrototype || !namedProperties || !eventTargetPrototype) {
-        throw new InternalError('Incomplete native Window allocation');
+        throw new InternalError('Incomplete Window global allocation');
       }
-      // With add-on globals, supply the engine-allocated global object and prototypes to Web IDL.
+      // Supply the engine-allocated global object and prototypes to Web IDL.
       return projectWindow(context, window, {
         object,
         registerAttributeGetter: (getter) => realm.registerGlobalGetter(getter),
@@ -156,12 +154,12 @@ export function createWindowEnvironment(
     },
     createGlobalThisValue: () => {
       realm.windowProxy = previousRealm?.windowProxy ?? new WindowProxyHandle(
-        useAddonGlobals ? realm.globalProxy : undefined,
+        realm.globalAllocation ? realm.globalProxy : undefined,
       );
       return realm.windowProxy.platform;
     },
   });
-  if (useAddonGlobals) {
+  if (realm.globalAllocation) {
     // Native callbacks select their original context. Keep child lookup bound
     // to that Window, independently of the handle's movable target.
     const window = realm.windowImplementation;

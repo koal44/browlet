@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../../src/browlet/browlet';
 import { getRelevantRealm } from '../../../support/browlet-binding';
+import { itPassesWith } from '../../../test-runtime';
 
 describe('WindowProxy foundations', () => {
   it('exposes no WindowProxy interface object', async () => {
@@ -125,15 +126,21 @@ describe('WindowProxy extensibility', () => {
     },
   );
 
-  it('uses the same extensibility rules for a foreign WindowProxy', async () => {
+  // SPEC_CLASH(window-foreign-prototype): Follow Chromium's foreign mutation denial.
+  itPassesWith('nativeGlobals')('rejects foreign prevention with SecurityError while remaining extensible', async () => {
     const caller = new Browlet({ route: () => '' });
     const target = new Browlet({ route: () => '' });
     // Separate initial about:blank Documents have distinct opaque origins and agents.
     Reflect.set(caller.window, 'foreignWindow', target.window);
     expect(await caller.evaluate(() => {
       const foreign = Reflect.get(window, 'foreignWindow') as object;
-      return [Reflect.isExtensible(foreign), Reflect.preventExtensions(foreign), Object.isExtensible(foreign)];
-    })).toEqual([true, false, true]);
+      try { Reflect.preventExtensions(foreign); }
+      catch (error) {
+        return [error instanceof DOMException && error.name === 'SecurityError',
+          Reflect.isExtensible(foreign), Object.isExtensible(foreign)];
+      }
+      return [false, Reflect.isExtensible(foreign), Object.isExtensible(foreign)];
+    })).toEqual([true, true, true]);
   });
 
   it('preserves its identity and extensibility when navigation replaces the Window', async () => {

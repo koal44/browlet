@@ -71,13 +71,13 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   Sources: [JSRealm](js-engine/realm.ts), [Window binding tests](../test/browlet/dom-binding.test.ts),
   [navigation tests](../test/browlet/browsing/navigation/document-lifecycle.test.ts).
   The modeled WindowProxy now rejects preventing extensions and remains extensible
-  across navigation. This preserves its forwarding target's invariants; native
-  extensibility behavior remains separately unvalidated in this slice. See the
+  across navigation. Native globals also remain extensible; foreign mutations
+  throw SecurityError under the chosen Chromium policy. See the
   [WindowProxy audit](browlet/browsing/window/ROADMAP.md#html-723-windowproxy-foundations-and-extensibility).
   Valid child-index reads, descriptors, and presence checks work on both backends
   in container insertion order. Own keys include the live child-index prefix;
-  ordinary keys still follow it without foreign-caller filtering. Automatic indexed
-  writes/deletion and missing-index security checks remain unfinished. Native global proxies
+  native foreign keys are now filtered through the caller's binding. Automatic same-origin indexed
+  writes/deletion remain unfinished. Stock Node also lacks missing-index security. Native global proxies
   use owner-supplied indexed callbacks alongside V8's ordinary global storage.
   Native ordinary accessor access now preserves explicit receivers and rejects
   invalid derived IDL receivers. A stable host view retains each original global's
@@ -89,18 +89,23 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   Retired VM globals remain weakly recognized across navigation. Other receivers,
   including objects inheriting from Window, are not mapped. Duplicate ordinary
   numeric keys are suppressed in enumeration until numeric definition paths are fixed.
-- **Browser origin security remains unfinished on every backend.** A native
-  WindowProxy and Node's shared security token provide identity and embedder
-  access, not same-/cross-origin policy. Web IDL invocation now checks Window and
-  Location receivers, including borrowed getters/methods, using the invoked
-  function's realm. Shared cross-origin descriptors and helper algorithms are
-  implemented, but direct property interception, retained-realm proxy access,
-  caller-context selection, and cross-origin named-property access await the exotic
-  methods in the [Window roadmap](browlet/browsing/window/ROADMAP.md#html-721-cross-origin-objects).
-  Prototype lookup still exposes the associated Window's prototype across origins;
-  correct null results and immutable-prototype comparisons need the caller's realm
-  and native prototype interception. The target Window's own event loop cannot
-  identify a caller from another agent.
+- **Native origin checks are connected; complete WindowProxy conformance remains open.**
+  Window contexts keep distinct tokens, and native access checks select the
+  executing caller before host dispatch. Foreign Document access is rejected,
+  descriptors and keys use that caller's binding, and foreign prototypes are null.
+  `SPEC_CLASH(window-foreign-receiver)` and `SPEC_CLASH(window-foreign-prototype)`
+  follow Chromium for foreign ordinary receivers and mutation denials. Same-origin
+  access stays in V8 and still bypasses COOP reporting. Same-origin indexed mutation
+  and missing Window members remain open. Stock Node lacks this automatic caller
+  selection and retains the approved expected failures. See the
+  [Window roadmap](browlet/browsing/window/ROADMAP.md#native-window-access-guard).
+  The failed-access callback is isolate-wide and must have one addon owner; it
+  cannot independently coexist with another embedder replacing the same hook.
+  On Node 24/addon, a Window-created Function using a Node-owned import loader
+  rejects with `TypeError: no access`; a rejecting loader can also leak its
+  original unhandled rejection. The native import assertion is an approved
+  expected failure, while the full unit run still exposes the unhandled errors.
+  Node 26/custom pass. See the [native import boundary](../node-compat/README.md#native-global-access-checks).
   Native global detachment cancels queued V8 jobs; HTML must perform its required
   checkpoint before detaching, as the current top-level path does.
 
@@ -601,8 +606,8 @@ See the [Storage roadmap](storage/ROADMAP.md#persistence-permission).
   checks. Native entry now fixes the A-to-B-to-C sender fixture on addon backends;
   stock Node still reports A while expecting B and retains the expected failure.
   Binding has cross-origin invocation checks and
-  caller-bound descriptor lookup and Get, but automatic WindowProxy property access
-  still needs to select that binding; `targetOrigin` filtering does not secure that access.
+  caller-bound descriptor lookup and Get. Native WindowProxy access now selects
+  that binding automatically; stock Node still lacks the caller boundary.
   WindowEventHandlers remain unimplemented. MessagePort transfer is implemented. See the
   [§9.3 dependencies](browlet/communication/ROADMAP.md#93-cross-document-messaging).
 
@@ -801,10 +806,10 @@ prototype lookup; Set rejects same-origin indices and requires a permitted sette
 for foreign writes. Caller-bound Delete protects present child indices and rejects
 all foreign deletions. Caller-bound key lists now select the ordinary or cross-origin
 tail after the live index prefix; missing focus/blur declarations still leave the
-foreign list incomplete. Location writes still reach unfinished navigation. Automatic
-traps still lack caller selection, so these checks do not yet enforce ordinary author
-property access.
-Automatic indexed assignment and deletion also remain unfinished; see the
+foreign list incomplete. Location writes still reach unfinished navigation. Native
+foreign access now selects these bindings automatically; stock traps still lack
+caller selection. Same-origin V8 access bypasses the caller-bound algorithms.
+Automatic same-origin indexed assignment and deletion remain unfinished; see the
 [WindowProxy audit](browlet/browsing/window/ROADMAP.md#html-723-indexed-child-reads).
 `Window[name]` resolves eligible names/IDs, stable live collections, and retained
 child navigables through Web IDL's named-properties prototype. Child creation and
@@ -894,7 +899,8 @@ The caller-bound access check now filters declared cross-origin names, checks li
 origin ancestry and virtual groups, and classifies opener relationships. Caller-bound
 WindowProxy Get/Set invoke it before property access, including permitted child reads
 and rejected writes.
-Automatic Get/Set traps still need that integration. The dispatcher still throws
+Native foreign Get/Set reaches these checks; ordinary same-origin V8 access and
+stock-Node traps still need the integration. The dispatcher still throws
 for eligible accesses; tests intercept it to inspect inputs and ordering, without
 establishing report construction or delivery. Missing Window declarations,
 including focus/blur, also leave the annotation-derived property list incomplete.

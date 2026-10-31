@@ -1,6 +1,18 @@
 'use strict';
 
 module.exports = native => ({
+  setGlobalAccess: function setGlobalAccess(target, select) {
+    if (typeof select !== 'function') throw new TypeError('Expected a global access selector');
+    native.setGlobalAccess(target, reference => {
+      const handlers = select(reference);
+      return {
+        ...handlers,
+        // V8 enumerates named and indexed properties separately.
+        ownKeys: () => handlers.ownKeys().filter(key => !isIndex(key)),
+        indices: () => handlers.ownKeys().filter(isIndex).map(Number),
+      };
+    });
+  },
   setPropertyDelegate: function setPropertyDelegate(object, delegate) {
     native.setPropertyDelegate(object, propertyHandlers(delegate));
   },

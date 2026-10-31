@@ -8,6 +8,7 @@ import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/index';
 import { CrossOriginObjectBinding } from '../../../../src/browlet/integration/web-idl/cross-origin';
 import { getBindingContext, unwrap } from '../../../support/browlet-binding';
+import { itPassesWith } from '../../../test-runtime';
 
 afterEach(() => { vi.restoreAllMocks(); });
 
@@ -146,13 +147,19 @@ describe('Caller-bound WindowProxy Set', () => {
     expect(setter.mock.contexts[0]).toBe(unwrap<LocationImpl>(receiver.location));
   });
 
-  it('uses the caller realm for invalid foreign setter receivers and the href setter realm for conversion', () => {
-    const { binding, handle, context, targetContext } = createPair();
+  it('uses the caller realm for invalid foreign setter receivers', () => {
+    const { binding, handle, context } = createPair();
     expect(() => binding.setWindowProxy('location', '/next', {}, handle)).toThrow(context.realm.TypeError);
+  });
+
+  itPassesWith('nativeGlobals')('keeps the caller realm through PutForwards conversion', () => {
+    const { binding, handle, context, targetContext } = createPair();
+    // The caller's foreign Location.href setter performs the USVString conversion.
+    // Chromium, Firefox, and WebKit all throw the caller's TypeError here.
     let failure: unknown;
     try { binding.setWindowProxy('location', Symbol(), handle.platform, handle); } catch (error) { failure = error; }
-    expect(failure).toBeInstanceOf(targetContext.realm.TypeError);
-    expect(failure).not.toBeInstanceOf(context.realm.TypeError);
+    expect(failure).toBeInstanceOf(context.realm.TypeError);
+    expect(failure).not.toBeInstanceOf(targetContext.realm.TypeError);
   });
 
   it('rechecks the current Window and origin after navigation', async () => {

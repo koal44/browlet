@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { AbortSignalImpl } from '../../../src/browlet/dom/abort/abort-signal';
 import { getBindingContext, getRelevantRealm } from '../../support/browlet-binding';
+import { createSiblingWindow } from '../../support/windows';
 import {
   ReadableStreamDefaultControllerImpl, type ReadableByteStreamControllerImpl,
   ReadableStreamImpl,
@@ -261,8 +262,7 @@ describe('ordinary readable-stream implementation', () => {
 describe('readable-stream projection', () => {
   it('preserves a borrowed enqueue failure across the stream\'s rejected promises', async () => {
     const browlet = new Browlet({ route: () => '' });
-    const foreign = new Browlet({ route: () => '' });
-    Reflect.set(browlet.window, 'foreignStreamRealm', foreign.window);
+    Reflect.set(browlet.window, 'foreignStreamRealm', createSiblingWindow(browlet));
 
     const result = await browlet.evaluate(async () => {
       const other = Reflect.get(globalThis, 'foreignStreamRealm') as typeof globalThis;

@@ -1,6 +1,6 @@
 import { InternalError, type TaskCreationOptions } from '../../infra/index';
 import {
-  JSRealm, addon, bindAsyncContext, getAssociatedRealm, isObject,
+  JSRealm, bindAsyncContext, getAssociatedRealm, isObject,
   type CompiledModule, type ModuleRequest,
   type GlobalObject, type GlobalThis, type JSRealmOptions, type RealmFunctionSteps,
 } from '../../js-engine/index';
@@ -63,10 +63,10 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
     // The context callback cannot run author code until construction and environment attachment finish.
     super(agent.eventLoop.microtaskQueue, {
       globalPrototypeChain: options.globalPrototypeChain,
+      globalAccess: options.globalAccess,
       reuseGlobalProxyFrom: options.reuseGlobalProxyFrom,
-      importModuleDynamically: !addon.createContextHandle || addon.supportsDynamicImport
-        ? (specifier, _context, attributes, phase) => this.importModuleDynamically(this, specifier, attributes, phase)
-        : undefined,
+      importModuleDynamically: (specifier, _context, attributes, phase) =>
+        this.importModuleDynamically(this, specifier, attributes, phase),
     });
     this.agent = agent;
     this.executionContext = new JSExecutionContext({ realm: this });
@@ -442,6 +442,7 @@ export type BrowletRealmCreationOptions = Omit<BrowletRealmOptions, 'agent'>;
 
 export type BrowletRealmOptions = {
   globalPrototypeChain?: JSRealmOptions['globalPrototypeChain'];
+  globalAccess?: JSRealmOptions['globalAccess'];
   reuseGlobalProxyFrom?: BrowletRealm;
   agent: Agent;
   crossOriginIsolated?: boolean;

@@ -16,10 +16,10 @@ import {
 } from './modules';
 import {
   associateContext, associateGlobalRealm, associateObjectRealm, cloneSharedArrayBuffer, compileScript,
-  createCollectionIterator, createContext, createExoticObject, createFunctionWithIncumbent, createMicrotaskQueue, detachContext,
+  createCollectionIterator, createContext, createExoticObject, createFunctionWithIncumbent, createMicrotaskQueue,
   getContextGlobalAllocation, getContextGlobalProxy,
   makePrototypeImmutable, observePromise, runInContext, runScript, runWithActiveRealm,
-  setGlobalObject, setPropertyDelegate, type JSMicrotaskQueue, type VMContext,
+  setGlobalAccess, setGlobalObject, setPropertyDelegate, type JSMicrotaskQueue, type VMContext,
 } from './runtime';
 
 /**
@@ -175,7 +175,7 @@ export class JSRealm {
   /**
    * Create a context on the supplied microtask queue and capture its built-ins.
    * The host controls queue checkpoints and may share the queue across realms.
-   * Native options can reuse a detached proxy and preallocate global prototypes;
+   * The backend can detach and reuse a prior proxy and preallocate global prototypes;
    * host-selected globals are installed separately through initializeGlobalObjects().
    */
   constructor(
@@ -192,15 +192,13 @@ export class JSRealm {
       reuseGlobalProxyFrom,
       options.globalPrototypeChain,
       importModuleDynamically,
+      options.globalAccess !== undefined,
     );
-    this.#importModuleDynamically = importModuleDynamically
+    this.#importModuleDynamically = importModuleDynamically && this.supportsDynamicImport
       ? (specifier, _script, attributes, phase) =>
         importModuleDynamically(specifier, this.#vmContext, attributes, phase)
       : undefined;
     this.#globalAllocation = getContextGlobalAllocation(this.#vmContext);
-    if (options.globalPrototypeChain && !this.#globalAllocation) {
-      throw new InternalError('The Node backend did not allocate the requested global prototypes');
-    }
     this.#globalProxy = getContextGlobalProxy(this.#vmContext);
     this.#globalObject = this.#globalProxy;
     this.#globalThis = this.#globalProxy;
@@ -320,6 +318,9 @@ export class JSRealm {
     associateObjectRealm(this.functionPrototype, this);
     associateObjectRealm(this.objectPrototype, this);
     associateObjectRealm(this.asyncIteratorPrototype, this);
+    if (options.globalAccess && this.#globalAllocation) {
+      setGlobalAccess(this.#globalProxy, options.globalAccess);
+    }
   }
 
   /** Global target; initially the engine proxy, then the object installed by the host. */
@@ -338,13 +339,10 @@ export class JSRealm {
   }
 
   /**
-   * Stable ordinary-global view and prototypes allocated by the Node compatibility add-on.
-   * Throws if globalPrototypeChain was omitted.
+   * Stable ordinary-global view and prototypes supplied by the engine.
+   * Undefined without a requested layout or when the backend cannot allocate it.
    */
-  get globalAllocation(): GlobalAllocation {
-    if (this.#globalAllocation === undefined) {
-      throw new InternalError('Realm has no preallocated global object and prototypes');
-    }
+  get globalAllocation(): GlobalAllocation | undefined {
     return this.#globalAllocation;
   }
 
@@ -356,11 +354,6 @@ export class JSRealm {
   /** Whether this context's backend accepts dynamic-import callbacks. */
   get supportsDynamicImport(): boolean {
     return !isAddonContextHandle(this.#vmContext) || addon.supportsDynamicImport;
-  }
-
-  /** Detach the native proxy for reuse; the host must finish pending work first. */
-  detachGlobal(): GlobalProxy {
-    return detachContext(this.#vmContext);
   }
 
   /** Install property forwarding on an object allocated with a delegated native template. */
@@ -890,10 +883,12 @@ type FallbackIteratorRecord = {
 };
 
 export type JSRealmOptions = {
-  /** Realm whose proxy has already been detached for this context to reuse. */
+  /** Prior realm to detach and reuse when supported; finish its pending work before construction. */
   reuseGlobalProxyFrom?: JSRealm;
-  /** Native prototype layers, ordered from the global's immediate prototype outward. */
+  /** Requested prototype layers; globalAllocation is undefined when the backend cannot supply them. */
   globalPrototypeChain?: GlobalPrototypeKind[];
+  /** Accessing-realm policy for preallocated globals; stock Node cannot enforce these checks. */
+  globalAccess?: (realm: JSRealm | undefined) => GlobalAccessHandlers;
   /** Loader for code without script/module metadata and direct realm evaluation. */
   importModuleDynamically?: ImportModuleDynamically<VMContext>;
 };
@@ -919,6 +914,19 @@ export type GlobalIndexedProperties = {
   getOwnPropertyDescriptor(index: number): PropertyDescriptor | undefined;
   /** Enumerate supported indices before the ordinary global keys. */
   ownKeys(): number[];
+};
+
+/** A host-selected view after native global access is denied; allowed access stays in V8. */
+export type GlobalAccessHandlers = {
+  allow: boolean;
+  /** Throw for native denials, including definition, deletion, and prototype/extensibility mutations. */
+  deny(): never;
+  /** Failed-access callbacks supply no original receiver; the host selects its receiver policy. */
+  get(property: string | symbol): unknown;
+  set(property: string | symbol, value: unknown): boolean;
+  getOwnPropertyDescriptor(property: string | symbol): PropertyDescriptor | undefined;
+  /** Own property keys, including array-index strings. */
+  ownKeys(): (string | symbol)[];
 };
 
 declare const globalProxyBrand: unique symbol;

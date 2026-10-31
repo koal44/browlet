@@ -10,7 +10,7 @@ const compat = require('../addon/index.cjs');
 for (const method of [
   'Script', 'Module', 'SourceTextModule', 'SyntheticModule',
   'cloneSharedArrayBuffer', 'createContextHandle', 'createHTMLDDA', 'createMicrotaskQueue', 'getFunctionRealm',
-  'getRealm', 'isContext', 'isWeakRef', 'observePromise', 'runInContext', 'setGlobalObject',
+  'getRealm', 'isContext', 'isWeakRef', 'observePromise', 'runInContext', 'setGlobalAccess', 'setGlobalObject',
   'createFunctionWithIncumbent', 'registerGlobalGetter',
   'setPropertyDelegate', 'setPropertyHandlers',
   'setPromiseRejectionTracker', 'isPromiseHandled', 'getPromiseResult',

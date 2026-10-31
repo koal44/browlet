@@ -126,6 +126,8 @@ void ForwardPromiseResult(const FunctionCallbackInfo<Value>& args, bool rejected
   }
   auto callback = args.Data().As<Function>();
   auto context = callback->GetCreationContext().ToLocalChecked();
+  // Nested engine operations must enter the callback's context, not the observer's.
+  Context::Scope scope(context);
   Local<Value> value = args[0], result;
   if (callback->Call(context, Undefined(isolate), 1, &value).ToLocal(&result)) {
     args.GetReturnValue().Set(result);
@@ -156,7 +158,10 @@ void ObservePromise(const FunctionCallbackInfo<Value>& args) {
   auto fulfilled = Function::New(context, Fulfilled, args[2]).ToLocalChecked();
   auto rejected = Function::New(context, Rejected, args[3]).ToLocalChecked();
   Local<Promise> result;
-  if (args[0].As<Promise>()->Then(context, fulfilled, rejected).ToLocal(&result)) {
+  // Attach in the Promise's context; the forwarding functions retain the observer's queue.
+  auto promise_context = args[0].As<Promise>()->GetCreationContext().ToLocalChecked();
+  Context::Scope promise_scope(promise_context);
+  if (args[0].As<Promise>()->Then(promise_context, fulfilled, rejected).ToLocal(&result)) {
     args.GetReturnValue().Set(result);
   }
 }

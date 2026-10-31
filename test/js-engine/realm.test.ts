@@ -146,7 +146,7 @@ describe('JavaScript Realm', () => {
     const globalThis = { answer: 42 };
 
     expectTypeOf(globalProxy).toEqualTypeOf<GlobalProxy>();
-    expect(() => realm.globalAllocation).toThrow('Realm has no preallocated global object and prototypes');
+    expect(realm.globalAllocation).toBeUndefined();
     realm.setGlobalObjects(globalObject, globalThis);
 
     expect(realm.globalProxy).toBe(globalProxy);

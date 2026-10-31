@@ -1,5 +1,5 @@
 import { createManualEventLoop } from '../../support/browlet-agent';
-import { describe, expect, it } from 'vitest';
+import { assert, describe, expect, it } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 
 import { unwrap, project } from '../../support/browlet-binding';
@@ -23,6 +23,7 @@ describe('Window global allocation', () => {
     expect(Object.getPrototypeOf(window)).toBe(WindowImpl.prototype);
     expect(platformWindow).not.toBe(window);
     expect(unwrap(platformWindow)).toBe(window);
+    assert(realm.globalAllocation);
     const { object, prototypeChain } = realm.globalAllocation;
     expect(object).toBe(platformWindow);
     expect(object).toBe(realm.globalObject);

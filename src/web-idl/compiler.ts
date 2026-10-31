@@ -1,3 +1,5 @@
+import { compileHostFunction } from '../js-engine/index';
+
 /** Compile host-side steps with property and call feedback isolated by label. */
 export function compileSteps<Steps extends (...args: never[]) => unknown>(
   label: string, dependencies: Record<string, unknown>, source: string,
@@ -7,11 +9,11 @@ export function compileSteps<Steps extends (...args: never[]) => unknown>(
   // Callers supply trusted source and parameter names; declaration strings used
   // in the body must be encoded as literals, never interpolated as source code.
   // Exposed functions still use WebIDLRealm.createFunction for realm ownership.
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval -- Compile trusted binding code with explicit dependencies.
-  const create = Function(Object.keys(dependencies).join(', '), `
+  // Compile in the host even when lazy binding preparation begins in an author realm.
+  const create = compileHostFunction(`
     "use strict";
     return (${source});
     //# sourceURL=webidl/${encodeURIComponent(label)}
-  `) as (...values: unknown[]) => Steps;
-  return Reflect.apply(create, undefined, Object.values(dependencies));
+  `, Object.keys(dependencies)) as (...values: unknown[]) => Steps;
+  return create(...Object.values(dependencies));
 }

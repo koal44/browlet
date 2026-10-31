@@ -72,7 +72,8 @@ describe('HTML dynamic import', () => {
     expect(env.realm.loadedModules.size).toBe(0);
   });
 
-  it('leaves a host-created Function with its Node referrer and loader', async () => {
+  // Approved Node 24/addon gap: Node's import continuation rejects across distinct tokens.
+  itPassesWith('guardedNodeImport')('leaves a host-created Function with its Node referrer and loader', async () => {
     const { env, fetch } = await fixture({});
     const target = new vm.SyntheticModule(['answer'], function() { this.setExport('answer', 42); });
     await target.link(() => { throw new Error('Synthetic modules have no imports'); });
@@ -97,6 +98,7 @@ describe('HTML dynamic import', () => {
   it.fails('allocates unsupported-attribute errors in the executing realm of a borrowed Function constructor', async () => {
     const source = await fixture({});
     const executing = await fixture({});
+    const importing = vi.spyOn(source.env.realm, 'importModuleDynamically');
     Reflect.set(source.env.global, 'OtherFunction', executing.env.realm.Function);
     const observation = await observe(executing.env, () => classic(source.env,
       `OtherFunction("return import('./borrowed.js', { with: { unsupported: 'x' } });")()`,
@@ -104,6 +106,7 @@ describe('HTML dynamic import', () => {
     const result = await settled(executing.env, observation, source.env);
     expect(result.type).toBe('rejected');
     if (result.type !== 'rejected') throw new Error('Expected import rejection');
+    expect(importing).toHaveBeenCalledOnce();
     expect(Object.getPrototypeOf(result.reason)).toBe(executing.env.realm.TypeError.prototype);
     expect(source.fetch).not.toHaveBeenCalled();
     expect(executing.fetch).not.toHaveBeenCalled();
@@ -181,10 +184,12 @@ describe('HTML dynamic import', () => {
         '/app/link.js': 'import { missing } from "./child.js";',
         '/app/descendant.js': 'import "./invalid.js";',
       });
+      const importing = vi.spyOn(env.realm, 'importModuleDynamically');
       const observation = await observe(env, () => classic(env, failure.source));
       const result = await settled(env, observation);
       expect(result.type).toBe('rejected');
       if (result.type !== 'rejected') throw new Error('Expected import rejection');
+      expect(importing).toHaveBeenCalledOnce();
       expect(Object.getPrototypeOf(result.reason)).toBe(env.realm[failure.error].prototype);
     });
   }
@@ -221,10 +226,12 @@ describe('HTML dynamic import', () => {
       // These global implementations are unfinished; exercise their explicit
       // environment contract while retaining real compilation and native import.
       vi.spyOn(env, kind, 'get').mockReturnValue(true);
+      const importing = vi.spyOn(env.realm, 'importModuleDynamically');
       const observation = await observe(env, () => classic(env, 'import("./child.js")'));
       const result = await settled(env, observation);
       expect(result.type).toBe('rejected');
       if (result.type !== 'rejected') throw new Error('Expected import rejection');
+      expect(importing).toHaveBeenCalledOnce();
       expect(Object.getPrototypeOf(result.reason)).toBe(env.realm.TypeError.prototype);
       expect(fetch).not.toHaveBeenCalled();
     });

@@ -12,9 +12,9 @@ import type { WindowImpl } from './window';
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-windowproxy-exotic-object
 // The handle is internal; the exposed identity is the engine proxy or the
 // plain-Node forwarding proxy, neither of which inherits from this class.
-// Extensibility, valid-index reads, and the child-key prefix follow HTML §7.2.3;
-// the remaining traps retain provisional forwarding. See ROADMAP.md for unfinished methods.
-// TODO(HTML 7.2.3): Select the accessing realm and compose CrossOriginObjectBinding into the exotic traps.
+// Native caller selection is composed in integration/web-idl/window-proxy.ts.
+// These stock-Node traps retain provisional forwarding; see ROADMAP.md.
+// TODO(stock Node): Select the accessing realm and compose CrossOriginObjectBinding into these traps.
 export class WindowProxyHandle implements ProxyHandler<object> {
   /** Handles keyed by the stable author-facing proxy identity. */
   // V8 global proxies lose private-field stamps when reused for another realm.

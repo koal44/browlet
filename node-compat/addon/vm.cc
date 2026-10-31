@@ -1,4 +1,5 @@
 #include <node.h>
+#include "global-access.h"
 #include "vm.h"
 #include "vm-imports.h"
 #include "realm.h"
@@ -170,6 +171,11 @@ void CreateContext(const FunctionCallbackInfo<Value>& args) {
   }
 
   auto global_template = data->global_template.Get(isolate);
+  const bool global_access = args[3]->IsTrue();
+  if ((!args[3]->IsUndefined() && !args[3]->IsBoolean()) || (global_access && args[2]->IsUndefined())) {
+    Fail(isolate, "ERR_INVALID_ARG_VALUE", "Global access checks require a prototype layout and boolean option");
+    return;
+  }
   std::vector<int> prototype_kinds;
   if (!args[2]->IsUndefined()) {
     if (!args[2]->IsArray()) {
@@ -181,7 +187,7 @@ void CreateContext(const FunctionCallbackInfo<Value>& args) {
       Fail(isolate, "ERR_INVALID_ARG_VALUE", "Global prototype layout must not be empty");
       return;
     }
-    std::string key;
+    std::string key = global_access ? "guarded:" : "";
     for (uint32_t i = 0; i < layout->Length(); ++i) {
       Local<Value> kind;
       if (!layout->Get(host, i).ToLocal(&kind)) return;
@@ -205,6 +211,7 @@ void CreateContext(const FunctionCallbackInfo<Value>& args) {
       global_template = parent->InstanceTemplate();
       global_template->SetImmutableProto();
       ConfigurePropertyDelegate(isolate, global_template, true);
+      if (global_access) ConfigureGlobalAccess(isolate, global_template);
       data->prototype_templates.emplace(key, Global<ObjectTemplate>(isolate, global_template));
     } else {
       global_template = found->second.Get(isolate);
@@ -219,7 +226,11 @@ void CreateContext(const FunctionCallbackInfo<Value>& args) {
   if (realm.IsEmpty()) return;
   if (node::InitializeContext(realm).IsNothing()) return;
   node::RegisterContext(data->environment, realm, "node-compat");
-  realm->SetSecurityToken(host->GetSecurityToken());
+  // Guarded globals keep distinct tokens so cross-context access reaches the host policy.
+  // TODO(node24-guarded-import): Node 24's own import continuation fails across
+  // these tokens; a rejected loader result can also remain unhandled (see README).
+  if (global_access) PrepareGlobalAccess(realm);
+  else realm->SetSecurityToken(host->GetSecurityToken());
 
   Local<Object> holder;
   if (!data->context_type.Get(isolate)->InstanceTemplate()

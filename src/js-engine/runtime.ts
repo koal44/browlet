@@ -12,7 +12,7 @@ import {
   type AddonContextHandle, type AddonMicrotaskQueueHandle, type ContextEvaluationOptions,
 } from './node-addons';
 import type {
-  CollectionIteratorKind, CompiledCode, CompiledScript, ExoticObjectHandlers, GlobalAllocation, GlobalIndexedProperties,
+  CollectionIteratorKind, CompiledCode, CompiledScript, ExoticObjectHandlers, GlobalAccessHandlers, GlobalAllocation, GlobalIndexedProperties,
   GlobalPrototypeKind, GlobalProxy,
   JSFunction, JSIteratorResult, JSRealm,
 } from './realm';
@@ -20,11 +20,22 @@ import type { ImportModuleDynamically } from './modules';
 
 const getNativeRealm = addon.getRealm;
 
+/** Compile trusted host code with explicit parameters, independently of the active author realm. */
+export function compileHostFunction(source: string, parameters: string[]): JSFunction {
+  return vm.compileFunction(source, parameters) as JSFunction;
+}
+
 /** Select handlers using the engine's current realm before entering JavaScript trap functions. */
 export function createExoticObject(
   realmAnchor: object, select: (realm: JSRealm | undefined) => ExoticObjectHandlers,
 ): object | undefined {
   return addon.createExoticObject?.(realmAnchor, (reference) => select(RealmStamper.get(reference)));
+}
+
+/** Resolve the native accessing context through the same realm identity used by exotic objects. */
+export function setGlobalAccess(target: GlobalProxy, select: (realm: JSRealm | undefined) => GlobalAccessHandlers): void {
+  if (!addon.setGlobalAccess) throw new InternalError('Node backend does not provide native global access checks');
+  addon.setGlobalAccess(target, (reference) => select(RealmStamper.get(reference)));
 }
 
 export function createMicrotaskQueue(): JSMicrotaskQueue {
@@ -137,6 +148,7 @@ export function createContext(
   reuseGlobalProxyFrom?: VMContext,
   globalPrototypeChain?: GlobalPrototypeKind[],
   importModuleDynamically?: ImportModuleDynamically<VMContext>,
+  globalAccess = false,
 ): VMContext {
   const handle = microtaskQueue instanceof AddonMicrotaskQueue
     ? microtaskQueue.handle
@@ -144,8 +156,15 @@ export function createContext(
   const options = { microtaskQueue: handle, importModuleDynamically };
 
   if (addon.createContextHandle && addon.runInContext) {
+    if (reuseGlobalProxyFrom) {
+      if (!isAddonContextHandle(reuseGlobalProxyFrom)) {
+        throw new InternalError('Cannot reuse a global proxy from another backend');
+      }
+      reuseGlobalProxyFrom.detachGlobal();
+    }
     const context: unknown = addon.createContextHandle({
-      ...options, reuseGlobalProxyFrom, globalPrototypeChain,
+      ...options, reuseGlobalProxyFrom, globalPrototypeChain, globalAccess,
+      importModuleDynamically: addon.supportsDynamicImport ? importModuleDynamically : undefined,
     });
     if (!isAddonContextHandle(context)) {
       throw new InternalError('Node backend createContextHandle returned an invalid handle');
@@ -153,12 +172,8 @@ export function createContext(
     return context;
   }
 
-  if (globalPrototypeChain) {
-    throw new InternalError('Node does not support preallocated global prototypes');
-  }
-  if (reuseGlobalProxyFrom) {
-    throw new InternalError('Node does not support reusable global proxies');
-  }
+  // Stock Node allocates an ordinary context. The host uses its modeled global
+  // bridge when globalAllocation is absent; native reuse/access remain unavailable.
   return Reflect.apply(vm.createContext, vm, [
     vm.constants.DONT_CONTEXTIFY,
     options,
@@ -202,13 +217,6 @@ export function setGlobalObject(context: VMContext, object: object, indexedPrope
     throw new InternalError('Node backend does not provide setGlobalObject');
   }
   addon.setGlobalObject(context, object, indexedProperties);
-}
-
-export function detachContext(context: VMContext): GlobalProxy {
-  if (!isAddonContextHandle(context)) {
-    throw new InternalError('Node does not support detachable context handles');
-  }
-  return context.detachGlobal();
 }
 
 export function makePrototypeImmutable(object: object): void {

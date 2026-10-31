@@ -66,7 +66,7 @@ event dispatch, and console reporting.
 `createContextHandle()` creates a native V8 context registered with Node;
 `runInContext()` evaluates there. These are not `node:vm` Contextify objects.
 The supported options are queue selection, `reuseGlobalProxyFrom`,
-`globalPrototypeChain`, and `importModuleDynamically`; evaluation accepts filename,
+`globalPrototypeChain`, `globalAccess`, and `importModuleDynamically`; evaluation accepts filename,
 lineOffset, and `displayErrors: false`, plus the optional import callback described below.
 Unsupported options fail explicitly. Interoperability with Node's own contextified objects, timeouts, and automatic afterEvaluate
 checkpoints remain outside this API.
@@ -356,8 +356,8 @@ on all addon bases, not an expected failure. See the
 `globalPrototypeChain` preallocates an immutable global proxy and ordered
 `mutable`, `immutable`, or `delegated` prototype layers. Reuse requires the same
 layout. Web IDL populates them; `setPropertyDelegate()` attaches named-property
-behavior. Node's shared VM
-security token permits embedder access; it does not implement browser cross-origin policy.
+behavior. Ordinary contexts share Node's VM security token; contexts opting into
+`globalAccess` instead keep distinct tokens and receive host access checks.
 
 The context's `globalObject` is a stable host view of V8's actual ordinary global
 storage, not a second property store. Host definitions and script declarations
@@ -395,9 +395,73 @@ per-context strong native root. The native tests cover name collisions, TDZ,
 live retained state, and collection after reuse. This is a version-sensitive
 public-V8-API technique, not an engine patch or a general exposed capture API.
 
-Caller selection, cross-origin filtering, caller-dependent prototypes, and the
-remaining indexed mutation rules are separate work. The ordinary receiver repair
-does not make direct foreign-Document access safe.
+### Native global access checks
+
+`createContextHandle({ globalPrototypeChain, globalAccess: true })` creates an
+access-checked native global. Reuse requires the same guarded layout.
+`setGlobalAccess(globalProxy, select)` attaches a context-owned selector. It gets
+the actual accessing realm reference before entering host code, including borrowed
+Reflect calls. Only the exact Node composition context bypasses policy. An
+unregistered or unconnected caller is never silently granted host access.
+
+Allowed operations use V8's ordinary global store. Denied access uses the selected
+Get/Set, descriptor, and key handlers. Foreign definition/deletion and
+prototype/extensibility mutations bypass those handlers; the selected `deny()`
+throws the host's exception. Browlet supplies HTML origin checks and caller-owned
+DOMExceptions through JS Engine; native code does not implement HTML policy.
+
+The public handler's `ownKeys()` returns all keys, including array-index strings.
+The JavaScript addon adapter splits that list into V8's named and indexed
+enumerators; callers do not supply a separate `indices()` handler.
+
+`global-access.cc` owns the isolate-wide failed-access callback. Addon loads share
+its registration count, and the last environment cleanup removes it. Selectors
+live in context extras and collect with their contexts. Pending exceptions survive;
+unrelated targets retain V8's default denial. V8 exposes no getter for a previous
+callback, so another embedder cannot independently own this hook in the same
+isolate. Production uses one maintained addon library per isolate.
+
+Distinct tokens also require Promise observation to attach reactions in the
+Promise's context while retaining the observer's queue. Native forwarding then
+enters the callback's own context, so a host reaction can allocate in another
+guarded Window without inheriting the observer's access restrictions.
+`global-access.test.cjs` covers realm selection, validation, guarded reuse,
+collection, repeated addon initialization, worker teardown, and Promise delivery.
+The HTML integration follows Chromium's foreign receiver and mutation choices;
+see the [Window audit](../src/browlet/browsing/window/ROADMAP.md#native-window-access-guard).
+Same-origin COOP reporting and indexed mutation rules remain separate work.
+
+**Node 24 import boundary:** a Function made with a guarded Window's constructor
+but a Node-owned referrer/loader rejects its import with `TypeError: no access`.
+The native regression reproduces this even with an allow-all selector; a separate
+probe without `observePromise()` also rejects. Ordinary host Promise adoption
+works. Node 26/custom pass the required import assertion. Node 24's case is an
+approved expected failure; this does not change the separate unsupported HTML
+dynamic-import status on official addon bases.
+
+The [isolated import probe](experimental/window-guard/node24-import.cjs) now
+narrows this to V8's native `JSPromise::Resolve` fast path. In
+[Node 24.19.0](https://github.com/nodejs/node/blob/v24.19.0/deps/v8/src/objects/objects.cc),
+it selects the current context's `promise_then()` when adopting an intrinsic
+Promise from another realm. [Node 26.8.1](https://github.com/nodejs/node/blob/v26.8.1/deps/v8/src/objects/objects.cc)
+selects that Promise prototype's creation context instead. Node's import bridge
+adopts its host loader Promise into the importing Window, exposing the wrong
+realm choice and subsequent Promise-constructor access denial. The loader runs;
+the Window guard callback is not invoked. This is independent of Holder/HolderV2.
+Returning a namespace, Module, or host Promise all reproduces the Node 24 failure.
+The probe's `--invalidate-then` diagnostic disables that lookup optimization and
+restores the original intrinsic; all three then succeed with the guard enabled.
+This changes optimization state for the whole isolate and is not installed in
+production. A backport of the engine correction remains preferable to a global
+optimization workaround; no Node/V8 source is changed here.
+
+When that Node loader rejects (including the missing-callback default), its
+original rejection can also remain unhandled. The Node 24/addon HTML import suite
+therefore still reports unhandled errors; these are not suppressed or counted as
+passing acceptance. The import rejection tests verify that HTML's loader was
+actually reached, so an unrelated native TypeError cannot satisfy their realm
+expectations. Resolving this Node-owned continuation boundary remains follow-up;
+the guard is not disabled and no Node/V8 patch is added here.
 
 ### Other addon operations
 
@@ -407,7 +471,7 @@ does not make direct foreign-Document access safe.
 | `isFinalizationRegistry(value)` | Requires `Value::IsFinalizationRegistry()`. Checks the native brand without reading properties or changing registered entries; proxies and prototype impostors return false. JS Engine retains its captured-`unregister` fallback where unavailable. |
 | `createHTMLDDA(context, call)` | Available with the addon on every supported base. Allocates a callable, non-constructible object with native `[[IsHTMLDDA]]` behavior in the supplied context. Invokes `call` with an undefined receiver and the original arguments; preserves its result or exception. |
 | `setPropertyHandlers(object, handlers)` | Attaches property algorithms to a native object allocated with interceptors. Accepts `has`, `get`, `set`, `getOwnPropertyDescriptor`, `defineProperty`, `deleteProperty`, and `ownKeys`; the addon translates descriptors and keys into V8's query/index protocols. |
-| `observePromise(promise, realmAnchor, fulfilled?, rejected?)` | Native `Promise::Then` in the observer's realm. Node 26/custom bypass author `then`, `constructor`, and species; Node 24 still consults `constructor`. A derived Promise is allocated and discarded by Browlet. |
+| `observePromise(promise, realmAnchor, fulfilled?, rejected?)` | Native `Promise::Then` in the backing Promise's context; forwarding functions retain the observer's queue and enter each callback's own context. Node 26/custom bypass author `then`, `constructor`, and species; Node 24 still consults `constructor`. A derived Promise is allocated and discarded by Browlet. |
 | `createCollectionIterator(context, kind, next)` | Requires `CollectionIterator::New`. Produces native Map/Set-branded iterators; the callback owns result conversion/allocation, V8 owns iteration lifecycle. |
 | `cloneSharedArrayBuffer(buffer, context)` | Allocates a new buffer object in the destination context over the existing shared backing store, preserving growth. Uses public V8 APIs; no engine patch is needed. |
 | `isLengthTrackingArrayBufferView(view)` | Requires `ArrayBufferView::IsLengthTracking()`. Reads auto/fixed length without mutation, including shared, detached, and out-of-bounds views. |

@@ -11,6 +11,8 @@
 - `location.ts`: Location identity, URL accessors, and navigation preparation.
 - [`../../integration/web-idl/cross-origin.ts`](../../integration/web-idl/cross-origin.ts):
   HTML's shared cross-origin algorithms and the Web IDL security check.
+- [`../../integration/web-idl/window-proxy.ts`](../../integration/web-idl/window-proxy.ts):
+  native Window caller selection and foreign property dispatch.
 
 ## HTML §7.2.1: cross-origin objects
 
@@ -73,13 +75,11 @@ WPT tests. Local coverage is in
 [`member-function.test.ts`](../../../../test/web-idl/binding/member-function.test.ts).
 The borrowed `document` getter regression failed before the security hook was wired.
 
-This is not full cross-origin enforcement. WindowProxy and Location's exotic
-internal methods must select the current binding before entering an IDL function,
-invoke these helpers, and implement their additional rules. Their caller lookup
-must account for the [execution-context limitation](../../../LIMITATIONS.md#scheduling-and-callback-context);
+WindowProxy and Location now select the current binding through native context
+capture before entering their shared algorithms. Location also supplies ordinary
+descriptor access without recursively entering its exotic method. Stock Node
+retains the [execution-context limitation](../../../LIMITATIONS.md#scheduling-and-callback-context);
 the invoked member's realm is only sufficient inside Web IDL invocation.
-Location's future binding must supply OrdinaryGetOwnProperty access to the descriptor
-helper without recursively entering its exotic `[[GetOwnProperty]]`.
 Window's undeclared `focus` and `blur` remain explicit dependencies. They do
 not contribute permissions or descriptors in the annotation proof of concept.
 Location's URL setters, `assign()`, and `replace()` prepare navigation inputs
@@ -361,77 +361,49 @@ Service Worker integration are not established by these settings tests.
 ## HTML §7.2.3: WindowProxy foundations and extensibility
 
 Audited the [preamble and §§7.2.3.1–4](https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-windowproxy-exotic-object)
-against the same HTML revision. This first pass implements the unconditional
-extensibility rules on the stock-Node forwarding proxy. Prototype security still
-requires caller selection and native interception, described below. The indexed-read
-pass below covers part of §§7.2.3.5–10; their security-dependent branches remain open.
+against the same HTML revision. Native Window access checks now supply the executing
+caller to the HTML binding. The [production guard](#native-window-access-guard)
+connects foreign property access and records the accepted Chromium differences;
+stock caller selection and same-origin COOP reporting remain unfinished.
 
 | Passage | Implementation and remaining dependency |
 | --- | --- |
 | Stable identity and [[Window]] | `WindowProxyHandle.platform` stays fixed while `associatedWindow` changes on navigation. Binding unwraps receivers through the current association. No WindowProxy interface object is exposed. Existing navigation tests and the new rejection/navigation case cover this lifecycle. |
 | Ordinary target note | The specification permits dispatch through the Window's methods while it behaves as an ordinary object. Stock Node uses Reflect forwarding and Web IDL's global prototype behavior; its nonconfigurable-descriptor accommodation remains necessary for JavaScript Proxy invariants. |
-| §7.2.3.1, [[GetPrototypeOf]] | The own-Window case returns Window.prototype. The required null result across origins remains missing: automatic traps need the current caller's binding before invoking `CrossOriginObjectBinding.isPlatformObjectSameOrigin()`. |
-| §7.2.3.2, [[SetPrototypeOf]] | Existing forwarding rejects changing the associated Window's immutable prototype. Full SetImmutablePrototype must instead compare against the proxy's caller-visible [[GetPrototypeOf]] result: a cross-origin caller may set null successfully without changing anything. This depends on §7.2.3.1. |
-| §7.2.3.3, [[IsExtensible]] | Stock-Node trap always returns true; its hidden target stays extensible. |
-| §7.2.3.4, [[PreventExtensions]] | Stock-Node trap always returns false. Reflect reports false; Object.preventExtensions/seal/freeze throw in the calling realm without changing the proxy or its target. These rules need no origin check. |
+| §7.2.3.1, [[GetPrototypeOf]] | Native same-origin access returns Window.prototype; foreign access returns null. Stock traps still lack automatic caller selection. |
+| §7.2.3.2, [[SetPrototypeOf]] | Same-origin access rejects changing the immutable prototype. Foreign native mutations throw SecurityError, following Chromium rather than HTML's comparison against the visible null prototype: `SPEC_CLASH(window-foreign-prototype)`. Explicit caller-bound helpers retain the HTML algorithm. |
+| §7.2.3.3, [[IsExtensible]] | Both backends return true. |
+| §7.2.3.4, [[PreventExtensions]] | Same-origin Reflect returns false; Object.preventExtensions/seal/freeze throw TypeError. Foreign native mutations throw the accessing realm's SecurityError under the same Chromium choice. Neither path makes the Window non-extensible. |
 
-**Caller dependency:** WindowProxy should consume HTML's modeled current
-`JSExecutionContext`. Its `.realm` and `.realm.env` already supply the identities
-needed by `CrossOriginObjectBinding`. `EventLoop.runningExecutionContext` gives
-that answer for a known loop, and entering our host-written proxy helpers does
-not replace the modeled context with the helper's Node realm.
+**Caller boundary:** V8 captures the accessing context before entering the Node
+host callback. JS Engine resolves its existing realm reference; HTML's
+[`getWindowProxyAccess()`](../../integration/web-idl/window-proxy.ts) selects the caller's
+registered binding and invokes `CrossOriginObjectBinding`. A B-authored function
+or borrowed B Reflect operation therefore selects B, including when entered from
+A. Native checks exempt only the exact Node composition context; an unregistered
+author context is not treated as privileged. Context extras retain the selector
+through garbage-collected edges, without a separate Window registry.
 
-Two producers remain unfinished. First, the scripting owner must expose which
-modeled execution is current across nested entries into different agents/loops;
-the accessed Window's loop cannot identify a caller in another loop. Second,
-ordinary author and built-in calls between realms do not yet push/pop records.
-Controlled script evaluation and callback preparation already maintain their
-entries. Object/function creation-realm lookup does not fill the missing call
-transitions. Direct Node-host access still needs an explicit embedding policy;
-an unknown caller must not silently become the target realm or privileged host.
+Stock traps still cannot infer every author/built-in realm transition from the
+modeled execution stack. The earlier probe at `5a165edd` observed A instead of B
+for B-authored and borrowed-built-in calls, while controlled nested evaluation
+selected B correctly. The execution-context experiment `956bde8f` remains parked
+on `research/ged-modeled-execution-context`. It is not needed by the native guard;
+the stock dependency and same-origin native reporting remain explicit follow-up.
 
-Rechecked after the integration at `5a165edd`, including a read-only stock Node
-24 trace inside the real WindowProxy get trap. A and B shared one agent for the
-call-transition cases; the accessed Window belonged to another agent:
-
-| Execution reaching the trap | Observed modeled current realm |
-| --- | --- |
-| A directly reads the target's document | A |
-| A calls a B-authored function that reads the target's document | A; the B call transition is missing |
-| A calls B's Reflect.get on the target's document | A; the built-in call transition is missing |
-| A's controlled evaluation enters a nested B evaluation | B, with A restored when B returns |
-
-The probe created the B function and Reflect.get through B's realm evaluation,
-stored them in A's global, and read the modeled stack in the target handle's get
-trap. No stack records were injected for those calls. A separate trace with A
-and B on different loops left both loops nonempty during nested evaluation,
-confirming that scanning for a nonempty stack cannot establish the current one.
-All stacks were empty after cleanup.
-
-The execution-context/prototype experiment `956bde8f` is parked on
-`research/ged-modeled-execution-context`; it is not part of this working branch.
-A possible integration is a current-execution accessor supplied by scripting
-to the HTML binding adapter, which selects the registered caller binding for each
-WindowProxy operation and carries it through internal descriptor lookup. Runtime
-hooks may eventually supply uncovered transitions to that model; native capture
-is not a prerequisite imposed by the WindowProxy consumer. Existing native job
-snapshots and stock `JSRuntime.runWithActiveRealm()` do not currently maintain
-those missing transitions.
-
-**Native dependency:** an addon global proxy bypasses `WindowProxyHandle`'s
-JavaScript traps. Its property delegate exposes property operations, not
-origin-sensitive prototype hooks. Native immutability alone cannot supply the
-different same-origin and cross-origin prototype results. The native path still
-needs a focused runtime design and validation; this pass changes no native code
-and builds no binaries.
+**Native boundary:** the actual global proxy bypasses JavaScript Proxy traps.
+Access checks connect its foreign property handlers to HTML, while V8 supplies
+the foreign null prototype and mutation denial. The isolate-wide failed-access
+callback asks the selected HTML binding to create SecurityError. This uses public
+addon APIs on all supported bases; it requires no new Node/V8 patch.
 
 [`window-proxy.test.ts`](../../../../test/browlet/browsing/window/window-proxy.test.ts)
 checks exposure, own-Window prototype immutability, Reflect/Object extensibility
 operations, caller-realm TypeErrors, foreign proxies, and navigation after a
-rejected change. Five regression cases failed before the fix: stock Node allowed
+rejected change. Five regression cases failed before the original fix: stock Node allowed
 Reflect.preventExtensions, and Object.seal/freeze left the hidden target
-non-extensible even when they threw. The tests remain ordinary enabled regressions;
-stock Node 24 validation does not establish native-backend conformance.
+non-extensible even when they threw. The foreign-mutation case now tests the
+accepted native Chromium choice and is an approved stock-only expected failure.
 
 ## HTML §7.2.3: indexed child reads
 
@@ -458,12 +430,12 @@ existing tree-order collection stays unchanged for named access and other consum
 | Passage | Implementation and remaining dependency |
 | --- | --- |
 | §7.2.3.5, valid array index | Select the current associated Document's child in container insertion order and return its active WindowProxy. Descriptor is non-writable, enumerable, configurable. Noncanonical numeric strings and symbols retain the ordinary path. |
-| §7.2.3.5, missing index and non-index properties | The caller-bound descriptor algorithm below implements undefined versus SecurityError for absent indices, ordinary descriptors, cross-origin declared descriptors, child target-name descriptors, and fallback checks. Automatic trap forwarding remains provisional until caller selection exists. |
-| §7.2.3.6, [[DefineOwnProperty]] | The caller-bound definition algorithm below rejects same-origin indices and throws SecurityError for foreign callers. Automatic target forwarding still needs caller selection before enforcing either rule. Nonconfigurable properties also retain the JavaScript Proxy invariant limitation noted below. |
-| §7.2.3.7, [[Get]], and ordinary [[HasProperty]] | Caller-bound Get runs the COOP check before OrdinaryGet/CrossOriginGet dispatch, including permitted child reads. Automatic Get and presence checks remain provisional until caller selection exists. The exact stock-VM receiver accommodation below remains at the automatic trap. |
-| §7.2.3.8, [[Set]] | Caller-bound Set runs the COOP check first, rejects same-origin indices, delegates other same-origin writes to ordinary Window assignment, and requires the foreign proxy descriptor's setter. Automatic forwarding still needs caller selection; Location navigation remains unfinished. |
-| §7.2.3.9, [[Delete]] | Caller-bound deletion returns false for present same-origin child indices and true for absent indices, uses ordinary deletion for other same-origin properties, and throws SecurityError for every foreign deletion. Automatic forwarding still needs caller selection. |
-| §7.2.3.10, [[OwnPropertyKeys]] | Caller-bound enumeration prefixes live child-index strings to ordinary Window keys or the declared cross-origin keys and fallback symbols. Automatic forwarding still needs caller selection; missing focus/blur declarations remain covered by the existing completeness expected failure. |
+| §7.2.3.5, missing index and non-index properties | Native foreign access invokes the caller-bound descriptor algorithm, including missing-index SecurityError, declared descriptors, child target names, and fallback checks. Stock forwarding still lacks caller selection. |
+| §7.2.3.6, [[DefineOwnProperty]] | Native foreign definition throws the caller's SecurityError. Same-origin indexed definition remains unfinished on both automatic paths; the explicit caller-bound algorithm rejects it. Stock nonconfigurable properties also retain the Proxy invariant limitation. |
+| §7.2.3.7, [[Get]], and ordinary [[HasProperty]] | Native foreign Get runs the caller-bound COOP check and CrossOriginGet; presence checks use the descriptor algorithm. Same-origin COOP reporting and stock caller selection remain unfinished. |
+| §7.2.3.8, [[Set]] | Native foreign Set runs the caller-bound COOP check and requires the foreign descriptor's setter, using the target receiver under the Chromium choice. Same-origin indexed rejection/reporting, stock caller selection, and Location navigation remain unfinished. |
+| §7.2.3.9, [[Delete]] | Native foreign deletion throws the caller's SecurityError. Automatic same-origin deletion still lacks the explicit algorithm's present-index false/absent-index true rule; stock foreign deletion lacks caller selection. |
+| §7.2.3.10, [[OwnPropertyKeys]] | Both backends prefix live child indices. Native foreign enumeration adds declared cross-origin keys and fallback symbols; stock enumeration lacks caller filtering. Missing focus/blur declarations remain covered by the completeness expected failure. |
 
 Native global proxies bypass these JavaScript traps. Both backends use Window's
 child lookup and length, with WindowProxy supplying indexed descriptors. Window
@@ -509,8 +481,8 @@ arrive with a separate VM global as receiver. On Window association the handle
 weakly records that exact global identity and maps it to its public proxy, including
 after navigation. Other objects are unchanged; merely inheriting from Window does
 not make an object a valid IDL receiver. This accommodation does not select a caller
-realm or restore the parked execution-context machinery. Automatic Get still needs
-to select the caller-bound operation below; both access traps still need COOP reporting.
+realm or restore the parked execution-context machinery. Stock automatic Get still
+needs caller selection; both backends still need automatic same-origin COOP reporting.
 
 Five enumeration regressions initially missed the child-key prefix. Two receiver
 regressions initially observed the underlying Window as `this` and mutations of
@@ -588,7 +560,7 @@ single-worker full-suite attempts exhausted the worker's 4 GiB heap; the complet
 matrix distributed the same tests across four workers. No assertions were removed
 or newly classified as expected failures.
 
-### Access guard follow-up
+### Native Window access guard
 
 The 31 October guard refresh in `node-compat/experimental/window-guard/` now uses
 this maintained store directly. It blocks the actual foreign-Document regression
@@ -596,18 +568,93 @@ on all three native bases, including warmed lookup. It also exposed a Node 24
 own-property query that followed the reused public proxy instead of the original
 global. The maintained native regression reproduces that wrong query without the
 guard; `property-delegate.cc` now selects the original holder consistently.
-The guard itself remains experimental. Its foreign receiver and mutation paths
-now follow the selected Chromium behavior on all three addon bases, using V8's
-public failed-access callback without an engine patch. Its README records browser
-differences, isolate-wide callback ownership, and the Promise-observation,
-trusted-compilation, and PutForwards dependencies needed for production adoption.
+The guard now lives in maintained `node-compat/addon/global-access.cc`, with the
+HTML adapter in `integration/web-idl/window-proxy.ts`. Guarded allocation is opt-in;
+ordinary addon contexts keep their existing behavior. Only the exact composing
+Node context bypasses policy. The addon owns the isolate-wide failed-access
+callback, reference-counted across repeated loads and removed at final environment
+cleanup. V8 exposes no previous-callback getter, so competing addons replacing
+that callback remain unsupported. The context retains its selector; discarded
+selectors, globals, and contexts collect. See the
+[native contract](../../../../node-compat/README.md#native-global-access-checks).
 
-For this query correction, the four affected Window suites pass on all six
-configurations: 73 assertions on each compat base, and 67 plus six existing
-expected failures on each stock base. The full native suites pass with 278 tests
-on each official base and 277 plus one existing skip on custom. Type contracts,
-focused lint, and whitespace checks pass. These results are separate from the
-preceding property-store slice's full-unit validation.
+Window composition supplies the requested prototype layout and an accessing-realm
+policy. JS Engine selects the backend, detaches and reuses native globals, and
+installs the policy; HTML does not inspect addon exports. The HTML adapter is
+`getWindowProxyAccess()`. Its own-key list includes index strings; JS Engine
+separates those for V8's named/indexed interceptors. Stock Node returns no global
+allocation and retains the explicitly limited modeled-proxy path.
+
+The accepted choices are marked beside the production dispatch:
+
+- `SPEC_CLASH(window-foreign-receiver)`: Chromium uses the target for ordinary
+  foreign Get/Set even when Reflect supplies another receiver. HTML, Firefox,
+  and WebKit preserve that receiver. Browlet follows Chromium at this native
+  boundary; same-origin access and explicitly called reflected accessors retain
+  the receiver. No JavaScript proxy is added around the native global.
+- `SPEC_CLASH(window-foreign-prototype)`: Chromium throws SecurityError for
+  foreign setPrototypeOf/preventExtensions/seal/freeze. HTML and Firefox/WebKit
+  instead permit the unchanged visible null prototype and reject preventing
+  extensions with boolean results (or TypeError in Object helpers). Browlet
+  follows Chromium, including caller-owned errors. Foreign definition/deletion
+  also use the native denial callback; they do not reach property interceptors.
+
+Browser evidence was collected on 31 October 2026 with Chromium 156.0.8078.4,
+Firefox 157.0, and WebKit 27.2. The reproducible browser probe is retained in
+experimental `window-guard/foreign-receivers.mjs`. All three also throw a caller
+TypeError for Symbol assignment to foreign Window.location, both through ordinary
+assignment and its reflected setter. Web IDL's [PutForwards setter](https://webidl.spec.whatwg.org/#dfn-attribute-setter)
+performs Get and Set in the setter's realm; it must not silently switch to the
+target's realm for the nested Location.href conversion.
+
+Three production prerequisites accompany the guard: Promise observation attaches
+in the backing Promise's context while reactions keep the observer's queue and
+enter their callback's context; trusted Binding code compiles in the Node host;
+PutForwards uses the setter realm's captured Reflect operations. The full-suite
+cross-owner pipe regression exposed the callback-context requirement. Its small
+native reproduction failed before the explicit context entry was added. Same-origin
+sibling test documents now share their requested origin, allowing existing borrowed
+Streams methods to test their intended realm behavior.
+
+Maintained coverage in `global-access.test.ts` tests cold and warmed Document
+denial, caller/borrowed-realm selection, navigation, retained bindings, receiver
+and conversion rules, descriptors, keys, and prototype mutations. The corresponding
+native suite covers registration, unconnected checks, unknown callers, queue
+ownership, proxy reuse, collection, repeated addon loads, and worker teardown.
+Confirmed addon-dependent assertions remain strict expected failures only with
+the addon disabled, as approved. Same-origin COOP reporting, same-origin indexed
+mutation, missing Window declarations, and navigation remain separate work.
+
+The full matrix also exposed a Node 24 import boundary: a Window-created Function
+with a Node-owned loader rejects with `TypeError: no access`, even with an allow-all
+native selector and without Browlet observation. Its strict assertion is an approved
+Node-24/addon expected failure. Rejecting loaders additionally leak an unhandled
+Node rejection; the full Node 24/addon run remains failing for those diagnostics.
+Node 26/custom pass this boundary. The [addon notes](../../../../node-compat/README.md#native-global-access-checks)
+record it separately from the earlier official-base HTML import dependency.
+The isolated probe subsequently identified V8's native Promise-resolution fast
+path selecting the importing context's `.then` for a host Promise on Node 24.
+Node 26 selects the Promise's own realm. Disabling that optimization makes the
+probe succeed without changing origin policy; it is diagnostic evidence, not a
+production workaround or a completed full-suite repair. Holder/HolderV2 is not
+involved. The addon notes link the exact versioned sources and reproduction.
+
+Production guard validation on 31 October 2026:
+
+| Full unit configuration | Passing assertions | Expected failures | Run result |
+| --- | --- | --- | --- |
+| Node 24.19.0, compat | 17,122 | 82 | Fails: 22 unhandled Node import rejections |
+| Node 26.8.1, compat | 17,127 | 77 | Pass |
+| Custom Node 27.0.0-pre, compat | 17,183 | 21 | Pass |
+| Each of the three bases, stock | 17,008 | 196 | Pass |
+
+Each run also retains 16 skips and one TODO. The full native suites complete with
+296 cases on each official base, and 295 plus one existing skip on custom; their
+counts include approved expected-failure controls. All 18 guard cases execute on
+each native base, including the new Node 24 import expected failure. Package builds
+and all ten artifact checks pass on each of the six configurations. Typecheck,
+type contracts, changed-file ESLint, and whitespace checks pass. The Node 24
+unhandled errors remain visible; this is not a completely passing integration.
 
 ## HTML §7.2.3: indexed platform types
 
@@ -683,9 +730,9 @@ The [descriptor suite](../../../../test/browlet/browsing/window/window-proxy-des
 adds 23 definition cases; 16 failed against the existing forwarding path. Tests use
 real caller/target bindings and descriptor records, including two-sided domain
 relaxation and navigation. They call the algorithm explicitly, not the automatic
-proxy trap. The latter still needs caller selection; nonconfigurable definitions
-must also account for JavaScript Proxy invariants at that boundary. Native dispatch
-remains separate. This method does not implement Set, Delete, or COOP reporting.
+proxy trap. The stock trap still needs caller selection and must account for
+nonconfigurable Proxy invariants. Native foreign definition now uses the guard's
+denial callback; same-origin indexed definition remains unfinished.
 
 ## HTML §7.2.3.7: caller-bound property reads
 
@@ -713,9 +760,9 @@ has 28 cases; 21 failed against ordinary forwarding. It covers data/accessor and
 prototype reads, primitive receivers, named/indexed children, caller-realm failures
 and declared functions, navigation, and COOP ordering. Reportable cases intercept
 the unfinished dispatcher; they establish its inputs and ordering, not report
-construction or delivery. Automatic caller selection and trap forwarding, native
-interception, missing focus/blur declarations, and report production remain explicit
-dependencies. The parked execution experiment is unchanged.
+construction or delivery. Native foreign forwarding is now connected; stock caller
+selection, same-origin reporting, missing focus/blur declarations, and report
+production remain explicit dependencies. The parked execution experiment is unchanged.
 
 ## HTML §7.2.3.8: caller-bound property writes
 
@@ -769,9 +816,9 @@ The [Delete suite](../../../../test/browlet/browsing/window/window-proxy-delete.
 has 25 cases; 21 failed against ordinary forwarding. Coverage includes numeric
 boundaries, live child association/removal, domain relaxation, caller-realm errors,
 and current-Window selection after navigation. Child associations and caller bindings
-are supplied explicitly. Automatic caller selection, native trap dispatch, and
-automatic child lifecycle production remain unfinished; this method does not make
-ordinary author deletion secure or restore the parked execution experiment.
+are supplied explicitly. Native foreign deletion is now secured by the guard's
+denial callback. Automatic same-origin indexed deletion, stock caller selection,
+and child lifecycle production remain unfinished.
 
 ## HTML §7.2.3.10: caller-bound own-property keys
 
@@ -1758,18 +1805,19 @@ this slice does not change Window's automatic dispatch.
 | --- | --- | --- |
 | existing `opening.ts`, `window.ts`, and navigation owners | Complete `open()`, auxiliary/top-level traversable creation, target selection, opener relationships, session-storage shed cloning, closing, and stopping | HTML §7.2.2.1; HTML §7.3; Storage |
 | existing `window.ts` | Remaining Window members and event-handler mixins; automatic child/opener lifecycle integration | HTML §7.2.2 and owning chapters |
-| existing `window-proxy.ts` | Connect caller-bound property operations to automatic traps; finish caller-dependent prototype/HasProperty paths and native interception | HTML §7.2.3 |
+| existing `window-proxy.ts` and `integration/web-idl/window-proxy.ts` | Finish same-origin indexed mutations and COOP reporting; supply stock caller selection; complete missing Window declarations | HTML §7.2.3 |
 | existing `location.ts` and navigation owners | Reload coordination and activation/navigation effects; automatic Location exotic dispatch requires the addon | HTML §§7.2.4, 7.4 |
 
 Automatic WindowProxy Get/Set must call the caller binding's
 `CrossOriginObjectBinding.checkAccessShouldBeReported()` with the accessor,
 accessed context, and property before property dispatch. The explicit Get/Set operations
-above do so; automatic traps still need caller selection. That check now handles
+above and native foreign dispatch do so; automatic same-origin access still needs
+this connection, and stock traps need caller selection. That check handles
 declared-name filtering, fully active ancestry, exact-origin comparisons,
 top-level virtual groups, and opener relationship classification. It passes the
 complete selected state and caller environment to the unfinished
-`OpenerPolicy.queueAccessReports()` dispatcher. Automatic caller selection and trap
-integration, missing focus/blur annotations, source-location capture, report bodies,
+`OpenerPolicy.queueAccessReports()` dispatcher. The remaining automatic integration,
+missing focus/blur annotations, source-location capture, report bodies,
 and URL-scoped delivery remain explicit [policy dependencies](../policy/ROADMAP.md#html-713-cross-origin-opener-policies).
 Group switching alone does not implement these traps or author-reference severance.
 

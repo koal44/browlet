@@ -299,13 +299,13 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
           if (!isObject(jsValue)) {
             return realmBinding.throwTypeError('Invalid receiver');
           }
-          const forwarded = jsValue[attribute.name];
+          const forwarded = realmBinding.realm.reflectGet(jsValue, attribute.name);
           if (!isObject(forwarded)) {
             return realmBinding.throwTypeError(
               attribute.name + ' does not reference an object',
             );
           }
-          Reflect.set(forwarded, putForwards, value);
+          realmBinding.realm.reflectSet(forwarded, putForwards, value);
           return undefined;
         }
 

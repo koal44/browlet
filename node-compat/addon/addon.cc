@@ -4,6 +4,7 @@
 #include "exception-reporting.h"
 #include "exotic-object.h"
 #include "function-entry.h"
+#include "global-access.h"
 #include "host-hooks.h"
 #include "html-all-collection.h"
 #include "iterators.h"
@@ -29,6 +30,7 @@ void Initialize(v8::Local<v8::Object> exports, v8::Local<v8::Value>,
   InitializeTemporal(exports);
   InitializeArrayBuffer(exports, context, vm_data);
   InitializeRealm(exports, context);
+  InitializeGlobalAccess(exports, context);
   InitializeExoticObject(exports, context);
   InitializeFunctionEntry(exports, context, vm_data);
   InitializeHostHooks(exports, context);

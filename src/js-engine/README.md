@@ -165,12 +165,16 @@ evaluating a known foreign value must not overwrite its existing association.
 
 Native context handles separate the replaceable realm from the reusable global
 proxy. A requested `globalAllocation` holds a stable host view of the actual
-per-context global and prototype objects for Web IDL to populate; accessing it
-without requesting a prototype layout throws. `globalObject` is the installed global, while `globalThis`
-is the host-selected this value. `GlobalObject` and `GlobalThis` name those roles
+per-context global and prototype objects for Web IDL to populate. It is undefined
+when no layout was requested or the backend cannot allocate one. `globalObject`
+is the installed global, while `globalThis` is the host-selected this value.
+`GlobalObject` and `GlobalThis` name those roles
 without requiring a particular property shape. Plain Node keeps the modeled
-global bridge. Neither path supplies browser cross-origin security. Detachment
-cancels queued V8 work, so HTML owns the checkpoint-before-reuse boundary.
+global bridge. HTML requests its prototype layout and supplies origin policy;
+JS Engine selects the backend without exposing addon exports to HTML composition.
+`reuseGlobalProxyFrom` detaches and reuses the prior proxy when supported; stock
+Node keeps its existing modeled-proxy path. Detachment cancels queued V8 work,
+so HTML owns the checkpoint-before-reuse boundary.
 The addon preserves the detached context's existing embedder token for retained
 functions accessing a reused proxy. `setGlobalIndexedProperties()` supplements a
 native realm's ordinary property store with owner-supplied indexed reads and keys.
@@ -179,6 +183,19 @@ lookup can invoke them with their original Window view. Explicit public-proxy
 lookup and author accessors use V8's ordinary receivers. Original-global capture
 is private to the addon, uses no engine patch, and is described in its
 [allocation contract](../../node-compat/README.md#native-global-property-storage).
+
+The `globalAccess` realm option supplies an accessing-realm policy. JS Engine
+enables native checks and distinct security tokens, installs the selector, and
+resolves the native caller through the existing realm stamper. Allowed access
+stays in V8; denied access selects the host's foreign Get/Set, descriptors, keys,
+and exception. JS Engine splits keys into V8's named/indexed interceptor lists.
+Stock Node cannot enforce the policy; its automatic caller-selection gap remains.
+HTML supplies WindowProxy policy during composition. The addon owns the
+isolate-wide failed-access hook and its registration lifetime; see the
+[access contract](../../node-compat/README.md#native-global-access-checks).
+`compileHostFunction()` separately compiles trusted binding steps in the host,
+independently of the currently executing author realm. Author functions keep
+their realm-owned compilation and policy.
 
 Captured host intrinsics can throw host-realm errors. Buffer metadata operations
 translate detached/out-of-bounds DataView failures into Infra TypeError requests;

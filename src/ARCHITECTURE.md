@@ -38,8 +38,12 @@ Ordinary author accessors receive V8's original receiver. Binding registers glob
 attribute getters through `GlobalObjectAllocation.registerAttributeGetter`, without
 replacing their functions. A retired context uses its original host view for bare
 IDL attribute access; explicit public-proxy access selects the replacement Window.
-Each indexed delegate likewise retains its original Window. Automatic
-origin-sensitive dispatch remains unfinished.
+Each indexed delegate likewise retains its original Window. Native Window contexts
+receive global access checks with distinct security tokens. HTML supplies the
+requested layout and WindowProxy policy; JS Engine selects the backend, reuses
+native globals, and installs access checks without HTML inspecting addon exports.
+JS Engine resolves the native accessing realm; HTML's WindowProxy binding supplies
+the origin policy and foreign property view. Native ordinary access keeps V8's store and receivers.
 Untyped `any` and `object` values keep their JavaScript representation.
 
 One private binding record connects those identities without changing the
@@ -87,8 +91,9 @@ including their partials and mixins. The same caller binding owns COOP access-re
 eligibility: it filters names through those declarations and reads the supplied
 browsing contexts' active ancestry. Policy owns the report dispatcher, whose input
 record retains the selected document and top-level context state. Caller-bound
-WindowProxy Get/Set run this check before property access; automatic caller selection,
-trap integration, and report delivery remain unfinished.
+WindowProxy Get/Set run this check before property access. Native foreign access
+selects those operations automatically; same-origin V8 access bypasses them and
+still needs COOP reporting integration. Report delivery remains unfinished.
 The caller binding's WindowProxy operations take
 the stable proxy handle and resolve its current Window. Lookup reuses Window's
 child-name selection; definition checks origin and rejects numeric indices before
@@ -101,9 +106,13 @@ Window deletion for other same-origin properties.
 OwnPropertyKeys prefixes current child-index strings to ordinary Window keys or
 the declared cross-origin keys. It preserves list concatenation; the stock Proxy
 trap retains its duplicate-key accommodation.
-They require an explicitly selected binding; automatic proxy interception still
-needs the current caller. Descriptor accommodation for JavaScript Proxy invariants
-belongs at the stock proxy trap, not in these algorithms.
+Native global access checks select the caller before entering host code, using
+the same realm references as Location. HTML keeps its caller binding and applies
+the chosen Chromium foreign-receiver and mutation rules. The native addon owns
+one failed-access callback per isolate; context extras retain each selector, with
+no global registry of Windows. Only the exact composition context has a host
+exemption. Stock Node still lacks automatic caller selection. Descriptor
+accommodation for JavaScript Proxy invariants belongs at its proxy trap.
 Location's creation hook retains one ordinary property store and attaches the
 platform record only to its final exotic object. Native Proxy-handler lookup
 captures the accessing realm before entering JavaScript; the binding selects that
