@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const { AsyncLocalStorage } = require('node:async_hooks');
 const { setImmediate: nextTurn } = require('node:timers/promises');
 const { spawnSync } = require('node:child_process');
+const { dirname, sep } = require('node:path');
 const { Worker, isMainThread, parentPort, workerData } = require('node:worker_threads');
 const { once } = require('node:events');
 const vm = require('node:vm');
@@ -306,6 +307,47 @@ testInWorker('registration resolves retained addon compilations independently of
   // No compilation metadata is distinct from another VM's unrecognized metadata.
   compat.runInContext('Promise.resolve().then(callback)', context);
   assert.deepEqual(snapshots, [first, module, undefined]);
+}, ['hostHooks', 'dynamicImport']);
+
+testInWorker('addon reload preserves old and new compiled-code capture', () => {
+  const callback = () => {};
+  const first = createGeneration(compat);
+  const entry = require.resolve('../addon/index.cjs');
+  const directory = dirname(entry) + sep;
+  for (const filename of Object.keys(require.cache)) {
+    if (filename.startsWith(directory) && filename.endsWith('.cjs')) delete require.cache[filename];
+  }
+  const reloaded = require(entry);
+  const second = createGeneration(reloaded);
+
+  const snapshots = [];
+  reloaded.setHostHooks({
+    makeJobCallback(fn, registration) {
+      if (fn === callback) snapshots.push(registration.compiledCode);
+      return { callback: fn };
+    },
+  });
+  for (const generation of [first, second]) {
+    generation.context.globalProxy.register();
+    generation.module.namespace.register();
+  }
+  assert.deepEqual(snapshots, [first.script, first.module, second.script, second.module]);
+
+  function createGeneration(adapter) {
+    const context = adapter.createContextHandle();
+    context.globalProxy.callback = callback;
+    const script = new adapter.Script('globalThis.register = () => Promise.resolve().then(callback)', {
+      filename: 'same.js', importModuleDynamically() {},
+    });
+    script.runInContext(context);
+    const module = new adapter.SourceTextModule('export const register = () => Promise.resolve().then(callback)', {
+      context, identifier: 'same.js', importModuleDynamically() {},
+    });
+    module.linkRequests([]);
+    module.instantiate();
+    module.evaluate();
+    return { context, script, module };
+  }
 }, ['hostHooks', 'dynamicImport']);
 
 testInWorker('FinalizationRegistry retains its construction record for every cleanup invocation', async () => {

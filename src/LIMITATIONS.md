@@ -105,10 +105,7 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   first guarded global. It repairs Node-owned imports and rejection delivery while
   preserving access checks, but affects the entire isolate: a tight host
   `Promise.all` benchmark takes about 27% longer. Node 26/custom do not activate it.
-  Separately, reloading the JavaScript addon entry point after deleting its require
-  cache aborts on custom Node because import-router cleanup is registered twice;
-  the retained regression is an approved expected failure. See the
-  [native import boundary](../node-compat/README.md#native-global-access-checks).
+  See the [native import boundary](../node-compat/README.md#native-global-access-checks).
   Native global detachment cancels queued V8 jobs; HTML must perform its required
   checkpoint before detaching, as the current top-level path does.
 

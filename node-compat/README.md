@@ -185,6 +185,16 @@ a weak association keep the callback and public referrer alive while code can st
 their cycles are collectible. This deliberately retains the public referrer to
 satisfy Node's callback contract, unlike the experimental raw-handle API.
 
+The Node environment owns one import router and cleanup hook. Reloading the
+JavaScript addon adapters reuses that router and its weak loader associations.
+Each loader retains its original module-result converter, so old, pending, and
+new imports keep the correct module identity checks after a reload. The native
+reload regression clears all JavaScript adapters from the require cache while
+keeping the binary loaded, then exercises script, module, and context loaders.
+Registration and compiled-code lookup share that retained registry. A job-hook
+regression also reloads the adapters and confirms that callback registration
+still identifies both old and new Script and SourceTextModule objects.
+
 An explicit script/module callback takes precedence. When compilation metadata
 is absent, the importing context supplies its fallback callback, including for
 indirect eval invoked by a Promise reaction. Foreign metadata remains Node's
@@ -467,13 +477,6 @@ adoption, and 16% in cross-realm adoption, with about 1.3 ms initial setup. Brow
 DOM/async workloads showed no clear slowdown within measured variation. The
 workaround preserves access checks; it trades this optimization cost for correct
 import completion and rejection delivery until the engine fix is available.
-
-**Addon reload dependency:** deleting the JavaScript entry point's require-cache
-entry and loading it again on custom Node reinstalls the import router's cleanup
-hook and aborts. The strict regression is an approved expected failure on runtimes
-with that router. Ordinary repeated context creation and worker teardown pass.
-Making router initialization reusable, including retained loaders, remains separate
-work in `vm-imports.cjs`/`vm-imports.cc`.
 
 ### Other addon operations
 

@@ -9,7 +9,6 @@ const { join } = require('node:path');
 const { addonBuild } = require('../node-base.cjs');
 const compat = require('../addon/index.cjs');
 const { assertCollected } = require('./support/gc.cjs');
-const { itPassesWith } = require('./support/test-runtime.cjs');
 
 test('global access is opt-in and validates the native target before registration', () => {
   const ordinary = compat.createContextHandle({ globalPrototypeChain: ['immutable'] });
@@ -203,7 +202,7 @@ test('repeated addon initialization in one isolate can tear down cleanly', () =>
   assert.equal(child.status, 0, child.stderr);
 });
 
-itPassesWith('addonReload')('reloading the JavaScript addon entry point preserves context creation', () => {
+test('reloading the JavaScript addon entry point preserves context creation', () => {
   const child = spawnSync(process.execPath, ['-e', `
     const entry = process.argv[1];
     const options = { globalPrototypeChain: ['immutable'], globalAccess: true };

@@ -4,6 +4,8 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const vm = require('node:vm');
 const { Worker } = require('node:worker_threads');
+const { spawnSync } = require('node:child_process');
+const { join } = require('node:path');
 const { setImmediate: nextTurn } = require('node:timers/promises');
 const { assertCollected } = require('./support/gc.cjs');
 const { itPassesWith } = require('./support/test-runtime.cjs');
@@ -23,6 +25,13 @@ test('Node and unrelated VM imports retain their loaders', async () => {
   });
   assert.equal((await script.runInThisContext()).default, 42);
   assert.deepEqual(referrers, [script]);
+});
+
+testImport('reload preserves old, pending, and new import loaders and module conversion', () => {
+  const child = spawnSync(process.execPath, [
+    '--experimental-vm-modules', join(__dirname, 'support/import-reload.cjs'),
+  ], { encoding: 'utf8' });
+  assert.equal(child.status, 0, child.stderr);
 });
 
 testImport('Script passes the Node callback arguments and uses the importing queue', () => {

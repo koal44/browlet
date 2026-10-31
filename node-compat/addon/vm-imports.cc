@@ -39,10 +39,11 @@ void SetContextImportLoader(const FunctionCallbackInfo<Value>& args) {
 void NormalizeResult(const FunctionCallbackInfo<Value>& args) {
   auto context = args.GetIsolate()->GetCurrentContext();
   auto data = args.Data().As<Array>();
-  Local<Value> normalize, phase, result;
-  if (!data->Get(context, 0).ToLocal(&normalize) || !data->Get(context, 1).ToLocal(&phase)) return;
-  Local<Value> arguments[] = {args[0], phase};
-  if (normalize.As<Function>()->Call(context, Undefined(args.GetIsolate()), 2, arguments).ToLocal(&result)) {
+  Local<Value> normalize, phase, id, result;
+  if (!data->Get(context, 0).ToLocal(&normalize) || !data->Get(context, 1).ToLocal(&phase) ||
+      !data->Get(context, 2).ToLocal(&id)) return;
+  Local<Value> arguments[] = {args[0], phase, id};
+  if (normalize.As<Function>()->Call(context, Undefined(args.GetIsolate()), 3, arguments).ToLocal(&result)) {
     args.GetReturnValue().Set(result);
   }
 }
@@ -102,27 +103,35 @@ MaybeLocal<Promise> ImportDynamically(Local<Context> context, Local<v8::Data> me
   // this continuation in the importing context instead of Node's host queue.
   Local<Function> finish;
   Local<Promise> promise;
-  Local<Value> normalization[] = {normalize, Text(isolate, phase_name)};
-  if (!Function::New(context, NormalizeResult, Array::New(isolate, normalization, 2)).ToLocal(&finish) ||
+  Local<Value> normalization[] = {normalize, Text(isolate, phase_name), id};
+  if (!Function::New(context, NormalizeResult, Array::New(isolate, normalization, 3)).ToLocal(&finish) ||
       !resolver->GetPromise()->Then(context, finish).ToLocal(&promise)) return {};
   return handles.Escape(promise);
 }
 
 void InstallDynamicImportRouter(const FunctionCallbackInfo<Value>& args) {
   auto isolate = args.GetIsolate();
-  if (!args[0]->IsFunction() || !args[1]->IsFunction()) {
-    isolate->ThrowException(Exception::TypeError(Text(isolate, "Expected import routing callbacks")));
+  if (!args[0]->IsFunction() || !args[1]->IsFunction() || !args[2]->IsObject()) {
+    isolate->ThrowException(Exception::TypeError(Text(isolate, "Expected import routing callbacks and loader registry")));
     return;
   }
   auto host = node::GetMainContext(node::GetCurrentEnvironment(isolate->GetCurrentContext()));
-  Local<Value> callbacks[] = {args[0], args[1]};
+  Local<Value> router, registry;
+  if (!host->GetExtrasBindingObject()->GetPrivate(host, RouterKey(isolate)).ToLocal(&router)) return;
+  if (!router->IsUndefined()) {
+    if (!router.As<Array>()->Get(host, 2).ToLocal(&registry)) return;
+    args.GetReturnValue().Set(registry);
+    return;
+  }
+  Local<Value> callbacks[] = {args[0], args[1], args[2]};
   if (host->GetExtrasBindingObject()->SetPrivate(host, RouterKey(isolate),
-          Array::New(isolate, callbacks, 2)).IsNothing()) return;
+          Array::New(isolate, callbacks, 3)).IsNothing()) return;
   isolate->SetHostImportModuleWithPhaseDynamicallyCallback(ImportDynamically);
   node::AddEnvironmentCleanupHook(isolate, [](void* pointer) {
     static_cast<Isolate*>(pointer)->SetHostImportModuleWithPhaseDynamicallyCallback(
         node::ImportModuleDynamicallyWithPhase);
   }, isolate);
+  args.GetReturnValue().Set(args[2]);
 }
 #endif
 }  // namespace

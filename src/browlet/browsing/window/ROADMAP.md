@@ -647,12 +647,21 @@ Production guard validation on 31 October 2026:
 | Each of the three bases, stock | 17,008 | 196 | Pass |
 
 Each run also retains 16 skips and one TODO. The full native suites complete with
-304 cases on each official base, and 303 plus one existing skip on custom; their
+305 cases on each official base, and 304 plus one existing skip on custom; their
 counts include approved expected-failure controls. All 26 guard cases execute on
-each native base. Import success and rejection now pass normally. A separate
-JavaScript addon reload regression remains an approved expected failure on custom:
-deleting the entry point's require cache reinstalls the import-router cleanup hook
-and aborts. Router initialization/lifetime repair remains separate work.
+each native base. Import success and rejection now pass normally.
+
+The subsequent addon reload repair reuses the Node environment's import router
+and registers cleanup only once. Each weak loader record retains its original
+module-result converter. The regression first reproduced the duplicate-cleanup
+abort, then passed after clearing every JavaScript addon adapter from the require
+cache: old, pending, and new script/module/context imports still use their own
+loaders and module identities. Ordinary context creation across entry-point reload
+now passes on every native base; the custom expected-failure classification is
+removed. Official bases still lack the separate import-forwarding export.
+The reload repair also passes the 14 affected unit files (224 cases) in all six
+runtime configurations, retaining their existing capability-dependent expected
+failures. Type contracts, changed-file ESLint, and whitespace checks pass.
 
 The rebuilt Browlet package and all ten artifact checks pass on each of the six
 configurations. Typecheck, type contracts, changed-file ESLint, and whitespace
