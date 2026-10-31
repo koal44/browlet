@@ -2,16 +2,19 @@ import {
   asciiWhitespacePattern, firstStrongDirection, getContainedTextDirection, normalizeNewlines,
   type TextDirection, InternalError,
 } from '../../../../infra/index';
+import type { URLRecord } from '../../../../url/index';
 import type { CSSDeclarationBlock, CSSStylePropertiesImpl } from '../../../../stylelet/index';
 
-import { ContentCategory, type ElementSanitization } from '../element-definitions/index';
+import { parseOrderedSet, splitOnAsciiWhitespace } from '../../infra/index';
+import { ContentCategory, ElementTag, type ElementSanitization } from '../element-definitions/index';
 import { ElementCSSInlineStyleMixin } from '../../../style/index';
-import { dirAttribute, isGlobalContentAttribute, translateAttribute } from './attributes/index';
+import { dirAttribute, getMicrodataURLAttribute, isGlobalContentAttribute, translateAttribute } from './attributes/index';
 
 import { ElementImpl } from '../element';
 import type { NodeImpl } from '../node';
 import type { AttrImpl } from '../attribute';
 import { HTMLOrSVGOrMathMLElementMixin } from '../html-or-svg-or-mathml-element';
+import { collectItemProperties } from './microdata';
 
 /** Base implementation for elements in the HTML namespace. */
 // https://html.spec.whatwg.org/multipage/dom.html#htmlelement
@@ -44,6 +47,10 @@ export class HTMLElementImpl extends ElementImpl {
   #htmlOrSVGOrMathMLElementMixin = new HTMLOrSVGOrMathMLElementMixin(this);
   /** Owns inline declarations independently of the lazily created CSSOM object. */
   #inlineStyleMixin = new ElementCSSInlineStyleMixin(this, this.env);
+  /** Fixed by the element's registered tag identity. */
+  #microdataURLAttribute = getMicrodataURLAttribute(this.tag);
+  /** URL property text fixed when its attribute is set, before itemprop need be present. */
+  #microdataURLValue = '';
 
   static is(value: unknown): value is HTMLElementImpl {
     return value instanceof HTMLElementImpl;
@@ -66,6 +73,55 @@ export class HTMLElementImpl extends ElementImpl {
 
   get style(): CSSStylePropertiesImpl {
     return this.#inlineStyleMixin.style;
+  }
+
+  /** An HTML element creates an item when its namespace-less itemscope attribute is present. */
+  // https://html.spec.whatwg.org/multipage/microdata.html#concept-item
+  isMicrodataItem(): boolean {
+    return this.hasAttributeNS(null, 'itemscope');
+  }
+
+  /** An item is top-level when itemprop is absent, regardless of its DOM ancestry. */
+  // https://html.spec.whatwg.org/multipage/microdata.html#top-level-microdata-items
+  isTopLevelMicrodataItem(): boolean {
+    return this.isMicrodataItem() && !this.hasAttributeNS(null, 'itemprop');
+  }
+
+  /** Read this item's own type tokens; non-items have none. Does not compute inherited relevant types. */
+  // https://html.spec.whatwg.org/multipage/microdata.html#item-types
+  getItemTypes(): string[] {
+    if (!this.isMicrodataItem()) return [];
+    // URL validity, uniqueness, and a shared vocabulary are authoring requirements.
+    return splitOnAsciiWhitespace(this.getAttributeNS(null, 'itemtype') ?? '');
+  }
+
+  /** Parse this item's identifier against its current document; absence, failure, and non-items return null. */
+  // https://html.spec.whatwg.org/multipage/microdata.html#global-identifier
+  getItemGlobalIdentifier(): URLRecord | null {
+    if (!this.isMicrodataItem()) return null;
+    const value = this.getAttributeNS(null, 'itemid');
+    return value === null ? null : this.nodeDocument.encodingParseURL(value);
+  }
+
+  /** Read property names in first-occurrence order, without validating their vocabulary. */
+  // https://html.spec.whatwg.org/multipage/microdata.html#property-names
+  getPropertyNames(): string[] {
+    return [...parseOrderedSet(this.getAttributeNS(null, 'itemprop') ?? '')];
+  }
+
+  /** Read a string or this element's nested item; missing itemprop returns null, distinct from an empty value. */
+  // https://html.spec.whatwg.org/multipage/microdata.html#concept-property-value
+  // The specification starts with a property; this query also accepts a non-property element.
+  getPropertyValue(): HTMLElementImpl | string | null {
+    if (!this.hasAttributeNS(null, 'itemprop')) return null;
+    if (this.isMicrodataItem()) return this;
+    return this.getMicrodataStringValue();
+  }
+
+  /** Snapshot this item's properties and whether discovery encountered a repeated element. */
+  // https://html.spec.whatwg.org/multipage/microdata.html#the-properties-of-an-item
+  getItemProperties(): { properties: HTMLElementImpl[]; hasError: boolean; } {
+    return collectItemProperties(this);
   }
 
   override getInlineStyleBlock(): CSSDeclarationBlock | null {
@@ -221,8 +277,24 @@ export class HTMLElementImpl extends ElementImpl {
     namespace: string | null,
   ): void {
     super.attributeChanged(localName, oldValue, newValue, namespace);
+    if (namespace === null && localName === this.#microdataURLAttribute) {
+      this.#microdataURLValue = newValue === null ? '' : (this.nodeDocument.encodingParseAndSerializeURL(newValue) ?? '');
+    }
     if (localName === 'style' && namespace === null) this.#inlineStyleMixin.attributeChanged(newValue);
     this.#htmlOrSVGOrMathMLElementMixin.attributeChanged(localName, newValue, namespace);
+  }
+
+  /** Read the string branch after itemprop and nested-item handling; time specializes its datetime value. */
+  protected getMicrodataStringValue(): string {
+    if (this.#microdataURLAttribute !== null) return this.#microdataURLValue;
+    switch (this.tag) {
+      case ElementTag.HTMLMeta:
+        return this.getAttributeNS(null, 'content') ?? '';
+      case ElementTag.HTMLData: case ElementTag.HTMLMeter:
+        return this.getAttributeNS(null, 'value') ?? '';
+      default:
+        return this.getDescendantTextContent();
+    }
   }
 
   /** Default direction for an absent or invalid dir attribute; bdi and telephone inputs specialize it. */

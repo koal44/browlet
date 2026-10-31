@@ -6,3 +6,4 @@ export { fetchPriorityAttribute } from './fetch-priority';
 export { isGlobalContentAttribute } from './global';
 export { translateAttribute } from './translate';
 export { dirAttribute } from './dir';
+export { getMicrodataURLAttribute } from './microdata';

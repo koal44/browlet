@@ -1793,9 +1793,16 @@ semantics.
 
 Current HTML §5 defines Microdata attributes and extraction algorithms, but no
 Microdata Web IDL interfaces. `html/microdata/` owns item/property discovery
-and JSON extraction over the DOM; reflected properties belong with element
-declarations and `html/reflection/`. See its narrower roadmap for the deliberately
-deferred vocabulary conversions.
+and JSON extraction over the DOM. The initial slices read item identity, own types,
+global identifiers, property names/values, and top-level status. Property discovery
+follows children and tree-scoped `itemref` targets, returning tree-ordered elements
+and a traversal-error flag. URL values retain their attribute-set-time resolution;
+time values use their element's datetime algorithm. Vocabulary validation and
+inherited-type queries are outside the browser-runtime scope. JSON extraction
+now serializes supplied top-level items, explicit types, identifiers, and property
+arrays, replacing cycles with `"ERROR"`. Its §6.11.5 `application/microdata+json`
+drag-data caller and the template dependency remain in the
+[Microdata roadmap](microdata/ROADMAP.md).
 
 ## HTML sections 8–9 ownership
 

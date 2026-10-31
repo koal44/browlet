@@ -53,6 +53,10 @@ user-activation consequences.
 | `drag-drop/` | Drag data store, `DataTransfer`, item/list objects and callbacks, `DragEvent`, security modes, and input-event processing | HTML §6.11 |
 | `popover.ts` | Popover state, top-layer transitions, invoker relationships, light dismiss, and `PopoverTargetAttributes` | HTML §6.12 |
 
+For §6.11.5's `application/microdata+json` entry, use
+[`extractMicrodataJSON(nodes)`](../html/microdata/json.ts) with the dragged node list.
+The extractor is implemented; creating the drag data store entry remains drag-and-drop work.
+
 `ToggleEvent`, `CommandEvent`, `DragEvent`, and `CloseWatcher` use Browlet's DOM
 event machinery but remain HTML-owned interfaces. Generic event dispatch must
 not acquire their state. Likewise, `VisibilityStateEntry` uses the shared

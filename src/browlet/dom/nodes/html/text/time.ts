@@ -14,6 +14,17 @@ export class HTMLTimeElementImpl extends HTMLElementImpl {
       ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Palpable,
     ];
   }
+
+  /** The datetime attribute when present, otherwise direct child text; no date parsing or normalization. */
+  // https://html.spec.whatwg.org/multipage/text-level-semantics.html#datetime-value
+  getDatetimeValue(): string {
+    return this.getAttributeNS(null, 'datetime') ?? this.getChildTextContent();
+  }
+
+  /** Use this element's datetime value for a string-valued Microdata property. */
+  protected override getMicrodataStringValue(): string {
+    return this.getDatetimeValue();
+  }
 }
 
 /*

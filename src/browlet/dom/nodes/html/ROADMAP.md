@@ -253,13 +253,19 @@ definition, upgrade, and reaction delivery remain missing custom-element owners.
 | --- | --- | --- |
 | `sections/heading.ts` | HTMLHeadingElement: `h1`–`h6` | Obsolete alignment reflection; heading presentation/accessibility |
 | `grouping/` | HTMLParagraphElement (`p`), HTMLPreElement (`pre`, `listing`, `xmp`), HTMLQuoteElement (`blockquote`, `q`), HTMLOListElement (`ol`), HTMLUListElement (`ul`), HTMLLIElement (`li`), HTMLDListElement (`dl`), HTMLDivElement (`div`), HTMLMenuElement (`menu`) | Reflected attributes, list numbering, quote citation URL, and obsolete presentation members |
-| `text/` | HTMLBRElement (`br`), HTMLDataElement (`data`), HTMLModElement (`del`, `ins`), HTMLSpanElement (`span`), HTMLTimeElement (`time`) | Reflected attributes, datetime-value processing, and obsolete members |
+| `text/` | HTMLBRElement (`br`), HTMLDataElement (`data`), HTMLModElement (`del`, `ins`), HTMLSpanElement (`span`), HTMLTimeElement (`time`) | Reflected attributes, machine-readable datetime interpretation, and obsolete members |
 | `embedded/` | HTMLPictureElement (`picture`), HTMLSourceElement (`source`), HTMLTrackElement (`track`) | Resource/source selection, reflected attributes, text-track state/loading/cues |
 | `tables/` | HTMLTableElement (`table`), HTMLTableCaptionElement (`caption`), HTMLTableColElement (`col`, `colgroup`), HTMLTableSectionElement (`tbody`, `tfoot`, `thead`), HTMLTableRowElement (`tr`), HTMLTableCellElement (`td`, `th`) | Table collections, indices, mutation methods, reflected/obsolete members, and table-model processing |
 | `forms/` | HTMLFieldSetElement (`fieldset`), HTMLLabelElement (`label`), HTMLLegendElement (`legend`), HTMLMeterElement (`meter`), HTMLOutputElement (`output`), HTMLProgressElement (`progress`), HTMLSelectedContentElement (`selectedcontent`) | Form ownership, disabledness, label/control association, values/reset, numeric processing, validation, and selected-option copying |
 | `interactive/details.ts` | HTMLDetailsElement (`details`) | Name/open reflection, group exclusivity, activation, and toggle events |
 | `scripting/` | HTMLCanvasElement (`canvas`), HTMLTemplateElement (`template`) | Canvas attributes/context/bitmap/drawing/serialization/offscreen transfer; template attributes, contents/owner document, parsing, cloning/adoption, and declarative shadow roots |
 | `legacy/` | HTMLDirectoryElement (`dir`), HTMLFontElement (`font`), HTMLMarqueeElement (`marquee`), HTMLParamElement (`param`) | Reflected/obsolete members, marquee methods and animation |
+
+The [Microdata value slice](../../../html/microdata/ROADMAP.md) supplies
+`HTMLTimeElementImpl.getDatetimeValue()`: the raw datetime attribute or direct
+child text. Its public reflection and machine-readable interpretation remain
+unfinished. `HTMLElementImpl` also retains Microdata URL-property values at
+attribute-set time through the ordinary attribute-change hook.
 
 Existing specialized implementations retain their prior scope. In particular,
 adding fieldset/output identities does not implement form collection membership,
