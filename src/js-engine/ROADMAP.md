@@ -48,9 +48,11 @@ Production script-element callers and complete source/active-script metadata
 remain integration work; source evaluation does not recompile
 retained artifacts.
 
-Custom hooks expose incumbent registration and opaque script metadata. Connect
-those to actual Script records and restore them around callbacks. The existing
-HTML stack mirrors controlled entries, not every arbitrary V8 frame.
+Custom hooks expose incumbent registration and opaque script metadata. HTML now
+captures the active script visible on its modeled stack into each JobCallback
+and restores its context around invocation, including exception cleanup. Native
+script metadata is not yet associated with those records; the HTML stack mirrors
+controlled entries, not every arbitrary V8 frame or module continuation.
 
 An opt-in native function entry now captures the incumbent before the JavaScript
 helper behind a Web IDL operation runs. `Window.postMessage()` uses it on all addon
@@ -70,8 +72,9 @@ Internal sandboxes and unrelated Node contexts retain Node's reporting.
 
 Stock Node still lacks these facilities; its integration assertions are approved
 expected failures. Complete running-script attribution across uncontrolled
-function calls and Promise jobs remains with the execution-context work; the
-tracker uses the modeled running script when present, including classic muting.
+function calls remains with the execution-context work. Job callbacks now restore
+the registering script when it was modeled at capture; the tracker uses the
+modeled running script when present, including classic muting.
 Keep Node forwarding, collection, worker teardown, and job-hook coexistence tests
 when extending this boundary. Another addon's replacement rejection callback
 cannot be recovered through V8's public API.
@@ -186,10 +189,14 @@ with V8's `(source, isCodeLike)` inputs and string/false/undefined results.
 Per-context private state supports replacement, removal, collection, and retained
 functions across global-proxy reuse. Allowed/extracted code still passes Node's
 checks and source-map handling. The forwarding export is in the existing patch;
-official addon bases retain approved expected failures for its absence. JS Engine
-and HTML do not register policies yet. Connect CSP and Binding-owned TrustedScript
-recognition during the host-hook audit; do not infer full HTML inputs from source
-prefixes. See the [contract and regressions](../../node-compat/README.md#string-compilation-and-source-extraction).
+official addon bases retain approved expected failures for its absence.
+`JSRealm.setModifyCodeGenerationFromStringsCallback()` anchors installation to a
+captured intrinsic in the retained context. Window composition now installs
+Binding-owned TrustedScript extraction for `HostGetCodeForEval`; native eval keeps
+its lexical scope and function identity. CSP's compilation policy is still
+unfinished. Do not infer full HTML inputs from source prefixes. See the
+[HTML audit](../browlet/scripting/ROADMAP.md#html-816-javascript-host-hook-audit)
+and [native contract](../../node-compat/README.md#string-compilation-and-source-extraction).
 
 Temporal's addon callback is an internal, synchronous, nonthrowing clock returning
 signed 64-bit bigint nanoseconds. This follows the native clock boundary in the
@@ -198,11 +205,14 @@ propagation. Violating the callback contract is a fatal internal error, with no
 fabricated reading. Context ownership, removal, collection, signed timestamps,
 and native-method identity are covered by the maintained tests. See the
 [clock contract and browser evidence](../../node-compat/README.md#temporal-clock).
-At the HTML hookup, connect the owning environment's wall clock and resolve
-precision policy before registering the callback. Recheck the isolation-capability
-getter after Ged's navigation work is integrated; the current branch still has an
-explicit permissions-policy dependency. Do not silently bypass that dependency
-inside the clock read.
+HTML now implements its environment-owned wall-clock calculation, including
+precision selection, nanosecond rounding, and the full Temporal Instant clamp.
+Automatic registration remains blocked: the concrete-isolation capability getter
+still reaches unfinished Permissions Policy evaluation, which throws for an active
+Document. That cannot run inside a nonthrowing native callback. The full Temporal
+Instant range also exceeds the callback's signed-int64 result. See the
+[HTML clock audit](../browlet/scripting/ROADMAP.md#8165-temporal-clock-calculation-and-installation-boundary).
+Do not bypass the policy query or silently replace the specified clamp with int64.
 
 Eric approved retaining demonstrated gaps as expected failures during adoption,
 without expanding this work into further engine patches. Carry over the three
@@ -226,10 +236,9 @@ Implement these with their consuming feature, rather than adding inert hooks:
 | Missing boundary | Consumer and completion condition |
 | --- | --- |
 | `HostEnsureCanCompileStrings` | Connect CSP checks to the adopted interception callback; preserve the four documented engine-input gaps |
-| `HostGetCodeForEval` | Connect Binding-owned TrustedScript identity/data to the adopted extraction callback |
-| `HostEnqueueFinalizationRegistryCleanupJob` | HTML cleanup tasks and script bracketing; capturing a registry callback does not control collection or cleanup scheduling |
+| `HostEnqueueFinalizationRegistryCleanupJob` | Context exception reporters repair the confirmed cleanup reporting defect on addon bases; stock mode and the official fallback's abort flag retain expected failures. V8 retains queued cleanup and cell ownership; broader HTML integration has no separate demonstrated author-visible scheduling failure. Require behavioral evidence before adding an engine handoff; see the [HTML audit](../browlet/scripting/ROADMAP.md#81662-finalizationregistry-cleanup-scheduling) |
 | Kept-object cleanup control | Native checkpoints already clear kept objects; resolve HTML's [ordering and Agent isolation questions](../browlet/scripting/EVENT-LOOP-ARCHITECTURE.md#node-v8-checkpoint) |
-| `HostSystemUTCEpochNanoseconds` | Connect the relevant environment's wall clock to the adopted nonthrowing Temporal callback; resolve precision policy before installation |
+| `HostSystemUTCEpochNanoseconds` | HTML calculation exists; resolve throwing Permissions Policy evaluation and the native int64 range before automatic clock registration |
 | Active function and arbitrary execution stack | Custom-element construction and script context; only controlled entries/NewTarget are currently visible |
 | Exact Promise primitives | Patch V8 to expose reaction attachment without a result Promise, then use it in the addon's `observePromise`; expose the existing `MarkAsHandled` API and remove constructor/species fallbacks |
 | Buffer and exotic internal slots | Non-destructive detach-key checks and exact exotic/Error state needed by structured data |

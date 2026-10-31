@@ -2,7 +2,7 @@ Browlet Node and V8 extensions
 
 Upstream: https://github.com/nodejs/node.git
 Base: 6f41e415639b5ec3dd816e44945cc73b4d7651e3
-Source: complete v8-patches branch at 3cf5241e9aed34b0e8d106adbe7accf90f43a00c
+Source: complete v8-patches branch at 6285731b69e0e8f54929ffd0ea9a5013f470e84b
 
 diff --git a/deps/v8/include/v8-array-buffer.h b/deps/v8/include/v8-array-buffer.h
 index f70c6dd57b36b0ed8352bd6738998f5c838a80ba..981a1ef2c1b0b50d767c1e2778d8eaf47c4af7df 100644
@@ -2915,6 +2915,20 @@ index 0000000000000000000000000000000000000000..5ae960455cb27afed192c813685b9a6a
 +assertNotEquals(errors[1].stack, errors[2].stack);
 +
 +Error.prepareStackTrace = undefined;
+diff --git a/src/api/environment.cc b/src/api/environment.cc
+index 40aef133596e1b52f402da8ebe40a73715f5affb..f3e7173949e794d21af7356859591bad630f4fd7 100644
+--- a/src/api/environment.cc
++++ b/src/api/environment.cc
+@@ -63,7 +63,8 @@ bool AllowWasmCodeGenerationCallback(Local<Context> context,
+ }
+ 
+ bool ShouldAbortOnUncaughtException(Isolate* isolate) {
+-  DebugSealHandleScope scope(isolate);
++  HandleScope scope(isolate);
++  if (errors::HasContextExceptionReporter(isolate)) return false;
+   Environment* env = Environment::GetCurrent(isolate);
+   return env != nullptr &&
+          (env->is_main_thread() || !env->is_stopping()) &&
 diff --git a/src/module_wrap.cc b/src/module_wrap.cc
 index 38ac15b337f366f4d02aa6522cc8168fb775a6b8..d85eca2e2f8e077384dfd415e8f11a49ad003469 100644
 --- a/src/module_wrap.cc
@@ -2950,10 +2964,25 @@ index 38ac15b337f366f4d02aa6522cc8168fb775a6b8..d85eca2e2f8e077384dfd415e8f11a49
  
  NODE_BINDING_CONTEXT_AWARE_INTERNAL(
 diff --git a/src/node.h b/src/node.h
-index 8e7d1e6a251669b542a2cc4e8d184b68c940a596..c8d0fbba96972ffd63c70ec16a8fbe4891358f7a 100644
+index 8e7d1e6a251669b542a2cc4e8d184b68c940a596..20f9d2b50383bb18d38e7fd7a324bdbba5be622d 100644
 --- a/src/node.h
 +++ b/src/node.h
-@@ -915,6 +915,21 @@ NODE_EXTERN v8::Local<v8::Context> GetMainContext(Environment* env);
+@@ -560,6 +560,14 @@ NODE_EXTERN v8::Isolate* NewIsolate(
+     const EmbedderSnapshotData* snapshot_data = nullptr,
+     const IsolateSettings& settings = {});
+ 
++// Route uncaught engine errors in this context to the embedder instead of the
++// process. The context owns the reporter; an empty function removes it. The
++// reporter receives the thrown value and should not throw. A reporter failure
++// returns to Node's uncaught-exception path. Registered contexts are exempt from
++// --abort-on-uncaught-exception so their reporter can apply the embedder policy.
++NODE_EXTERN void SetContextExceptionReporter(
++    v8::Local<v8::Context> context, v8::Local<v8::Function> reporter);
++
+ // Creates a new context with Node.js-specific tweaks.
+ // Call `RegisterContext` after the context been created to register
+ // the context with Node.js specific setups like the inspector.
+@@ -915,6 +923,21 @@ NODE_EXTERN v8::Local<v8::Context> GetMainContext(Environment* env);
  [[noreturn]] NODE_EXTERN void OnFatalError(const char* location,
                                             const char* message);
  NODE_EXTERN void PromiseRejectCallback(v8::PromiseRejectMessage message);
@@ -2975,11 +3004,104 @@ index 8e7d1e6a251669b542a2cc4e8d184b68c940a596..c8d0fbba96972ffd63c70ec16a8fbe48
  NODE_EXTERN bool AllowWasmCodeGenerationCallback(v8::Local<v8::Context> context,
                                              v8::Local<v8::String>);
  NODE_EXTERN bool ShouldAbortOnUncaughtException(v8::Isolate* isolate);
+diff --git a/src/node_errors.cc b/src/node_errors.cc
+index cf000047d38d0f48f8e554fd9362c66f663c91c9..5857418b15b48cbd67ea8a69d1fc372e4ddbd559 100644
+--- a/src/node_errors.cc
++++ b/src/node_errors.cc
+@@ -37,6 +37,37 @@ using v8::String;
+ using v8::Undefined;
+ using v8::Value;
+ 
++namespace {
++// This guard owns no JavaScript values. Reentrant errors and reporter failures
++// must use Node's handler instead of recursively calling the embedder.
++thread_local bool reporting_context_exception = false;
++
++Local<v8::Private> ContextExceptionReporterKey(Isolate* isolate) {
++  return v8::Private::ForApi(
++      isolate, String::NewFromUtf8Literal(isolate, "node:contextExceptionReporter"));
++}
++
++Local<Function> GetContextExceptionReporter(Isolate* isolate) {
++  if (reporting_context_exception) return {};
++  auto context = isolate->GetEnteredOrMicrotaskContext();
++  if (context.IsEmpty()) return {};
++  auto value = context->GetExtrasBindingObject()
++                   ->GetPrivate(context, ContextExceptionReporterKey(isolate))
++                   .ToLocalChecked();
++  return value->IsFunction() ? value.As<Function>() : Local<Function>();
++}
++}  // namespace
++
++void SetContextExceptionReporter(Local<Context> context,
++                                 Local<Function> reporter) {
++  auto isolate = Isolate::GetCurrent();
++  Local<Value> value = reporter.IsEmpty() ? Local<Value>(Undefined(isolate))
++                                        : Local<Value>(reporter);
++  context->GetExtrasBindingObject()
++      ->SetPrivate(context, ContextExceptionReporterKey(isolate), value)
++      .Check();
++}
++
+ bool IsExceptionDecorated(Environment* env, Local<Value> er) {
+   if (!er.IsEmpty() && er->IsObject()) {
+     Local<Object> err_obj = er.As<Object>();
+@@ -1075,6 +1106,30 @@ const char* errno_string(int errorno) {
+   }
+ }
+ 
++bool HasContextExceptionReporter(Isolate* isolate) {
++  return !GetContextExceptionReporter(isolate).IsEmpty();
++}
++
++static bool ReportContextException(Isolate* isolate, Local<Value> error) {
++  auto reporter = GetContextExceptionReporter(isolate);
++  if (reporter.IsEmpty()) return false;
++  auto context = isolate->GetEnteredOrMicrotaskContext();
++  reporting_context_exception = true;
++  auto reset = OnScopeLeave([] { reporting_context_exception = false; });
++  v8::TryCatch caught(isolate);
++  if (reporter->Call(context, Undefined(isolate), 1, &error).IsEmpty()) {
++    if (caught.HasTerminated()) {
++      caught.ReThrow();
++    } else {
++      auto failure = caught.Exception();
++      auto message = caught.Message();
++      caught.Reset();
++      TriggerUncaughtException(isolate, failure, message);
++    }
++  }
++  return true;
++}
++
+ void PerIsolateMessageListener(Local<Message> message, Local<Value> error) {
+   Isolate* isolate = Isolate::GetCurrent();
+   switch (message->ErrorLevel()) {
+@@ -1100,7 +1155,9 @@ void PerIsolateMessageListener(Local<Message> message, Local<Value> error) {
+       break;
+     }
+     case Isolate::MessageErrorLevel::kMessageError:
+-      TriggerUncaughtException(isolate, error, message);
++      if (!ReportContextException(isolate, error)) {
++        TriggerUncaughtException(isolate, error, message);
++      }
+       break;
+   }
+ }
 diff --git a/src/node_errors.h b/src/node_errors.h
-index cab1dc76dcc751d572305bf9297ab2ad8151030d..d4ff9a08d081fe7ae41b7a70dfe37ef9015c690b 100644
+index cab1dc76dcc751d572305bf9297ab2ad8151030d..668ca71d5b131ad5d5d8a46cd0f9ae0c0051d237 100644
 --- a/src/node_errors.h
 +++ b/src/node_errors.h
-@@ -370,10 +370,6 @@ class PrinterTryCatch : public v8::TryCatch {
+@@ -16,6 +16,8 @@ namespace node {
+ // This forward declaration is required to have the method
+ // available in error messages.
+ namespace errors {
++// Used by Node's abort policy before V8 dispatches the message listener.
++bool HasContextExceptionReporter(v8::Isolate* isolate);
+ const char* errno_string(int errorno);
+ }
+ 
+@@ -370,10 +372,6 @@ class PrinterTryCatch : public v8::TryCatch {
  
  }  // namespace errors
  

@@ -1,7 +1,7 @@
 import { EOL } from 'node:os';
 
 import { InternalError } from '../infra/index';
-import { addon } from '../js-engine/index';
+import { addon, isObject } from '../js-engine/index';
 import {
   BindingWorld, QuotaExceededErrorImpl, type GlobalObjectAllocation,
   type BindingContext, type ImplementationClass, type StampedPlatformObject,
@@ -34,7 +34,7 @@ import {
   cspViolationReportBodyIDL, securityPolicyViolationEventIDL, securityPolicyViolationEventInitIDL,
   securityPolicyViolationEventDispositionIDL,
 } from './browsing/policy/csp/index';
-import { trustedTypesIDLDefinitions } from './browsing/policy/trusted-types/index';
+import { TrustedScriptImpl, trustedTypesIDLDefinitions } from './browsing/policy/trusted-types/index';
 import { AbortControllerImpl, AbortSignalImpl } from './dom/abort/index';
 import {
   DocumentImpl, htmlDocumentIDL, documentReadyStateIDL, documentVisibilityStateIDL,
@@ -158,7 +158,7 @@ export function createWindowEnvironment(
   });
   if (reservedEnv !== null) reservedEnv.id = '';
   realm.windowImplementation.setWindowOrWorkerGlobalScopeMixin(new WindowOrWorkerGlobalScopeMixin(env));
-  installRealmHostHooks(env);
+  installRealmHostHooks(env, getCodeForEval);
   return env;
 }
 
@@ -174,6 +174,16 @@ export function createSandboxEnvironment(userAgent?: UserAgent): BrowletEnvironm
 }
 
 // -- Construction helpers -----------------------------------------------
+
+/** Recognize a TrustedScript platform object and read its retained implementation data. */
+// https://html.spec.whatwg.org/multipage/webappapis.html#hostgetcodeforeval
+// SPEC_MISMATCH: HostGetCodeForEval(argument) -> a String or no-code
+// undefined represents no-code for the native extraction callback.
+function getCodeForEval(argument: unknown): string | undefined {
+  if (!isObject(argument)) return undefined;
+  const script = browletBindingWorld.unwrap(argument);
+  return TrustedScriptImpl.is(script) ? script.data : undefined;
+}
 
 /** Supply the binding-owned functions consumed during environment construction. */
 export function createBrowletEnvironmentInit(context: BindingContext<BrowletEnvironment>): BrowletEnvironmentInit {

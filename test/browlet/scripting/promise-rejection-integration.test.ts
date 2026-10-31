@@ -2,12 +2,16 @@ import { afterEach, describe, expect, vi } from 'vitest';
 
 import { getPromiseResult, isPromiseHandled } from '../../../src/js-engine/index';
 import { Browlet } from '../../../src/browlet/browlet';
+import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
+import { createDocumentState } from '../../../src/browlet/browsing/navigation/document-state';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import type { PromiseRejectionEvent } from '../../../src/browlet/platform';
 import { domManipulationTaskSource } from '../../../src/browlet/scripting/tasks';
 import { ClassicScript } from '../../../src/browlet/scripting/script';
 import { ScriptFetchOptions } from '../../../src/browlet/scripting/script-fetch-options';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { mockEventLoopTurns } from '../../support/browlet-agent';
+import { createSiblingWindow } from '../../support/windows';
 import { runInHostTask } from '../../support/tasks';
 import { itPassesWith } from '../../test-runtime';
 
@@ -126,6 +130,58 @@ describe('native HostPromiseRejectionTracker to HTML events', () => {
     second.loop.performMicrotaskCheckpoint();
     second.loop.runTaskTurn();
     expect(second.events.map((event) => event.reason as unknown)).toEqual(['second']);
+  });
+
+  it('notifies each Window sharing one agent without mixing their pending lists', () => {
+    const f = fixture();
+    const otherWindow = createSiblingWindow(f.browser);
+    const otherRealm = getRelevantRealm(otherWindow);
+    // The binding-only sibling helper has no navigable. Attach its real Document
+    // so HTML's fully-active task gate permits rejection-event delivery.
+    const document = otherRealm.windowImplementation.document;
+    document.browsingContext = new BrowsingContext();
+    document.browsingContext.initializeWindowProxy(otherRealm.windowProxy);
+    new TopLevelTraversable(createDocumentState(document));
+    expect(document.isFullyActive()).toBe(true);
+    expect(otherRealm.agent.eventLoop).toBe(f.loop);
+    const otherEvents: PromiseRejectionEvent[] = [];
+    otherWindow.addEventListener('unhandledrejection', (event) => {
+      event.preventDefault();
+      otherEvents.push(event as PromiseRejectionEvent);
+    });
+    const first = f.reject('Promise.reject("first")');
+    // Calling the captured intrinsic supplies the other current realm, without
+    // a modeled running script. The native hook must select that environment.
+    const second = Reflect.apply(otherRealm.promiseReject, otherRealm.NativePromise, ['second']) as Promise<unknown>;
+    f.promises.push(second);
+    expect(f.env.globalImplementation.aboutToBeNotifiedRejectedPromises).toEqual([first]);
+    expect(otherRealm.env.globalImplementation.aboutToBeNotifiedRejectedPromises).toEqual([second]);
+    f.loop.performMicrotaskCheckpoint();
+    expect(f.tasks.size).toBe(2);
+    expect(f.loop.runTaskTurn()).toBe(true);
+    expect(f.loop.runTaskTurn()).toBe(true);
+    expect(f.events.map((event) => event.reason as unknown)).toEqual(['first']);
+    expect(otherEvents.map((event) => event.reason as unknown)).toEqual(['second']);
+    expect(f.env.globalImplementation.outstandingRejectedPromises.has(first)).toBe(true);
+    expect(f.env.globalImplementation.outstandingRejectedPromises.has(second)).toBe(false);
+    expect(otherRealm.env.globalImplementation.outstandingRejectedPromises.has(second)).toBe(true);
+  });
+
+  it('uses a borrowed then method\'s current settings rather than the promise creation realm', () => {
+    const f = fixture();
+    const otherWindow = createSiblingWindow(f.browser);
+    const otherRealm = getRelevantRealm(otherWindow);
+    const promise = f.reject('Promise.reject("handled elsewhere")');
+    Reflect.apply(otherRealm.promiseThen, promise, [undefined, () => {}]);
+    expect(isPromiseHandled(promise)).toBe(true);
+    // HTML removes from the current global, not from every realm's collection.
+    // Notification subsequently checks the engine's handled flag for this one.
+    expect(f.env.globalImplementation.aboutToBeNotifiedRejectedPromises).toEqual([promise]);
+    expect(otherRealm.env.globalImplementation.aboutToBeNotifiedRejectedPromises).toEqual([]);
+    f.loop.performMicrotaskCheckpoint();
+    f.loop.runTaskTurn();
+    expect(f.events).toEqual([]);
+    expect(f.env.globalImplementation.outstandingRejectedPromises.has(promise)).toBe(false);
   });
 
   it('queues listener-created rejections for a later notification task', () => {

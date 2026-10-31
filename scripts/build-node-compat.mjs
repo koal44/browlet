@@ -24,8 +24,8 @@ try {
   const addon = resolve(root, 'node-compat/addon');
   const build = target.build;
   const sources = [
-    'addon.cc', 'array-buffer.cc', 'code-generation.cc', 'function-entry.cc', 'host-hooks.cc', 'html-all-collection.cc',
-    'iterators.cc', 'object-types.cc', 'promise.cc', 'property-delegate.cc', 'realm.cc',
+    'addon.cc', 'array-buffer.cc', 'code-generation.cc', 'exception-reporting.cc', 'function-entry.cc',
+    'host-hooks.cc', 'html-all-collection.cc', 'iterators.cc', 'object-types.cc', 'promise.cc', 'property-delegate.cc', 'realm.cc',
     'temporal.cc', 'vm.cc', 'vm-modules.cc', 'vm-imports.cc',
   ].map(name => resolve(addon, name));
   const isolateHeader = target.includes.map(path => resolve(path, 'v8-isolate.h')).find(existsSync);
@@ -46,6 +46,7 @@ try {
   const dynamicImport = /NODE_EXTERN\s+v8::MaybeLocal<v8::Promise>\s+ImportModuleDynamicallyWithPhase\s*\(/u.test(nodeHeader);
   const importMeta = /NODE_EXTERN\s+void\s+HostInitializeImportMetaObjectCallback\s*\(/u.test(nodeHeader);
   const codeGeneration = /NODE_EXTERN\s+v8::ModifyCodeGenerationFromStringsResult\s+ModifyCodeGenerationFromStrings\s*\(/u.test(nodeHeader);
+  const contextExceptionReporter = /NODE_EXTERN\s+void\s+SetContextExceptionReporter\s*\(/u.test(nodeHeader);
   const contextHeader = readFileSync(resolve(dirname(isolateHeader), 'v8-context.h'), 'utf8');
   const temporalClock = contextHeader.includes('SetTemporalHostSystemUTCEpochNanosecondsCallback');
   const environment = windows ? compilerEnvironment() : process.env;
@@ -62,6 +63,7 @@ try {
     ...(dynamicImport ? ['NODE_COMPAT_DYNAMIC_IMPORT'] : []),
     ...(importMeta ? ['NODE_COMPAT_IMPORT_META'] : []),
     ...(codeGeneration ? ['NODE_COMPAT_CODE_GENERATION'] : []),
+    ...(contextExceptionReporter ? ['NODE_COMPAT_CONTEXT_EXCEPTION_REPORTER'] : []),
     ...(temporalClock ? ['NODE_COMPAT_TEMPORAL_CLOCK'] : []),
   ];
 

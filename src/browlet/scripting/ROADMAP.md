@@ -140,9 +140,9 @@ scopes the observed environment in `incumbentEnv` on the HTML stack. Selection a
 callback skip counters include these entries; retained entry and active-script
 lookup do not change. `Window.postMessage()` passes the ABC and nested return/throw regressions
 on every addon base. Stock Node keeps the approved attribution failures. This
-does not supply a ScriptOrModule for the observed author function; active-script
-capture/restoration in HostMakeJobCallback and HostCallJobCallback remains for
-the host-hook audit.
+does not supply a ScriptOrModule for the observed author function. The host-hook
+audit now captures/restores scripts already visible to the modeled stack across
+JobCallbacks; complete author-function provenance remains separate work.
 
 Binding now derives capture from the incumbent parameter on injected resolvers and
 accessors, synchronous callback conversion, and `[PutForwards]` dependencies. Browlet
@@ -908,6 +908,411 @@ and compat mode. Typechecking, declaration-contract checks, and touched-file
 ESLint also pass. This does not establish engine module execution or HTML
 script-element integration.
 
+## HTML §8.1.6: JavaScript host-hook audit
+
+The first slice implements §8.1.6.3 `HostGetCodeForEval`. Window composition
+supplies Binding-owned TrustedScript recognition to the realm's native
+source-extraction callback. Binding unwraps a genuine platform object in the
+main BindingWorld and reads retained data; author stringifiers, properties, and
+prototypes do not participate. `undefined` represents the specification's
+`no-code` result. Native direct eval retains its lexical scope, and borrowed
+eval selects its own realm. The global eval/Function functions are unchanged.
+
+[Regressions](../../../test/browlet/scripting/code-extraction.test.ts) cover direct
+and indirect evaluation, foreign trusted values, empty source, realm-owned syntax
+errors, forged/proxied values, and ordinary native compilation. Extraction needs
+custom Node plus the addon; stock and official-addon cases retain the already
+approved missing-forwarding-export expected failures.
+
+Two boundaries remain explicit in [host-hooks.ts](host-hooks.ts):
+
+- §8.1.6.1 `HostEnsureCanAddPrivateElement` stays unimplemented under the approved
+  `SPEC_CLASH(html-private-elements)` choice. See the
+  [engine decision](../../js-engine/ROADMAP.md#private-elements-on-host-objects).
+- §8.1.6.2 `HostEnsureCanCompileStrings` delegates to CSP's
+  [EnsureCSPDoesNotBlockStringCompilation](https://w3c.github.io/webappsec-csp/#can-compile-strings),
+  which is not implemented yet. The native callback has only `(source, isCodeLike)`;
+  the algorithm also requires compilation kind and original Function arguments.
+  Retain the four approved [input-gap regressions](../../../node-compat/test/code-generation-gaps.test.cjs).
+  Do not reconstruct the missing inputs by examining generated source. Before
+  connecting policy, review the supported subset and its observable limits:
+  TrustedScript extraction alone does not enforce CSP or require-trusted-types-for
+  on eval/Function. The check also needs default-policy unchanged-source validation,
+  script-src/default-src selection, trusted-types-eval/unsafe-eval, and violations.
+
+Keep the compilation-policy boundary open before treating §8.1.6.2 as done.
+
+Validation: the full custom/compat unit suite passes (515 files; 16,280 passing
+tests). The extraction, Trusted Types, and callback-lifecycle suites pass across
+all six runtime configurations with approved expected failures. Typechecking,
+declaration contracts, touched-file ESLint, and the native code-generation suites
+also pass; the latter retain their four approved input gaps.
+
+### §8.1.6.4: Promise rejection tracking
+
+Audited the hook against the current HTML algorithm and the native notification
+entry. Its existing implementation needs no algorithm change: the executing
+realm supplies current settings, a non-null running script supplies its own
+settings, and a muted running classic script suppresses both operations. A
+scriptless top context does not inherit a lower active script's muting/settings.
+
+The pending-list and outstanding-weak-set branches match the specified order.
+`rejectionhandled` is queued on the selected global's DOM-manipulation task
+source, retaining the original Promise and its engine result. Unknown handles
+are ignored. A borrowed Promise method can report handling in a different
+global; notification still checks the engine's handled flag before firing.
+
+The [algorithm tests](../../../test/browlet/scripting/promise-rejections.test.ts)
+and [native integration tests](../../../test/browlet/scripting/promise-rejection-integration.test.ts)
+now cover scriptless current-settings fallback above a muted script, unknown
+handle notifications, borrowed `then`, and two fully active Windows sharing one
+Agent/event loop with separate rejection state. Native notification and slot
+reads work on all three addon bases; stock-mode limitations remain expected
+failures under the existing approval.
+
+Running-script attribution across ordinary author calls is still limited to
+what the modeled stack observes. The §8.1.6.6 slice below now captures/restores
+that active-script context across callbacks; the old TODO incorrectly suggested
+that parsed script records themselves were still missing. This does not close
+complete author-function provenance or the existing Worker/global lifecycle gates.
+
+Validation: both rejection suites pass across all six runtime configurations:
+29 passing tests on each addon base; 16 passing and 13 approved expected failures
+in each stock configuration. Touched-file ESLint and `git diff --check` pass.
+
+### §8.1.6.5: Temporal clock calculation and installation boundary
+
+`BrowletEnvironment.getSystemUTCEpochNanoseconds()` implements the HTML algorithm
+using this global's relevant settings. It reads `timing.currentWallTime()`, which
+already applies the environment's isolation-sensitive coarsening, converts the
+reading to integer nanoseconds, and clamps it to Temporal's full Instant range
+(±8.64 × 10²¹ ns). Integral milliseconds are converted to bigint before scaling;
+multiplying the whole Number reading would lose low bits at today's epoch.
+The fractional millisecond remainder is rounded to the nearest nanosecond.
+
+The [calculation tests](../../../test/browlet/scripting/temporal-clock.test.ts)
+cover live readings, both precision policies, signed rounding, present-day epoch
+precision, and both range endpoints and out-of-range inputs. These are HTML
+algorithm tests, not evidence that author `Temporal.Now` uses the new operation.
+
+Automatic native installation remains deliberately unfinished at
+`installRealmHostHooks()`. Two dependencies need review before connecting it:
+
+- An active Window in a concretely isolated AgentCluster reaches
+  `Document.isAllowedToUse('cross-origin-isolated')`, whose Permissions Policy
+  evaluation still throws. The existing Window-settings tests demonstrate this
+  prerequisite. The native clock contract cannot propagate that exception: it
+  terminates the process. Do not hide the policy dependency with a catch/default
+  clock or register a callback which can reach this unfinished operation.
+- The adopted native callback returns signed 64-bit nanoseconds, a smaller range
+  than Temporal's Instant range. Today's timestamps fit; the algorithm's full
+  range does not. The native contract tests already reject overflow as fatal.
+  Keep the HTML range intact and resolve this engine boundary separately instead
+  of silently clamping the HTML result to int64.
+
+Sources: HTML `#hostsystemutcepochnanoseconds`, Temporal's
+[Instant range](https://tc39.es/proposal-temporal/#sec-temporal-instant-range), and
+the [native clock contract](../../../node-compat/README.md#temporal-clock).
+Official-base clock-setter gaps retain their approved expected failures in the
+native suite; this slice introduces no new failure classifications.
+
+Validation: all 26 calculation, HRT, and Window-settings tests pass on
+custom/compat, including the existing concrete-isolation prerequisite check.
+Typechecking, declaration contracts, touched-file ESLint, and `git diff --check`
+pass. This pure-algorithm slice changes neither native code nor hook registration.
+
+The Temporal installation and CSP compilation boundaries remain parked while
+the numbered host-hook audit continues.
+
+### §8.1.6.6.1 and §8.1.6.6.6: JobCallback invocation and capture
+
+Audited `HostCallJobCallback` together with its producer, `HostMakeJobCallback`.
+Each HTML registration now retains incumbent settings and a fresh execution
+context for the active script, or null when no HTML script is active. The new
+context has null Function, the script's settings realm, and the script's record;
+it does not retain the registration frame's mutable incumbent-skip counter.
+
+Invocation prepares the stored incumbent, pushes the saved script context when
+present, calls the original callback with its receiver and arguments, and pops
+the context before callback cleanup. `finally` preserves that order on thrown
+completions. Non-HTML registrations keep their existing direct-call path.
+
+The [regressions](../../../test/browlet/scripting/job-callbacks.test.ts) observed
+an author-visible failure before the correction: a muted classic script's
+`pending.promise.then(reportError)` exposed the original exception and message.
+The same foreign platform method registered by two scripts now applies each
+script's own muting. Tests also cover fresh context identity, throwing reactions,
+thenable receivers, nested registration, scriptless callbacks, and unrelated
+Node Promise progress. Unsupported backends retain the existing approved
+missing-host-hook expectations; the uncertain ABC listener test remains skipped.
+
+The native registration snapshot still supplies incumbent identity. Active-script
+capture uses the modeled HTML stack; native `hostDefinedOptions` are not mapped
+back to HTML script records. Arbitrary author calls and module-specific entry,
+including resumption after top-level await, remain explicit provenance limits.
+This slice neither reconstructs those frames nor connects dynamic import.
+The spec's `Promise.resolve('import(...)').then(eval)` consumer still awaits
+`HostLoadImportedModule`; restoring its known script state is now in place.
+
+Validation: the callback, Promise-job, lifecycle, and runtime-error suites pass
+across all six configurations (custom/compat: 41 passing and one existing skip;
+official compat: 33 passing, eight expected failures, one skip; stock: 32 passing,
+nine expected failures, one skip). The full custom/compat unit run passes:
+517 files, 16,302 passing tests, 17 existing expected failures, 16 skips, and one
+TODO. Typechecking, declaration contracts, touched-file ESLint, and diff checks
+also pass. No addon or engine changes were needed.
+
+### §8.1.6.6.2: FinalizationRegistry cleanup scheduling
+
+Audited `HostEnqueueFinalizationRegistryCleanupJob(finalizationRegistry)` against
+the HTML algorithm and the maintained native bridge. The confirmed exception
+reporting defect is repaired on addon bases. Full HTML scheduling integration
+remains unaudited; no separate browser-confirmed, author-visible scheduling
+failure has been demonstrated.
+
+The required path is:
+
+1. Select the registry's `[[Realm]]` global and queue a global task on the
+   JavaScript engine task source. This selects the task's Document and activity
+   gating independently of the callback's realm.
+2. In that task, prepare to run script using the cleanup callback's realm's
+   environment. It need not be the registry's realm or the captured incumbent.
+3. Run the whole `CleanupFinalizationRegistry` operation. Its individual calls
+   still use the existing `HostCallJobCallback` machinery.
+4. Clean up after running script, then report an abrupt completion to the
+   registry's global. Reporting follows script cleanup and its checkpoint.
+
+The current V8 patch exposes callback capture at construction and invocation
+with one held value. It does not expose a registry cleanup enqueue callback,
+the registry's stored cleanup callback, or an operation that resumes the whole
+cleanup. V8's `FinalizationRegistryCleanupTask::RunInternal()` still dequeues
+dirty registries, enters their contexts, runs cleanup, and requeues remaining
+work. `JSFinalizationRegistry::Cleanup()` removes each cleared cell before our
+call hook and stops on an abrupt callback completion. These are in the regular
+Node checkout's `deps/v8/src/heap/finalization-registry-cleanup-task.cc` and
+`deps/v8/src/objects/js-weak-refs.cc`.
+
+Queuing individual callbacks from `callJobCallback` would let V8 consume cells
+before author code runs. It would lose abrupt-completion control of the cleanup
+loop and prevent intervening `unregister()` calls from removing those cells.
+The native registry must remain the owner of its cells and cleanup operation.
+If a future behavioral regression establishes a need to transfer scheduling,
+that handoff must defer the operation as a unit, preserve both realms, and
+account for rescheduling and context disposal. No new hook shape or engine patch
+is required merely by the absence of a modeled HTML task.
+
+The existing native FinalizationRegistry regression verifies capture/invocation
+of the same construction record for multiple held values. It does not establish
+HTML task scheduling, entry settings, Document gating, checkpoint ordering, or
+exception reporting. Garbage collection timing remains implementation-defined;
+that latitude does not supply these missing HTML responsibilities.
+
+Follow-up probes (2026-10-29) established a concrete reporting difference. Before
+the repair, a real Window's cleanup callback ran and threw, but the exception
+reached Node's `uncaughtException` listener rather than the Window's `error`
+listener. A `reportError()` control reached that Window listener correctly. The
+maintained [Window regression](../../../test/browlet/scripting/finalization-errors.test.ts)
+first failed at the missing event, then passed with the context reporter.
+
+The [browser-only probe](../../../scratch/FINALIZATION-BROWSER-PROBE.cjs), enabled
+explicitly with `--run`, passes on Chromium 156.0.8078.4, Firefox 157.0, and
+Playwright WebKit 27.2. Each runs cleanup and dispatches a cancelable Window
+`error` event containing the same thrown Error. With `preventDefault()`, the
+automation client's unhandled page-error report is suppressed; without it,
+that report also occurs. Every case observes an actual cleanup invocation after
+requesting GC, rather than treating an absent callback as success.
+
+This reporting requirement is not a specification gap. ECMAScript's
+`CleanupFinalizationRegistry` propagates a throwing callback, and its
+`HostEnqueueFinalizationRegistryCleanupJob` delegates error reporting to the
+host. HTML §8.1.6.6.2 supplies that reporting step for the registry's global;
+§8.1.4.6 dispatches the cancelable ErrorEvent. The browser results agree on this
+case. They do not establish all cross-realm, lifecycle, or checkpoint behavior.
+
+The adopted [context reporter](../../../node-compat/README.md#native-cleanup-error-reporting)
+uses V8's entered/microtask context to select the registry owner. HTML registers
+`env.reportException` during realm composition; the context retains it without
+a global-proxy reverse lookup or additional native root. Custom Node routes
+messages through `node::SetContextExceptionReporter` before process handlers and
+abort policy. Official Node 24/26 use the approved private `_fatalException`
+fallback. Their explicit abort flag runs earlier, so the stronger isolation
+assertion remains an expected failure there. The stock-mode Window failure is
+also approved: no addon means no context reporter. No new V8 patch is needed.
+
+The native tests preserve registry/callback realm distinction, thrown value
+identity, Node's monitor/capture/async behavior, reporter disposal, and removal.
+The real Window test also verifies cancellation and that its error listener can
+unregister remaining cells before another cleanup callback runs. These tests do
+not establish every lifecycle or checkpoint ordering rule. The experimental
+missing-task assertion is not evidence of a second browser-consensus failure or
+a reason by itself to replace V8's cleanup scheduling.
+
+### §8.1.6.6.3: Generic jobs
+
+Audited `HostEnqueueGenericJob(job, realm)`. Both HTML steps are already
+implemented: select the supplied realm's global, then queue `job()` on the
+JavaScript engine task source. `BrowletRealm.queueGlobalTask()` selects that
+global's event loop and associated Document. Task selection supplies the
+fully-active Document gate. No script preparation or callback-state capture is
+added to this hook; a resulting Promise reaction has its own enqueue hook.
+
+The native consumer is `Atomics.waitAsync` notification delivery. V8's wakeup
+enters the waiting context, retains the Promise in a single-use job, and hands
+the job and realm to the addon. JS Engine maps the stable realm reference to
+the HTML realm; the task later resolves the Promise. This slice changes no
+runtime behavior or engine API.
+
+The [engine-job regressions](../../../test/browlet/scripting/engine-jobs.test.ts)
+verify task-source identity, the associated Document, and subsequent Promise
+reaction delivery. The additional case borrows another same-agent Window's
+`Atomics.waitAsync`: notification belongs to that function's realm, while the
+reaction belongs to its callback's realm. Keeping the wait-owning Document
+inactive leaves the task queued and the reaction unrun; reactivation permits
+the task and its checkpoint. The fixture uses real Window bindings and explicit
+activity relationships because auxiliary-window creation is still unfinished.
+
+The existing backend limits remain explicit: without custom job hooks the
+notification is not handed to HTML, and the installed isolate-wide generic
+hook cannot decline an unrelated Node/VM job. The latter guard now carries a
+local TODO; its [recorded limitation](../../LIMITATIONS.md) still needs a native
+ownership/fallback contract. This audit introduces no new failure category.
+
+Validation: the 35 engine-job, task, and Promise-job cases pass across all six
+runtime configurations, retaining the approved unsupported-backend expectations.
+Custom/compat passes all 35 normally. Typechecking, type contracts, touched-file
+ESLint, and diff checks pass.
+
+### §8.1.6.6.4: Promise jobs
+
+Audited `HostEnqueuePromiseJob(job, realm)` against HTML and the maintained
+engine bridge. A non-null job realm selects the environment prepared before
+invocation and cleaned up afterward. The operation queues an HTML microtask;
+it does not add a `canRunScript()` gate. Handlerless propagation has a null job
+realm and skips script preparation/cleanup. Callback incumbent and active-script
+restoration remain with the make/call hooks audited above.
+
+The hook retains an implementation-only third argument, `queueRealm`, and can
+return `false` to decline a job. JS Engine derives that realm from the native
+job's creation context. It preserves the engine's queue selection even for a
+null job realm, while unrelated Node/VM jobs stay in their original queues.
+These are native ownership adaptations, not additional HTML algorithm inputs.
+The callable-shape review is marked at `enqueuePromiseJob()`.
+
+One reporting bug was reproduced and repaired. A Promise registered in Window A
+with a revoked fulfillment Proxy and a rejection function from Window B can
+produce a job realm of A but a queue realm of B. ECMAScript's
+[NewPromiseReactionJob](https://tc39.es/ecma262/#sec-newpromisereactionjob)
+selects the current realm when `GetFunctionRealm` throws for the revoked Proxy.
+V8 independently falls back to the other handler for queue selection. If a
+custom Promise species supplies a throwing reject function, the whole job
+completes abruptly. Browlet previously dispatched the error event in B. The
+regression observed that wrong destination before the repair; reporting now
+uses the supplied job realm A after script cleanup. No native change is needed.
+
+The [Promise-job tests](../../../test/browlet/scripting/promise-jobs.test.ts)
+also verify separate thenable/reaction microtasks, both directions of handlerless
+propagation, cross-realm entry versus incumbent settings, and independent Window
+queues. The [isolated error regression](../../../test/support/promise-job-error-child.ts)
+checks ordinary and revoked handlers, cleanup before reporting, thrown-value
+identity, continued microtask delivery, and isolation from Node's uncaught-error
+path. An ordinary handler throw is still a rejection of its derived Promise,
+not an uncaught job error. Unsupported backends retain the existing approved
+missing-host-hook expectations; all assertions run on those configurations too.
+
+`SPEC_GAP(promise-job-null-realm)` records the separate case where a handlerless
+job completes abruptly. HTML explicitly leaves the reporting global unresolved;
+[WHATWG issue #10526](https://github.com/whatwg/html/issues/10526) remains open
+and reports browser disagreement. Browlet retains its existing queue-realm
+reporting fallback. This audit does not establish that fallback as a shared
+browser requirement or resolve the cross-realm policy question. The fixed
+revoked-Proxy case has a non-null job realm and is not part of that gap.
+
+Validation: all five focused suites pass in all six runtime configurations:
+custom/compat has 58 ordinary passes, official compat has 44 passes and 14
+approved missing-capability expected failures, and stock has 43 passes and 15
+expected failures. No tests are skipped and no unhandled test errors remain.
+Typechecking, type contracts, touched-file ESLint, and diff checks pass.
+
+### §8.1.6.6.5: Timeout jobs
+
+Audited `HostEnqueueTimeoutJob(job, realm, milliseconds)`. Its three steps are
+already implemented: select the supplied realm's global, construct a completion
+that queues `job()` on the JavaScript engine task source, and run that completion
+after a timeout using the global's `"JavaScript"` ordering group. This uses
+`GlobalTimers.runStepsAfterTimeout()`, not `setTimeout()` initialization, so it
+does not inherit timer nesting or delay clamping. No runtime behavior changed.
+
+The [engine-job regressions](../../../test/browlet/scripting/engine-jobs.test.ts)
+now cover both local and borrowed `Atomics.waitAsync` timeout delivery. The
+waiting function's Window owns the active-time clock even when another Window
+calls it. Inactivity suspends the wait; becoming inactive again after expiration
+also prevents the already queued engine task from running. Only that task
+invokes the native timeout operation, followed by the Promise reaction's
+separate microtask in its callback's realm.
+
+A second regression lets the timer expire and enqueue its task, then calls
+`Atomics.notify()` before that task runs. The native waiter cancels the pending
+timeout. Running the older timeout task does nothing; the later notification
+task settles the Promise once with `"ok"`. The existing native tests additionally
+cover single-use jobs and cancellation of retained timeouts. Timer tests cover
+ordering, active-time accounting, and destruction independently of the addon.
+
+The existing native ownership restriction remains: generic/timeout hooks cannot
+decline unrelated Node/VM jobs once installed. Unsupported backends retain their
+approved missing-host-hook expectations. Worker globals/settings/startup are
+still incomplete; `GlobalTimers` now marks the missing non-suspended-worker-time
+connection explicitly. The [worker roadmap](../workers/ROADMAP.md#execution-and-lifetime-constraints)
+owns that lifecycle work. This Window audit does not supply worker execution or
+suspension machinery.
+
+Validation: all 10 engine-job/timer cases pass normally on custom/compat. Each
+other configuration passes the five timer cases and retains five approved
+missing-host-hook expected failures. All six runs exit successfully, with no
+skips. Typechecking, type contracts, touched-file ESLint, and diff checks pass.
+
+### §8.1.6.6.6: JobCallback capture follow-up
+
+Reviewed all five `HostMakeJobCallback(callable)` steps after the job-scheduling
+audit. The producer already implements the required record creation from the
+earlier `HostCallJobCallback` slice; no runtime changes were needed:
+
+- The native registration snapshot supplies incumbent identity before entering
+  Node's JavaScript hook frames. Our trailing `registration` argument makes this
+  dependency explicit; it is marked for signature review. Unrelated Node and
+  sandbox registrations retain null host state and ordinary engine invocation.
+- Active-script lookup is independent of that incumbent and of the callback's
+  realm. For a modeled active script, a fresh context retains its settings realm
+  and script record, with null Function and an initially zero incumbent skip
+  counter. With no active script, the stored context is null.
+- Each registration retains its own record and the unchanged callable. Settlement
+  does not recapture the incumbent or script state.
+
+The added [callback regression](../../../test/browlet/scripting/job-callbacks.test.ts)
+uses a foreign built-in `eval`, following the subsection's example but reporting
+an error instead of importing a module. A muted classic script registers the
+reaction; a different, unmuted classic script later settles the Promise. The
+foreign Window receives the muted error, proving that the registering script
+survives the built-in callback and is not replaced by the settling script.
+Existing tests cover distinct registrations, fresh context identity, callback
+throws, thenable receivers, scriptless jobs, and unrelated Node callbacks.
+
+The existing provenance limits remain: native script metadata is not mapped to
+HTML script records, and ordinary author calls/module resumptions are not fully
+represented on our stack. The exact dynamic-import examples still depend on
+`HostLoadImportedModule`; the event-handler example additionally needs compiled
+content handlers. This audit does not substitute an import test with synthetic
+loader behavior or claim those consumers are connected.
+
+Validation: the callback and Promise-job suites pass in all six configurations.
+Custom/compat has 18 ordinary passes; each official compat base has six ordinary
+passes and 12 approved expected failures; each stock base has five ordinary
+passes and 13 approved expected failures. There are no skips or new failure
+classifications. Typechecking, declaration contracts, touched-file ESLint, and
+diff checks pass.
+
+The next bounded section is §8.1.6.7.1, `HostGetImportMetaProperties`, starting
+the module-related host hooks.
+
 ## Present
 
 | Source | Current responsibility |
@@ -920,7 +1325,7 @@ script-element integration.
 | `global-object.ts`, `import-map.ts` | Shared HTML global state, import-map parsing/normalization/merging, module specifier resolution, and parse-result creation; Window owns registration |
 | [`../environment.ts`](../environment.ts), [`../dom/events/error-event.ts`](../dom/events/error-event.ts) | Global exception reporting and ErrorEvent; the realm callback and global-scope operation delegate to the environment |
 | `event-loop.ts`, `tasks.ts` | Task records, source/queue associations, fully-active gating, deterministic turns, checkpoints, incumbent stack, timing hooks, and coalesced wake-ups |
-| `host-hooks.ts` | Custom-engine make/call hooks plus Promise, generic, and timeout job delivery |
+| `host-hooks.ts` | Native TrustedScript extraction and rejection installation; custom-engine make/call hooks plus Promise, generic, and timeout job delivery |
 | [`../global-scope.ts`](../global-scope.ts), `timers.ts` | Higher-level global API composition; lower-level active-time waits and Window function timers |
 | `rendering-opportunity.ts` | Independent opportunity producer, Document render-blocking filter, and ordered rendering pipeline seams |
 | `speculation-rules.ts` | Parse-result creation and an empty-only rule-set record with an explicit parser boundary; Document owns registered sets and Window owns registration/removal/replacement |

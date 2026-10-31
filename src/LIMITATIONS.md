@@ -200,6 +200,9 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   expected failures on all backends, with passing A-only controls. See the
   [constructor evidence](browlet/scripting/ROADMAP.md#constructor-callback-incumbent).
   Later Promise/async-sequence conversions depend on their own callback/job context.
+  Job callbacks now restore the registering script when it was present in the
+  modeled stack; arbitrary author calls and module continuations still lack
+  complete script attribution.
   The A-to-B bound-listener
   investigation is skipped by agreement: its JavaScript observer's equivalence to
   the native API in HTML's examples is uncertain. Revisit with the actual example
@@ -208,6 +211,17 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   The direct-host-entry fallback remains in place. See the
   [callback lifecycle record](browlet/scripting/EVENT-LOOP-ARCHITECTURE.md#node-v8-execution-contexts)
   and [tests](../test/browlet/scripting/callback-lifecycle.test.ts).
+- **Native cleanup reporting needs the addon.** With it, registry errors reach
+  their Window's cancelable error event. Stock mode still reports through Node.
+  Official Node 24/26 use private `_fatalException` interception; their explicit
+  `--abort-on-uncaught-exception` flag can abort before that interception.
+  Custom Node has a context reporter ahead of this policy, preserving Node's
+  behavior for unregistered contexts. Both limits have expected-failure coverage.
+  V8 still queues and runs cleanup; custom make/call hooks preserve callback
+  state. Broader HTML task integration remains unaudited, with no separate
+  browser-confirmed author-visible scheduling failure. The
+  [audit](browlet/scripting/ROADMAP.md#81662-finalizationregistry-cleanup-scheduling)
+  distinguishes that uncertainty from the repaired reporting defect.
 - **Custom generic/timeout hooks are isolate-wide.** They cannot decline an
   individual job. `Atomics.waitAsync` in an unrelated Node/VM realm while those
   Browlet hooks are installed is unsupported; HTML realms use their task and
@@ -446,10 +460,11 @@ also rejects recursive calls that would otherwise return null before filtering.
 
 ## Trusted Types
 
-The addon can intercept native eval/Function compilation and extract source
-through a host callback while preserving Node's checks. HTML does not yet register
-CSP or TrustedScript policy with it. Official Node 24/26 lack the required forwarding
-export. Even custom Node's callback lacks compilation kind, original Function
+Window's `HostGetCodeForEval` extracts retained TrustedScript data through Binding
+and the native callback, preserving eval's scope and Node's checks. Stock mode
+and official Node 24/26 addon builds cannot extract it: the latter lack the required
+forwarding export. CSP string-compilation enforcement is not connected, including
+`require-trusted-types-for` on eval/Function. Even custom Node's callback lacks compilation kind, original Function
 parameter boundaries and argument identities, and reports `Function()`'s empty
 body as CodeLike. The [four regressions](../node-compat/test/code-generation-gaps.test.cjs)
 remain approved expected failures; full Trusted Types Function support is not
@@ -476,10 +491,13 @@ explicit standard content-handler list used for sink metadata.
 
 - **Temporal does not yet use the environment's precision-limited wall clock.**
   The addon supports an internal nonthrowing clock per context on custom Node;
-  official Node 24/26 lack the V8 setter. HTML registration and precision-policy
-  selection remain unfinished. The callback must return signed 64-bit bigint
-  nanoseconds; throwing or returning invalid data is a fatal internal error, not
-  an author-catchable exception. See the
+  official Node 24/26 lack the V8 setter. HTML's environment clock calculation is
+  implemented, but automatic registration remains blocked by the throwing
+  Permissions Policy prerequisite for active, concretely isolated Windows. The
+  callback must return signed 64-bit bigint nanoseconds, which cannot represent
+  Temporal's full Instant range; throwing or returning invalid data is a fatal
+  internal error, not an author-catchable exception. See the
+  [HTML audit](browlet/scripting/ROADMAP.md#8165-temporal-clock-calculation-and-installation-boundary) and
   [clock contract](../node-compat/README.md#temporal-clock).
 
 - **Window messaging still depends on runtime and WindowProxy work.**

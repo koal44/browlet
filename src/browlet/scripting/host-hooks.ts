@@ -8,6 +8,7 @@ import type {
 import type { BrowletEnvironment } from '../environment';
 
 import { createTaskSource } from './event-loop';
+import { JSExecutionContext } from './execution-context';
 import { BrowletRealm } from './realm';
 
 export const jsEngineTaskSource = createTaskSource('JavaScript engine');
@@ -17,8 +18,16 @@ let installed = false;
 /** Install HTML callback and job routing once for this JavaScript runtime. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#javascript-specification-host-hooks
 export function installHostHooks(): void {
+  // SPEC_CLASH(html-private-elements): HostEnsureCanAddPrivateElement is not installed.
+  // HTML rejects private elements on WindowProxy/Location; Browlet currently
+  // follows Chromium's acceptance. See js-engine/ROADMAP.md#private-elements-on-host-objects.
   if (installed || !setHostHooks) return;
-  // TODO(HTML §8.1.6.5): HostLoadImportedModule and import.meta.resolve must call
+  // HTML §8.1.6.6.2: Realm reporters below deliver cleanup exceptions to the
+  // registry's global. V8 owns the queued cleanup operation; make/call hooks
+  // only surround individual callbacks after their cells have been removed. Broader HTML task
+  // integration is unaudited, but no separate author-visible scheduling failure
+  // has been demonstrated. See the roadmap before adding an engine handoff.
+  // TODO(HTML §8.1.6.7.3): HostLoadImportedModule and import.meta.resolve must call
   // env.resolveModuleSpecifier() with the referring script.
   // §8.1.5's resolver exists; engine module hooks are not installed here yet.
   setHostHooks({
@@ -32,27 +41,67 @@ export function installHostHooks(): void {
 }
 
 /** Install realm hooks during composition, once the HTML environment and global are ready. */
-export function installRealmHostHooks(env: BrowletEnvironment): void {
+export function installRealmHostHooks(
+  env: BrowletEnvironment, getCodeForEval: (argument: unknown) => string | undefined,
+): void {
+  // HostGetCodeForEval's platform identity check belongs to Binding. A missing
+  // code result delegates unchanged to Node, including for ordinary strings.
+  env.realm.setModifyCodeGenerationFromStringsCallback(getCodeForEval);
+  // TODO(HTML §8.1.6.2): HostEnsureCanCompileStrings must perform CSP's
+  // EnsureCSPDoesNotBlockStringCompilation. Its policy algorithm is not yet
+  // implemented, and V8 supplies neither compilation kind nor original Function
+  // arguments. Do not infer those inputs from generated source or isCodeLike.
+  // The four approved engine-input failures remain in code-generation-gaps.test.cjs.
   // Unlike the patched job hooks, rejection tracking uses public V8 APIs on
   // every addon base. Bind the executing environment without adding an argument
   // to HTML's HostPromiseRejectionTracker(promise, operation).
   env.realm.setPromiseRejectionTracker(env.trackPromiseRejection.bind(env));
+  // V8 reports native cleanup errors in the registry's context, which can differ
+  // from the cleanup callback's realm. Capture the owning environment here.
+  env.realm.setExceptionReporter(env.reportException.bind(env));
+  // TODO(HTML §8.1.6.5): Register env.getSystemUTCEpochNanoseconds once the clock
+  // read is nonthrowing. Concrete Window isolation still reaches the unfinished
+  // Permissions Policy query; throwing through the native callback is fatal.
+  // Also resolve the native signed-int64 range versus Temporal's full Instant
+  // range. Keep installation absent rather than substituting a clock/policy.
 }
 
-type JobCallback = JSJobCallback<BrowletEnvironment | null>;
+type JobCallback = JSJobCallback<{
+  /** Settings captured at registration, independently of the callback's realm. */
+  incumbentEnv: BrowletEnvironment;
+  /** Fresh context carrying the registering script into the later invocation. */
+  activeScriptContext: JSExecutionContext | null;
+} | null>;
 
 // https://html.spec.whatwg.org/multipage/webappapis.html#hostmakejobcallback
+// SPEC_MISMATCH: HostMakeJobCallback(callable)
+// registration supplies the incumbent observed before the native bridge enters
+// Node's JavaScript hooks; looking it up here would include those host frames.
 function makeJobCallback(
   callback: JSFunction,
   registration: JSJobRegistration,
 ): JobCallback {
   const incumbent = registration.incumbent;
-  // TODO(HTML §8.1.6.6.6): Capture/restore the active-script execution context once
-  // script creation/evaluation supplies parsed records to the modeled stack.
-  // The record contracts exist; BrowletRealm.evaluate() still enters with no HTML script.
+  // Registrations outside HTML retain the ordinary engine call path.
+  if (!(incumbent instanceof BrowletRealm) || !incumbent.hasEnvironment) {
+    return { callback, hostDefined: null };
+  }
+  const env = incumbent.env;
+  // Steps 2–4 select the active script independently of incumbent settings and
+  // the callback's realm. Capture a new context, not the frame's skip counter.
+  const activeScript = env.responsibleEventLoop.activeScript;
+  let activeScriptContext: JSExecutionContext | null = null;
+  if (activeScript !== null) {
+    activeScriptContext = new JSExecutionContext({
+      realm: activeScript.env.realm, scriptOrModule: activeScript.record,
+    });
+  }
+  // TODO(HTML active-script provenance): This captures records visible to our
+  // modeled stack. Ordinary author calls and module evaluation still need their
+  // script association; the native registration metadata is not mapped to it.
   return {
     callback,
-    hostDefined: incumbent instanceof BrowletRealm && incumbent.hasEnvironment ? incumbent.env : null,
+    hostDefined: { incumbentEnv: env, activeScriptContext },
   };
 }
 
@@ -62,20 +111,32 @@ function callJobCallback(
   receiver: unknown,
   argumentsList: unknown[],
 ): unknown {
-  const env = record.hostDefined;
-  if (env === null) {
+  const state = record.hostDefined;
+  if (state === null) {
     return Reflect.apply(record.callback, receiver, argumentsList);
   }
-  const loop = env.responsibleEventLoop;
-  loop.prepareToRunCallback(env);
+  const { incumbentEnv, activeScriptContext } = state;
+  const loop = incumbentEnv.responsibleEventLoop;
+  loop.prepareToRunCallback(incumbentEnv);
+  if (activeScriptContext !== null) loop.executionContextStack.push(activeScriptContext);
   try {
     return Reflect.apply(record.callback, receiver, argumentsList);
   } finally {
-    loop.cleanUpAfterRunningCallback(env);
+    if (activeScriptContext !== null) {
+      if (loop.runningExecutionContext !== activeScriptContext) {
+        // eslint-disable-next-line no-unsafe-finally -- Stack corruption is an internal error even if the author callback threw.
+        throw new InternalError('Job callback script contexts were cleaned up out of order');
+      }
+      loop.executionContextStack.pop();
+    }
+    loop.cleanUpAfterRunningCallback(incumbentEnv);
   }
 }
 
 // https://html.spec.whatwg.org/multipage/webappapis.html#hostenqueuepromisejob
+// SPEC_MISMATCH: HostEnqueuePromiseJob(job, realm)
+// queueRealm preserves the engine-selected queue when the job realm is null;
+// returning false leaves jobs outside HTML with the engine's original queue.
 function enqueuePromiseJob(
   job: () => void,
   realm: JSRealm | null,
@@ -94,7 +155,11 @@ function enqueuePromiseJob(
         if (env !== undefined) env.responsibleEventLoop.cleanUpAfterRunningScript(env);
       }
     } catch (exception) {
-      destination.reportException(exception);
+      // Step 2.4 uses the job realm, which can differ from the queue realm for
+      // revoked Proxy handlers. Reporting follows script cleanup above.
+      // SPEC_GAP(promise-job-null-realm): HTML leaves the reporting global undefined
+      // when realm is null (whatwg/html#10526). Retain our queue-realm fallback.
+      (env?.realm ?? destination).reportException(exception);
     }
   });
 }
@@ -102,8 +167,12 @@ function enqueuePromiseJob(
 // https://html.spec.whatwg.org/multipage/webappapis.html#hostenqueuegenericjob
 function enqueueGenericJob(job: () => void, realm: JSRealm | null): void {
   if (!(realm instanceof BrowletRealm) || !realm.hasEnvironment) {
+    // TODO(runtime ownership): The isolate-wide native hook cannot decline a
+    // job for an unrelated Node/VM realm. Keep that unsupported boundary explicit.
     throw new InternalError('HTML generic jobs require an HTML realm');
   }
+  // Steps 1–2: the supplied realm selects its global's loop and Document.
+  // This is an engine task; author Promise reactions use their separate hook.
   realm.queueGlobalTask(jsEngineTaskSource, job);
 }
 
@@ -114,8 +183,13 @@ function enqueueTimeoutJob(
   milliseconds: number,
 ): void {
   if (!(realm instanceof BrowletRealm) || !realm.hasEnvironment) {
+    // TODO(runtime ownership): Like generic jobs, this isolate-wide native hook
+    // cannot decline an unrelated Node/VM job. Keep that boundary explicit.
     throw new InternalError('HTML timeout jobs require an HTML realm');
   }
+  // Steps 1–3: retain this realm's global for both active-time waiting and the
+  // eventual engine task. The JavaScript ordering group is separate from timers
+  // created by setTimeout/setInterval, without their nesting or delay clamping.
   const timers = realm.env.getWindowOrWorkerGlobalScopeMixin().timers;
   timers.runStepsAfterTimeout('JavaScript', milliseconds, () => {
     realm.queueGlobalTask(jsEngineTaskSource, job);

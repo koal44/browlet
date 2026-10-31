@@ -196,6 +196,43 @@ describe('HTML rejected-promise notification', () => {
     expect(otherEnv.globalImplementation.aboutToBeNotifiedRejectedPromises).toEqual([]);
   });
 
+  it('uses current settings when the running context has no script, without consulting lower muted frames', () => {
+    const { env, reject } = fixture();
+    const { promise } = reject(42);
+    env.globalImplementation.aboutToBeNotifiedRejectedPromises.length = 0;
+    const otherEnv = getRelevantRealm(browser().window).env;
+    const loop = otherEnv.responsibleEventLoop;
+    const script = new ClassicScript('', env, env.apiBaseURL, new ScriptFetchOptions(), true);
+    const lower = new JSExecutionContext({ realm: env.realm, scriptOrModule: script.record });
+    const current = new JSExecutionContext({ realm: otherEnv.realm });
+    loop.executionContextStack.push(lower, current);
+    try {
+      expect(loop.activeScript).toBe(script);
+      expect(loop.runningScript).toBeNull();
+      otherEnv.trackPromiseRejection(promise, 'reject');
+      expect(otherEnv.globalImplementation.aboutToBeNotifiedRejectedPromises).toEqual([promise]);
+      otherEnv.trackPromiseRejection(promise, 'handle');
+      expect(otherEnv.globalImplementation.aboutToBeNotifiedRejectedPromises).toEqual([]);
+    } finally {
+      loop.executionContextStack.pop();
+      loop.executionContextStack.pop();
+    }
+    expect(env.globalImplementation.aboutToBeNotifiedRejectedPromises).toEqual([]);
+    expect(loop.getTaskQueue(domManipulationTaskSource).size).toBe(0);
+  });
+
+  it('ignores handle notifications for promises absent from both collections', () => {
+    const { env, loop, window } = fixture();
+    const events = vi.fn();
+    window.addEventListener('rejectionhandled', events);
+    const promise = new env.realm.NativePromise(() => {});
+    env.trackPromiseRejection(promise, 'handle');
+    expect(env.globalImplementation.aboutToBeNotifiedRejectedPromises).toEqual([]);
+    expect(env.globalImplementation.outstandingRejectedPromises.has(promise)).toBe(false);
+    expect(loop.getTaskQueue(domManipulationTaskSource).size).toBe(0);
+    expect(events).not.toHaveBeenCalled();
+  });
+
   it.each(['reject', 'handle'] as const)('suppresses %s tracking for a muted running classic script', (operation) => {
     const { env, loop, reject } = fixture();
     const { promise } = reject(42);

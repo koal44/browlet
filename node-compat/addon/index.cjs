@@ -24,6 +24,7 @@ exports.getFunctionRealm = native.getFunctionRealm;
 exports.createFunctionWithIncumbent = native.createFunctionWithIncumbent;
 exports.observePromise = native.observePromise;
 exports.setPromiseRejectionTracker = native.setPromiseRejectionTracker;
+exports.setExceptionReporter = require('./exception-reporting.cjs')(native);
 exports.setModifyCodeGenerationFromStringsCallback = native.setModifyCodeGenerationFromStringsCallback;
 exports.setTemporalHostSystemUTCEpochNanosecondsCallback = native.setTemporalHostSystemUTCEpochNanosecondsCallback;
 exports.isPromiseHandled = native.isPromiseHandled;

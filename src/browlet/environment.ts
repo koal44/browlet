@@ -414,9 +414,11 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     console.error(exception);
   }
 
-  /** HTML's HostPromiseRejectionTracker, bound to the executing realm's environment. */
+  /** HTML's HostPromiseRejectionTracker, bound to the executing realm rather than the Promise's creation realm. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#the-hostpromiserejectiontracker-implementation
   trackPromiseRejection(promise: Promise<unknown>, operation: 'reject' | 'handle'): void {
+    // A scriptless running context uses current settings; do not substitute an
+    // active script from a lower context (including one with muted errors).
     const script = this.responsibleEventLoop.runningScript;
     if (script instanceof ClassicScript && script.mutedErrors) return;
     const env = script?.env ?? this;
@@ -466,6 +468,22 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
         if (!isPromiseHandled(promise)) global.outstandingRejectedPromises.add(promise);
       }
     });
+  }
+
+  /** Read this environment's coarsened epoch time, rounded and clamped for Temporal. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#hostsystemutcepochnanoseconds
+  getSystemUTCEpochNanoseconds(): bigint {
+    const time = this.timing.currentWallTime();
+    // Convert the integral part before scaling: present-day epoch nanoseconds
+    // already exceed Number's safe integer range. Round only the fractional ms.
+    const milliseconds = Math.trunc(time.milliseconds);
+    const ns = BigInt(milliseconds) * 1_000_000n +
+      BigInt(Math.round((time.milliseconds - milliseconds) * 1_000_000));
+    // https://tc39.es/proposal-temporal/#sec-temporal-instant-range
+    const nsMaxInstant = 8_640_000_000_000_000_000_000n;
+    if (ns < -nsMaxInstant) return -nsMaxInstant;
+    if (ns > nsMaxInstant) return nsMaxInstant;
+    return ns;
   }
 
   /** Fetch supplies shared numeric timestamps; HRT owns coarsening and time-origin conversion. */

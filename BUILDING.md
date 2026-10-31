@@ -77,7 +77,9 @@ git apply "/path/to/browlet/vendor/_patches/node-v8.patch"
 
 This single patch contains the complete `v8-patches` branch, including Node's
 forwarding exports and V8 facilities not yet consumed by Browlet. No second patch
-is needed for dynamic imports. The addon detects the forwarding export in the
+is needed for dynamic imports. It also includes Node's context exception reporter;
+official Node builds use the [documented compatibility fallback](node-compat/README.md#native-cleanup-error-reporting).
+The addon detects the forwarding export in the
 selected headers; builds without it retain classic/static module execution but
 reject dynamic-import callback options.
 

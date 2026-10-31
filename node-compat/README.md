@@ -427,11 +427,54 @@ recursive capture of the host's own work is suppressed. Pre-installation work
 keeps its original callback path. Teardown clears native hooks/references.
 
 [JS Engine](../src/js-engine/runtime.ts) translates references to registered realms.
-[HTML](../src/browlet/scripting/host-hooks.ts) retains incumbent settings and owns
-callback cleanup, microtask tasks, generic tasks, and active-time timeouts.
+[HTML](../src/browlet/scripting/host-hooks.ts) retains incumbent settings plus the
+modeled active-script context and owns callback cleanup, microtask tasks, generic
+tasks, and active-time timeouts.
 Ordinary Node Promise jobs remain on Node's queues. Unrelated Node/VM
 Atomics.waitAsync is unsupported while HTML's generic/timeout hooks are installed.
-Script records and restoration remain [engine/HTML work](../src/js-engine/ROADMAP.md).
+Script attribution beyond modeled entries and module continuations remain
+[engine/HTML work](../src/js-engine/ROADMAP.md).
+
+### Native cleanup error reporting
+
+`setExceptionReporter(context, reporter | undefined)` installs an internal
+reporter for uncaught engine errors in that context. HTML installs
+`env.reportException` once the realm's environment and global are ready.
+V8's entered/microtask context identifies the registry's realm, including when
+the cleanup callback belongs to another realm. The callback receives the
+original thrown value; it is retained by the context, with no additional native
+root or global-proxy lookup. Passing `undefined` restores Node reporting.
+Reporters should not throw; an internal failure returns to Node's handler.
+
+- **Custom Node:** `node::SetContextExceptionReporter` routes the engine message
+  before Node's process handlers and exempts registered contexts from its abort
+  policy. This is a Node-only addition in the combined patch; no V8 change is
+  needed. `process._fatalException` stays untouched.
+- **Official Node 24/26:** the compatibility layer intercepts the private
+  `process._fatalException` entry and selects the context-owned reporter using
+  public V8 APIs. It delegates unregistered contexts and Promise rejection
+  reports to the original handler. Node's explicit
+  `--abort-on-uncaught-exception` flag runs before this fallback, so a cleanup
+  throw can still abort the process. This accepted limitation is a strict
+  expected failure, not a reason to disable Node's process-wide abort policy.
+- **Stock mode:** without the addon, native cleanup errors still reach Node.
+  The real Window regression is an approved stock-only expected failure.
+
+The [native regressions](test/exception-reporting.test.cjs) cover registry versus
+callback ownership, primitive throws, reporter removal/collection/failure, Node
+monitor and primary capture handlers, async context, and both abort-policy
+paths. The [Window regression](../test/browlet/scripting/finalization-errors.test.ts)
+checks exact error identity, cancelable dispatch, and `unregister()` before the
+next cleanup callback. Node errors remain on Node's normal path.
+
+FinalizationRegistry capture/call support does not include
+`HostEnqueueFinalizationRegistryCleanupJob`. V8 still schedules and runs whole
+registry cleanups; our call hook receives individual held values after their
+cells have been removed. It cannot defer the cleanup operation or select its
+HTML task. The [HTML audit](../src/browlet/scripting/ROADMAP.md#81662-finalizationregistry-cleanup-scheduling)
+records the distinct registry/callback realm roles and the adopted exception
+reporting repair. No additional author-visible scheduling failure has been
+demonstrated; an absent HTML task record alone does not justify a new V8 API.
 
 When changing routing, verify unrelated Node progress and runner shutdown as well
 as page results. Earlier ambient-owner routing captured runtime diagnostics and

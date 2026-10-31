@@ -13,6 +13,8 @@ export class GlobalTimers {
   #idMap = new Map<number, TimerKey>();
   #queueTask: GlobalTimersOptions['queueTask'];
   #time: HighResolutionTimeSource;
+  // TODO(HTML worker timers): Connect non-suspended worker time during worker
+  // startup. Only Window Document activity currently drives these waits.
   #fullyActive = false;
   #nextId = 1;
   #nextSequence = 0;

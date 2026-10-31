@@ -23,6 +23,7 @@ const supported = {
   dynamicImport: typeof native.installDynamicImportRouter === 'function',
   importMeta: typeof native.setImportMetaInitializer === 'function',
   codeGeneration: typeof compat.setModifyCodeGenerationFromStringsCallback === 'function',
+  contextExceptionReporter: typeof native.getEnteredExceptionReporter !== 'function',
   temporalClock: typeof compat.setTemporalHostSystemUTCEpochNanosecondsCallback === 'function',
   // V8 omits compilation kind, original Function arguments and boundaries,
   // and reports Function()'s implicit empty body as CodeLike.

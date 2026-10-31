@@ -63,6 +63,13 @@ export class NodeAPI {
   setPromiseRejectionTracker?: (
     context: VMContext, tracker: ((promise: Promise<unknown>, operation: 'reject' | 'handle') => void) | undefined,
   ) => void;
+  /** Route uncaught engine errors to the owning context, including native registry cleanup failures. */
+  setExceptionReporter?: (context: VMContext, reporter: ((exception: unknown) => void) | undefined) => void;
+  /** Intercept native eval/Function compilation; an object created in the target context identifies its realm. */
+  setModifyCodeGenerationFromStringsCallback?: (
+    realmReference: object,
+    callback: ((source: unknown, isCodeLike: boolean) => string | false | undefined) | undefined,
+  ) => void;
   runInContext?: (
     source: string, context: VMContext, options?: ContextEvaluationOptions,
   ) => unknown;
@@ -95,6 +102,8 @@ export class NodeAPI {
     this.isPromiseHandled = this.#loadMethod(backend, 'isPromiseHandled');
     this.getPromiseResult = this.#loadMethod(backend, 'getPromiseResult');
     this.setPromiseRejectionTracker = this.#loadMethod(backend, 'setPromiseRejectionTracker');
+    this.setExceptionReporter = this.#loadMethod(backend, 'setExceptionReporter');
+    this.setModifyCodeGenerationFromStringsCallback = this.#loadMethod(backend, 'setModifyCodeGenerationFromStringsCallback');
     this.runInContext = this.#loadMethod(backend, 'runInContext');
     this.setGlobalObject = this.#loadMethod(backend, 'setGlobalObject');
     this.setHostHooks = this.#loadMethod(backend, 'setHostHooks');

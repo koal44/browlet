@@ -1,6 +1,7 @@
 #include <node.h>
 #include "array-buffer.h"
 #include "code-generation.h"
+#include "exception-reporting.h"
 #include "function-entry.h"
 #include "host-hooks.h"
 #include "html-all-collection.h"
@@ -23,6 +24,7 @@ void Initialize(v8::Local<v8::Object> exports, v8::Local<v8::Value>,
   InitializeVmImports(exports, context, vm_data);
   InitializeVmModules(exports, context, vm_data);
   InitializeCodeGeneration(exports);
+  InitializeExceptionReporting(exports, context, vm_data);
   InitializeTemporal(exports);
   InitializeArrayBuffer(exports, context, vm_data);
   InitializeRealm(exports, context);

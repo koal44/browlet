@@ -191,8 +191,11 @@ capture. A `JSExecutionContext` scopes that observation on the same stack with
 the method's current realm and the observed `incumbentEnv`, but no
 ScriptOrModule. It leaves retained entry selection and active-script provenance
 unchanged; callback skipping applies to the observation as well as script records.
-`Window.postMessage()` is the first consumer. Other binding surfaces and the
-host-hook audit remain separate work. The A-to-B callback-registration investigation is skipped pending
+`Window.postMessage()` is the first consumer. JobCallback records now retain
+incumbent settings plus a fresh context for the modeled active script; make/call
+hooks restore that context across invocation and unwind it on return or throw.
+Other binding surfaces and complete script provenance remain separate work.
+The A-to-B callback-registration investigation is skipped pending
 review of its observer and translation of HTML's examples; see the
 [audit record](browlet/scripting/ROADMAP.md#html-8133-explicit-context-experiment).
 There is no native interception of arbitrary author frames.

@@ -571,6 +571,27 @@ export class JSRealm {
     addon.setPromiseRejectionTracker?.(this.#vmContext, tracker);
   }
 
+  /**
+   * Report uncaught engine errors belonging to this realm. The reporter should
+   * not throw; internal failures return to Node. Stock mode cannot intercept
+   * these reports. Official addon bases retain Node's explicit abort-flag limit.
+   */
+  setExceptionReporter(reporter: ((exception: unknown) => void) | undefined): void {
+    addon.setExceptionReporter?.(this.#vmContext, reporter);
+  }
+
+  /**
+   * Intercept native eval/Function in this realm. Return extracted source, false
+   * to block, or undefined to delegate unchanged. Node's checks still apply.
+   * Backends without the forwarding export leave native compilation unchanged.
+   */
+  setModifyCodeGenerationFromStringsCallback(
+    callback: ((source: unknown, isCodeLike: boolean) => string | false | undefined) | undefined,
+  ): void {
+    // A captured intrinsic identifies this context even after global-proxy reuse.
+    addon.setModifyCodeGenerationFromStringsCallback?.(this.Object, callback);
+  }
+
   /** Compile without execution, allocating any syntax failure in this realm. */
   // https://tc39.es/ecma262/#sec-parse-script
   // SPEC_MISMATCH: ParseScript(sourceText, realm, hostDefined) -> Script Record or a List of SyntaxError objects

@@ -1,10 +1,16 @@
-import { describe, expect, it, vi } from 'vitest';
+import { spawnSync } from 'node:child_process';
+import { resolve } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import { getRelevantRealm } from '../../support/browlet-binding';
+import { createSiblingWindow } from '../../support/windows';
+import { runInHostTask } from '../../support/tasks';
 import type { Task } from '../../../src/browlet/scripting/event-loop';
 import { networkingTaskSource } from '../../../src/browlet/scripting/tasks';
+
+afterEach(() => vi.restoreAllMocks());
 
 describe('HTML Promise jobs', () => {
   it.each(['fulfill', 'reject'] as const)('continues when Node delivers Promise settlement through an HTML task (%s)', async (settlement) => {
@@ -93,7 +99,7 @@ describe('HTML Promise jobs', () => {
     expect(realm.callbacks.captureContext()).toBe(realm.env);
   });
 
-  itPassesWith('hostHooks')('queues handlerless propagation without preparing a script realm', () => {
+  itPassesWith('hostHooks').each(['resolve', 'reject'] as const)('queues handlerless propagation without preparing a script realm (%s)', (settlement) => {
     const browlet = new Browlet({ route: () => '' });
     const realm = getRelevantRealm(browlet.window);
     const loop = realm.agent.eventLoop;
@@ -108,7 +114,7 @@ describe('HTML Promise jobs', () => {
     const observed: unknown[] = [];
     Reflect.set(realm.globalObject, 'observe', (value: unknown) => { observed.push(value); });
 
-    realm.evaluate('Promise.resolve(17).then().then(value => observe(value))',
+    realm.evaluate(`Promise.${settlement}(17).then().then(value => observe(value), reason => observe(reason))`,
       'handlerless-promise.js');
 
     expect(observed).toEqual([17]);
@@ -117,6 +123,59 @@ describe('HTML Promise jobs', () => {
     expect(tasks[1]?.scriptEvaluationEnvironments)
       .toEqual(new Set([realm.env]));
   });
+
+  itPassesWith('hostHooks').each(['reaction', 'thenable'] as const)('uses the foreign %s function for entry settings and the registering realm for incumbent settings', async (kind) => {
+    await runInHostTask(() => {
+      const browser = new Browlet({ route: () => '' });
+      const caller = getRelevantRealm(browser.window);
+      const callee = getRelevantRealm(createSiblingWindow(browser));
+      const loop = caller.agent.eventLoop;
+      const observations: { value: number; entry: unknown; incumbent: unknown; task: Task | null; }[] = [];
+      const observationErrors: unknown[] = [];
+      Reflect.set(callee.globalObject, 'observe', (value: number) => {
+        // Missing hooks leave no entry context. Record that failed observation
+        // for the assertion without creating an unrelated unhandled rejection.
+        try {
+          observations.push({
+            value, entry: loop.entryExecutionContext.realm,
+            incumbent: loop.getIncumbentEnvironment(), task: loop.currentlyRunningTask,
+          });
+        } catch (error) {
+          observationErrors.push(error);
+        }
+      });
+      const callback = callee.evaluate(kind === 'reaction'
+        ? '(value => { observe(value); })'
+        : '({ then(resolve) { observe(17); resolve(17); } })', 'foreign-callback.js');
+      Reflect.set(caller.globalObject, 'foreignCallback', callback);
+      caller.evaluate(kind === 'reaction'
+        ? 'Promise.resolve(17).then(foreignCallback)'
+        : 'Promise.resolve(foreignCallback)', 'register-job.js');
+
+      expect(observationErrors).toEqual([]);
+      expect(observations).toHaveLength(1);
+      const observed = observations[0]!;
+      expect(observed.value).toBe(17);
+      expect(observed.entry === callee, 'entry settings come from the invoked function').toBe(true);
+      expect(observed.incumbent === caller.env, 'incumbent settings come from registration').toBe(true);
+      expect(observed.task?.source.name).toBe('microtask');
+      expect(observed.task?.scriptEvaluationEnvironments).toEqual(new Set([callee.env]));
+      expect(loop.executionContextStack).toEqual([]);
+      expect(loop.backupIncumbentEnvironmentStack).toEqual([]);
+      expect(loop.currentlyRunningTask).toBeNull();
+    });
+  });
+
+  itPassesWith('hostHooks').each(['handler', 'revoked'] as const)('reports an abrupt job to its specified realm after script cleanup (%s)', (kind) => {
+    // Unsupported engines report the uncaught job to Node. Isolate that outcome
+    // from Vitest while retaining the required Window behavior as the assertion.
+    const child = spawnSync(process.execPath, [
+      '--import', 'tsx', resolve('test/support/promise-job-error-child.ts'), kind,
+    ], { env: process.env, encoding: 'utf8', windowsHide: true, timeout: 20000 });
+    expect(child.error).toBeUndefined();
+    expect(child.status, child.stdout + child.stderr).toBe(0);
+    expect(child.stdout).toContain('PASS: Promise job error reporting');
+  }, 25000);
 
   itPassesWith('explicitQueues')('keeps Window queues independent when Node settles their Promises', () => {
     const observations: number[] = [];
