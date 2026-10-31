@@ -212,8 +212,9 @@ official addon bases retain approved expected failures for its absence.
 `JSRealm.setModifyCodeGenerationFromStringsCallback()` anchors installation to a
 captured intrinsic in the retained context. Window composition now installs
 Binding-owned TrustedScript extraction for `HostGetCodeForEval`; native eval keeps
-its lexical scope and function identity. CSP's compilation policy is still
-unfinished. Do not infer full HTML inputs from source prefixes. See the
+its lexical scope and function identity. HTML now connects CSP source-list checks
+and reporting through the same callback; its earlier Trusted Types validation is
+still unfinished. Do not infer full HTML inputs from source prefixes. See the
 [HTML audit](../browlet/scripting/ROADMAP.md#html-816-javascript-host-hook-audit)
 and [native contract](../../node-compat/README.md#string-compilation-and-source-extraction).
 
@@ -270,7 +271,7 @@ Implement these with their consuming feature, rather than adding inert hooks:
 
 | Missing boundary | Consumer and completion condition |
 | --- | --- |
-| `HostEnsureCanCompileStrings` | Connect CSP checks to the adopted interception callback; preserve the four documented engine-input gaps |
+| `HostEnsureCanCompileStrings` | CSP source-list checks/reporting are connected; preceding Trusted Types validation retains the four documented engine-input gaps |
 | `HostEnqueueFinalizationRegistryCleanupJob` | Context exception reporters repair the confirmed cleanup reporting defect on addon bases; stock mode and the official fallback's abort flag retain expected failures. V8 retains queued cleanup and cell ownership; broader HTML integration has no separate demonstrated author-visible scheduling failure. Require behavioral evidence before adding an engine handoff; see the [HTML audit](../browlet/scripting/ROADMAP.md#81662-finalizationregistry-cleanup-scheduling) |
 | Kept-object cleanup control | Native checkpoints already clear kept objects; resolve HTML's [ordering and Agent isolation questions](../browlet/scripting/EVENT-LOOP-ARCHITECTURE.md#node-v8-checkpoint) |
 | `HostSystemUTCEpochNanoseconds` | Ordinary Windows install the HTML clock through the existing setter; concrete isolation needs Permissions Policy, and timestamps must fit the native int64 range |

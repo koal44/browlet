@@ -253,7 +253,10 @@ V8's `(source, isCodeLike)` inputs: a string result supplies replacement source,
 `false` blocks compilation, and `undefined` delegates unchanged. Other results
 throw TypeError. This combines the engine interception needed by
 `HostEnsureCanCompileStrings` and `HostGetCodeForEval`; it is not their complete
-HTML contract. HTML policy and actual TrustedScript recognition remain deferred.
+HTML contract. Window composition supplies Binding-owned TrustedScript recognition
+and CSP source-list checks/reporting. The preceding Trusted Types validation still
+needs the unavailable engine inputs listed below; it does not enforce
+`require-trusted-types-for` or default-policy checks on eval/Function.
 
 Registration forces cached and uncached eval/Function compilation through the
 callback. Ordinary Script/module compilation is unaffected. Allowed or extracted

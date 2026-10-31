@@ -948,7 +948,7 @@ It does not treat reaching §8.1.7 as completion of the earlier dependencies.
 | Area | Current implementation | Remaining work and disposition |
 | --- | --- | --- |
 | Temporal clock (§8.1.6.5) | Window composition installs `BrowletEnvironment.getSystemUTCEpochNanoseconds()` through JS Engine and the existing addon for non-concrete isolation. Author clock reads, borrowing, and navigation are covered. | Concrete isolation needs Permissions Policy's inherited/header/container state and document feature query; the native callback accepts only signed-int64 nanoseconds. The bounded hookup retains these explicit limits; see §8.1.6.5 below. |
-| String compilation (§8.1.6.2) | Binding-owned TrustedScript extraction is connected through `HostGetCodeForEval`; Node's own checks remain in force. | CSP's `EnsureCSPDoesNotBlockStringCompilation` algorithm and its host-hook connection are missing. The four approved engine-input limitations remain separate from that TypeScript algorithm work. This is an earlier-section dependency on CSP, not a later event-loop algorithm. |
+| String compilation (§8.1.6.2) | Binding-owned TrustedScript extraction and CSP source-list checks/reporting are connected; Node's own checks remain in force. | The preceding Trusted Types/default-policy validation still needs compilation kind and original Function inputs absent from the engine callback. Keep the four approved input-gap failures and unsupported-backend limits; further native work is parked. This is not a later event-loop algorithm. |
 | Execution attribution | Job registration captures compilation identity and restores the associated HTML script; direct `reportError` selection now has an accepted compatibility limitation. | The bounded rejection probe below reproduces caller-based muting on all addon bases, contrary to the intended Chromium/Firefox behavior; WebKit and the literal built-in-context reading differ too. Keep the two ordinary failures while the fix is deferred; no runtime change. Constructor incumbent capture and borrowed-Function import-error realms retain their already approved expected failures. Do not turn these into an unbounded goal of mirroring every author frame. |
 | WebAssembly modules | The addon supplies module compilation and supplied-graph execution. | `BrowletRealm.parseWebAssemblyModule()` still throws; source/deferred graph phases are also rejected. Keep the JSRealm/HTML/Wasm ESM integration on hold for its separate standards slice. |
 | Other adopted hooks | Promise rejection delivery, job routing, module imports, import metadata, and cleanup-exception reporting have their documented integrations. | Keep the existing private-element choice, unrelated-Node generic/timeout ownership limit, and unaudited whole-registry cleanup scheduling explicit. No new demonstrated cleanup scheduling failure justifies another native handoff. |
@@ -956,8 +956,9 @@ It does not treat reaching §8.1.7 as completion of the earlier dependencies.
 Temporal's ordinary Window connection is complete; its concrete-isolation and
 range limits remain explicit. Permissions Policy is a different dependency from
 the implemented Permissions API used by Storage; `Document.isAllowedToUse()`
-still throws for an active Document. CSP's compilation policy remains the other
-unconnected earlier-section algorithm. Event-loop implementation has not resumed.
+still throws for an active Document. CSP source-list enforcement is connected;
+complete Trusted Types compilation validation remains parked on its engine-input
+dependency. Event-loop implementation has not resumed.
 
 ### §§8.1.6.1–8.1.6.3: private elements and string compilation
 
@@ -982,14 +983,18 @@ Two boundaries remain explicit in [host-hooks.ts](host-hooks.ts):
   [engine decision](../../js-engine/ROADMAP.md#private-elements-on-host-objects).
 - §8.1.6.2 `HostEnsureCanCompileStrings` delegates to CSP's
   [EnsureCSPDoesNotBlockStringCompilation](https://w3c.github.io/webappsec-csp/#can-compile-strings),
-  which is not implemented yet. The native callback has only `(source, isCodeLike)`;
-  the algorithm also requires compilation kind and original Function arguments.
+  whose source-list portion is now connected to the native callback. CSP selects
+  script-src/default-src, interprets unsafe-eval/trusted-types-eval, and reports
+  every violation; only enforcing policies block. The existing denial result
+  creates EvalError in the compilation realm. See the
+  [CSP consumer](../browsing/policy/csp/ROADMAP.md#string-compilation-consumer).
+  The preceding Trusted Types validation remains unfinished: the native callback
+  has only `(source, isCodeLike)`, not compilation kind or original Function arguments.
   Retain the four approved [input-gap regressions](../../../node-compat/test/code-generation-gaps.test.cjs).
-  Do not reconstruct the missing inputs by examining generated source. Before
-  connecting policy, review the supported subset and its observable limits:
-  TrustedScript extraction alone does not enforce CSP or require-trusted-types-for
-  on eval/Function. The check also needs default-policy unchanged-source validation,
-  script-src/default-src selection, trusted-types-eval/unsafe-eval, and violations.
+  Do not reconstruct missing inputs from generated source. TrustedScript extraction
+  and source-list checks do not enforce require-trusted-types-for on eval/Function,
+  or invoke/validate the default policy. Stock and official addon modes retain the
+  approved code-generation-hook availability failures.
 
 Keep the compilation-policy boundary open before treating §8.1.6.2 as done.
 

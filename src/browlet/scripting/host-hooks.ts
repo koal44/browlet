@@ -41,14 +41,21 @@ export function installHostHooks(): void {
 export function installRealmHostHooks(
   env: BrowletEnvironment, getCodeForEval: (argument: unknown) => string | undefined,
 ): void {
-  // HostGetCodeForEval's platform identity check belongs to Binding. A missing
-  // code result delegates unchanged to Node, including for ordinary strings.
-  env.realm.setModifyCodeGenerationFromStringsCallback(getCodeForEval);
-  // TODO(HTML §8.1.6.2): HostEnsureCanCompileStrings must perform CSP's
-  // EnsureCSPDoesNotBlockStringCompilation. Its policy algorithm is not yet
-  // implemented, and V8 supplies neither compilation kind nor original Function
-  // arguments. Do not infer those inputs from generated source or isCodeLike.
-  // The four approved engine-input failures remain in code-generation-gaps.test.cjs.
+  // HostGetCodeForEval's platform identity check belongs to Binding. Check the
+  // current policy at compilation, including cached code and retained functions.
+  env.realm.setModifyCodeGenerationFromStringsCallback((argument) => {
+    const extracted = getCodeForEval(argument);
+    const source = typeof argument === 'string' ? argument : extracted;
+    if (source !== undefined && env.policyContainer.cspList?.isStringCompilationBlocked(source, env)) return false;
+    // Non-code values and allowed ordinary strings delegate unchanged to Node.
+    // Extracted source also goes through Node's existing checks in the addon.
+    return extracted;
+  });
+  // TODO(HTML §8.1.6.2 HostEnsureCanCompileStrings): Complete CSP's preceding
+  // Trusted Types validation. V8 supplies neither compilation kind nor original
+  // Function arguments. Do not infer these from source or isCodeLike. In particular,
+  // require-trusted-types-for and default-policy unchanged-source validation
+  // are not enforced here. Keep the four input gaps in code-generation-gaps.test.cjs.
   // Unlike the patched job hooks, rejection tracking uses public V8 APIs on
   // every addon base. Bind the executing environment without adding an argument
   // to HTML's HostPromiseRejectionTracker(promise, operation).

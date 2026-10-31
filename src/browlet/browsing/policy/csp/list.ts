@@ -152,6 +152,28 @@ export class CSPList implements FetchCSPList {
     return blocked;
   }
 
+  /** Check compilation source lists and report violations; only enforcing policies block. */
+  // https://w3c.github.io/webappsec-csp/#can-compile-strings
+  // Source-list portion only: the preceding Trusted Types validation still needs
+  // engine inputs absent from the native callback. Return a denial flag so the
+  // engine creates EvalError in the compilation realm.
+  isStringCompilationBlocked(source: string, env: BrowletEnvironment): boolean {
+    const trustedTypesRequired = this.doesSinkTypeRequireTrustedTypes('script', false);
+    let blocked = false;
+    for (const policy of this.policies) {
+      const sources = policy.directives.get('script-src') ?? policy.directives.get('default-src');
+      if (sources === undefined || sources.tokens.some((token) => {
+        const keyword = asciiLower(token);
+        return keyword === "'unsafe-eval'" || (trustedTypesRequired && keyword === "'trusted-types-eval'");
+      })) continue;
+      const violation = new CSPViolation(policy, 'script-src', 'eval', env);
+      if (sources.tokens.includes("'report-sample'")) violation.sample = source.slice(0, 40);
+      violation.report();
+      if (policy.disposition === 'enforce') blocked = true;
+    }
+    return blocked;
+  }
+
   /** Whether any applicable policy requires a trusted value for this sink group. */
   // https://w3c.github.io/trusted-types/dist/spec/#does-sink-require-trusted-types
   doesSinkTypeRequireTrustedTypes(sinkGroup: string, includeReportOnlyPolicies: boolean): boolean {

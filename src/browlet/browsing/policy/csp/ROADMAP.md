@@ -102,6 +102,38 @@ policies, report targets/samples, adoption, namespaces, and CSSOM bypass. Source
 list regressions cover all three hashes, UTF-8 input, equivalent hash encodings,
 fallback inputs, and keywords. No new expected failures or skips are needed.
 
+## String-compilation consumer
+
+Window's native eval/Function hook now calls `CSPList.isStringCompilationBlocked()`
+for ordinary strings and extracted TrustedScript source. This implements the
+source-list portion of
+[EnsureCSPDoesNotBlockStringCompilation](https://w3c.github.io/webappsec-csp/#can-compile-strings):
+`script-src` takes precedence over `default-src`, including empty directives;
+`script-src-elem` and `script-src-attr` do not govern compilation. `unsafe-eval`
+permits compilation. `trusted-types-eval` permits the source-list step only when
+the CSP list has an enforced `require-trusted-types-for 'script'` requirement.
+These keywords match ASCII case-insensitively.
+
+Every violated policy reports effective directive `script-src` and blocked
+resource `eval`. `report-sample` retains the first 40 source code units. Report-only
+policies report without blocking. The boolean result lets the existing engine
+callback produce EvalError in the compilation realm, rather than throwing a
+Node-owned error. Policy is read at each compilation, including cached source;
+already compiled functions remain callable. Borrowed eval and Function use their
+own realm's policy. Native eval scope and Node's existing checks remain intact.
+
+This is not the complete Trusted Types algorithm. Its preceding validation,
+default-policy invocation, and unchanged-source check remain unconnected because
+the engine callback lacks compilation kind and original Function arguments.
+In particular, `require-trusted-types-for` does not yet reject untrusted compilation,
+even with `trusted-types-eval`. Do not infer those inputs from source text or claim
+that the source-list allowance establishes trust. The four existing
+[engine-input regressions](../../../../../node-compat/test/code-generation-gaps.test.cjs)
+remain expected failures. Stock mode and official Node addon builds lack the
+forwarding export, so their native compilation remains unenforced; integration
+assertions retain the previously approved `codeGeneration` expected-failure gate.
+The policy algorithm itself is exercised on every backend.
+
 ## Retained specification decisions
 
 The following source markers retain approved choices. September 2026 browser
@@ -172,9 +204,9 @@ documentation cleanup does not refresh those observations.
 - **Console:** `env.reportConsoleWarning()` is provisional. Supply a real
   Console Printer/output sink while retaining attribution; do not call the
   author's overridable console or substitute Node console output.
-- **Compilation:** classic/module scripts and string-compilation host hooks,
-  Trusted Types script-sink checks, Wasm compilation, and WebRTC integrations.
-  Their owning specifications provide these dependencies.
+- **Compilation:** classic/module script consumers, the preceding Trusted Types
+  validation in the string-compilation hook, string timers, Wasm compilation,
+  and WebRTC integrations. Their owning specifications provide these dependencies.
 
 Mixed Content and Upgrade Insecure Requests remain parent-policy algorithms;
 CSP contributes directives rather than another upgrade implementation.

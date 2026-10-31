@@ -497,8 +497,12 @@ also rejects recursive calls that would otherwise return null before filtering.
 Window's `HostGetCodeForEval` extracts retained TrustedScript data through Binding
 and the native callback, preserving eval's scope and Node's checks. Stock mode
 and official Node 24/26 addon builds cannot extract it: the latter lack the required
-forwarding export. CSP string-compilation enforcement is not connected, including
-`require-trusted-types-for` on eval/Function. Even custom Node's callback lacks compilation kind, original Function
+forwarding export. Custom/compat now enforces CSP's script-src/default-src
+compilation restrictions and reports violations through the existing callback.
+Stock and official addon modes cannot enforce these restrictions. The preceding
+Trusted Types validation remains unconnected on every backend, including
+`require-trusted-types-for` and default-policy checks on eval/Function. Thus
+`trusted-types-eval` does not yet guarantee trusted input. Even custom Node's callback lacks compilation kind, original Function
 parameter boundaries and argument identities, and reports `Function()`'s empty
 body as CodeLike. The [four regressions](../node-compat/test/code-generation-gaps.test.cjs)
 remain approved expected failures; full Trusted Types Function support is not
