@@ -7,24 +7,32 @@ module.exports = native => ({
   setPropertyHandlers: function setPropertyHandlers(object, handlers) {
     native.setPropertyDelegate(object, nativePropertyHandlers(handlers));
   },
-  setGlobalObject: function setGlobalObject(handle, object) {
+  setGlobalObject: function setGlobalObject(handle, object, indexedProperties) {
     if (!native.isContext(handle) || handle.globalObject !== object) {
       throw new TypeError('Expected the context\'s allocated global object');
     }
-    native.setPropertyDelegate(handle.globalProxy, propertyHandlers(object));
+    native.setPropertyDelegate(handle.globalProxy, propertyHandlers(object, indexedProperties));
   },
 });
 
-function propertyHandlers(delegate) {
+function propertyHandlers(delegate, indexedProperties) {
+  const indexedDescriptor = key => typeof key === 'string' && isIndex(key)
+    ? indexedProperties?.getOwnPropertyDescriptor(Number(key)) : undefined;
   return nativePropertyHandlers({
-    has: key => Reflect.has(delegate, key),
+    has: key => indexedDescriptor(key) !== undefined || Reflect.has(delegate, key),
     // Native global callbacks omit the receiver to use the per-context target.
-    get: (key, receiver = delegate) => Reflect.get(delegate, key, receiver),
+    get: (key, receiver = delegate) => {
+      const descriptor = indexedDescriptor(key);
+      if (descriptor === undefined) return Reflect.get(delegate, key, receiver);
+      if ('value' in descriptor) return descriptor.value;
+      return descriptor.get === undefined ? undefined : Reflect.apply(descriptor.get, receiver, []);
+    },
     set: (key, value, receiver = delegate) => Reflect.set(delegate, key, value, receiver),
-    getOwnPropertyDescriptor: key => Reflect.getOwnPropertyDescriptor(delegate, key),
+    getOwnPropertyDescriptor: key => indexedDescriptor(key) ?? Reflect.getOwnPropertyDescriptor(delegate, key),
     defineProperty: (key, descriptor) => Reflect.defineProperty(delegate, key, descriptor),
     deleteProperty: key => Reflect.deleteProperty(delegate, key),
-    ownKeys: () => Reflect.ownKeys(delegate),
+    ownKeys: () => indexedProperties === undefined ? Reflect.ownKeys(delegate)
+      : [...new Set([...indexedProperties.ownKeys().map(String), ...Reflect.ownKeys(delegate)])],
   });
 }
 function nativePropertyHandlers(handlers) {

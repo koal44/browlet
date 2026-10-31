@@ -87,6 +87,11 @@ export class HTMLIFrameElementImpl extends HTMLElementImpl {
     this.lazyLoadResumptionSteps = null;
     steps?.();
   }
+
+  protected override insertionSteps(): void {
+    this.nodeDocument.recordNavigableContainerInsertion(this);
+    super.insertionSteps();
+  }
 }
 
 /*

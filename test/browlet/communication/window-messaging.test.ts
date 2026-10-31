@@ -437,7 +437,7 @@ describe('Window.postMessage (§9.3)', () => {
       'nested D', 'outer B', 'after throw B', 'after return A',
     ]);
     expect(c.events.map((event) =>
-      [a.window, b.window, c.window, d.window].indexOf(event.source as Window),
+      [a.window, b.window, c.window, d.window].findIndex((window) => window === event.source),
     )).toEqual([3, 1, 1, 0]);
   });
 });

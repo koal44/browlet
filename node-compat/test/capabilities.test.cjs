@@ -124,6 +124,20 @@ test('successive contexts reuse the proxy with fresh globals and intrinsics', ()
   assert.equal(compat.runInContext('globalThis', third), proxy);
 });
 
+test('retained functions can access a reused proxy without losing their original globals', () => {
+  const first = compat.createContextHandle();
+  first.globalProxy.page = 'old';
+  const read = compat.runInContext('() => [page, globalThis.page]', first);
+  first.detachGlobal();
+  const second = compat.createContextHandle({ reuseGlobalProxyFrom: first });
+  second.globalProxy.page = 'new';
+  assert.deepEqual(Array.from(read()), ['old', 'new']);
+  second.detachGlobal();
+  const third = compat.createContextHandle({ reuseGlobalProxyFrom: second });
+  third.globalProxy.page = 'third';
+  assert.deepEqual(Array.from(read()), ['old', 'third']);
+});
+
 test('a live reused proxy does not retain the previous realm', async () => {
   // Adapted from 07301f053's GC regression; keep the replacement alive.
   function replace() {
@@ -238,6 +252,47 @@ test('reusing a global rejects a different allocation layout without consuming t
   assert.equal(second.globalProxy, proxy);
   assert.throws(() => compat.setGlobalObject(second, {}), /allocated global object/);
   assert.throws(() => compat.setPropertyDelegate({}, {}), /no property delegation support/);
+});
+
+test('indexed global reads stay live while ordinary properties retain their per-context owner', () => {
+  const children = [{}];
+  const first = allocate(children);
+  first.globalObject.page = 'old';
+  first.globalObject[0] = 'shadowed ordinary property';
+  assert.equal(first.globalProxy[0], children[0]);
+  assert.equal(compat.runInContext('0 in globalThis && Object.hasOwn(globalThis, 0)', first), true);
+  assert.deepEqual(Object.getOwnPropertyDescriptor(first.globalProxy, '0'), {
+    value: children[0], writable: false, enumerable: true, configurable: true,
+  });
+  children.push({});
+  const indices = Reflect.ownKeys(first.globalProxy).filter(key => key === '0' || key === '1');
+  assert.deepEqual(indices, ['0', '1']);
+  assert.equal(first.globalProxy[1], children[1]);
+  children.splice(0, 1);
+  assert.equal(first.globalProxy[0], children[0]);
+  assert.equal(Reflect.has(first.globalProxy, '1'), false);
+
+  const read = compat.runInContext('() => [page, globalThis.page, globalThis[0]]', first);
+  first.detachGlobal();
+  const replacement = [{}];
+  const second = allocate(replacement, first);
+  second.globalObject.page = 'new';
+  assert.equal(second.globalProxy, first.globalProxy);
+  assert.deepEqual(Array.from(read()), ['old', 'new', replacement[0]]);
+  assert.equal(first.globalObject.page, 'old');
+
+  function allocate(values, previous) {
+    const handle = compat.createContextHandle({
+      globalPrototypeChain: ['immutable'], reuseGlobalProxyFrom: previous,
+    });
+    handle.globalObject.globalThis = handle.globalProxy;
+    compat.setGlobalObject(handle, handle.globalObject, {
+      getOwnPropertyDescriptor: index => index < values.length
+        ? { value: values[index], writable: false, enumerable: true, configurable: true } : undefined,
+      ownKeys: () => values.map((_, index) => index),
+    });
+    return handle;
+  }
 });
 
 test('allocated globals and their property delegates do not retain dead contexts', async () => {

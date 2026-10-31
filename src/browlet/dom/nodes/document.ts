@@ -215,6 +215,10 @@ export class DocumentImpl extends NodeImpl {
 
   /** Associated browsing context, or null for a detached document. */
   #browsingContext: BrowsingContext | null = null;
+  /** Most recent connected insertion of each navigable container, independent of child creation. */
+  #navigableContainerInsertionOrder = new WeakMap<ElementImpl, number>();
+  /** Next ordinal for connected container insertion in this document. */
+  #nextNavigableContainerInsertionOrder = 0;
   /** First base element with an href attribute, whose frozen URL supplies the base. */
   #firstBaseElement: HTMLBaseElementImpl | null = null;
   /** First element child, maintained before tree mutation participants run. */
@@ -1469,6 +1473,27 @@ export class DocumentImpl extends NodeImpl {
       ) navigables.push(node.contentNavigable);
     }
     return navigables;
+  }
+
+  /** Select a live child by its container's insertion order, without changing document tree order. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#windowproxy-getownproperty
+  // SPEC_MISMATCH: WindowProxy.[[GetOwnProperty]](P)
+  getIndexedChildNavigable(index: number): Navigable | undefined {
+    const children = this.getDocumentTreeChildNavigables();
+    if (index >= children.length) return undefined;
+    children.sort((a, b) => {
+      const aOrder = this.#navigableContainerInsertionOrder.get(a.container!)!;
+      const bOrder = this.#navigableContainerInsertionOrder.get(b.container!)!;
+      return aOrder - bOrder;
+    });
+    return children[index];
+  }
+
+  /** Record a container's connection even when its child navigable has not been created yet. */
+  recordNavigableContainerInsertion(container: HTMLIFrameElementImpl | HTMLObjectElementImpl | HTMLFrameElementImpl): void {
+    if (container.isConnected) {
+      this.#navigableContainerInsertionOrder.set(container, this.#nextNavigableContainerInsertionOrder++);
+    }
   }
 
   /** Whether this document is active throughout its navigable ancestry. */

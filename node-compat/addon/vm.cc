@@ -282,7 +282,12 @@ void Detach(const FunctionCallbackInfo<Value>& args) {
   }
   auto realm = handle->context.Get(isolate);
   auto proxy = realm->Global();
+  auto security_token = realm->GetSecurityToken();
   realm->DetachGlobal();
+  // Detachment can replace the embedder token. Retained functions must still
+  // access a reused proxy under the context's original engine access policy.
+  // HTML origin checks remain the binding's responsibility.
+  realm->SetSecurityToken(security_token);
   handle->state = ContextHandle::kDetached;
   args.GetReturnValue().Set(proxy);
 }

@@ -21,6 +21,75 @@ describe('WindowProxy foundations', () => {
   });
 });
 
+describe('WindowProxy receivers', () => {
+  it('preserves the default and explicit receiver for author accessors', async () => {
+    const browser = new Browlet({ route: () => '' });
+    expect(await browser.evaluate(() => {
+      const key = Symbol('accessor');
+      const receiver = {};
+      const setterReceivers: unknown[] = [];
+      let setterValue: unknown;
+      Object.defineProperty(window, key, {
+        get(this: object) { return this; },
+        set(this: object, value: unknown) { setterReceivers.push(this); setterValue = value; },
+        configurable: true,
+      });
+      const defaultGet = Reflect.get(window, key) === window;
+      const explicitGet = Reflect.get(window, key, receiver) === receiver;
+      const defaultSet = Reflect.set(window, key, 'default');
+      const explicitSet = Reflect.set(window, key, 'explicit', receiver);
+      return [
+        defaultGet, explicitGet, defaultSet, setterReceivers[0] === window,
+        explicitSet, setterReceivers[1] === receiver, setterValue,
+      ];
+    })).toEqual([true, true, true, true, true, true, 'explicit']);
+  });
+
+  it('writes data properties to the supplied receiver and respects its restrictions', async () => {
+    const browser = new Browlet({ route: () => '' });
+    expect(await browser.evaluate((): unknown[] => {
+      const key = Symbol('writable');
+      const absent = Symbol('absent');
+      Object.defineProperty(window, key, { value: 1, writable: true, configurable: true });
+      const receiver = Object.create(window) as object;
+      const written = Reflect.set(window, key, 2, receiver);
+      const created = Reflect.set(window, absent, 3, receiver);
+      const frozen = Object.freeze({});
+      return [
+        written, created,
+        Object.getOwnPropertyDescriptor(receiver, key)?.value,
+        Object.getOwnPropertyDescriptor(receiver, absent)?.value,
+        Reflect.get(window, key), Object.hasOwn(window, absent),
+        Reflect.set(window, key, 4, frozen), Reflect.set(window, key, 5, 0),
+        Reflect.get(window, key),
+      ];
+    })).toEqual([true, true, 2, 3, 1, false, false, false, 1]);
+  });
+
+  it('rejects a derived object as the receiver of a Window IDL getter', async () => {
+    const browser = new Browlet({ route: () => '' });
+    expect(await browser.evaluate(() => {
+      const receiver = Object.create(window) as object;
+      try { Reflect.get(window, 'document', receiver); }
+      catch (error) { return error instanceof TypeError; }
+      return false;
+    })).toBe(true);
+  });
+
+  it('keeps stock-VM global receiver aliases valid across navigation', async () => {
+    const browser = new Browlet({ route: () => '' });
+    const proxy = browser.window;
+    const oldGlobal = getRelevantRealm(proxy).globalProxy;
+    expect(Reflect.get(oldGlobal, 'window')).toBe(proxy);
+
+    await browser.navigate('https://example.test/next');
+    const newGlobal = getRelevantRealm(proxy).globalProxy;
+    expect(Reflect.get(oldGlobal, 'window')).toBe(proxy);
+    expect(Reflect.get(newGlobal, 'window')).toBe(proxy);
+    expect(browser.window).toBe(proxy);
+  });
+});
+
 describe('WindowProxy extensibility', () => {
   it('rejects preventing extensions without disturbing property access', () => {
     const browser = new Browlet({ route: () => '' });

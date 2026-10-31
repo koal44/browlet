@@ -12,7 +12,7 @@ import {
   type AddonContextHandle, type AddonMicrotaskQueueHandle, type ContextEvaluationOptions,
 } from './node-addons';
 import type {
-  CollectionIteratorKind, CompiledScript, GlobalAllocation, GlobalPrototypeKind, GlobalProxy,
+  CollectionIteratorKind, CompiledScript, GlobalAllocation, GlobalIndexedProperties, GlobalPrototypeKind, GlobalProxy,
   JSFunction, JSIteratorResult, JSRealm,
 } from './realm';
 import type { ImportModuleDynamically } from './modules';
@@ -189,11 +189,11 @@ export function setPropertyDelegate(object: object, delegate: object): void {
   addon.setPropertyDelegate(object, delegate);
 }
 
-export function setGlobalObject(context: VMContext, object: object): void {
+export function setGlobalObject(context: VMContext, object: object, indexedProperties?: GlobalIndexedProperties): void {
   if (!addon.setGlobalObject) {
     throw new InternalError('Node backend does not provide setGlobalObject');
   }
-  addon.setGlobalObject(context, object);
+  addon.setGlobalObject(context, object, indexedProperties);
 }
 
 export function detachContext(context: VMContext): GlobalProxy {

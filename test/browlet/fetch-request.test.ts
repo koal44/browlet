@@ -3,7 +3,7 @@ import { UserAgent } from '../../src/browlet/user-agent';
 
 import { getBindingContext, getRelevantRealm } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
-import type { HTMLBaseElement, Request, RequestInit, Window } from '../../src/browlet/platform';
+import type { HTMLBaseElement, Request, RequestInit, Window, WindowProxy } from '../../src/browlet/platform';
 import { PolicyContainer } from '../../src/browlet/browsing/policy/container';
 import { CSPDirectives, CSPDirectiveValue } from '../../src/browlet/browsing/policy/csp/directives';
 import { CSPList } from '../../src/browlet/browsing/policy/csp/list';
@@ -42,7 +42,7 @@ describe('Fetch Request construction', () => {
   it('resolves URLs and referrers using the document API base URL', async () => {
     const browlet = new Browlet({ route: () => '' });
     await browlet.navigate('https://example.test/base/page');
-    const window = browlet.window as Window & Pick<typeof globalThis, 'TypeError'>;
+    const window = browlet.window as WindowProxy & Pick<typeof globalThis, 'TypeError'>;
     const request = new window.Request('resource', { referrer: '../from', referrerPolicy: 'origin' });
     expect(request.url).toBe('https://example.test/base/resource');
     expect(request.referrer).toBe('https://example.test/from');
@@ -56,7 +56,7 @@ describe('Fetch Request construction', () => {
   it('uses the document base element when resolving Request URLs', async () => {
     const browlet = new Browlet({ route: () => '<base href="https://example.test/base/">' });
     await browlet.navigate('https://example.test/page');
-    const window = browlet.window as Window & Pick<typeof globalThis, 'TypeError'>;
+    const window = browlet.window;
     expect(new window.Request('resource').url).toBe('https://example.test/base/resource');
     const base = window.document.getElementsByTagName('base')[0] as HTMLBaseElement;
     base.href = '/changed/';
@@ -406,7 +406,7 @@ describe('Fetch client population with HTML settings', () => {
   it('checks populated integrity policies and submits typed reports using the actual Window Document URL', async () => {
     const browlet = new Browlet({ route: () => '<base href="https://resource.test/assets/">' });
     await browlet.navigate('https://document.test/page#fragment');
-    const window = browlet.window as Window & Pick<typeof globalThis, 'TypeError'>;
+    const window = browlet.window;
     const realm = getRelevantRealm(window);
     const env = realm.env;
     const response = new FetchResponse();
@@ -554,8 +554,8 @@ describe('Fetch client settings ownership', () => {
 
 const url = 'https://example.test/start';
 
-function createWindow(): Window & Pick<typeof globalThis, 'TypeError'> {
-  return new Browlet({ route: () => '' }).window as Window & Pick<typeof globalThis, 'TypeError'>;
+function createWindow(): WindowProxy & Pick<typeof globalThis, 'TypeError'> {
+  return new Browlet({ route: () => '' }).window as WindowProxy & Pick<typeof globalThis, 'TypeError'>;
 }
 
 function implementation(window: Window, request: Request): RequestImpl {

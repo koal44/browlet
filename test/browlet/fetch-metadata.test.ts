@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { UserAgent } from '../../src/browlet/user-agent';
 import { getBindingContext, getRelevantRealm } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
-import type { Window } from '../../src/browlet/platform';
 import { FetchRequest, RequestImpl } from '../../src/fetch/request';
 import { createOpaqueOrigin } from '../../src/url/origin';
 import { obtainURLOrigin, parseURL } from '../../src/url/url';
@@ -11,7 +10,7 @@ describe('Browlet Fetch Metadata integration', () => {
   it('uses projected Request inputs and keeps the outgoing headers separate from author headers', async () => {
     const browlet = new Browlet({ route: () => '' });
     await browlet.navigate('https://example.test/');
-    const window = browlet.window as Window & typeof globalThis;
+    const window = browlet.window;
     const request = new window.Request('/resource', { headers: { 'Sec-Fetch-Site': 'none' } });
     const context = getBindingContext(getRelevantRealm(window));
     const source = context.unwrap(request, RequestImpl)!.getRequest();

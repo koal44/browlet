@@ -27,7 +27,9 @@ arrive as a bounded legacy slice.
 The [Window length audit](../../browsing/window/ROADMAP.md#html-7222-indexed-access)
 adds `HTMLFrameElementImpl.contentNavigable` as initially-null retained state.
 Legacy frame creation/destruction must maintain it; the field does not implement
-frame loading, public contentWindow/contentDocument, or insertion-order tracking.
+frame loading or public contentWindow/contentDocument. The
+[WindowProxy indexed-read pass](../../browsing/window/ROADMAP.md#html-723-indexed-child-reads)
+records connected container insertion order through the frame's DOM insertion steps.
 
 ## Removal condition
 

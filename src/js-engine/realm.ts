@@ -350,6 +350,14 @@ export class JSRealm {
     setPropertyDelegate(object, delegate);
   }
 
+  /** Add live indexed own properties to this native realm's existing global delegate. */
+  setGlobalIndexedProperties(properties: GlobalIndexedProperties): void {
+    if (this.#globalAllocation === undefined) {
+      throw new InternalError('Indexed global delegation requires a native global allocation');
+    }
+    setGlobalObject(this.#vmContext, this.#globalObject, properties);
+  }
+
   /** Create a realm-owned function that forwards calls and optional construction to host steps. */
   createFunction<Result>(
     steps: RealmFunctionSteps<Result>,
@@ -859,6 +867,14 @@ export type GlobalObject = object;
 
 /** Host-selected value of the realm's global this binding. */
 export type GlobalThis = object;
+
+/** Live indexed reads supplied by the owner of a native global's ordinary property target. */
+export type GlobalIndexedProperties = {
+  /** Describe a supported index; undefined preserves ordinary lookup for an unsupported index. */
+  getOwnPropertyDescriptor(index: number): PropertyDescriptor | undefined;
+  /** Enumerate supported indices before the ordinary global keys. */
+  ownKeys(): number[];
+};
 
 declare const globalProxyBrand: unique symbol;
 

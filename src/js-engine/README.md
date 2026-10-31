@@ -158,6 +158,10 @@ is the host-selected this value. `GlobalObject` and `GlobalThis` name those role
 without requiring a particular property shape. Plain Node keeps the modeled
 global bridge. Neither path supplies browser cross-origin security. Detachment
 cancels queued V8 work, so HTML owns the checkpoint-before-reuse boundary.
+The addon preserves the detached context's existing embedder token for retained
+functions accessing a reused proxy. `setGlobalIndexedProperties()` supplements a
+native realm's fixed ordinary-property target with owner-supplied indexed reads
+and keys; it does not replace the target with a movable global-this object.
 
 Captured host intrinsics can throw host-realm errors. Buffer metadata operations
 translate detached/out-of-bounds DataView failures into Infra TypeError requests;

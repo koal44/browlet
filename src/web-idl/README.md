@@ -1018,7 +1018,11 @@ buffers, streams, and errors. Implementation tests use post-conversion values.
 interfaces, mixins, partials, callbacks, dictionaries, enums, and aliases. The
 caller supplies the complete declaration collection, including common definitions.
 Proxy shapes require an explicit `proxyInterfaces` mapping; recognition hooks
-cannot describe a TypeScript interface. An optional `exposure` selects global names,
+cannot describe a TypeScript interface. An entry can name the forwarded interface
+or specify `{ interface, indexedGetter }` to add a readonly numeric index with an
+output type and `undefined` for absent indices. This describes the proxy itself;
+it does not add an IDL getter, iterator, or constructor to the forwarded interface.
+An optional `exposure` selects global names,
 secure-context status, and isolation. By default the output includes conditional
 facilities; types do not guarantee their availability in every realm.
 

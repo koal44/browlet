@@ -7,6 +7,18 @@ import type * as Platform from '../../../../src/browlet/platform';
 // These are independent author-side examples. No lib.dom or Node declarations participate.
 declare const window: WindowProxy;
 
+const childWindow: WindowProxy | undefined = window[0];
+const grandchildWindow: WindowProxy | undefined = childWindow?.[0];
+const childThroughFrames: WindowProxy | undefined = window.frames[0];
+// @ts-expect-error an index can be absent
+const requiredChild: WindowProxy = window[0];
+// @ts-expect-error child indices cannot be assigned
+window[0] = window;
+// @ts-expect-error WindowProxy has no iterator
+window[Symbol.iterator]();
+// @ts-expect-error numeric child access does not declare arbitrary named properties
+window.undeclaredChildName;
+
 const global: Window = window.window;
 const document: Document = global.document;
 const originAgentCluster: boolean = window.originAgentCluster;

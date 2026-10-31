@@ -74,6 +74,18 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   across navigation. This preserves its forwarding target's invariants; native
   extensibility behavior remains separately unvalidated in this slice. See the
   [WindowProxy audit](browlet/browsing/window/ROADMAP.md#html-723-windowproxy-foundations-and-extensibility).
+  Valid child-index reads, descriptors, and presence checks work on both backends
+  in container insertion order. Own keys include the live child-index prefix;
+  ordinary keys still follow it without foreign-caller filtering. Automatic indexed
+  writes/deletion and missing-index security checks remain unfinished. Native global proxies
+  use owner-supplied indexed callbacks alongside their original per-context Window
+  target. Native accessor receiver forwarding remains incorrect: explicit receivers
+  are replaced by that Window target, including invalid derived receivers.
+  Stock get/set forwarding preserves the receiver, with exact associated VM globals
+  mapped to the public proxy so free global names still reach Window bindings.
+  Retired VM globals remain weakly recognized across navigation. Other receivers,
+  including objects inheriting from Window, are not mapped. Duplicate ordinary
+  numeric keys are suppressed in enumeration until numeric definition paths are fixed.
 - **Browser origin security remains unfinished on every backend.** A native
   WindowProxy and Node's shared security token provide identity and embedder
   access, not same-/cross-origin policy. Web IDL invocation now checks Window and
@@ -521,8 +533,8 @@ explicit standard content-handler list used for sink metadata.
   checks. Native entry now fixes the A-to-B-to-C sender fixture on addon backends;
   stock Node still reports A while expecting B and retains the expected failure.
   Binding has cross-origin invocation checks and
-  caller-bound descriptor helpers, but WindowProxy property access still needs to
-  select those descriptors; `targetOrigin` filtering does not secure that access.
+  caller-bound descriptor lookup and Get, but automatic WindowProxy property access
+  still needs to select that binding; `targetOrigin` filtering does not secure that access.
   WindowEventHandlers remain unimplemented. MessagePort transfer is implemented. See the
   [§9.3 dependencies](browlet/communication/ROADMAP.md#93-cross-document-messaging).
 
@@ -705,9 +717,21 @@ see the [Window audit](browlet/browsing/window/ROADMAP.md#html-7221-opening-and-
 `Window.length` now counts current document-tree child navigables, using retained
 iframe/object/frame associations. Those associations still require internal
 creation/destruction producers; appending a container alone creates no child.
-Numeric `window[index]` lookup remains unfinished WindowProxy work, including
-container insertion order and cross-origin behavior; see the
-[indexed-access audit](browlet/browsing/window/ROADMAP.md#html-7222-indexed-access).
+Valid numeric `window[index]` lookup uses container insertion order on the stock
+proxy, and enumeration includes the current index prefix. Caller-bound own-descriptor
+lookup now implements missing-index security, declared cross-origin members, named
+children, and fallback keys. Caller-bound property definition rejects same-origin
+numeric indices and all foreign definitions. Caller-bound Get/Set run the COOP
+access check before property access. Get preserves the receiver through same-origin
+prototype lookup; Set rejects same-origin indices and requires a permitted setter
+for foreign writes. Caller-bound Delete protects present child indices and rejects
+all foreign deletions. Caller-bound key lists now select the ordinary or cross-origin
+tail after the live index prefix; missing focus/blur declarations still leave the
+foreign list incomplete. Location writes still reach unfinished navigation. Automatic
+traps still lack caller selection, so these checks do not yet enforce ordinary author
+property access.
+Automatic indexed assignment and deletion also remain unfinished; see the
+[WindowProxy audit](browlet/browsing/window/ROADMAP.md#html-723-indexed-child-reads).
 `Window[name]` resolves eligible names/IDs, stable live collections, and retained
 child navigables through Web IDL's named-properties prototype. Child creation and
 template contents still need their producers. HTML's same-origin-only child-name
@@ -757,6 +781,14 @@ errors remain unfinished. COOP navigation reporting throws when a configured
 endpoint needs a report in a group shared with another context; the required
 URL-scoped queue and access reports are explicit dependencies in the
 [policy audit](browlet/browsing/policy/ROADMAP.md#html-713-cross-origin-opener-policies).
+The caller-bound access check now filters declared cross-origin names, checks live
+origin ancestry and virtual groups, and classifies opener relationships. Caller-bound
+WindowProxy Get/Set invoke it before property access, including permitted child reads
+and rejected writes.
+Automatic Get/Set traps still need that integration. The dispatcher still throws
+for eligible accesses; tests intercept it to inspect inputs and ordering, without
+establishing report construction or delivery. Missing Window declarations,
+including focus/blur, also leave the annotation-derived property list incomplete.
 
 COEP navigation and dedicated-worker inheritance checks and observer reports are
 implemented, but automatic child creation/destruction, navigation network-error handling,

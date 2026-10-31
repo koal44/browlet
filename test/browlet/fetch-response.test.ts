@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../src/browlet/browlet';
-import type { HTMLBaseElement, Window } from '../../src/browlet/platform';
+import type { HTMLBaseElement, WindowProxy } from '../../src/browlet/platform';
 
 describe('Fetch Response construction', () => {
   it('constructs a default response with a nullable body and mutable headers', () => {
@@ -81,7 +81,7 @@ describe('Fetch Response factories', () => {
   it('resolves redirect URLs against the factory realm and keeps headers immutable', async () => {
     const browlet = new Browlet({ route: () => '' });
     await browlet.navigate('https://example.test/dir/page');
-    const window = browlet.window as Window & typeof globalThis;
+    const window = browlet.window as WindowProxy & Pick<typeof globalThis, 'TypeError' | 'RangeError'>;
     const response = window.Response.redirect('../next#fragment');
     expect(response).toMatchObject({ type: 'default', status: 302, url: '', redirected: false, body: null });
     expect(response.headers.get('Location')).toBe('https://example.test/next#fragment');
@@ -98,8 +98,8 @@ describe('Fetch Response factories', () => {
     const other = new Browlet({ route: () => '<base href="/other/">' });
     await owner.navigate('https://owner.test/page');
     await other.navigate('https://other.test/page');
-    const ownerWindow = owner.window as Window & typeof globalThis;
-    const otherWindow = other.window as Window & typeof globalThis;
+    const ownerWindow = owner.window;
+    const otherWindow = other.window;
     expect(otherWindow.Response.redirect.call(ownerWindow.Response, 'next').headers.get('Location'))
       .toBe('https://other.test/other/next');
     (otherWindow.document.getElementsByTagName('base')[0] as HTMLBaseElement).href = '/changed/';
@@ -212,6 +212,6 @@ describe('Fetch Response cloning and realm ownership', () => {
   });
 });
 
-function createWindow(): Window & typeof globalThis {
-  return new Browlet({ route: () => '' }).window as Window & typeof globalThis;
+function createWindow(): WindowProxy & Pick<typeof globalThis, 'TypeError' | 'RangeError'> {
+  return new Browlet({ route: () => '' }).window as WindowProxy & Pick<typeof globalThis, 'TypeError' | 'RangeError'>;
 }

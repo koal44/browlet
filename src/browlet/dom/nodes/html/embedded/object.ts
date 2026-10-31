@@ -67,6 +67,11 @@ export class HTMLObjectElementImpl extends HTMLElementImpl {
     }
     return true;
   }
+
+  protected override insertionSteps(): void {
+    this.nodeDocument.recordNavigableContainerInsertion(this);
+    super.insertionSteps();
+  }
 }
 
 /*

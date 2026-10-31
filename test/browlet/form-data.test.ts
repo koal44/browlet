@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { getBindingContext, getRelevantRealm } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
-import type { Window } from '../../src/browlet/platform';
+import type { WindowProxy } from '../../src/browlet/platform';
 import { FileImpl } from '../../src/file/index';
 import { FormDataImpl } from '../../src/xhr/index';
 
@@ -198,9 +198,8 @@ describe('XMLHttpRequest FormData projection', () => {
   });
 });
 
-function createWindow(): Window & typeof globalThis {
-  return new Browlet({ route: () => '' }).window as
-    Window & typeof globalThis;
+function createWindow(): WindowProxy {
+  return new Browlet({ route: () => '' }).window;
 }
 
 function construct(

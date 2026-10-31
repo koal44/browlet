@@ -4,7 +4,7 @@ export {
   COEPInheritanceViolationReportBodyImpl, type COEPInheritanceViolationReportBody, coepInheritanceViolationReportBodyIDL,
 } from './coep';
 export { PolicyContainer } from './container';
-export { OpenerPolicy, sanitizeURLForReport, type OpenerPolicyValue } from './coop';
+export { OpenerPolicy, sanitizeURLForReport, type OpenerPolicyValue, type OpenerPolicyAccessReportParams } from './coop';
 export { HSTSStore, HSTSPolicy, type HSTSHost } from './hsts';
 export {
   IntegrityPolicy, IntegrityViolationReportBodyImpl, integrityViolationReportBodyIDL,

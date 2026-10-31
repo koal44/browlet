@@ -12,7 +12,7 @@ export * from './buffers';
 export { codeUnitsToString, isomorphicDecode, isomorphicEncode } from './byte-string';
 export { computeHash, randomUUID } from './crypto';
 export type {
-  GlobalAllocation, GlobalObject, GlobalProxy, GlobalThis, JSFunction, JSIteratorResult,
+  GlobalAllocation, GlobalIndexedProperties, GlobalObject, GlobalProxy, GlobalThis, JSFunction, JSIteratorResult,
   JSMethod, RealmFunctionOptions, RealmFunctionSteps,
 } from './realm';
 export type {

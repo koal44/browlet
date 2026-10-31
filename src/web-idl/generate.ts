@@ -14,9 +14,17 @@ import { matchesExposure } from './assembly/exposure';
 /** Options for a module containing platform types, without runtime exports or ambient globals. */
 export interface PlatformTypeOptions {
   /** Interface surface forwarded by each declared proxy; recognition hooks cannot describe that shape. */
-  proxyInterfaces?: Record<string, string>;
+  proxyInterfaces?: Record<string, string | ProxyTypeOptions>;
   /** Select one exposure profile; omission describes all declared members and conditional facilities. */
   exposure?: Pick<WebIDLRealm, 'globalNames' | 'secureContext' | 'crossOriginIsolated'>;
+}
+
+/** Additional author-facing shape for a proxy whose properties are not declared by IDL. */
+export interface ProxyTypeOptions {
+  /** Declared interface forwarded by the proxy. */
+  interface: string;
+  /** Readonly numeric index result; generated reads also include undefined for absent indices. */
+  indexedGetter?: WebIDLType;
 }
 
 /**
@@ -69,6 +77,10 @@ class PlatformTypeGenerator {
 
     // Unused typedef bodies still need types for their generated declarations.
     for (const assembled of assembly.typedefs.values()) assembly.getIDLType(assembled.primary.type);
+    for (const name of assembly.proxyObjects.keys()) {
+      const surface = options.proxyInterfaces?.[name];
+      if (typeof surface === 'object' && surface.indexedGetter) assembly.getIDLType(surface.indexedGetter);
+    }
     for (const [declaration, type] of assembly.typesByDeclaration) this.#collectTypeRefinements(declaration, type);
   }
 
@@ -86,11 +98,19 @@ class PlatformTypeGenerator {
       blocks.push(`export type ${this.#name(name)}${this.#typeParameters(assembled.primary.typeParameters)} = ${this.#type(this.#assembly.getIDLType(assembled.primary.type), 'input')};`);
     }
     for (const [name, assembled] of this.#assembly.proxyObjects) {
-      const target = this.#options.proxyInterfaces?.[name];
+      const surface = this.#options.proxyInterfaces?.[name];
+      const target = typeof surface === 'string' ? surface : surface?.interface;
       if (!target || !this.#assembly.interfaces.get(target)) {
         throw new InternalError(`Type generation needs a proxyInterfaces entry naming an interface for ${assembled.primary.name}`);
       }
-      blocks.push(`export type ${this.#name(name)} = ${this.#name(target)};`);
+      if (typeof surface === 'object' && surface.indexedGetter) {
+        const indexedType = this.#type(this.#assembly.getIDLType(surface.indexedGetter), 'output');
+        blocks.push(this.#interface(this.#name(name), [
+          `readonly [index: number]: ${indexedType} | undefined;`,
+        ], this.#name(target)));
+      } else {
+        blocks.push(`export type ${this.#name(name)} = ${this.#name(target)};`);
+      }
     }
     for (const assembled of this.#assembly.dictionaries.values()) {
       blocks.push(this.#dictionary(assembled, 'input', this.#name(assembled.primary.name)));

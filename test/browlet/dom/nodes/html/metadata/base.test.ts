@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../../../../src/browlet/browlet';
-import type { HTMLBaseElement, Window } from '../../../../../../src/browlet/platform';
+import type { HTMLBaseElement, WindowProxy } from '../../../../../../src/browlet/platform';
 import { getRelevantRealm } from '../../../../../support/browlet-binding';
 import { ShadowRootImpl } from '../../../../../../src/browlet/dom/nodes/shadow-root';
 import type { DocumentImpl } from '../../../../../../src/browlet/dom/nodes/document';
@@ -12,7 +12,7 @@ describe('HTMLBaseElement', () => {
   it('exposes parsed and script-created base elements with reflected href and target', async () => {
     const browlet = new Browlet({ route: () => '<base href="../assets/" target="frame">' });
     await browlet.navigate('https://example.test/dir/page');
-    const window = browlet.window as Window & typeof globalThis;
+    const window = browlet.window as WindowProxy & Pick<typeof globalThis, 'TypeError'>;
     const document = window.document;
     const base = document.getElementsByTagName('base')[0] as HTMLBaseElement;
     expect(base).toBeInstanceOf(window.HTMLBaseElement);

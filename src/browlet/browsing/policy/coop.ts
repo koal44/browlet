@@ -2,7 +2,7 @@ import { InternalError } from '../../../infra/index';
 import { areSameOrigin, copyURL, serializeURL, type Origin, type URLRecord } from '../../../url/index';
 import type { FetchResponse } from '../../../fetch/index';
 
-import type { BrowletEnvironmentBase } from '../../environment';
+import type { BrowletEnvironment, BrowletEnvironmentBase } from '../../environment';
 
 import { EmbedderPolicy } from './coep';
 
@@ -102,6 +102,16 @@ export class OpenerPolicy {
         responseCOOP.reportOnlyValue, activeDocumentCOOP.value);
   }
 
+  /** Dispatch both directions of a reportable browsing-context access. */
+  // https://html.spec.whatwg.org/multipage/browsers.html#coop-violation-access
+  // SPEC_MISMATCH: queue violation reports for accesses (accessorAccessedRelationship, accessorCOOP, accessedCOOP, accessorURL, accessedURL, accessorInitialURL, accessedInitialURL, accessorOrigin, accessedOrigin, accessorCreatorOrigin, accessedCreatorOrigin, accessorReferrer, accessedReferrer, propertyName, environment)
+  static queueAccessReports(_params: OpenerPolicyAccessReportParams, _env: BrowletEnvironment): void {
+    // TODO: select the two report producers, apply their endpoint and disclosure
+    // rules, capture source location, and submit through URL-scoped Reporting.
+    // SPEC_CLASH(coop-access-report-type): HTML gives all six access bodies the type "access-to-opener"; pending review.
+    throw new InternalError('COOP access report dispatch is not implemented');
+  }
+
   /** Select the configured report destination for this disposition. */
   reportingEndpointForDisposition(disposition: 'enforce' | 'reporting'): string | null {
     // SPEC_CLASH(coop-report-endpoint): use disposition-specific endpoints, as WebKit does; HTML always names the enforced endpoint.
@@ -146,3 +156,29 @@ export type OpenerPolicyValue =
   | 'same-origin'
   | 'same-origin-plus-COEP'
   | 'noopener-allow-popups';
+
+/** Inputs retained by the access check for the report dispatcher. */
+export interface OpenerPolicyAccessReportParams {
+  /** Relationship of the accessor to the accessed top-level context. */
+  relationship: 'accessor-is-opener' | 'accessor-is-openee' | 'none';
+  /** Policies of the two top-level active documents. */
+  accessorCOOP: OpenerPolicy;
+  accessedCOOP: OpenerPolicy;
+  /** Current URLs of the two documents participating in the access. */
+  accessorURL: URLRecord;
+  accessedURL: URLRecord;
+  /** Initial top-level URLs, retaining null before navigation records them. */
+  accessorInitialURL: URLRecord | null;
+  accessedInitialURL: URLRecord | null;
+  /** Current origins of the two documents participating in the access. */
+  accessorOrigin: Origin;
+  accessedOrigin: Origin;
+  /** Opener origins captured at top-level context creation, if present. */
+  accessorCreatorOrigin: Origin | null;
+  accessedCreatorOrigin: Origin | null;
+  /** Referrers of the two top-level active documents. */
+  accessorReferrer: string;
+  accessedReferrer: string;
+  /** Cross-origin accessible name whose access is being reported. */
+  propertyName: string;
+}

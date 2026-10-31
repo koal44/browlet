@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getBindingContext, getRelevantRealm } from '../../support/browlet-binding';
 import { Browlet } from '../../../src/browlet/browlet';
-import type { Window } from '../../../src/browlet/platform';
+import type { WindowProxy } from '../../../src/browlet/platform';
 import { ReportImpl, ReportBodyImpl } from '../../../src/browlet/reporting/report';
 import type { IntegrityViolationReportBody } from '../../../src/fetch/policy';
 import { reference } from '../../../src/web-idl/index';
@@ -147,7 +147,4 @@ type ReportObject = {
 
 type ReportBodyObject = { toJSON(): object; };
 
-type ReportingWindow = Window & typeof globalThis & {
-  ReportBody: new () => ReportBodyObject;
-  IntegrityViolationReportBody: new () => ReportBodyObject & IntegrityViolationReportBody;
-};
+type ReportingWindow = WindowProxy & Pick<typeof globalThis, 'Object' | 'JSON' | 'TypeError'>;

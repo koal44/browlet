@@ -1,12 +1,15 @@
 import { InternalError } from '../../../infra/index';
-import { isCallable } from '../../../js-engine/index';
+import { isCallable, isDataDescriptor } from '../../../js-engine/index';
 import {
   isArrayIndex, type AssembledInterface, type BindingContext, type ExtendedAttribute,
   type PlatformRecord, type SecurityCheckBinding, type SecurityCheckType,
 } from '../../../web-idl/index';
-import { areSameOriginDomain } from '../../../url/index';
+import { areSameOrigin, areSameOriginDomain, type Origin } from '../../../url/index';
 
+import { OpenerPolicy, type OpenerPolicyAccessReportParams } from '../../browsing/policy/index';
+import type { WindowProxyHandle } from '../../browsing/window/index';
 import type { BrowletEnvironment } from '../../environment';
+import type { BrowsingContext } from '../../browsing/navigation/index';
 
 /** HTML's cross-origin algorithms for interfaces marked [CrossOriginObject]. */
 // BINDING_INTEGRATION: Owns platform descriptors and invokes the original Web IDL member steps.
@@ -22,11 +25,167 @@ export class CrossOriginObjectBinding {
     this.#context = context;
   }
 
+  /** Look up a proxy's own descriptor in this caller's realm, using its current Window. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#windowproxy-getownproperty
+  // SPEC_MISMATCH: WindowProxy.[[GetOwnProperty]] (P)
+  getWindowProxyOwnProperty(property: string | symbol, proxy: WindowProxyHandle): PropertyDescriptor | undefined {
+    const window = proxy.associatedWindow;
+    const implementation = proxy.windowImplementation;
+    if (typeof property === 'string' && isArrayIndex(property)) {
+      const child = implementation.getAssociatedDocument().getIndexedChildNavigable(Number(property));
+      if (child !== undefined) {
+        return { value: child.activeWindowProxy.platform, writable: false, enumerable: true, configurable: true };
+      }
+      if (this.isPlatformObjectSameOrigin(window)) return undefined;
+      throw new this.#context.DOMException('Cross-origin index is not accessible', 'SecurityError');
+    }
+    if (this.isPlatformObjectSameOrigin(window)) return Reflect.getOwnPropertyDescriptor(window, property);
+    const descriptor = this.crossOriginGetOwnPropertyHelper(window, property);
+    if (descriptor !== undefined) return descriptor;
+    if (typeof property === 'string' && implementation.getChildNavigableTargetNames().has(property)) {
+      // Membership in the child-name set guarantees a WindowProxy result.
+      const child = implementation.getNamedProperty(property) as WindowProxyHandle;
+      return { value: child.platform, writable: false, enumerable: false, configurable: true };
+    }
+    return this.crossOriginPropertyFallback(property);
+  }
+
+  /** Define an own property from a descriptor record, using this caller and the proxy's current Window. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#windowproxy-defineownproperty
+  // SPEC_MISMATCH: WindowProxy.[[DefineOwnProperty]] (P, Desc)
+  defineWindowProxyOwnProperty(
+    property: string | symbol,
+    descriptor: PropertyDescriptor,
+    proxy: WindowProxyHandle,
+  ): boolean {
+    const window = proxy.associatedWindow;
+    if (!this.isPlatformObjectSameOrigin(window)) {
+      throw new this.#context.DOMException('Cross-origin property definition is denied', 'SecurityError');
+    }
+    if (typeof property === 'string' && isArrayIndex(property)) return false;
+    return Reflect.defineProperty(window, property, descriptor);
+  }
+
+  /** Read a proxy from this Window caller, preserving the supplied receiver. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#windowproxy-get
+  // SPEC_MISMATCH: WindowProxy.[[Get]] (P, Receiver)
+  getWindowProxy(property: string | symbol, receiver: unknown, proxy: WindowProxyHandle): unknown {
+    const window = proxy.associatedWindow;
+    const callerRealm = this.#context.getEnvironment().realm;
+    if (!callerRealm.isWindow()) throw new InternalError('WindowProxy Get requires a Window caller');
+    this.checkAccessShouldBeReported(
+      callerRealm.windowImplementation.browsingContext!, proxy.windowImplementation.browsingContext!, property,
+    );
+    const sameOrigin = this.isPlatformObjectSameOrigin(window);
+    const descriptor = this.getWindowProxyOwnProperty(property, proxy);
+    if (!sameOrigin) return this.#crossOriginGetWithDescriptor(descriptor, receiver);
+
+    // OrdinaryGet must use the proxy's descriptor, then continue at the Window prototype.
+    // https://tc39.es/ecma262/#sec-ordinaryget
+    if (descriptor === undefined) {
+      const parent = Reflect.getPrototypeOf(window);
+      return parent === null ? undefined : Reflect.get(parent, property, receiver);
+    }
+    if (isDataDescriptor(descriptor)) return descriptor.value;
+    if (!descriptor.get) return undefined;
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Supply the descriptor's receiver explicitly.
+    return Reflect.apply(descriptor.get, receiver, []);
+  }
+
+  /** Write a proxy from this Window caller, preserving the supplied value and receiver. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#windowproxy-set
+  // SPEC_MISMATCH: WindowProxy.[[Set]] (P, V, Receiver)
+  setWindowProxy(property: string | symbol, value: unknown, receiver: unknown, proxy: WindowProxyHandle): boolean {
+    const window = proxy.associatedWindow;
+    const callerRealm = this.#context.getEnvironment().realm;
+    if (!callerRealm.isWindow()) throw new InternalError('WindowProxy Set requires a Window caller');
+    this.checkAccessShouldBeReported(
+      callerRealm.windowImplementation.browsingContext!, proxy.windowImplementation.browsingContext!, property,
+    );
+    if (this.isPlatformObjectSameOrigin(window)) {
+      if (typeof property === 'string' && isArrayIndex(property)) return false;
+      // Unlike Get, OrdinarySet operates on the underlying Window.
+      return Reflect.set(window, property, value, receiver);
+    }
+    return this.#crossOriginSetWithDescriptor(this.getWindowProxyOwnProperty(property, proxy), value, receiver);
+  }
+
+  /** Delete an own property using this caller and the proxy's current Window. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#windowproxy-delete
+  // SPEC_MISMATCH: WindowProxy.[[Delete]] (P)
+  deleteWindowProxyProperty(property: string | symbol, proxy: WindowProxyHandle): boolean {
+    const window = proxy.associatedWindow;
+    if (!this.isPlatformObjectSameOrigin(window)) {
+      throw new this.#context.DOMException('Cross-origin property deletion is denied', 'SecurityError');
+    }
+    if (typeof property === 'string' && isArrayIndex(property)) {
+      return this.getWindowProxyOwnProperty(property, proxy) === undefined;
+    }
+    return Reflect.deleteProperty(window, property);
+  }
+
+  /** List a proxy's own keys using this caller and the current Window's child navigables. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#windowproxy-ownpropertykeys
+  // SPEC_MISMATCH: WindowProxy.[[OwnPropertyKeys]] ()
+  getWindowProxyOwnPropertyKeys(proxy: WindowProxyHandle): (string | symbol)[] {
+    const window = proxy.associatedWindow;
+    const maxProperties = proxy.windowImplementation.getAssociatedDocument().getDocumentTreeChildNavigables().length;
+    const keys: (string | symbol)[] = [];
+    for (let index = 0; index < maxProperties; index++) keys.push(String(index));
+    const tail = this.isPlatformObjectSameOrigin(window)
+      ? Reflect.ownKeys(window) : this.crossOriginOwnPropertyKeys(window);
+    return keys.concat(tail);
+  }
+
   /** Whether a string is one of Window's cross-origin names, including array indices. */
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#cross-origin-accessible-window-property-name
   isCrossOriginAccessibleWindowPropertyName(name: string): boolean {
     const properties = prepareCrossOriginObject(this.#context.resolveInterface('Window'))!;
     return properties.some((entry) => entry.property === name) || isArrayIndex(name);
+  }
+
+  /** Check a WindowProxy access using this caller binding's declarations and environment. */
+  // https://html.spec.whatwg.org/multipage/browsers.html#coop-check-access-report
+  // SPEC_MISMATCH: check if an access between two browsing contexts should be reported (accessor, accessed, P, environment)
+  checkAccessShouldBeReported(accessor: BrowsingContext, accessed: BrowsingContext, property: string | symbol): void {
+    if (typeof property !== 'string' || !this.isCrossOriginAccessibleWindowPropertyName(property)) return;
+    const accessorDocument = accessor.activeDocument;
+    const accessedDocument = accessed.activeDocument;
+    if (!accessorDocument.isFullyActive() || !accessedDocument.isFullyActive()) {
+      throw new InternalError('COOP access reporting requires fully active documents');
+    }
+    const accessorTop = accessor.topLevelBrowsingContext!;
+    const accessedTop = accessed.topLevelBrowsingContext!;
+    const accessorTopDocument = accessorTop.activeDocument;
+    const accessedTopDocument = accessedTop.activeDocument;
+    const accessorAncestors = getSameOriginAncestorContexts(accessor, accessorTopDocument.origin);
+    const accessedAncestors = getSameOriginAncestorContexts(accessed, accessedTopDocument.origin);
+    if (accessorAncestors === null || accessedAncestors === null) return;
+    if (accessorTop.virtualBrowsingContextGroupID === accessedTop.virtualBrowsingContextGroupID) return;
+
+    let relationship: OpenerPolicyAccessReportParams['relationship'] = 'none';
+    if (accessedTop.openerBrowsingContext !== null && accessorAncestors.includes(accessedTop.openerBrowsingContext)) {
+      relationship = 'accessor-is-opener';
+    }
+    if (accessorTop.openerBrowsingContext !== null && accessedAncestors.includes(accessorTop.openerBrowsingContext)) {
+      relationship = 'accessor-is-openee';
+    }
+    OpenerPolicy.queueAccessReports({
+      relationship,
+      accessorCOOP: accessorTopDocument.openerPolicy,
+      accessedCOOP: accessedTopDocument.openerPolicy,
+      accessorURL: accessorDocument.url,
+      accessedURL: accessedDocument.url,
+      accessorInitialURL: accessorTop.initialURL,
+      accessedInitialURL: accessedTop.initialURL,
+      accessorOrigin: accessorDocument.origin,
+      accessedOrigin: accessedDocument.origin,
+      accessorCreatorOrigin: accessorTop.openerOriginAtCreation,
+      accessedCreatorOrigin: accessedTop.openerOriginAtCreation,
+      accessorReferrer: accessorTopDocument.referrer,
+      accessedReferrer: accessedTopDocument.referrer,
+      propertyName: property,
+    }, this.#context.getEnvironment());
   }
 
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#crossoriginproperties-(-o-)
@@ -36,7 +195,7 @@ export class CrossOriginObjectBinding {
   }
 
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#crossoriginpropertyfallback-(-p-)
-  crossOriginPropertyFallback(property: PropertyKey): PropertyDescriptor {
+  crossOriginPropertyFallback(property: string | symbol): PropertyDescriptor {
     if (fallbackKeys.includes(property)) {
       return { value: undefined, writable: false, enumerable: false, configurable: true };
     }
@@ -52,7 +211,7 @@ export class CrossOriginObjectBinding {
   }
 
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#crossorigingetownpropertyhelper-(-o,-p-)
-  crossOriginGetOwnPropertyHelper(object: object, property: PropertyKey): PropertyDescriptor | undefined {
+  crossOriginGetOwnPropertyHelper(object: object, property: string | symbol): PropertyDescriptor | undefined {
     const entry = this.crossOriginProperties(object).find((entry) => entry.property === property);
     if (!entry) return undefined;
 
@@ -61,7 +220,7 @@ export class CrossOriginObjectBinding {
     if (!callers) CrossOriginObjectBinding.#descriptorMaps.set(record, callers = new WeakMap());
     const env = this.#context.getEnvironment();
     let descriptors = callers.get(env);
-    if (!descriptors) callers.set(env, descriptors = new Map<PropertyKey, PropertyDescriptor>());
+    if (!descriptors) callers.set(env, descriptors = new Map<string | symbol, PropertyDescriptor>());
     const cached = descriptors.get(property);
     if (cached) return cached;
 
@@ -90,26 +249,44 @@ export class CrossOriginObjectBinding {
   }
 
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#crossoriginget-(-o,-p,-receiver-)
-  crossOriginGet(object: object, property: PropertyKey, receiver: unknown): unknown {
-    const descriptor = Reflect.getOwnPropertyDescriptor(object, property);
-    if (!descriptor) throw new InternalError('CrossOriginGet requires an own property descriptor');
-    if ('value' in descriptor) return descriptor.value;
-    if (!descriptor.get) throw new this.#context.DOMException('Cross-origin property is not readable', 'SecurityError');
-    return Reflect.apply(descriptor.get, receiver, []);
+  crossOriginGet(object: object, property: string | symbol, receiver: unknown): unknown {
+    return this.#crossOriginGetWithDescriptor(Reflect.getOwnPropertyDescriptor(object, property), receiver);
   }
 
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#crossoriginset-(-o,-p,-v,-receiver-)
-  crossOriginSet(object: object, property: PropertyKey, value: unknown, receiver: unknown): boolean {
-    const descriptor = Reflect.getOwnPropertyDescriptor(object, property);
-    if (!descriptor) throw new InternalError('CrossOriginSet requires an own property descriptor');
-    if (!descriptor.set) throw new this.#context.DOMException('Cross-origin property is not writable', 'SecurityError');
-    Reflect.apply(descriptor.set, receiver, [value]);
-    return true;
+  crossOriginSet(object: object, property: string | symbol, value: unknown, receiver: unknown): boolean {
+    return this.#crossOriginSetWithDescriptor(Reflect.getOwnPropertyDescriptor(object, property), value, receiver);
   }
 
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#crossoriginownpropertykeys-(-o-)
-  crossOriginOwnPropertyKeys(object: object): PropertyKey[] {
+  crossOriginOwnPropertyKeys(object: object): (string | symbol)[] {
     return [...this.crossOriginProperties(object).map((entry) => entry.property), ...fallbackKeys];
+  }
+
+  /** Finish CrossOriginGet after resolving the own descriptor for this caller. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#crossoriginget-(-o,-p,-receiver-)
+  // SPEC_MISMATCH: CrossOriginGet (O, P, Receiver)
+  #crossOriginGetWithDescriptor(descriptor: PropertyDescriptor | undefined, receiver: unknown): unknown {
+    if (!descriptor) throw new InternalError('CrossOriginGet requires an own property descriptor');
+    if (isDataDescriptor(descriptor)) return descriptor.value;
+    if (!descriptor.get) throw new this.#context.DOMException('Cross-origin property is not readable', 'SecurityError');
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Supply the descriptor's receiver explicitly.
+    return Reflect.apply(descriptor.get, receiver, []);
+  }
+
+  /** Finish CrossOriginSet after resolving the own descriptor for this caller. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#crossoriginset-(-o,-p,-v,-receiver-)
+  // SPEC_MISMATCH: CrossOriginSet (O, P, V, Receiver)
+  #crossOriginSetWithDescriptor(
+    descriptor: PropertyDescriptor | undefined,
+    value: unknown,
+    receiver: unknown,
+  ): boolean {
+    if (!descriptor) throw new InternalError('CrossOriginSet requires an own property descriptor');
+    if (!descriptor.set) throw new this.#context.DOMException('Cross-origin property is not writable', 'SecurityError');
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Supply the descriptor's receiver explicitly.
+    Reflect.apply(descriptor.set, receiver, [value]);
+    return true;
   }
 
   #getRecord(object: object): Readonly<PlatformRecord> | undefined {
@@ -170,11 +347,21 @@ export function prepareCrossOriginObject(assembled: AssembledInterface): readonl
 }
 
 type CrossOriginProperty = { property: string; needsGetter?: boolean; needsSetter?: boolean; };
-type CrossOriginPropertyDescriptorMap = WeakMap<BrowletEnvironment, Map<PropertyKey, PropertyDescriptor>>;
+type CrossOriginPropertyDescriptorMap = WeakMap<BrowletEnvironment, Map<string | symbol, PropertyDescriptor>>;
 type CrossOriginMember = { kind: string; name?: string; static?: boolean; extendedAttributes?: ExtendedAttribute[]; };
 
 const interfaceProperties = new WeakMap<AssembledInterface, readonly CrossOriginProperty[] | null>();
-const fallbackKeys: PropertyKey[] = ['then', Symbol.toStringTag, Symbol.hasInstance, Symbol.isConcatSpreadable];
+const fallbackKeys: (string | symbol)[] = ['then', Symbol.toStringTag, Symbol.hasInstance, Symbol.isConcatSpreadable];
+
+/** Collect the live inclusive ancestry, rejecting a cross-origin participant before reporting. */
+function getSameOriginAncestorContexts(context: BrowsingContext, topOrigin: Origin): BrowsingContext[] | null {
+  const ancestors: BrowsingContext[] = [];
+  for (let navigable = context.activeDocument.getNodeNavigable(); navigable !== null; navigable = navigable.parent) {
+    if (!areSameOrigin(navigable.activeDocument!.origin, topOrigin)) return null;
+    ancestors.push(navigable.activeBrowsingContext!);
+  }
+  return ancestors;
+}
 
 function collectCrossOriginProperties(members: Iterable<CrossOriginMember>): CrossOriginProperty[] {
   const properties = new Map<string, CrossOriginProperty>();

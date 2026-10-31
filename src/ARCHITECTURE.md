@@ -25,6 +25,17 @@ Their binding declaration supplies `getHandle()` and `getProxy()` to convert
 between public proxies and their retained handles. Receiver resolution selects
 the handle's current platform target at invocation; retaining a handle does not
 freeze that target.
+Stock Node's WindowProxy handle also recognizes the exact VM globals associated
+with it as receiver aliases for its public proxy. Weak identities remain valid
+across navigation; arbitrary receivers keep their identity, including objects
+inheriting from Window. This is the `node-vm-global-proxy` accommodation, not
+caller-realm selection.
+Native globals receive indexed descriptors and keys at Window composition through
+`JSRealm.setGlobalIndexedProperties()`. Both backends use Window's child lookup and
+WindowProxy's descriptor helper. Each native delegate retains its original Window
+for ordinary bindings and child lookup; public proxy reuse selects the replacement
+context's delegate. Native ordinary accessor receivers and automatic origin-sensitive
+dispatch remain unfinished.
 Untyped `any` and `object` values keep their JavaScript representation.
 
 One private binding record connects those identities without changing the
@@ -62,7 +73,28 @@ cross-origin descriptors. The current proof of concept uses interface
 and permissions. `htmlExtendedAttributeHooks.prepareSecurityCheck` prepares each
 protected interface's invocation policy once when the binding world is assembled.
 Permission records and Window-name lookup share the assembled declarations,
-including their partials and mixins. Realm supplies allocation and execution
+including their partials and mixins. The same caller binding owns COOP access-report
+eligibility: it filters names through those declarations and reads the supplied
+browsing contexts' active ancestry. Policy owns the report dispatcher, whose input
+record retains the selected document and top-level context state. Caller-bound
+WindowProxy Get/Set run this check before property access; automatic caller selection,
+trap integration, and report delivery remain unfinished.
+The caller binding's WindowProxy operations take
+the stable proxy handle and resolve its current Window. Lookup reuses Window's
+child-name selection; definition checks origin and rejects numeric indices before
+ordinary definition. Get evaluates the selected descriptor and follows the Window
+prototype for missing same-origin properties, preserving the supplied receiver.
+Set rejects same-origin indices before ordinary Window assignment; foreign writes
+require a setter in the caller-selected proxy descriptor.
+Delete rejects foreign callers, protects present child indices, and uses ordinary
+Window deletion for other same-origin properties.
+OwnPropertyKeys prefixes current child-index strings to ordinary Window keys or
+the declared cross-origin keys. It preserves list concatenation; the stock Proxy
+trap retains its duplicate-key accommodation.
+They require an explicitly selected binding; automatic proxy interception still
+needs the current caller. Descriptor accommodation for JavaScript Proxy invariants
+belongs at the stock proxy trap, not in these algorithms.
+Realm supplies allocation and execution
 facilities; the invoking member's binding selects the actual receiver's security
 policy, including when the member is inherited from an unprotected interface.
 `BindingContext.createMemberFunction()` creates fresh declared IDL

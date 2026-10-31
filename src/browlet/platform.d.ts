@@ -79,7 +79,9 @@ export type RequestInfo = Request | string;
 
 export type TrustedType = TrustedHTML | TrustedScript | TrustedScriptURL;
 
-export type WindowProxy = Window;
+export interface WindowProxy extends Window {
+  readonly [index: number]: WindowProxy | undefined;
+}
 
 export interface QuotaExceededErrorOptions {
   quota?: number;

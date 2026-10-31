@@ -5,7 +5,7 @@ import { require as tsRequire } from 'tsx/cjs/api';
 // Loading TypeScript declarations without typechecking avoids a bootstrap dependency on the output.
 const { generatePlatformTypes } = tsRequire('../src/web-idl/generate.ts', import.meta.url);
 const { DefinitionAssembly } = tsRequire('../src/web-idl/assembly/index.ts', import.meta.url);
-const { webIDLCommonDefinitions } = tsRequire('../src/web-idl/core/index.ts', import.meta.url);
+const { reference, webIDLCommonDefinitions } = tsRequire('../src/web-idl/core/index.ts', import.meta.url);
 const { browletDefinitions } = tsRequire('../src/browlet/bindings.ts', import.meta.url);
 
 const args = process.argv.slice(2);
@@ -13,7 +13,10 @@ if (args.some((arg) => arg !== '--check')) throw new Error('Usage: node scripts/
 
 const target = new URL('../src/browlet/platform.d.ts', import.meta.url);
 const assembly = new DefinitionAssembly([...webIDLCommonDefinitions, ...browletDefinitions]);
-const source = generatePlatformTypes(assembly, { proxyInterfaces: { WindowProxy: 'Window' } });
+const source = generatePlatformTypes(assembly, {
+  // HTML's indexed child properties belong to WindowProxy, not to a Window IDL getter.
+  proxyInterfaces: { WindowProxy: { interface: 'Window', indexedGetter: reference('WindowProxy') } },
+});
 let previous;
 try {
   previous = await readFile(target, 'utf8');

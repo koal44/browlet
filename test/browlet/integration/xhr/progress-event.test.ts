@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { getBindingContext, getRelevantRealm } from '../../../support/browlet-binding';
 import { Browlet } from '../../../../src/browlet/browlet';
-import type { Window } from '../../../../src/browlet/platform';
+import type { WindowProxy } from '../../../../src/browlet/platform';
 import { EventTargetImpl } from '../../../../src/browlet/dom/events/event-target';
 import { ProgressEventImpl } from '../../../../src/browlet/integration/xhr/progress-event';
 
@@ -102,9 +102,8 @@ describe('XMLHttpRequest ProgressEvent projection', () => {
   });
 });
 
-function createWindow(): Window & typeof globalThis {
-  return new Browlet({ route: () => '' }).window as
-    Window & typeof globalThis;
+function createWindow(): WindowProxy {
+  return new Browlet({ route: () => '' }).window;
 }
 
 function requireEventTargetImplementation(

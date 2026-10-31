@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { BrowletEnvironment } from '../../src/browlet/environment';
 import { Browlet } from '../../src/browlet/browlet';
-import type { Window } from '../../src/browlet/platform';
+import type { WindowProxy } from '../../src/browlet/platform';
 import { getBindingContext, getRelevantRealm } from '../support/browlet-binding';
 import {
   FileReaderImpl, fileReaderIDL,
@@ -762,9 +762,8 @@ describe('File API §6.2: FileReader reads', () => {
   });
 });
 
-function createWindow(): Window & typeof globalThis {
-  return new Browlet({ route: () => '' }).window as
-    Window & typeof globalThis;
+function createWindow(): WindowProxy & Pick<typeof globalThis, 'ArrayBuffer'> {
+  return new Browlet({ route: () => '' }).window as WindowProxy & Pick<typeof globalThis, 'ArrayBuffer'>;
 }
 
 function createReader(context = getContext(createWindow())): FileReaderImpl {

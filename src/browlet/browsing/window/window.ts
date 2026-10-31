@@ -383,6 +383,11 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
     this.#globalScopeMixin = mixin;
   }
 
+  /** Return a child WindowProxy handle in this Window's container insertion order. */
+  getIndexedWindow(index: number): WindowProxyHandle | undefined {
+    return this.getAssociatedDocument().getIndexedChildNavigable(index)?.activeWindowProxy;
+  }
+
   /** Resolve a supported name to a child WindowProxy, one element, or a stable live collection. */
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-window-nameditem
   getNamedProperty(name: string): WindowProxyHandle | ElementImpl | HTMLCollectionImpl {
@@ -404,7 +409,7 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#named-access-on-the-window-object
   getSupportedPropertyNames(): ReadonlySet<string> {
     const document = this.getAssociatedDocument();
-    const childNames = this.#getChildNavigableTargetNames();
+    const childNames = this.getChildNavigableTargetNames();
     const names = new Set<string>();
     for (let node = document.firstChild; node !== null; node = node.nextDescendant(document)) {
       if (!node.isElement()) continue;
@@ -419,6 +424,23 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
       if (name) names.add(name);
       const id = node.getAttributeNS(null, 'id');
       if (id) names.add(id);
+    }
+    return names;
+  }
+
+  /** Collect eligible child target names, deduplicating before the exact-origin check. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#document-tree-child-navigable-target-name-property-set
+  getChildNavigableTargetNames(): ReadonlySet<string> {
+    const seen = new Set<string>();
+    const names = new Set<string>();
+    for (const child of this.getAssociatedDocument().getDocumentTreeChildNavigables()) {
+      const name = child.targetName;
+      if (name === '' || seen.has(name)) continue;
+      seen.add(name);
+      const document = child.activeDocument;
+      if (document === null) throw new InternalError('A named child navigable needs an active Document');
+      // SPEC_CLASH(window-named-child-origin): follow HTML; Blink/Gecko also allow matching container names.
+      if (areSameOrigin(document.origin, this.env.origin)) names.add(name);
     }
     return names;
   }
@@ -451,22 +473,6 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   /** Apply the default-passive listener rule for Window targets. */
   protected override isDefaultPassiveTarget(): boolean {
     return true;
-  }
-
-  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#document-tree-child-navigable-target-name-property-set
-  #getChildNavigableTargetNames(): ReadonlySet<string> {
-    const seen = new Set<string>();
-    const names = new Set<string>();
-    for (const child of this.getAssociatedDocument().getDocumentTreeChildNavigables()) {
-      const name = child.targetName;
-      if (name === '' || seen.has(name)) continue;
-      seen.add(name);
-      const document = child.activeDocument;
-      if (document === null) throw new InternalError('A named child navigable needs an active Document');
-      // SPEC_CLASH(window-named-child-origin): follow HTML; Blink/Gecko also allow matching container names.
-      if (areSameOrigin(document.origin, this.env.origin)) names.add(name);
-    }
-    return names;
   }
 
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-window-nameditem-filter

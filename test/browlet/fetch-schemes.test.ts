@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { UserAgent } from '../../src/browlet/user-agent';
 import { getRelevantRealm } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
-import type { Window } from '../../src/browlet/platform';
 import { BrowletEnvironmentBase } from '../../src/browlet/environment';
 import { type WindowEnvironment } from '../../src/browlet/environment';
 import { navigationAndTraversalTaskSource } from '../../src/browlet/scripting/tasks';
@@ -266,7 +265,7 @@ describe('Scheme responses through main Fetch', () => {
   it('filters and consumes a Blob range through the automatic Window event loop', async () => {
     const browlet = new Browlet({ route: () => '', reporting: false });
     await browlet.navigate('https://example.test/');
-    const window = browlet.window as Window & typeof globalThis;
+    const window = browlet.window;
     const env = getRelevantRealm(window).env;
     const url = window.URL.createObjectURL(new window.Blob(['0123456789'], { type: 'text/plain' }));
     const request = new FetchRequest(env.parseURL(url)!, env);
@@ -283,7 +282,7 @@ describe('Scheme responses through main Fetch', () => {
   it('reads a captured Blob after its creator Document is destroyed', async () => {
     const browlet = new Browlet({ route: () => '', reporting: false });
     await browlet.navigate('https://example.test/');
-    const window = browlet.window as Window & typeof globalThis;
+    const window = browlet.window;
     const realm = getRelevantRealm(window);
     const env = realm.env;
     const url = window.URL.createObjectURL(new window.Blob(['survives destruction']));

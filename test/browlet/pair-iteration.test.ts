@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../src/browlet/browlet';
-import type { Window } from '../../src/browlet/platform';
+import type { WindowProxy } from '../../src/browlet/platform';
 
 describe.each(['URLSearchParams', 'FormData'] as const)('%s pair iteration', (name) => {
   function createPairs() {
-    const window = new Browlet({ route: () => '' }).window as Window & Pick<typeof globalThis, 'Object' | 'Array' | 'TypeError'>;
+    const window = new Browlet({ route: () => '' }).window;
     return new window[name]();
   }
 
@@ -75,8 +75,8 @@ describe.each(['URLSearchParams', 'FormData'] as const)('%s pair iteration', (na
   });
 
   it('accepts next borrowed from another realm and allocates its result there', () => {
-    const first = new Browlet({ route: () => '' }).window as Window & Pick<typeof globalThis, 'Object' | 'Array' | 'TypeError'>;
-    const second = new Browlet({ route: () => '' }).window as Window & Pick<typeof globalThis, 'Object' | 'Array' | 'TypeError'>;
+    const first = new Browlet({ route: () => '' }).window;
+    const second = new Browlet({ route: () => '' }).window as WindowProxy & Pick<typeof globalThis, 'Object' | 'Array'>;
     const pairs = new first[name]();
     pairs.append('a', '1');
     pairs.append('b', '2');
@@ -94,7 +94,7 @@ describe.each(['URLSearchParams', 'FormData'] as const)('%s pair iteration', (na
 });
 
 it('rejects a pair iterator belonging to a different interface', () => {
-  const window = new Browlet({ route: () => '' }).window as Window & Pick<typeof globalThis, 'Object' | 'Array' | 'TypeError'>;
+  const window = new Browlet({ route: () => '' }).window as WindowProxy & Pick<typeof globalThis, 'TypeError'>;
   const params = new window.URLSearchParams().entries();
   const formData = new window.FormData().entries();
 
@@ -102,7 +102,7 @@ it('rejects a pair iterator belonging to a different interface', () => {
 });
 
 it('retains a URLSearchParams iterator index across sorting and URL query replacement', () => {
-  const window = new Browlet({ route: () => '' }).window as Window & Pick<typeof globalThis, 'Object' | 'Array' | 'TypeError'>;
+  const window = new Browlet({ route: () => '' }).window;
   const url = new window.URL('https://example.com/?c=3&a=1&b=2');
   const pairs = url.searchParams;
   const iterator = pairs.entries();

@@ -38,7 +38,7 @@ were included as direct dependencies; the full §7.1.4 audit is recorded below.
 | Isolation capability | same-origin-plus-COEP selects logical isolation. Agent clusters become origin-keyed, but the host does not provide physical isolation. The WindowOrWorkerGlobalScope crossOriginIsolated member now forwards the existing environment capability; logical isolation reports false. |
 | Report URL sanitization | `sanitizeURLForReport()` copies the URL, removes credentials, and excludes the fragment without applying Fetch's different non-HTTP stripping rule. |
 | Navigation reports | `queueNavigationToReport()` and `queueNavigationFromReport()` are explicit unfinished operations. They return for an absent disposition endpoint and otherwise throw for the missing URL-scoped Reporting queue. Body construction, disclosure rules, and delivery remain unfinished. |
-| Access reports | `BrowsingContext.checkAccessShouldBeReported()` is an explicit unfinished operation. WindowProxy/Location security hooks must invoke it with the accessing environment. All six body producers and their dispatcher remain required, as detailed below. |
+| Access reports | `CrossOriginObjectBinding.checkAccessShouldBeReported()` filters declared cross-origin names, asserts fully active documents, rejects cross-origin ancestry, compares top-level virtual groups, and classifies opener relationships. Caller-bound WindowProxy Get/Set invoke it; automatic traps still need caller selection and integration. `OpenerPolicy.queueAccessReports()` explicitly retains the unfinished dispatcher and six body producers. |
 
 Reporting dependencies are deliberately not routed through an arbitrary active
 global. A response report can belong to an earlier redirect, a future document,
@@ -52,14 +52,47 @@ Navigation-from bodies need nextResponseURL, disclosed only for same-origin
 responses or when the COOP response initiated the navigation. Referrer uses its
 specified serialization; it is not replaced by a sanitized unrelated URL.
 
-Access reporting must filter cross-origin-accessible property names, require
-fully active documents, reject cross-origin ancestor chains, compare top-level
-virtual group identities, and classify accessor-is-opener, accessor-is-openee,
-or neither. The dispatcher must produce both directions for opener, openee,
-and unrelated-window accesses, with the specified report-only same-origin gate.
+The access eligibility and relationship check was rechecked against
+[published HTML](https://html.spec.whatwg.org/multipage/browsers.html#coop-check-access-report)
+(26 October 2026) on 28 October. It uses the existing assembled cross-origin
+annotations, including array-index recognition, without adding callbacks to the
+environment or duplicating a permission table. Missing Window focus/blur declarations
+remain an explicit limitation, covered by the existing annotation-completeness
+expected failure. Symbols and non-reportable names return before context access.
+The live inclusive ancestor chains use exact same-origin comparisons, independent
+of document.domain and the serialized ancestor-origin snapshots. Virtual IDs,
+opener relationships, policies, initial URLs, and referrers come from the top-level
+contexts/documents; current URLs and origins come from the participating documents.
+
+The check moved from a BrowsingContext stub to the caller binding, which supplies
+the specification's environment argument. The dispatcher accepts
+`OpenerPolicyAccessReportParams` plus that environment instead of fourteen separate
+state arguments plus the environment. Both arrangements retain `SPEC_MISMATCH`
+markers for review. Initial URLs and opener origins retain the nullable types of
+the actual browsing-context slots; lifecycle producers and report disclosure still
+need to account for those values. No substitute URL or origin is invented.
+
+[Access-check tests](../../../../test/browlet/browsing/policy/coop-access.test.ts)
+use real Window bindings, documents, and nested navigables, with the unfinished
+dispatcher intercepted to inspect its inputs. All 35 cases initially failed at
+the stub. They cover the early returns, activity assertion, ancestry on both sides,
+live origin changes, virtual groups, relationships, and the complete input record.
+They do not demonstrate automatic WindowProxy interception or emitted reports.
+
+Caller-bound WindowProxy [Get](../window/ROADMAP.md#html-7237-caller-bound-property-reads)
+and [Set](../window/ROADMAP.md#html-7238-caller-bound-property-writes) invoke this check
+before property access, even for permitted child reads and rejected writes. Their
+ordering tests intercept the unfinished dispatcher; automatic caller selection
+and report delivery remain separate work.
+
+The dispatcher must still produce both directions for opener, openee,
+and unrelated-window accesses, applying the individual report algorithms' endpoint
+and disclosure rules. The published dispatcher no longer contains the local
+draft's unbound `coop` and `disposition` steps, so those obsolete steps are not
+requirements for this implementation.
 Body disclosure depends on current/initial URLs, opener origins at creation,
 referrers, and exact same-origin checks. The accessing environment must supply
-source URL, line, and column. Ancestor navigation, creator/opener state,
+source URL, line, and column. Automatic ancestor navigation, creator/opener state,
 WindowProxy/Location access interception, source-location capture, and URL-scoped
 Reporting are still missing consumers/producers; none is treated as complete by
 the policy comparison tests.

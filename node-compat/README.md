@@ -329,6 +329,10 @@ infallible clock; recheck that ownership after navigation work is integrated.
 A handle separates its stable realm reference from its reusable global proxy.
 Detachment allows that proxy to transfer once to a fresh context. Retaining the
 realm reference keeps the old realm alive; `.global` is not its identity.
+Detachment preserves that context's existing embedder security token, so retained
+functions can still access the reused proxy. Without restoration, Node 26 resets
+the token and rejects that access. This neither changes HTML origin checks nor
+restores the detached context's microtask queue.
 `getRealm(object)` reports creation context, while `getFunctionRealm(callable)`
 follows bound/proxy targets without traps and rejects revoked callable proxies.
 
@@ -345,6 +349,13 @@ on all addon bases, not an expected failure. See the
 layout. Web IDL populates them; `setPropertyDelegate()` attaches named-property
 behavior and `setGlobalObject()` selects the Window target. Node's shared VM
 security token permits embedder access; it does not implement browser cross-origin policy.
+`setGlobalObject(handle, object, indexedProperties)` optionally supplements that
+target with live indexed descriptors and keys. Indexed reads, descriptors, and
+presence checks consult the supplied callbacks; enumeration merges their keys
+without duplicates. Ordinary properties remain on the original per-context target,
+including when a retained function runs after proxy reuse. The callbacks do not
+implement caller selection, cross-origin filtering, or the remaining indexed
+mutation rules. Global accessor receiver preservation is still separate work.
 
 | Optional operation | Availability and contract |
 | --- | --- |

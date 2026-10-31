@@ -13,7 +13,6 @@ import { DocumentMode, type DocumentImpl, type ElementImpl } from '../../dom/nod
 import { HTMLIFrameElementImpl } from '../../dom/nodes/html/embedded/index';
 import { CustomElementRegistryImpl } from '../../dom/nodes/html/custom-elements/index';
 import type { WindowProxyHandle, WindowImpl } from '../window/index';
-import type { BrowletEnvironment } from '../../environment';
 import type { UserAgent } from '../../user-agent';
 
 import type { Navigable } from './navigable';
@@ -261,15 +260,6 @@ export class BrowsingContext {
       reportSwitch('reporting');
     }
     return result;
-  }
-
-  // https://html.spec.whatwg.org/multipage/browsers.html#coop-check-access-report
-  checkAccessShouldBeReported(_accessed: BrowsingContext, _property: string | symbol, _env: BrowletEnvironment): void {
-    // TODO: connect WindowProxy/Location access hooks, validate active ancestor
-    // origins, classify opener relationships, and queue the six access reports.
-    // Source location and URL-scoped Reporting configuration are still required.
-    // SPEC_CLASH(coop-access-report-type): HTML gives all six access bodies the type "access-to-opener"; pending review.
-    throw new InternalError('COOP access reporting is not implemented');
   }
 
   /** Apply the requested window position and size features. */

@@ -156,6 +156,15 @@ export function createWindowEnvironment(
       return realm.windowProxy.platform;
     },
   });
+  if (useAddonGlobals) {
+    // Native callbacks select their original context. Keep ordinary properties
+    // and indexed children bound to that Window, not the handle's movable target.
+    const window = realm.windowImplementation;
+    realm.setGlobalIndexedProperties({
+      getOwnPropertyDescriptor: (index) => WindowProxyHandle.getIndexedOwnProperty(window, index),
+      ownKeys: () => Array.from({ length: window.length }, (_, index) => index),
+    });
+  }
   if (reservedEnv !== null) reservedEnv.id = '';
   realm.windowImplementation.setWindowOrWorkerGlobalScopeMixin(new WindowOrWorkerGlobalScopeMixin(env));
   installRealmHostHooks(env, getCodeForEval);

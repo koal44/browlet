@@ -65,6 +65,7 @@ describe('Window global allocation', () => {
     if (!firstDocumentGetter) throw new Error('Window document getter missing');
     const oldClosure = first.realm.evaluate('const original = 42; () => original', 'old.js') as () => number;
     const oldDocument = first.realm.evaluate('() => document', 'old-document.js') as () => Document;
+    const currentDocument = first.realm.evaluate('() => window.document', 'current-document.js') as () => Document;
     const oldState = first.realm.evaluate(`
       var pageState = 1;
       () => [++pageState, globalThis];
@@ -78,6 +79,7 @@ describe('Window global allocation', () => {
     expect(second.realm.Object).not.toBe(first.realm.Object);
     expect(oldClosure()).toBe(42);
     expect(unwrap(oldDocument())).toBe(first.document);
+    expect(unwrap(currentDocument())).toBe(second.document);
     expect(oldState()).toEqual([2, proxy]);
     expect(second.realm.evaluate('typeof pageState', 'new-state.js')).toBe('undefined');
     expect(unwrap(first.platformWindow)).toBe(first.window);

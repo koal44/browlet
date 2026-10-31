@@ -31,6 +31,11 @@ export class HTMLFrameElementImpl extends HTMLElementImpl {
     previous?.setContainer(null);
     value?.setContainer(this);
   }
+
+  protected override insertionSteps(): void {
+    this.nodeDocument.recordNavigableContainerInsertion(this);
+    super.insertionSteps();
+  }
 }
 
 /*

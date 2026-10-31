@@ -8,7 +8,7 @@ import {
 } from '../../src/file/index';
 import { getBindingContext, getRelevantRealm } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
-import type { Blob, FileList, Window } from '../../src/browlet/platform';
+import type { Blob, FileList, WindowProxy } from '../../src/browlet/platform';
 import { InternalError } from '../../src/infra/internal-error';
 import { ReadableStreamImpl } from '../../src/streams/index';
 import type { StampedPlatformObject } from '../../src/web-idl/index';
@@ -534,9 +534,8 @@ describe('File API File and FileList projection', () => {
   });
 });
 
-function createWindow(): Window & typeof globalThis {
-  return new Browlet({ route: () => '' }).window as
-    Window & typeof globalThis;
+function createWindow(): WindowProxy & Pick<typeof globalThis, 'Uint8Array'> {
+  return new Browlet({ route: () => '' }).window as WindowProxy & Pick<typeof globalThis, 'Uint8Array'>;
 }
 
 function constructBlob(

@@ -636,6 +636,36 @@ describe('platform declaration generation', () => {
     `)).toEqual([]);
   });
 
+  it('models readonly proxy indices without adding an iterator or an interface object', () => {
+    const assembly = new DefinitionAssembly([
+      defineInterface({ name: 'FrameHost', members: [roAttr('self', reference('FrameProxy'))] }),
+      defineProxyObject({ name: 'FrameProxy', getHandle: () => undefined, getProxy: () => undefined }),
+    ]);
+    const declarations = generatePlatformTypes(assembly, {
+      proxyInterfaces: { FrameProxy: { interface: 'FrameHost', indexedGetter: reference('FrameProxy') } },
+    });
+    expect(compile(declarations, `
+      import type { FrameHost, FrameProxy } from './platform';
+      // @ts-expect-error proxy declarations have no constructor companion
+      import type { FrameProxyConstructor } from './platform';
+      declare const proxy: FrameProxy;
+      const host: FrameHost = proxy;
+      const child: FrameProxy | undefined = proxy[0];
+      const grandchild: FrameProxy | undefined = child?.[1];
+      const throughSelf: FrameProxy | undefined = proxy.self[0];
+      // @ts-expect-error an index can be absent
+      const required: FrameProxy = proxy[0];
+      // @ts-expect-error the index is readonly
+      proxy[0] = proxy;
+      // @ts-expect-error proxy indices are not an IDL indexed getter on the target
+      host[0];
+      // @ts-expect-error a numeric index does not imply iterability
+      proxy[Symbol.iterator]();
+      // @ts-expect-error arbitrary named properties are not declared
+      proxy.undeclaredChildName;
+    `)).toEqual([]);
+  });
+
   it('rejects opaque PutForwards targets', () => {
     const assembly = new DefinitionAssembly([
       defineInterface({

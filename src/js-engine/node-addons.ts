@@ -5,7 +5,8 @@ import { isAbsolute } from 'node:path';
 import { InternalError } from '../infra/internal-error';
 
 import type {
-  CollectionIteratorKind, CompiledScript, GlobalObject, GlobalPrototypeKind, GlobalProxy, JSFunction, JSIteratorResult,
+  CollectionIteratorKind, CompiledScript, GlobalIndexedProperties, GlobalObject, GlobalPrototypeKind, GlobalProxy,
+  JSFunction, JSIteratorResult,
 } from './realm';
 import type { JSJobCallback, VMContext } from './runtime';
 import type { ImportModuleDynamically, ModuleOptions, SourceTextModule, SourceTextModuleOptions, SyntheticModule } from './modules';
@@ -77,7 +78,7 @@ export class NodeAPI {
   runInContext?: (
     source: string, context: VMContext, options?: ContextEvaluationOptions,
   ) => unknown;
-  setGlobalObject?: (context: VMContext, object: object) => void;
+  setGlobalObject?: (context: VMContext, object: object, indexedProperties?: GlobalIndexedProperties) => void;
   // Requires the V8 host-hook patches.
   setHostHooks?: <HostDefined>(hooks: AddonHostHooks<HostDefined>) => void;
   setPropertyDelegate?: (object: object, delegate: object) => void;
