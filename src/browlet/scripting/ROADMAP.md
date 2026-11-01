@@ -431,7 +431,7 @@ replaced; these are fetch orchestration tests, not worker/worklet startup tests.
 - `fetchClassicWorkerImportedScript()` is an explicit throwing skeleton. Unlike
   the two callback-based classic fetchers, this algorithm pauses synchronously
   until Fetch completes, then returns a script or throws NetworkError. The
-  [event-loop pause dependency](#deferred-processing-model-tails) is not supplied by today's
+  [event-loop pause dependency](#outstanding-event-loop-work) is not supplied by today's
   asynchronous Fetch task delivery. Do not substitute a Promise return or launch
   a fetch that cannot finish before this method returns.
 - Descendant loading now connects static/dynamic JavaScript/CSS/JSON/text graphs through
@@ -1704,6 +1704,156 @@ Validation: all 40 focused rendering and task tests pass on each of the six
 runtime configurations, including six new rendering cases. Typechecking,
 declaration contracts, touched-file ESLint, and diff checks pass.
 
+### HTML §8.1.7.3 microtask-checkpoint audit
+
+The checkpoint's reentrancy guard, shared-queue drain, current-task bookkeeping,
+and rejected-promise notification are already connected. DOM observer and
+slot-change delivery run on that same queue, rather than in a separate tail.
+This audit adds integration coverage without changing runtime behavior.
+
+The [checkpoint tests](../../../test/browlet/scripting/microtask-checkpoint.test.ts)
+exercise nested Promise reactions, explicit microtasks, and MutationObserver
+batches before the next ordinary task. A throwing callback reports its exception
+and finishes the error listener before continuing the queue, including work
+queued by that listener. Internal microtask steps still drain when their Document
+becomes inactive, while ordinary tasks remain queued; author callback invocation
+retains its separate can-run-script check. Existing rejection tests cover the
+post-drain notification task, same-checkpoint handling, and multiple Windows.
+
+Two specification-owned consumers remain absent:
+
+- [IndexedDB §2.7.1 transaction cleanup](https://w3c.github.io/IndexedDB/#cleanup-indexed-database-transactions)
+  needs transaction state and the cleanup-event-loop association. It must mark
+  matching transactions inactive and clear that association after the drain.
+- [Long Animation Frames §3.2.2 checkpoint timing](https://w3c.github.io/long-animation-frames/#record-timing-info-for-microtask-checkpoint)
+  finishes pending script entries on Documents belonging to this loop. Those
+  entries and Document frame timing state do not exist yet; this is not merely
+  measuring how long `performMicrotaskCheckpoint()` takes.
+
+The native drain still bundles `ClearKeptObjects()` ahead of HTML's
+post-processing. Its [ordering and Agent-isolation questions](EVENT-LOOP-ARCHITECTURE.md#node-v8-checkpoint)
+remain explicit; these tests do not establish complete checkpoint conformance
+or justify additional engine changes. No new runtime limitation was found.
+
+Validation: the five focused suites contain 60 cases. All pass on each addon
+base; each stock base has 43 ordinary passes and the same 17 approved expected
+failures. The three new cases pass on all six configurations. Typechecking,
+declaration contracts, touched-file ESLint, and diff checks pass.
+
+### HTML §8.1.7.3 stable-state scheduling
+
+`BrowletEnvironment.awaitStableState()` now queues the supplied synchronous
+section on its realm's shared microtask queue. The initiating parallel algorithm
+must return after the call. The section returns either the remaining parallel
+steps or nothing; the environment schedules a returned continuation through
+`runInParallel()`. This makes the specification's conditional resumption explicit
+without returning an author Promise. The continuation representation is reviewed.
+
+An idle-loop regression first failed because `queueMicrotask()` requested no
+host turn. EventLoop now coalesces a checkpoint wake-up for microtasks arriving
+outside a task/checkpoint. The wake-up drains the existing engine queue before
+selecting another ordinary task; it does not create an HTML task or a second
+microtask queue. Work queued during a task uses that task's checkpoint, and
+nested microtasks drain in the same checkpoint. An explicit earlier checkpoint
+also clears the pending request.
+
+The [stable-state tests](../../../test/browlet/scripting/stable-state.test.ts)
+cover idle wake-up, coalescing, FIFO/nested delivery, no extra turn during a task,
+ordering before ordinary work, owning-loop and inactive-Document metadata, optional
+resumption, and automatic delivery through the real Node host. Internal synchronous
+sections are not gated on Document activity; calling author code still goes through
+its separate Binding/script checks. Image and media algorithms remain callers to
+connect when their own steps are implemented.
+
+SPEC_CLASH(stable-state-microtask-agent): HTML queues a microtask from parallel work here, while its queue-a-microtask algorithm asserts it is not called in parallel.
+Browlet follows the stable-state requirement with an explicitly retained owning
+environment and loop, rather than infer a surrounding Agent in parallel work.
+The host checkpoint wake-up supplies delivery when that loop has no ordinary task.
+No addon or engine change is needed.
+
+Validation: all eight new cases pass across the six runtime configurations. The
+six focused suites contain 68 cases: 68 ordinary passes on every addon base,
+and 53 ordinary passes plus the same 15 approved expected failures on every
+stock base. Typechecking, declaration contracts, touched-file ESLint, and diff
+checks pass. The official HTML reference was refreshed and remains at
+`404b3eb14a7a936dddefb2d78e224dbeb01d2358`.
+
+### HTML §8.1.7.3 continuation-based spinning
+
+`EventLoop.spinUntil(waitForGoal, continuation)` implements the
+[spin-the-event-loop macro](https://html.spec.whatwg.org/multipage/webappapis.html#spin-the-event-loop)
+for algorithms lowered into explicit continuations. It saves the modeled stack,
+empties it, checkpoints, and starts the wait on a later host turn. The wait must
+register a completion callback without blocking; calling that callback queues
+the continuation once on the original task source. A spinning microtask resumes
+as an ordinary task. Other tasks remain eligible while the goal is pending.
+
+The caller must return immediately and place all remaining steps, including
+paired script/callback cleanup, in the continuation. This does not suspend an
+arbitrary author function or defer a synchronous caller's `finally`. The existing
+`runScriptEvaluation()` and Binding call scopes therefore cannot surround a
+suspension without first lowering their remaining work into a continuation.
+
+The callback pair represents HTML's goal and remaining steps; this signature
+and representation are reviewed. Browlet moves the
+saved stack together with its script-entry task links and callback backup stack,
+so unrelated work cannot inherit suspended callbacks or impose a common cleanup
+order on independently suspended algorithms. It requeues the original Task to
+retain its source, Document, script-evaluation environments, and other metadata;
+HTML's microtask definition explicitly needs those fields when spinning moves a
+microtask to a regular task queue. The continuation retains its async context.
+
+The [spinning tests](../../../test/browlet/scripting/event-loop-spin.test.ts)
+cover progress during a pending goal, completion coalescing, saved entries and
+balanced cleanup on success/throw, microtask promotion, nested independent
+suspensions, inactive-Document gating, repeated spinning, and real host delivery.
+No addon or engine change is required. The parser's existing stylesheet/script
+continuations have not yet been migrated; its preparation, readiness, nesting,
+and abort requirements remain explicit in the [parser roadmap](../html/parser/ROADMAP.md).
+
+Validation: all eight new cases pass on all six runtime configurations. The six
+focused scheduling/lifecycle suites have 63 ordinary passes and one existing skip
+on custom/compat; the other configurations retain 61 ordinary passes, two approved
+expected failures, and that same skip. Typechecking, declaration contracts,
+touched-file ESLint, and diff checks pass.
+
+### HTML §§8.1.7.4–8.1.7.5 task sources and cross-specification delivery
+
+All five generic sources have shared identities in `tasks.ts`: DOM manipulation,
+user interaction, networking, navigation and traversal, and rendering. Each
+EventLoop owns its queues and source associations. Their existence does not
+implement the corresponding producers: trusted input and the production refresh
+host remain absent. Author `dispatchEvent()` stays synchronous; §8.1.7.4's
+user-interaction requirement applies to events caused by user input.
+
+§8.1.7.5's return from parallel work uses the existing global-task boundary.
+`runInParallel()` schedules a later Node turn without entering an HTML task;
+`env.queueTask()` selects the owner's global and Document. Fetch and Storage
+also support explicit destination globals. The Node host is cooperative, not
+a worker pool; CPU-heavy work needs its own data/worker boundary.
+
+The [parallel-delivery tests](../../../test/browlet/scripting/parallel-delivery.test.ts)
+use a controlled Blob byte source with real File API, Streams, Binding, and
+event-loop machinery. Both successful reads and backend errors finish while
+their Document is inactive, but leave the author Promise pending. File-reading
+tasks retain that Document and deliver realm-owned results/errors after its
+activity is restored. Existing Fetch tests cover a different destination global
+and retained Windows across navigation; Storage and Permissions retain their
+specified task sources. No runtime correction was needed for these paths.
+
+These tests cover the task-source and cross-specification delivery paths above;
+they do not close §8.1.7. Missing callers do not block implementation of the
+operations those callers will use. Idle-period processing still contains
+implementable HTML work; continuation-based spinning is now implemented above.
+The [outstanding-work inventory](#outstanding-event-loop-work) distinguishes that
+work from specific missing owners and host effects. Continue here before
+advancing to §8.1.8.1 event handlers.
+
+Validation: 44 focused task/Fetch/Storage/Permissions cases on each of six
+runtime configurations. All 44 pass on addon bases; stock bases have 40 ordinary
+passes and four existing expected failures. Both new delivery cases pass
+everywhere. Typechecking, declaration contracts, ESLint, and diff checks pass.
+
 ## Present
 
 | Source | Current responsibility |
@@ -1805,33 +1955,44 @@ but neither they nor native queues reveal every arbitrary V8 frame. Retain the
 [execution-context limitation](../../LIMITATIONS.md#scheduling-and-callback-context)
 until Script records and transparent host entry provide the missing evidence.
 
-## Deferred processing-model tails
+## Outstanding event-loop work
 
 HTML [§8.1.7.3](https://html.spec.whatwg.org/multipage/webappapis.html#event-loop-processing-model)
-has distinct remaining consumers:
+still has unimplemented algorithm steps, not just missing consumers.
 
-The 2026-09-15 audit covered §§8.1.7.1–8.1.7.5 at HTML source
-`24c5e48bf66ea61bc199ec6338c81258275ba9c6`; these are the retained follow-ups.
+The 2026-10-31 review read §§8.1.7.1–8.1.7.5 at HTML source
+`404b3eb14a7a936dddefb2d78e224dbeb01d2358`. This is not a completion claim.
+Implement the available steps; identify each missing dependency at the step
+that needs it, including its owner and specification algorithm. An absent image,
+media, or parser caller is not by itself a reason to omit the scheduling operation.
 
-| Operation | Required next boundary |
-| --- | --- |
-| Window idle periods | No-runnable-task path, initial render/last-idle times, timer deadlines, animation-frame maps, refresh prediction, requestIdleCallback/IdleDeadline, and removal of destroyed Windows |
-| Rendering | Production refresh host and owners for the ordered hooks, style/layout/display, animation callbacks, and observation delivery; document ordering is implemented |
-| Performance reporting | Real owners for task/long-task and checkpoint timing hooks |
-| Worker rendering/shutdown | Actual globals, closing state, queue suppression/discard, run-a-worker continuation, and teardown |
-| Await a stable state | Suspend parallel work, execute its synchronous section as a microtask on the right loop, then resume; first image/media consumer |
-| Spin the event loop | Concrete continuation-based suspension/resumption for parser work; a general operation needs unavailable execution-stack capture |
-| Pause | Embedder-controlled blocking/UI contract, pause-duration accounting, and a real modal or synchronous consumer |
-| Checkpoint tails | Rejected promises, DOM notifications, and IndexedDB cleanup; resolve the native clear's [ordering and Agent isolation](EVENT-LOOP-ARCHITECTURE.md#node-v8-checkpoint) |
+| Operation | Work available in Browlet | Exact remaining dependency or boundary |
+| --- | --- | --- |
+| [Await a stable state](https://html.spec.whatwg.org/multipage/webappapis.html#await-a-stable-state) | Implemented on `env.awaitStableState()`, with shared-queue idle wake-ups and optional parallel continuation. | Image/media algorithms still need to supply their own synchronous sections and continuations; the scheduling operation itself is implemented. |
+| [Spin the event loop](https://html.spec.whatwg.org/multipage/webappapis.html#spin-the-event-loop) | Implemented on `EventLoop.spinUntil()`: suspend modeled state, checkpoint, register the wait, and resume on the original task source with saved state and metadata. | Callers must lower their remaining steps and cleanup into the continuation. The parser already has stylesheet/script continuations to migrate; complete preparation, readiness, nesting, and abort handling belong to its [script runner](../html/parser/ROADMAP.md). Arbitrary synchronous author calls are not resumable through this helper. |
+| [Pause](https://html.spec.whatwg.org/multipage/webappapis.html#pause) | Retain the current global, sample time before/after, and prevent task dispatch while a host wait is active. | The waiting step must block the current author call while its goal can still be satisfied; an asynchronous Promise alone does not do that. A synchronous host wait/UI effect is missing. [Record pause duration](https://w3c.github.io/long-animation-frames/#record-pause-duration) separately needs Document frame timing and a pending script entry. |
+| [Window idle periods](https://html.spec.whatwg.org/multipage/webappapis.html#idle-deadline-computation) | Initialize render/idle timestamps, handle the no-runnable-task branch, and calculate the 50ms deadline with timer/render bounds and per-Window coarsening. | Timers already retain expiry estimates, but need to expose the specified deadlines in the shared time domain. Rendering needs animation-frame callback state and refresh/pending-render inputs. The final [start an idle period](https://w3c.github.io/requestidlecallback/#start-an-idle-period-algorithm) call needs that specification's callback lists and delivery algorithm. These do not prevent implementing the preceding HTML steps. |
+| [Rendering](https://html.spec.whatwg.org/multipage/webappapis.html#update-the-rendering) | Document ordering and the ordered update pipeline are present. | The production refresh host and the owners of individual resize, scroll, animation, layout, paint, and observation steps remain absent; an ordered hook is not an implementation of its operation. |
+| Performance reporting | Task timing and long-task call sites are present. | [Long Tasks reporting](https://w3c.github.io/longtasks/#report-long-tasks) and Long Animation Frames task/script/frame records and algorithms are missing. |
+| Worker rendering/shutdown | Task queues and Agent records exist. | [Worker event-loop processing](https://html.spec.whatwg.org/multipage/webappapis.html#event-loop-processing-model) requires a real WorkerGlobalScope, its closing state, supported dedicated-worker animation callbacks, and the [run a worker](https://html.spec.whatwg.org/multipage/workers.html#run-a-worker) continuation. A closing flag alone cannot implement shutdown. |
+| Checkpoint tails | Rejection notification and DOM delivery are connected. | [IndexedDB transaction cleanup](https://w3c.github.io/IndexedDB/#cleanup-indexed-database-transactions) needs transaction state and the cleanup-event-loop association. [Long Animation Frames checkpoint timing](https://w3c.github.io/long-animation-frames/#record-timing-info-for-microtask-checkpoint) needs pending script/frame entries. The native clear's [ordering and Agent isolation](EVENT-LOOP-ARCHITECTURE.md#node-v8-checkpoint) remain separate engine questions. |
+
+The stable-state operation and its parallel-microtask specification clash are
+recorded [above](#html-8173-stable-state-scheduling), followed by the controlled
+spinning operation. These implementations do not close the remaining processing
+model. The next bounded slice can implement the element-task wrapper below,
+then proceed through the available idle-period steps and their exact dependencies.
 
 Preserve a single queue for Promise jobs and HTML microtasks. Do not put a
 TypeScript microtask queue beside V8's queue or claim a worker closing flag
 implements shutdown. Worker/worklet Agent records alone also do not configure
 V8's CanBlock or shared-memory isolation; those gates remain with the engine.
 
-The element-task wrapper must use the element's relevant global/creation realm,
-not its mutable node document after adoption. Add it with a real caller and a
-cycle-safe route to existing binding ownership.
+The unimplemented [queue an element task](https://html.spec.whatwg.org/multipage/webappapis.html#queue-an-element-task)
+wrapper must use the element's relevant global/creation realm, not its mutable
+node document after adoption. Existing Binding ownership and global-task routing
+are its foundations; a future caller is not a prerequisite. Keep the route
+cycle-safe and test adoption across realms.
 
 ## Validation
 

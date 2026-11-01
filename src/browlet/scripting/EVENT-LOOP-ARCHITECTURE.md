@@ -48,6 +48,30 @@ a runnable task, install it, execute with cleanup, checkpoint, and request anoth
 host turn while runnable work remains. A future bounded batch must still perform
 the checkpoint after each task. "Continually run" does not require a blocking loop.
 
+Microtasks arriving outside an HTML task/checkpoint also request a coalesced host
+wake-up. That wake-up drains the same engine queue before another ordinary task
+is selected; it does not manufacture an HTML task. Work queued during a task uses
+its existing checkpoint. `env.awaitStableState()` uses this route for parallel
+algorithms: its synchronous section runs as a microtask and may return remaining
+steps for `env.runInParallel()`. The caller must stop its original parallel steps
+after requesting the stable state. No author Promise or second microtask queue
+is introduced.
+
+`EventLoop.spinUntil(waitForGoal, continuation)` lowers HTML's spinning macro
+into a nonblocking wait registration and explicit remaining steps. It moves the
+modeled stack, script-entry task links, and callback backups aside before the
+checkpoint. A later host turn starts the wait; its completion requeues the Task
+on its original source with its Document and evaluation metadata intact. This
+also moves a spinning microtask onto an ordinary task queue. Resumption restores
+the saved bookkeeping and async context. Independent suspensions need not finish
+in stack order.
+
+The original caller must return immediately and put paired cleanup into the
+continuation. Synchronous script/Binding wrappers cannot surround that suspension
+and still clean up in their original `finally`. This operation supplies controlled
+algorithm continuations, not arbitrary author-stack capture. Concrete callers own
+their readiness notifications and abort handling.
+
 Shared time is sampled in processing-model order. Task-start, long-task-reporting,
 and task-end hooks leave Long Tasks/Long Animation Frames to their owners.
 Rendering's independent producer records an opportunity and queues the ordered

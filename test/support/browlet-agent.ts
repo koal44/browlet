@@ -6,9 +6,9 @@ import * as node from '../../src/browlet/integration/node';
 import { UserAgent } from '../../src/browlet/user-agent';
 
 /** Leave Window task turns under fixture control while retaining real realm setup. */
-export function createManualUserAgent(): UserAgent {
+export function createManualUserAgent(init: Partial<EventLoopInit> = {}): UserAgent {
   const userAgent = new UserAgent();
-  vi.spyOn(userAgent, 'createWindowAgent').mockImplementation(() => new WindowAgent(createManualEventLoop()));
+  vi.spyOn(userAgent, 'createWindowAgent').mockImplementation(() => new WindowAgent(createManualEventLoop(init)));
   return userAgent;
 }
 

@@ -360,6 +360,22 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     return this.realm.queueGlobalTask(taskSources[source], steps, options);
   }
 
+  /**
+   * Queue a synchronous section on this environment's loop. The section may
+   * return the remaining parallel steps, or return nothing to end the algorithm.
+   * The initiating parallel algorithm must stop after calling this method.
+   */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#await-a-stable-state
+  // SPEC_CLASH(stable-state-microtask-agent): HTML requires this from parallel
+  // work but queue-a-microtask asserts a surrounding Agent. Retain the owning
+  // environment before parallel work and use its explicit loop instead.
+  awaitStableState(synchronousSection: () => (() => void) | void): void {
+    this.realm.queueMicrotask(() => {
+      const continuation = synchronousSection();
+      if (continuation !== undefined) this.runInParallel(continuation);
+    });
+  }
+
   /** Deliver Fetch work to its destination global, which can differ from the body owner's. */
   queueGlobalFetchTask(global: GlobalObject, steps: () => void): void {
     const targetRealm = BrowletRealm.getAssociatedRealm(global);

@@ -1,5 +1,5 @@
 import { InternalError, type TaskCreationOptions } from '../../infra/index';
-import { createMicrotaskQueue } from '../../js-engine/index';
+import { bindAsyncContext, createMicrotaskQueue } from '../../js-engine/index';
 
 import { unsafeSharedCurrentTime, type UnsafeMoment } from '../timing/index';
 import type { DocumentImpl } from '../dom/nodes/index';
@@ -31,6 +31,8 @@ export class EventLoop {
   #currentlyRunningTask: Task | null = null;
   #runningTaskTurn = false;
   #performingMicrotaskCheckpoint = false;
+  /** Work arriving outside an HTML task needs a host checkpoint wake-up. */
+  #microtaskCheckpointRequested = false;
   #init: EventLoopInit;
   #turnRequested = false;
   #taskQueues = new Set<Set<Task>>();
@@ -293,6 +295,66 @@ export class EventLoop {
     }
   }
 
+  /**
+   * Suspend a continuation-based algorithm until its parallel wait calls ready.
+   * The caller must return immediately and move all remaining steps, including
+   * paired script/callback cleanup, into continuation. This does not suspend an
+   * arbitrary author function or a caller's synchronous try/finally scope.
+   */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#spin-the-event-loop
+  spinUntil(waitForGoal: (ready: () => void) => void, continuation: () => void): void {
+    const task = this.#currentlyRunningTask;
+    if (task === null) throw new InternalError('Spinning the event loop requires a running task');
+
+    const resume = bindAsyncContext(continuation);
+    const oldStack = this.executionContextStack;
+    // The modeled entries' task links and callback backups must travel with
+    // them, rather than become the bookkeeping of another task while waiting.
+    const oldScriptEntryTasks = this.#scriptEntryTasks;
+    const oldCallbackStack = this.backupIncumbentEnvironmentStack;
+    this.executionContextStack = [];
+    this.#scriptEntryTasks = [];
+    this.backupIncumbentEnvironmentStack = [];
+    try {
+      // The existing guard makes this a no-op when a microtask spins.
+      this.performMicrotaskCheckpoint();
+    } catch (error) {
+      this.executionContextStack = oldStack;
+      this.#scriptEntryTasks = oldScriptEntryTasks;
+      this.backupIncumbentEnvironmentStack = oldCallbackStack;
+      throw error;
+    }
+
+    // A host turn runs the wait outside HTML task execution. The wait registers
+    // its completion; it must not busy-wait or block the host thread.
+    this.#init.requestTurn(() => {
+      let queued = false;
+      waitForGoal(() => {
+        if (queued) return;
+        queued = true;
+        task.steps = () => {
+          const stack = this.executionContextStack;
+          const scriptEntryTasks = this.#scriptEntryTasks;
+          const callbackStack = this.backupIncumbentEnvironmentStack;
+          this.executionContextStack = oldStack;
+          this.#scriptEntryTasks = oldScriptEntryTasks;
+          this.backupIncumbentEnvironmentStack = oldCallbackStack;
+          try { resume(); }
+          finally {
+            this.executionContextStack = stack;
+            this.#scriptEntryTasks = scriptEntryTasks;
+            this.backupIncumbentEnvironmentStack = callbackStack;
+          }
+        };
+        // Requeue the suspended task, retaining its source, Document, script
+        // evaluation environments, and other task metadata. A spun microtask
+        // resumes here as an ordinary task, not on the engine microtask queue.
+        this.#getTaskQueue(task.source).add(task);
+        this.#requestTurnIfNeeded();
+      });
+    });
+  }
+
   /** Conditional checkpoint at a Browlet-controlled parser entry. */
   performMicrotaskCheckpointIfStackEmpty(): void {
     if (this.executionContextStack.length === 0) {
@@ -300,9 +362,12 @@ export class EventLoop {
     }
   }
 
+  /** Drain the shared queue, then schedule notifications for pending rejections. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#perform-a-microtask-checkpoint
   performMicrotaskCheckpoint(): void {
     if (this.#performingMicrotaskCheckpoint) return;
 
+    this.#microtaskCheckpointRequested = false;
     this.#performingMicrotaskCheckpoint = true;
     try {
       this.microtaskQueue.performMicrotaskCheckpoint();
@@ -313,14 +378,18 @@ export class EventLoop {
         for (const env of rejectedPromiseEnvironments) env.notifyAboutRejectedPromises();
       }
 
-      // TODO(HTML §8.1.7.3): Clean up IndexedDB transactions.
+      // TODO(IndexedDB §2.7.1): Deactivate transactions whose cleanup event loop
+      // is this loop and clear that association. Transaction state is not implemented.
+      // https://w3c.github.io/IndexedDB/#cleanup-indexed-database-transactions
       // Native checkpoints already clear kept objects; review ordering and isolation
       // with those consumers (EVENT-LOOP-ARCHITECTURE.md#node-v8-checkpoint).
     } finally {
       this.#performingMicrotaskCheckpoint = false;
     }
 
-    // TODO(HTML section 8.1.7.3): Record microtask-checkpoint timing.
+    // TODO(Long Animation Frames §3.2.2): Finish pending scripts for Documents
+    // on this loop. Document frame timing and pending-script entries are missing.
+    // https://w3c.github.io/long-animation-frames/#record-timing-info-for-microtask-checkpoint
   }
 
   /** Include this environment's pending rejections in the next checkpoint. */
@@ -328,6 +397,7 @@ export class EventLoop {
     this.#rejectedPromiseEnvironments.add(env);
   }
 
+  /** Queue internal steps; the Document is metadata, not a fully-active delivery gate. */
   queueMicrotask(
     steps: () => void,
     document: DocumentImpl | null = null,
@@ -353,6 +423,18 @@ export class EventLoop {
           wasPerformingMicrotaskCheckpoint;
       }
     });
+
+    // Parallel algorithms can reach a stable state while no HTML task is
+    // running. Wake the host to drain this same engine queue; do not invent
+    // an ordinary HTML task or wait for unrelated work to arrive.
+    if (
+      this.#currentlyRunningTask === null &&
+      !this.#runningTaskTurn &&
+      !this.#performingMicrotaskCheckpoint
+    ) {
+      this.#microtaskCheckpointRequested = true;
+      this.#requestTurnIfNeeded();
+    }
   }
 
   queueTask(
@@ -424,13 +506,14 @@ export class EventLoop {
   #requestTurnIfNeeded(): void {
     if (
       this.#turnRequested ||
-      !this.hasRunnableTasks()
+      (!this.#microtaskCheckpointRequested && !this.hasRunnableTasks())
     ) return;
 
     this.#turnRequested = true;
     this.#init.requestTurn(() => {
       try {
-        this.runTaskTurn();
+        if (this.#microtaskCheckpointRequested) this.performMicrotaskCheckpoint();
+        else this.runTaskTurn();
       } finally {
         this.#turnRequested = false;
         this.#requestTurnIfNeeded();

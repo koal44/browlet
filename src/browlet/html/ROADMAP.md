@@ -865,7 +865,7 @@ stylesheet critical-resource loading still need their specified block/unblock
 calls and Fetch request flags. Neither the ad hoc parser script handler nor
 the current inline stylesheet association claims those loading algorithms.
 The [loader](../loader/ROADMAP.md), [style integration](../style/ROADMAP.md), and
-[rendering pipeline](../scripting/ROADMAP.md#deferred-processing-model-tails)
+[rendering pipeline](../scripting/ROADMAP.md#outstanding-event-loop-work)
 retain those dependencies, including real rendering opportunities and display.
 
 [`render-blocking.test.ts`](../../../test/browlet/dom/nodes/render-blocking.test.ts)
@@ -960,7 +960,7 @@ definitions, not a new callable algorithm or interface.
 | Meaning follows the current DOM state, and presentation must update when that state changes | Existing mutations update implemented consumers such as title state, live collections, inline declarations, and style-element sheets. Production style/layout/paint delivery and accessibility presentation are incomplete; the existing mutation hooks and rendering task skeleton do not complete this requirement. |
 
 The presentation dependency remains with [style integration](../style/ROADMAP.md),
-the [rendering update phases](../scripting/ROADMAP.md#deferred-processing-model-tails),
+the [rendering update phases](../scripting/ROADMAP.md#outstanding-event-loop-work),
 and §3.2.9's future accessibility owner. This audit accounts for the subsection
 without claiming a working renderer or adding a placeholder presentation API.
 The existing [`RenderingUpdateHooks`](../scripting/rendering-opportunity.ts) carry
