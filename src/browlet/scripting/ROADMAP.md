@@ -947,14 +947,14 @@ It does not treat reaching §8.1.7 as completion of the earlier dependencies.
 
 | Area | Current implementation | Remaining work and disposition |
 | --- | --- | --- |
-| Temporal clock (§8.1.6.5) | Window composition installs `BrowletEnvironment.getSystemUTCEpochNanoseconds()` through JS Engine and the existing addon for non-concrete isolation. Author clock reads, borrowing, and navigation are covered. | Permissions Policy's document query now works, but concrete-isolation hook installation still needs a lifecycle review; the native callback accepts only signed-int64 nanoseconds. See §8.1.6.5 below. |
+| Temporal clock (§8.1.6.5) | Window composition installs `BrowletEnvironment.getSystemUTCEpochNanoseconds()` through JS Engine and the existing addon in every isolation mode. Live policy checks, reporting, borrowing, and navigation are covered. | The native callback accepts only signed-int64 nanoseconds and requires custom/compat. Native AgentCluster isolation remains a separate engine boundary. See §8.1.6.5 below. |
 | String compilation (§8.1.6.2) | Binding-owned TrustedScript extraction and CSP source-list checks/reporting are connected; Node's own checks remain in force. | The preceding Trusted Types/default-policy validation still needs compilation kind and original Function inputs absent from the engine callback. Keep the four approved input-gap failures and unsupported-backend limits; further native work is parked. This is not a later event-loop algorithm. |
 | Execution attribution | Job registration and rejection notifications capture compilation identity and select the associated HTML script. The two ordinary-call rejection regressions now pass on every addon base; direct `reportError` selection retains its accepted compatibility limitation. | Rejection muting follows the approved Chromium/Firefox choice; WebKit and the literal built-in-context reading differ. Complete attribution across async resumptions and security-token boundaries remains unfinished. Constructor incumbent capture and borrowed-Function import-error realms retain their already approved expected failures. Do not turn these into an unbounded goal of mirroring every author frame. |
 | WebAssembly modules | The addon supplies module compilation and supplied-graph execution. | `BrowletRealm.parseWebAssemblyModule()` still throws; source/deferred graph phases are also rejected. Keep the JSRealm/HTML/Wasm ESM integration on hold for its separate standards slice. |
 | Other adopted hooks | Promise rejection delivery, job routing, module imports, import metadata, and cleanup-exception reporting have their documented integrations. | Keep the existing private-element choice, unrelated-Node generic/timeout ownership limit, and unaudited whole-registry cleanup scheduling explicit. No new demonstrated cleanup scheduling failure justifies another native handoff. |
 
-Temporal's ordinary Window connection is complete; its concrete-isolation and
-range limits remain explicit. Permissions Policy is a different dependency from
+Temporal's Window connection is complete; its backend and range limits remain
+explicit. Permissions Policy is a different dependency from
 the implemented Permissions API used by Storage; `Document.isAllowedToUse()` now
 checks active Documents and reports violations. CSP source-list enforcement is connected;
 complete Trusted Types compilation validation remains parked on its engine-input
@@ -1102,21 +1102,23 @@ uses its captured realm-owned Reflect intrinsic for default descriptors and
 initializes both Temporal and `Date.prototype.toTemporalInstant` before host
 inspection. The latter also has a regression for page-visible Instant identity.
 
-Eric accepted the bounded hookup and these remaining limits on 2026-10-31:
+Concrete isolation is connected after the Permissions Policy integration. HTML's
+[Window settings algorithm](https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object)
+returns false without a policy query for non-concrete isolation. Concrete
+isolation calls `Document.isAllowedToUse('cross-origin-isolated')`, including its
+[activity gates](https://html.spec.whatwg.org/multipage/iframe-embed-object.html#allowed-to-use)
+and violation reporting. Registration only retains the callback; it does not
+query the Document before attachment. Navigation installs the associated Document
+and response policies before author execution. Each reading uses live settings:
+denied policy or an inactive/removed Document selects coarser precision, while a
+report-only restriction reports without reducing permitted precision. Retained
+native methods continue using their own environment after WindowProxy reuse.
+The tests explicitly supply concrete isolation; configuring native AgentCluster
+isolation and completing child navigation remain separate work. See the
+[policy connection](../browsing/policy/ROADMAP.md#permissions-policy-clock-prerequisite).
 
-- **Concrete isolation is not connected.** HTML's
-  [Window settings algorithm](https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object)
-  returns false without a policy query for non-concrete isolation. Concrete
-  isolation calls `Document.isAllowedToUse('cross-origin-isolated')`, whose
-  [HTML gates](https://html.spec.whatwg.org/multipage/iframe-embed-object.html#allowed-to-use)
-  and Permissions Policy query now work, including actual violation reporting.
-  Supplied-response Document initialization installs enforced/report-only
-  policies through §9.6; full child navigation remains open.
-  See the [policy dependency checklist](../browsing/policy/ROADMAP.md#permissions-policy-clock-prerequisite).
-  Concrete hook installation remains a separate integration task. It still
-  precedes Document attachment, so a future
-  precision snapshot must be taken after policy construction. The current callback
-  reads live environment state and is installed only for non-concrete clusters.
+Eric accepted the remaining native limits on 2026-10-31:
+
 - **Native timestamps must fit int64** (roughly 1677–2262). HTML specifies rounding
   and clamping to ±8.64 × 10²¹ ns; this is not a gap. The existing engine callback
   returns signed 64-bit nanoseconds, just like Chromium's callbacks in
@@ -1135,12 +1137,17 @@ clock assertions retain the approved backend limitation as expected failures.
 Node 24's disabled-by-default Temporal also retains that approved availability
 limit; namespace ownership passes wherever native Temporal is enabled.
 
-Validation: all 26 calculation, HRT, and Window-settings tests pass on
-custom/compat, including the existing concrete-isolation prerequisite check.
-Typechecking, declaration contracts, touched-file ESLint, and `git diff --check`
-pass. This pure-algorithm slice changes neither native code nor hook registration.
+Regression evidence: before removing the isolation guard, concrete registration
+was absent and four native clock cases returned V8's system time instead of the
+fixture's coarsened wall clock. All 24 Temporal tests now pass on custom/compat,
+including enforced/report-only policy, reports, borrowing, and retained inactive
+or detached Documents. No native code or clock calculation changes were needed.
+The affected Temporal, HRT, Window-settings, policy-enforcement, and Document
+lifecycle suites pass in all six runtime configurations (85 cases each), with
+only approved backend expected failures. Typechecking, type contracts, touched-file
+ESLint, and `git diff --check` pass.
 
-The installation and CSP compilation boundaries remain open in the
+The backend/range and Trusted Types compilation limits remain explicit in the
 [outstanding-connections audit](#outstanding-connections-before-event-loops-2026-10-31).
 
 ### §8.1.6.6.1 and §8.1.6.6.6: JobCallback invocation and capture

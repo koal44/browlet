@@ -68,16 +68,13 @@ export function installRealmHostHooks(
   // from the cleanup callback's realm. Capture the owning environment here.
   env.realm.setExceptionReporter((exception) => env.reportException(exception));
   // https://html.spec.whatwg.org/multipage/webappapis.html#hostsystemutcepochnanoseconds
-  // Non-concrete isolation returns false without querying the Document's policy.
-  // TODO(Temporal): The Permissions Policy query now works, but enabling concrete
-  // isolation still needs a lifecycle review. Composition precedes Document
-  // attachment, so do not eagerly query its policy here.
+  // Registration does not read the Document: navigation attaches it and its
+  // policies before author execution. Read live settings on each clock call so
+  // reused Windows and inactive retained Documents keep the right precision.
   // TODO(Temporal range): The existing native callback accepts int64 nanoseconds
   // (roughly 1677–2262), not HTML's full Instant range. Preserve the HTML clamp;
   // see the roadmap for the accepted native clock limit and Chromium evidence.
-  if (env.realm.agent.agentCluster?.crossOriginIsolationMode !== 'concrete') {
-    env.realm.setTemporalHostSystemUTCEpochNanosecondsCallback(() => env.getSystemUTCEpochNanoseconds());
-  }
+  env.realm.setTemporalHostSystemUTCEpochNanosecondsCallback(() => env.getSystemUTCEpochNanoseconds());
 }
 
 type JobCallback = JSJobCallback<{

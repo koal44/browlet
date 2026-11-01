@@ -631,12 +631,12 @@ See the [Web Storage roadmap](browlet/storage/ROADMAP.md).
 
 ## HTML integration gates
 
-- **Temporal's HTML clock requires custom Node with the addon.** Ordinary Windows
-  install their environment's live, precision-limited wall clock. Stock mode and
+- **Temporal's HTML clock requires custom Node with the addon.** Windows in every
+  isolation mode install their environment's live, precision-limited wall clock. Stock mode and
   official Node 24/26 retain the engine clock; Node 24 also disables Temporal by
-  default. Permissions Policy's document query now works; concrete-isolation
-  hook installation still needs a lifecycle review because composition precedes
-  Document attachment.
+  default. Concrete isolation uses live Document activity and Permissions Policy
+  checks, including violation reports. The clock connection does not configure
+  native AgentCluster isolation or complete child navigation.
   The callback accepts signed 64-bit bigint nanoseconds (roughly 1677–2262),
   narrower than Temporal's full Instant range. An out-of-range system clock or a
   throwing internal callback is a fatal contract violation, not an author-catchable

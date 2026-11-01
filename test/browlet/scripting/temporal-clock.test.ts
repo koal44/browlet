@@ -3,7 +3,11 @@ import { itPassesWith } from '../../test-runtime';
 
 import { JSRealm } from '../../../src/js-engine/realm';
 import { Browlet } from '../../../src/browlet/browlet';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { FetchResponse } from '../../../src/fetch/response';
+import { parseURL } from '../../../src/url/index';
 import { Moment, UnsafeMoment, wallClock } from '../../../src/browlet/timing/clock';
+import { createManualUserAgent } from '../../support/browlet-agent';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { createSiblingWindow } from '../../support/windows';
 
@@ -67,21 +71,58 @@ describe('HTML Temporal clock integration', () => {
     expect(oldTemporal.Now.instant().epochNanoseconds).toBe(123_000_000n);
   });
 
-  it.each(['none', 'logical', 'concrete'] as const)('keeps %s isolation within the supported installation boundary', (mode) => {
+  it.each(['none', 'logical', 'concrete'] as const)('installs the %s clock before attaching its Document', (mode) => {
     const browser = new Browlet({ route: () => '' });
     const env = getRelevantRealm(browser.window).env;
     env.realm.agent.agentCluster!.crossOriginIsolationMode = mode;
     const install = vi.spyOn(JSRealm.prototype, 'setTemporalHostSystemUTCEpochNanosecondsCallback');
-    // The sibling's Document is attached after host-hook installation. Concrete
-    // isolation must not query the missing policy or install a fatal callback.
+    // Registration must not query the Document before the caller attaches it.
     const siblingEnv = getRelevantRealm(createSiblingWindow(browser)).env;
 
-    if (mode === 'concrete') {
-      expect(install).not.toHaveBeenCalled();
+    expect(install).toHaveBeenCalledOnce();
+    expect(install.mock.contexts[0]).toBe(siblingEnv.realm);
+  });
+
+  itPassesWith('temporalClock').each([
+    ['allowed', undefined, undefined, 12_345_000n, null],
+    ['denied', 'cross-origin-isolated=()', undefined, 12_300_000n, 'enforce'],
+    ['report-only', undefined, 'cross-origin-isolated=()', 12_345_000n, 'report'],
+  ] as const)('uses the response policy for a concretely isolated %s clock', (_name, enforced, reportOnly, expected, disposition) => {
+    const { window } = createIsolatedWindow(enforced, reportOnly);
+    const observer = new window.ReportingObserver(() => {});
+    observer.observe();
+    vi.spyOn(wallClock, 'unsafeCurrentTime').mockReturnValue(new UnsafeMoment(wallClock, 12.345_678));
+    const temporal = Reflect.get(window, 'Temporal') as typeof Temporal;
+
+    expect(temporal.Now.instant().epochNanoseconds).toBe(expected);
+    const reports = observer.takeRecords();
+    if (disposition === null) {
+      expect(reports).toEqual([]);
     } else {
-      expect(install).toHaveBeenCalledOnce();
-      expect(install.mock.contexts[0]).toBe(siblingEnv.realm);
+      expect(reports).toHaveLength(1);
+      expect(reports[0]!.body!.toJSON()).toMatchObject({ featureId: 'cross-origin-isolated', disposition });
     }
+  });
+
+  itPassesWith('temporalClock')('rechecks activity for retained concrete clocks after navigation and detachment', () => {
+    const { document, traversable, window } = createIsolatedWindow();
+    const oldTemporal = Reflect.get(window, 'Temporal') as typeof Temporal;
+    vi.spyOn(wallClock, 'unsafeCurrentTime').mockReturnValue(new UnsafeMoment(wallClock, 12.345_678));
+    expect(oldTemporal.Now.instant().epochNanoseconds).toBe(12_345_000n);
+
+    const response = new FetchResponse();
+    response.urlList.push(parseURL('https://clock.test/replacement').url!);
+    const params = traversable.createNavigationParams(response);
+    const replacement = traversable.createAndInitializeDocument('html', 'text/html', params);
+    traversable.finalizeCrossDocumentNavigation('push', 'browser UI', traversable.createHistoryEntry(replacement, params));
+    const newTemporal = Reflect.get(traversable.activeWindowProxy.platform, 'Temporal') as typeof Temporal;
+
+    expect(replacement.env).not.toBe(document.env);
+    expect(document.isFullyActive()).toBe(false);
+    expect(newTemporal.Now.instant().epochNanoseconds).toBe(12_345_000n);
+    expect(oldTemporal.Now.instant.call(newTemporal.Now).epochNanoseconds).toBe(12_300_000n);
+    replacement.browsingContext = null;
+    expect(newTemporal.Now.instant().epochNanoseconds).toBe(12_300_000n);
   });
 });
 
@@ -101,8 +142,7 @@ describe('HTML HostSystemUTCEpochNanoseconds calculation', () => {
     const browser = new Browlet({ route: () => '' });
     const env = getRelevantRealm(browser.window).env;
     vi.spyOn(wallClock, 'unsafeCurrentTime').mockReturnValue(new UnsafeMoment(wallClock, 12.345_678));
-    // Supply the policy result at its existing boundary; Permissions Policy
-    // evaluation itself remains unfinished and is not supplied by this fixture.
+    // Isolate the calculation here; integration tests above exercise the real policy.
     const isolated = vi.spyOn(env, 'crossOriginIsolatedCapability', 'get').mockReturnValue(true);
 
     expect(env.getSystemUTCEpochNanoseconds()).toBe(12_345_000n);
@@ -139,3 +179,19 @@ describe('HTML HostSystemUTCEpochNanoseconds calculation', () => {
     expect(env.getSystemUTCEpochNanoseconds()).toBe(nanoseconds);
   });
 });
+
+/** Supply concrete isolation, then use the real response-policy and Document lifecycle. */
+function createIsolatedWindow(enforced?: string, reportOnly?: string) {
+  const traversable = TopLevelTraversable.create(createManualUserAgent(), null, '');
+  // Native AgentCluster isolation remains separate from this HTML clock integration.
+  traversable.activeBrowsingContext!.group!.crossOriginIsolationMode = 'concrete';
+  const response = new FetchResponse();
+  response.urlList.push(parseURL('https://clock.test/page').url!);
+  if (enforced !== undefined) response.headerList.append('Permissions-Policy', enforced);
+  if (reportOnly !== undefined) response.headerList.append('Permissions-Policy-Report-Only', reportOnly);
+  const params = traversable.createNavigationParams(response);
+  const document = traversable.createAndInitializeDocument('html', 'text/html', params);
+  traversable.finalizeCrossDocumentNavigation('push', 'browser UI', traversable.createHistoryEntry(document, params));
+  expect(document.env.realm.agent.agentCluster!.crossOriginIsolationMode).toBe('concrete');
+  return { document, traversable, window: traversable.activeWindowProxy.platform };
+}

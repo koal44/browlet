@@ -28,10 +28,12 @@ policies. Automatic child creation and the full navigation loader remain unfinis
 This policy is separate from the Permissions API used by Storage.
 
 The [HTML clock integration](../../scripting/ROADMAP.md#8165-temporal-clock-calculation-and-installation-boundary)
-still installs its callback only for non-concrete isolation. Enabling concrete
-installation needs a separate lifecycle review: composition precedes Document
-attachment, so any cached precision decision must wait for the associated
-Document and its policy state. Completing the policy query does not change that hook.
+installs its callback in every isolation mode. Registration retains the callback
+without querying the not-yet-attached Document; navigation installs the Document
+and policies before author code runs. Clock reads use the live activity and policy
+checks, including violation reports. Retained inactive Documents receive coarser
+precision. Native AgentCluster isolation and the existing clock backend/range
+limits remain separate from this policy connection.
 
 ## HTML 7.1.3 cross-origin opener policies
 
@@ -833,8 +835,8 @@ these sections.
   implement their specified failure behavior. Fullscreen must activate and test
   its legacy iframe fallback; Client Hints and other request-feature owners must
   invoke `FetchRequest.isAllowedToUseFeature()`.
-  `cross-origin-isolated` is connected; concrete-isolation Temporal hook
-  installation still needs the lifecycle review described above.
+  `cross-origin-isolated` and the concrete-isolation Temporal clock are connected
+  through the live Document query described above.
 - **Permissions:** policy-controlled permission queries already call that
   Document boundary. Changes to effective policy must also notify existing
   `PermissionStatus` results through `UserAgent.notifyPermissionStateChanged()`.
