@@ -167,7 +167,7 @@ describe('Web IDL extended-attribute integration', () => {
     });
     const context = world.register(new TestRealm(), (ctx) => ({ realm: ctx.realm }));
     for (const implementation of [FirstImpl, SecondImpl]) {
-      const object = context.project(implementation, context.construct(implementation));
+      const object = context.project(implementation, context.construct(implementation))!;
       expect(Reflect.get(object, 'value')).toBe(implementation === FirstImpl ? 6 : 9);
     }
     expect(preparations).toBe(1);

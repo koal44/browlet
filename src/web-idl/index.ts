@@ -6,7 +6,8 @@ export * from './core/index';
 export type { BindingContext };
 export { BindingWorld, type BindingWorldOptions } from './binding/world';
 export type {
-  AttributeBinding, ExtendedAttributeHooks, HTMLConstructorBinding, PlatformObjectBinding, SecurityCheckBinding,
+  AttributeBinding, ExtendedAttributeHooks, HTMLConstructorBinding, InterfaceProjectionSteps,
+  PlatformObjectBinding, SecurityCheckBinding,
 } from './binding/extended-attributes';
 export type { AssembledInterface, IDLAttribute, IDLFrozenArrayType, IDLInterfaceType, IDLType } from './assembly/index';
 export { matchesExposure } from './assembly/index';

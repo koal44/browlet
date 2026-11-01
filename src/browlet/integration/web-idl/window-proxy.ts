@@ -1,11 +1,23 @@
 import { InternalError } from '../../../infra/index';
 import type { GlobalAccessHandlers, JSRealm } from '../../../js-engine/index';
-import type { BindingContext } from '../../../web-idl/index';
+import type { AssembledInterface, BindingContext, InterfaceProjectionSteps } from '../../../web-idl/index';
 
-import type { WindowProxyHandle } from '../../browsing/window/index';
+import type { WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
 import type { BrowletEnvironment } from '../../environment';
 
 import { CrossOriginObjectBinding } from './cross-origin';
+
+/** Expose a Window's current public proxy while preserving its original platform target. */
+export function prepareWindowProjection(owner: AssembledInterface): InterfaceProjectionSteps<WindowImpl> | undefined {
+  if (owner.primary.name !== 'Window') return;
+  return (window) => {
+    // SPEC_CLASH(window-event-target-after-navigation): follow Chromium/WebKit's null for replaced Windows; Firefox returns WindowProxy.
+    // SPEC_CLASH(window-event-target-after-removal): retain Chromium/Firefox's WindowProxy without replacement; WebKit returns null.
+    // See browsing/window/ROADMAP.md and Blink DOMWindow::Wrap / WebKit toJS(DOMWindow&).
+    const proxy = window.getWindowProxy();
+    return proxy.windowImplementation === window ? proxy.platform : null;
+  };
+}
 
 /** Select WindowProxy access policy using the accessing realm's binding. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-windowproxy-exotic-object

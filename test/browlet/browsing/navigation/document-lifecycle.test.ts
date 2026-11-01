@@ -67,7 +67,7 @@ describe('browsing context groups', () => {
     const document = createTestDocument();
     const env = document.env;
     const window = unwrap<WindowImpl>(env.global);
-    const platform = project(window) as StampedPlatformObject<Window>;
+    const platform = env.realm.globalObject as StampedPlatformObject<Window>;
     window.setAssociatedDocument(document);
     context.windowProxy.setAssociatedWindow(platform);
 
@@ -100,7 +100,9 @@ describe('browsing context groups', () => {
     expect(realm).toBeInstanceOf(WindowRealm);
     expect(realm.agent).toBe(agent);
     expect(realm.windowImplementation).toBe(window);
-    expect(realm.globalObject).toBe(project(window));
+    expect(realm.globalObject).toBe(getBindingContext(realm).getObjectRecord(window)?.platformObject);
+    context.windowProxy.setAssociatedWindow(realm.globalObject);
+    expect(project(window)).toBe(context.windowProxy.platform);
     expect(realm.globalThis).toBe(context.windowProxy.platform);
     expect(Reflect.get(realm.globalObject, 'Object')).toBe(realm.Object);
     expect(Reflect.get(realm.globalObject, 'globalThis')).toBe(context.windowProxy.platform);
@@ -137,7 +139,8 @@ describe('browsing context groups', () => {
     expect(() => { realm.windowImplementation = window; })
       .toThrow('Realm Window implementation is already initialized');
     expect(realm.windowImplementation).toBe(window);
-    expect(realm.globalObject).toBe(project(window));
+    expect(realm.globalObject).toBe(getBindingContext(realm).getObjectRecord(window)?.platformObject);
+    expect(project(window)).toBe(realm.globalThis);
   });
 
   it('rejects reassignment of a Window realm\'s WindowProxy handle', () => {

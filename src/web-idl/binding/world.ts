@@ -5,13 +5,14 @@ import { webIDLCommonDefinitions, type Definition } from '../core/index';
 import type { WebIDLEnvironment, WebIDLRealm } from '../environment';
 import { DefinitionAssembly, type AssembledInterface, type IDLAttribute } from '../assembly/index';
 import {
-  getImplementationRecord, getPlatformRecord, type StampedImplInstance, type StampedPlatformObject,
+  getImplementationRecord, getPlatformRecord, type StampedImplInstance,
 } from './platform';
 
 import { RealmBinding } from './realm';
 import { registerImplementationBindings } from './register';
 import type {
-  AttributeBinding, ExtendedAttributeHooks, HTMLConstructorBinding, PlatformObjectBinding, SecurityCheckBinding,
+  AttributeBinding, ExtendedAttributeHooks, HTMLConstructorBinding, InterfaceProjectionSteps,
+  PlatformObjectBinding, SecurityCheckBinding,
 } from './extended-attributes';
 
 /**
@@ -30,6 +31,8 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
   #securityChecks = new Map<AssembledInterface, SecurityCheckBinding>();
   /** Additional platform creation steps owned by the interface's specification. */
   #platformObjects = new Map<AssembledInterface, PlatformObjectBinding>();
+  /** Outward projection rules prepared once for each participating interface. */
+  #interfaceProjections = new Map<AssembledInterface, InterfaceProjectionSteps>();
   /** Host lookup shared by this world's registered realm bindings. */
   #incumbentEnvironment?: (methodEnv: WebIDLEnvironment) => WebIDLEnvironment | undefined;
 
@@ -88,6 +91,13 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
         }
       }
     }
+    const prepareInterfaceProjection = options.extendedAttributes?.prepareInterfaceProjection;
+    if (prepareInterfaceProjection) {
+      for (const assembled of this.#assembly.interfaces.values()) {
+        const project = prepareInterfaceProjection(assembled);
+        if (project) this.#interfaceProjections.set(assembled, project);
+      }
+    }
   }
 
   /** Compose a realm's environment and binding context, reusing an existing registration. */
@@ -140,6 +150,11 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
     return this.#platformObjects.get(owner);
   }
 
+  /** Find outward projection steps for an implementation's actual interface. */
+  getInterfaceProjection(owner: AssembledInterface): InterfaceProjectionSteps | undefined {
+    return this.#interfaceProjections.get(owner);
+  }
+
   /** Find a realm's binding context in this world without registering it. */
   getBindingContext(realm: Env['realm']): BindingContext<Env> | undefined {
     // Registration checked the environment retained by this realm's binding.
@@ -157,8 +172,8 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
     return record?.binding.world === this ? record.implInst : undefined;
   }
 
-  /** Retrieve or create a platform object if its implementation is already associated with this world. */
-  project(implInst: object): StampedPlatformObject | undefined {
+  /** Project an implementation already associated with this world; undefined means it has no owner here. */
+  project(implInst: object): object | null | undefined {
     const record = getImplementationRecord(implInst);
     return record?.binding.world === this ? record.project() : undefined;
   }

@@ -5,6 +5,7 @@ import { itPassesWith } from '../../test-runtime';
 import { unwrap, project } from '../../support/browlet-binding';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
 import { WindowImpl } from '../../../src/browlet/browsing/window/window';
+import type { Window } from '../../../src/browlet/platform';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { AgentCluster, WindowAgent } from '../../../src/browlet/scripting/agents';
 import type { WindowRealm } from '../../../src/browlet/scripting/realm';
@@ -12,7 +13,6 @@ import { createWindowEnvironment } from '../../../src/browlet/bindings';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { parseURL } from '../../../src/url/url';
 import { createOpaqueOrigin } from '../../../src/url/origin';
-import type { StampedPlatformObject } from '../../../src/web-idl/index';
 
 // Native allocation belongs to the addon; plain Node has no equivalent API.
 describe('Window global allocation', () => {
@@ -20,6 +20,7 @@ describe('Window global allocation', () => {
     const fixture = createNativeWindow();
     const { realm, window, platformWindow, document, context } = fixture;
     const proxy = context.windowProxy.platform;
+    expect(project(window)).toBe(proxy);
     expect(Object.getPrototypeOf(window)).toBe(WindowImpl.prototype);
     expect(platformWindow).not.toBe(window);
     expect(unwrap(platformWindow)).toBe(window);
@@ -197,7 +198,7 @@ function createNativeWindow(previous?: NativeWindow): NativeWindow {
   const { window, realm } = env;
   const proxy = realm.windowProxy;
   const context = previous?.context ?? new BrowsingContext(proxy);
-  const platformWindow = project(window) as StampedPlatformObject<Window>;
+  const platformWindow = realm.globalObject;
   const document = realm.env.createDocument();
   document.url = creationURL;
   document.origin = origin;

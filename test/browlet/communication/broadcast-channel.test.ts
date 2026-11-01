@@ -3,14 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { createWindowEnvironment } from '../../../src/browlet/bindings';
 import { BrowsingContext, TopLevelTraversable, createDocumentState } from '../../../src/browlet/browsing/navigation/index';
-import { WindowImpl } from '../../../src/browlet/browsing/window/index';
 import { BroadcastChannelImpl } from '../../../src/browlet/communication/index';
-import type { BroadcastChannel, MessageEvent, Window } from '../../../src/browlet/platform';
+import type { BroadcastChannel, MessageEvent } from '../../../src/browlet/platform';
 import { AgentCluster, WindowAgent } from '../../../src/browlet/scripting/agents';
 import { navigationAndTraversalTaskSource } from '../../../src/browlet/scripting/tasks';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { createOpaqueOrigin, obtainURLOrigin, parseURL, type Origin } from '../../../src/url/index';
-import type { StampedPlatformObject } from '../../../src/web-idl/index';
 import { createManualEventLoop } from '../../support/browlet-agent';
 import { getBindingContext } from '../../support/browlet-binding';
 
@@ -442,8 +440,7 @@ function createWindow(
   document.origin = origin;
   document.browsingContext = new BrowsingContext(env.realm.windowProxy);
   env.window.setAssociatedDocument(document);
-  const binding = getBindingContext(env.realm);
-  env.realm.windowProxy.setAssociatedWindow(binding.project(WindowImpl, env.window) as StampedPlatformObject<Window>);
+  env.realm.windowProxy.setAssociatedWindow(env.realm.globalObject);
   const navigable = new TopLevelTraversable(createDocumentState(document));
   env.markExecutionReady();
   return {

@@ -5,6 +5,7 @@ import {
 } from '../../../src/web-idl/core/index';
 import { BindingWorld } from '../../../src/web-idl/binding/world';
 import { getImplementationRecord, getPlatformRecord } from '../../../src/web-idl/binding/platform';
+import type { ExtendedAttributeHooks } from '../../../src/web-idl/binding/extended-attributes';
 
 import { installTestBindings } from '../../support/web-idl-binding';
 
@@ -52,6 +53,47 @@ describe('interface projection ownership', () => {
     });
   }
 
+  it('uses the actual interface projection across realms without replacing its paired platform object', () => {
+    const exposed = new WeakMap<object, object | null>();
+    let preparations = 0;
+    const { a, b, realmA, world } = setup({
+      prepareInterfaceProjection(owner) {
+        if (owner.primary.name !== 'Child') return;
+        preparations++;
+        return (value) => exposed.get(value)!;
+      },
+    });
+    const record = a.createPlatformRecord('Child')!;
+    const child = record.implInst;
+    const target = record.platformObject!;
+    const publicObject = new Proxy(target, {});
+    const otherRecord = b.createPlatformRecord('Child')!;
+    const otherChild = otherRecord.implInst;
+    const otherTarget = otherRecord.platformObject!;
+    const otherPublicObject = new Proxy(otherTarget, {});
+    exposed.set(otherChild, otherPublicObject);
+
+    for (const value of [publicObject, null]) {
+      exposed.set(child, value);
+      expect(b.implToJS(child, reference('Base'))).toBe(value);
+      expect(b.implToJS(child, union(reference('Base'), idlType.DOMString))).toBe(value);
+      expect(a.implToJS(otherChild, reference('Base'))).toBe(otherPublicObject);
+      expect(a.project(ChildImpl, child)).toBe(value);
+      expect(b.project(BaseImpl, child)).toBe(value);
+      expect(world.project(child)).toBe(value);
+      expect(record.project()).toBe(value);
+      expect(record.platformObject).toBe(target);
+      expect(a.unwrap(target, ChildImpl)).toBe(child);
+      expect(getPlatformRecord(target)?.realm).toBe(realmA);
+    }
+
+    const ordinary = a.construct(BaseImpl);
+    expect(b.implToJS(ordinary, reference('Base'))).toBe(a.project(BaseImpl, ordinary));
+    expect(b.implToJS(child, idlType.object)).toBe(child);
+    expect(b.implToJS(child, idlType.any)).toBe(child);
+    expect(preparations).toBe(1);
+  });
+
   it('retains already-platform union values and proxy object identities', () => {
     const { a, ctxB, hostObject, hostHandle } = setup();
     const platformObject = a.project(ChildImpl, new ChildImpl());
@@ -89,7 +131,7 @@ describe('interface projection ownership', () => {
   });
 });
 
-function setup() {
+function setup(extendedAttributes?: ExtendedAttributeHooks) {
   const hostObject = new Proxy(Object.freeze({}), {
     getPrototypeOf() { throw new Error('Host objects must not enter implementation discovery'); },
   });
@@ -101,11 +143,11 @@ function setup() {
       getHandle: (value) => value === hostObject ? hostHandle : undefined,
       getProxy: (value) => value === hostHandle ? hostObject : undefined,
     }),
-  ]);
+  ], { extendedAttributes });
   const { realm: realmA, context: a } = installTestBindings(world);
   const { realm: realmB, context: b } = installTestBindings(world);
   return {
-    realmA, realmB, a, b, hostObject, hostHandle,
+    world, realmA, realmB, a, b, hostObject, hostHandle,
     ctxA: { binding: world.getRealmBinding(realmA)!, realm: realmA },
     ctxB: { binding: world.getRealmBinding(realmB)!, realm: realmB },
   };

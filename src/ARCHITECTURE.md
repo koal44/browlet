@@ -46,6 +46,15 @@ JS Engine resolves the native accessing realm; HTML's WindowProxy binding suppli
 the origin policy and foreign property view. Native ordinary access keeps V8's store and receivers.
 Untyped `any` and `object` values keep their JavaScript representation.
 
+Interface bindings can register outward projection through
+`prepareInterfaceProjection`. Each platform record captures its actual interface's
+steps once; all outward projection uses its `project()` operation, including
+typed results, callback receivers, and a Window returned as EventTarget.
+HTML's Window integration exposes the public WindowProxy while it still selects
+that Window, including after removal, and null after replacement, following Chromium.
+The paired platform object remains the original Window property store for
+installation, receiver ownership, and reflection.
+
 One private binding record connects those identities without changing the
 implementation's class prototype. Its `BindingWorld` supplies the identity
 scope; its realm binding supplies prototypes and member functions. Browlet's

@@ -4,7 +4,7 @@ import { type BrowletEnvironment } from '../../src/browlet/environment';
 import type { NodeImpl } from '../../src/browlet/dom/nodes/index';
 import type { WindowImpl } from '../../src/browlet/browsing/window/index';
 import type { Node, Window } from '../../src/browlet/platform';
-import type { BindingContext, StampedImplInstance, StampedPlatformObject } from '../../src/web-idl/index';
+import type { BindingContext, StampedImplInstance } from '../../src/web-idl/index';
 
 // Binding tests inspect the same world used by Browlet's composition root.
 // Implementation algorithms instead retain their environment and typed objects.
@@ -26,7 +26,7 @@ export function getRelevantRealm(value: object): BrowletRealm {
 }
 
 /** Project a fixture's already associated implementation in Browlet's main world. */
-export function project(value: object): StampedPlatformObject {
+export function project(value: object): object {
   const platform = browletBindingWorld.project(value);
   if (!platform) throw new Error('Fixture implementation has no Browlet binding');
   return platform;

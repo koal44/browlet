@@ -509,7 +509,7 @@ describe('Web IDL realm interface bindings', () => {
       const realm = new Realm({ secureContext });
       const ctx = world.register(realm, (ctx) => ({ realm: ctx.realm }));
       const value = new JSONValuesImpl();
-      const object = ctx.project(JSONValuesImpl, value);
+      const object = ctx.project(JSONValuesImpl, value)!;
       const first = call(object, 'toJSON', object);
       expect(first).toEqual(secureContext ? { value: 1, secureValue: 2 } : { value: 1 });
       expect(first).toBeInstanceOf(realm.Object);
@@ -521,7 +521,7 @@ describe('Web IDL realm interface bindings', () => {
 
       const other = new JSONValuesImpl();
       other.current = 5;
-      const otherObject = ctx.project(JSONValuesImpl, other);
+      const otherObject = ctx.project(JSONValuesImpl, other)!;
       expect(call(otherObject, 'toJSON', otherObject))
         .toEqual(secureContext ? { value: 5, secureValue: 10 } : { value: 5 });
 

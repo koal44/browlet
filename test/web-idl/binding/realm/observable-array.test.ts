@@ -251,7 +251,7 @@ describe('Web IDL observable arrays', () => {
     const binding = world.register(realm, (ctx) => ({ realm: ctx.realm }));
     const implementation = new BuildingImpl();
     const employeeImpl = new EmployeeImpl();
-    const object = binding.project(BuildingImpl, implementation);
+    const object = binding.project(BuildingImpl, implementation)!;
     const employeeObject = binding.project(EmployeeImpl, employeeImpl);
     const values = getArray(object, 'workers');
     const backingList = implementation.workers;
@@ -286,7 +286,7 @@ function createNumberArrayBinding(observableArraySteps?: ObservableArraySteps): 
   const context = world.register(realm, (ctx) => ({ realm: ctx.realm }));
   const binding = world.getRealmBinding(realm)!;
   const implementation = new NumberArraysImpl();
-  const object = context.project(NumberArraysImpl, implementation);
+  const object = context.project(NumberArraysImpl, implementation)!;
   return {
     attribute,
     binding,

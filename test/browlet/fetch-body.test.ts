@@ -128,11 +128,11 @@ describe('Fetch body delivery through HTML', () => {
         request.body = body;
         return context.project(RequestImpl, context.construct(
           RequestImpl, [request, 'request', context.getEnvironment().createDependentAbortSignal([])],
-        ));
+        ))!;
       }
       const response = new FetchResponse();
       response.body = body;
-      return context.project(ResponseImpl, context.construct(ResponseImpl, [response, 'response']));
+      return context.project(ResponseImpl, context.construct(ResponseImpl, [response, 'response']))!;
     };
     const body = FetchBody.fromBytes(Uint8Array.of(65, 66), source.context.getEnvironment());
     const receiver = create(ownerBinding, body);

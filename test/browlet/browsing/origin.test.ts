@@ -76,13 +76,13 @@ describe('Origin interface', () => {
     const browser = new Browlet({ route: () => '' });
     const binding = getBindingContext(unwrap<DocumentImpl>(browser.document).env.realm);
     const origin = createOpaqueOrigin();
-    const event = binding.project(MessageEventImpl, new MessageEventImpl('message', {}, 0, origin));
+    const event = binding.project(MessageEventImpl, new MessageEventImpl('message', {}, 0, origin))!;
     const copy = browser.window.Origin.from(event);
     expect(Reflect.get(event, 'origin')).toBe('null');
     expect(unwrap<OriginImpl>(copy).extractOrigin()).toBe(origin);
     expect(copy.isSameOrigin(browser.window.Origin.from(event))).toBe(true);
     for (const value of [null, '', 'null', 'https://example.com/']) {
-      const event = binding.project(MessageEventImpl, new MessageEventImpl('message', {}, 0, value));
+      const event = binding.project(MessageEventImpl, new MessageEventImpl('message', {}, 0, value))!;
       expect(Reflect.get(event, 'origin')).toBe(value ?? '');
       expect(() => browser.window.Origin.from(event)).toThrow(Reflect.get(browser.window, 'TypeError'));
     }

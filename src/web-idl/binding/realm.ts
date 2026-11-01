@@ -80,7 +80,8 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
       if (DOMExceptionImpl.is(value)) {
         // An already-owned exception keeps its platform identity, even when
         // delivered through another world; do not associate it a second time.
-        return getImplementationRecord(value)?.project() ?? this.project(DOMExceptionImpl, value);
+        const record = getImplementationRecord(value);
+        return record ? record.project() : this.project(DOMExceptionImpl, value);
       }
       const request = ExceptionRequestStamper.get(value);
       if (!request) return value;
@@ -128,7 +129,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     this.installDefinitions(target);
   }
 
-  /** Project a global implementation, optionally adopting an engine allocation. */
+  /** Project a global, optionally supplying its engine-owned allocation. */
   projectGlobalObject(
     implInst: object,
     interfaceName: string,
@@ -280,8 +281,8 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
       : undefined;
   }
 
-  /** Retrieve or create the platform object for an implementation through its registered interface. */
-  project<T extends object>(implClass: ImplementationClass<T>, implInst: T): StampedPlatformObject {
+  /** Project an implementation through its registered interface, preserving an existing owner. */
+  project<T extends object>(implClass: ImplementationClass<T>, implInst: T): object | null {
     return this.associate(implClass, implInst).project();
   }
 
@@ -314,6 +315,9 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     let binding = this.#implementationBindings.get(assembled);
     if (!binding) {
       binding = new ImplementationBinding(this, assembled);
+      if (assembled instanceof AssembledInterface) {
+        binding.interfaceProjection = this.world.getInterfaceProjection(assembled);
+      }
       this.#implementationBindings.set(assembled, binding);
     }
     return binding as ImplementationBinding<Assembled>;
@@ -424,11 +428,11 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     return installed;
   }
 
-  // Project adapter: preserve an existing owner or stamp a fresh result with this receiver binding.
-  projectImplementationObject(
+  // Convert a typed result using its existing owner or establish one with this receiver binding.
+  projectInterfaceResult(
     implInst: object,
     expectedAssembled: AssembledInterface,
-  ): StampedPlatformObject | undefined {
+  ): object | null | undefined {
     return this.associateImplementationObject(implInst, expectedAssembled)?.project();
   }
 

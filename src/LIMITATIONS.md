@@ -156,12 +156,15 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   unsupported; the maintained bridge forwards to Node's default handler. See the
   [rejection audit](browlet/scripting/ROADMAP.md#html-8147-unhandled-promise-rejections).
 
-- **Window event-target identity is incomplete.** Event delivery reaches the
-  correct Window implementation, but `event.target === window` is false because
-  projection returns the Window target instead of its public WindowProxy. The
-  [regression](../test/browlet/browsing/window-event-target.test.ts) retains this
-  approved expected failure on both backends; Chromium returns true. Resolve
-  this at the Window/Binding boundary, not in individual event algorithms.
+- **Retained Window event targets follow Chromium.** Live event targets,
+  path entries, and function-listener receivers expose WindowProxy on both
+  backends. After replacement, converting the old Window returns null as in
+  Chromium/WebKit; Firefox retains WindowProxy. Removal without replacement
+  retains the proxy as in Chromium/Firefox; WebKit returns null. A proxy saved
+  before navigation remains stable. See the
+  [Window identity tests](../test/browlet/browsing/window-event-target.test.ts)
+  and the `window-event-target-after-navigation` / `window-event-target-after-removal` clashes in the
+  [Window roadmap](browlet/browsing/window/ROADMAP.md).
 
 - **Import-map algorithms still need production callers.** Parsing, normalization,
   merging, module specifier resolution, parse-result creation, and Window
@@ -596,8 +599,8 @@ rejecting opaque origins and denied acquisition with `SecurityError`.
 Removal, named deletion, and clearing queue storage events for other matching
 objects, with delivery gated by Document activity. `setItem()` and named writes
 check bottle and shelf quotas before mutation and broadcast changed values.
-Window's IDL `onstorage` receives these changes; its callback receiver still hits
-the shared Window/WindowProxy identity limitation. Body/frameset handler aliases,
+Window's IDL `onstorage` receives these changes with its public WindowProxy receiver.
+Body/frameset handler aliases,
 inline handler compilation, and storage synchronization across separate
 threads/processes remain pending.
 Storage keys are origin-only; third-party partitioning/blocking, expiry,

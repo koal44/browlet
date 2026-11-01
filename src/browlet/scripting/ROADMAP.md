@@ -763,7 +763,7 @@ uses real native rejections, slot reads, checkpoints, event bindings, and
 boundary. Native tests also cover Node forwarding, collection, worker teardown,
 and callback/job-hook coexistence. Complete running-script restoration in jobs
 remains separate. The [Window event-target regression](../../../test/browlet/browsing/window-event-target.test.ts)
-records an independent approved binding failure, also present for ordinary events.
+now passes through shared Window/Binding conversion, independently of native rejection tracking.
 Window and WorkerGlobalScope inherit EventTarget;
 WorkletGlobalScope does not. Keep the common global-state contract independent
 of EventTarget and review worklet rejection delivery with its eventual consumer.

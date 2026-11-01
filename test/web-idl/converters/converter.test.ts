@@ -178,7 +178,7 @@ function fixture() {
   const world = new BindingWorld(definitions);
   const { realm: first, context } = installTestBindings(world);
   const { realm: second } = installTestBindings(world);
-  const owner = context.project(SourceImpl, new SourceImpl(context.InternalPromise));
+  const owner = context.project(SourceImpl, new SourceImpl(context.InternalPromise))!;
   return { first, second, owner, binding: world.getRealmBinding(first)! };
 }
 

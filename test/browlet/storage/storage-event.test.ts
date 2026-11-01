@@ -187,8 +187,6 @@ describe('HTML §12.2.4: StorageEvent', () => {
     expect(await browser.evaluate(() => {
       const event = Reflect.get(globalThis, 'receivedStorageEvent') as StorageEvent;
       const storage = Reflect.get(globalThis, 'storageUnderTest') as StoragePlatform;
-      // Window projection still exposes the target instead of its WindowProxy.
-      // Keep the required identity below; see ../browsing/window-event-target.test.ts.
       const received = [event instanceof StorageEvent, event.isTrusted, event.key, event.oldValue,
         event.newValue, event.url, event.storageArea === storage, event.target === window];
       event.initStorageEvent('author');

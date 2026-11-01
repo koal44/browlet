@@ -28,7 +28,7 @@ describe('fresh Web IDL member functions', () => {
     const context = world.register(methodRealm, (context) => ({ realm: context.realm }));
     const receiverContext = world.register(receiverRealm, (context) => ({ realm: context.realm }));
     const receiver = receiverContext.project(DerivedImpl, new DerivedImpl());
-    const methodOwner = context.project(DerivedImpl, new DerivedImpl());
+    const methodOwner = context.project(DerivedImpl, new DerivedImpl())!;
     const original: unknown = Reflect.get(methodOwner, 'scale');
     const prototype = Reflect.getPrototypeOf(Reflect.getPrototypeOf(methodOwner)!)!;
     Reflect.set(prototype, 'scale', () => { throw new Error('Author replacement must not run'); });

@@ -28,8 +28,8 @@ describe('Web IDL inherited collections', () => {
     ]);
     const realm = new Realm();
     const ctx = world.register(realm, (ctx) => ({ realm: ctx.realm }));
-    const first = ctx.project(ChildImpl, new ChildImpl());
-    const second = ctx.project(ChildImpl, new ChildImpl());
+    const first = ctx.project(ChildImpl, new ChildImpl())!;
+    const second = ctx.project(ChildImpl, new ChildImpl())!;
     const unrelated = ctx.project(UnrelatedImpl, new UnrelatedImpl());
     const method = kind === 'map' ? 'set' : 'add';
 
@@ -206,7 +206,7 @@ describe('Web IDL maplike declarations', () => {
     ]);
     const realm = new Realm();
     const context = world.register(realm, (ctx) => ({ realm: ctx.realm }));
-    const object = context.project(MapImpl, new MapImpl());
+    const object = context.project(MapImpl, new MapImpl())!;
     const entries = world.getRealmBinding(realm)!.getMapEntries(object);
     const child = new ChildImpl();
     if (method === 'keys') entries.set('visible', child);
@@ -276,7 +276,7 @@ describe('Web IDL maplike declarations', () => {
     );
     class CollectionImplementation {}
     const implementation = new CollectionImplementation();
-    const object = new PlatformRecord(implementation, assembled, binding).project();
+    const object = new PlatformRecord(implementation, assembled, binding).project()!;
 
     expect(call(object, 'set', [1, 'one'])).toBe(object);
     expect(Object.getPrototypeOf(implementation))
@@ -528,8 +528,8 @@ describe('Web IDL collection result ownership', () => {
     ]);
     const owner = world.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
     const other = world.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
-    const object = owner.project(CollectionImpl, new CollectionImpl());
-    const foreign = other.project(CollectionImpl, new CollectionImpl());
+    const object = owner.project(CollectionImpl, new CollectionImpl())!;
+    const foreign = other.project(CollectionImpl, new CollectionImpl())!;
     const value = new ValueImpl();
     const binding = world.getRealmBinding(owner.realm)!;
     if (kind === 'map') binding.getMapEntries(object).set('key', value);

@@ -775,6 +775,17 @@ allocation. A sandbox can register for internal allocations without installing
 author interfaces. [Browlet's composition root](../browlet/bindings.ts) demonstrates
 both the sandbox and Window paths.
 
+`prepareInterfaceProjection` registers outward projection once per interface in
+the binding world; each realm's `ImplementationBinding` retains the prepared steps.
+Each `PlatformRecord` captures its actual interface's steps at construction.
+`project()` applies those steps or returns the ordinary cached platform object;
+the result itself is not cached when custom steps are present. Interface and union
+results, callback receivers, and explicit context/world projection all use that
+same operation, including when a result is declared as a base interface.
+HTML's Window integration supplies its public WindowProxy or null for a replaced
+Window. The record's `platformObject` keeps the original property store for internal
+use. Global allocation has no separate outward-projection parameter.
+
 `GlobalObjectAllocation.registerAttributeGetter` optionally tells the engine
 allocation which original functions implement global IDL attributes. Binding
 registers them as it prepares the getters; it does not replace the functions,

@@ -33,7 +33,7 @@ describe('Web IDL synchronous iterable declarations', () => {
         members: [iter(idlType.long, { key: idlType.DOMString })],
       });
       const context = new BindingWorld([definition]).register(new Realm(), (ctx) => ({ realm: ctx.realm }));
-      const object = context.project(PairsImpl, context.construct(PairsImpl));
+      const object = context.project(PairsImpl, context.construct(PairsImpl))!;
       if (method === 'forEach') {
         const seen: unknown[][] = [];
         Reflect.apply(getMethod(object, method), object, [(value: unknown, key: unknown) => {
@@ -222,8 +222,8 @@ describe('Web IDL synchronous iterable declarations', () => {
       const owner = bindings.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
       const other = bindings.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
       const implInst = owner.construct(PairsImpl);
-      const object = owner.project(PairsImpl, implInst);
-      const foreign = other.project(PairsImpl, other.construct(PairsImpl));
+      const object = owner.project(PairsImpl, implInst)!;
+      const foreign = other.project(PairsImpl, other.construct(PairsImpl))!;
       let value: object | undefined;
       if (method === 'forEach') {
         Reflect.apply(getMethod(foreign, 'forEach'), object, [(item: object) => { value = item; }]);

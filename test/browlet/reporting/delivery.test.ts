@@ -130,7 +130,7 @@ describe('Reporting delivery', () => {
   it('copies a projected report without retaining its body or binding identity', async () => {
     const { userAgent, realm, env, scope } = createWindow();
     const report = env.generateReport({ message: 'test' }, 'test', 'default');
-    const platform = getBindingContext(realm).project(ReportImpl, report);
+    const platform = getBindingContext(realm).project(ReportImpl, report)!;
     Reflect.get(platform, 'body');
     expect(isStampedImplInstance(report)).toBe(true);
     expect(isStampedImplInstance(report.body)).toBe(true);

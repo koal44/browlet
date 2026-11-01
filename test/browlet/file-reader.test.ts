@@ -226,7 +226,7 @@ describe('File API §6.2: FileReader reads', () => {
     });
     expect(arrayBuffer.result)
       .toBeInstanceOf(requireFunction(first, 'ArrayBuffer'));
-    const result = Reflect.get(context.project(FileReaderImpl, arrayBuffer), 'result') as ArrayBuffer;
+    const result = Reflect.get(context.project(FileReaderImpl, arrayBuffer)!, 'result') as ArrayBuffer;
     expect(result).toBe(arrayBuffer.result);
     expect(result)
       .toBeInstanceOf(requireFunction(first, 'ArrayBuffer'));
@@ -680,7 +680,7 @@ describe('File API §6.2: FileReader reads', () => {
 
         expect(taskErrors).toEqual([failure]);
         expect(reader.error).toBeNull();
-        expect(Reflect.get(context.project(FileReaderImpl, reader), 'error')).toBeNull();
+        expect(Reflect.get(context.project(FileReaderImpl, reader)!, 'error')).toBeNull();
         expect(events).toEqual([]);
         if (kind === 'load event') expect(new Uint8Array(reader.result as ArrayBuffer)).toEqual(Uint8Array.of(65));
         else expect(reader.result).toBeNull();
@@ -718,7 +718,7 @@ describe('File API §6.2: FileReader reads', () => {
       expect(taskErrors[0]).toBeInstanceOf(InternalError);
       expect(taskErrors[0]).toHaveProperty('message', 'A Blob byte source must return the complete requested range');
       expect(reader.error).toBeNull();
-      expect(Reflect.get(context.project(FileReaderImpl, reader), 'error')).toBeNull();
+      expect(Reflect.get(context.project(FileReaderImpl, reader)!, 'error')).toBeNull();
     } finally {
       taskDelivery.mockRestore();
     }
@@ -755,7 +755,7 @@ describe('File API §6.2: FileReader reads', () => {
     expect(reader.result).toBeNull();
     expect(reader.error).toBeInstanceOf(DOMExceptionImpl);
     expect(reader.error).toMatchObject({ name });
-    const error: unknown = Reflect.get(context.project(FileReaderImpl, reader), 'error');
+    const error: unknown = Reflect.get(context.project(FileReaderImpl, reader)!, 'error');
     expect(error).toMatchObject({ name });
     expect(error).toBeInstanceOf(requireFunction(context.realm.globalObject, 'DOMException'));
     expect(context.unwrap(error, DOMExceptionImpl)).toBe(reader.error);

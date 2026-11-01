@@ -181,8 +181,8 @@ describe('Web IDL initial objects', () => {
     second.install(secondRealm.globalObject);
     const Constructor = Reflect.get(firstRealm.globalObject, 'Child') as new() => object;
     const constructed = new Constructor();
-    const projected = first.project(ChildImpl, new ChildImpl());
-    const foreign = second.project(ChildImpl, new ChildImpl());
+    const projected = first.project(ChildImpl, new ChildImpl())!;
+    const foreign = second.project(ChildImpl, new ChildImpl())!;
 
     for (const name of ['label', 'read']) {
       const descriptor = Object.getOwnPropertyDescriptor(constructed, name)!;
@@ -558,7 +558,7 @@ function project(
       { configurable: true, enumerable: true, value, writable: true },
     ])),
   ) as object;
-  return new PlatformRecord(implementation, assembled, binding).project();
+  return new PlatformRecord(implementation, assembled, binding).project()!;
 }
 
 function requireFunction(value: unknown): RealmFunction {

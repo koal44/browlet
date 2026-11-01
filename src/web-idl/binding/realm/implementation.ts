@@ -7,6 +7,7 @@ import type {
 } from '../../assembly/index';
 import type { PlatformRecord } from '../platform';
 
+import type { InterfaceProjectionSteps } from '../extended-attributes';
 import type { RealmBinding } from '../realm';
 import type { LegacyPropertyMetadata } from './legacy';
 import { MemberBinding, type MemberOwner } from './member';
@@ -24,6 +25,8 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
   initializeImplementation?: ImplementationInitializationSteps;
   /** Replace ordinary constructor invocation when the declaration supplies custom steps. */
   overriddenConstructor?: OverriddenConstructorSteps;
+  /** Registered outward projection, independent of the paired platform object's allocation. */
+  interfaceProjection?: InterfaceProjectionSteps;
   /** Registered steps and generated functions, keyed by compiled members. */
   members?: Map<IDLMember, MemberBinding>;
 

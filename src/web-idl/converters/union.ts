@@ -121,7 +121,7 @@ export class UnionConverter<Type extends IDLUnionType = IDLUnionType> extends Co
         }
         for (const candidate of candidates.interfaces) {
           const projected = candidate.kind === 'interface'
-            ? this.binding.projectImplementationObject(value, candidate.assembled)
+            ? this.binding.projectInterfaceResult(value, candidate.assembled)
             : candidate.assembled.primary.getProxy(value);
           if (projected !== undefined) return projected;
         }

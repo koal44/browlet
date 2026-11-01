@@ -15,7 +15,7 @@ describe('InternalPromise result projection', () => {
   it('resolves the platform value immediately, before the promise is first returned', async () => {
     const { binding, implementation, owner } = createFixture();
     const child = new ResultChildImpl();
-    const platform = binding.project(ResultChildImpl, child);
+    const platform = binding.project(ResultChildImpl, child)!;
     let reads = 0;
     Object.defineProperty(platform, 'then', { get() { reads++; return undefined; } });
     implementation.pending.resolve(child);
@@ -28,8 +28,8 @@ describe('InternalPromise result projection', () => {
     const { binding, implementation, owner } = createFixture();
     const child = new ResultChildImpl();
     const replacement = new ResultChildImpl(19);
-    const platform = binding.project(ResultChildImpl, child);
-    const adopted = binding.project(ResultChildImpl, replacement);
+    const platform = binding.project(ResultChildImpl, child)!;
+    const adopted = binding.project(ResultChildImpl, replacement)!;
     const failure = new Error('then getter failed');
     Object.defineProperty(platform, 'then', {
       get() {
@@ -67,7 +67,7 @@ describe('InternalPromise result projection', () => {
     const firstBinding = bindings.register(first, (ctx) => ({ realm: ctx.realm }));
     const secondBinding = bindings.register(second, (ctx) => ({ realm: ctx.realm }));
     const implementation = new ResultOwnerImpl(firstBinding.InternalPromise);
-    const owner = firstBinding.project(ResultOwnerImpl, implementation);
+    const owner = firstBinding.project(ResultOwnerImpl, implementation)!;
     const foreign = secondBinding.project(ResultOwnerImpl, new ResultOwnerImpl(secondBinding.InternalPromise));
     const foreignPrototype = Object.getPrototypeOf(foreign) as object;
     const result = Reflect.get(owner, 'result') as Promise<unknown>;
@@ -115,7 +115,7 @@ function createFixture() {
   const realm = new TestRealm();
   const binding = bindings.register(realm, (ctx) => ({ realm: ctx.realm }));
   const implementation = new ResultOwnerImpl(binding.InternalPromise);
-  const owner = binding.project(ResultOwnerImpl, implementation);
+  const owner = binding.project(ResultOwnerImpl, implementation)!;
   return { binding, implementation, owner };
 }
 

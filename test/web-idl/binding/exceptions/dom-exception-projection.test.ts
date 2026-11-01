@@ -73,7 +73,7 @@ describe('DOMException implementation projection', () => {
     const first = createContext(world);
     const second = createContext(world);
     const owner = first.project(OwnerImpl, new OwnerImpl());
-    const otherOwner = second.project(OwnerImpl, new OwnerImpl());
+    const otherOwner = second.project(OwnerImpl, new OwnerImpl())!;
     const method = Reflect.get(otherOwner, 'fail') as () => never;
     const error = caught(() => Reflect.apply(method, owner, []));
 
@@ -91,7 +91,7 @@ describe('DOMException implementation projection', () => {
     const first = createContext(world);
     const second = createContext(world);
     const holder = new HolderImpl();
-    const object = first.project(HolderImpl, holder);
+    const object = first.project(HolderImpl, holder)!;
     const foreign = second.project(HolderImpl, new HolderImpl());
     // eslint-disable-next-line @typescript-eslint/unbound-method -- Explicitly apply the borrowed getter to its receiver.
     const getter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(foreign), 'error')!.get!;

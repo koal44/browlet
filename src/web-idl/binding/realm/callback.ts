@@ -209,7 +209,8 @@ export type CallbackCallable = AssembledCallbackFunction | IDLOperation;
 function projectCallbackReceiver(
   value: unknown,
 ): unknown {
-  return getImplementationRecord(value)?.platformObject ?? value;
+  const record = getImplementationRecord(value);
+  return record === undefined ? value : record.project();
 }
 
 // Shared preparation and cleanup for callback functions and interface operations.

@@ -16,7 +16,8 @@ const implInst = { count: 1 };
 const platformObject = { authorProperty: true };
 
 const record: PlatformRecord<typeof implInst> = new PlatformRecord(implInst, assembled, binding);
-const projected: StampedPlatformObject = record.project();
+const projected: object | null = record.project();
+const platform: StampedPlatformObject | undefined = record.platformObject;
 const created: PlatformRecord = binding.allocatePlatformRecord(assembled);
 binding.getImplementationBinding(assembled);
 // @ts-expect-error Realm binding caches use assembled definitions, not their declarations.

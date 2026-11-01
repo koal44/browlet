@@ -7,6 +7,7 @@ import {
 
 import type { WebIDLRealm } from '../environment';
 import type { IDLAttribute, AssembledInterface } from '../assembly/index';
+import type { InterfaceProjectionSteps } from './extended-attributes';
 import type { RealmBinding } from './realm';
 import type { ObservableArrayHandle } from './realm/index';
 
@@ -28,15 +29,20 @@ export function isStampedPlatformObject(platformObject: unknown): platformObject
 
 /** The shared record for an implementation instance and its eventual platform object. */
 export class PlatformRecord<T extends object = object> {
+  /** Implementation paired with this record's platform object. */
   implInst: StampedImplInstance<T>;
   /** The object's interface with its inheritance, partials, and mixins assembled. */
   assembled: AssembledInterface;
+  /** Owning realm binding for allocation, invocation, and identity checks. */
   binding: RealmBinding;
+  /** Paired platform object retained for installation, receiver checks, and reflection. */
   platformObject?: StampedPlatformObject;
   // Lazily allocated storage for maplike, setlike, and observable-array members.
   mapEntries?: Map<unknown, unknown>;
   observableArrays?: Map<IDLAttribute, ObservableArrayHandle<unknown, unknown>>;
   setEntries?: Set<unknown>;
+  /** Interface-owned projection selected once; its result can change with the implementation's lifetime. */
+  #interfaceProjection: InterfaceProjectionSteps | undefined;
 
   constructor(
     implInst: T,
@@ -45,15 +51,17 @@ export class PlatformRecord<T extends object = object> {
   ) {
     this.assembled = assembled;
     this.binding = binding;
+    this.#interfaceProjection = binding.getImplementationBinding(assembled).interfaceProjection;
     binding.initializeImplementation(implInst, assembled);
     this.implInst = ImplementationStamper.stamp(implInst, this);
   }
 
   get realm(): WebIDLRealm { return this.binding.realm; }
 
-  project(): StampedPlatformObject {
-    return this.platformObject ??
-      this.attachPlatformObject(this.binding.allocatePlatformObject(this.implInst, this.assembled));
+  /** Project the implementation through its registered steps or its ordinary cached platform object. */
+  project(): object | null {
+    const project = this.#interfaceProjection;
+    return project ? project(this.implInst) : this.#ensurePlatformObject();
   }
 
   /** Save a serializable interface's implementation state and engine-owned exception stack. */
@@ -64,7 +72,7 @@ export class PlatformRecord<T extends object = object> {
     // Core owns name/message; the JavaScript binding supplies the native Error state.
     // https://webidl.spec.whatwg.org/#idl-DOMException
     if (DOMExceptionImpl.is(this.implInst)) {
-      const stack = readErrorStack(this.project(), this.realm);
+      const stack = readErrorStack(this.#ensurePlatformObject(), this.realm);
       serialized.fields.Stack = typeof stack === 'string' ? stack : '';
     }
   }
@@ -74,7 +82,7 @@ export class PlatformRecord<T extends object = object> {
     steps.deserializationSteps(serialized, this.implInst, this.realm, context);
     if (DOMExceptionImpl.is(this.implInst)) {
       const data = serialized as StructuredData<{ Stack: string; }>;
-      writeErrorStack(this.project(), data.fields.Stack);
+      writeErrorStack(this.#ensurePlatformObject(), data.fields.Stack);
     }
   }
 
@@ -114,6 +122,12 @@ export class PlatformRecord<T extends object = object> {
   /** Whether this object's interface is the requested interface or inherits from it. */
   implements(assembled: AssembledInterface): boolean {
     return this.assembled.implements(assembled);
+  }
+
+  /** Allocate the paired platform object when ordinary projection or internal reflection needs it. */
+  #ensurePlatformObject(): StampedPlatformObject {
+    return this.platformObject ??
+      this.attachPlatformObject(this.binding.allocatePlatformObject(this.implInst, this.assembled));
   }
 }
 

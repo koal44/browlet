@@ -337,8 +337,8 @@ describe('readable-stream projection', () => {
       throw new Error('ReadableStream did not resolve to its implementation');
     }
     const [branch1, branch2] = stream.teeDefault(true);
-    const branch1Object = bindings.project(ReadableStreamImpl, branch1);
-    const branch2Object = bindings.project(ReadableStreamImpl, branch2);
+    const branch1Object = bindings.project(ReadableStreamImpl, branch1)!;
+    const branch2Object = bindings.project(ReadableStreamImpl, branch2)!;
     const read1 = observeBrowletPromise(
       window,
       readProjectedStream(branch1Object),

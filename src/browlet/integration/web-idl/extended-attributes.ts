@@ -7,8 +7,9 @@ import { prepareCustomElementConstructor } from './html-constructor';
 import { prepareCrossOriginSecurityCheck } from './cross-origin';
 import { prepareMessageEventPorts } from './message-event';
 import { prepareLocationObject } from './location';
+import { prepareWindowProjection } from './window-proxy';
 
-/** HTML-owned creation, attribute projection, and annotation behavior supplied to Browlet's binding world. */
+/** HTML-owned creation, projection, and annotation behavior supplied to Browlet's binding world. */
 export const htmlExtendedAttributeHooks: ExtendedAttributeHooks<BrowletEnvironment> = {
   // Declaration tests establish the owner contracts; erase receiver types only at the generic registry boundary.
   prepareAttribute: ((member, owners) =>
@@ -19,4 +20,5 @@ export const htmlExtendedAttributeHooks: ExtendedAttributeHooks<BrowletEnvironme
   prepareSecurityCheck: prepareCrossOriginSecurityCheck,
   // Location is the only interface currently handled by this platform-creation hook.
   preparePlatformObject: prepareLocationObject,
+  prepareInterfaceProjection: prepareWindowProjection as ExtendedAttributeHooks<BrowletEnvironment>['prepareInterfaceProjection'],
 };

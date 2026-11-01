@@ -1857,12 +1857,49 @@ The generated `WindowProxy` type extends the declared Window platform surface wi
 readonly child indices; `WindowProxyHandle` retains the internal proxy state. Undeclared compatibility
 properties and the missing Window members above are not promised by the types.
 
-Window values returned through EventTarget projection currently expose the target
-object instead of the public WindowProxy: `event.target === window` is false on
-both backends. Chromium returns true (2026-10-27). The focused
-[regression](../../../../test/browlet/browsing/window-event-target.test.ts) is an
-approved expected failure. Fix the Window/Binding identity conversion for all
-such returns; rejection notification must not special-case its event target.
+Window values returned through EventTarget conversion expose the public
+WindowProxy for `target`, `currentTarget`, `srcElement`, `composedPath()`, and
+function-listener/`onstorage` receivers. Chromium 156, Firefox 157, and WebKit 27.2
+agree for live Windows (2026-10-31), including Document bubbling and listeners
+from another realm. Object listeners retain their own receiver; ordinary
+EventTargets and post-dispatch cleanup keep their normal behavior.
+
+Binding's `PlatformRecord.project()` supplies the shared author conversion for
+interface and union results and callback receivers. HTML's WindowProxy integration
+registers the Window rule through `prepareInterfaceProjection`; each realm's
+Window `ImplementationBinding` retains it. The record captures those steps once,
+including for EventTarget results and explicit context/world projection.
+Its `platformObject` retains
+the original property store for installation, reflection, and receiver ownership.
+Event dispatch and Storage retain implementation targets. No native code or
+engine capability is involved in this conversion.
+
+`SPEC_CLASH(window-event-target-after-navigation)` follows Chromium/WebKit:
+converting a Window after replacement returns null. Firefox returns the stable
+WindowProxy after navigation. Web IDL's
+[interface conversion](https://webidl.spec.whatwg.org/#interface-to-js) preserves
+the referenced object; [DOM's target getter](https://dom.spec.whatwg.org/#dom-event-target)
+does not clear the stored Window on navigation. Browlet follows Chromium/WebKit
+at the author conversion boundary without changing that stored target. A proxy
+saved before navigation remains stable in all three browsers. Both eager and
+previously unread event targets show the disagreement. Blink's `DOMWindow::Wrap()`
+returns null without a Frame and otherwise returns WindowProxy; WebKit's
+`toJS(DOMWindow&)` makes the same frame check in `JSDOMWindowBase.cpp`.
+The manual probe remains in `node-compat/experimental/window-event-identity.mjs`.
+This approved choice is an HTML projection/lifecycle rule, not a V8 limitation.
+
+`SPEC_CLASH(window-event-target-after-removal)` follows Chromium/Firefox:
+removing an iframe without replacing its Window retains the public WindowProxy;
+WebKit returns null. The conversion therefore checks the handle's current Window,
+not whether the old Document still has a browsing context. This separately
+approved distinction also avoids making ordinary object conversion depend on
+Document activity or scheduling.
+
+The [Window regression suite](../../../../test/browlet/browsing/window-event-target.test.ts)
+covers live identities, same-agent cross-realm listeners, retained/lazy targets,
+detachment, and the original property store after navigation. The original
+expected failure is now an ordinary test, and Storage's two identity regressions
+pass through the same conversion.
 
 `Window.postMessage()` forwards both overloads to the
 [communication implementation](../../communication/window-messaging.ts), using

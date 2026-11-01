@@ -109,11 +109,10 @@ and storage fields while preserving timestamp and composed, as `initEvent()` doe
 Blink uses the same sequence in `modules/storage/storage_event.cc`.
 
 Writes, removal, and clearing use this interface for broadcast delivery.
-The trusted-event and `onstorage` tests retain ordinary failing assertions
-for the existing [Window event-target identity limitation](../../LIMITATIONS.md):
-delivery reaches Window, but `event.target === window` and the handler's
-`this === window` are false. Resolve that shared
-Window/Binding conversion rather than special-casing StorageEvent.
+The trusted-event and `onstorage` identity regressions pass through shared
+Window/Binding conversion: `event.target === window` and the handler's
+`this === window` are true. StorageEvent and event dispatch retain their
+implementation targets; neither owns a special projection rule.
 
 ## §12.3: Privacy
 

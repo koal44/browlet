@@ -135,7 +135,7 @@ describe('Sequence and record conversion through implementations', () => {
     const other = world.register(new TestRealm(), (ctx) => ({ realm: ctx.realm }));
     const foreign = new BindingWorld([definition]).register(new TestRealm(), (ctx) => ({ realm: ctx.realm }));
     const implInst = new ItemImpl();
-    const platform = other.project(ItemImpl, implInst);
+    const platform = other.project(ItemImpl, implInst)!;
     const foreignPlatform = foreign.project(ItemImpl, new ItemImpl());
     const type = binding.assembly.getIDLType(union(idlType.object, idlType.boolean));
     const options = { implClasses: [ItemImpl] };

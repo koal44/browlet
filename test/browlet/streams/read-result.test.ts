@@ -97,7 +97,7 @@ describe('stream read Promise boundaries', () => {
       const bindings = new BindingWorld([consumerIDL, callbackIDL, readableStreamReadResultIDL]);
       const entries = [first, second].map((fixture) => {
         const consumer = new ReadConsumerImpl();
-        const object = bindings.register(fixture.realm, (ctx) => ({ realm: ctx.realm })).project(ReadConsumerImpl, consumer);
+        const object = bindings.register(fixture.realm, (ctx) => ({ realm: ctx.realm })).project(ReadConsumerImpl, consumer)!;
         Reflect.set(fixture.realm.globalObject, 'reader', fixture.reader);
         const callback = fixture.realm.evaluate('() => reader.read()', 'read-callback.js') as () => Promise<unknown>;
         const argument = method === 'invoke' ? callback : callback();
@@ -137,7 +137,7 @@ function createReader() {
   const controller = stream.controller;
   if (!(controller instanceof ReadableStreamDefaultControllerImpl)) throw new Error('Expected a default controller');
   const implementation = stream.getReader();
-  const reader = getBindingContext(realm).project(ReadableStreamDefaultReaderImpl, implementation);
+  const reader = getBindingContext(realm).project(ReadableStreamDefaultReaderImpl, implementation)!;
   const failure = new realm.TypeError('source failed');
   return { browlet, realm, stream, controller, implementation, reader, failure };
 }

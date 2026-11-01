@@ -403,7 +403,7 @@ describe('File API File and FileList projection', () => {
       name: 'picked.bin',
       type: 'application/octet-stream',
     }, env);
-    const file = context.project(FileImpl, implementation);
+    const file = context.project(FileImpl, implementation)!;
 
     expect(file).toBeInstanceOf(requireFunction(window, 'File'));
     expect(context.project(FileImpl, implementation)).toBe(file);
@@ -431,7 +431,7 @@ describe('File API File and FileList projection', () => {
       source,
       { name: 'unknown.bin', type: '' },
       env,
-    ));
+    ))!;
     const modificationTime = Reflect.get(unknown, 'lastModified') as number;
     const after = Date.now();
     expect(modificationTime).toBeGreaterThanOrEqual(before);
@@ -572,7 +572,7 @@ function createFileList(
   );
   return {
     implementation,
-    platformObject: context.project(FileListImpl, implementation),
+    platformObject: context.project(FileListImpl, implementation)!,
   };
 }
 
@@ -588,7 +588,7 @@ function projectBlob(window: object, implementation: BlobImpl): object {
   return getBindingContext(realm).project(
     BlobImpl,
     implementation,
-  );
+  )!;
 }
 
 function call(

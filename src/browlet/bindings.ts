@@ -3,7 +3,7 @@ import { EOL } from 'node:os';
 import { InternalError } from '../infra/index';
 import { isObject } from '../js-engine/index';
 import {
-  BindingWorld, QuotaExceededErrorImpl, reference, type GlobalObjectAllocation,
+  BindingWorld, QuotaExceededErrorImpl, reference,
   type BindingContext, type ImplementationClass, type StampedPlatformObject,
 } from '../web-idl/index';
 import { streamsIDLDefinitions } from '../streams/index';
@@ -16,7 +16,7 @@ import { xhrIDLDefinitions } from '../xhr/index';
 import { fetchIDLDefinitions } from '../fetch/index';
 import { CSSStyleSheetImpl, styleletIDLDefinitions } from '../stylelet/index';
 
-import type { CSSStyleSheet, QuotaExceededError, Window } from './platform';
+import type { CSSStyleSheet, QuotaExceededError } from './platform';
 import { domHighResTimeStampIDL, epochTimeStampIDL } from './timing/index';
 import {
   EventLoop, SandboxAgent, eventHandlerIDL, eventHandlerNonNullIDL, windowEventHandlersIDL,
@@ -132,7 +132,7 @@ export function createWindowEnvironment(
       const window = new WindowImpl(env);
       realm.windowImplementation = window;
       const allocation = realm.globalAllocation;
-      if (!allocation) return projectWindow(context, window);
+      if (!allocation) return context.projectGlobalObject(window, 'Window');
 
       const { object, prototypeChain } = allocation;
       const [windowPrototype, namedProperties, eventTargetPrototype] = prototypeChain;
@@ -140,7 +140,7 @@ export function createWindowEnvironment(
         throw new InternalError('Incomplete Window global allocation');
       }
       // Supply the engine-allocated global object and prototypes to Web IDL.
-      return projectWindow(context, window, {
+      return context.projectGlobalObject(window, 'Window', {
         object,
         registerAttributeGetter: (getter) => realm.registerGlobalGetter(getter),
         prototypes: new Map([
@@ -258,15 +258,6 @@ export function createBrowletEnvironmentInit(context: BindingContext<BrowletEnvi
       return ports;
     },
   };
-}
-
-/** Project the Window into its realm's global allocation and install provisional additions. */
-function projectWindow(
-  context: BindingContext<BrowletEnvironment>,
-  window: WindowImpl,
-  allocation?: GlobalObjectAllocation,
-): StampedPlatformObject<Window> {
-  return context.projectGlobalObject(window, 'Window', allocation) as StampedPlatformObject<Window>;
 }
 
 // -- Shared declarations and world --------------------------------------

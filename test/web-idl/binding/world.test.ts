@@ -155,7 +155,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     const b = world.register(realmB, (ctx) => ({ realm: ctx.realm }));
     a.install(realmA.globalObject);
     b.install(realmB.globalObject);
-    target = a.project(ReceiverImpl, new ReceiverImpl('first'));
+    target = a.project(ReceiverImpl, new ReceiverImpl('first'))!;
     const prototype = Reflect.getPrototypeOf(target)!;
     const descriptor = Reflect.getOwnPropertyDescriptor(prototype, 'value')!;
     const echo = Reflect.get(target, 'echo') as (value: object) => object;
@@ -171,7 +171,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     expect(Object.hasOwn(realmB.globalObject, 'ProxyObject')).toBe(false);
 
     const replacement = new ReceiverImpl('second');
-    target = b.project(ReceiverImpl, replacement);
+    target = b.project(ReceiverImpl, replacement)!;
     expect(Reflect.apply(descriptor.get!, object, [])).toBe('second');
     Reflect.apply(descriptor.set!, object, ['changed']);
     expect(replacement.value).toBe('changed');
@@ -466,7 +466,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     context.install(realm.globalObject);
 
     const implementation = context.construct(ConcreteImpl, [42]);
-    const platform = context.project(BaseImpl, implementation);
+    const platform = context.project(BaseImpl, implementation)!;
     const Declared = Reflect.get(realm.globalObject, 'Declared') as CallableFunction;
     expect(implementation.constructor).toBe(ConcreteImpl);
     expect(implementation.dependency).toBe(declaredDependency);
@@ -541,7 +541,7 @@ describe('Web IDL binding worlds and realm registration', () => {
       .toThrow('Implementation instance belongs to another binding world');
 
     const secondImplementation = secondContext.construct(ExampleImpl);
-    const secondObject = secondContext.project(ExampleImpl, secondImplementation);
+    const secondObject = secondContext.project(ExampleImpl, secondImplementation)!;
     expect(firstContext).not.toBe(secondContext);
     expect(firstContext.realm).toBe(secondContext.realm);
     expect(first.getBindingContext(realm)).toBe(firstContext);
@@ -569,7 +569,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     const world = new BindingWorld([definition]);
     const ctx = world.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
     const instance = ctx.construct(FrozenImpl);
-    const object = ctx.project(FrozenImpl, instance);
+    const object = ctx.project(FrozenImpl, instance)!;
 
     expect(Object.isFrozen(instance)).toBe(true);
     expect(Object.getPrototypeOf(instance)).toBe(FrozenImpl.prototype);

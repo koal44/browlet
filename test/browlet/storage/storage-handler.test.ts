@@ -67,7 +67,6 @@ describe('HTML WindowEventHandlers: onstorage', () => {
     expect(await browser.evaluate(() => new Promise((resolve) => {
       let returned = false;
       onstorage = function(event) {
-        // Keep the required receiver identity despite the known Window/WindowProxy projection limitation.
         resolve([returned, event instanceof StorageEvent, event.isTrusted,
           event.key, event.oldValue, event.newValue, event.url,
           event.storageArea === Reflect.get(globalThis, 'peerStorage'),

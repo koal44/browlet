@@ -55,7 +55,7 @@ export function prepareCustomElementConstructor(
       const element = document.createElementNode(definition.localName, HTML_NAMESPACE, null, isValue, registry);
       element.customElementState = 'custom';
       element.customElementDefinition = definition;
-      const platform = ctx.project(ElementImpl, element);
+      const platform = ctx.project(ElementImpl, element)!;
       Object.setPrototypeOf(platform, prototype);
       return platform;
     }
@@ -63,7 +63,7 @@ export function prepareCustomElementConstructor(
     // Upgrade owns pushing/popping; reentrant prototype access can change the last entry.
     const element = stack[stack.length - 1]!;
     if (element === alreadyConstructed) throw new env.realm.TypeError('Custom element is already constructed');
-    const platform = ctx.project(ElementImpl, element);
+    const platform = ctx.project(ElementImpl, element)!;
     // SPEC_CLASH(html-constructor-nonextensible-upgrade): follow HTML and Chromium; Firefox/WebKit throw on false.
     Reflect.setPrototypeOf(platform, prototype);
     stack[stack.length - 1] = alreadyConstructed;

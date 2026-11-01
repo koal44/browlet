@@ -21,11 +21,11 @@ export class InterfaceConverter<Type extends IDLInterfaceType = IDLInterfaceType
     };
   }
 
-  protected override createOutputSteps(): ConversionSteps<object> {
+  protected override createOutputSteps(): ConversionSteps<object | null> {
     const assembled = this.type.assembled;
     return (value) => {
       const object = isObject(value)
-          ? this.binding.projectImplementationObject(value, assembled)
+          ? this.binding.projectInterfaceResult(value, assembled)
           : undefined;
       if (object === undefined) {
         throw new InternalError(`IDL interface value ${assembled.name} is not an implementation target`);

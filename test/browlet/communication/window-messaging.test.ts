@@ -4,16 +4,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { createWindowEnvironment } from '../../../src/browlet/bindings';
 import { BrowsingContext, TopLevelTraversable, createDocumentState } from '../../../src/browlet/browsing/navigation/index';
-import { WindowImpl } from '../../../src/browlet/browsing/window/index';
-import type { MessageEvent, Window } from '../../../src/browlet/platform';
+import type { WindowImpl } from '../../../src/browlet/browsing/window/index';
+import type { MessageEvent } from '../../../src/browlet/platform';
 import { AgentCluster, WindowAgent } from '../../../src/browlet/scripting/agents';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { createOpaqueOrigin, obtainURLOrigin, parseURL } from '../../../src/url/index';
 import { arg, defineCallbackFunction, defineInterface, idlType, impl, onError, op, reference } from '../../../src/web-idl/core/index';
 import { BindingWorld } from '../../../src/web-idl/binding/world';
-import type { StampedPlatformObject } from '../../../src/web-idl/index';
 import { createManualEventLoop, createManualUserAgent } from '../../support/browlet-agent';
-import { getBindingContext } from '../../support/browlet-binding';
 import { runInHostTask } from '../../support/tasks';
 import { itPassesWith } from '../../test-runtime';
 
@@ -457,8 +455,7 @@ function createWindow(url: string, agent = new WindowAgent(createManualEventLoop
   document.origin = origin;
   document.browsingContext = new BrowsingContext(env.realm.windowProxy);
   env.window.setAssociatedDocument(document);
-  const binding = getBindingContext(env.realm);
-  env.realm.windowProxy.setAssociatedWindow(binding.project(WindowImpl, env.window) as StampedPlatformObject<Window>);
+  env.realm.windowProxy.setAssociatedWindow(env.realm.globalObject);
   const navigable = new TopLevelTraversable(createDocumentState(document));
   env.markExecutionReady();
   const window = env.realm.windowProxy.platform;

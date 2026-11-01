@@ -66,7 +66,7 @@ describe('Web IDL promise member binding', () => {
   it.each(['promise', 'thenable'] as const)('imports %s arguments and callback results as internal promises', async (kind) => {
     const fixture = createOrdinaryPromiseFixture();
     const child = new PromiseChildImpl();
-    const projected = fixture.firstBinding.project(PromiseChildImpl, child);
+    const projected = fixture.firstBinding.project(PromiseChildImpl, child)!;
 
     const input = () => kind === 'promise'
       ? Promise.resolve(projected)
@@ -156,12 +156,12 @@ describe('Web IDL promise member binding', () => {
     const world = new BindingWorld([itemIDL, itemsIDL]);
     const binding = world.register(realm, (ctx) => ({ realm: ctx.realm }));
     const item = stamped ? binding.construct(ItemImpl) : new ItemImpl();
-    const owner = binding.project(ItemsImpl, new ItemsImpl(item, realm.InternalPromise));
+    const owner = binding.project(ItemsImpl, new ItemsImpl(item, realm.InternalPromise))!;
     const iterator = call(owner, 'values') as object;
     const methodRealm = borrowed ? new Realm() : realm;
     const methodOwner = borrowed ? call(world.register(methodRealm, (ctx) => ({ realm: ctx.realm })).project(
       ItemsImpl, new ItemsImpl(item, realm.InternalPromise),
-    ), 'values') as object : iterator;
+    )!, 'values') as object : iterator;
     const pending = Reflect.apply(
       Reflect.get(methodOwner, 'next') as CallableFunction, iterator, [],
     ) as Promise<IteratorResult<object, undefined>>;
@@ -184,7 +184,7 @@ describe('Web IDL promise member binding', () => {
     });
     const binding = new BindingWorld([definition, promiseChildIDL]).register(new Realm(), (ctx) => ({ realm: ctx.realm }));
     const implementation = new OrdinaryPromiseOwnerImpl(binding.InternalPromise);
-    const owner = binding.project(OrdinaryPromiseOwnerImpl, implementation);
+    const owner = binding.project(OrdinaryPromiseOwnerImpl, implementation)!;
     const iterator = call(owner, 'values') as object;
     const child = new PromiseChildImpl();
 
@@ -347,7 +347,7 @@ function createOrdinaryPromiseFixture() {
   const { realm: first, context: firstBinding } = installTestBindings(bindings);
   const { realm: second } = installTestBindings(bindings);
   const implementation = new OrdinaryPromiseOwnerImpl(firstBinding.InternalPromise);
-  const owner = firstBinding.project(OrdinaryPromiseOwnerImpl, implementation);
+  const owner = firstBinding.project(OrdinaryPromiseOwnerImpl, implementation)!;
   const foreignConstructor = Reflect.get(second.globalObject, 'OrdinaryPromiseOwner') as { prototype: object; };
   return { bindings, first, second, firstBinding, implementation, owner, foreignPrototype: foreignConstructor.prototype };
 }

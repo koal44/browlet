@@ -19,7 +19,14 @@ export type ExtendedAttributeHooks<Env extends WebIDLEnvironment = WebIDLEnviron
   prepareSecurityCheck?: (owner: AssembledInterface) => SecurityCheckBinding<Env> | undefined;
   /** Prepare additional creation steps after own IDL members, before platform identity is attached. */
   preparePlatformObject?: (owner: AssembledInterface) => PlatformObjectBinding<Env> | undefined;
+  /** Prepare outward projection for the implementation's actual interface. */
+  prepareInterfaceProjection?: (owner: AssembledInterface) => InterfaceProjectionSteps | undefined;
 };
+
+/** Select an implementation's exposed object without replacing its paired platform object. */
+export type InterfaceProjectionSteps<Implementation extends object = object> = (
+  implInst: Implementation,
+) => object | null;
 
 /** Finish an allocation, optionally replacing it with a specification-owned exotic object. */
 export type PlatformObjectBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> = (

@@ -92,8 +92,8 @@ related.implInst.value.toFixed();
 associated.implInst.missing;
 // @ts-expect-error Owner association retains the known implementation fields.
 related.implInst.missing;
-const platformObject: StampedPlatformObject = ctx.project(Example, implInst);
-const projected: StampedPlatformObject | undefined = world.project(implInst);
+const platformObject: object | null = ctx.project(Example, implInst);
+const projected: object | null | undefined = world.project(implInst);
 const created: StampedPlatformObject | undefined = record?.platformObject;
 const unwrapped: StampedImplInstance<Example> | undefined = ctx.unwrap(platformObject, Example);
 unwrapped?.value.toFixed();
@@ -102,7 +102,7 @@ const plain = new Example();
 const unstamped: StampedImplInstance<Example> = plain;
 // @ts-expect-error An implementation stamp is not a platform stamp.
 const notPlatform: StampedPlatformObject = implInst;
-// @ts-expect-error A platform stamp does not expose its implementation's stamp.
+// @ts-expect-error Projection does not expose an implementation stamp.
 const notImpl: StampedImplInstance = platformObject;
 if (isStampedImplInstance(plain)) {
   const recognized: StampedImplInstance<Example> = plain;

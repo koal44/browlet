@@ -170,7 +170,7 @@ function createFixture(sharedAgent = false) {
     const implementation = new OwnershipProbeImpl(
       name, binding.InternalPromise.fromNative(pending.promise, String, idlType.DOMString), trace, binding.InternalPromise,
     );
-    const object = binding.project(OwnershipProbeImpl, implementation);
+    const object = binding.project(OwnershipProbeImpl, implementation)!;
     expose('record', (value: string) => {
       if (value === 'author B') {
         const env = realm.agent.eventLoop.currentlyRunningTask
