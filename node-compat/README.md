@@ -64,7 +64,16 @@ no getter for a previous replacement. Tracker callbacks must not throw; failures
 use Node's fatal-exception reporting. HTML owns muting, notification timing,
 event dispatch, and console reporting.
 
-`createMicrotaskQueue()` supplies enqueue/checkpoint operations.
+`createMicrotaskQueue(requestCheckpoint?)` supplies enqueue/checkpoint operations.
+The optional internal callback requests a deferred checkpoint after an outer
+engine call completes in a context using that queue, including native registry
+cleanup. Notifications coalesce until `runMicrotasks()` finishes; the callback
+does not drain jobs. Unregistered and detached contexts do not notify it.
+The registration follows the queue's lifetime, and context/callback cycles remain
+collectable. This is a conservative completion signal, not notification of every
+job arrival: another context can enqueue into this queue without completing here.
+JS Engine omits it when installed native Promise-job hooks already wake HTML.
+
 `createContextHandle()` creates a native V8 context registered with Node;
 `runInContext()` evaluates there. These are not `node:vm` Contextify objects.
 The supported options are queue selection, `reuseGlobalProxyFrom`,

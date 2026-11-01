@@ -1,5 +1,5 @@
 import { InternalError, type TaskCreationOptions } from '../../infra/index';
-import { bindAsyncContext, createMicrotaskQueue } from '../../js-engine/index';
+import { bindAsyncContext, createMicrotaskQueue, type JSMicrotaskQueue } from '../../js-engine/index';
 
 import { unsafeSharedCurrentTime, type UnsafeMoment } from '../timing/index';
 import type { DocumentImpl } from '../dom/nodes/index';
@@ -15,7 +15,7 @@ import { JSScriptOrModule, type Script } from './script';
 // https://html.spec.whatwg.org/multipage/webappapis.html#event-loops
 export class EventLoop {
   /** Engine queue shared by this Agent's realms, using the selected backend. */
-  microtaskQueue = createMicrotaskQueue();
+  microtaskQueue: JSMicrotaskQueue;
   /** Most recent rendering opportunity reported by the host. */
   lastRenderOpportunityTime: UnsafeMoment | null = null;
   /** Explicit context stack for this loop's agent, including retained realm contexts. */
@@ -44,6 +44,7 @@ export class EventLoop {
   /** Retain host scheduling and accounting dependencies for the loop's lifetime. */
   constructor(init: EventLoopInit) {
     this.#init = init;
+    this.microtaskQueue = createMicrotaskQueue(() => { this.requestMicrotaskCheckpoint(); });
   }
 
   /** Task executing on this loop, or null outside task execution. */
@@ -424,9 +425,13 @@ export class EventLoop {
       }
     });
 
-    // Parallel algorithms can reach a stable state while no HTML task is
-    // running. Wake the host to drain this same engine queue; do not invent
-    // an ordinary HTML task or wait for unrelated work to arrive.
+    this.requestMicrotaskCheckpoint();
+  }
+
+  /** Coalesce external wake-ups; an executing task or checkpoint already drains this queue. */
+  requestMicrotaskCheckpoint(): void {
+    // Used both by parallel algorithms reaching a stable state and by native
+    // cleanup completion. Notify the same host turn; do not add a dummy job.
     if (
       this.#currentlyRunningTask === null &&
       !this.#runningTaskTurn &&

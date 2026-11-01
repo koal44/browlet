@@ -219,6 +219,13 @@ event-loop queue. Native queues retain their handles directly. Without that
 facility, event loops share Node's ambient queue and its checkpoint substitute;
 HTML checkpoint guards and post-checkpoint work still belong to HTML.
 
+`createMicrotaskQueue(requestCheckpoint?)` can notify the owner after native
+execution, such as FinalizationRegistry cleanup, that bypasses its task runner.
+The addon coalesces notifications per queue until a checkpoint; HTML schedules
+that checkpoint through its existing host turn. JS Engine omits the fallback
+when native Promise-job hooks are installed. Stock mode keeps Node's scheduling.
+It is not a general signal for jobs arriving from another context.
+
 `setHostHooks` is optional. It maps native references to known JSRealms; unknown
 references become null. Promise routing follows the **job's queue realm**, which
 can differ from a handlerless reaction's null specification realm. Returning

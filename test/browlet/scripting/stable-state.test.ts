@@ -13,6 +13,26 @@ import { runInHostTask } from '../../support/tasks';
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('stable-state scheduling', () => {
+  it('uses the same coalesced checkpoint path for work already in the engine queue', async () => {
+    const turns: (() => void)[] = [];
+    const loop = createManualEventLoop({ requestTurn: (steps) => { turns.push(steps); } });
+    const order: string[] = [];
+    loop.queueTask(networkingTaskSource, null, () => { order.push('task'); });
+    loop.microtaskQueue.enqueueMicrotask(() => { order.push('engine reaction'); });
+    loop.requestMicrotaskCheckpoint();
+    loop.requestMicrotaskCheckpoint();
+
+    expect(turns).toHaveLength(1);
+    await runInHostTask(() => {
+      turns.shift()!();
+      expect(order).toEqual(['engine reaction']);
+      expect(turns).toHaveLength(1);
+      turns.shift()!();
+      expect(order).toEqual(['engine reaction', 'task']);
+      expect(turns).toEqual([]);
+    });
+  });
+
   it('wakes an idle loop for a microtask arriving outside an HTML task', async () => {
     const turns: (() => void)[] = [];
     const loop = createManualEventLoop({ requestTurn: (steps) => { turns.push(steps); } });

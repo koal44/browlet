@@ -21,9 +21,10 @@ export function installHostHooks(): void {
   if (installed || !setHostHooks) return;
   // HTML §8.1.6.6.2: Realm reporters below deliver cleanup exceptions to the
   // registry's global. V8 owns the queued cleanup operation; make/call hooks
-  // only surround individual callbacks after their cells have been removed. Broader HTML task
-  // integration is unaudited, but no separate author-visible scheduling failure
-  // has been demonstrated. See the roadmap before adding an engine handoff.
+  // only surround individual callbacks after their cells have been removed.
+  // EventLoop's queue notification supplies the cleanup checkpoint wake-up when
+  // native Promise-job hooks are absent. Whole-cleanup HTML task integration
+  // remains unaudited; see the roadmap before adding an engine handoff.
   // HostGetImportMetaProperties is installed per source-text module by parseModule().
   // HostLoadImportedModule lives in module-loading.ts. The graph loader calls it
   // directly; BrowletRealm's Node-shaped callbacks route dynamic imports to it.

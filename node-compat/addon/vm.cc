@@ -17,6 +17,11 @@ namespace {
 using namespace v8;
 
 class NativeHandle;
+class Queue;
+// Non-owning entries; Queue destruction removes them before its engine queue dies.
+thread_local std::unordered_map<Isolate*, std::unordered_map<MicrotaskQueue*, Queue*>> observed_queues;
+void NotifyCallCompleted(Isolate* isolate);
+
 struct AddonData {
   node::Environment* environment;
   Global<FunctionTemplate> queue_type;
@@ -63,11 +68,58 @@ class NativeHandle {
 
 class Queue : public NativeHandle {
  public:
-  Queue(AddonData* owner, Local<Object> holder, Isolate* isolate)
-      : NativeHandle(owner, holder, owner->queue_key.Get(isolate)),
-        queue(MicrotaskQueue::New(isolate, MicrotasksPolicy::kExplicit)) {}
+  Isolate* isolate;
   std::shared_ptr<MicrotaskQueue> queue;
+  Global<Function> notify;
+  bool checkpoint_requested = false;
+
+  Queue(AddonData* owner, Local<Object> holder, Isolate* isolate, Local<Value> callback)
+      : NativeHandle(owner, holder, owner->queue_key.Get(isolate)),
+        isolate(isolate), queue(MicrotaskQueue::New(isolate, MicrotasksPolicy::kExplicit)) {
+    if (!callback->IsFunction()) return;
+    // Keep the callback in the traced JS graph, not a persistent native root.
+    holder->SetPrivate(isolate->GetCurrentContext(), owner->lifetime_key.Get(isolate), callback).Check();
+    notify.Reset(isolate, callback.As<Function>());
+    notify.SetWeak();
+    auto& queues = observed_queues[isolate];
+    if (queues.empty()) isolate->AddCallCompletedCallback(NotifyCallCompleted);
+    queues.emplace(queue.get(), this);
+  }
+
+  ~Queue() override {
+    auto entry = observed_queues.find(isolate);
+    if (entry == observed_queues.end()) return;
+    entry->second.erase(queue.get());
+    if (entry->second.empty()) {
+      isolate->RemoveCallCompletedCallback(NotifyCallCompleted);
+      observed_queues.erase(entry);
+    }
+  }
 };
+
+// An outer engine call (not each JS call) may have queued work without passing
+// through an enqueue hook, e.g. native FinalizationRegistry cleanup. Notify only
+// its registered queue; the host chooses when to checkpoint. This is not a
+// universal arrival signal for jobs enqueued into another context's queue.
+void NotifyCallCompleted(Isolate* isolate) {
+  auto queues = observed_queues.find(isolate);
+  if (queues == observed_queues.end()) return;
+  HandleScope handles(isolate);
+  auto context = isolate->GetCurrentContext();
+  if (context.IsEmpty()) return;
+  auto entry = queues->second.find(context->GetMicrotaskQueue());
+  if (entry == queues->second.end()) return;
+  auto queue = entry->second;
+  if (queue->checkpoint_requested || queue->queue->IsRunningMicrotasks() || queue->notify.IsEmpty()) return;
+  queue->checkpoint_requested = true;
+  auto callback = queue->notify.Get(isolate);
+  TryCatch caught(isolate);
+  if (callback->Call(callback->GetCreationContext().ToLocalChecked(),
+                     Undefined(isolate), 0, nullptr).IsEmpty()) {
+    if (caught.HasTerminated()) caught.ReThrow();
+    else node::FatalException(isolate, caught);
+  }
+}
 
 class ContextHandle : public NativeHandle {
  public:
@@ -123,10 +175,14 @@ T* Unwrap(Isolate* isolate, Local<Value> value,
 
 void CreateQueue(const FunctionCallbackInfo<Value>& args) {
   auto isolate = args.GetIsolate();
+  if (!args[0]->IsUndefined() && !args[0]->IsFunction()) {
+    Fail(isolate, "ERR_INVALID_ARG_TYPE", "Expected a checkpoint notification callback or undefined");
+    return;
+  }
   Local<Object> holder;
   if (!Data(args)->queue_type.Get(isolate)->InstanceTemplate()
            ->NewInstance(isolate->GetCurrentContext()).ToLocal(&holder)) return;
-  new Queue(Data(args), holder, isolate);
+  new Queue(Data(args), holder, isolate, args[0]);
   args.GetReturnValue().Set(holder);
 }
 
@@ -144,7 +200,11 @@ void Enqueue(const FunctionCallbackInfo<Value>& args) {
 void Checkpoint(const FunctionCallbackInfo<Value>& args) {
   auto isolate = args.GetIsolate();
   auto queue = Unwrap<Queue>(isolate, args.This(), Data(args)->queue_key);
-  if (queue) queue->queue->PerformCheckpoint(isolate);
+  if (queue) {
+    queue->queue->PerformCheckpoint(isolate);
+    // Clear after draining so completion of the checkpoint cannot wake itself.
+    queue->checkpoint_requested = false;
+  }
 }
 
 void CreateContext(const FunctionCallbackInfo<Value>& args) {
@@ -234,6 +294,9 @@ void CreateContext(const FunctionCallbackInfo<Value>& args) {
   if (!data->context_type.Get(isolate)->InstanceTemplate()
            ->NewInstance(host).ToLocal(&holder)) return;
   new ContextHandle(data, holder, realm, std::move(queue), global_template);
+  // A retained context also retains its queue's notification registration.
+  // Intrinsic -> context holder -> queue holder -> callback is collectable.
+  holder->SetPrivate(host, data->lifetime_key.Get(isolate), args[0]).Check();
   holder->DefineOwnProperty(host, Text(isolate, "realm"), GetRealmReference(realm),
       static_cast<PropertyAttribute>(ReadOnly | DontDelete)).Check();
   if (!args[2]->IsUndefined()) {

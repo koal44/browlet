@@ -1271,6 +1271,29 @@ not establish every lifecycle or checkpoint ordering rule. The experimental
 missing-task assertion is not evidence of a second browser-consensus failure or
 a reason by itself to replace V8's cleanup scheduling.
 
+The later idle-progress audit found a concrete missing wake-up on official
+Node 24/26 addon builds: cleanup ran and queued a Promise reaction, but that
+reaction remained pending until unrelated HTML work arrived. The
+[Window regression](../../../test/browlet/scripting/finalization-wakeup.test.ts)
+observed that failure before the repair. Custom Promise-job hooks already woke
+the loop; stock Node's ambient queue also progressed.
+
+The addon now offers a guarded `AddCallCompletedCallback` notification on the
+existing microtask queue. It selects only the completing context's registered
+queue, coalesces until the next checkpoint, and ignores checkpoint reentry.
+`EventLoop.requestMicrotaskCheckpoint()` schedules the existing host turn;
+the native callback neither runs jobs nor creates an HTML task. JS Engine omits
+this fallback when native Promise-job hooks are installed. The
+[native tests](../../../node-compat/test/microtask-wakeup.test.cjs) cover shared
+queues, unrelated cleanup, rearming, collection, and worker teardown.
+
+This completion signal can request a checkpoint when no jobs arrived, and it
+does not observe every cross-context enqueue. The latter remains part of the
+separate direct-host Promise interoperability boundary. It does not replace the
+Wasm handoff, which must enter an HTML task before Promise resolution can invoke
+an author `then` getter. Neither that boundary nor the separate Atomics hook
+ownership defect requires expanding this cleanup repair.
+
 ### §8.1.6.6.3: Generic jobs
 
 Audited `HostEnqueueGenericJob(job, realm)`. Both HTML steps are already

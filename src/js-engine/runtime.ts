@@ -38,8 +38,9 @@ export function setGlobalAccess(target: GlobalProxy, select: (realm: JSRealm | u
   addon.setGlobalAccess(target, (reference) => select(RealmStamper.get(reference)));
 }
 
-export function createMicrotaskQueue(): JSMicrotaskQueue {
-  return jsRuntime.createMicrotaskQueue();
+/** Create the owning queue, optionally requesting checkpoints after unobserved native entries. */
+export function createMicrotaskQueue(requestCheckpoint?: () => void): JSMicrotaskQueue {
+  return jsRuntime.createMicrotaskQueue(requestCheckpoint);
 }
 
 export function associateGlobalRealm(global: object, realm: JSRealm): void {
@@ -114,6 +115,7 @@ export function observePromise(
 }
 
 const setNativeHostHooks = addon.setHostHooks;
+let promiseJobsObserved = false;
 export const setHostHooks = setNativeHostHooks && getNativeRealm
   ? <HostDefined>(hooks: JSHostHooks<HostDefined>): void => {
     setNativeHostHooks({
@@ -136,6 +138,7 @@ export const setHostHooks = setNativeHostHooks && getNativeRealm
       enqueueTimeoutJob: (job, realm, milliseconds) =>
         hooks.enqueueTimeoutJob(job, RealmStamper.get(realm) ?? null, milliseconds),
     });
+    promiseJobsObserved = true;
   }
   : undefined;
 
@@ -306,12 +309,14 @@ class JSRuntime {
       : getObjectRealm;
   }
 
-  createMicrotaskQueue(): JSMicrotaskQueue {
+  createMicrotaskQueue(requestCheckpoint?: () => void): JSMicrotaskQueue {
     if (!addon.createMicrotaskQueue) {
       return this.#ambientMicrotaskQueue;
     }
 
-    const handle: unknown = addon.createMicrotaskQueue();
+    // Native enqueue hooks already notify HTML. Otherwise, observed outer
+    // calls can wake the owning queue after native cleanup, without polling.
+    const handle: unknown = addon.createMicrotaskQueue(promiseJobsObserved ? undefined : requestCheckpoint);
     if (!isAddonMicrotaskQueueHandle(handle)) {
       throw new InternalError('Node backend createMicrotaskQueue returned an invalid queue');
     }

@@ -277,10 +277,12 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   Custom Node has a context reporter ahead of this policy, preserving Node's
   behavior for unregistered contexts. Both limits have expected-failure coverage.
   V8 still queues and runs cleanup; custom make/call hooks preserve callback
-  state. Broader HTML task integration remains unaudited, with no separate
-  browser-confirmed author-visible scheduling failure. The
+  state. On official addon bases, a guarded queue-completion notification now
+  wakes the existing HTML checkpoint after native cleanup; custom Promise-job
+  hooks already provide that wake-up. Whole-cleanup HTML task integration remains
+  unaudited. The
   [audit](browlet/scripting/ROADMAP.md#81662-finalizationregistry-cleanup-scheduling)
-  distinguishes that uncertainty from the repaired reporting defect.
+  distinguishes that uncertainty from the repaired reporting and idle-progress defects.
 - **Custom generic/timeout hooks are isolate-wide.** They cannot decline an
   individual job. `Atomics.waitAsync` in an unrelated Node/VM realm while those
   Browlet hooks are installed is unsupported; HTML realms use their task and

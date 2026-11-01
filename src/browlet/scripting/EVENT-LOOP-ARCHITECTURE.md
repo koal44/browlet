@@ -58,6 +58,15 @@ steps for `env.runInParallel()`. The caller must stop its original parallel step
 after requesting the stable state. No author Promise or second microtask queue
 is introduced.
 
+Native FinalizationRegistry cleanup can enqueue reactions while the HTML loop
+is idle. On addon runtimes without installed Promise-job hooks, the queue's
+guarded outer-call completion notification uses `requestMicrotaskCheckpoint()`
+to wake that same loop. Shared contexts coalesce into one pending checkpoint;
+unrelated queues stay asleep. This adds no dummy job or second scheduler and
+does not transfer ownership of the registry cleanup itself. The
+[cleanup regression](../../../test/browlet/scripting/finalization-wakeup.test.ts)
+requires progress without an unrelated task or evaluation.
+
 Native work enqueued directly into the engine queue needs its own completion
 notification. Native Wasm completion now hands a one-shot resolver to the owning
 HTML loop through `JSRealm.setWasmAsyncCompletionCallback()`. HTML queues an

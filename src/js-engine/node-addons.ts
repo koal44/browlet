@@ -37,7 +37,7 @@ export class NodeAPI {
   ) => JSFunction<Result>;
   /** Allocate the callable, undetectable object used for document.all; attach properties with setPropertyHandlers. */
   createHTMLDDA?: <Result>(context: VMContext, call: JSFunction<Result>) => JSFunction<Result>;
-  createMicrotaskQueue?: () => AddonMicrotaskQueueHandle;
+  createMicrotaskQueue?: (requestCheckpoint?: () => void) => AddonMicrotaskQueueHandle;
   /** Node-shaped retained scripts; HTML selects the realm when running them. */
   Script?: new (source: string, options?: ContextEvaluationOptions) => CompiledScript;
   /** Node-shaped source-text modules bound to an existing context. */
