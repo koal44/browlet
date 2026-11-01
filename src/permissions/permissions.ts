@@ -138,13 +138,18 @@ export class PermissionsImpl {
     if (!feature) throw new TypeError(`Unsupported permission: ${root.name}`);
     const descriptor = currentEnv.convertPermissionDescriptor(permissionDesc, feature.descriptorType);
     const result = currentEnv.InternalPromise.withResolvers(permissionStatusType);
-    currentEnv.runInParallel(() => {
+    // SPEC_CLASH(permissions-query-parallel-allocation): Permissions §6.2.1 creates a realm-owned status in parallel.
+    // Follow HTML §8.1.7.5's task boundary and the browsers' owning-context allocation.
+    // Binding eagerly creates the Platform object; our installed query only reads
+    // local state. Keep creation, the synchronous query hook, and settlement in
+    // one permissions task rather than a separate background turn. See ROADMAP.md, §6.2.
+    this.env.queueTask('permissions', () => {
       try {
         const status = currentEnv.createPermissionStatus(descriptor);
         currentEnv.permissions.runPermissionQuery(descriptor, status);
-        this.env.queueTask('permissions', () => { result.resolve(status); });
+        result.resolve(status);
       } catch (error) {
-        this.env.queueTask('permissions', () => { result.reject(error); });
+        result.reject(error);
       }
     });
     return result.promise;

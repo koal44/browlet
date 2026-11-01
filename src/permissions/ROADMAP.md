@@ -257,12 +257,48 @@ Both conversions use Web IDL, including the specified second read of `name` and
 unchanged propagation of getter exceptions. Binding rejects invalid arguments and
 receivers through promises rather than synchronous author exceptions.
 
-Background work creates a fresh status and runs the feature's optional `query()`
-hook, defaulting to the existing permission-state lookup. Resolution and failures
-from background query work are queued on the receiver global's permissions task
-source, so rejection receives the same HTML checkpoint as success. Querying does
+One task on the receiver global's permissions task source creates a fresh status,
+runs the feature's optional `query()` hook, and settles the Promise. The hook
+defaults to the existing permission-state lookup, and rejection receives the same
+HTML checkpoint as success. Querying does
 not prompt, record a decision, or change bucket protection. Only `persistent-storage` is installed;
 names for APIs Browlet has not installed reject with TypeError.
+
+`SPEC_CLASH(permissions-query-parallel-allocation)`: [Permissions §6.2.1](https://w3c.github.io/permissions/#dom-permissions-query)
+explicitly creates and populates the initial `PermissionStatus` after continuing
+in parallel. [HTML §8.1.7.5](https://html.spec.whatwg.org/multipage/webappapis.html#event-loop-for-spec-authors)
+forbids creating or manipulating realm-associated objects in parallel. Browlet
+follows HTML's task boundary and the browsers' confinement of object work to its
+owning context, instead of Permissions' literal parallel allocation. Descriptor
+conversion and Promise creation remain synchronous; status creation, query, and
+settlement now share the specified permissions task. The earlier implementation
+followed Permissions' ordering through a cooperative Node turn. This change fixes
+that placement without claiming an observed concurrent-JavaScript data race.
+
+The follow-up browser-source investigation confirms that implementations do not
+literally allocate the status in background work:
+
+| Engine | Initial query boundary |
+| --- | --- |
+| [Chromium](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/modules/permissions/permissions.cc) | `HasPermission()` returns permission data through the context's `kPermission` task runner. `TaskComplete()` then creates the status through `PermissionStatus::Take()` and resolves the Promise. |
+| [WebKit](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/Modules/permissions/Permissions.cpp) | Queries the permission controller, then uses `ensureOnContextThread()` before creating `PermissionStatus` and resolving. A denied Permissions Policy check also creates its result on the owning context. |
+| [Firefox](https://github.com/mozilla-firefox/firefox/blob/main/dom/permission/Permissions.cpp) | Creates the internal status synchronously before asynchronous initialization. [Initialization](https://github.com/mozilla-firefox/firefox/blob/main/dom/permission/PermissionStatus.cpp) applies returned state on the current serial event target, and resolution returns to that target too. |
+
+Their allocation points differ, but realm-associated work stays on the owning
+context. Browlet's `createPermissionStatus()` calls Binding's
+`createPlatformRecord()`, which eagerly allocates the Platform object as well as
+its Implementation; it is not merely collecting realm-neutral result data.
+
+The installed `persistent-storage` query uses an in-memory store and synchronous
+environment checks, so it needs no separate background turn. This preserves the
+existing feature-query contract and requires no engine changes. A future external
+lookup must return data before the permissions task, rather than manipulate the
+status off the owning loop. The query test verifies allocation and population
+inside that task; lifecycle cases verify deferral while inactive, resumption on
+reactivation, and cancellation before allocation when the Document is destroyed.
+The existing borrowed-method test preserves the distinct result realm and task
+destination. Subsequent `PermissionStatus` update scheduling is a separate path;
+this change is limited to the initial query.
 
 The method's environment supplies current settings, conversion, the promise, and
 result allocation. The receiver supplies the relevant global for delivery. This
@@ -288,7 +324,7 @@ previously recorded dependencies.
 **Exit proof:** all initial states, security restrictions, unchanged store and no
 prompt, real EventTarget behavior, fresh/readonly/branded results, promise rejection
 and original getter errors, two-stage conversion, inactive-document ordering,
-background/task separation, borrowed-method settings and result ownership, and a
+task-owned allocation and Document lifetime, borrowed-method settings and result ownership, and a
 feature query override.
 
 ## §6.3: PermissionStatus updates and lifetime

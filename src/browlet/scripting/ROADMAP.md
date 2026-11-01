@@ -1841,6 +1841,22 @@ activity is restored. Existing Fetch tests cover a different destination global
 and retained Windows across navigation; Storage and Permissions retain their
 specified task sources. No runtime correction was needed for these paths.
 
+The 2026-10-31 follow-up audit covers §8.1.7.5 itself: capture author inputs before
+yielding, perform background work on realm-neutral data, and return through a task
+with an explicit source and global before creating observable results. Its example
+encryption API illustrates this composition; it does not add another scheduler
+operation. The existing environment, Binding, and global-task machinery provide
+the required boundaries. Individual consumers still need to obey them.
+
+Permissions' initial query conflicts with that guidance:
+it explicitly creates and populates a realm-owned status in parallel. The
+[Permissions roadmap](../../permissions/ROADMAP.md#62-querying-permissions) records
+`SPEC_CLASH(permissions-query-parallel-allocation)`. Browlet now follows HTML's
+task boundary and the browsers' confinement of object work to its owning context:
+the initial query allocates, populates, and settles inside one permissions task.
+The installed query reads local state, so it needs no separate background turn.
+This correction uses the existing global-task machinery.
+
 These tests cover the task-source and cross-specification delivery paths above;
 they do not close §8.1.7. Missing callers do not block implementation of the
 operations those callers will use. Idle-period processing still contains
@@ -1849,10 +1865,12 @@ The [outstanding-work inventory](#outstanding-event-loop-work) distinguishes tha
 work from specific missing owners and host effects. Continue here before
 advancing to §8.1.8.1 event handlers.
 
-Validation: 44 focused task/Fetch/Storage/Permissions cases on each of six
+The original delivery slice validated 44 focused task/Fetch/Storage/Permissions cases on each of six
 runtime configurations. All 44 pass on addon bases; stock bases have 40 ordinary
 passes and four existing expected failures. Both new delivery cases pass
 everywhere. Typechecking, declaration contracts, ESLint, and diff checks pass.
+The follow-up audit reran all 44 cases on custom/addon and Node 26.8.1/stock with
+the same results. It changes only comments and documentation; lint and diff checks pass.
 
 ## Present
 

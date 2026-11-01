@@ -1,8 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
+import { createDocumentState } from '../../../src/browlet/browsing/navigation/document-state';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import type { Task } from '../../../src/browlet/scripting/event-loop';
+import { permissionsTaskSource } from '../../../src/browlet/scripting/tasks';
 import { PermissionFeature, originPermissionKey, PermissionStore } from '../../../src/permissions/index';
+import { createManualUserAgent } from '../../support/browlet-agent';
 import { getRelevantRealm, unwrap } from '../../support/browlet-binding';
+import { runInHostTask } from '../../support/tasks';
 import { observeBrowletPromise, performTestMicrotaskCheckpoint } from '../test-runtime';
 import type { PermissionStatusImpl } from '../../../src/browlet/integration/permissions/index';
 
@@ -127,7 +133,7 @@ describe('Permissions §6.2: query()', () => {
     const browser = await createBrowser();
     const env = getRelevantRealm(browser.window).env;
     vi.spyOn(env.getAssociatedDocument()!, 'isFullyActive').mockReturnValue(false);
-    const background = vi.spyOn(env, 'runInParallel');
+    const delivery = vi.spyOn(env, 'queueTask');
     // The inactive Document cannot run a new author script; call its actual platform API externally.
     let reads = 0;
     const promise = browser.window.navigator.permissions.query({ get name() { reads++; return 'persistent-storage'; } });
@@ -137,34 +143,85 @@ describe('Permissions §6.2: query()', () => {
     await expect(observed).rejects.toBeInstanceOf(browser.window.DOMException);
     await expect(observed).rejects.toMatchObject({ name: 'InvalidStateError' });
     expect(reads).toBe(0);
-    expect(background).not.toHaveBeenCalled();
+    expect(delivery).not.toHaveBeenCalled();
   });
 
-  it('populates the status in background work, then resolves on a permissions task', async () => {
-    const browser = await createBrowser();
-    const env = getRelevantRealm(browser.window).env;
+  it('allocates and populates the status inside the permissions task that resolves the Promise', async () => {
+    const traversable = TopLevelTraversable.create(createManualUserAgent(), null, '');
+    const document = traversable.activeDocument!;
+    const window = traversable.activeBrowsingContext!.windowProxy.platform;
+    const env = document.env;
+    const loop = env.responsibleEventLoop;
     const background: (() => void)[] = [];
-    const delivery: (() => void)[] = [];
     vi.spyOn(env, 'runInParallel').mockImplementation((steps) => { background.push(steps); });
-    vi.spyOn(env, 'queueTask').mockImplementation((source, steps) => {
-      expect(source).toBe('permissions');
-      delivery.push(steps);
-      return { remove() {} };
+    const allocationTasks: (Task | null)[] = [];
+    const queryTasks: (Task | null)[] = [];
+    const createStatus = env.createPermissionStatus;
+    const allocation = vi.spyOn(env, 'createPermissionStatus').mockImplementation((descriptor) => {
+      allocationTasks.push(loop.currentlyRunningTask);
+      return createStatus(descriptor);
     });
-    const promise = browser.window.navigator.permissions.query({ name: 'persistent-storage' });
-    const observed = observeBrowletPromise(browser.window, promise);
-    let resolved = false;
-    void observed.then(() => { resolved = true; });
-    expect(background).toHaveLength(1);
-    expect(delivery).toHaveLength(0);
-    env.userAgent.storagePersistence.setPermission(env.origin, 'granted');
-    background[0]!();
-    expect(delivery).toHaveLength(1);
-    await Promise.resolve();
-    expect(resolved).toBe(false);
-    delivery[0]!();
-    performTestMicrotaskCheckpoint(browser.window);
-    expect((await observed).state).toBe('granted');
+    const query = vi.fn<PermissionFeature['query']>((_descriptor, status) => {
+      queryTasks.push(loop.currentlyRunningTask);
+      status.state = 'granted';
+    });
+    env.userAgent.permissionStore = new PermissionStore([new PermissionFeature('persistent-storage', originPermissionKey, { query })]);
+    const promise = window.navigator.permissions.query({ name: 'persistent-storage' });
+    const observed = observeBrowletPromise(window, promise);
+    // Completing any background work must not allocate or populate a Platform object.
+    for (const steps of background) steps();
+    expect(allocation).not.toHaveBeenCalled();
+    expect(query).not.toHaveBeenCalled();
+    const tasks = [...loop.getTaskQueue(permissionsTaskSource)];
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]!.document).toBe(document);
+
+    await runInHostTask(() => { expect(loop.runTaskTurn()).toBe(true); });
+    const status = await observed;
+    expect(allocationTasks).toEqual(tasks);
+    expect(queryTasks).toEqual(tasks);
+    expect(status).toBeInstanceOf(window.PermissionStatus);
+    expect(status.state).toBe('granted');
+  });
+
+  it.each(['reactivation', 'destruction'] as const)('defers query allocation while inactive, then handles Document %s', async (outcome) => {
+    const traversable = TopLevelTraversable.create(createManualUserAgent(), null, '');
+    const document = traversable.activeDocument!;
+    const window = traversable.activeBrowsingContext!.windowProxy.platform;
+    const env = document.env;
+    const loop = env.responsibleEventLoop;
+    const activeEntry = traversable.activeSessionHistoryEntry;
+    const background: (() => void)[] = [];
+    vi.spyOn(env, 'runInParallel').mockImplementation((steps) => { background.push(steps); });
+    const allocation = vi.spyOn(env, 'createPermissionStatus');
+    const query = vi.spyOn(env.permissions, 'runPermissionQuery');
+    const settled = vi.fn();
+    // Document destruction runs on its owning loop, ahead of the pending query.
+    if (outcome === 'destruction') env.queueTask('permissions', () => { document.destroy(); });
+    const promise = window.navigator.permissions.query({ name: 'persistent-storage' });
+    const observed = observeBrowletPromise(window, promise).then(settled, settled);
+    traversable.activeSessionHistoryEntry = { ...activeEntry, documentState: createDocumentState(null) };
+    expect(document.isFullyActive()).toBe(false);
+    for (const steps of background) steps();
+    await runInHostTask(() => { expect(loop.runTaskTurn()).toBe(false); });
+    expect(allocation).not.toHaveBeenCalled();
+    expect(query).not.toHaveBeenCalled();
+    expect(settled).not.toHaveBeenCalled();
+
+    traversable.activeSessionHistoryEntry = activeEntry;
+    await runInHostTask(() => { expect(loop.runTaskTurn()).toBe(true); });
+    if (outcome === 'destruction') {
+      expect(loop.getTaskQueue(permissionsTaskSource).size).toBe(0);
+      await runInHostTask(() => { expect(loop.runTaskTurn()).toBe(false); });
+      expect(allocation).not.toHaveBeenCalled();
+      expect(query).not.toHaveBeenCalled();
+      expect(settled).not.toHaveBeenCalled();
+    } else {
+      await observed;
+      expect(allocation).toHaveBeenCalledOnce();
+      expect(query).toHaveBeenCalledOnce();
+      expect(settled).toHaveBeenCalledExactlyOnceWith(expect.any(window.PermissionStatus));
+    }
   });
 
   it('uses the method settings and result realm, but queues delivery on the receiver global', async () => {
