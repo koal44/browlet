@@ -64,6 +64,18 @@ describe('HTML dynamic import', () => {
     expect(owner.env.realm.loadedModules.size).toBe(0);
   });
 
+  testImport('keeps repeated evaluations with identical source on their own Window loader', async () => {
+    const first = await fixture({ '/child.js': 'export default 5;' });
+    const second = await fixture({ '/child.js': 'export default 9;' });
+    const source = 'import("./child.js").then(module => module.default)';
+    for (let index = 0; index < 3; index++) {
+      expect(await first.browser.evaluate(source)).toBe(5);
+      expect(await second.browser.evaluate(source)).toBe(9);
+    }
+    expect(first.requests).toEqual(['https://modules.test/child.js']);
+    expect(second.requests).toEqual(['https://modules.test/child.js']);
+  });
+
   testImport('retains the classic-script referrer for Function-created imports', async () => {
     const { env, requests } = await fixture({ '/app/generated.js': 'export const answer = 42;' });
     const observation = await observe(env, () => classic(env, `Function("return import('./generated.js');")()`));

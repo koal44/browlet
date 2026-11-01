@@ -18,6 +18,27 @@ const testJob = itPassesWith('hostHooks');
 afterEach(() => vi.restoreAllMocks());
 
 describe('HTML HostMakeJobCallback and HostCallJobCallback', () => {
+  testJob('keeps repeated source evaluation separate from the calling HTML script', async () => {
+    await runInHostTask(() => {
+      const f = fixture();
+      const observations: (Script | null)[] = [];
+      Reflect.set(f.realm.globalObject, 'observe', () => observations.push(f.loop.activeScript));
+      const source = '() => Promise.resolve().then(() => observe())';
+      f.realm.evaluate(source, 'evaluation.js');
+      Reflect.set(f.realm.globalObject, 'registerFromEvaluation', f.realm.evaluate(source, 'evaluation.js'));
+      const definingScript = f.script('globalThis.registerFromScript = () => Promise.resolve().then(() => observe())');
+      expect(definingScript.run().type).toBe('normal');
+      const callingScript = f.script('registerFromEvaluation(); registerFromScript();');
+      expect(callingScript.run().type).toBe('normal');
+      f.loop.performMicrotaskCheckpoint();
+
+      expect(observations).toHaveLength(2);
+      expect(observations[0]).toBeNull();
+      expect(observations[1] === definingScript).toBe(true);
+      expect(f.loop.executionContextStack).toEqual([]);
+    });
+  });
+
   for (const muted of [true, false]) {
     // Missing hooks already leave errors unmuted, so that control passes everywhere.
     const testRegistration = muted ? testJob : it;

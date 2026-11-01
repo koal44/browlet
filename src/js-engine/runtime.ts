@@ -241,12 +241,13 @@ export function runInContext(
 /** Compile without execution using the backend that owns the supplied context. */
 export function compileScript(
   source: string, context: VMContext, filename: string, importModuleDynamically?: ImportModuleDynamically<CompiledScript>,
+  lineOffset = 0,
 ): CompiledScript {
   if (isAddonContextHandle(context)) {
     if (!addon.Script) throw new InternalError('Node backend does not provide Script');
-    return new addon.Script(source, { filename, displayErrors: false, importModuleDynamically });
+    return new addon.Script(source, { filename, lineOffset, displayErrors: false, importModuleDynamically });
   }
-  return new vm.Script(source, { filename, importModuleDynamically } as vm.ScriptOptions);
+  return new vm.Script(source, { filename, lineOffset, importModuleDynamically } as vm.ScriptOptions);
 }
 
 /** Run retained code without reparsing it or performing a microtask checkpoint. */

@@ -170,6 +170,8 @@ export class JSRealm {
   #constructibleFunctionFactory: RealmFunctionFactory;
   /** Uses this context as the referrer for source-string evaluation. */
   #importModuleDynamically: ImportModuleDynamically<CompiledScript> | undefined;
+  /** Recent evaluation code, scoped to this realm's fixed import loader. */
+  #evaluations = new Map<string, { filename: string; lineOffset: number; code: CompiledScript; }>();
   #fallbackIteratorNext: Partial<Record<CollectionIteratorKind, JSFunction>> = {};
 
   /**
@@ -722,13 +724,27 @@ export class JSRealm {
 
   /** Evaluate a script in this realm, using the supplied source location in diagnostics. */
   evaluate(source: string, filename: string, lineOffset = 0): unknown {
-    return runWithActiveRealm(this, () =>
-      runInContext(source, this.#vmContext, {
-        displayErrors: false,
-        filename,
-        lineOffset,
-        importModuleDynamically: this.#importModuleDynamically,
-      }));
+    return runWithActiveRealm(this, () => {
+      if (this.#importModuleDynamically === undefined) {
+        return runInContext(source, this.#vmContext, { displayErrors: false, filename, lineOffset });
+      }
+      // Fresh import identities prevent V8 cache hits for identical source and
+      // make its colliding entries increasingly expensive to search. Retain the
+      // compiled code, not its result; declarations and allocations still run.
+      let evaluation = this.#evaluations.get(source);
+      if (!evaluation || evaluation.filename !== filename || evaluation.lineOffset !== lineOffset) {
+        evaluation = {
+          filename, lineOffset,
+          code: compileScript(source, this.#vmContext, filename, this.#importModuleDynamically, lineOffset),
+        };
+      }
+      this.#evaluations.delete(source);
+      this.#evaluations.set(source, evaluation);
+      // Bound retained source history, including when callers alternate sources.
+      // Parsed HTML scripts keep their separate identities through parseScript().
+      if (this.#evaluations.size > 32) this.#evaluations.delete(this.#evaluations.keys().next().value!);
+      return runScript(evaluation.code, this.#vmContext);
+    });
   }
 
   /** Let the host scope its own bookkeeping around a captured native function entry. */

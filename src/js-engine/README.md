@@ -109,7 +109,17 @@ retained `Script` object or target-realm syntax errors. Stock contexts use Node'
 `JSRealm.runScript()` executes that artifact in the existing context without
 reparsing or performing a checkpoint. HTML owns the Script Record, script
 association, modeled execution-context entry, and completion handling.
-`evaluate()` remains the separate source-text convenience path.
+`evaluate()` remains the separate source-text convenience path. When it installs
+a dynamic-import callback, the realm retains compiled code for its 32 most
+recent source texts, requiring the same filename and line offset for reuse.
+Every call executes again; objects, closures, and global declaration checks remain
+fresh. The cache is local to the realm and its fixed loader, so replacement
+realms start empty. `parseScript()` never uses it: distinct HTML script records
+must retain distinct compilation identities. Without an evaluation import
+callback, the existing direct backend path keeps V8's normal cache behavior.
+This avoids repeated fresh import identities colliding in V8's compilation
+cache. Larger working sets can still evict entries and require recompilation;
+this does not repair V8's general cache behavior for separately compiled scripts.
 
 `compileModule()` and `createDefaultExportModule()` retain real engine modules.
 `getModuleRequests()` exposes their unresolved dependencies, `linkModule()` links

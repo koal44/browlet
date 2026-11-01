@@ -97,4 +97,23 @@ describe('local page evaluation', () => {
     expect(rejection).toBeInstanceOf(Error);
     expect((rejection as Error).message).toContain('context was destroyed');
   });
+
+  it('reevaluates the same function against fresh bindings after navigation', async () => {
+    const target = TopLevelTraversable.create(new UserAgent(), null, '');
+    const page = new PageEvaluation(target);
+    const read = () => Reflect.get(globalThis, 'value') as number | undefined;
+    await page.evaluate(() => { Reflect.set(globalThis, 'value', 5); });
+    expect(await page.evaluate(read)).toBe(5);
+    expect(await page.evaluate(read)).toBe(5);
+
+    const url = target.activeWindow!.env.parseURL('https://example.test/next')!;
+    const params = target.createNavigationParamsFromSource(url);
+    const document = target.createAndInitializeDocument('html', 'text/html', params);
+    target.finalizeCrossDocumentNavigation('replace', params.userInvolvement,
+      target.createHistoryEntry(document, params, ''));
+
+    expect(await page.evaluate(read)).toBeUndefined();
+    await page.evaluate(() => { Reflect.set(globalThis, 'value', 9); });
+    expect(await page.evaluate(read)).toBe(9);
+  });
 });
