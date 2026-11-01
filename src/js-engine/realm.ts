@@ -634,6 +634,15 @@ export class JSRealm {
   }
 
   /**
+   * Schedule native Wasm Promise resolution on the owning host. The callback
+   * must not throw; call its completion once from the destination task. Stock
+   * Node retains its native scheduling. Detached native contexts discard it.
+   */
+  setWasmAsyncCompletionCallback(callback: ((complete: () => void) => void) | undefined): void {
+    addon.setWasmAsyncCompletionCallback?.(this.#vmContext, callback);
+  }
+
+  /**
    * Intercept native eval/Function in this realm. Return extracted source, false
    * to block, or undefined to delegate unchanged. Node's checks still apply.
    * Backends without the forwarding export leave native compilation unchanged.

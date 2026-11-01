@@ -234,6 +234,13 @@ and `getPromiseResult()` read native slots without changing handled state or
 consulting author properties. Stock Node retains Node reporting and explicitly
 throws for those unavailable slot reads; it does not substitute process events.
 
+`JSRealm.setWasmAsyncCompletionCallback()` supplies native Wasm completion as a
+one-shot `complete()` operation for the owning host to schedule. This requires
+only the addon on every base; stock Node retains native scheduling. HTML returns
+through a task before Promise resolution and possible author `then` lookup.
+The bridge does not allocate replacement results, poll, or drain microtasks.
+See the [native contract](../../node-compat/README.md#native-webassembly-completion).
+
 Each realm supplies an `InternalPromise` constructor extending
 Infra's [`InternalPromise`](../infra/promises.ts) with realm-owned observation. Static creation
 methods and instance chaining retain that constructor. `InternalPromise.fromInternal()`

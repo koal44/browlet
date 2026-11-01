@@ -202,6 +202,15 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   separate, and HTML script/worker startup does not call these fetchers yet. See the
   [script-creation audit](browlet/scripting/ROADMAP.md#html-8143-creating-scripts).
 
+- **Native Wasm task ownership requires the addon.** All addon bases now deliver
+  native compilation/instantiation Promise resolution through the owning HTML
+  task, including module thenable assimilation. Stock Node makes automatic
+  progress through its native queue but cannot install that task/lifecycle handoff.
+  The addon assumes Node's default V8 Wasm resolver for unregistered contexts;
+  chaining another embedder's replacement of the isolate-wide callback is unsupported.
+  See the [completion contract](browlet/scripting/ROADMAP.md#native-webassembly-completion)
+  and [regressions](../test/browlet/scripting/wasm-completion.test.ts).
+
 - **Wasm ESM has three retained binding gaps.** The addon runs supplied mixed
   JavaScript/Wasm graphs, but mutable globals exported to JavaScript are snapshots,
   `v128` exports read as undefined instead of remaining uninitialized, and mutable

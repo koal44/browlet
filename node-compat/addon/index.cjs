@@ -32,6 +32,7 @@ exports.setPromiseRejectionTracker = (context, tracker) => native.setPromiseReje
     ? (promise, operation, options) => tracker(promise, operation, vm.getCompiledCode(options))
     : tracker);
 exports.setExceptionReporter = require('./exception-reporting.cjs')(native);
+exports.setWasmAsyncCompletionCallback = native.setWasmAsyncCompletionCallback;
 exports.setModifyCodeGenerationFromStringsCallback = native.setModifyCodeGenerationFromStringsCallback;
 exports.setTemporalHostSystemUTCEpochNanosecondsCallback = native.setTemporalHostSystemUTCEpochNanosecondsCallback;
 exports.isPromiseHandled = native.isPromiseHandled;

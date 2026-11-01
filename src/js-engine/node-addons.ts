@@ -76,6 +76,8 @@ export class NodeAPI {
   ) => void;
   /** Route uncaught engine errors to the owning context, including native registry cleanup failures. */
   setExceptionReporter?: (context: VMContext, reporter: ((exception: unknown) => void) | undefined) => void;
+  /** Hand native Wasm resolution to the owning host as a one-shot completion. */
+  setWasmAsyncCompletionCallback?: (context: VMContext, callback: ((complete: () => void) => void) | undefined) => void;
   /** Intercept native eval/Function compilation; an object created in the target context identifies its realm. */
   setModifyCodeGenerationFromStringsCallback?: (
     realmReference: object,
@@ -123,6 +125,7 @@ export class NodeAPI {
     this.getPromiseResult = this.#loadMethod(backend, 'getPromiseResult');
     this.setPromiseRejectionTracker = this.#loadMethod(backend, 'setPromiseRejectionTracker');
     this.setExceptionReporter = this.#loadMethod(backend, 'setExceptionReporter');
+    this.setWasmAsyncCompletionCallback = this.#loadMethod(backend, 'setWasmAsyncCompletionCallback');
     this.setModifyCodeGenerationFromStringsCallback = this.#loadMethod(backend, 'setModifyCodeGenerationFromStringsCallback');
     this.setTemporalHostSystemUTCEpochNanosecondsCallback = this.#loadMethod(backend, 'setTemporalHostSystemUTCEpochNanosecondsCallback');
     this.runInContext = this.#loadMethod(backend, 'runInContext');

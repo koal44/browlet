@@ -111,6 +111,30 @@ after that callback. [Public API tests](test/vm-api.test.cjs) cover the matching
 Node call path, callback collection, and live exports. Remaining probes stay in
 `experimental/module-records/`.
 
+### Native WebAssembly completion
+
+`setWasmAsyncCompletionCallback(context, schedule)` hands asynchronous native
+Wasm Promise resolution to that context's host. `schedule(complete)` must not
+throw; retain `complete` for the owning task, or discard it when delivery is no
+longer appropriate. It resolves/rejects once, including synchronous `then` lookup,
+without running a checkpoint. A detached context makes it inert. Passing
+`undefined` removes the scheduler for future completions; already handed-off
+completions remain owned by their queued task.
+
+This uses V8's existing `SetWasmAsyncResolvePromiseCallback` on every supported
+base, without a Node/V8 patch. HTML installs it through JS Engine and uses its
+existing task/checkpoint machinery. Compilation, instance creation, and result
+identity remain V8-owned. Registering it does not replace the Wasm author API.
+
+The isolate-wide dispatcher preserves V8's default resolution for unregistered
+contexts, including ordinary Node and VM code. V8 exposes no getter/reset for
+this callback: another embedder's replacement cannot be chained. Addon reloads
+share the dispatcher; final environment cleanup restores default behavior.
+Callbacks and pending results have traced JavaScript ownership, with no native
+registry retaining their contexts. [Tests](test/wasm-completion.test.cjs) cover
+deferred success/error delivery, thenables, context separation, native defaults,
+detachment, collection, and worker teardown.
+
 ### WebAssembly modules
 
 `new WebAssemblyModule(bytes, { context, identifier })` is an addon extension:

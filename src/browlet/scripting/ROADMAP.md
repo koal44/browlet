@@ -1778,6 +1778,71 @@ stock base. Typechecking, declaration contracts, touched-file ESLint, and diff
 checks pass. The official HTML reference was refreshed and remains at
 `404b3eb14a7a936dddefb2d78e224dbeb01d2358`.
 
+### Native WebAssembly completion
+
+The [completion tests](../../../test/browlet/scripting/wasm-completion.test.ts)
+exercise the existing native global on main, independently of the separate
+WebAssembly API implementation. Successful compilation, CompileError delivery,
+and compiled-Module thenable assimilation originally stalled on official Node
+24.19.0 and 26.8.1 with the addon. All three stock configurations and custom Node
+with the addon already delivered them automatically.
+
+The initial control observed V8's read of the Module's `then` getter: compilation
+had finished and Promise resolution had started. Queueing one microtask through
+the owning HTML loop delivered the result on all six configurations, without
+polling or manually running a checkpoint. This identified a missing notification
+at the native-completion boundary, not a failure to drain an already notified loop.
+
+The addon creates explicit V8 microtask queues. V8's default asynchronous Wasm
+resolver resolves/rejects under `kDoNotRunMicrotasks`; ordinary Node subsequently
+drains its own queue, but does not drive Browlet's explicit queue. Custom Node's
+`HostEnqueuePromiseJob` bridge routes these jobs through `EventLoop.queueMicrotask()`
+and its idle wake-up. Official addon builds lack that bridge. The idle-loop fix
+supplied the receiving side; the native completion handoff below supplies the producer.
+
+The addon now uses public V8 `SetWasmAsyncResolvePromiseCallback` on every base.
+`JSRealm.setWasmAsyncCompletionCallback()` registers the owning host's scheduler
+per context. The native callback retains the resolver and result in a traced,
+one-shot completion; it neither changes the compiled object nor drains microtasks.
+HTML queues that completion on the JavaScript-engine task source, with its global's
+Document and paired script preparation/cleanup. Resolution and the synchronous
+Module `then` lookup consequently happen inside that task. Its checkpoint drains
+the resulting reactions, independently of the custom Promise job hooks.
+
+Inactive Documents retain their queued work. Destruction removes pending tasks
+and discards later arrivals; native detachment also makes retained completions
+inert. The [delivery tests](../../../test/browlet/scripting/wasm-completion-delivery.test.ts)
+control the external completion notification while exercising real HTML task and
+Document lifetimes on each runtime. Stock Node keeps native delivery and cannot
+install this HTML handoff; its automatic progress remains covered separately.
+
+The WebAssembly JS API's [asynchronous compilation algorithm](https://webassembly.github.io/spec/js-api/#asynchronously-compile-a-webassembly-module)
+requires task delivery. Its optional task source is absent for ordinary compile;
+HTML uses the existing engine-task source here. Native V8 still owns compilation,
+result allocation, and instantiation; this hook transfers Promise resolution, not
+those algorithms. No Node/V8 source patch or Wasm API adaptation is needed.
+
+The isolate-wide native dispatcher forwards unregistered contexts with V8's
+default Resolve/Reject behavior. V8 provides no getter for chaining another
+embedder's replacement callback; Node's default is the supported coexistence
+contract. Per-context callbacks and pending completions are garbage-collectable.
+The [native tests](../../../node-compat/test/wasm-completion.test.cjs) cover
+success/error handoff, thenable order, independent contexts, Node/VM defaults,
+removal, detachment/proxy reuse, collection, and worker teardown. Existing addon
+reload tests also protect cleanup-hook registration.
+
+Observing only the final compilation Promise is insufficient: a Module's
+author-defined `then` can require a browser microtask before that Promise settles.
+The assimilation regression preserves this case. Pip owns Wasm input conversion
+and API algorithms; Vin owns this runtime/HTML scheduling connection.
+
+Validation: 18 focused Wasm/task/checkpoint cases pass on all six configurations.
+All eight native completion tests pass on all three addon builds. The full native
+suite has no unexpected failures: official bases retain 218 ordinary passes and
+102 approved expected failures; custom has 307 ordinary passes, 12 approved
+expected failures, and its one existing skip. Typechecking, declaration contracts,
+touched-file ESLint, and diff checks pass. No new failure classifications were added.
+
 ### HTML §8.1.7.3 continuation-based spinning
 
 `EventLoop.spinUntil(waitForGoal, continuation)` implements the

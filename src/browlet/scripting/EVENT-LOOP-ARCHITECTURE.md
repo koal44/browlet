@@ -48,14 +48,25 @@ a runnable task, install it, execute with cleanup, checkpoint, and request anoth
 host turn while runnable work remains. A future bounded batch must still perform
 the checkpoint after each task. "Continually run" does not require a blocking loop.
 
-Microtasks arriving outside an HTML task/checkpoint also request a coalesced host
-wake-up. That wake-up drains the same engine queue before another ordinary task
+Microtasks queued through `EventLoop.queueMicrotask()` outside an HTML
+task/checkpoint request a coalesced host wake-up. That wake-up drains the same
+engine queue before another ordinary task
 is selected; it does not manufacture an HTML task. Work queued during a task uses
 its existing checkpoint. `env.awaitStableState()` uses this route for parallel
 algorithms: its synchronous section runs as a microtask and may return remaining
 steps for `env.runInParallel()`. The caller must stop its original parallel steps
 after requesting the stable state. No author Promise or second microtask queue
 is introduced.
+
+Native work enqueued directly into the engine queue needs its own completion
+notification. Native Wasm completion now hands a one-shot resolver to the owning
+HTML loop through `JSRealm.setWasmAsyncCompletionCallback()`. HTML queues an
+engine task before resolution can read an author-defined `then`, and the existing
+checkpoint handles reactions. This works independently of custom job hooks on
+all addon bases. Stock Node retains native scheduling. The
+[Wasm completion regressions](../../../test/browlet/scripting/wasm-completion.test.ts)
+protect progress without polling or unrelated HTML work; the
+[roadmap](ROADMAP.md#native-webassembly-completion) records task/lifetime ownership.
 
 `EventLoop.spinUntil(waitForGoal, continuation)` lowers HTML's spinning macro
 into a nonblocking wait registration and explicit remaining steps. It moves the

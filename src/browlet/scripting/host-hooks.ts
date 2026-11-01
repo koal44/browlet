@@ -67,6 +67,22 @@ export function installRealmHostHooks(
   // V8 reports native cleanup errors in the registry's context, which can differ
   // from the cleanup callback's realm. Capture the owning environment here.
   env.realm.setExceptionReporter((exception) => env.reportException(exception));
+  // WebAssembly JS API §5 returns asynchronous compilation/instantiation through
+  // a task. Resolve there: even looking up a Module's then can run author code.
+  // Official addon queues need this handoff independently of custom job hooks.
+  env.realm.setWasmAsyncCompletionCallback((complete) => {
+    // Destruction already removed the Document's tasks; do not retain a late
+    // completion in a queue whose Document can never become active again.
+    const document = env.realm.getAssociatedDocument();
+    if (document !== null && document.browsingContext === null) return;
+    env.realm.queueGlobalTask(jsEngineTaskSource, () => {
+      if (!env.canRunScript()) return;
+      const loop = env.responsibleEventLoop;
+      loop.prepareToRunScript(env);
+      try { complete(); }
+      finally { loop.cleanUpAfterRunningScript(env); }
+    });
+  });
   // https://html.spec.whatwg.org/multipage/webappapis.html#hostsystemutcepochnanoseconds
   // Registration does not read the Document: navigation attaches it and its
   // policies before author execution. Read live settings on each clock call so
