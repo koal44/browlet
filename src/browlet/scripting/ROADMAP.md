@@ -1026,11 +1026,11 @@ Agent/event loop with separate rejection state. Native notification and slot
 reads work on all three addon bases; stock-mode limitations remain expected
 failures under the existing approval.
 
-Running-script attribution across ordinary author calls is still limited to
-what the modeled stack observes. The §8.1.6.6 slice below now captures/restores
-that active-script context across callbacks; the old TODO incorrectly suggested
-that parsed script records themselves were still missing. This does not close
-complete author-function provenance or the existing Worker/global lifecycle gates.
+The native rejection boundary now supplies retained compiled-code identity for
+ordinary calls, as described below. Missing metadata still uses the modeled
+running script. The §8.1.6.6 slice separately captures/restores active-script
+context across callbacks. Complete author-function provenance and the existing
+Worker/global lifecycle gates remain separate work.
 
 At the original hook audit, both rejection suites passed across all six runtime configurations:
 29 passing tests on each addon base; 16 passing and 13 approved expected failures
@@ -1038,15 +1038,14 @@ in each stock configuration. Touched-file ESLint and `git diff --check` pass.
 
 #### Ordinary-call rejection attribution probe (31 October 2026)
 
-SPEC_CLASH(promise-rejection-script-selection): Chromium/Firefox mute by the defining script in this probe; WebKit never mutes it, while Browlet currently mutes by the outer calling script. Chromium/Firefox is the intended compatibility target; the runtime correction is deferred.
+SPEC_CLASH(promise-rejection-script-selection): Chromium/Firefox mute by the defining script in this probe; WebKit never mutes it, and the literal ECMAScript built-in context is scriptless. Browlet follows Chromium/Firefox using captured compilation identity.
 
 Script A defines `function rejectFromDefinition() { return Promise.reject(42); }`;
 script B calls it. The native integration regression gives A and B opposite
-`mutedErrors` values. All three addon bases fail both Chromium/Firefox comparison
-expectations: muted A/unmuted B emits `[42]`, while unmuted A/muted B emits `[]`.
-Eric approved retaining these as ordinary failing tests on 31 October 2026;
-they are neither expected failures nor skips on the addon paths. No runtime or
-addon code changed. Stock mode lacks the already-documented tracking facility.
+`mutedErrors` values. Before the repair, all three addon bases failed both
+Chromium/Firefox comparisons: muted A/unmuted B emitted `[42]`, while unmuted
+A/muted B emitted `[]`. The retained ordinary regressions now pass: A's muting
+controls the result. Stock mode lacks the already-documented tracking facility.
 
 The reproducible [browser probe](../../../node-compat/experimental/browser-probes/html/promise-rejection-attribution.mjs)
 uses two HTTP origins and external classic scripts without CORS. Chromium
@@ -1056,7 +1055,7 @@ only B is muted, or both are muted. The probe checks that both scripts ran;
 the rejection reason is a primitive, so this result does not establish a general
 policy for Error objects, async resumptions, or cross-realm reporting.
 
-There is a specification boundary to settle before adopting more native code.
+This is an approved browser-compatibility choice, not a settled normative reading.
 [HTML's hook](https://html.spec.whatwg.org/multipage/webappapis.html#the-hostpromiserejectiontracker-implementation)
 uses the [running context's ScriptOrModule](https://html.spec.whatwg.org/multipage/webappapis.html#running-script),
 but ECMAScript's [BuiltinCallOrConstruct](https://tc39.es/ecma262/#sec-builtincallorconstruct)
@@ -1066,14 +1065,19 @@ script here, rather than either author script. The browser comparison alone
 does not justify treating the defining-script expectation as a settled normative
 requirement.
 
-The current native notification supplies only the promise and operation to the
-executing realm's tracker. Our modeled stack still names B when its ordinary call
-enters A's function; realm identity cannot distinguish two scripts in one realm.
-Matching Chromium/Firefox needs additional engine attribution at rejection, not
-just the existing callback-registration restoration. An addon bridge extension
-appears necessary with the current inputs; this investigation does not establish
-that a Node/V8 patch is needed. Reassess the boundary after Ged's current work is
-integrated, before proposing native changes or broader execution-stack work.
+The addon reads V8's public `GetCurrentHostDefinedOptions()` at rejection/handling,
+before entering JavaScript. A VM-owned weak registry resolves that metadata to
+retained compiled code on all three addon bases, independently of import-loader
+support. HTML uses its existing compiled-code association to supply the script
+to the tracker. Missing metadata falls back to the modeled running script;
+unrecognized code selects no HTML script. The modeled execution stack is unchanged,
+and no Node/V8 patch or universal platform-entry capture is needed.
+
+Native regressions cover script/module identity without import callbacks, adapter
+reloads, retained functions, and collection after flushing V8's compilation cache.
+The engine query is security-token-sensitive; the ordinary same-realm cases do
+not establish complete cross-realm or async provenance. The broader script-selection
+questions above remain explicit rather than being inferred from these passing cases.
 
 ### §8.1.6.5: Temporal clock calculation and installation boundary
 

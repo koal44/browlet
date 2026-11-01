@@ -75,7 +75,7 @@ describe('native HostPromiseRejectionTracker to HTML events', () => {
 
   // SPEC_CLASH(promise-rejection-script-selection): Chromium/Firefox select the
   // defining script for this primitive reason; WebKit reports both cases. Target
-  // Chromium/Firefox, retaining ordinary failures while the fix is deferred.
+  // Chromium/Firefox, using the code captured at the native rejection boundary.
   // This is a compatibility choice, not an unambiguous specification requirement.
   it.each([false, true])('matches Chromium/Firefox rejection muting through an ordinary call (%s)', (muted) => {
     const f = fixture();

@@ -312,7 +312,7 @@ void CompileScript(const FunctionCallbackInfo<Value>& args) {
     // subsequently execute in any attached context in this isolate.
     Context::Scope scope(realm);
     Local<v8::Data> import_options;
-    if (!DynamicImportOptions(isolate, args[4]).ToLocal(&import_options)) return;
+    if (!CompilationOptions(isolate, args[4], args[5]->IsTrue()).ToLocal(&import_options)) return;
     ScriptOrigin origin(args[2], args[3].As<Int32>()->Value(), 0,
                         false, -1, {}, false, false, false, import_options);
     ScriptCompiler::Source source(args[0].As<String>(), origin);
@@ -326,6 +326,24 @@ void CompileScript(const FunctionCallbackInfo<Value>& args) {
   holder->SetInternalField(0, compiled);
   if (holder->SetPrivate(host, Data(args)->script_key.Get(isolate), True(isolate)).IsNothing()) return;
   args.GetReturnValue().Set(holder);
+}
+
+void InitializeVmRegistry(const FunctionCallbackInfo<Value>& args) {
+  auto isolate = args.GetIsolate();
+  if (!args[0]->IsObject()) {
+    Fail(isolate, "ERR_INVALID_ARG_TYPE", "Expected a VM compilation registry");
+    return;
+  }
+  auto host = node::GetMainContext(node::GetCurrentEnvironment(isolate->GetCurrentContext()));
+  auto key = Private::ForApi(isolate, Text(isolate, "browlet.vmRegistry"));
+  auto extras = host->GetExtrasBindingObject();
+  Local<Value> registry;
+  if (!extras->GetPrivate(host, key).ToLocal(&registry)) return;
+  if (registry->IsUndefined()) {
+    registry = args[0];
+    if (extras->SetPrivate(host, key, registry).IsNothing()) return;
+  }
+  args.GetReturnValue().Set(registry);
 }
 
 void RunScript(const FunctionCallbackInfo<Value>& args) {
@@ -414,6 +432,7 @@ v8::Local<v8::External> InitializeVm(v8::Local<v8::Object> exports,
   data->script_template.Reset(isolate, script_template);
 
   const struct { const char* name; FunctionCallback callback; } methods[] = {
+    {"initializeVmRegistry", InitializeVmRegistry},
     {"createMicrotaskQueue", CreateQueue},
     {"createContextHandle", CreateContext},
     {"evaluate", Evaluate},

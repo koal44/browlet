@@ -6,21 +6,30 @@ let needsPromiseThenWorkaround = process.versions.node.startsWith('24.');
 
 // Adapt the public options to the native context/evaluation arguments.
 module.exports = (native, initializeGlobalObject) => {
+  const entries = new WeakMap();
+  // The Node environment retains this one registry across adapter reloads on
+  // every base, independently of the optional dynamic-import router.
+  const registry = native.initializeVmRegistry({
+    register(callback, referrer, convertResult) {
+      const id = Symbol();
+      entries.set(id, { callback, referrer, convertResult });
+      return id;
+    },
+    get(id) { return entries.get(id); },
+  });
   const { Module, SourceTextModule, SyntheticModule, WebAssemblyModule, resultForImport, captureWasmIntrinsics } =
-    require('./vm-modules.cjs')(native, registerImport);
-  const imports = native.installDynamicImportRouter &&
-    require('./vm-imports.cjs')(native, resultForImport);
+    require('./vm-modules.cjs')(native, registerCompilation);
+  if (native.installDynamicImportRouter) require('./vm-imports.cjs')(native, registry);
 
-  function registerImport(callback, referrer) {
+  function registerCompilation(callback, referrer) {
     checkImportCallback(callback);
-    if (callback === undefined) return undefined;
-    return imports.register(callback, referrer);
+    return registry.register(callback, referrer, resultForImport);
   }
 
   function checkImportCallback(callback) {
     if (callback === undefined) return;
     if (typeof callback !== 'function') throw new TypeError('Expected importModuleDynamically to be a function');
-    if (!imports) throw new Error('Dynamic imports in addon contexts require the patched Node forwarding export');
+    if (!native.installDynamicImportRouter) throw new Error('Dynamic imports in addon contexts require the patched Node forwarding export');
   }
 
   class Script {
@@ -39,7 +48,7 @@ module.exports = (native, initializeGlobalObject) => {
       // A Script is unbound. HTML realizes parser failures in its selected realm.
       this.#handle = native.compileScript(`${source}`, undefined,
         options.filename ?? 'evalmachine.<anonymous>', options.lineOffset ?? 0,
-        registerImport(options.importModuleDynamically, this));
+        registerCompilation(options.importModuleDynamically, this), options.importModuleDynamically !== undefined);
     }
 
     runInContext(context, options = {}) {
@@ -88,7 +97,7 @@ module.exports = (native, initializeGlobalObject) => {
       initializeGlobalObject(context);
       captureWasmIntrinsics(context);
       if (importModuleDynamically !== undefined) {
-        native.setContextImportLoader(context, imports.register(importModuleDynamically, context));
+        native.setContextImportLoader(context, registry.register(importModuleDynamically, context, resultForImport));
       }
       return context;
     },
@@ -121,7 +130,7 @@ module.exports = (native, initializeGlobalObject) => {
     // it has a saved script context to restore when metadata is absent.
     getCompiledCode(options) {
       if (options.length === 0) return undefined;
-      return imports ? imports.getReferrer(options) : null;
+      return registry.get(options[2])?.referrer ?? null;
     },
   };
 };

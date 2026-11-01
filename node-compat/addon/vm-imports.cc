@@ -56,14 +56,16 @@ MaybeLocal<Promise> ImportDynamically(Local<Context> context, Local<v8::Data> me
   Context::Scope scope(context);
   auto options = metadata.As<FixedArray>();
   Local<Value> id = Undefined(isolate);
-  if (options->Length() == 2 && options->Get(0) == Marker(isolate)) {
-    id = options->Get(1).As<Symbol>();
-  } else if (options->Length() == 0) {
-    // Only missing metadata uses the fallback; foreign metadata stays with Node.
+  bool own_metadata = options->Length() == 3 && options->Get(0) == Marker(isolate);
+  if (own_metadata) id = options->Get(1).As<Value>();
+  if (id->IsUndefined() && (own_metadata || options->Length() == 0)) {
+    // Compilation identity does not imply an explicit import loader. Foreign
+    // metadata still belongs to Node, rather than our context fallback.
     if (!context->GetExtrasBindingObject()->GetPrivate(context,
             ContextLoaderKey(isolate)).ToLocal(&id)) return {};
   }
   if (id->IsUndefined()) {
+    if (own_metadata) metadata = PrimitiveArray::New(isolate, 0);
     return handles.EscapeMaybe(node::ImportModuleDynamicallyWithPhase(
         context, metadata, resource_name, specifier, phase, attributes));
   }
@@ -111,41 +113,37 @@ MaybeLocal<Promise> ImportDynamically(Local<Context> context, Local<v8::Data> me
 
 void InstallDynamicImportRouter(const FunctionCallbackInfo<Value>& args) {
   auto isolate = args.GetIsolate();
-  if (!args[0]->IsFunction() || !args[1]->IsFunction() || !args[2]->IsObject()) {
-    isolate->ThrowException(Exception::TypeError(Text(isolate, "Expected import routing callbacks and loader registry")));
+  if (!args[0]->IsFunction() || !args[1]->IsFunction()) {
+    isolate->ThrowException(Exception::TypeError(Text(isolate, "Expected import routing callbacks")));
     return;
   }
   auto host = node::GetMainContext(node::GetCurrentEnvironment(isolate->GetCurrentContext()));
-  Local<Value> router, registry;
+  Local<Value> router;
   if (!host->GetExtrasBindingObject()->GetPrivate(host, RouterKey(isolate)).ToLocal(&router)) return;
-  if (!router->IsUndefined()) {
-    if (!router.As<Array>()->Get(host, 2).ToLocal(&registry)) return;
-    args.GetReturnValue().Set(registry);
-    return;
-  }
-  Local<Value> callbacks[] = {args[0], args[1], args[2]};
+  if (!router->IsUndefined()) return;
+  Local<Value> callbacks[] = {args[0], args[1]};
   if (host->GetExtrasBindingObject()->SetPrivate(host, RouterKey(isolate),
-          Array::New(isolate, callbacks, 3)).IsNothing()) return;
+          Array::New(isolate, callbacks, 2)).IsNothing()) return;
   isolate->SetHostImportModuleWithPhaseDynamicallyCallback(ImportDynamically);
   node::AddEnvironmentCleanupHook(isolate, [](void* pointer) {
     static_cast<Isolate*>(pointer)->SetHostImportModuleWithPhaseDynamicallyCallback(
         node::ImportModuleDynamicallyWithPhase);
   }, isolate);
-  args.GetReturnValue().Set(args[2]);
 }
 #endif
 }  // namespace
 
-v8::MaybeLocal<v8::Data> DynamicImportOptions(v8::Isolate* isolate,
-                                            v8::Local<v8::Value> loader) {
-  if (loader->IsUndefined()) return v8::PrimitiveArray::New(isolate, 0);
-  if (!loader->IsSymbol()) {
-    isolate->ThrowException(v8::Exception::TypeError(Text(isolate, "Expected an import loader symbol")));
+v8::MaybeLocal<v8::Data> CompilationOptions(v8::Isolate* isolate,
+                                           v8::Local<v8::Value> id, bool has_import_loader) {
+  if (id->IsUndefined()) return v8::PrimitiveArray::New(isolate, 0);
+  if (!id->IsSymbol()) {
+    isolate->ThrowException(v8::Exception::TypeError(Text(isolate, "Expected a compilation identity symbol")));
     return {};
   }
-  auto options = v8::PrimitiveArray::New(isolate, 2);
+  auto options = v8::PrimitiveArray::New(isolate, 3);
   options->Set(isolate, 0, Marker(isolate));
-  options->Set(isolate, 1, loader.As<v8::Symbol>());
+  options->Set(isolate, 1, has_import_loader ? id.As<v8::Primitive>() : v8::Undefined(isolate).As<v8::Primitive>());
+  options->Set(isolate, 2, id.As<v8::Symbol>());
   return options;
 }
 

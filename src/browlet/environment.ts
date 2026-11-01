@@ -463,10 +463,15 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
 
   /** HTML's HostPromiseRejectionTracker, bound to the executing realm rather than the Promise's creation realm. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#the-hostpromiserejectiontracker-implementation
-  trackPromiseRejection(promise: Promise<unknown>, operation: 'reject' | 'handle'): void {
+  // SPEC_CLASH(promise-rejection-script-selection): Use captured author code for
+  // the Chromium/Firefox muting policy; built-in contexts are scriptless in the
+  // literal ECMAScript steps. See the ordinary-call probe in the scripting roadmap.
+  trackPromiseRejection(
+    promise: Promise<unknown>, operation: 'reject' | 'handle',
+    script: Script | null = this.responsibleEventLoop.runningScript,
+  ): void {
     // A scriptless running context uses current settings; do not substitute an
     // active script from a lower context (including one with muted errors).
-    const script = this.responsibleEventLoop.runningScript;
     if (script instanceof ClassicScript && script.mutedErrors) return;
     const env = script?.env ?? this;
     const global = env.globalImplementation;

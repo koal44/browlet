@@ -380,8 +380,12 @@ running-script lookup. An unattached browser realm rejects reporting with an
 InternalError; internal sandboxes deliberately retain console-only diagnostics.
 
 Rejected-promise state also stays on each global. The environment's
-`trackPromiseRejection()` translates HTML's rejection hook using the modeled
-running script and current settings; `notifyAboutRejectedPromises()` schedules
+`trackPromiseRejection()` translates HTML's rejection hook using captured
+compiled-code identity, or the modeled running script when engine metadata is
+absent, and current settings. The VM registry supplies this identity independently
+of dynamic-import callbacks; the HTML association remains owned by scripting.
+Unrecognized code does not inherit an unrelated outer script. No extra modeled
+execution frame is required. `notifyAboutRejectedPromises()` schedules
 the global's DOM notification task. `PromiseRejectionEvent` retains the original
 promise as an IDL object, without adopting it or installing reactions. Window
 composition registers the realm's native rejection hook after its environment

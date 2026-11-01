@@ -67,17 +67,20 @@ their own consumers and regressions; this is not arbitrary frame interception.
 ### Promise rejection lifecycle
 
 Pip's rejection bridge is integrated on all addon bases. The executing context
-selects `BrowletEnvironment.trackPromiseRejection(promise, operation)` through
-the realm hook installation. Native `isPromiseHandled()` and `getPromiseResult()`
+selects the environment through realm hook installation, and captured compilation
+metadata identifies the rejecting/handling script when available. Native
+`isPromiseHandled()` and `getPromiseResult()`
 read slots without installing reactions. HTML schedules notification at its
 checkpoint and delivers `unhandledrejection`/`rejectionhandled` as global tasks.
 Internal sandboxes and unrelated Node contexts retain Node's reporting.
 
 Stock Node still lacks these facilities; its integration assertions are approved
-expected failures. Complete running-script attribution across uncontrolled
-function calls remains with the execution-context work. Job callbacks now restore
-the registering script when it was modeled at capture; the tracker uses the
-modeled running script when present, including classic muting.
+expected failures. Ordinary calls between retained scripts now select the
+executing function's compiled code for classic muting. Compilation identity is
+independent of dynamic-import support and survives adapter reloads. Missing
+metadata keeps the modeled running-script lookup; unrecognized code selects no
+HTML script. This is not complete attribution across arbitrary async resumptions
+or security-token boundaries. Job callback restoration remains separate.
 Keep Node forwarding, collection, worker teardown, and job-hook coexistence tests
 when extending this boundary. Another addon's replacement rejection callback
 cannot be recovered through V8's public API.

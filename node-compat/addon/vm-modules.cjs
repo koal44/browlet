@@ -4,7 +4,7 @@ const { isModuleNamespaceObject } = require('node:util').types;
 
 // Node's module object model over the addon's context handles. Loading remains
 // the host's responsibility; these objects retain supplied dependencies only.
-module.exports = (native, registerImport) => {
+module.exports = (native, registerCompilation) => {
   const records = new WeakMap();
   const wasm = require('./vm-wasm.cjs')(native);
   let nextIdentifier = 0;
@@ -50,7 +50,7 @@ module.exports = (native, registerImport) => {
         }
       }
       super(context, identifier, module => native.compileModule(source, context, identifier, lineOffset,
-        registerImport(options.importModuleDynamically, module)));
+        registerCompilation(options.importModuleDynamically, module), options.importModuleDynamically !== undefined));
       const record = recordFor(this);
       if (initializeImportMeta !== undefined) {
         record.initializeImportMeta = meta => Reflect.apply(initializeImportMeta, undefined, [meta, this]);

@@ -148,8 +148,10 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   native reject/handle notifications, non-observing slot reads, and HTML checkpoint
   notifications/events. Stock Node retains its process-level reporting and throws
   for unavailable slot queries; the integration suite keeps approved expected
-  failures. The tracker uses the existing modeled running script, so complete
-  muting/attribution across arbitrary calls and Promise jobs remains unfinished.
+  failures. Captured compilation identity fixes classic muting across ordinary
+  calls between retained scripts, following Chromium/Firefox. Missing metadata
+  uses the modeled running script; complete attribution across arbitrary async
+  resumptions and security-token boundaries remains unfinished.
   Independently replacing V8's rejection callback through another addon is
   unsupported; the maintained bridge forwards to Node's default handler. See the
   [rejection audit](browlet/scripting/ROADMAP.md#html-8147-unhandled-promise-rejections).

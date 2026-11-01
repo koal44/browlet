@@ -225,7 +225,13 @@ testMeta('discarded initializer cycles release their modules and contexts at eve
     return { module: new WeakRef(module), context: new WeakRef(f.context), global: new WeakRef(f.context.globalProxy),
       record: new WeakRef(record), initializer: new WeakRef(initializeImportMeta) };
   }
-  for (let stage = 0; stage < 4; stage++) await assertCollected(allocate(stage));
+  for (let stage = 0; stage < 4; stage++) {
+    const references = allocate(stage);
+    // Compilation metadata keeps the public module alive while V8 caches its code.
+    await nextTurn();
+    await global.gc({ type: 'major', execution: 'async', flavor: 'last-resort' });
+    await assertCollected(references);
+  }
 });
 
 testMeta('worker teardown preserves Node metadata and addon routing', { timeout: 15000 }, async testContext => {

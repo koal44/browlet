@@ -57,10 +57,20 @@ void TrackPromiseRejection(PromiseRejectMessage message) {
   if (forward) node::PromiseRejectCallback(message);
   if (!tracker->IsFunction()) return;
 
+  // Observe the rejecting/handling code before entering the JavaScript bridge.
+  // This public V8 query is available on all supported Node bases.
+  auto options = Array::New(isolate);
+  Local<v8::Data> metadata;
+  if (isolate->GetCurrentHostDefinedOptions().ToLocal(&metadata)) {
+    auto values = metadata.As<PrimitiveArray>();
+    for (int i = 0; i < values->Length(); ++i) {
+      options->CreateDataProperty(context, i, values->Get(isolate, i)).Check();
+    }
+  }
   Local<Value> arguments[] = {promise, Text(isolate,
-      event == kPromiseRejectWithNoHandler ? "reject" : "handle")};
+      event == kPromiseRejectWithNoHandler ? "reject" : "handle"), options};
   TryCatch caught(isolate);
-  auto result = tracker.As<Function>()->Call(context, Undefined(isolate), 2, arguments);
+  auto result = tracker.As<Function>()->Call(context, Undefined(isolate), 3, arguments);
   if (result.IsEmpty()) {
     // V8's notification callback cannot propagate an ordinary exception.
     if (caught.HasTerminated()) caught.ReThrow();

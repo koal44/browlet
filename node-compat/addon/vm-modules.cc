@@ -84,7 +84,7 @@ void CompileModule(const FunctionCallbackInfo<Value>& args) {
   {
     Context::Scope scope(realm);
     Local<v8::Data> import_options;
-    if (!DynamicImportOptions(isolate, args[4]).ToLocal(&import_options)) return;
+    if (!CompilationOptions(isolate, args[4], args[5]->IsTrue()).ToLocal(&import_options)) return;
     ScriptOrigin origin(args[2], args[3].As<Int32>()->Value(), 0,
                         false, -1, {}, false, false, true, import_options);
     ScriptCompiler::Source source(args[0].As<String>(), origin);

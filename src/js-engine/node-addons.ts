@@ -69,9 +69,10 @@ export class NodeAPI {
   /** Read engine slots without reactions, species lookup, or author property access. */
   isPromiseHandled?: (promise: Promise<unknown>) => boolean;
   getPromiseResult?: (promise: Promise<unknown>) => unknown;
-  /** Receive synchronous reject/handle notifications in the executing context. */
+  /** Receive synchronous notifications with retained code; undefined means no metadata, null means foreign code. */
   setPromiseRejectionTracker?: (
-    context: VMContext, tracker: ((promise: Promise<unknown>, operation: 'reject' | 'handle') => void) | undefined,
+    context: VMContext,
+    tracker: ((promise: Promise<unknown>, operation: 'reject' | 'handle', compiledCode: CompiledCode | null | undefined) => void) | undefined,
   ) => void;
   /** Route uncaught engine errors to the owning context, including native registry cleanup failures. */
   setExceptionReporter?: (context: VMContext, reporter: ((exception: unknown) => void) | undefined) => void;

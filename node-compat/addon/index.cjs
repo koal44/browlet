@@ -27,7 +27,10 @@ exports.getFunctionRealm = native.getFunctionRealm;
 exports.createExoticObject = native.createExoticObject;
 exports.createFunctionWithIncumbent = native.createFunctionWithIncumbent;
 exports.observePromise = native.observePromise;
-exports.setPromiseRejectionTracker = native.setPromiseRejectionTracker;
+exports.setPromiseRejectionTracker = (context, tracker) => native.setPromiseRejectionTracker(context,
+  typeof tracker === 'function'
+    ? (promise, operation, options) => tracker(promise, operation, vm.getCompiledCode(options))
+    : tracker);
 exports.setExceptionReporter = require('./exception-reporting.cjs')(native);
 exports.setModifyCodeGenerationFromStringsCallback = native.setModifyCodeGenerationFromStringsCallback;
 exports.setTemporalHostSystemUTCEpochNanosecondsCallback = native.setTemporalHostSystemUTCEpochNanosecondsCallback;

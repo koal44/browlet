@@ -111,7 +111,7 @@ testImport('context fallback uses the importing context, callback arguments, and
   assert.equal(result.value, target.namespace);
 });
 
-testImport('one unbound script without metadata selects each execution context fallback', () => {
+testImport('one identified unbound script without an import callback selects each context fallback', () => {
   const contexts = [1, 2].map(value => {
     let target;
     const f = fixture({ importModuleDynamically(_specifier, referrer) {
@@ -159,11 +159,12 @@ testImport('context fallback leaves Node-owned generated code with its Node load
 
 test('missing script and context loaders retain Node\'s rejection', async () => {
   const f = fixture();
-  const result = observe(f, compat.runInContext('import("unregistered")', f.context));
+  const results = [compat.runInContext('import("unregistered")', f.context),
+    new compat.Script('import("unregistered")').runInContext(f.context)].map(promise => observe(f, promise));
   f.queue.runMicrotasks();
   await nextTurn();
   f.queue.runMicrotasks();
-  assert.equal(result.error.code, 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING');
+  for (const result of results) assert.equal(result.error.code, 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING');
 });
 
 test('invalid context import options do not consume a detached global proxy', () => {
@@ -377,6 +378,8 @@ testImport('functions retain their context fallback and unreachable callback cyc
   retained.queue.runMicrotasks();
   assert.equal(result.value.value, 42);
   const discarded = allocate(false);
+  // The target module now has compilation identity even without an import callback.
+  await global.gc({ type: 'major', execution: 'async', flavor: 'last-resort' });
   await assertCollected(discarded.references);
 });
 

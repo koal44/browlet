@@ -165,7 +165,12 @@ test('module objects and synthetic callback cycles collect at every lifecycle st
     return { source: new WeakRef(source), synthetic: new WeakRef(synthetic), value: new WeakRef(value),
       context: new WeakRef(context), queue: new WeakRef(queue) };
   }
-  for (const stage of ['created', 'linked', 'evaluated']) await assertCollected(allocate(stage));
+  for (const stage of ['created', 'linked', 'evaluated']) {
+    const references = allocate(stage);
+    // Compilation metadata retains the VM object while V8 caches its code.
+    await global.gc({ type: 'major', execution: 'async', flavor: 'last-resort' });
+    await assertCollected(references);
+  }
 });
 
 test('evaluated graphs release synthetic callbacks and their module objects while exports remain live', async () => {

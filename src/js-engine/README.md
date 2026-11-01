@@ -221,9 +221,11 @@ can differ from a handlerless reaction's null specification realm. Returning
 false preserves the original V8 queue. Generic/timeout enqueue hooks transfer
 all scheduling and have no per-job fallback. HTML chooses settings and task policy.
 
-`JSRealm.setPromiseRejectionTracker()` installs a two-argument reject/handle
-callback for the executing context. It works on every addon base without the
-job-hook patches. Internal sandboxes remain unregistered. `isPromiseHandled()`
+`JSRealm.setPromiseRejectionTracker()` installs a reject/handle callback for the
+executing context. Its third argument identifies the retained compiled code:
+`undefined` means no engine metadata; `null` means unrecognized code. The hook
+works on every addon base without the job-hook patches. Internal sandboxes
+remain unregistered. `isPromiseHandled()`
 and `getPromiseResult()` read native slots without changing handled state or
 consulting author properties. Stock Node retains Node reporting and explicitly
 throws for those unavailable slot reads; it does not substitute process events.

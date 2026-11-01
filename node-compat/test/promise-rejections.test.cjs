@@ -39,6 +39,85 @@ test('rejection and handler notifications are synchronous and preserve promise/r
   assert.equal(f.events.length, 2);
 });
 
+test('rejections identify retained compilations without import callbacks or distinct filenames', () => {
+  const f = fixture();
+  const codes = [];
+  native.setPromiseRejectionTracker(f.realm, (promise, operation, compiledCode) => {
+    if (operation === 'reject') codes.push(compiledCode);
+  });
+  const definition = new compat.Script('globalThis.rejectFromDefinition = () => Promise.reject(42)', { filename: 'same.js' });
+  const caller = new compat.Script('rejectFromDefinition()', { filename: 'same.js' });
+  definition.runInContext(f.realm);
+  caller.runInContext(f.realm);
+  const module = new compat.SourceTextModule('Promise.reject(42)', { context: f.realm, identifier: 'same.js' });
+  module.linkRequests([]);
+  module.instantiate();
+  module.evaluate();
+  f.run('Promise.reject(42)');
+  assert.deepEqual(codes, [definition, module, undefined]);
+});
+
+test('rejection compilation identity survives adapter reloads on every addon base', () => {
+  const { dirname, sep } = require('node:path');
+  const old = generation(compat);
+  const entry = require.resolve('../addon/index.cjs');
+  const directory = dirname(entry) + sep;
+  for (const filename of Object.keys(require.cache)) {
+    if (filename.startsWith(directory) && filename.endsWith('.cjs')) delete require.cache[filename];
+  }
+  const reloaded = require(entry);
+  const fresh = generation(reloaded);
+  const codes = [];
+  for (const value of [old, fresh]) {
+    reloaded.setPromiseRejectionTracker(value.context, (promise, operation, compiledCode) => {
+      if (operation === 'reject') codes.push(compiledCode);
+    });
+    value.context.globalProxy.reject();
+  }
+  assert.deepEqual(codes, [old.script, fresh.script]);
+
+  function generation(adapter) {
+    const context = adapter.createContextHandle();
+    const script = new adapter.Script('globalThis.reject = () => Promise.reject(42)', { filename: 'same.js' });
+    script.runInContext(context);
+    return { context, script };
+  }
+});
+
+test('compilation identities without import callbacks do not root discarded scripts or modules', async () => {
+  const references = (() => {
+    const context = compat.createContextHandle();
+    const script = new compat.Script('globalThis.retained = () => 42');
+    script.runInContext(context);
+    const module = new compat.SourceTextModule('export const value = 42', { context });
+    module.linkRequests([]);
+    module.instantiate();
+    module.evaluate();
+    return { script: new WeakRef(script), module: new WeakRef(module), context: new WeakRef(context) };
+  })();
+  // As with import-loader identities, cached V8 code retains its compilation.
+  // Flush that cache before checking whether the registry itself roots a cycle.
+  await global.gc({ type: 'major', execution: 'async', flavor: 'last-resort' });
+  await assertCollected(references);
+});
+
+test('a live function retains its rejection compilation after collection', async () => {
+  const f = fixture();
+  function allocate() {
+    const script = new compat.Script('() => Promise.reject(42)');
+    return { fn: script.runInContext(f.realm), script: new WeakRef(script) };
+  }
+  const { fn, script } = allocate();
+  let captured;
+  native.setPromiseRejectionTracker(f.realm, (promise, operation, compiledCode) => {
+    if (operation === 'reject') captured = compiledCode;
+  });
+  await global.gc({ type: 'major', execution: 'async', flavor: 'last-resort' });
+  fn();
+  assert.ok(captured instanceof compat.Script);
+  assert.equal(captured, script.deref());
+});
+
 test('promises handled before rejection do not report an unhandled rejection', () => {
   const f = fixture();
   const promise = f.run(`

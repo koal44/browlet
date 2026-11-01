@@ -613,11 +613,13 @@ export class JSRealm {
 
   /**
    * Install HostPromiseRejectionTracker for code executing in this realm.
+   * Captured code is undefined without metadata, null for an unrecognized
+   * compilation, or the retained Script/SourceTextModule object.
    * The callback must not throw. Stock Node leaves reporting with Node because
    * it cannot supply these synchronous notifications without the addon.
    */
   setPromiseRejectionTracker(
-    tracker: ((promise: Promise<unknown>, operation: 'reject' | 'handle') => void) | undefined,
+    tracker: ((promise: Promise<unknown>, operation: 'reject' | 'handle', compiledCode: CompiledCode | null | undefined) => void) | undefined,
   ): void {
     addon.setPromiseRejectionTracker?.(this.#vmContext, tracker);
   }

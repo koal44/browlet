@@ -57,9 +57,13 @@ export function installRealmHostHooks(
   // require-trusted-types-for and default-policy unchanged-source validation
   // are not enforced here. Keep the four input gaps in code-generation-gaps.test.cjs.
   // Unlike the patched job hooks, rejection tracking uses public V8 APIs on
-  // every addon base. Bind the executing environment without adding an argument
-  // to HTML's HostPromiseRejectionTracker(promise, operation).
-  env.realm.setPromiseRejectionTracker((promise, operation) => env.trackPromiseRejection(promise, operation));
+  // every addon base. Missing metadata retains the modeled running context;
+  // foreign or non-HTML code must not inherit an unrelated outer script.
+  env.realm.setPromiseRejectionTracker((promise, operation, code) => {
+    const script = code === undefined ? undefined :
+      code === null ? null : JSScriptOrModule.fromCompiledCode(code)?.script ?? null;
+    env.trackPromiseRejection(promise, operation, script);
+  });
   // V8 reports native cleanup errors in the registry's context, which can differ
   // from the cleanup callback's realm. Capture the owning environment here.
   env.realm.setExceptionReporter((exception) => env.reportException(exception));

@@ -185,22 +185,32 @@ a weak association keep the callback and public referrer alive while code can st
 their cycles are collectible. This deliberately retains the public referrer to
 satisfy Node's callback contract, unlike the experimental raw-handle API.
 
-The Node environment owns one import router and cleanup hook. Reloading the
-JavaScript addon adapters reuses that router and its weak loader associations.
+The Node environment owns one VM registry on every addon base, independently of
+the optional import router and its cleanup hook. Every retained Script and
+SourceTextModule receives a weak compilation identity, even without an import
+callback. Reloading the JavaScript adapters reuses that registry and the router.
 Each loader retains its original module-result converter, so old, pending, and
 new imports keep the correct module identity checks after a reload. The native
 reload regression clears all JavaScript adapters from the require cache while
 keeping the binary loaded, then exercises script, module, and context loaders.
-Registration and compiled-code lookup share that retained registry. A job-hook
-regression also reloads the adapters and confirms that callback registration
-still identifies both old and new Script and SourceTextModule objects.
+Registration and compiled-code lookup share that retained registry. Job-hook and
+rejection regressions confirm that old and new compiled code remains identifiable
+after reload. V8's compilation cache can also retain those identities and their
+public referrers; collection tests flush the cache before checking discarded cycles.
 
 An explicit script/module callback takes precedence. When compilation metadata
-is absent, the importing context supplies its fallback callback, including for
+is absent or contains only our compilation identity, the importing context
+supplies its fallback callback, including for
 indirect eval invoked by a Promise reaction. Foreign metadata remains Node's
 responsibility, even when the generated code executes in an addon context.
 The fallback belongs to the context, so reusing its global proxy neither copies
 the old callback nor changes the loader of retained functions from the old realm.
+
+Promise rejection notifications capture the current compilation metadata through
+V8's public API before entering the JavaScript tracker. The third callback
+argument is the retained Script/SourceTextModule, `undefined` for absent metadata,
+or `null` for unrecognized code. This works on official Node 24/26 and custom Node
+without a new engine patch. It does not intercept arbitrary function entry.
 
 The addon forwards unrelated Node/VM requests to Node and restores its handler at
 environment cleanup. Another addon's competing replacement of the isolate-wide
