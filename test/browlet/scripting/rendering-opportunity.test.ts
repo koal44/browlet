@@ -3,8 +3,12 @@ import { createManualUserAgent } from '../../support/browlet-agent';
 
 import { getRelevantRealm } from '../../support/browlet-binding';
 import {
-  TopLevelTraversable, type Navigable,
+  TopLevelTraversable, Navigable,
 } from '../../../src/browlet/browsing/navigation/navigable';
+import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
+import { createDocumentState } from '../../../src/browlet/browsing/navigation/document-state';
+import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
+import type { HTMLIFrameElementImpl } from '../../../src/browlet/dom/nodes/html/embedded/iframe';
 import {
   type RenderingOpportunityHost, type RenderingUpdateHooks,
   type RenderingUpdatePhase, renderingUpdatePhases, WindowRenderingProducer,
@@ -89,6 +93,139 @@ describe('Window rendering producer', () => {
     agent.eventLoop.runTaskTurn();
 
     expect(updateRenderingAndUserInterface).not.toHaveBeenCalled();
+  });
+
+  it('processes parents before children even when the child Window was registered first', () => {
+    const { agent, document, navigable } = createWindowFixture();
+    const child = createDocumentInAgent(document);
+    const parent = createDocumentInAgent(document);
+    const parentNavigable = attachChildDocument(parent, appendFrame(document));
+    const childNavigable = attachChildDocument(child, appendFrame(parent));
+    const visited: DocumentImpl[] = [];
+    const manualHost = createManualRenderingHost([
+      new UnsafeMoment(monotonicClock, 10), new UnsafeMoment(monotonicClock, 20),
+    ]);
+    const producer = new WindowRenderingProducer(agent, manualHost.host, {
+      runResizeSteps: ({ document }) => { visited.push(document); },
+    });
+    producer.start();
+    manualHost.signal([navigable, childNavigable, parentNavigable]);
+
+    agent.eventLoop.runTaskTurn();
+
+    const expectedOrder = [document, parent, child];
+    expect(visited.map((current) => expectedOrder.indexOf(current))).toEqual([0, 1, 2]);
+    producer.stop();
+  });
+
+  it('orders sibling frames through shadow trees before the host\'s light children', () => {
+    const { agent, document, navigable } = createWindowFixture();
+    const lightChild = createDocumentInAgent(document);
+    const shadowChild = createDocumentInAgent(document);
+    const host = document.body!.appendChild(document.createElement('div'));
+    const lightFrame = host.appendChild(appendFrame(document));
+    const shadow = host.attachShadow({
+      mode: 'closed', delegatesFocus: false, slotAssignment: 'named', clonable: false, serializable: false,
+    });
+    const shadowFrame = shadow.appendChild(appendFrame(document));
+    const lightNavigable = attachChildDocument(lightChild, lightFrame);
+    const shadowNavigable = attachChildDocument(shadowChild, shadowFrame);
+    const visited: DocumentImpl[] = [];
+    const manualHost = createManualRenderingHost([
+      new UnsafeMoment(monotonicClock, 10), new UnsafeMoment(monotonicClock, 20),
+    ]);
+    const producer = new WindowRenderingProducer(agent, manualHost.host, {
+      runResizeSteps: ({ document }) => { visited.push(document); },
+    });
+    producer.start();
+    manualHost.signal([navigable, lightNavigable, shadowNavigable]);
+
+    agent.eventLoop.runTaskTurn();
+
+    const expectedOrder = [document, shadowChild, lightChild];
+    expect(visited.map((current) => expectedOrder.indexOf(current))).toEqual([0, 1, 2]);
+    producer.stop();
+  });
+
+  it('keeps one document order through an update and observes moved containers in the next task', () => {
+    const { agent, document, navigable } = createWindowFixture();
+    const first = createDocumentInAgent(document);
+    const second = createDocumentInAgent(document);
+    const firstFrame = appendFrame(document);
+    const secondFrame = appendFrame(document);
+    const firstNavigable = attachChildDocument(first, firstFrame);
+    const secondNavigable = attachChildDocument(second, secondFrame);
+    const visited: DocumentImpl[] = [];
+    const manualHost = createManualRenderingHost([
+      new UnsafeMoment(monotonicClock, 10), new UnsafeMoment(monotonicClock, 20),
+      new UnsafeMoment(monotonicClock, 30),
+    ]);
+    const producer = new WindowRenderingProducer(agent, manualHost.host, {
+      runResizeSteps: ({ document: current }) => {
+        if (current === document) document.body!.insertBefore(secondFrame, firstFrame);
+      },
+      runScrollSteps: ({ document }) => { visited.push(document); },
+    });
+    producer.start();
+    manualHost.signal([navigable, firstNavigable, secondNavigable]);
+
+    agent.eventLoop.runTaskTurn();
+    const originalOrder = [document, first, second];
+    expect(visited.map((current) => originalOrder.indexOf(current))).toEqual([0, 1, 2]);
+    visited.length = 0;
+    agent.eventLoop.runTaskTurn();
+    expect(visited.map((current) => originalOrder.indexOf(current))).toEqual([0, 2, 1]);
+    producer.stop();
+  });
+
+  it('flushes autofocus candidates only for top-level traversables', () => {
+    const { agent, document, navigable } = createWindowFixture();
+    const child = createDocumentInAgent(document);
+    const childNavigable = attachChildDocument(child, appendFrame(document));
+    const visited: DocumentImpl[] = [];
+    const manualHost = createManualRenderingHost([
+      new UnsafeMoment(monotonicClock, 10), new UnsafeMoment(monotonicClock, 20),
+    ]);
+    const producer = new WindowRenderingProducer(agent, manualHost.host, {
+      flushAutofocusCandidates: ({ document }) => { visited.push(document); },
+    });
+    producer.start();
+    manualHost.signal([navigable, childNavigable]);
+
+    agent.eventLoop.runTaskTurn();
+
+    expect(visited).toHaveLength(1);
+    expect(visited[0]).toBe(document);
+    producer.stop();
+  });
+
+  it.each(['filtered', 'other-agent'] as const)('orders siblings when their parent is %s', (parentState) => {
+    const { agent, document, navigable } = createWindowFixture();
+    const parentNavigable = parentState === 'other-agent'
+      ? TopLevelTraversable.create(document.env.userAgent, null, '')
+      : navigable;
+    const parent = parentNavigable.activeDocument!;
+    const second = createDocumentInAgent(document);
+    const first = createDocumentInAgent(document);
+    const firstNavigable = attachChildDocument(first, appendFrame(parent));
+    const secondNavigable = attachChildDocument(second, appendFrame(parent));
+    const visited: DocumentImpl[] = [];
+    const manualHost = createManualRenderingHost([
+      new UnsafeMoment(monotonicClock, 10), new UnsafeMoment(monotonicClock, 20),
+    ]);
+    const producer = new WindowRenderingProducer(agent, manualHost.host, {
+      filters: { hasHiddenVisibilityState: (candidate) => candidate === parent },
+      runResizeSteps: ({ document }) => { visited.push(document); },
+    });
+    producer.start();
+    manualHost.signal([parentNavigable, firstNavigable, secondNavigable]);
+
+    agent.eventLoop.runTaskTurn();
+
+    const expectedOrder = [first, second];
+    expect(visited.map((current) => expectedOrder.indexOf(current))).toEqual([0, 1]);
+    if (parentState === 'other-agent') expect(parent.env.responsibleEventLoop).not.toBe(agent.eventLoop);
+    producer.stop();
   });
 
   it('applies the unnecessary-rendering filter only when both inputs exist', () => {
@@ -236,4 +373,35 @@ function createManualRenderingHost(times: UnsafeMoment[]): {
       notify?.(navigables);
     },
   };
+}
+
+function createDocumentInAgent(source: DocumentImpl): DocumentImpl {
+  const sourceEnv = source.env;
+  const agent = sourceEnv.realm.agent;
+  if (!(agent instanceof WindowAgent)) throw new Error('Expected a Window agent');
+  const env = sourceEnv.userAgent.createWindowEnvironment({
+    agent, userAgent: sourceEnv.userAgent,
+    creationURL: sourceEnv.creationURL, origin: sourceEnv.origin, parent: null,
+    topLevelCreationURL: sourceEnv.creationURL, topLevelOrigin: sourceEnv.origin,
+  });
+  const document = env.createDocument();
+  document.type = 'html';
+  document.contentType = 'text/html';
+  document.origin = source.origin;
+  document.browsingContext = new BrowsingContext(env.realm.windowProxy);
+  env.window.setAssociatedDocument(document);
+  env.realm.windowProxy.setAssociatedWindow(env.realm.globalObject);
+  document.populateWithHTMLHeadBody();
+  return document;
+}
+
+function appendFrame(document: DocumentImpl): HTMLIFrameElementImpl {
+  return document.body!.appendChild(document.createElement('iframe')) as HTMLIFrameElementImpl;
+}
+
+function attachChildDocument(document: DocumentImpl, container: HTMLIFrameElementImpl): Navigable {
+  // Connect real implementation owners through the existing seam until child creation is implemented.
+  const navigable = new Navigable(createDocumentState(document), container.nodeDocument.getNodeNavigable());
+  container.contentNavigable = navigable;
+  return navigable;
 }

@@ -1,7 +1,7 @@
 import { InternalError } from '../../infra/index';
 
 import type { UnsafeMoment } from '../timing/index';
-import type { DocumentImpl } from '../dom/nodes/index';
+import type { DocumentImpl, NodeImpl } from '../dom/nodes/index';
 import type { Navigable } from '../browsing/navigation/index';
 
 import type { WindowAgent } from './agents';
@@ -79,19 +79,17 @@ export class WindowRenderingProducer {
 
       const run = this.#update[phase];
       if (run === undefined) continue;
+      const topLevelOnly = phase === 'flushAutofocusCandidates';
       for (const document of documents) {
+        if (topLevelOnly && document.getNodeNavigable()?.isTopLevelTraversable !== true) continue;
         run({ document, frameTimestamp, unsafeStyleAndLayoutStartTime });
       }
     }
   }
 
   #collectRenderableDocuments(): DocumentImpl[] {
-    const documents: DocumentImpl[] = [];
     const filters = this.#update.filters;
-    for (const window of this.#agent.windowObjects) {
-      const document = window.getAssociatedDocument();
-      if (!document.isFullyActive()) continue;
-
+    return this.#collectDocumentsInTreeOrder().filter((document) => {
       const navigable = document.getNodeNavigable();
       if (
         navigable === null ||
@@ -100,21 +98,62 @@ export class WindowRenderingProducer {
         filters?.hasHiddenVisibilityState?.(document) === true ||
         filters?.isRenderingSuppressedForViewTransitions?.(document) === true ||
         filters?.shouldSkipRendering?.(document) === true
-      ) continue;
+      ) return false;
 
       if (
         filters?.wouldRenderingHaveVisibleEffect?.(document) === false &&
         filters.hasAnimationFrameCallbacks?.(document) === false
-      ) continue;
+      ) return false;
 
-      documents.push(document);
+      return true;
+    });
+  }
+
+  /** Snapshot parent-before-child and shadow-including container order for one update. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#update-the-rendering
+  #collectDocumentsInTreeOrder(): DocumentImpl[] {
+    const roots = new Map<NodeImpl, number>();
+    const documents: { document: DocumentImpl; path: number[]; }[] = [];
+    for (const window of this.#agent.windowObjects) {
+      const document = window.getAssociatedDocument();
+      if (!document.isFullyActive()) continue;
+
+      const path: number[] = [];
+      let node: NodeImpl = document;
+      while (true) {
+        const parent: NodeImpl | null = node.isDocument()
+          ? node.getNodeNavigable()?.container ?? null
+          : node.isShadowRoot() ? node.host : node.parentNode;
+        if (parent === null) {
+          let rootIndex = roots.get(node);
+          if (rootIndex === undefined) {
+            rootIndex = roots.size;
+            roots.set(node, rootIndex);
+          }
+          path.push(rootIndex);
+          break;
+        }
+
+        // Cross a Document's container or a shadow root's host before its light
+        // children. Ordinary edges use sibling positions; no subtree scan or
+        // retained index is needed. Unrelated roots keep first-seen order.
+        path.push(node.parentNode === null ? -1 : node.getIndex());
+        node = parent;
+      }
+      documents.push({ document, path: path.reverse() });
     }
 
-    // HTML orders this list parent-before-child, with siblings in their
-    // navigable containers' shadow-including tree order. Browlet currently
-    // creates only top-level traversables. Traverse the child topology when
-    // it arrives; sorting only by depth would not be sufficient.
-    return documents;
+    // Compare paths from their roots: the first differing sibling position
+    // decides order. A shorter shared prefix puts the parent before its child.
+    documents.sort((a, b) => {
+      const length = Math.min(a.path.length, b.path.length);
+      for (let index = 0; index < length; index++) {
+        const difference = a.path[index]! - b.path[index]!;
+        if (difference !== 0) return difference;
+      }
+      return a.path.length - b.path.length;
+    });
+    return documents.map(({ document }) => document);
   }
 }
 

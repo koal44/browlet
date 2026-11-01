@@ -1678,6 +1678,32 @@ ordinary passes and two existing expected failures; each stock run has 111 passe
 and three existing expected failures. All three new regressions pass everywhere.
 Typechecking, declaration contracts, touched-file ESLint, and diff checks pass.
 
+### HTML §8.1.7.3 rendering document order
+
+The next bounded pass uses the same HTML revision for
+[update the rendering](https://html.spec.whatwg.org/multipage/webappapis.html#update-the-rendering).
+`WindowRenderingProducer` now orders fully active Documents before applying its
+renderability filters. Parents precede children; sibling containers follow
+shadow-including tree order. It computes sibling-position paths through container
+and shadow-host ancestry once per task, without scanning document subtrees or
+maintaining a second child index. Unrelated roots retain first-seen order.
+
+Rendering phases share that snapshot even when an earlier phase moves a frame.
+The next task observes the changed container order. A filtered or other-agent
+parent does not discard its eligible children, and the autofocus phase applies
+only to top-level traversables. Regression tests first observed wrong parent and
+sibling order, stale order after a move, and autofocus dispatch to a child.
+
+This completes document ordering within the existing producer, not production
+rendering. The refresh host is not installed by UserAgent, and real phase owners
+(resize/scroll, animation frames, layout, painting, and the other hooks) remain
+dependencies. Tests compose real Window/Document bindings with a controlled
+opportunity host and observation hooks; automatic child creation is still absent.
+
+Validation: all 40 focused rendering and task tests pass on each of the six
+runtime configurations, including six new rendering cases. Typechecking,
+declaration contracts, touched-file ESLint, and diff checks pass.
+
 ## Present
 
 | Source | Current responsibility |
@@ -1790,7 +1816,7 @@ The 2026-09-15 audit covered §§8.1.7.1–8.1.7.5 at HTML source
 | Operation | Required next boundary |
 | --- | --- |
 | Window idle periods | No-runnable-task path, initial render/last-idle times, timer deadlines, animation-frame maps, refresh prediction, requestIdleCallback/IdleDeadline, and removal of destroyed Windows |
-| Rendering | Production owners for the ordered hooks, child-document order, style/layout/display, animation callbacks, and observation delivery |
+| Rendering | Production refresh host and owners for the ordered hooks, style/layout/display, animation callbacks, and observation delivery; document ordering is implemented |
 | Performance reporting | Real owners for task/long-task and checkpoint timing hooks |
 | Worker rendering/shutdown | Actual globals, closing state, queue suppression/discard, run-a-worker continuation, and teardown |
 | Await a stable state | Suspend parallel work, execute its synchronous section as a microtask on the right loop, then resume; first image/media consumer |

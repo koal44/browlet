@@ -52,6 +52,11 @@ Shared time is sampled in processing-model order. Task-start, long-task-reportin
 and task-end hooks leave Long Tasks/Long Animation Frames to their owners.
 Rendering's independent producer records an opportunity and queues the ordered
 update pipeline; the host refresh source does not run author callbacks directly.
+Each rendering task snapshots fully active Documents in parent-before-child and
+shadow-including container order before filtering them. The order is retained
+through that update and rebuilt for the next task. Autofocus flushing applies
+only to top-level traversables. The production refresh host and rendering-phase
+owners remain unfinished; the producer does not implement those operations.
 
 `env.queueTask(source, steps, options?)` queues work for the execution owner
 using the shared source keys in Infra. `scripting/tasks.ts` maps those keys to
