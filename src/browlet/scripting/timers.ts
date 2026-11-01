@@ -186,7 +186,6 @@ export class GlobalTimers {
       }
       this.#schedule(timer);
     }
-    this.#eventLoop.notifyTaskRunnabilityChanged();
   }
 
   #schedule(timer: ActiveTimer): void {

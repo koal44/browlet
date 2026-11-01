@@ -159,11 +159,12 @@ export class Navigable {
     return this.container?.nodeDocument ?? null;
   }
 
-  /** Update the reverse link after a container sets its content navigable. */
+  /** Update the reverse link and Document activity after a container sets its content navigable. */
   setContainer(container: HTMLIFrameElementImpl | HTMLObjectElementImpl | HTMLFrameElementImpl | null): void {
     if (this.#container === container) return;
     if (this.#container?.contentNavigable === this) this.#container.contentNavigable = null;
     this.#container = container;
+    this.activeDocument?.notifyFullyActiveStateChanged();
   }
 
   // https://html.spec.whatwg.org/multipage/document-sequences.html#the-rules-for-choosing-a-navigable

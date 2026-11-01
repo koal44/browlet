@@ -178,8 +178,10 @@ trees and returning an empty list when the Document has no node navigable.
 The setters maintain the reverse `Navigable.container` link for all three types,
 including clearing, replacement, and reassociation. Document full activity follows
 the actual container Document recursively; a child without a container is not
-fully active. Child creation/destruction must populate and clear these associations,
-and propagate ancestor-activity changes to child observers. `Navigable.activeWindowProxy`
+fully active. Container reassociation and ancestor activity changes now notify
+child Documents recursively, including shadow-tree containers, so timers and
+queued tasks can resume. Child creation/destruction must still populate and clear
+these associations. `Navigable.activeWindowProxy`
 provides the active document's stable proxy once that relationship exists;
 the field and accessor alone do not create nested browsing contexts.
 Browsing-context creation still accepts an iframe embedder; object/frame creation

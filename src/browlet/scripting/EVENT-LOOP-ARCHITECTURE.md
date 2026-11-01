@@ -27,6 +27,11 @@ is fully active. Task queues are insertion-ordered sets: blocked tasks remain
 while selection finds the first runnable task in a chosen queue. Queue selection
 may vary, but cannot reorder runnable work within a source.
 
+Document activity notifications wake eligible work on that Document's loop and
+propagate through retained child Documents, including shadow-tree containers.
+Container reassociation also notifies activity. This wake-up belongs to Document
+lifecycle; timer observers only pause and resume their own active-time waits.
+
 Globals, elements, and settings route work to a loop; they do not acquire its
 queues. The host supplies wake-ups, time, and background effects. HTML still
 selects the task destination and defines ordering. Rendering opportunities enter

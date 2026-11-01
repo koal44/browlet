@@ -1581,17 +1581,37 @@ export class DocumentImpl extends NodeImpl {
     return () => { this.#fullyActiveObservers.delete(observer); };
   }
 
-  /** Notify internal subscribers after navigation or lifecycle state changes. */
+  /** Notify subscribers and descendant Documents after navigation or lifecycle state changes. */
   notifyFullyActiveStateChanged(): void {
     const fullyActive = this.isFullyActive();
     for (const observer of this.#fullyActiveObservers) {
       observer(fullyActive);
     }
-    // Permission updates are suppressed while inactive; reconcile when this Document returns.
     if (fullyActive) {
+      // HTML task runnability changes for every source, independently of timers.
+      this.env.responsibleEventLoop.notifyTaskRunnabilityChanged();
+      // Permission updates are suppressed while inactive; reconcile when this Document returns.
       for (const status of this.env.userAgent.permissionStatuses.values()) {
         if (status.env.getAssociatedDocument() === this) status.queueUpdate();
       }
+    }
+
+    // Full activity depends on the container Document's entire ancestry.
+    // Window's document-tree child list excludes shadow trees and inactive
+    // Documents, so it cannot supply the descendants whose activity changed here.
+    // This full tree walk keeps lifecycle bookkeeping simple for now. Replace it
+    // with a maintained child-navigable collection when child creation, removal,
+    // and adoption can keep that collection complete, including shadow trees.
+    // https://html.spec.whatwg.org/#fully-active
+    for (
+      let node = this.firstChild;
+      node !== null;
+      node = node.nextShadowIncludingDescendant(this)
+    ) {
+      if (
+        node instanceof HTMLIFrameElementImpl || node instanceof HTMLObjectElementImpl ||
+        node instanceof HTMLFrameElementImpl
+      ) node.contentNavigable?.activeDocument?.notifyFullyActiveStateChanged();
     }
   }
 

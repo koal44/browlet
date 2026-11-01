@@ -1649,6 +1649,35 @@ alongside the matrix timed out the finalization subprocess; it passed alone and
 in the bounded full rerun. No timeout or regression classification was changed.
 Typechecking, declaration contracts, touched-file ESLint, and diff checks pass.
 
+### HTML §8.1.7 event-loop entry audit
+
+The 2026-10-31 pass checks §§8.1.7.1–8.1.7.2 and the task-turn portion of
+§8.1.7.3 against HTML source `404b3eb14a7a936dddefb2d78e224dbeb01d2358`.
+Task records, fixed per-source queues, first-runnable selection, explicit
+global/Document routing, and the shared engine microtask queue are already
+connected. Microtasks do not acquire the ordinary task's fully-active gate.
+
+The missing connection was waking loops when Document activity changes.
+`Document.notifyFullyActiveStateChanged()` now wakes its own loop when active
+and notifies active child Documents recursively, including containers in shadow
+trees and children of a now-inactive ancestor. `Navigable.setContainer()` reaches
+that notification too. Timer observers still pause/resume their active-time
+waits; they no longer own task wake-ups for every source.
+
+The [task-activity regressions](../../../test/browlet/scripting/task-activity.test.ts)
+first failed with no wake-up after attaching a child, and only the ancestor's
+loop waking after restoration. They retain blocked tasks and per-source order
+through restoration across three distinct agents. Their graphs use the existing
+container seam; this does not implement automatic iframe creation or history
+traversal. The element-task wrapper still waits for its first consumer. Idle,
+rendering, worker lifecycle, and checkpoint-tail dependencies remain below.
+
+Validation: the six focused task, timer, lifecycle, indexed-access, and permission
+status suites pass across all six runtime configurations. Each addon run has 112
+ordinary passes and two existing expected failures; each stock run has 111 passes
+and three existing expected failures. All three new regressions pass everywhere.
+Typechecking, declaration contracts, touched-file ESLint, and diff checks pass.
+
 ## Present
 
 | Source | Current responsibility |
