@@ -569,8 +569,26 @@ worker integration. Extra permission data and automatic expiry also remain
 unimplemented. Future features must register their descriptor/result declarations
 and supply any additional query behavior and state implications for ordered
 descriptor aspects.
-[Permissions Policy](browlet/browsing/policy/ROADMAP.md) evaluation is also
-unfinished; the permission store does not bypass that policy check.
+[Permissions Policy](browlet/browsing/policy/ROADMAP.md#permissions-policy) has feature
+definitions, per-Document empty policy records, allowlist matching, and attribute
+and response-header parsers. Iframe `allow`/`allowFullscreen` reflection and
+declared-origin/container-policy processing exist. Fullscreen remains unregistered;
+its legacy wildcard fallback is inactive. Document and iframe `permissionsPolicy`
+objects retain stable identity and expose all four §7.2 inspection methods. The
+queries check current observable policy without consulting a loaded iframe child.
+Allowlist inspection follows the draft's default-origin gate and uses serialized
+opaque origins; its browser differences and missing-declaration fallback are
+documented in the policy roadmap.
+Response Document creation combines container inheritance with the enforced and
+report-only response headers, retaining their endpoint names separately. Feature-use
+checks enforce policy and generate actual violations through shared Reporting,
+including local observation without an endpoint. Potential iframe checks and
+report producers exist but await the iframe load-event caller. Full child
+navigation and script-location extraction remain unfinished. Request feature
+checks use the initiating Window's policy and the populated request origin;
+Client Hints and other request-feature consumers remain unimplemented. The helper
+does not automatically restrict ordinary fetches, and it denies non-Window clients.
+The permission store does not bypass that policy check.
 Appendix B has an internal queued permission setter for caller-supplied settings,
 keys, and one UserAgent. It does not provide WebDriver commands, session lookup,
 protocol conversion, or automatic settings enumeration. Inactive target tasks
@@ -616,8 +634,9 @@ See the [Web Storage roadmap](browlet/storage/ROADMAP.md).
 - **Temporal's HTML clock requires custom Node with the addon.** Ordinary Windows
   install their environment's live, precision-limited wall clock. Stock mode and
   official Node 24/26 retain the engine clock; Node 24 also disables Temporal by
-  default. Concrete isolation remains unconnected until Permissions Policy's
-  inherited/header/container state and document feature query are implemented.
+  default. Permissions Policy's document query now works; concrete-isolation
+  hook installation still needs a lifecycle review because composition precedes
+  Document attachment.
   The callback accepts signed 64-bit bigint nanoseconds (roughly 1677–2262),
   narrower than Temporal's full Instant range. An out-of-range system clock or a
   throwing internal callback is a fatal contract violation, not an author-catchable
@@ -849,7 +868,7 @@ gap. See the [related-window and bar audits](browlet/browsing/window/ROADMAP.md#
 Window settings follow the current associated Document. Their cross-site-ancestor
 query retains a conservative true result without a navigable, a case HTML leaves
 unspecified. Concrete isolation denies capability without full Document activity,
-but still requires Permissions Policy evaluation for fully active Documents; see
+then checks the Document's Permissions Policy and reports actual violations; see
 the [settings audit](browlet/browsing/window/ROADMAP.md#html-7226-script-settings-for-window-objects).
 Location now reads its browsing context's active Document and checks the entry
 origin before exposing URL components or ancestor origins. `Document.location`

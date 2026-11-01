@@ -40,7 +40,10 @@ import {
 } from './scripting/index';
 import { ErrorEventImpl, EventTargetImpl, PromiseRejectionEventImpl, type EventImpl } from './dom/events/index';
 import type { ReportImpl } from './reporting/index';
-import { InsecureRequestsPolicy, type PolicyContainer } from './browsing/policy/index';
+import {
+  InsecureRequestsPolicy, PermissionsPolicy, reportPermissionsPolicyViolation, reportPotentialPermissionsPolicyViolation,
+  type PolicyContainer, type PolicyControlledFeature,
+} from './browsing/policy/index';
 import { ContentSecurityPolicy } from './browsing/policy/csp/index';
 import type { AbortControllerImpl, AbortSignalImpl } from './dom/abort/index';
 import { NodeImpl, type DocumentImpl } from './dom/nodes/index';
@@ -386,6 +389,15 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   /** Apply the associated Document's feature policy; non-Document globals skip that check. */
   isAllowedToUse(feature: string): boolean {
     return this.getAssociatedDocument()?.isAllowedToUse(feature) ?? true;
+  }
+
+  /** Resolve a supported feature and check this Document's policy for the supplied origin, including reporting. */
+  isPolicyFeatureEnabled(name: string, origin: Origin): boolean {
+    const document = this.getAssociatedDocument();
+    if (document === null) return false;
+    const feature = PermissionsPolicy.getSupportedFeature(name);
+    if (feature === undefined) throw new InternalError(`Unsupported policy-controlled feature: ${name}`);
+    return document.isPolicyFeatureEnabled(feature, origin) === 'Enabled';
   }
 
   /** Whether this environment's associated Document exists and is fully active. */
@@ -784,6 +796,23 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     // PROVISIONAL: Console's internal Printer and developer-console output are
     // not implemented. Preserve this environment as the message's owner when
     // connecting that output; do not call the author's overridable console API.
+  }
+
+  /** Report an actual feature-use violation at this environment's global. */
+  // https://w3c.github.io/webappsec-permissions-policy/#report-permissions-policy-violation
+  reportPermissionsPolicyViolation(
+    feature: PolicyControlledFeature, disposition: 'enforce' | 'report', endpoint: string | null,
+  ): void {
+    reportPermissionsPolicyViolation(feature, this, disposition, endpoint);
+  }
+
+  /** Report a potential iframe policy violation at this embedding environment's global. */
+  // https://w3c.github.io/webappsec-permissions-policy/#report-potential-permissions-policy-violation
+  reportPotentialPermissionsPolicyViolation(
+    feature: PolicyControlledFeature, disposition: 'enforce' | 'report', endpoint: string | null,
+    allowAttribute: string | null, srcAttribute: string | null,
+  ): void {
+    reportPotentialPermissionsPolicyViolation(feature, this, disposition, endpoint, allowAttribute, srcAttribute);
   }
 
   /** Create a report and its observer body, capturing this environment's current identification value. */

@@ -29,6 +29,7 @@ export function createClientEnvironment(
     queueGlobalFetchTask,
     reportCSPViolation,
     isWindow: false,
+    isPolicyFeatureEnabled() { throw new Error('This fixture has no Permissions Policy implementation'); },
     isServiceWorker: false,
     isTopLevelWindow: false,
     isSecureContext: true,

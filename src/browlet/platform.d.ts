@@ -927,8 +927,11 @@ export interface HTMLImageElementConstructor extends Ctor<HTMLElementConstructor
 }
 
 export interface HTMLIFrameElement extends HTMLElement {
+  allow: string;
+  allowFullscreen: boolean;
   referrerPolicy: string;
   loading: string;
+  readonly permissionsPolicy: PermissionsPolicy;
 }
 
 export interface HTMLIFrameElementConstructor extends Ctor<HTMLElementConstructor> {
@@ -1509,6 +1512,34 @@ export interface COEPInheritanceViolationReportBody extends ReportBody {
   toJSON(): object;
 }
 
+export interface PermissionsPolicy {
+  allowsFeature(feature: string, origin?: string): boolean;
+  features(): Array<string>;
+  allowedFeatures(): Array<string>;
+  getAllowlistForFeature(feature: string): Array<string>;
+}
+
+export interface PermissionsPolicyConstructor {
+  readonly prototype: PermissionsPolicy;
+  [Symbol.hasInstance](value: unknown): value is PermissionsPolicy;
+}
+
+export interface PermissionsPolicyViolationReportBody extends ReportBody {
+  toJSON(): object;
+  readonly featureId: string;
+  readonly sourceFile: string | null;
+  readonly lineNumber: number | null;
+  readonly columnNumber: number | null;
+  readonly disposition: string;
+  readonly allowAttribute: string | null;
+  readonly srcAttribute: string | null;
+}
+
+export interface PermissionsPolicyViolationReportBodyConstructor extends Ctor<ReportBodyConstructor> {
+  readonly prototype: PermissionsPolicyViolationReportBody;
+  [Symbol.hasInstance](value: unknown): value is PermissionsPolicyViolationReportBody;
+}
+
 export interface CSPViolationReportBody extends ReportBody {
   readonly documentURL: string;
   readonly referrer: string | null;
@@ -1844,6 +1875,8 @@ export interface Window extends EventTarget {
   BarProp: BarPropConstructor;
   ReportBody: ReportBodyConstructor;
   IntegrityViolationReportBody: IntegrityViolationReportBodyConstructor;
+  PermissionsPolicy: PermissionsPolicyConstructor;
+  PermissionsPolicyViolationReportBody: PermissionsPolicyViolationReportBodyConstructor;
   CSPViolationReportBody: CSPViolationReportBodyConstructor;
   SecurityPolicyViolationEvent: SecurityPolicyViolationEventConstructor;
   ReportingObserver: ReportingObserverConstructor;
@@ -2513,6 +2546,7 @@ export interface Document extends Node {
   readonly defaultView: WindowProxy | null;
   onreadystatechange: EventHandlerNonNull | null;
   readonly all: HTMLAllCollection;
+  readonly permissionsPolicy: PermissionsPolicy;
   readonly children: HTMLCollection;
   readonly firstElementChild: Element | null;
   readonly lastElementChild: Element | null;

@@ -36,8 +36,8 @@ import {
 import { EventImpl, CustomEventImpl, type EventTargetImpl } from '../events/index';
 import { StorageEventImpl } from '../../storage/events/index';
 import {
-  InsecureRequestsPolicy, PolicyContainer, OpenerPolicy, PermissionsPolicy, SandboxingFlagSet,
-  type SandboxingFlag,
+  InsecureRequestsPolicy, PolicyContainer, OpenerPolicy, PermissionsPolicy, PermissionsPolicyImpl, SandboxingFlagSet,
+  type SandboxingFlag, type PolicyControlledFeature, type PolicyFeatureValue,
 } from '../../browsing/policy/index';
 import { CSPList } from '../../browsing/policy/csp/index';
 import { RangeImpl } from '../ranges/index';
@@ -170,7 +170,10 @@ export class DocumentImpl extends NodeImpl {
   // https://html.spec.whatwg.org/multipage/dom.html#language
   contentLanguage = '';
   /** Permissions policy controlling features in this document. */
-  permissionsPolicy = new PermissionsPolicy();
+  permissionsPolicyState = new PermissionsPolicy();
+  /** Policy whose violations are reported without blocking feature use. */
+  // https://w3c.github.io/webappsec-permissions-policy/#document-report-only-permissions-policy
+  reportOnlyPermissionsPolicyState = new PermissionsPolicy();
   /** Cross-origin opener policy selected for this document. */
   openerPolicy = new OpenerPolicy();
   /** Sandbox restrictions currently applied to the document. */
@@ -257,6 +260,8 @@ export class DocumentImpl extends NodeImpl {
   #scriptBlockingStyleSheetsReady: InternalPromiseWithResolvers<void> | null = null;
   /** Stable factory object associated with this document. */
   #implementation?: DOMImplementationImpl;
+  /** Stable script-visible inspection object, separate from the current internal policy record. */
+  #permissionsPolicy?: PermissionsPolicyImpl;
   /** Cached live collection returned by document.all. */
   #all?: HTMLAllCollectionImpl;
   /** Stable live collections exposed by the document's tree accessors. */
@@ -281,6 +286,12 @@ export class DocumentImpl extends NodeImpl {
 
   static is(value: unknown): value is DocumentImpl {
     return value instanceof DocumentImpl;
+  }
+
+  /** Inspection object retained for this Document, independent of policy record replacement. */
+  // https://w3c.github.io/webappsec-permissions-policy/#document-policy-object
+  get permissionsPolicy(): PermissionsPolicyImpl {
+    return this.#permissionsPolicy ??= new PermissionsPolicyImpl(this, this.env);
   }
 
   // https://dom.spec.whatwg.org/#dom-document-url
@@ -1112,7 +1123,9 @@ export class DocumentImpl extends NodeImpl {
       throw new InternalError('A completely loaded Document needs a browsing context');
     }
     this.completelyLoadedTime = currentCoarsenedWallTime().milliseconds;
-    // PROVISIONAL: container/iframe load completion enters with child navigables.
+    // TODO(HTML child loading): Queue the container's iframe load event steps on the DOM
+    // manipulation task source, including the Permissions Policy §10.1 check after dispatch.
+    // Those steps still need iframe timing/mute flags; the Window load event above is separate.
   }
 
   /** Only HTML content without a body or frameset may acquire new rendering blockers. */
@@ -1524,13 +1537,42 @@ export class DocumentImpl extends NodeImpl {
     return navigable.containerDocument?.isFullyActive() ?? false;
   }
 
-  /** Whether this Document may use a policy-controlled feature. */
+  /** Read inherited and declared restrictions for delegation, without applying a default allowlist. */
+  // https://w3c.github.io/webappsec-permissions-policy/#get-feature-value-for-origin
+  getPolicyFeatureValue(feature: PolicyControlledFeature, origin: Origin, reportOnly: boolean): PolicyFeatureValue {
+    const policy = reportOnly ? this.reportOnlyPermissionsPolicyState : this.permissionsPolicyState;
+    if (policy.inheritedPolicy.get(feature) === 'Disabled') return 'Disabled';
+    const allowlist = policy.declaredPolicy.declarations.get(feature);
+    return allowlist === undefined || allowlist.matches(origin) ? 'Enabled' : 'Disabled';
+  }
+
+  /** Check feature use at an origin; pass report=false for an inspection without violation reports. */
+  // https://w3c.github.io/webappsec-permissions-policy/#is-feature-enabled
+  isPolicyFeatureEnabled(feature: PolicyControlledFeature, origin: Origin, report = true): PolicyFeatureValue {
+    const policy = this.permissionsPolicyState;
+    const reportOnlyPolicy = this.reportOnlyPermissionsPolicyState;
+    const result = policy.check(feature, origin, this.origin);
+    const reportOnlyResult = reportOnlyPolicy.check(feature, origin, this.origin);
+    if (report) {
+      // SPEC_CLASH(permissions-policy-report-disposition): §9.10 uses Enforce/Report;
+      // follow §8's lowercase report-body values, also used by Chromium.
+      if (result === 'Disabled') {
+        this.env.reportPermissionsPolicyViolation(feature, 'enforce', policy.getReportingEndpoint(feature));
+      } else if (reportOnlyResult === 'Disabled') {
+        this.env.reportPermissionsPolicyViolation(feature, 'report', reportOnlyPolicy.getReportingEndpoint(feature));
+      }
+    }
+    return result;
+  }
+
+  /** Resolve a supported feature name and apply HTML's activity gates before checking its policy. */
   // https://html.spec.whatwg.org/multipage/iframe-embed-object.html#allowed-to-use
-  isAllowedToUse(feature: string): boolean {
+  isAllowedToUse(name: string): boolean {
     if (this.browsingContext === null || !this.isFullyActive()) return false;
-    // TODO(Permissions Policy): Evaluate feature enablement for this Document and its origin using permissionsPolicy.
-    // Permissions Policy §9.10: https://w3c.github.io/webappsec-permissions-policy/#is-feature-enabled
-    throw new InternalError(`Permissions Policy evaluation for ${feature} is not implemented`);
+    const feature = PermissionsPolicy.getSupportedFeature(name);
+    // New consumers must register their defining specification's feature and default allowlist.
+    if (feature === undefined) throw new InternalError(`Unsupported policy-controlled feature: ${name}`);
+    return this.isPolicyFeatureEnabled(feature, this.origin) === 'Enabled';
   }
 
   /** Subscribe to activity changes and return an unsubscribe function. */

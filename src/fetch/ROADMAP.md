@@ -14,6 +14,11 @@ and upstream-test disagreements remain documented under retained decisions.
 
 ## Remaining Fetch work
 
+- **Policy-controlled request features:** `FetchRequest.isAllowedToUseFeature()`
+  implements Permissions Policy §9.15 through the initiating client's Document.
+  Client Hints and other request-feature owners still need their definitions and
+  callers; this is not a general network-request blocking check. See the
+  [policy roadmap](../browlet/browsing/policy/ROADMAP.md#915-request-feature-checks).
 - **Group cancellation:** `FetchGroup.cancel()` is a provisional no-op. Complete
   HTML's task/data disposal and keepalive/deferred rules; controller cancellation
   and non-keepalive group termination already work.

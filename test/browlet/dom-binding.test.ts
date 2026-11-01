@@ -384,6 +384,7 @@ describe('Browlet DOM binding', () => {
       'links',
       'moveBefore',
       'onreadystatechange',
+      'permissionsPolicy',
       'plugins',
       'prepend',
       'querySelector',

@@ -10,6 +10,7 @@ import { isValidAttributeLocalName, validateAndExtract } from '../infra/index';
 import { ElementTag, type ContentCategory, type ContentModel } from './element-definitions/index';
 import type { LinkStyleMixin } from '../../style/index';
 import type { EventImpl } from '../events/index';
+import type { PermissionsPolicyDirective } from '../../browsing/policy/index';
 import { getTrustedTypeDataForAttribute, type TrustedTypeValue } from '../../browsing/policy/trusted-types/index';
 import { DOMTokenListImpl, type TokenListAttribute } from '../token-list';
 import type { IntersectionObserverRegistration } from '../intersection-observer/index';
@@ -694,6 +695,12 @@ export class ElementImpl extends NodeImpl {
   /** Style sheet supplied by this element, if its style behavior has one. */
   getStyleSheet(): CSSStyleSheetImpl | null {
     return this.linkStyleMixin?.sheet ?? null;
+  }
+
+  /** Read a fresh container policy; elements without policy attributes return an empty map. */
+  // https://w3c.github.io/webappsec-permissions-policy/#process-policy-attributes
+  processPolicyAttributes(): PermissionsPolicyDirective {
+    return new Map();
   }
 
   /** Record parser creation before attributes and insertion; ordinary elements need no state. */

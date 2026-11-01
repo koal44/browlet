@@ -99,7 +99,7 @@ No extension registry or worker startup machinery is needed to set that flag.
 | Origin | `origin` queries the associated Document's origin. |
 | Has cross-site ancestor | `hasCrossSiteAncestor` uses the Document's live ancestry query. |
 | Policy container | `policyContainer` returns the associated Document's policies. |
-| Cross-origin isolated capability | `crossOriginIsolatedCapability` returns false outside concrete isolation. The concrete branch calls `Document.isAllowedToUse()`: a Document without a browsing context or that is not fully active returns false; fully active Documents still need Permissions Policy evaluation. |
+| Cross-origin isolated capability | `crossOriginIsolatedCapability` returns false outside concrete isolation. The concrete branch calls `Document.isAllowedToUse()`: a Document without a browsing context or full activity returns false; fully active Documents check their Permissions Policy and report actual violations. |
 | Time origin | `timeOrigin` supplies the existing HRT `Moment` for navigation start. |
 | Responsible event loop | `responsibleEventLoop` returns `realm.agent.eventLoop`, the same agent that owns the associated global. |
 
@@ -947,16 +947,16 @@ It does not treat reaching §8.1.7 as completion of the earlier dependencies.
 
 | Area | Current implementation | Remaining work and disposition |
 | --- | --- | --- |
-| Temporal clock (§8.1.6.5) | Window composition installs `BrowletEnvironment.getSystemUTCEpochNanoseconds()` through JS Engine and the existing addon for non-concrete isolation. Author clock reads, borrowing, and navigation are covered. | Concrete isolation needs Permissions Policy's inherited/header/container state and document feature query; the native callback accepts only signed-int64 nanoseconds. The bounded hookup retains these explicit limits; see §8.1.6.5 below. |
+| Temporal clock (§8.1.6.5) | Window composition installs `BrowletEnvironment.getSystemUTCEpochNanoseconds()` through JS Engine and the existing addon for non-concrete isolation. Author clock reads, borrowing, and navigation are covered. | Permissions Policy's document query now works, but concrete-isolation hook installation still needs a lifecycle review; the native callback accepts only signed-int64 nanoseconds. See §8.1.6.5 below. |
 | String compilation (§8.1.6.2) | Binding-owned TrustedScript extraction and CSP source-list checks/reporting are connected; Node's own checks remain in force. | The preceding Trusted Types/default-policy validation still needs compilation kind and original Function inputs absent from the engine callback. Keep the four approved input-gap failures and unsupported-backend limits; further native work is parked. This is not a later event-loop algorithm. |
-| Execution attribution | Job registration captures compilation identity and restores the associated HTML script; direct `reportError` selection now has an accepted compatibility limitation. | The bounded rejection probe below reproduces caller-based muting on all addon bases, contrary to the intended Chromium/Firefox behavior; WebKit and the literal built-in-context reading differ too. Keep the two ordinary failures while the fix is deferred; no runtime change. Constructor incumbent capture and borrowed-Function import-error realms retain their already approved expected failures. Do not turn these into an unbounded goal of mirroring every author frame. |
+| Execution attribution | Job registration and rejection notifications capture compilation identity and select the associated HTML script. The two ordinary-call rejection regressions now pass on every addon base; direct `reportError` selection retains its accepted compatibility limitation. | Rejection muting follows the approved Chromium/Firefox choice; WebKit and the literal built-in-context reading differ. Complete attribution across async resumptions and security-token boundaries remains unfinished. Constructor incumbent capture and borrowed-Function import-error realms retain their already approved expected failures. Do not turn these into an unbounded goal of mirroring every author frame. |
 | WebAssembly modules | The addon supplies module compilation and supplied-graph execution. | `BrowletRealm.parseWebAssemblyModule()` still throws; source/deferred graph phases are also rejected. Keep the JSRealm/HTML/Wasm ESM integration on hold for its separate standards slice. |
 | Other adopted hooks | Promise rejection delivery, job routing, module imports, import metadata, and cleanup-exception reporting have their documented integrations. | Keep the existing private-element choice, unrelated-Node generic/timeout ownership limit, and unaudited whole-registry cleanup scheduling explicit. No new demonstrated cleanup scheduling failure justifies another native handoff. |
 
 Temporal's ordinary Window connection is complete; its concrete-isolation and
 range limits remain explicit. Permissions Policy is a different dependency from
-the implemented Permissions API used by Storage; `Document.isAllowedToUse()`
-still throws for an active Document. CSP source-list enforcement is connected;
+the implemented Permissions API used by Storage; `Document.isAllowedToUse()` now
+checks active Documents and reports violations. CSP source-list enforcement is connected;
 complete Trusted Types compilation validation remains parked on its engine-input
 dependency. Event-loop implementation has not resumed.
 
@@ -1109,16 +1109,12 @@ Eric accepted the bounded hookup and these remaining limits on 2026-10-31:
   returns false without a policy query for non-concrete isolation. Concrete
   isolation calls `Document.isAllowedToUse('cross-origin-isolated')`, whose
   [HTML gates](https://html.spec.whatwg.org/multipage/iframe-embed-object.html#allowed-to-use)
-  exist but whose Permissions Policy query still throws. Precisely missing are
-  [§9.9 Check permissions policy](https://w3c.github.io/webappsec-permissions-policy/#check-permissions-policy)
-  and [§9.10 Is feature enabled in document for origin?](https://w3c.github.io/webappsec-permissions-policy/#is-feature-enabled),
-  including the declared/inherited policy records they read. Those records must
-  be populated by response/header processing (§§9.1–9.3), iframe attributes (§9.4),
-  and creation/inheritance (§§9.5–9.8), with feature defaults and allowlist matching.
+  and Permissions Policy query now work, including actual violation reporting.
+  Supplied-response Document initialization installs enforced/report-only
+  policies through §9.6; full child navigation remains open.
   See the [policy dependency checklist](../browsing/policy/ROADMAP.md#permissions-policy-clock-prerequisite).
-  This is missing implementation, not a specification gap or the Permissions API.
-  The query alone is small; supplying its inputs is a separate policy/navigation
-  slice. Hook installation also precedes Document attachment, so a future
+  Concrete hook installation remains a separate integration task. It still
+  precedes Document attachment, so a future
   precision snapshot must be taken after policy construction. The current callback
   reads live environment state and is installed only for non-concrete clusters.
 - **Native timestamps must fit int64** (roughly 1677–2262). HTML specifies rounding

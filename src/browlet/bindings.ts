@@ -31,6 +31,8 @@ import {
 } from './reporting/index';
 import {
   integrityViolationReportBodyIDL, coepViolationReportBodyIDL, coepInheritanceViolationReportBodyIDL,
+  permissionsPolicyIDL, documentPermissionsPolicyIDL, iframePermissionsPolicyIDL,
+  permissionsPolicyViolationReportBodyIDL,
 } from './browsing/policy/index';
 import {
   cspViolationReportBodyIDL, securityPolicyViolationEventIDL, securityPolicyViolationEventInitIDL,
@@ -284,6 +286,8 @@ export const browletDefinitions = [
   barPropIDL,
   reportIDL, reportBodyIDL, integrityViolationReportBodyIDL, testReportBodyIDL,
   coepViolationReportBodyIDL, coepInheritanceViolationReportBodyIDL,
+  permissionsPolicyIDL, documentPermissionsPolicyIDL, iframePermissionsPolicyIDL,
+  permissionsPolicyViolationReportBodyIDL,
   cspViolationReportBodyIDL,
   securityPolicyViolationEventIDL, securityPolicyViolationEventInitIDL, securityPolicyViolationEventDispositionIDL,
   reportingObserverIDL, reportingObserverCallbackIDL, reportingObserverOptionsIDL, reportListIDL,

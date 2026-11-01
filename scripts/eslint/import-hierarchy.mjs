@@ -49,6 +49,8 @@ export const layers = [
   ['browlet/dom/events', 'browlet/reporting'],
   // Feature event payloads can serve Document's legacy factory without loading their producers.
   ['browlet/storage/events'],
+  // CSP source matching is shared by CSP and Permissions Policy without loading either policy's state.
+  ['browlet/browsing/policy/csp/source-expressions'],
   ['browlet/browsing/policy'],
   ['browlet/browsing/policy/csp'],
   ['browlet/browsing/policy/trusted-types'],

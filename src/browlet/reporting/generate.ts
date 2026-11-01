@@ -6,6 +6,7 @@ import { TestReportBodyImpl } from './test-report';
 import {
   IntegrityViolationReportBodyImpl, COEPViolationReportBodyImpl, type COEPViolationReportBody,
   COEPInheritanceViolationReportBodyImpl, type COEPInheritanceViolationReportBody,
+  PermissionsPolicyViolationReportBodyImpl, type PermissionsPolicyViolationReportBody,
 } from '../browsing/policy/index';
 import type { BrowletEnvironment } from '../environment';
 
@@ -26,6 +27,10 @@ export function generateReport(data: unknown, type: string, destination: string,
         break;
       case 'integrity-violation':
         report.body = new IntegrityViolationReportBodyImpl(data as IntegrityViolationReportBody);
+        break;
+      case 'permissions-policy-violation':
+      case 'potential-permissions-policy-violation':
+        report.body = new PermissionsPolicyViolationReportBodyImpl(data as PermissionsPolicyViolationReportBody);
         break;
       case 'coep': {
         const body = data as COEPViolationReportBody | COEPInheritanceViolationReportBody;

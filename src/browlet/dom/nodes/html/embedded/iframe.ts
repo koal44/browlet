@@ -1,10 +1,13 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { attr, ctor, defineInterface, idlType, impl, reflectEnumerated, xattr } from '../../../../../web-idl/core/index';
+import { attr, ctor, defineInterface, idlType, impl, reflect, reflectEnumerated, xattr } from '../../../../../web-idl/core/index';
+import { createOpaqueOrigin, obtainURLOrigin, type Origin } from '../../../../../url/index';
 import type { ReferrerPolicy } from '../../../../../fetch/index';
 
 import { ElementTag, ContentCategory } from '../../element-definitions/index';
 import { loadingAttribute, referrerPolicyAttribute } from '../attributes/index';
-import { SandboxingFlagSet } from '../../../../browsing/policy/index';
+import {
+  SandboxingFlagSet, PermissionsPolicy, PermissionsPolicyAllowlist, PermissionsPolicyImpl, type PermissionsPolicyDirective,
+} from '../../../../browsing/policy/index';
 import type { Navigable } from '../../../../browsing/navigation/index';
 
 import type { ElementImpl } from '../../element';
@@ -34,6 +37,8 @@ export class HTMLIFrameElementImpl extends HTMLElementImpl {
   lazyLoadResumptionSteps: (() => void) | null = null;
   /** Retained child destination; the accessor keeps its reverse container link in sync. */
   #contentNavigable: Navigable | null = null;
+  /** Stable inspection object associated with this element, including while detached or adopted. */
+  #permissionsPolicy?: PermissionsPolicyImpl;
 
   static is(value: unknown): value is HTMLIFrameElementImpl {
     return value instanceof HTMLIFrameElementImpl;
@@ -44,6 +49,12 @@ export class HTMLIFrameElementImpl extends HTMLElementImpl {
     return embedder instanceof HTMLIFrameElementImpl
       ? referrerPolicyAttribute.getState(embedder.getAttributeNS(null, 'referrerpolicy'))!
       : '';
+  }
+
+  /** Inspection object for this element's attributes and embedding Document. */
+  // https://w3c.github.io/webappsec-permissions-policy/#iframe-policy-object
+  get permissionsPolicy(): PermissionsPolicyImpl {
+    return this.#permissionsPolicy ??= new PermissionsPolicyImpl(this, this.env);
   }
 
   /** Child navigation destination, or null before creation and after destruction. */
@@ -61,8 +72,69 @@ export class HTMLIFrameElementImpl extends HTMLElementImpl {
     value?.setContainer(this);
   }
 
+  /** Origin selected by this iframe's current attributes for Permissions Policy. */
+  // https://w3c.github.io/webappsec-permissions-policy/#declared-origin
+  get declaredOrigin(): Origin {
+    const document = this.nodeDocument;
+    if (document.activeSandboxingFlagSet.has('sandboxed-origin') || this.sandboxingFlagSet.has('sandboxed-origin')) {
+      return createOpaqueOrigin();
+    }
+    if (this.hasAttributeNS(null, 'srcdoc')) return document.origin;
+    const src = this.getAttributeNS(null, 'src');
+    if (src !== null) {
+      const url = document.parseHTMLURL(src);
+      // SPEC_CLASH(permissions-policy-blank-origin): Keep the draft's opaque URL origin
+      // for about:blank. Firefox also denies 'src'; Chromium/WebKit use the inherited origin.
+      if (url !== null) return obtainURLOrigin(url);
+    }
+    return document.origin;
+  }
+
   override getDocumentNamedItemType(): DocumentNamedItemType {
     return 'name';
+  }
+
+  /** Read a fresh container policy from this iframe's current attributes and node Document. */
+  // https://w3c.github.io/webappsec-permissions-policy/#process-policy-attributes
+  override processPolicyAttributes(): PermissionsPolicyDirective {
+    const directive = PermissionsPolicy.parseDirective(
+      this.getAttributeNS(null, 'allow') ?? '', this.nodeDocument.origin, this.declaredOrigin,
+    );
+    // TODO(Fullscreen): Register its feature and test legacy precedence when the API is implemented.
+    const fullscreen = PermissionsPolicy.getSupportedFeature('fullscreen');
+    if (fullscreen !== undefined && this.hasAttributeNS(null, 'allowfullscreen') && !directive.has(fullscreen)) {
+      const allowlist = new PermissionsPolicyAllowlist();
+      allowlist.matchesAllOrigins = true;
+      directive.set(fullscreen, allowlist);
+    }
+    return directive;
+  }
+
+  /** Report potential restrictions from the current embedding policy, retaining the supplied attribute text. */
+  // https://w3c.github.io/webappsec-permissions-policy/#check-potential-violation-in-container
+  // TODO(HTML iframe loading): Call after the element's load handlers return, reading
+  // the current raw allow/src, before clearing the child Document's load-in-progress flag (§10.1).
+  checkPotentialPermissionsPolicyViolation(allowAttribute: string | null, srcAttribute: string | null): void {
+    const document = this.nodeDocument;
+    const env = document.env;
+    const origin = this.declaredOrigin;
+    // SPEC_CLASH(permissions-policy-potential-features): §9.12 checks every supported
+    // feature; Chromium checks only declarations in a nonempty allow attribute. Follow the draft.
+    for (const feature of PermissionsPolicy.getSupportedFeatures()) {
+      // SPEC_CLASH(permissions-policy-report-disposition): Keep §8's lowercase values,
+      // as for actual reports, instead of §9.12's Enforce/Report spellings.
+      if (PermissionsPolicy.getInheritedValue(feature, this, origin) === 'Disabled') {
+        env.reportPotentialPermissionsPolicyViolation(
+          feature, 'enforce', document.permissionsPolicyState.getReportingEndpoint(feature), allowAttribute, srcAttribute,
+        );
+      } else if (PermissionsPolicy.getInheritedValue(feature, this, origin, true) === 'Disabled') {
+        // SPEC_CLASH(permissions-policy-potential-endpoint): §9.12 selects this
+        // report-only endpoint; Chromium's branch reads the enforced policy's endpoint.
+        env.reportPotentialPermissionsPolicyViolation(
+          feature, 'report', document.reportOnlyPermissionsPolicyState.getReportingEndpoint(feature), allowAttribute, srcAttribute,
+        );
+      }
+    }
   }
 
   /** Lazy loading is disabled without scripting, even for an explicit lazy attribute. */
@@ -126,6 +198,8 @@ export const htmlIFrameElementIDL = defineInterface({
   members: [
     ctor([], xattr('HTMLConstructor')),
     // PROVISIONAL: [CEReactions] entry/exit awaits HTML custom-element reaction delivery.
+    attr('allow', idlType.DOMString, xattr('CEReactions', reflect())),
+    attr('allowFullscreen', idlType.boolean, xattr('CEReactions', reflect())),
     attr('referrerPolicy', idlType.DOMString, xattr('CEReactions', reflectEnumerated(referrerPolicyAttribute))),
     attr('loading', idlType.DOMString, xattr('CEReactions', reflectEnumerated(loadingAttribute))),
   ],

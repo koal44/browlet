@@ -25,7 +25,11 @@ Relative references resolve against the complete response URL. Empty or aborted
 parsing produces an empty configuration.
 
 COEP, Integrity Policy, CSP, and test reports reach the shared observer/outbound
-paths. Window reporting uses the associated Document's current URL, independently
+paths. Permissions Policy's actual and potential violation producers use these
+paths, including local-only reports without an endpoint. The potential checker
+still needs its call from the unfinished
+[iframe load event steps](../browsing/policy/ROADMAP.md#912-and-914-potential-iframe-violations).
+Window reporting uses the associated Document's current URL, independently
 of its base or referrer URL. Workers must supply their own source URL. Fetch's
 narrow environment contract does not need to know about the global-scope mixin.
 

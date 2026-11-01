@@ -37,7 +37,7 @@ describe('Document', () => {
       cspList: undefined,
       referrerPolicy: 'strict-origin-when-cross-origin',
     });
-    expect(document.permissionsPolicy).toBeInstanceOf(PermissionsPolicy);
+    expect(document.permissionsPolicyState).toBeInstanceOf(PermissionsPolicy);
     expect(document.openerPolicy).toEqual({
       value: 'unsafe-none',
       reportingEndpoint: null,
@@ -71,7 +71,7 @@ describe('Document', () => {
     const second = first.createDocumentNode();
 
     expect(second.policyContainer).not.toBe(first.policyContainer);
-    expect(second.permissionsPolicy).not.toBe(first.permissionsPolicy);
+    expect(second.permissionsPolicyState).not.toBe(first.permissionsPolicyState);
     expect(second.openerPolicy).not.toBe(first.openerPolicy);
     expect(second.moduleMap).not.toBe(first.moduleMap);
     expect(second.moduleMap.entries).not.toBe(first.moduleMap.entries);

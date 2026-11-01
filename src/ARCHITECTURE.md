@@ -460,6 +460,9 @@ UserAgent when used as client settings. BrowletEnvironment implements it directl
 Request CSP violations use the client's `env.reportCSPViolation(policy, request)`.
 Fetch treats the policy as opaque; Browlet's environment validates it and supplies
 the concrete environment to CSP's violation construction and reporting.
+Request-specific feature checks use `client.isPolicyFeatureEnabled(name, origin)`;
+Browlet resolves the shared Permissions Policy definition and delegates to the
+client's Document, including reporting, without exposing HTML types to Fetch.
 
 Implementations use `env.realm` for realm operations and `env` directly for
 environment facilities. Implementations receive no Binding Context, callback
@@ -1045,7 +1048,9 @@ The mixin reuses `EventHandlerMap` for callbacks and listener registration;
 it does not create storage objects or add another delivery path.
 
 Policy and CSP sit below the node implementations that construct and retain their
-state. Their event and report implementations depend on DOM events and shared
+state. CSP's `source-expressions.ts` is a lower entry point shared by CSP and
+Permissions Policy; matching needs only Infra and URL, without loading policy state.
+Their event and report implementations depend on DOM events and shared
 Reporting, which sit below policy. CSP keeps type references to supplied Documents
 and environments without loading their concrete classes. Document retains policy
 initialization; Reporting's separate generator and the complete browser environment

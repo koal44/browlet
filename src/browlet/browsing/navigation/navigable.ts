@@ -304,7 +304,9 @@ export class Navigable {
       throw new InternalError('COEP-blocked navigation requires network-error processing');
     }
     const browsingContext = this.#obtainBrowsingContext(params);
-    const permissionsPolicy = this.#createPermissionsPolicy(params);
+    const permissionsPolicy = PermissionsPolicy.fromResponse(this.container, params.origin, response);
+    // https://w3c.github.io/webappsec-permissions-policy/#changes-to-html
+    const reportOnlyPermissionsPolicy = PermissionsPolicy.fromResponse(this.container, params.origin, response, true);
     const creationURL = params.request?.currentURL ?? params.url;
     const activeDocument = browsingContext.activeDocument;
 
@@ -337,7 +339,8 @@ export class Navigable {
     document.origin = params.origin;
     document.browsingContext = browsingContext;
     document.policyContainer = params.policyContainer;
-    document.permissionsPolicy = permissionsPolicy;
+    document.permissionsPolicyState = permissionsPolicy;
+    document.reportOnlyPermissionsPolicyState = reportOnlyPermissionsPolicy;
     document.setActiveSandboxingFlagSet(params.finalSandboxingFlagSet);
     document.openerPolicy = params.openerPolicy;
     document.initializeLoadTimingInfo(params.startTime);
@@ -543,19 +546,6 @@ export class Navigable {
     }
     params.reservedEnv!.targetBrowsingContext = newBrowsingContext;
     return newBrowsingContext;
-  }
-
-  /** Combine response and container permissions for the destination document. */
-  // https://w3c.github.io/webappsec-permissions-policy/#create-from-response
-  // PROVISIONAL: only top-level destinations without a Permissions-Policy header are supported.
-  #createPermissionsPolicy(params: NavigationParams): PermissionsPolicy {
-    if (params.response.headerList.get('Permissions-Policy') !== null) {
-      throw new InternalError('Permissions-Policy response parsing is not implemented');
-    }
-    if (!(this instanceof TopLevelTraversable)) {
-      throw new InternalError('Container permissions-policy creation is not implemented');
-    }
-    return PermissionsPolicy.create(null, params.origin);
   }
 }
 

@@ -47,8 +47,10 @@ The [native addon suite](test/) also covers lifetime, garbage collection, and ru
 ## Contexts, globals, and optional facilities
 
 `setPromiseRejectionTracker(context, tracker)` installs a synchronous
-`tracker(promise, operation)` for code executing in that context; operation is
-`'reject'` or `'handle'`. Passing undefined clears it. `isPromiseHandled()` and
+`tracker(promise, operation, compiledCode)` for code executing in that context;
+operation is `'reject'` or `'handle'`. Compiled code is the retained Script or
+SourceTextModule, `undefined` without metadata, or `null` for unrecognized code.
+Passing undefined as the tracker clears it. `isPromiseHandled()` and
 `getPromiseResult()` read native slots without reactions or author property access;
 the result query rejects pending promises. These are baseline addon operations
 on all three bases, independent of the patched job hooks.

@@ -55,12 +55,12 @@ describe('Permissions §5.1: browser settings and Storage integration', () => {
     expect(env.permissions.getCurrentPermissionState('persistent-storage')).toBe('prompt');
     expect(check).not.toHaveBeenCalled();
 
-    // Synthetic feature: exercises the existing, explicit Permissions Policy dependency.
+    // A permission consumer must also register its defining Permissions Policy feature.
     env.userAgent.permissionStore = new PermissionStore([
       new PermissionFeature('test-policy-feature', originPermissionKey, { policyControlled: true }),
     ]);
     expect(() => env.permissions.getCurrentPermissionState('test-policy-feature'))
-      .toThrow('Permissions Policy evaluation for test-policy-feature is not implemented');
+      .toThrow('Unsupported policy-controlled feature: test-policy-feature');
     expect(check).toHaveBeenCalledExactlyOnceWith('test-policy-feature');
     check.mockReturnValue(false);
     expect(env.permissions.getCurrentPermissionState('test-policy-feature')).toBe('denied');

@@ -69,11 +69,9 @@ export function installRealmHostHooks(
   env.realm.setExceptionReporter((exception) => env.reportException(exception));
   // https://html.spec.whatwg.org/multipage/webappapis.html#hostsystemutcepochnanoseconds
   // Non-concrete isolation returns false without querying the Document's policy.
-  // TODO(Permissions Policy): Before enabling concrete isolation, implement
-  // #is-feature-enabled and its inherited/header/container policy inputs (§§9.1–9.10):
-  // https://w3c.github.io/webappsec-permissions-policy/#is-feature-enabled
-  // Composition precedes Document attachment, so do not eagerly query its policy
-  // here. A later callback must also never reach the current throwing placeholder.
+  // TODO(Temporal): The Permissions Policy query now works, but enabling concrete
+  // isolation still needs a lifecycle review. Composition precedes Document
+  // attachment, so do not eagerly query its policy here.
   // TODO(Temporal range): The existing native callback accepts int64 nanoseconds
   // (roughly 1677–2262), not HTML's full Instant range. Preserve the HTML clamp;
   // see the roadmap for the accepted native clock limit and Chromium evidence.

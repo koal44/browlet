@@ -54,6 +54,8 @@ export interface FetchEnvironment extends FetchEnvironmentBase, FileEnvironment 
   reportCSPViolation(policy: unknown, request: FetchRequest): void;
   /** Whether this environment's global is a Window. */
   isWindow: boolean;
+  /** Check a supported feature name at an origin in the client's Document, including violation reporting. */
+  isPolicyFeatureEnabled(feature: string, origin: Origin): boolean;
   /** Whether this global is a ServiceWorkerGlobalScope, which cannot intercept its own fetches. */
   isServiceWorker: boolean;
   /** Whether the client's Window has a navigable whose parent is null. */

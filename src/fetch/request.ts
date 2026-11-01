@@ -261,6 +261,16 @@ export class FetchRequest {
     return this.policyContainer.cspList?.isRequestBlocked(this) ?? false;
   }
 
+  /** Check a supported feature against the initiating Window's policy, using the populated request origin. */
+  // https://w3c.github.io/webappsec-permissions-policy/#algo-should-request-be-allowed-to-use-feature
+  // Fetch passes the feature's name; the browser client resolves its shared definition.
+  isAllowedToUseFeature(feature: string): boolean {
+    const client = this.client;
+    if (client === null || !client.isWindow) return false;
+    if (this.origin === undefined) throw new InternalError('Fetch request origin has not been resolved');
+    return client.isPolicyFeatureEnabled(feature, this.origin);
+  }
+
   /** Append an inclusive byte range, optionally leaving its end open. */
   // https://fetch.spec.whatwg.org/#concept-request-add-range-header
   addRangeHeader(first: number | bigint, last?: number | bigint): void {

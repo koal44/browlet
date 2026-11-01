@@ -4,6 +4,7 @@ import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
 import { createDocumentState } from '../../../../src/browlet/browsing/navigation/document-state';
+import { PermissionsPolicy } from '../../../../src/browlet/browsing/policy/permissions';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { monotonicClock } from '../../../../src/browlet/timing/clock';
 import { obtainURLOrigin, parseURL } from '../../../../src/url/index';
@@ -63,11 +64,14 @@ describe('Window script settings', () => {
     expect(env.crossOriginIsolatedCapability).toBe(false);
   });
 
-  it('keeps concrete isolation dependent on Permissions Policy for an active Document', () => {
+  it('applies Permissions Policy to concrete isolation for an active Document', () => {
     const browser = new Browlet({ route: () => '' });
     const env = getRelevantRealm(browser.window).env;
     env.realm.agent.agentCluster!.crossOriginIsolationMode = 'concrete';
-    expect(() => env.crossOriginIsolatedCapability).toThrow(/permissions.policy/i);
+    expect(env.crossOriginIsolatedCapability).toBe(true);
+    const feature = PermissionsPolicy.getSupportedFeature('cross-origin-isolated')!;
+    env.window.document.permissionsPolicyState.inheritedPolicy.set(feature, 'Disabled');
+    expect(env.crossOriginIsolatedCapability).toBe(false);
   });
 
   it('denies concrete isolation when the Document has lost its browsing context', () => {

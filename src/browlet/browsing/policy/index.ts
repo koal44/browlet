@@ -9,6 +9,16 @@ export { HSTSStore, HSTSPolicy, type HSTSHost } from './hsts';
 export {
   IntegrityPolicy, IntegrityViolationReportBodyImpl, integrityViolationReportBodyIDL,
 } from './integrity-policy';
-export { PermissionsPolicy } from './permissions';
+export {
+  PermissionsPolicy, PermissionsPolicyAllowlist, DeclaredPermissionsPolicy,
+  type PolicyControlledFeature, type PolicyFeatureValue, type PermissionsPolicyDirective,
+} from './permissions';
+export {
+  PermissionsPolicyImpl, permissionsPolicyIDL, documentPermissionsPolicyIDL, iframePermissionsPolicyIDL,
+} from './permissions-policy';
+export {
+  PermissionsPolicyViolationReportBodyImpl, type PermissionsPolicyViolationReportBody,
+  permissionsPolicyViolationReportBodyIDL, reportPermissionsPolicyViolation, reportPotentialPermissionsPolicyViolation,
+} from './permissions-policy-report';
 export { SandboxingFlagSet, type SandboxingFlag } from './sandbox';
 export { InsecureRequestsPolicy } from './upgrade-insecure-requests';

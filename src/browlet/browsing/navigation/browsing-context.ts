@@ -108,7 +108,7 @@ export class BrowsingContext {
     document.mode = DocumentMode.Quirks;
     document.origin = origin;
     document.browsingContext = browsingContext;
-    document.permissionsPolicy = permissionsPolicy;
+    document.permissionsPolicyState = permissionsPolicy;
     document.setActiveSandboxingFlagSet(sandboxFlags);
     document.initializeLoadTimingInfo(
       unsafeContextCreationTime.coarsen(env.crossOriginIsolatedCapability).milliseconds,

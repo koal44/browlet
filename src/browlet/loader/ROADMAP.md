@@ -16,6 +16,13 @@ have different response processing and cancellation lifetimes. Preloading a
 stylesheet does not apply it; speculative or lazy discovery does not establish
 successful use. Keep each completion contract with its consuming owner.
 
+The iframe load event steps must call
+`HTMLIFrameElementImpl.checkPotentialPermissionsPolicyViolation()` after the
+element's `load` handlers return, using the then-current raw `allow` and `src`,
+before clearing the child Document's load-in-progress flag. Child Window `load`
+is a separate event. The checker exists; iframe timing/flags and completion
+callers remain unfinished. See the [integration review](../browsing/policy/ROADMAP.md#101-html-integration).
+
 For stylesheet integration, follow the
 [style-loading reading order](../style/ROADMAP.md#loading-algorithm-reading-order)
 and the [CSS resource consumers](../../stylelet/ROADMAP.md#resource-consumers).
