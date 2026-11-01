@@ -348,9 +348,12 @@ features. The Window Atomics.wait regression in
 expected failure; replace it with a normal test when enforcement exists.
 Worker/worklet cluster allocation is bookkeeping, not a working worker backend.
 
-Generic/timeout hooks are isolate-wide and cannot reject individual jobs.
-Supporting unrelated Node/VM Atomics.waitAsync while HTML installs these hooks
-needs an explicit routing/fallback contract. Browser-origin access checks and
+Generic/timeout hooks are isolate-wide but can decline individual jobs with
+`false`. HTML uses that result for unrelated Node/VM realms; V8 retains native
+notification delivery and its original cancelable timeout task. The
+[ownership regression](../../test/browlet/scripting/atomics-ownership.test.ts)
+requires ordinary progress with Browlet installed on every runtime base.
+Browser-origin access checks and
 nested contexts remain with [Window](../browlet/browsing/window/ROADMAP.md).
 
 ## Retained investigation evidence

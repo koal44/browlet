@@ -150,18 +150,18 @@ void EnqueuePromise(Local<Context> realm, MicrotaskQueue* queue, PromiseJobKind 
   if (!Enqueue(kPromiseEnqueue, 3, argv)) queue->EnqueueMicrotask(isolate, job);
 }
 
-void EnqueueGeneric(Local<Context> realm, Local<Function> job) {
+bool EnqueueGeneric(Local<Context> realm, Local<Function> job) {
   auto isolate = Isolate::GetCurrent();
   HandleScope scope(isolate);
   Local<Value> argv[] = {job, GetRealmReference(realm)};
-  Enqueue(kGenericEnqueue, 2, argv);
+  return Enqueue(kGenericEnqueue, 2, argv);
 }
 
-void EnqueueTimeout(Local<Context> realm, Local<Function> job, double milliseconds) {
+bool EnqueueTimeout(Local<Context> realm, Local<Function> job, double milliseconds) {
   auto isolate = Isolate::GetCurrent();
   HandleScope scope(isolate);
   Local<Value> argv[] = {job, GetRealmReference(realm), Number::New(isolate, milliseconds)};
-  Enqueue(kTimeoutEnqueue, 3, argv);
+  return Enqueue(kTimeoutEnqueue, 3, argv);
 }
 
 void InstallHooks(const FunctionCallbackInfo<Value>& args) {

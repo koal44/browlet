@@ -492,6 +492,7 @@ testInWorker('generic notification, timeout scheduling and Promise reactions rem
   const reactions = [];
   const outcomes = [];
   const invoked = [];
+  const declined = [];
   handle.globalProxy.record = value => outcomes.push(value);
   compat.setHostHooks({
     makeJobCallback(callback, registration) {
@@ -501,9 +502,14 @@ testInWorker('generic notification, timeout scheduling and Promise reactions rem
       if (record.hostDefined.incumbent === handle.realm) invoked.push(args[0]);
       return Reflect.apply(record.callback, receiver, args);
     },
-    // These void hooks transfer ownership even if JavaScript returns false.
-    enqueueGenericJob(job, realm) { generic.push({ job, realm }); return false; },
-    enqueueTimeoutJob(job, realm, milliseconds) { timeouts.push({ job, realm, milliseconds }); return false; },
+    enqueueGenericJob(job, realm) {
+      if (realm !== handle.realm) { declined.push(job); return false; }
+      generic.push({ job, realm });
+    },
+    enqueueTimeoutJob(job, realm, milliseconds) {
+      if (realm !== handle.realm) { declined.push(job); return false; }
+      timeouts.push({ job, realm, milliseconds });
+    },
     enqueuePromiseJob(job, realm) {
       if (realm === handle.realm) reactions.push(job);
       else queueMicrotask(job);
@@ -534,6 +540,40 @@ testInWorker('generic notification, timeout scheduling and Promise reactions rem
   assert.deepEqual(invoked, outcomes, 'make/call records survive all three enqueue handoffs');
   assert.throws(() => generic[0].job(), /already run/);
   assert.throws(() => timeouts[1].job(), /already run/);
+
+  // The same installation must preserve native delivery for Node and a plain
+  // VM realm. Long waits also protect the native timer range and cancellation.
+  for (const global of [globalThis, vm.runInNewContext('globalThis')]) {
+    const values = new global.Int32Array(new global.SharedArrayBuffer(16));
+    let timedOut;
+    global.Atomics.waitAsync(values, 0, 0, 5).value.then(value => { timedOut = value; });
+    const waits = [10000, 2 ** 32, Number.MAX_VALUE].map((milliseconds, index) =>
+      global.Atomics.waitAsync(values, index + 1, 0, milliseconds).value);
+    const settled = [];
+    waits.forEach((promise, index) => promise.then(value => settled.push([index, value])));
+    const deadline = performance.now() + 2000;
+    while (timedOut === undefined && performance.now() < deadline) await nextTurn();
+    assert.equal(timedOut, 'timed-out', 'declined timeouts use the native timer');
+    assert.deepEqual(settled, [], 'long native waits must not be clamped to one millisecond');
+    for (let index = 1; index <= waits.length; index++) {
+      assert.equal(Atomics.notify(values, index), 1);
+    }
+    const notifiedDeadline = performance.now() + 2000;
+    while (settled.length !== waits.length && performance.now() < notifiedDeadline) await nextTurn();
+    assert.deepEqual(settled, [[0, 'ok'], [1, 'ok'], [2, 'ok']]);
+  }
+  assert.equal(declined.length, 14);
+  for (const job of declined) assert.throws(() => job(), /already run/);
+  assert.equal(generic.length, 1, 'unowned jobs must not enter the host task queue');
+  assert.equal(timeouts.length, 2);
+
+  const child = spawnSync(process.execPath, ['-e', `
+    const compat = require(${JSON.stringify(require.resolve('../addon/index.cjs'))});
+    compat.setHostHooks({ enqueueGenericJob: () => false, enqueueTimeoutJob: () => false });
+    Atomics.waitAsync(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000000);
+  `], { encoding: 'utf8', windowsHide: true, timeout: 5000 });
+  assert.equal(child.error, undefined);
+  assert.equal(child.status, 0, 'a declined native wait must not keep Node alive: ' + child.stderr);
 });
 
 // Hook configuration lasts for the isolate; each test gets a fresh one.

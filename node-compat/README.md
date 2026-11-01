@@ -628,8 +628,8 @@ Each callback is optional; omitted enqueue hooks leave that job kind with V8.
 | `makeJobCallback(callback, registration)` | Return `{ callback, hostDefined }`, retaining the original callback. Each reaction/thenable registration captures separately; FinalizationRegistry captures at construction. |
 | `callJobCallback(record, receiver, args)` | Invoke the captured callback using the exact retained record; return its result or propagate its exception. |
 | `enqueuePromiseJob(job, realm, enqueue)` | Schedule the single-use job, or return `false` to leave it on its original queue. The specification realm can be null; `enqueue` includes a snapshot and reaction/thenable kind. |
-| `enqueueGenericJob(job, realm)` | Schedule a single-use generic job; currently Atomics.waitAsync notification delivery. |
-| `enqueueTimeoutJob(job, realm, milliseconds)` | Schedule no earlier than the delay; currently Atomics.waitAsync deadlines. Calling a cancelled timeout once is harmless. |
+| `enqueueGenericJob(job, realm)` | Schedule a single-use generic job, or return `false` for V8's original delivery; currently Atomics.waitAsync notification delivery. |
+| `enqueueTimeoutJob(job, realm, milliseconds)` | Schedule no earlier than the delay, or return `false` for V8's original timer; currently Atomics.waitAsync deadlines. Calling an accepted but cancelled timeout once is harmless. |
 
 Registration/enqueue snapshots contain current, entered, and incumbent realm
 references plus opaque `hostDefinedOptions`. Registration additionally resolves
@@ -645,7 +645,10 @@ Jobs take no arguments and must run asynchronously in the required order.
 They retain the original V8 job and restore its saved continuation when called;
 calling twice throws. A Promise job's creation realm identifies its queue even
 when the specification realm is null. Returning `false` delegates immediately:
-do not also schedule that job. Generic/timeout hooks cannot decline a job.
+do not also schedule that job. Declined generic/timeout callables are invalidated;
+V8 keeps the original operation, native timer range, and cancellation identity.
+These two return contracts require the current combined V8 patch and a rebuilt
+custom engine/addon pair.
 
 Make/enqueue callbacks must not throw: invalid records and exceptions reach
 Node's uncaught-exception machinery. Call-hook exceptions follow the original
@@ -657,8 +660,8 @@ keeps its original callback path. Teardown clears native hooks/references.
 [HTML](../src/browlet/scripting/host-hooks.ts) retains incumbent settings plus the
 modeled active-script context and owns callback cleanup, microtask tasks, generic
 tasks, and active-time timeouts.
-Ordinary Node Promise jobs remain on Node's queues. Unrelated Node/VM
-Atomics.waitAsync is unsupported while HTML's generic/timeout hooks are installed.
+Ordinary Node Promise jobs remain on Node's queues. HTML declines unrelated
+Node/VM Atomics.waitAsync jobs, preserving native timeout and notification delivery.
 Script attribution beyond modeled entries and module continuations remain
 [engine/HTML work](../src/js-engine/ROADMAP.md).
 
@@ -700,8 +703,8 @@ registry cleanups; our call hook receives individual held values after their
 cells have been removed. It cannot defer the cleanup operation or select its
 HTML task. The [HTML audit](../src/browlet/scripting/ROADMAP.md#81662-finalizationregistry-cleanup-scheduling)
 records the distinct registry/callback realm roles and the adopted exception
-reporting repair. No additional author-visible scheduling failure has been
-demonstrated; an absent HTML task record alone does not justify a new V8 API.
+reporting repair. Guarded queue-completion notifications also repair idle cleanup
+reaction progress. An absent HTML task record alone does not justify a new V8 API.
 
 When changing routing, verify unrelated Node progress and runner shutdown as well
 as page results. Earlier ambient-owner routing captured runtime diagnostics and

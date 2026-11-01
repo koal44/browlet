@@ -196,28 +196,24 @@ function enqueuePromiseJob(
 }
 
 // https://html.spec.whatwg.org/multipage/webappapis.html#hostenqueuegenericjob
-function enqueueGenericJob(job: () => void, realm: JSRealm | null): void {
-  if (!(realm instanceof BrowletRealm) || !realm.hasEnvironment) {
-    // TODO(runtime ownership): The isolate-wide native hook cannot decline a
-    // job for an unrelated Node/VM realm. Keep that unsupported boundary explicit.
-    throw new InternalError('HTML generic jobs require an HTML realm');
-  }
+// SPEC_MISMATCH: HostEnqueueGenericJob(job, realm)
+// Returning false leaves unrelated Node/VM jobs on V8's original delivery path.
+function enqueueGenericJob(job: () => void, realm: JSRealm | null): false | void {
+  if (!(realm instanceof BrowletRealm) || !realm.hasEnvironment) return false;
   // Steps 1–2: the supplied realm selects its global's loop and Document.
   // This is an engine task; author Promise reactions use their separate hook.
   realm.queueGlobalTask(jsEngineTaskSource, job);
 }
 
 // https://html.spec.whatwg.org/multipage/webappapis.html#hostenqueuetimeoutjob
+// SPEC_MISMATCH: HostEnqueueTimeoutJob(job, realm, milliseconds)
+// Returning false preserves V8's timer and cancellation for non-HTML realms.
 function enqueueTimeoutJob(
   job: () => void,
   realm: JSRealm | null,
   milliseconds: number,
-): void {
-  if (!(realm instanceof BrowletRealm) || !realm.hasEnvironment) {
-    // TODO(runtime ownership): Like generic jobs, this isolate-wide native hook
-    // cannot decline an unrelated Node/VM job. Keep that boundary explicit.
-    throw new InternalError('HTML timeout jobs require an HTML realm');
-  }
+): false | void {
+  if (!(realm instanceof BrowletRealm) || !realm.hasEnvironment) return false;
   // Steps 1–3: retain this realm's global for both active-time waiting and the
   // eventual engine task. The JavaScript ordering group is separate from timers
   // created by setTimeout/setInterval, without their nesting or delay clamping.

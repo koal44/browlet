@@ -3,6 +3,7 @@ Browlet Node and V8 extensions
 Upstream: https://github.com/nodejs/node.git
 Base: 6f41e415639b5ec3dd816e44945cc73b4d7651e3
 Source: complete v8-patches branch at 6285731b69e0e8f54929ffd0ea9a5013f470e84b
+Includes the working-tree generic/timeout job ownership correction.
 
 diff --git a/deps/v8/include/v8-array-buffer.h b/deps/v8/include/v8-array-buffer.h
 index f70c6dd57b36b0ed8352bd6738998f5c838a80ba..981a1ef2c1b0b50d767c1e2778d8eaf47c4af7df 100644
@@ -24,7 +25,7 @@ index f70c6dd57b36b0ed8352bd6738998f5c838a80ba..981a1ef2c1b0b50d767c1e2778d8eaf4
     * Copy the contents of the ArrayBufferView's buffer to an embedder defined
     * memory without additional overhead that calling ArrayBufferView::Buffer
 diff --git a/deps/v8/include/v8-callbacks.h b/deps/v8/include/v8-callbacks.h
-index e5eba5a203b8bc4d0c05b1f0d6cbdffd352d4a06..2f1d5d1e775333726b823d05dba9082e1e8754dc 100644
+index e5eba5a203b8bc4d0c05b1f0d6cbdffd352d4a06..ea9b2fa6555a554a1f653b167f78ad1ecca2944c 100644
 --- a/deps/v8/include/v8-callbacks.h
 +++ b/deps/v8/include/v8-callbacks.h
 @@ -342,6 +342,10 @@ using WasmCustomDescriptorsEnabledCallback = bool (*)(Local<Context> context);
@@ -38,7 +39,7 @@ index e5eba5a203b8bc4d0c05b1f0d6cbdffd352d4a06..2f1d5d1e775333726b823d05dba9082e
  /**
   * Import phases in import requests.
   */
-@@ -458,6 +462,41 @@ using HostInitializeImportMetaObjectCallback = void (*)(Local<Context> context,
+@@ -458,6 +462,45 @@ using HostInitializeImportMetaObjectCallback = void (*)(Local<Context> context,
  using HostCreateShadowRealmContextCallback =
      MaybeLocal<Context> (*)(Local<Context> initiator_context);
  
@@ -62,18 +63,22 @@ index e5eba5a203b8bc4d0c05b1f0d6cbdffd352d4a06..2f1d5d1e775333726b823d05dba9082e
 + * notified Atomics.waitAsync resolutions, after native delivery to the waiting
 + * isolate. The host must retain the function and schedule it asynchronously in
 + * that isolate. The function runs at most once and does not enqueue itself.
-+ * The hook must not throw. Timeout delivery is unaffected.
++ * Return true to accept scheduling, or false to keep V8's normal delivery.
++ * A declined job is invalidated and must not be invoked. The hook must not
++ * invoke the job synchronously or throw. Timeout delivery is unaffected.
 + */
-+using GenericJobEnqueueHook = void (*)(Local<Context> realm,
++using GenericJobEnqueueHook = bool (*)(Local<Context> realm,
 +                                       Local<Function> job);
 +
 +/**
 + * Transfers scheduling of a timeout job to the host. The host must retain the
 + * function and run it asynchronously in the realm's isolate after at least
 + * milliseconds. The function may be called only once; if its waiter has been
-+ * notified, it does nothing. The hook must not throw.
++ * notified, it does nothing. Return true to accept scheduling, or false to keep
++ * V8's native timer and cancellation. A declined job is invalidated and must
++ * not be invoked. The hook must not invoke the job synchronously or throw.
 + */
-+using TimeoutJobEnqueueHook = void (*)(Local<Context> realm,
++using TimeoutJobEnqueueHook = bool (*)(Local<Context> realm,
 +                                       Local<Function> job,
 +                                       double milliseconds);
 +
@@ -1404,7 +1409,7 @@ index 6f1507c5ea9eb5a3836e50b0d49aa3ce2e2d9e8d..bec0a88e4545305f203d7e5c85a61847
    JSCollectionIteratorPrint(os, "JSSetIterator");
  }
 diff --git a/deps/v8/src/execution/futex-emulation.cc b/deps/v8/src/execution/futex-emulation.cc
-index 26074a2314090a0c1837fdac18c71a6115c84169..8d3da5ab3fd2ccef1dd17de866aebb78540470a3 100644
+index 26074a2314090a0c1837fdac18c71a6115c84169..e1dc4bce1762d6843a2fa20b0162a406fd0483f0 100644
 --- a/deps/v8/src/execution/futex-emulation.cc
 +++ b/deps/v8/src/execution/futex-emulation.cc
 @@ -4,6 +4,7 @@
@@ -1427,16 +1432,33 @@ index 26074a2314090a0c1837fdac18c71a6115c84169..8d3da5ab3fd2ccef1dd17de866aebb78
  #include "src/objects/objects-inl.h"
  #include "src/tasks/cancelable-task.h"
  
-@@ -169,6 +172,8 @@ class ResolveAsyncWaiterPromisesTask : public CancelableTask {
+@@ -177,10 +180,25 @@ class AsyncWaiterTimeoutTask : public CancelableTask {
+     FutexEmulation::HandleAsyncWaiterTimeout(node_);
+   }
  
- class AsyncWaiterTimeoutTask : public CancelableTask {
-  public:
-+  static constexpr ExternalPointerTag kManagedTag = kAsyncWaiterTimeoutTaskTag;
++  void Cancel() {
++    NoGarbageCollectionMutexGuard lock_guard(GetWaitList()->mutex());
++    node_->CancelTimeoutTask();
++  }
 +
-   AsyncWaiterTimeoutTask(CancelableTaskManager* cancelable_task_manager,
-                          FutexWaitListNode* node)
-       : CancelableTask(cancelable_task_manager), node_(node) {}
-@@ -353,7 +358,7 @@ Tagged<Object> FutexEmulation::Wait(Isolate* isolate, WaitMode mode,
+  private:
+   FutexWaitListNode* node_;
+ };
+ 
++// Keep unique ownership so a declined handoff can post the original task,
++// including its cancellation ID, directly to the native task runner.
++struct AsyncWaiterTimeoutJob {
++  static constexpr ExternalPointerTag kManagedTag = kAsyncWaiterTimeoutTaskTag;
++  std::unique_ptr<AsyncWaiterTimeoutTask> task;
++
++  explicit AsyncWaiterTimeoutJob(std::unique_ptr<AsyncWaiterTimeoutTask> task)
++      : task(std::move(task)) {}
++};
++
+ void FutexEmulation::NotifyAsyncWaiter(FutexWaitListNode* node) {
+   DCHECK(node->IsAsync());
+   // This function can run in any thread.
+@@ -353,7 +371,7 @@ Tagged<Object> FutexEmulation::Wait(Isolate* isolate, WaitMode mode,
    }
    DCHECK_EQ(mode, WaitMode::kAsync);
    return WaitAsync(isolate, array_buffer, addr, value, use_timeout,
@@ -1445,7 +1467,7 @@ index 26074a2314090a0c1837fdac18c71a6115c84169..8d3da5ab3fd2ccef1dd17de866aebb78
  }
  
  template <typename T>
-@@ -502,7 +507,8 @@ FutexWaitListNode::FutexWaitListNode(std::weak_ptr<BackingStore> backing_store,
+@@ -502,7 +520,8 @@ FutexWaitListNode::FutexWaitListNode(std::weak_ptr<BackingStore> backing_store,
  template <typename T>
  Tagged<Object> FutexEmulation::WaitAsync(
      Isolate* isolate, DirectHandle<JSArrayBuffer> array_buffer, size_t addr,
@@ -1455,11 +1477,12 @@ index 26074a2314090a0c1837fdac18c71a6115c84169..8d3da5ab3fd2ccef1dd17de866aebb78
    base::TimeDelta rel_timeout =
        base::TimeDelta::FromNanoseconds(rel_timeout_ns);
  
-@@ -513,6 +519,12 @@ Tagged<Object> FutexEmulation::WaitAsync(
+@@ -513,6 +532,13 @@ Tagged<Object> FutexEmulation::WaitAsync(
  
    enum class ResultKind { kNotEqual, kTimedOut, kAsync };
    ResultKind result_kind;
 +  std::unique_ptr<AsyncWaiterTimeoutTask> timeout_task;
++  std::shared_ptr<v8::TaskRunner> timeout_task_runner;
 +  base::TimeTicks timeout_start;
 +  const bool host_timeout =
 +      isolate->has_timeout_job_enqueue_hook() && rel_timeout_ms != V8_INFINITY;
@@ -1468,7 +1491,7 @@ index 26074a2314090a0c1837fdac18c71a6115c84169..8d3da5ab3fd2ccef1dd17de866aebb78
    void* wait_location = FutexWaitList::ToWaitLocation(*array_buffer, addr);
    // Get a weak pointer to the backing store, to be stored in the async state of
    // the node.
-@@ -534,7 +546,7 @@ Tagged<Object> FutexEmulation::WaitAsync(
+@@ -534,7 +560,7 @@ Tagged<Object> FutexEmulation::WaitAsync(
  #endif
      if (loaded_value != value) {
        result_kind = ResultKind::kNotEqual;
@@ -1477,7 +1500,7 @@ index 26074a2314090a0c1837fdac18c71a6115c84169..8d3da5ab3fd2ccef1dd17de866aebb78
        result_kind = ResultKind::kTimedOut;
      } else {
        result_kind = ResultKind::kAsync;
-@@ -542,15 +554,23 @@ Tagged<Object> FutexEmulation::WaitAsync(
+@@ -542,15 +568,24 @@ Tagged<Object> FutexEmulation::WaitAsync(
        FutexWaitListNode* node = new FutexWaitListNode(
            std::move(backing_store), wait_location, promise_capability, isolate);
  
@@ -1498,6 +1521,7 @@ index 26074a2314090a0c1837fdac18c71a6115c84169..8d3da5ab3fd2ccef1dd17de866aebb78
 -            std::move(task), rel_timeout.InSecondsF());
 +        if (host_timeout) {
 +          timeout_task = std::move(task);
++          timeout_task_runner = node->async_state_->task_runner;
 +        } else {
 +          node->async_state_->task_runner->PostNonNestableDelayedTask(
 +              std::move(task), rel_timeout.InSecondsF());
@@ -1505,15 +1529,16 @@ index 26074a2314090a0c1837fdac18c71a6115c84169..8d3da5ab3fd2ccef1dd17de866aebb78
        }
  
        wait_list->AddNode(node);
-@@ -622,6 +642,28 @@ Tagged<Object> FutexEmulation::WaitAsync(
+@@ -622,6 +657,45 @@ Tagged<Object> FutexEmulation::WaitAsync(
        break;
    }
  
 +  if (timeout_task) {
 +    // Hand off outside the wait-list mutex, after retaining the Promise.
 +    // Notification still cancels this task through its registered task ID.
-+    auto task = Managed<AsyncWaiterTimeoutTask>::From(
-+        isolate, sizeof(AsyncWaiterTimeoutTask), std::move(timeout_task));
++    auto task = Managed<AsyncWaiterTimeoutJob>::From(
++        isolate, sizeof(AsyncWaiterTimeoutJob) + sizeof(AsyncWaiterTimeoutTask),
++        std::make_shared<AsyncWaiterTimeoutJob>(std::move(timeout_task)));
 +    DirectHandle<NativeContext> realm(isolate->native_context());
 +    auto context =
 +        factory->NewBuiltinContext(realm, Context::MIN_CONTEXT_SLOTS + 1);
@@ -1528,13 +1553,29 @@ index 26074a2314090a0c1837fdac18c71a6115c84169..8d3da5ab3fd2ccef1dd17de866aebb78
 +    double milliseconds = std::max(
 +        0.0, rel_timeout_ms -
 +                 (base::TimeTicks::Now() - timeout_start).InMillisecondsF());
-+    isolate->EnqueueTimeoutJob(realm, job, milliseconds);
++    if (!isolate->EnqueueTimeoutJob(realm, job, milliseconds)) {
++      auto native_task = std::move(task->raw()->task);
++      task->SetManagedObject(nullptr);
++      context->SetNoCell(Context::MIN_CONTEXT_SLOTS,
++                        ReadOnlyRoots(isolate).undefined_value());
++      if (use_timeout) {
++        double seconds = std::max(
++            0.0, (timeout_start + rel_timeout - base::TimeTicks::Now())
++                     .InSecondsF());
++        timeout_task_runner->PostNonNestableDelayedTask(std::move(native_task),
++                                                       seconds);
++      } else {
++        // V8 treats finite delays beyond its native range as infinite.
++        // Retire the offered timer without disturbing the waiting Promise.
++        native_task->Cancel();
++      }
++    }
 +  }
 +
    return *result;
  }
  
-@@ -790,6 +832,27 @@ void FutexEmulation::ResolveAsyncWaiterPromise(FutexWaitListNode* node) {
+@@ -790,6 +864,30 @@ void FutexEmulation::ResolveAsyncWaiterPromise(FutexWaitListNode* node) {
      } else {
        DCHECK(!node->waiting_);
        result_string = isolate->factory()->ok_string();
@@ -1556,13 +1597,16 @@ index 26074a2314090a0c1837fdac18c71a6115c84169..8d3da5ab3fd2ccef1dd17de866aebb78
 +                .set_map(direct_handle(
 +                    realm->strict_function_without_prototype_map(), isolate))
 +                .Build();
-+        isolate->EnqueueGenericJob(realm, job);
-+        return;
++        if (isolate->EnqueueGenericJob(realm, job)) return;
++        // The host declined ownership. Invalidate its callable and continue
++        // with the original resolution below, in this native foreground task.
++        context->SetNoCell(Context::MIN_CONTEXT_SLOTS,
++                          ReadOnlyRoots(isolate).undefined_value());
 +      }
      }
      MaybeDirectHandle<Object> resolve_result =
          JSPromise::Resolve(promise, result_string);
-@@ -861,6 +924,26 @@ void FutexEmulation::HandleAsyncWaiterTimeout(FutexWaitListNode* node) {
+@@ -861,6 +959,26 @@ void FutexEmulation::HandleAsyncWaiterTimeout(FutexWaitListNode* node) {
    delete node;
  }
  
@@ -1575,8 +1619,8 @@ index 26074a2314090a0c1837fdac18c71a6115c84169..8d3da5ab3fd2ccef1dd17de866aebb78
 +    THROW_NEW_ERROR(isolate,
 +                    NewTypeError(MessageTemplate::kTimeoutJobAlreadyRun));
 +  }
-+  auto managed = Cast<Managed<AsyncWaiterTimeoutTask>>(data);
-+  auto task = managed->get();
++  auto managed = Cast<Managed<AsyncWaiterTimeoutJob>>(data);
++  auto task = std::move(managed->raw()->task);
 +  // Destroy the task when this call finishes, so it cannot remain registered
 +  // as running until GC. CancelableTask::Run ignores cancelled waiters.
 +  managed->SetManagedObject(nullptr);
@@ -1623,7 +1667,7 @@ index 4c1d9c79c2cc0b8119e8603e657fe3987da5529d..f0120aa58f5c09f32c9a2407bcc23ba3
    // Resolve the Promises of the async waiters which belong to |isolate|.
    static void ResolveAsyncWaiterPromises(Isolate* isolate);
 diff --git a/deps/v8/src/execution/isolate.cc b/deps/v8/src/execution/isolate.cc
-index e86eabdbf07d4097dcc3b743ddaf3ac438ed34d7..117f29d89cadcd5988d6246e80ac4f69f28bcf59 100644
+index e86eabdbf07d4097dcc3b743ddaf3ac438ed34d7..c43d62ad29feb209faa6f45f8826f2041429f513 100644
 --- a/deps/v8/src/execution/isolate.cc
 +++ b/deps/v8/src/execution/isolate.cc
 @@ -19,6 +19,7 @@
@@ -1653,7 +1697,7 @@ index e86eabdbf07d4097dcc3b743ddaf3ac438ed34d7..117f29d89cadcd5988d6246e80ac4f69
    DirectHandle<Script> script;
    if (!visitor.CurrentScript().ToHandle(&script)) {
      return MaybeDirectHandle<Script>();
-@@ -7224,6 +7231,183 @@ void Isolate::RunPromiseHook(PromiseHookType type,
+@@ -7224,6 +7231,186 @@ void Isolate::RunPromiseHook(PromiseHookType type,
    promise_hook_(type, v8::Utils::ToLocal(promise), v8::Utils::ToLocal(parent));
  }
  
@@ -1752,28 +1796,31 @@ index e86eabdbf07d4097dcc3b743ddaf3ac438ed34d7..117f29d89cadcd5988d6246e80ac4f69
 +  CHECK(!has_exception());
 +}
 +
-+void Isolate::EnqueueGenericJob(DirectHandle<NativeContext> realm,
++bool Isolate::EnqueueGenericJob(DirectHandle<NativeContext> realm,
 +                                DirectHandle<JSFunction> job) {
 +  DCHECK_NOT_NULL(generic_job_enqueue_hook_);
 +  DirectHandle<Object> ambient(
 +      isolate_data()->continuation_preserved_embedder_data(), this);
 +  ExternalCallbackScope scope(this, FUNCTION_ADDR(generic_job_enqueue_hook_));
-+  generic_job_enqueue_hook_(v8::Utils::ToLocal(realm), v8::Utils::ToLocal(job));
++  bool accepted = generic_job_enqueue_hook_(v8::Utils::ToLocal(realm),
++                                             v8::Utils::ToLocal(job));
 +  isolate_data()->set_continuation_preserved_embedder_data(*ambient);
 +  CHECK(!has_exception());
++  return accepted;
 +}
 +
-+void Isolate::EnqueueTimeoutJob(DirectHandle<NativeContext> realm,
++bool Isolate::EnqueueTimeoutJob(DirectHandle<NativeContext> realm,
 +                                DirectHandle<JSFunction> job,
 +                                double milliseconds) {
 +  DCHECK_NOT_NULL(timeout_job_enqueue_hook_);
 +  DirectHandle<Object> ambient(
 +      isolate_data()->continuation_preserved_embedder_data(), this);
 +  ExternalCallbackScope scope(this, FUNCTION_ADDR(timeout_job_enqueue_hook_));
-+  timeout_job_enqueue_hook_(v8::Utils::ToLocal(realm), v8::Utils::ToLocal(job),
-+                            milliseconds);
++  bool accepted = timeout_job_enqueue_hook_(
++      v8::Utils::ToLocal(realm), v8::Utils::ToLocal(job), milliseconds);
 +  isolate_data()->set_continuation_preserved_embedder_data(*ambient);
 +  CHECK(!has_exception());
++  return accepted;
 +}
 +
 +DirectHandle<Object> Isolate::CaptureFinalizationRegistryContext(
@@ -1838,7 +1885,7 @@ index e86eabdbf07d4097dcc3b743ddaf3ac438ed34d7..117f29d89cadcd5988d6246e80ac4f69
                                         DirectHandle<JSPromise> parent) {
    DCHECK(!promise->has_async_task_id());
 diff --git a/deps/v8/src/execution/isolate.h b/deps/v8/src/execution/isolate.h
-index 9e0888eab6cad4ce87c9fd68ffd8f0bbd5a3da07..348bc1ce4a1ec475c7e1c87346ace8f719e469ef 100644
+index 9e0888eab6cad4ce87c9fd68ffd8f0bbd5a3da07..f9c9567c7f94d82ff28710d28a7fcf90d24221ff 100644
 --- a/deps/v8/src/execution/isolate.h
 +++ b/deps/v8/src/execution/isolate.h
 @@ -1001,7 +1001,8 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
@@ -1886,7 +1933,7 @@ index 9e0888eab6cad4ce87c9fd68ffd8f0bbd5a3da07..348bc1ce4a1ec475c7e1c87346ace8f7
 +  bool has_generic_job_enqueue_hook() const {
 +    return generic_job_enqueue_hook_ != nullptr;
 +  }
-+  void EnqueueGenericJob(DirectHandle<NativeContext> realm,
++  bool EnqueueGenericJob(DirectHandle<NativeContext> realm,
 +                         DirectHandle<JSFunction> job);
 +  void SetTimeoutJobEnqueueHook(v8::TimeoutJobEnqueueHook hook) {
 +    timeout_job_enqueue_hook_ = hook;
@@ -1894,7 +1941,7 @@ index 9e0888eab6cad4ce87c9fd68ffd8f0bbd5a3da07..348bc1ce4a1ec475c7e1c87346ace8f7
 +  bool has_timeout_job_enqueue_hook() const {
 +    return timeout_job_enqueue_hook_ != nullptr;
 +  }
-+  void EnqueueTimeoutJob(DirectHandle<NativeContext> realm,
++  bool EnqueueTimeoutJob(DirectHandle<NativeContext> realm,
 +                         DirectHandle<JSFunction> job, double milliseconds);
 +  void SetFinalizationRegistryCaptureHook(
 +      v8::FinalizationRegistryCaptureHook hook) {

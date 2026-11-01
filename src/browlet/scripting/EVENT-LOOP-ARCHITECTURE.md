@@ -163,8 +163,10 @@ bracket invocation, and place Promise jobs in HTML microtask tasks. Handlerless
 jobs still have a queue/task even when their specification realm is null.
 
 Generic jobs use the JavaScript engine task source. Timeout jobs reach that
-source through active-time waits. Node Promise jobs keep their original queues;
-mixed Node/HTML Atomics.waitAsync remains outside the generic/timeout integration.
+source through active-time waits. Node Promise jobs keep their original queues.
+HTML declines generic/timeout jobs for non-HTML realms, leaving Atomics.waitAsync
+notification and timeout delivery with V8. This fallback creates no HTML task
+or JavaScript timer for those realms.
 These hooks do not supply formal Script records or arbitrary active-script restoration.
 
 The parser's conditional pre-script checkpoint is separate from its later

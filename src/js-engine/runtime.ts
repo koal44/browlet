@@ -402,17 +402,19 @@ export type JSHostHooks<HostDefined> = {
     realm: JSRealm | null,
     queueRealm: JSRealm | null,
   ): false | void;
+  /** Schedule the job, or return false to retain V8's native delivery. */
   enqueueGenericJob(
     this: void,
     job: () => void,
     realm: JSRealm | null,
-  ): void;
+  ): false | void;
+  /** Schedule the timeout, or return false to retain V8's native timer. */
   enqueueTimeoutJob(
     this: void,
     job: () => void,
     realm: JSRealm | null,
     milliseconds: number,
-  ): void;
+  ): false | void;
 };
 
 export type JSJobCallback<HostDefined> = {

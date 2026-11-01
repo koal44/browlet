@@ -951,7 +951,7 @@ It does not treat reaching §8.1.7 as completion of the earlier dependencies.
 | String compilation (§8.1.6.2) | Binding-owned TrustedScript extraction and CSP source-list checks/reporting are connected; Node's own checks remain in force. | The preceding Trusted Types/default-policy validation still needs compilation kind and original Function inputs absent from the engine callback. Keep the four approved input-gap failures and unsupported-backend limits; further native work is parked. This is not a later event-loop algorithm. |
 | Execution attribution | Job registration and rejection notifications capture compilation identity and select the associated HTML script. The two ordinary-call rejection regressions now pass on every addon base; direct `reportError` selection retains its accepted compatibility limitation. | Rejection muting follows the approved Chromium/Firefox choice; WebKit and the literal built-in-context reading differ. Complete attribution across async resumptions and security-token boundaries remains unfinished. Constructor incumbent capture and borrowed-Function import-error realms retain their already approved expected failures. Do not turn these into an unbounded goal of mirroring every author frame. |
 | WebAssembly modules | The addon supplies module compilation and supplied-graph execution. | `BrowletRealm.parseWebAssemblyModule()` still throws; source/deferred graph phases are also rejected. Keep the JSRealm/HTML/Wasm ESM integration on hold for its separate standards slice. |
-| Other adopted hooks | Promise rejection delivery, job routing, module imports, import metadata, and cleanup-exception reporting have their documented integrations. | Keep the existing private-element choice, unrelated-Node generic/timeout ownership limit, and unaudited whole-registry cleanup scheduling explicit. No new demonstrated cleanup scheduling failure justifies another native handoff. |
+| Other adopted hooks | Promise rejection delivery, job routing, module imports, import metadata, cleanup-exception reporting, and idle cleanup wake-ups have their documented integrations. Generic/timeout hooks decline unrelated Node jobs. | Keep the existing private-element choice and unaudited whole-registry cleanup scheduling explicit. A missing task record alone does not justify another native handoff. |
 
 Temporal's Window connection is complete; its backend and range limits remain
 explicit. Permissions Policy is a different dependency from
@@ -1318,11 +1318,8 @@ inactive leaves the task queued and the reaction unrun; reactivation permits
 the task and its checkpoint. The fixture uses real Window bindings and explicit
 activity relationships because auxiliary-window creation is still unfinished.
 
-The existing backend limits remain explicit: without custom job hooks the
-notification is not handed to HTML, and the installed isolate-wide generic
-hook cannot decline an unrelated Node/VM job. The latter guard now carries a
-local TODO; its [recorded limitation](../../LIMITATIONS.md) still needs a native
-ownership/fallback contract. This audit introduces no new failure category.
+Without custom job hooks, notification is not handed to HTML. The ownership
+follow-up below repairs the installed hook's handling of unrelated Node/VM jobs.
 
 Validation: the 35 engine-job, task, and Promise-job cases pass across all six
 runtime configurations, retaining the approved unsupported-backend expectations.
@@ -1404,9 +1401,9 @@ task settles the Promise once with `"ok"`. The existing native tests additionall
 cover single-use jobs and cancellation of retained timeouts. Timer tests cover
 ordering, active-time accounting, and destruction independently of the addon.
 
-The existing native ownership restriction remains: generic/timeout hooks cannot
-decline unrelated Node/VM jobs once installed. Unsupported backends retain their
-approved missing-host-hook expectations. Worker globals/settings/startup are
+Generic/timeout hooks can now decline unrelated Node/VM jobs; see the ownership
+follow-up below. Unsupported backends retain their approved missing-host-hook
+expectations. Worker globals/settings/startup are
 still incomplete; `GlobalTimers` now marks the missing non-suspended-worker-time
 connection explicitly. The [worker roadmap](../workers/ROADMAP.md#execution-and-lifetime-constraints)
 owns that lifecycle work. This Window audit does not supply worker execution or
@@ -1416,6 +1413,39 @@ Validation: all 10 engine-job/timer cases pass normally on custom/compat. Each
 other configuration passes the five timer cases and retains five approved
 missing-host-hook expected failures. All six runs exit successfully, with no
 skips. Typechecking, type contracts, touched-file ESLint, and diff checks pass.
+
+### Generic/timeout job ownership follow-up
+
+The isolate-wide installation also intercepts ordinary Node and VM waits.
+The [production regression](../../../test/browlet/scripting/atomics-ownership.test.ts)
+first failed on custom/compat: constructing Browlet caused those waits to report
+`HTML timeout jobs require an HTML realm` or `HTML generic jobs require an HTML
+realm`, with neither expected result delivered. Official addon and stock modes
+already retain native delivery because they do not install these custom hooks.
+
+HTML now returns `false` for a realm without HTML settings, matching the existing
+Promise-job ownership convention. JS Engine and the addon pass that decision
+through the two existing V8 hooks. A declined notification continues native
+Promise resolution; a declined timeout returns the same cancelable task to V8's
+foreground task runner. Its original deadline, cancellation ID, and native range
+are preserved. The offered callable is invalidated, so it cannot deliver twice
+or retain the waiter after fallback. No Node JavaScript timer is introduced.
+
+The maintained native handoff test covers accepted HTML-style scheduling beside
+declined Node/VM jobs, notification cancelling native timers, delays beyond
+Node's JavaScript timer range and V8's finite range, and process exit with a
+pending native wait. Existing HTML tests retain active-time accounting,
+inactive-Document gating, borrowed-realm selection, and the timeout/notification
+race. This repairs ownership within the existing custom engine patch; it does
+not add generic/timeout interception to official Node builds.
+
+Validation: the 47 focused scheduling cases pass across all six configurations,
+retaining 12 approved expected failures on official addon builds and 18 in stock
+mode; custom/compat passes all 47. The 325-case native suite passes on all three
+bases with its existing expected failures and one existing custom-only skip.
+Initial concurrent official-addon runs timed out starting the cleanup child;
+both focused reruns pass without code changes. Typechecking and type contracts
+also pass. The custom engine and all three matching addons were rebuilt.
 
 ### §8.1.6.6.6: JobCallback capture follow-up
 

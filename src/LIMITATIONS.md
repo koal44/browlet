@@ -283,10 +283,6 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   unaudited. The
   [audit](browlet/scripting/ROADMAP.md#81662-finalizationregistry-cleanup-scheduling)
   distinguishes that uncertainty from the repaired reporting and idle-progress defects.
-- **Custom generic/timeout hooks are isolate-wide.** They cannot decline an
-  individual job. `Atomics.waitAsync` in an unrelated Node/VM realm while those
-  Browlet hooks are installed is unsupported; HTML realms use their task and
-  active-time timeout paths. Revisit with a host-hook routing/fallback contract.
 - **Direct host calls are not HTML tasks.** Calling a projected API from Node
   does not itself establish a checkpoint boundary. Use the
   [automation entry](browlet/automation/README.md) for page commands; a broader

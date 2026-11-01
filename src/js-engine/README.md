@@ -229,8 +229,9 @@ It is not a general signal for jobs arriving from another context.
 `setHostHooks` is optional. It maps native references to known JSRealms; unknown
 references become null. Promise routing follows the **job's queue realm**, which
 can differ from a handlerless reaction's null specification realm. Returning
-false preserves the original V8 queue. Generic/timeout enqueue hooks transfer
-all scheduling and have no per-job fallback. HTML chooses settings and task policy.
+false preserves the original V8 queue. Generic/timeout enqueue hooks also accept
+`false`, leaving native notification delivery or the original cancelable timer
+with V8. HTML accepts only jobs belonging to its realms and chooses their task policy.
 
 `JSRealm.setPromiseRejectionTracker()` installs a reject/handle callback for the
 executing context. Its third argument identifies the retained compiled code:

@@ -222,8 +222,8 @@ type AddonHostHooks<HostDefined> = {
     record: JSJobCallback<HostDefined>, receiver: unknown, argumentsList: unknown[],
   ): unknown;
   enqueuePromiseJob?(job: () => void, realm: object | null): false | void;
-  enqueueGenericJob?(job: () => void, realm: object): void;
-  enqueueTimeoutJob?(job: () => void, realm: object, milliseconds: number): void;
+  enqueueGenericJob?(job: () => void, realm: object): false | void;
+  enqueueTimeoutJob?(job: () => void, realm: object, milliseconds: number): false | void;
 };
 
 export function isAddonMicrotaskQueueHandle(value: unknown): value is AddonMicrotaskQueueHandle {
