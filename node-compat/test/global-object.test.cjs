@@ -57,6 +57,9 @@ test('ordinary storage reflection excludes child indices while nested accessors 
   const child = {};
   compat.setGlobalObject(f.handle, f.owner, {
     getOwnPropertyDescriptor: index => index === 0 ? { value: child, writable: false, enumerable: true, configurable: true } : undefined,
+    set: () => false,
+    defineProperty: () => false,
+    deleteProperty: index => index !== 0,
     ownKeys: () => [0],
   });
   assert.equal(f.proxy[0], child);
@@ -85,6 +88,33 @@ test('retired global delegates query their original own properties after proxy r
   assert.deepEqual(Array.from(retained()), [1, 'undefined']);
   assert.equal(seen.get('originalOnly'), true);
   assert.equal(seen.get('replacementOnly'), false);
+});
+
+test('indexed mutations use owner callbacks for supported and unsupported indices', () => {
+  const f = fixture();
+  const child = {};
+  const calls = [];
+  compat.setGlobalObject(f.handle, f.owner, {
+    getOwnPropertyDescriptor: index => index === 0 ? { value: child, writable: false, enumerable: true, configurable: true } : undefined,
+    set(index, value) { calls.push(['set', index, value]); return false; },
+    defineProperty(index, descriptor) { calls.push(['define', index, descriptor.value]); return false; },
+    deleteProperty(index) { calls.push(['delete', index]); return index !== 0; },
+    ownKeys: () => [0],
+  });
+  for (const index of ['0', '1', '4294967294']) {
+    assert.equal(Reflect.set(f.proxy, index, 'assigned'), false);
+    assert.equal(Reflect.defineProperty(f.proxy, index, { value: 'defined', configurable: true }), false);
+    assert.equal(Reflect.deleteProperty(f.proxy, index), index !== '0');
+  }
+  assert.deepEqual(calls, [0, 1, 4294967294].flatMap(index => [
+    ['set', index, 'assigned'], ['define', index, 'defined'], ['delete', index],
+  ]));
+  calls.length = 0;
+  Object.defineProperty(f.owner, '1', { value: 'stored', writable: true, configurable: true });
+  f.owner[1] = 'updated';
+  assert.equal(f.owner[1], 'updated');
+  assert.equal(Reflect.deleteProperty(f.owner, '1'), true);
+  assert.deepEqual(calls, []);
 });
 
 for (const kind of ['property', 'lexical']) {

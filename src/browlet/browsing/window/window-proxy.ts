@@ -79,6 +79,7 @@ export class WindowProxyHandle implements ProxyHandler<object> {
     attributes: PropertyDescriptor,
   ): boolean {
     // TODO(HTML 7.2.3.6): Select the caller binding and use defineWindowProxyOwnProperty().
+    if (typeof property === 'string' && isArrayIndex(property)) return false;
     return Reflect.defineProperty(
       this.associatedWindow,
       property,
@@ -88,6 +89,9 @@ export class WindowProxyHandle implements ProxyHandler<object> {
 
   deleteProperty(_target: object, property: string | symbol): boolean {
     // TODO(HTML 7.2.3.9): Select the caller binding and use deleteWindowProxyProperty().
+    if (typeof property === 'string' && isArrayIndex(property)) {
+      return this.windowImplementation.getIndexedWindow(Number(property)) === undefined;
+    }
     return Reflect.deleteProperty(
       this.associatedWindow,
       property,
@@ -141,8 +145,8 @@ export class WindowProxyHandle implements ProxyHandler<object> {
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#windowproxy-ownpropertykeys
   ownKeys(_target: object): (string | symbol)[] {
     // TODO(HTML 7.2.3.10): Select the caller binding and use getWindowProxyOwnPropertyKeys(), retaining deduplication here.
-    // ACCOMMODATION(node-vm-global-proxy): Unfinished numeric definitions and direct
-    // stock-VM access can leave indices on Window; a Proxy must not return duplicate keys.
+    // ACCOMMODATION(node-vm-global-proxy): Direct stock-VM access can still leave
+    // indices on Window; a Proxy must not return duplicate keys.
     const keys = new Set<string | symbol>(Array.from({ length: this.windowImplementation.length }, (_, index) => String(index)));
     for (const key of Reflect.ownKeys(this.associatedWindow)) keys.add(key);
     return [...keys];
@@ -156,6 +160,7 @@ export class WindowProxyHandle implements ProxyHandler<object> {
 
   set(_target: object, property: string | symbol, value: unknown, receiver: unknown): boolean {
     // TODO(HTML 7.2.3.8): Select the caller binding and call setWindowProxy() with the resolved receiver.
+    if (typeof property === 'string' && isArrayIndex(property)) return false;
     const window = this.associatedWindow;
     return Reflect.set(window, property, value, this.#resolveReceiver(receiver));
   }

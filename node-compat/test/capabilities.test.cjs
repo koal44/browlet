@@ -289,6 +289,9 @@ test('indexed global reads stay live while ordinary properties retain their per-
     compat.setGlobalObject(handle, handle.globalObject, {
       getOwnPropertyDescriptor: index => index < values.length
         ? { value: values[index], writable: false, enumerable: true, configurable: true } : undefined,
+      set: () => false,
+      defineProperty: () => false,
+      deleteProperty: index => index >= values.length,
       ownKeys: () => values.map((_, index) => index),
     });
     return handle;

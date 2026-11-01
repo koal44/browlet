@@ -177,7 +177,11 @@ Node keeps its existing modeled-proxy path. Detachment cancels queued V8 work,
 so HTML owns the checkpoint-before-reuse boundary.
 The addon preserves the detached context's existing embedder token for retained
 functions accessing a reused proxy. `setGlobalIndexedProperties()` supplements a
-native realm's ordinary property store with owner-supplied indexed reads and keys.
+native realm's ordinary property store with owner-supplied indexed reads, mutation
+callbacks, and keys. Mutation callbacks cover every array index, including absent
+ones; HTML supplies WindowProxy's rejection and child-presence rules. A native
+write with a different receiver uses V8's attribute lookup instead of the setter,
+so an absent index can still create a property on that receiver.
 `registerGlobalGetter()` identifies global IDL attribute functions so retired bare
 lookup can invoke them with their original Window view. Explicit public-proxy
 lookup and author accessors use V8's ordinary receivers. Original-global capture

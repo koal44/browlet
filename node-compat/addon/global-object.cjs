@@ -63,8 +63,10 @@ const ordinaryAccess = {
 };
 
 function globalHandlers(record) {
-  const indexedDescriptor = key => typeof key === 'string' && key !== '4294967295' &&
-    String(Number(key) >>> 0) === key ? record.indexed?.getOwnPropertyDescriptor(Number(key)) : undefined;
+  const indexedDescriptor = key => {
+    const index = arrayIndex(key);
+    return index === undefined ? undefined : record.indexed?.getOwnPropertyDescriptor(index);
+  };
   const retainedAttribute = key => {
     if (!record.detached) return undefined;
     const descriptor = Reflect.getOwnPropertyDescriptor(record.object, key);
@@ -78,11 +80,28 @@ function globalHandlers(record) {
   return {
     has: key => indexedDescriptor(key) !== undefined || retainedAttribute(key) !== undefined,
     get: key => retainedAttribute(key) !== undefined ? Reflect.get(record.object, key) : indexedDescriptor(key)?.value,
-    set: (key, value) => retainedAttribute(key) !== undefined ? Reflect.set(record.object, key, value)
-      : indexedDescriptor(key) === undefined ? undefined : false,
+    // SPEC_CLASH(window-indexed-set-receiver): V8 bypasses this setter for a different receiver.
+    // Absent indices then write to that receiver, as in Chromium; HTML/Firefox/WebKit reject.
+    set(key, value) {
+      const index = arrayIndex(key);
+      if (index !== undefined && record.indexed) return record.indexed.set(index, value);
+      return retainedAttribute(key) === undefined ? undefined : Reflect.set(record.object, key, value);
+    },
     getOwnPropertyDescriptor: indexedDescriptor,
-    defineProperty: key => indexedDescriptor(key) === undefined ? undefined : false,
-    deleteProperty: key => indexedDescriptor(key) === undefined ? undefined : false,
+    defineProperty(key, descriptor) {
+      const index = arrayIndex(key);
+      return index === undefined ? undefined : record.indexed?.defineProperty(index, descriptor);
+    },
+    deleteProperty(key) {
+      const index = arrayIndex(key);
+      return index === undefined ? undefined : record.indexed?.deleteProperty(index);
+    },
     ownKeys: () => record.indexed?.ownKeys().map(String) ?? [],
   };
+}
+
+function arrayIndex(key) {
+  if (typeof key !== 'string') return undefined;
+  const index = Number(key) >>> 0;
+  return index !== 4294967295 && String(index) === key ? index : undefined;
 }

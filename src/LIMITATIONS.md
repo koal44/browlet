@@ -76,8 +76,11 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   [WindowProxy audit](browlet/browsing/window/ROADMAP.md#html-723-windowproxy-foundations-and-extensibility).
   Valid child-index reads, descriptors, and presence checks work on both backends
   in container insertion order. Own keys include the live child-index prefix;
-  native foreign keys are now filtered through the caller's binding. Automatic same-origin indexed
-  writes/deletion remain unfinished. Stock Node also lacks missing-index security. Native global proxies
+  native foreign keys are now filtered through the caller's binding. Both backends
+  reject same-origin indexed writes/definitions and protect present children from deletion.
+  Native `Reflect.set(window, absentIndex, value, differentReceiver)` still writes
+  to that receiver because V8 bypasses the setter (`window-indexed-set-receiver`).
+  Stock Node also lacks missing-index security. Native global proxies
   use owner-supplied indexed callbacks alongside V8's ordinary global storage.
   Native ordinary accessor access now preserves explicit receivers and rejects
   invalid derived IDL receivers. A stable host view retains each original global's
@@ -88,15 +91,15 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   mapped to the public proxy so free global names still reach Window bindings.
   Retired VM globals remain weakly recognized across navigation. Other receivers,
   including objects inheriting from Window, are not mapped. Duplicate ordinary
-  numeric keys are suppressed in enumeration until numeric definition paths are fixed.
+  numeric keys from internal storage or direct stock-VM access remain suppressed in enumeration.
 - **Native origin checks are connected; complete WindowProxy conformance remains open.**
   Window contexts keep distinct tokens, and native access checks select the
   executing caller before host dispatch. Foreign Document access is rejected,
   descriptors and keys use that caller's binding, and foreign prototypes are null.
   `SPEC_CLASH(window-foreign-receiver)` and `SPEC_CLASH(window-foreign-prototype)`
   follow Chromium for foreign ordinary receivers and mutation denials. Same-origin
-  access stays in V8 and still bypasses COOP reporting. Same-origin indexed mutation
-  and missing Window members remain open. Stock Node lacks this automatic caller
+  access stays in V8 and still bypasses COOP reporting. The indexed explicit-receiver
+  gap and missing Window members remain open. Stock Node lacks this automatic caller
   selection and retains the approved expected failures. See the
   [Window roadmap](browlet/browsing/window/ROADMAP.md#native-window-access-guard).
   The failed-access callback is isolate-wide and must have one addon owner; it
@@ -830,7 +833,8 @@ tail after the live index prefix; missing focus/blur declarations still leave th
 foreign list incomplete. Location writes still reach unfinished navigation. Native
 foreign access now selects these bindings automatically; stock traps still lack
 caller selection. Same-origin V8 access bypasses the caller-bound algorithms.
-Automatic same-origin indexed assignment and deletion remain unfinished; see the
+Automatic same-origin indexed mutation is connected, with the native absent-index
+explicit-receiver exception described above; see the
 [WindowProxy audit](browlet/browsing/window/ROADMAP.md#html-723-indexed-child-reads).
 `Window[name]` resolves eligible names/IDs, stable live collections, and retained
 child navigables through Web IDL's named-properties prototype. Child creation and

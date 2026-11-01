@@ -118,11 +118,13 @@ describe('Window global allocation', () => {
       var declared = 7;
       function readDeclared() { return declared; }
       globalThis[3] = 'indexed';
+      globalThis['03'] = 'ordinary';
       globalThis[Symbol.for('probe')] = 'symbol';
-      [this.declared, readDeclared(), this[3], this[Symbol.for('probe')]];
-    `, 'properties.js')).toEqual([7, 7, 'indexed', 'symbol']);
+      [this.declared, readDeclared(), this[3], this['03'], this[Symbol.for('probe')]];
+    `, 'properties.js')).toEqual([7, 7, undefined, 'ordinary', 'symbol']);
     expect(Reflect.get(platformWindow, 'declared')).toBe(7);
-    expect(Reflect.get(platformWindow, '3')).toBe('indexed');
+    expect(Reflect.get(platformWindow, '3')).toBeUndefined();
+    expect(Reflect.get(platformWindow, '03')).toBe('ordinary');
     expect(realm.evaluate(`
       Object.defineProperty(this, 'fixed', {value: 9});
       [Reflect.set(this, 'fixed', 1), Reflect.deleteProperty(this, 'fixed'),
@@ -130,7 +132,7 @@ describe('Window global allocation', () => {
     `, 'fixed.js')).toEqual([false, false, false, 9]);
     expect(realm.evaluate(`
       const keys = Reflect.ownKeys(this);
-      keys.includes('document') && keys.includes('3') &&
+      keys.includes('document') && !keys.includes('3') && keys.includes('03') &&
         keys.includes(Symbol.for('probe')) && new Set(keys).size === keys.length;
     `, 'keys.js')).toBe(true);
     expect(realm.evaluate('delete this.JSON; typeof JSON', 'delete.js')).toBe('undefined');

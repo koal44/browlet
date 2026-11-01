@@ -431,18 +431,18 @@ existing tree-order collection stays unchanged for named access and other consum
 | --- | --- |
 | §7.2.3.5, valid array index | Select the current associated Document's child in container insertion order and return its active WindowProxy. Descriptor is non-writable, enumerable, configurable. Noncanonical numeric strings and symbols retain the ordinary path. |
 | §7.2.3.5, missing index and non-index properties | Native foreign access invokes the caller-bound descriptor algorithm, including missing-index SecurityError, declared descriptors, child target names, and fallback checks. Stock forwarding still lacks caller selection. |
-| §7.2.3.6, [[DefineOwnProperty]] | Native foreign definition throws the caller's SecurityError. Same-origin indexed definition remains unfinished on both automatic paths; the explicit caller-bound algorithm rejects it. Stock nonconfigurable properties also retain the Proxy invariant limitation. |
+| §7.2.3.6, [[DefineOwnProperty]] | Both automatic paths reject same-origin indexed definition. Native foreign definition throws the caller's SecurityError; stock foreign dispatch still needs caller selection. Stock nonconfigurable properties retain the Proxy invariant limitation. |
 | §7.2.3.7, [[Get]], and ordinary [[HasProperty]] | Native foreign Get runs the caller-bound COOP check and CrossOriginGet; presence checks use the descriptor algorithm. Same-origin COOP reporting and stock caller selection remain unfinished. |
-| §7.2.3.8, [[Set]] | Native foreign Set runs the caller-bound COOP check and requires the foreign descriptor's setter, using the target receiver under the Chromium choice. Same-origin indexed rejection/reporting, stock caller selection, and Location navigation remain unfinished. |
-| §7.2.3.9, [[Delete]] | Native foreign deletion throws the caller's SecurityError. Automatic same-origin deletion still lacks the explicit algorithm's present-index false/absent-index true rule; stock foreign deletion lacks caller selection. |
+| §7.2.3.8, [[Set]] | Native foreign Set runs the caller-bound COOP check and requires the foreign descriptor's setter, using the target receiver under the Chromium choice. Both automatic paths reject ordinary same-origin indexed writes; the native absent-index explicit-receiver gap is recorded below. Same-origin reporting, stock caller selection, and Location navigation remain unfinished. |
+| §7.2.3.9, [[Delete]] | Both automatic same-origin paths return false for present children and true for absent indices without deleting underlying stored numeric properties. Native foreign deletion throws the caller's SecurityError; stock foreign deletion lacks caller selection. |
 | §7.2.3.10, [[OwnPropertyKeys]] | Both backends prefix live child indices. Native foreign enumeration adds declared cross-origin keys and fallback symbols; stock enumeration lacks caller filtering. Missing focus/blur declarations remain covered by the completeness expected failure. |
 
 Native global proxies bypass these JavaScript traps. Both backends use Window's
 child lookup and length, with WindowProxy supplying indexed descriptors. Window
 composition supplies callbacks retaining the original Window; ordinary globals
 use V8's per-context store and preserve their receivers as described below.
-Caller-realm integration, origin-sensitive filtering, and indexed mutation rules
-remain separate work. The indexed-access suite covers both backends.
+Stock caller-realm integration and origin-sensitive filtering remain separate
+work. Indexed mutations are connected below. The indexed-access suite covers both backends.
 Automatic child creation/destruction remains with the element/navigation owners;
 tests connect real children at the existing content-navigable association.
 The generated `WindowProxy` type now adds a readonly numeric index to the declared
@@ -453,6 +453,52 @@ callers, insertion versus tree order, subtree insertion, moves and reinsertion,
 late/replaced child associations, filtering, and parent navigation. Ten new
 regressions failed before implementation; all eighteen tests in that file pass
 on stock Node 24. No new expected failures or skips were introduced.
+
+### Automatic indexed mutations
+
+HTML §§7.2.3.6, 7.2.3.8, and 7.2.3.9 now reach the automatic paths for
+same-origin numeric properties. Stock traps reject assignment and definition
+before touching a supplied receiver. Deletion checks the current child list:
+present indices return false, absent indices return true, and neither case
+changes ordinary numeric properties in the original Window store.
+
+The native global adapter now forwards all indexed mutations to
+`GlobalIndexedProperties.set`, `defineProperty`, and `deleteProperty`, including
+indices without a synthetic descriptor. HTML supplies the same rejection and
+child-presence rules when composing Window. The existing native interceptors
+already return false and honor strict-mode throwing; this slice changes their
+JavaScript adapter, with no C++ or Node/V8 patch and no binary rebuild.
+Native foreign access remains subject to the existing guard before these callbacks.
+
+`SPEC_CLASH(window-indexed-reflect-result)` follows HTML/Firefox/WebKit:
+`Reflect.set(window, index, value)` and indexed `Reflect.defineProperty` return
+false. Chromium returns true without changing the child or creating the indexed
+property; strict assignment still throws. Returning false already works on the
+existing native bridge, so this difference does not need an engine workaround.
+
+`SPEC_CLASH(window-indexed-set-receiver)` records the native boundary for a
+different explicit receiver. HTML/Firefox/WebKit reject every indexed write
+before inspecting that receiver. V8's `Object::SetPropertyInternal` instead
+queries interceptor attributes when the holder differs from the receiver, then
+uses `SetSuperProperty`; it does not call the setter. Our read-only child
+descriptor rejects present indices, but an absent index writes to the supplied
+receiver. Chromium permits this receiver write for both present and absent
+indices. Returning a fabricated descriptor for every absent index would change
+presence and descriptor lookup, so that is not used as a workaround.
+
+Browser-only probe `node-compat/experimental/window-indexed-mutations.mjs`
+reproduces these differences in Chromium 156.0.8078.4, Firefox 157.0, and
+WebKit 27.2 (2026-10-31). The approved boundary keeps the small integration and
+records the native receiver gap without a V8 patch. Its two regression cases keep
+HTML's required result as expected failures only with the addon; stock Node runs
+and satisfies those same assertions normally.
+
+The indexed-access regressions cover present/absent/boundary indices, alternate
+receiver side effects, strict-mode errors, ordinary non-index controls, original
+property-store preservation, same-origin callers, and navigation. Before the
+repair, ten cases failed on stock Node 24 and seven with the addon; the native
+adapter's focused owner-callback regression failed as well. Automatic COOP
+reporting, stock caller selection, and child creation/destruction remain separate.
 
 ## HTML §7.2.3: enumeration and receivers
 
@@ -535,12 +581,11 @@ fixture independently exercises ordinary storage, exact receivers, retained
 Document access paths, live old-owner state, capture-name collisions and TDZ, and
 collection of retired/replacement contexts and views.
 
-This slice does not connect automatic cross-origin dispatch. The experimental
-foreign-Document regression still expects both direct and borrowed access to
-throw `SecurityError`; direct property access currently returns a Document.
-The access guard must run before ordinary global property lookup. Caller-dependent
-prototype reflection, COOP access reports, and full indexed mutation rules also
-remain open. The property-store repair requires addon rebuilds, not a Node/V8 patch.
+This property-store slice preceded the native access guard below, which now
+rejects foreign Document access and controls foreign prototype reflection.
+Automatic same-origin indexed mutations are connected above, with the explicit
+receiver limitation recorded there. COOP access reports and stock caller selection
+remain open. The property-store repair required addon rebuilds, not a Node/V8 patch.
 
 Validation on Windows used all six runtime configurations, with four Vitest
 workers. All **579 unit files** passed in each configuration:
@@ -622,8 +667,8 @@ and conversion rules, descriptors, keys, and prototype mutations. The correspond
 native suite covers registration, unconnected checks, unknown callers, queue
 ownership, proxy reuse, collection, repeated addon loads, and worker teardown.
 Confirmed addon-dependent assertions remain strict expected failures only with
-the addon disabled, as approved. Same-origin COOP reporting, same-origin indexed
-mutation, missing Window declarations, and navigation remain separate work.
+the addon disabled, as approved. Same-origin COOP reporting, the indexed
+explicit-receiver gap, missing Window declarations, and navigation remain separate work.
 
 Node 24's native Promise-resolution fast path selects the importing context's
 `.then` for a host Promise. This caused Node-owned imports to reject with
@@ -747,7 +792,7 @@ real caller/target bindings and descriptor records, including two-sided domain
 relaxation and navigation. They call the algorithm explicitly, not the automatic
 proxy trap. The stock trap still needs caller selection and must account for
 nonconfigurable Proxy invariants. Native foreign definition now uses the guard's
-denial callback; same-origin indexed definition remains unfinished.
+denial callback; both automatic paths now reject same-origin indexed definition.
 
 ## HTML §7.2.3.7: caller-bound property reads
 
@@ -805,7 +850,8 @@ index boundaries, foreign denials, receiver/error identity, navigation, and repo
 before setters, conversion, or rejection. Location tests intercept its unfinished
 implementation setter while retaining real IDL conversion and receiver selection;
 COOP tests intercept report dispatch. Neither establishes navigation or report delivery.
-Automatic trap dispatch and native interception remain unfinished. OrdinarySet and
+Automatic indexed rejection is connected above; complete stock caller dispatch
+and same-origin COOP reporting remain unfinished. OrdinarySet and
 PutForwards can also invoke an independently supplied WindowProxy receiver's internal
 methods; those nested accesses still need automatic caller selection. No ambient
 caller fallback or replacement execution tracking is introduced.
@@ -832,8 +878,8 @@ has 25 cases; 21 failed against ordinary forwarding. Coverage includes numeric
 boundaries, live child association/removal, domain relaxation, caller-realm errors,
 and current-Window selection after navigation. Child associations and caller bindings
 are supplied explicitly. Native foreign deletion is now secured by the guard's
-denial callback. Automatic same-origin indexed deletion, stock caller selection,
-and child lifecycle production remain unfinished.
+denial callback. Automatic same-origin indexed deletion is connected above;
+stock caller selection and child lifecycle production remain unfinished.
 
 ## HTML §7.2.3.10: caller-bound own-property keys
 
@@ -1820,7 +1866,7 @@ this slice does not change Window's automatic dispatch.
 | --- | --- | --- |
 | existing `opening.ts`, `window.ts`, and navigation owners | Complete `open()`, auxiliary/top-level traversable creation, target selection, opener relationships, session-storage shed cloning, closing, and stopping | HTML §7.2.2.1; HTML §7.3; Storage |
 | existing `window.ts` | Remaining Window members and event-handler mixins; automatic child/opener lifecycle integration | HTML §7.2.2 and owning chapters |
-| existing `window-proxy.ts` and `integration/web-idl/window-proxy.ts` | Finish same-origin indexed mutations and COOP reporting; supply stock caller selection; complete missing Window declarations | HTML §7.2.3 |
+| existing `window-proxy.ts` and `integration/web-idl/window-proxy.ts` | Resolve the native indexed explicit-receiver gap; finish same-origin COOP reporting; supply stock caller selection; complete missing Window declarations | HTML §7.2.3 |
 | existing `location.ts` and navigation owners | Reload coordination and activation/navigation effects; automatic Location exotic dispatch requires the addon | HTML §§7.2.4, 7.4 |
 
 Automatic WindowProxy Get/Set must call the caller binding's

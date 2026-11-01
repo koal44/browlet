@@ -5,6 +5,7 @@ import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
 import { createDocumentState } from '../../../../src/browlet/browsing/navigation/document-state';
+import { addon } from '../../../../src/js-engine/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl, HTMLObjectElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/index';
 import type { HTMLFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/legacy/frame';
@@ -274,6 +275,148 @@ describe('WindowProxy indexed reads', () => {
   });
 });
 
+describe('WindowProxy indexed mutations', () => {
+  it.each(['0', '1', '4294967294'])('rejects assignment to index %s', async (property) => {
+    const browser = new Browlet({ route: () => '' });
+    const document = unwrap<DocumentImpl>(browser.document);
+    document.body!.appendChild(createChild(document, 'iframe').container);
+    expect(await browser.evaluate((property) => Reflect.set(window, property, 'replacement'), property)).toBe(false);
+    expect(Reflect.has(getRelevantRealm(browser.window).globalObject, property)).toBe(false);
+  });
+
+  for (const property of ['0', '1', '4294967294']) {
+    // Approved native-only failure: V8 bypasses the setter for a different receiver and an absent index.
+    // Keep HTML's required result; window-indexed-set-receiver records Chromium's disagreement.
+    const test = property !== '0' && addon.createContextHandle ? it.fails : it;
+    test(`rejects assignment to index ${property} without touching a different receiver`, async () => {
+      const browser = new Browlet({ route: () => '' });
+      const document = unwrap<DocumentImpl>(browser.document);
+      document.body!.appendChild(createChild(document, 'iframe').container);
+
+      expect(await browser.evaluate((property) => {
+        let touched = false;
+        const receiver = new Proxy({}, {
+          getOwnPropertyDescriptor() { touched = true; return undefined; },
+          defineProperty() { touched = true; return true; },
+        });
+        return {
+          receiver: Reflect.set(window, property, 'replacement', receiver),
+          touched,
+        };
+      }, property)).toEqual({ receiver: false, touched: false });
+    });
+  }
+
+  it.each(['0', '1', '4294967294'])('rejects definition of index %s', async (property) => {
+    const browser = new Browlet({ route: () => '' });
+    const document = unwrap<DocumentImpl>(browser.document);
+    document.body!.appendChild(createChild(document, 'iframe').container);
+
+    expect(await browser.evaluate((property) => {
+      let error;
+      try { Object.defineProperty(window, property, { value: 1, configurable: true }); }
+      catch (caught) { error = caught instanceof TypeError; }
+      return {
+        data: Reflect.defineProperty(window, property, { value: 1, configurable: true }),
+        accessor: Reflect.defineProperty(window, property, { get() { return 2; }, configurable: true }),
+        empty: Reflect.defineProperty(window, property, {}),
+        error,
+      };
+    }, property)).toEqual({ data: false, accessor: false, empty: false, error: true });
+  });
+
+  it('rejects deleting present children and permits deleting absent indices', async () => {
+    const browser = new Browlet({ route: () => '' });
+    const document = unwrap<DocumentImpl>(browser.document);
+    const child = createChild(document, 'iframe');
+    document.body!.appendChild(child.container);
+    const remove = () => [Reflect.deleteProperty(window, '0'), Reflect.deleteProperty(window, '1')];
+    expect(await browser.evaluate(remove)).toEqual([false, true]);
+    expect(browser.window[0]).toBe(child.navigable.activeWindowProxy.platform);
+    child.container.contentNavigable = null;
+    expect(await browser.evaluate(remove)).toEqual([true, true]);
+  });
+
+  it('throws realm TypeErrors for strict indexed assignment and deletion', async () => {
+    const browser = new Browlet({ route: () => '' });
+    const document = unwrap<DocumentImpl>(browser.document);
+    document.body!.appendChild(createChild(document, 'iframe').container);
+    expect(await browser.evaluate(() => {
+      'use strict';
+      const target = window as unknown as Record<string, unknown>;
+      const errors = [];
+      try { target['0'] = 'replacement'; } catch (error) { errors.push(error instanceof TypeError); }
+      try { target['1'] = 'replacement'; } catch (error) { errors.push(error instanceof TypeError); }
+      try { delete target['0']; } catch (error) { errors.push(error instanceof TypeError); }
+      return errors;
+    })).toEqual([true, true, true]);
+  });
+
+  it('leaves the original Window store untouched for both present and absent indices', () => {
+    const browser = new Browlet({ route: () => '' });
+    const document = unwrap<DocumentImpl>(browser.document);
+    document.body!.appendChild(createChild(document, 'iframe').container);
+    const target = getRelevantRealm(browser.window).globalObject;
+    for (const key of ['0', '1']) {
+      Reflect.defineProperty(target, key, { value: 'original', writable: true, configurable: true });
+      expect(Reflect.set(browser.window, key, 'replacement')).toBe(false);
+      expect(Reflect.defineProperty(browser.window, key, { value: 'replacement' })).toBe(false);
+      expect(Reflect.deleteProperty(browser.window, key)).toBe(key === '1');
+      expect(Reflect.getOwnPropertyDescriptor(target, key)?.value).toBe('original');
+    }
+  });
+
+  it('preserves ordinary mutation for non-index strings and symbols', async () => {
+    const browser = new Browlet({ route: () => '' });
+    expect(await browser.evaluate(() => {
+      return ['00', '-0', '0.0', '4294967295', Symbol('0')].map((property) => {
+        const defined = Reflect.defineProperty(window, property, { value: 1, writable: true, configurable: true });
+        const assigned = Reflect.set(window, property, 2);
+        const value: unknown = Reflect.get(window, property);
+        const deleted = Reflect.deleteProperty(window, property);
+        return [defined, assigned, value, deleted, Object.hasOwn(window, property)];
+      });
+    })).toEqual(Array.from({ length: 5 }, () => [true, true, 2, true, false]));
+  });
+
+  it('uses the replacement Window child list after navigation', async () => {
+    const browser = new Browlet({ route: () => '' });
+    const proxy = browser.window;
+    const document = unwrap<DocumentImpl>(browser.document);
+    document.body!.appendChild(createChild(document, 'iframe').container);
+    expect(Reflect.deleteProperty(proxy, '0')).toBe(false);
+    await browser.navigate('https://example.test/next');
+    expect(browser.window).toBe(proxy);
+    expect(Reflect.deleteProperty(proxy, '0')).toBe(true);
+    const replacement = unwrap<DocumentImpl>(browser.document);
+    replacement.body!.appendChild(createChild(replacement, 'iframe').container);
+    expect(Reflect.deleteProperty(proxy, '0')).toBe(false);
+    expect(Reflect.set(proxy, '1', 'replacement')).toBe(false);
+    expect(Reflect.defineProperty(proxy, '1', { value: 'replacement' })).toBe(false);
+  });
+
+  it('applies indexed mutation rules from another same-origin Window', async () => {
+    const caller = new Browlet({ route: () => '' });
+    const target = new Browlet({ route: () => '' });
+    await caller.navigate('https://example.test/caller');
+    await target.navigate('https://example.test/target');
+    const document = unwrap<DocumentImpl>(target.document);
+    document.body!.appendChild(createChild(document, 'iframe').container);
+    Reflect.set(caller.window, 'peer', target.window);
+    expect(await caller.evaluate(() => {
+      const peer = Reflect.get(window, 'peer') as Window;
+      let error;
+      try { Object.defineProperty(peer, '1', { value: 1 }); }
+      catch (caught) { error = caught instanceof TypeError; }
+      return {
+        present: [Reflect.set(peer, '0', 1), Reflect.defineProperty(peer, '0', { value: 1 }), Reflect.deleteProperty(peer, '0')],
+        absent: [Reflect.set(peer, '1', 1), Reflect.defineProperty(peer, '1', { value: 1 }), Reflect.deleteProperty(peer, '1')],
+        error,
+      };
+    })).toEqual({ present: [false, false, false], absent: [false, false, true], error: true });
+  });
+});
+
 describe('WindowProxy child-index enumeration', () => {
   it('prefixes child indices before ordinary string and symbol keys', async () => {
     const browser = new Browlet({ route: () => '' });
@@ -363,7 +506,7 @@ describe('WindowProxy child-index enumeration', () => {
   it('does not duplicate an index already present on the stock Window target', () => {
     const browser = new Browlet({ route: () => '' });
     const document = unwrap<DocumentImpl>(browser.document);
-    // The unfinished define/set traps and direct stock-VM global can still leave ordinary indices.
+    // Internal storage reflection and direct stock-VM access can still leave ordinary indices.
     Reflect.defineProperty(getRelevantRealm(browser.window).globalObject, '0', {
       value: 'ordinary target value', configurable: true,
     });

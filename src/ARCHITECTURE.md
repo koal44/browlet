@@ -30,7 +30,7 @@ with it as receiver aliases for its public proxy. Weak identities remain valid
 across navigation; arbitrary receivers keep their identity, including objects
 inheriting from Window. This is the `node-vm-global-proxy` accommodation, not
 caller-realm selection.
-Native globals receive indexed descriptors and keys at Window composition through
+Native globals receive indexed descriptors, mutation rules, and keys at Window composition through
 `JSRealm.setGlobalIndexedProperties()`. Both backends use Window's child lookup and
 WindowProxy's descriptor helper. Native ordinary properties live in V8's actual
 per-context global; a stable host view reflects into that store after proxy reuse.

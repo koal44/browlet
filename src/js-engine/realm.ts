@@ -361,7 +361,7 @@ export class JSRealm {
     setPropertyDelegate(object, delegate);
   }
 
-  /** Add live indexed own properties to this native realm's existing global delegate. */
+  /** Supply indexed property lookup and mutation through this native realm's existing global delegate. */
   setGlobalIndexedProperties(properties: GlobalIndexedProperties): void {
     if (this.#globalAllocation === undefined) {
       throw new InternalError('Indexed global delegation requires a native global allocation');
@@ -910,10 +910,16 @@ export type GlobalObject = object;
 /** Host-selected value of the realm's global this binding. */
 export type GlobalThis = object;
 
-/** Live indexed reads supplied by the owner of a native global's ordinary property store. */
+/** Indexed property behavior supplied by the owner of a native global's ordinary property store. */
 export type GlobalIndexedProperties = {
   /** Describe a supported index; undefined preserves ordinary lookup for an unsupported index. */
   getOwnPropertyDescriptor(index: number): PropertyDescriptor | undefined;
+  /** Handle assignment to any array index, including unsupported indices. */
+  set(index: number, value: unknown): boolean;
+  /** Handle definition of any array index using the converted descriptor. */
+  defineProperty(index: number, descriptor: PropertyDescriptor): boolean;
+  /** Handle deletion of any array index independently of ordinary stored properties. */
+  deleteProperty(index: number): boolean;
   /** Enumerate supported indices before the ordinary global keys. */
   ownKeys(): number[];
 };

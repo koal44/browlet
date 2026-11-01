@@ -166,6 +166,12 @@ export function createWindowEnvironment(
     const window = realm.windowImplementation;
     realm.setGlobalIndexedProperties({
       getOwnPropertyDescriptor: (index) => WindowProxyHandle.getIndexedOwnProperty(window, index),
+      // HTML §§7.2.3.6, 7.2.3.8–9: indices reject writes; deletion succeeds only without a child.
+      // SPEC_CLASH(window-indexed-reflect-result): follow HTML/Firefox/WebKit's false; Chromium reports success without writing.
+      // TODO(HTML 7.2.3.8): Run the same-origin COOP access check before indexed assignment.
+      set: () => false,
+      defineProperty: () => false,
+      deleteProperty: (index) => window.getIndexedWindow(index) === undefined,
       ownKeys: () => Array.from({ length: window.length }, (_, index) => index),
     });
   }

@@ -385,10 +385,19 @@ therefore describe the same properties. The host view stays with its original
 context when `globalProxy` moves to a replacement. Ordinary author reads/writes
 use V8's dispatch, preserving explicit receivers and Binding's receiver checks.
 `setGlobalObject(handle, object, indexedProperties)` accepts that allocated view
-and optionally supplies live indexed descriptors and keys. Indexed reads, descriptors, and
-presence checks consult the supplied callbacks; enumeration merges their keys
+and optionally supplies live indexed descriptors, mutation callbacks, and keys.
+The indexed contract requires `getOwnPropertyDescriptor`, `set`, `defineProperty`,
+`deleteProperty`, and `ownKeys`. Mutation callbacks handle every array index,
+including absent indices, and return their success boolean. Indexed reads,
+descriptors, and presence checks consult the supplied callbacks; enumeration merges their keys
 without duplicates. Host storage reflection excludes these synthetic indices;
 getters run outside that reflection scope so nested child access remains live.
+
+For a different explicit receiver, V8 uses the interceptor's property attributes
+instead of its setter. A read-only supported index rejects that write, but an absent
+index can create a property on the receiver. HTML/Firefox/WebKit reject both;
+Chromium permits receiver writes. This `window-indexed-set-receiver` limitation
+does not affect ordinary indexed assignment, definition, or deletion.
 
 Native global delegates query own properties on their original store after proxy
 reuse. Node 24 requires the original native holder for this query as well as for
@@ -449,7 +458,8 @@ guarded Window without inheriting the observer's access restrictions.
 collection, repeated addon initialization, worker teardown, and Promise delivery.
 The HTML integration follows Chromium's foreign receiver and mutation choices;
 see the [Window audit](../src/browlet/browsing/window/ROADMAP.md#native-window-access-guard).
-Same-origin COOP reporting and indexed mutation rules remain separate work.
+Same-origin COOP reporting remains separate work. Indexed mutations now use the
+owner callbacks above, with the explicit-receiver limitation recorded there.
 
 **Node 24 Promise workaround:** the first successful guarded-context creation
 initializes a JavaScript workaround in [vm.cjs](addon/vm.cjs). It briefly replaces
