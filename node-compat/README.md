@@ -67,12 +67,25 @@ event dispatch, and console reporting.
 `createMicrotaskQueue(requestCheckpoint?)` supplies enqueue/checkpoint operations.
 The optional internal callback requests a deferred checkpoint after an outer
 engine call completes in a context using that queue, including native registry
-cleanup. Notifications coalesce until `runMicrotasks()` finishes; the callback
-does not drain jobs. Unregistered and detached contexts do not notify it.
+cleanup, or when a Promise owned by that context settles. The latter covers
+internal Atomics completions and resolvers called from Node. Notifications
+coalesce until `runMicrotasks()` finishes; the callback must not drain jobs or
+run author code, since settlement notification precedes reaction enqueueing.
+Unregistered and detached contexts do not notify it.
 The registration follows the queue's lifetime, and context/callback cycles remain
 collectable. This is a conservative completion signal, not notification of every
-job arrival: another context can enqueue into this queue without completing here.
+job arrival: a Node-owned Promise can enqueue a Window callback without settling
+a Window Promise. Such raw handoffs remain outside the supported automation bridge.
 JS Engine omits it when installed native Promise-job hooks already wake HTML.
+
+The first observed queue installs one native callback through Node's public
+[`promiseHooks.onSettled()`](https://nodejs.org/api/v8.html#promisehooksonsettledsettled)
+multiplexer. It coexists with application/Node hooks rather than replacing them.
+Node retains the observer for its environment's lifetime; it owns no queues and
+ignores unregistered Promise owners. No `.then()` observation, Promise/Atomics
+replacement, polling timer, or new Node/V8 patch is involved. This supplies
+ordinary completion progress on official addon bases; HTML generic/timeout task
+ownership and active-time waiting still require the custom enqueue hooks.
 
 `createContextHandle()` creates a native V8 context registered with Node;
 `runInContext()` evaluates there. These are not `node:vm` Contextify objects.

@@ -287,7 +287,15 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   does not itself establish a checkpoint boundary. Use the
   [automation entry](browlet/automation/README.md) for page commands; a broader
   embedder contract must define direct-call/Promise interoperability. Do not
-  hide this by checkpointing after every Web IDL operation.
+  hide this by checkpointing after every Web IDL operation. The official addon
+  fallback now wakes a queue for its own Promise settlements, including Atomics
+  and direct resolver calls. A raw Node-owned Promise given a Window reaction,
+  or a host call attaching a reaction to an already-fulfilled Window Promise,
+  can still enqueue into that Window without notifying it. The serialized
+  `exposeFunction()` bridge supplies its own delivery boundary. The
+  [raw-handoff regressions](../test/browlet/scripting/host-promise-handoff.test.ts)
+  are TODOs on official addon bases pending that interoperability contract;
+  passing stock/custom configurations remain active.
 - **WebDriver command algorithms have unfinished dependencies.** BiDi evaluation
   has protocol-shaped inputs/results and explicit target, execution, Await,
   serialization, activation, and exception-detail boundaries. It cannot execute

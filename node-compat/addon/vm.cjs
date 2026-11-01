@@ -1,6 +1,7 @@
 'use strict';
 
 const vm = require('node:vm');
+const { onSettled } = require('node:v8').promiseHooks;
 
 let needsPromiseThenWorkaround = process.versions.node.startsWith('24.');
 
@@ -65,7 +66,7 @@ module.exports = (native, initializeGlobalObject) => {
   const methods = {
     Script,
     Module, SourceTextModule, SyntheticModule, WebAssemblyModule,
-    createMicrotaskQueue: native.createMicrotaskQueue,
+    createMicrotaskQueue: callback => native.createMicrotaskQueue(callback, onSettled),
     createContextHandle: function createContextHandle(options = {}) {
       for (const key of Object.keys(options)) {
         if (key !== 'microtaskQueue' && key !== 'reuseGlobalProxyFrom' && key !== 'globalPrototypeChain' && key !== 'globalAccess' &&

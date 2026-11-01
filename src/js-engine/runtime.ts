@@ -38,7 +38,7 @@ export function setGlobalAccess(target: GlobalProxy, select: (realm: JSRealm | u
   addon.setGlobalAccess(target, (reference) => select(RealmStamper.get(reference)));
 }
 
-/** Create the owning queue, optionally requesting checkpoints after unobserved native entries. */
+/** Create the owning queue, optionally requesting checkpoints after native completion or Promise settlement. */
 export function createMicrotaskQueue(requestCheckpoint?: () => void): JSMicrotaskQueue {
   return jsRuntime.createMicrotaskQueue(requestCheckpoint);
 }
@@ -316,7 +316,7 @@ class JSRuntime {
     }
 
     // Native enqueue hooks already notify HTML. Otherwise, observed outer
-    // calls can wake the owning queue after native cleanup, without polling.
+    // calls and Promise settlements can wake the owning queue without polling.
     const handle: unknown = addon.createMicrotaskQueue(promiseJobsObserved ? undefined : requestCheckpoint);
     if (!isAddonMicrotaskQueueHandle(handle)) {
       throw new InternalError('Node backend createMicrotaskQueue returned an invalid queue');

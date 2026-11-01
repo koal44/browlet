@@ -4,8 +4,79 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { setTimeout: delay } = require('node:timers/promises');
 const { Worker } = require('node:worker_threads');
+const { promiseHooks } = require('node:v8');
 const compat = require('../addon/index.cjs');
 const { assertCollected } = require('./support/gc.cjs');
+
+test('Promise settlement requests its owning checkpoint without observing the result', () => {
+  let notifications = 0;
+  let unrelated = 0;
+  const queue = compat.createMicrotaskQueue(() => { notifications++; });
+  const other = compat.createMicrotaskQueue(() => { unrelated++; });
+  const context = compat.createContextHandle({ microtaskQueue: queue });
+  const idle = compat.createContextHandle({ microtaskQueue: other });
+  const state = compat.runInContext(`
+    const state = { reactions: 0 };
+    state.promise = new Promise(resolve => { state.resolve = resolve; });
+    state.promise.then(() => { state.reactions++; });
+    state.unobserved = new Promise(resolve => { state.resolveUnobserved = resolve; });
+    Object.defineProperty(state.unobserved, 'then', { get() { throw 'must not read then'; } });
+    Object.defineProperty(state.unobserved, 'constructor', { get() { throw 'must not read constructor'; } });
+    state;
+  `, context);
+  assert.equal(notifications, 0);
+  state.resolve('fulfilled');
+  state.resolveUnobserved('fulfilled');
+  assert.equal(notifications, 1, 'settlements coalesce on the Promise owner, even when called from Node');
+  assert.equal(unrelated, 0);
+  assert.equal(state.reactions, 0, 'notification must not drain or re-enter author code');
+  assert.equal(compat.isPromiseHandled(state.unobserved), false, 'no extra reaction is attached');
+  queue.runMicrotasks();
+  assert.equal(state.reactions, 1);
+  assert.equal(notifications, 1, 'settlement during the checkpoint must not wake it again');
+  // Keep the unrelated context live throughout the observations.
+  assert.ok(idle.realm);
+});
+
+test('settlement notification coexists with Node hooks installed and removed later', () => {
+  const observed = new WeakSet();
+  const stop = promiseHooks.onSettled(promise => { observed.add(promise); });
+  try {
+    let notifications = 0;
+    const queue = compat.createMicrotaskQueue(() => { notifications++; });
+    const context = compat.createContextHandle({ microtaskQueue: queue });
+    const state = compat.runInContext(`
+      const state = {};
+      state.promise = new Promise(resolve => { state.resolve = resolve; });
+      state.next = new Promise(resolve => { state.resolveNext = resolve; });
+      state;
+    `, context);
+    state.resolve();
+    assert.ok(observed.has(state.promise));
+    assert.equal(notifications, 1);
+    queue.runMicrotasks();
+    stop();
+    state.resolveNext();
+    assert.equal(notifications, 2, 'removing another Node hook must preserve notification');
+    queue.runMicrotasks();
+    Promise.resolve('unrelated Node work');
+    assert.equal(notifications, 2, 'Node-owned settlements must not notify Window queues');
+  } finally { stop(); }
+});
+
+test('a detached Promise owner cannot notify its former queue', () => {
+  let notifications = 0;
+  const queue = compat.createMicrotaskQueue(() => { notifications++; });
+  const context = compat.createContextHandle({ microtaskQueue: queue });
+  const resolve = compat.runInContext(`
+    let resolve;
+    new Promise(fulfill => { resolve = fulfill; });
+    resolve;
+  `, context);
+  context.detachGlobal();
+  resolve('fulfilled');
+  assert.equal(notifications, 0);
+});
 
 test('native cleanup notifies only its queue and coalesces until a checkpoint', { timeout: 15000 }, async () => {
   let notifications = 0;
@@ -17,11 +88,12 @@ test('native cleanup notifies only its queue and coalesces until a checkpoint', 
   const idle = fixture(other);
   // Unrelated work is present, but another queue's completion cannot drain it.
   compat.runInContext('Promise.resolve().then(() => state.reactions++)', idle.context);
+  assert.equal(unrelated, 1, 'its own settlement requests a separate checkpoint');
 
   a.register(); b.register();
   await collectUntil(() => a.state.cleanups === 1 && b.state.cleanups === 1);
   assert.equal(notifications, 1, 'related contexts share one pending notification');
-  assert.equal(unrelated, 0);
+  assert.equal(unrelated, 1, 'cleanup in another queue adds no notification');
   assert.equal(a.state.reactions + b.state.reactions + idle.state.reactions, 0,
     'notification must not run the queue itself');
   queue.runMicrotasks();

@@ -1896,6 +1896,62 @@ suite has no unexpected failures: official bases retain 218 ordinary passes and
 expected failures, and its one existing skip. Typechecking, declaration contracts,
 touched-file ESLint, and diff checks pass. No new failure classifications were added.
 
+### Native Atomics completion progress
+
+The [idle Atomics regressions](../../../test/browlet/scripting/atomics-wakeup.test.ts)
+first failed on both official addon bases: timeout and notification completed
+natively, but their Window Promise reactions stayed queued. Custom job hooks and
+all stock configurations already supplied progress. The existing completion
+observer only covered outer V8 API calls; internal Futex Promise resolution need
+not finish such a call in the waiting context.
+
+The addon now also requests the owning queue's checkpoint when its Promise
+settles, using Node's public Promise-hook multiplexer and the existing coalescing
+guard. HTML still selects the checkpoint turn. This adds no timer, polling,
+Promise reaction, author-property lookup, or Node/V8 patch. JS Engine omits the
+fallback when native enqueue hooks are installed. Native regressions cover
+coalescing, non-reentrancy, other queues, Node hook changes, detached owners,
+collection, and worker teardown.
+
+This repairs ordinary official-addon progress, not the separate generic/timeout
+hooks' HTML task source, Document gating, or active-time policy. Those stronger
+requirements retain their existing capability-based tests. Raw Node Promises
+given Window callbacks still lack a destination-queue signal on official bases;
+the supported `exposeFunction()` bridge passes fulfillment and rejection controls.
+The reproducible counterexamples remain ordinary failures in Experimental.
+
+Validation: the six affected suites contain 27 cases. Custom/compat passes all;
+official addons have 15 passes and the same 12 approved expected failures;
+stock modes have 14 passes and the same 13 approved expected failures. The two
+new Atomics progress cases pass everywhere. The 328-case native suite has no
+unexpected failures on any base, retaining its prior expected failures and the
+one existing custom-only skip. Typechecking, type contracts, touched-file lint,
+and diff checks pass. No new failure classifications were introduced.
+
+### Raw host Promise handoffs (on hold)
+
+The [maintained regressions](../../../test/browlet/scripting/host-promise-handoff.test.ts)
+retain four raw host registrations: Node and already-fulfilled Window Promises,
+each with default species or species that returns an ordinary object. All four
+first failed on both official addon bases: the reaction remained queued until
+an explicit rescue checkpoint. They are approved TODOs on those configurations;
+passing stock/custom cases remain enabled. TODOs retain the desired assertions
+but do not execute them on the affected bases.
+
+These registrations originate in Node outside HTML task delivery. They are
+possible through retained Window references, but are not evidence of a stall
+from ordinary page calls or the supported `exposeFunction()` bridge. Adoption
+is on hold until we define the direct host/Window Promise contract or identify
+a supported caller that requires it. Promise settlement and initialization
+observers do not provide a general destination-queue arrival signal; an ordinary
+object species can avoid creating a native Promise altogether. The custom
+enqueue hook supplies the missing notification.
+
+The targeted production repairs remain in place. The failing probes, chained
+cross-agent handoffs, guarded-broadcast prototype, and overhead/lifecycle
+results remain in Experimental. No broadcast or additional lifecycle hook is
+adopted for these TODOs.
+
 ### HTML §8.1.7.3 continuation-based spinning
 
 `EventLoop.spinUntil(waitForGoal, continuation)` implements the

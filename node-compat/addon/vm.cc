@@ -34,6 +34,7 @@ struct AddonData {
   Global<Private> script_key;
   Global<ObjectTemplate> script_template;
   std::unordered_set<NativeHandle*> handles;
+  bool observing_promise_settlements = false;
 };
 
 class NativeHandle {
@@ -97,15 +98,11 @@ class Queue : public NativeHandle {
   }
 };
 
-// An outer engine call (not each JS call) may have queued work without passing
-// through an enqueue hook, e.g. native FinalizationRegistry cleanup. Notify only
-// its registered queue; the host chooses when to checkpoint. This is not a
-// universal arrival signal for jobs enqueued into another context's queue.
-void NotifyCallCompleted(Isolate* isolate) {
+// Signals request a checkpoint; they must not drain the queue or run author
+// code here. In particular, a settlement hook runs before reactions are queued.
+void NotifyCheckpoint(Isolate* isolate, Local<Context> context) {
   auto queues = observed_queues.find(isolate);
   if (queues == observed_queues.end()) return;
-  HandleScope handles(isolate);
-  auto context = isolate->GetCurrentContext();
   if (context.IsEmpty()) return;
   auto entry = queues->second.find(context->GetMicrotaskQueue());
   if (entry == queues->second.end()) return;
@@ -118,6 +115,22 @@ void NotifyCallCompleted(Isolate* isolate) {
                      Undefined(isolate), 0, nullptr).IsEmpty()) {
     if (caught.HasTerminated()) caught.ReThrow();
     else node::FatalException(isolate, caught);
+  }
+}
+
+// An outer engine call may have queued work without an enqueue hook, e.g.
+// FinalizationRegistry cleanup. It need not settle a Promise in this context.
+void NotifyCallCompleted(Isolate* isolate) {
+  HandleScope handles(isolate);
+  NotifyCheckpoint(isolate, isolate->GetCurrentContext());
+}
+
+// Internal resolutions such as Atomics.waitAsync need not complete a public
+// V8 API call. Use the Promise's owner even when its resolver runs from Node.
+void NotifyPromiseSettled(const FunctionCallbackInfo<Value>& args) {
+  Local<Context> context;
+  if (args[0].As<Promise>()->GetCreationContext().ToLocal(&context)) {
+    NotifyCheckpoint(args.GetIsolate(), context);
   }
 }
 
@@ -175,14 +188,28 @@ T* Unwrap(Isolate* isolate, Local<Value> value,
 
 void CreateQueue(const FunctionCallbackInfo<Value>& args) {
   auto isolate = args.GetIsolate();
+  auto data = Data(args);
   if (!args[0]->IsUndefined() && !args[0]->IsFunction()) {
     Fail(isolate, "ERR_INVALID_ARG_TYPE", "Expected a checkpoint notification callback or undefined");
     return;
   }
+  if (args[0]->IsFunction() && !data->observing_promise_settlements) {
+    // The adapter supplies Node's public hook multiplexer. Do not replace
+    // Node/async_hooks' isolate or context hooks. Node owns this observer for
+    // its environment's lifetime; it retains no queue or context registration.
+    if (!args[1]->IsFunction()) {
+      Fail(isolate, "ERR_INVALID_ARG_TYPE", "Expected the Node Promise hook registrar");
+      return;
+    }
+    auto host = isolate->GetCurrentContext();
+    Local<Value> observer = Function::New(host, NotifyPromiseSettled).ToLocalChecked();
+    if (args[1].As<Function>()->Call(host, Undefined(isolate), 1, &observer).IsEmpty()) return;
+    data->observing_promise_settlements = true;
+  }
   Local<Object> holder;
-  if (!Data(args)->queue_type.Get(isolate)->InstanceTemplate()
+  if (!data->queue_type.Get(isolate)->InstanceTemplate()
            ->NewInstance(isolate->GetCurrentContext()).ToLocal(&holder)) return;
-  new Queue(Data(args), holder, isolate, args[0]);
+  new Queue(data, holder, isolate, args[0]);
   args.GetReturnValue().Set(holder);
 }
 

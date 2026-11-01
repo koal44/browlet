@@ -231,10 +231,13 @@ HTML checkpoint guards and post-checkpoint work still belong to HTML.
 
 `createMicrotaskQueue(requestCheckpoint?)` can notify the owner after native
 execution, such as FinalizationRegistry cleanup, that bypasses its task runner.
+It also observes settlement of an owned Promise, including native Atomics
+completion, without attaching a reaction or reading author properties.
 The addon coalesces notifications per queue until a checkpoint; HTML schedules
 that checkpoint through its existing host turn. JS Engine omits the fallback
 when native Promise-job hooks are installed. Stock mode keeps Node's scheduling.
-It is not a general signal for jobs arriving from another context.
+It is not a general signal for jobs arriving from another context: a raw Node
+Promise can enqueue a Window callback without settling a Window-owned Promise.
 
 `setHostHooks` is optional. It maps native references to known JSRealms; unknown
 references become null. Promise routing follows the **job's queue realm**, which
