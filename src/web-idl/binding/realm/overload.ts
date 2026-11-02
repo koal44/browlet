@@ -176,8 +176,8 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
 
   const record = getPlatformRecord(value);
   const localRecord = record?.binding.world === binding.world ? record : undefined;
-  if (localRecord || binding.assembly.proxyObjects.is(value)) {
-    matches = localRecord && !group.hasProxyCandidates
+  if (localRecord || binding.assembly.proxyObjects.is(value) || group.instanceChecks.some((isInstance) => isInstance(value))) {
+    matches = localRecord && !group.hasProxyCandidates && group.instanceChecks.length === 0
       ? group.getInterfaceCandidates(localRecord.assembled)
       : candidates.filter((callable) => {
         const type = callable.getArgument(index)!.type;
@@ -341,6 +341,8 @@ function containsImplementedInterface(
 ): boolean {
   return type.candidates.interfaces.some((candidate) => {
     if (candidate.kind === 'interface') {
+      const isInstance = candidate.assembled.primary.isInstance;
+      if (isInstance) return isInstance(value);
       return record?.implements(candidate.assembled);
     }
     return candidate.assembled.is(value);

@@ -2,7 +2,7 @@ import { InternalError, type InternalPromise } from '../../infra/index';
 import { hasExtendedAttribute, type ImplementationClass, type InjectedArgument } from '../core/index';
 
 import type {
-  IDLAttribute, IDLOperation, IDLAsyncIterable, IDLConstructor, AssembledCallable, AssembledInterface,
+  IDLAttribute, IDLOperation, IDLAsyncIterable, IDLConstructor, AssembledCallable, AssembledInterface, AssembledNamespace,
 } from '../assembly/index';
 
 import type {
@@ -16,6 +16,22 @@ import type { AttributeBinding } from './extended-attributes';
 export function registerImplementationBindings(binding: RealmBinding): void {
   for (const assembled of binding.assembly.interfaces.values()) {
     registerInterfaceImplementation(binding, assembled);
+  }
+  for (const assembled of binding.assembly.namespaces.values()) {
+    registerNamespaceImplementation(binding, assembled);
+  }
+}
+
+// Connect namespace declarations to explicit implementation steps without an implementation class.
+function registerNamespaceImplementation(binding: RealmBinding, assembled: AssembledNamespace): void {
+  const implementationBinding = binding.getImplementationBinding(assembled);
+  for (const { member } of assembled.members) {
+    const memberBinding = implementationBinding.getOrCreateMemberBinding(member);
+    if (member.kind === 'operation' && member.overrideInvoke) {
+      memberBinding.operationSteps = createDefinedOperationSteps(member.overrideInvoke, member, binding);
+    } else if (member.kind === 'attribute' && (member.overrideGet || member.attributeFunction)) {
+      registerDefinedAttribute(memberBinding, member, assembled, binding);
+    }
   }
 }
 
@@ -210,7 +226,7 @@ function missingMemberBinding(
 function registerDefinedAttribute(
   memberBinding: MemberBinding,
   member: IDLAttribute,
-  assembled: AssembledInterface,
+  assembled: AssembledInterface | AssembledNamespace,
   binding: RealmBinding,
   accessors?: AttributeBinding,
 ): void {

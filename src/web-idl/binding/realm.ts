@@ -316,7 +316,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     if (!binding) {
       binding = new ImplementationBinding(this, assembled);
       if (assembled instanceof AssembledInterface) {
-        binding.interfaceProjection = this.world.getInterfaceProjection(assembled);
+        binding.projectionOverride = this.world.getProjectionOverride(assembled);
       }
       this.#implementationBindings.set(assembled, binding);
     }
@@ -385,7 +385,8 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     isWindow = this.realm.globalNames.has('Window'),
   ): Map<string, object> {
     const installed = new Map<string, object>();
-    const interfaces = this.assembly.interfaces.inInheritanceOrder((assembled) => assembled.isExposed(this.realm));
+    const interfaces = this.assembly.interfaces.inInheritanceOrder((assembled) =>
+      !assembled.primary.isInstance && assembled.isExposed(this.realm));
 
     for (const assembled of interfaces) {
       const definition = assembled.primary;
@@ -433,6 +434,8 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     implInst: object,
     expectedAssembled: AssembledInterface,
   ): object | null | undefined {
+    const isInstance = expectedAssembled.primary.isInstance;
+    if (isInstance) return isInstance(implInst) ? implInst : undefined;
     return this.associateImplementationObject(implInst, expectedAssembled)?.project();
   }
 

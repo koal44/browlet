@@ -169,6 +169,8 @@ export class OverloadGroup<Callable extends AssembledCallable> {
   distinguishingIndex: number;
   /** Proxy recognition depends on the incoming value, not just its assembled interface. */
   hasProxyCandidates: boolean;
+  /** Instance checks for engine-provided types accepted by these overloads. */
+  instanceChecks: ((value: unknown) => boolean)[] = [];
   #primitiveCandidates?: PrimitiveOverloadCandidates<Callable>;
   /** Reuse interface and object matches for every instance of the same concrete interface. */
   #candidatesByInterface = new Map<AssembledInterface, Callable[]>();
@@ -178,6 +180,14 @@ export class OverloadGroup<Callable extends AssembledCallable> {
     this.distinguishingIndex = distinguishingIndex;
     this.hasProxyCandidates = distinguishingIndex >= 0 && callables.some((callable) =>
       callable.getArgument(distinguishingIndex)!.type.candidates.interfaces.some((type) => type.kind === 'proxy-object'));
+    if (distinguishingIndex >= 0) {
+      for (const callable of callables) {
+        for (const type of callable.getArgument(distinguishingIndex)!.type.candidates.interfaces) {
+          const isInstance = type.kind === 'interface' && type.assembled.primary.isInstance;
+          if (isInstance && !this.instanceChecks.includes(isInstance)) this.instanceChecks.push(isInstance);
+        }
+      }
+    }
   }
 
   /** Retain every match in declaration order; callers must not modify these lists. */

@@ -21,10 +21,12 @@ export class UnionConverter<Type extends IDLUnionType = IDLUnionType> extends Co
     const convertCbInterface = candidates.callbackInterface && this.forType(candidates.callbackInterface).getInputSteps();
     const convertNumber = candidates.numeric && this.forType(candidates.numeric).getInputSteps();
     const convertString = candidates.string && this.forType(candidates.string).getInputSteps();
+    const nativeInterfaces = candidates.interfaces.filter((candidate) =>
+      candidate.kind === 'interface' && candidate.assembled.primary.isInstance);
 
     return (value) => {
       if (isObject(value)) {
-        if (this.binding.isPlatformObject(value)) {
+        if (this.binding.isPlatformObject(value) || nativeInterfaces.some((candidate) => this.#implements(candidate, value))) {
           const interfaceType = candidates.interfaces.find((candidate) =>
             this.#implements(candidate, value));
           if (interfaceType) {
@@ -165,6 +167,8 @@ export class UnionConverter<Type extends IDLUnionType = IDLUnionType> extends Co
 
   #implements(candidate: UnionInterfaceCandidate, value: unknown): boolean {
     if (candidate.kind === 'interface') {
+      const isInstance = candidate.assembled.primary.isInstance;
+      if (isInstance) return isInstance(value);
       const record = getPlatformRecord(value);
       return record?.binding.world === this.binding.world &&
         record.implements(candidate.assembled);

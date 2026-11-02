@@ -100,9 +100,19 @@ export class JSRealm {
   Uint32Array;
   /** Original URIError constructor in this realm. */
   URIError;
+  /** Native WebAssembly namespace retained when browser bindings install members. */
+  WebAssembly;
+  /** Original WebAssembly.CompileError constructor in this realm. */
+  WebAssemblyCompileError;
 
   // -- Captured methods --------------------------------------------------
 
+  /** Original WebAssembly.validate, captured before its browser binding is installed. */
+  webAssemblyValidate;
+  /** Original WebAssembly.compile, captured before its browser binding is installed. */
+  webAssemblyCompile;
+  /** Original WebAssembly.instantiate, captured before its browser binding is installed. */
+  webAssemblyInstantiate;
   /** Captured ArrayBuffer.prototype.transfer method. */
   arrayBufferTransfer;
   /** Captured Array.prototype.entries method. */
@@ -240,6 +250,11 @@ export class JSRealm {
     this.Uint16Array = Reflect.get(this.#globalProxy, 'Uint16Array') as Uint16ArrayConstructor;
     this.Uint32Array = Reflect.get(this.#globalProxy, 'Uint32Array') as Uint32ArrayConstructor;
     this.URIError = Reflect.get(this.#globalProxy, 'URIError') as URIErrorConstructor;
+    this.WebAssembly = Reflect.get(this.#globalProxy, 'WebAssembly') as object;
+    this.WebAssemblyCompileError = Reflect.get(this.WebAssembly, 'CompileError') as ErrorConstructor;
+    this.webAssemblyValidate = Reflect.get(this.WebAssembly, 'validate') as JSMethod;
+    this.webAssemblyCompile = Reflect.get(this.WebAssembly, 'compile') as JSMethod;
+    this.webAssemblyInstantiate = Reflect.get(this.WebAssembly, 'instantiate') as JSMethod;
     this.arrayBufferTransfer = Reflect.get(this.ArrayBuffer.prototype, 'transfer');
     this.arrayEntries = Reflect.get(this.Array.prototype, 'entries') as JSMethod;
     this.arrayForEach = Reflect.get(this.Array.prototype, 'forEach') as JSMethod;

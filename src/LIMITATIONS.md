@@ -229,6 +229,17 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   See the [completion contract](browlet/scripting/ROADMAP.md#native-webassembly-completion)
   and [regressions](../test/browlet/scripting/wasm-completion.test.ts).
 
+- **`SPEC_CLASH(wasm-module-start-timing)`:** Native `WebAssembly.instantiate(module)`
+  reads imports and runs the start function before returning. The draft requires
+  synchronous import reads followed by instantiation in a later task. Chromium
+  matches V8; Firefox and WebKit defer startup. Browlet accepts this existing V8
+  limitation for now. The addon's completion hook runs after instantiation, so it
+  does not repair this ordering. The
+  [specification regression](../test/browlet/webassembly/instantiation.test.ts)
+  and [audit](browlet/webassembly/ROADMAP.md#5-audit-imports-and-compiled-module-instantiation)
+  retain the required ordering and the standards discussion; acceptance does not
+  establish a specification exception or a documented V8 compatibility rationale.
+
 - **Wasm ESM has three retained binding gaps.** The addon runs supplied mixed
   JavaScript/Wasm graphs, but mutable globals exported to JavaScript are snapshots,
   `v128` exports read as undefined instead of remaining uninitialized, and mutable

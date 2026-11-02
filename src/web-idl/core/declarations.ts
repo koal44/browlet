@@ -33,6 +33,11 @@ export type PrimaryInterfaceDefinition<Env = unknown, Impl extends object = obje
   // Project metadata: implementation identity, construction dependencies, and projection hooks.
   /** One or more implementation classes, with their construction and projection hooks. */
   implementation?: InterfaceImplementation<Env, Impl> | InterfaceImplementation<Env, Impl>[];
+  /**
+   * Recognize an engine-provided instance, such as a WebAssembly.Module, without author code.
+   * Check each converted value and preserve its identity; the engine owns constructors and members.
+   */
+  isInstance?: (value: unknown) => boolean;
   /** Select HTMLAllCollection's native identity and call behavior, using its declared `item` operation. */
   documentAll?: true;
 
@@ -217,6 +222,9 @@ export type NamespaceDefinition<Env = unknown> = {
   exposed?: Exposed;
   /** Extended attributes applying to this namespace. */
   extendedAttributes?: ExtendedAttribute[];
+
+  /** Override ordinary namespace allocation; Binding installs the declared members on the returned object. */
+  namespaceOverride?: (env: Env) => object;
 };
 
 /** Declare a namespace object and its members. */

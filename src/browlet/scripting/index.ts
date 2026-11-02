@@ -13,7 +13,7 @@ export {
   createTaskSource, EventLoop, type EventLoopInit, type TaskTimingHooks, type LongTaskReporter,
   type TaskQueueSelector, type WindowIdleRendering, Task, type TaskSource,
 } from './event-loop';
-export { installHostHooks, installRealmHostHooks, jsEngineTaskSource } from './host-hooks';
+export { installHostHooks, installRealmHostHooks } from './host-hooks';
 export { JSExecutionContext } from './execution-context';
 export type { BrowletGlobalObject } from './global-object';
 export {
@@ -48,7 +48,8 @@ export { SpeculationRulesParseResult, SpeculationRuleSet } from './speculation-r
 export {
   domManipulationTaskSource, userInteractionTaskSource, networkingTaskSource,
   navigationAndTraversalTaskSource, renderingTaskSource, fileTaskSource, timerTaskSource, idleTaskSource,
-  storageTaskSource, permissionsTaskSource, reportingTaskSource, automationTaskSource, taskSources, type QueuedTaskHandle,
+  storageTaskSource, permissionsTaskSource, reportingTaskSource, automationTaskSource, jsEngineTaskSource,
+  taskSources, type QueuedTaskHandle,
 } from './tasks';
 export { GlobalTimers, type TimerAction, type GlobalTimersOptions, type TimerKey } from './timers';
 export { DetachedTransferableStamper } from './transferable';

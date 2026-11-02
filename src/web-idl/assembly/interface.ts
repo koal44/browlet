@@ -74,6 +74,9 @@ export class AssembledInterface {
     this.implementations = primary.implementation
       ? Array.isArray(primary.implementation) ? primary.implementation : [primary.implementation]
       : [];
+    if (primary.isInstance && (this.implementations.length || primary.members.length || primary.inherits || partials.length)) {
+      throw new InternalError(`Native interface ${primary.name} must be a value-only declaration`);
+    }
     this.commonImplementationClass = getCommonImplementationClass(this.implementations);
     this.name = primary.name;
     this.partials = partials;

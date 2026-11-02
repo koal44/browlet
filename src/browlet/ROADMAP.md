@@ -17,6 +17,7 @@ domains; narrower roadmaps carry their actual status and remaining contracts.
 | Origins, policies, windows, and navigation | HTML §7 | `browsing/` |
 | Trusted values, policies, and injection-sink checks | Trusted Types, with DOM/HTML and CSP integrations | [browsing/policy/trusted-types/](browsing/policy/trusted-types/ROADMAP.md) |
 | Agents, realms, scripts, scheduling, global utilities, timers, and frames | HTML §§8.1–8.3, 8.7–8.8, and 8.12 | `scripting/` |
+| WebAssembly browser APIs and host integration | WebAssembly JavaScript API, Web API, and ES-module integration | [webassembly/](webassembly/ROADMAP.md), with HTML loading and structured data in `scripting/` |
 | Dynamic markup, DOM parsing/serialization, and sanitization | HTML §§8.4–8.6 | `html/parser/`, `dom/parsing/`, and `html/sanitization/` |
 | Window prompts, printing, and system capabilities | HTML §§8.9–8.10 | `browsing/window/` plus an embedder capability, and `navigator/` |
 | Image and drawing primitives | HTML §§4.12 and 8.11 | [graphics integration](graphics/ROADMAP.md) over shared [graphics](../graphics/ROADMAP.md) |
@@ -73,8 +74,9 @@ standard with its first real consumer and retain its own ownership:
   [layout](../layout/ROADMAP.md), accessibility, and interaction
   retain their own prerequisites. MSE is unnecessary for existing Blob URLs.
 - Device APIs need both an explicit use case and a host capability.
-  Core WebAssembly execution remains engine-owned; HTML module/clone integration
-  enters with its consumers.
+- [WebAssembly](webassembly/ROADMAP.md) has a browser-integration roadmap covering
+  native API review, streaming, serialization, and HTML modules. Core execution
+  remains engine-owned.
 
 ## Deferred top-level domains
 

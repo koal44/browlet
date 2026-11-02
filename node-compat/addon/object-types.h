@@ -3,8 +3,8 @@
 
 #include <v8.h>
 
-// Expose V8 object-brand checks missing from node:util.types so structured
-// cloning can reject unsupported objects without invoking their methods.
+// Expose V8 object-brand checks missing from node:util.types without invoking
+// author code or inspecting prototypes.
 namespace node_compat {
 void InitializeObjectTypes(v8::Local<v8::Object> exports);
 }  // namespace node_compat

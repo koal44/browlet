@@ -6,6 +6,41 @@ const vm = require('node:vm');
 const compat = require('../addon/index.cjs');
 const { itPassesWith } = require('./support/test-runtime.cjs');
 
+test('WebAssembly.Module predicate recognizes native objects across realms without author code', () => {
+  const bytes = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]);
+  const foreign = vm.runInNewContext('new WebAssembly.Module(bytes)', { bytes });
+  const fail = () => { throw new Error('Author code ran'); };
+  for (const value of [new WebAssembly.Module(bytes), foreign]) {
+    assert.equal(compat.isWebAssemblyModule(value), true);
+    for (const key of ['exports', 'constructor', Symbol.toStringTag]) {
+      Object.defineProperty(value, key, { get: fail });
+    }
+    Object.setPrototypeOf(value, new Proxy({}, {
+      get: fail, getPrototypeOf: fail, ownKeys: fail,
+    }));
+    Object.freeze(value);
+    assert.equal(compat.isWebAssemblyModule(value), true);
+  }
+  const bare = Object.setPrototypeOf(new WebAssembly.Module(bytes), null);
+  assert.equal(compat.isWebAssemblyModule(bare), true);
+});
+
+test('WebAssembly.Module predicate rejects other values, prototype impostors, and proxies', () => {
+  const fail = () => { throw new Error('Author code ran'); };
+  const module = new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));
+  const revoked = Proxy.revocable(module, {});
+  revoked.revoke();
+  for (const value of [
+    undefined, null, true, 1, 1n, 'text', Symbol(), () => {}, [], {},
+    new WebAssembly.Instance(module), new Uint8Array(), new ArrayBuffer(0),
+    Object.create(WebAssembly.Module.prototype), { [Symbol.toStringTag]: 'WebAssembly.Module' },
+    new Proxy(module, { get: fail, getPrototypeOf: fail, ownKeys: fail }), revoked.proxy,
+  ]) {
+    assert.equal(compat.isWebAssemblyModule(value), false);
+  }
+  assert.equal(compat.isWebAssemblyModule(), false);
+});
+
 test('WeakRef predicate recognizes native objects across realms without author code', () => {
   const fail = () => { throw new Error('Author code ran'); };
   for (const value of [new WeakRef({}), vm.runInNewContext('new WeakRef({})')]) {

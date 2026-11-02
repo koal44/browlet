@@ -40,6 +40,22 @@ export const hasSymbolData: (value: unknown) => value is Symbol = nodeTypes.isSy
 export const isWeakMapObject: (value: unknown) => value is WeakMap<object, unknown> = nodeTypes.isWeakMap;
 export const isWeakSetObject: (value: unknown) => value is WeakSet<object> = nodeTypes.isWeakSet;
 
+/** Recognize a genuine Module across realms. Select the native or fallback check once at initialization. */
+export const isWebAssemblyModule = (addon.isWebAssemblyModule ?? isWebAssemblyModuleFallback) as
+  (value: unknown) => value is JSWebAssemblyModule;
+
+/** Check the engine's Instance brand without changing its identity or consulting its prototype. */
+export function isWebAssemblyInstance(value: unknown): value is JSWebAssemblyInstance {
+  try { Reflect.apply(wasmInstanceExports, value as object, []); return true; }
+  catch (error) { if (error instanceof nativeTypeError) return false; throw error; }
+}
+
+/** Opaque native identities; these type-only brands add no properties to engine objects. */
+export type JSWebAssemblyModule = { [wasmModuleBrand]: true; };
+export type JSWebAssemblyInstance = { [wasmInstanceBrand]: true; };
+declare const wasmModuleBrand: unique symbol;
+declare const wasmInstanceBrand: unique symbol;
+
 export function isMapIteratorObject(value: unknown): value is MapIterator<unknown> {
   return nodeTypes.isMapIterator(value);
 }
@@ -209,6 +225,17 @@ export function nativeCloneRejectsPropertylessObject(value: object, keys: string
   }
 }
 
+function isWebAssemblyModuleFallback(value: unknown): value is JSWebAssemblyModule {
+  if (typeof value !== 'object' || value === null) return false;
+  if (knownWebAssemblyModules.has(value)) return true;
+  // Without the addon, inspect exports once. A Module cannot change its underlying type.
+  try {
+    Reflect.apply(wasmModuleExports, undefined, [value]);
+    knownWebAssemblyModules.add(value);
+    return true;
+  } catch (error) { if (error instanceof nativeTypeError) return false; throw error; }
+}
+
 function isNativeDataCloneError(value: unknown): boolean {
   return typeof value === 'object' && value !== null &&
     Reflect.get(value, 'name') === 'DataCloneError';
@@ -279,6 +306,8 @@ const setIteratorNext = Reflect.get(
 
 const nativeIsWeakRef = addon.isWeakRef;
 const nativeIsFinalizationRegistry = addon.isFinalizationRegistry;
+/** Successful fallback checks only; recognition must not retain otherwise unreachable Modules. */
+const knownWebAssemblyModules = new WeakSet<object>();
 const weakRefDeref = typeof WeakRef === 'undefined'
   ? undefined
   : Reflect.get(
@@ -293,3 +322,11 @@ const finalizationRegistryUnregister = typeof FinalizationRegistry === 'undefine
   );
 const brandProbe = {};
 const nativeStructuredClone = globalThis.structuredClone;
+const nativeWebAssembly = Reflect.get(globalThis, 'WebAssembly') as {
+  Module: { exports: (value: unknown) => unknown; };
+  Instance: { prototype: object; };
+};
+const wasmModuleExports = nativeWebAssembly.Module.exports;
+const wasmInstanceExports = getAccessor<unknown>(nativeWebAssembly.Instance.prototype, 'exports');
+// eslint-disable-next-line no-restricted-properties -- Identify the captured intrinsic's brand-check failure, not an author-visible error.
+const nativeTypeError = globalThis.TypeError;

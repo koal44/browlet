@@ -14,6 +14,29 @@ import { DefinitionAssembly } from '../../src/web-idl/assembly/index';
 import { generatePlatformTypes } from '../../src/web-idl/generate';
 
 describe('platform declaration generation', () => {
+  it('retains native interface value types without inventing constructors', () => {
+    const assembly = new DefinitionAssembly([
+      defineInterface({
+        name: 'NativeValue', members: [], isInstance: () => false, exposed: '*',
+        ...xattr(['LegacyNamespace', 'Host']),
+      }),
+      defineNamespace({
+        name: 'Host', exposed: '*', members: [
+          op('read', promise(reference('NativeValue')), []),
+        ],
+      }),
+    ]);
+    const source = generatePlatformTypes(assembly);
+    expect(source).toContain('export interface NativeValue');
+    expect(source).not.toContain('NativeValueConstructor');
+    expect(source).not.toContain('NativeValue:');
+    expect(compile(source, `
+      import type { Host, NativeValue } from './platform';
+      declare const host: Host;
+      const value: Promise<NativeValue> = host.read();
+    `)).toEqual([]);
+  });
+
   it('omits redundant union parentheses while preserving function and array grouping', () => {
     const choice = union(idlType.DOMString, idlType.long);
     const assembly = new DefinitionAssembly([

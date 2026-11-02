@@ -67,7 +67,9 @@ class PlatformTypeGenerator {
       for (const name of collection.keys()) this.#names.set(name, this.#reserve(name));
     }
     for (const assembled of assembly.interfaces.values()) {
-      if (assembled.hasInterfaceObject()) this.#objects.set(assembled, this.#reserve(`${assembled.name}Constructor`));
+      if (assembled.hasInterfaceObject() && !assembled.primary.isInstance) {
+        this.#objects.set(assembled, this.#reserve(`${assembled.name}Constructor`));
+      }
     }
     for (const assembled of assembly.callbackInterfaces.withInterfaceObjects()) {
       this.#objects.set(assembled, this.#reserve(`${assembled.primary.name}InterfaceObject`));
@@ -355,7 +357,7 @@ class PlatformTypeGenerator {
       }
     }
     for (const child of this.#assembly.interfaces.inNamespace(assembled.primary.name)) {
-      if (this.#exposed(child.primary) && child.hasInterfaceObject()) {
+      if (this.#exposed(child.primary) && this.#objects.has(child)) {
         members.push(`${propertyName(child.name)}: ${this.#objects.get(child)!};`);
       }
     }

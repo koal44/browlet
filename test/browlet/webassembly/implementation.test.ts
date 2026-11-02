@@ -1,0 +1,105 @@
+import { describe, expect, it } from 'vitest';
+
+import type { TaskSourceKey } from '../../../src/infra/index';
+import type { JSEnvironment } from '../../../src/js-engine/index';
+import { BindingWorld } from '../../../src/web-idl/index';
+import type { WebAssembly as WebAssemblyAPI } from '../../../src/browlet/platform';
+import { WebAssemblyImpl, webAssemblyIDLDefinitions, type WebAssemblyCompileOptions } from '../../../src/browlet/webassembly/index';
+import { TestRealm } from '../../support/web-idl-realm';
+
+// Exercise Web IDL conversion with a standalone realm and controlled host task delivery.
+describe('WebAssembly with a standalone binding', () => {
+  it('converts byte input and reuses native results without Browlet', async () => {
+    const { api, realm } = fixture();
+    const bytes = new Uint8Array(emptyModule);
+    const result = await api.instantiate(new DataView(bytes.buffer), undefined, { builtins: ['unknown'] });
+    expect(result.module).toBeInstanceOf(Reflect.get(realm.WebAssembly, 'Module'));
+    expect(result.instance).toBeInstanceOf(Reflect.get(realm.WebAssembly, 'Instance'));
+    expect(await api.instantiate(result.module)).toBeInstanceOf(Reflect.get(realm.WebAssembly, 'Instance'));
+  });
+
+  it('converts DataView and iterable options before native compilation', async () => {
+    const { api, realm } = fixture();
+    const bytes = new Uint8Array(emptyModule);
+    const view = new DataView(bytes.buffer);
+    const trace: string[] = [];
+    const options = {
+      get builtins() {
+        trace.push('builtins');
+        return { *[Symbol.iterator]() { trace.push('iterator'); yield 'unknown'; } };
+      },
+      get importedStringConstants() { trace.push('strings'); return null; },
+    };
+    expect(api.validate(view)).toBe(true);
+    const promise = Reflect.apply(Reflect.get(api, 'compile'), null, [view, options]);
+    expect(promise).toBeInstanceOf(realm.NativePromise);
+    expect(await promise).toBeInstanceOf(Reflect.get(realm.WebAssembly, 'Module'));
+    expect(trace).toEqual(['builtins', 'iterator', 'strings']);
+  });
+
+  it('preserves conversion errors through the invoked realm promise', async () => {
+    const { api, realm } = fixture();
+    const bytes = new Uint8Array(emptyModule);
+    await expect(Reflect.apply(Reflect.get(api, 'compile'), null, [bytes, 1])).rejects.toBeInstanceOf(realm.TypeError);
+    const marker = new Error('iterator failure');
+    const options = { builtins: { [Symbol.iterator]() { throw marker; } } };
+    await expect(Reflect.apply(Reflect.get(api, 'compile'), null, [bytes, options])).rejects.toBe(marker);
+  });
+
+  it.each(['mutate', 'detach'])('copies bytes after options can %s them', async (action) => {
+    const { api, realm } = fixture();
+    const bytes = new Uint8Array(emptyModule);
+    const options = {
+      get builtins() {
+        if (action === 'detach') bytes.buffer.transfer();
+        else bytes.fill(0);
+        return [];
+      },
+    };
+    await expect(api.compile(bytes, options)).rejects.toBeInstanceOf(realm.WebAssemblyCompileError);
+  });
+
+  it('delivers duplicate-builtin rejection through the host task', async () => {
+    const { api, realm, tasks } = fixture();
+    const bytes = new Uint8Array(emptyModule);
+    const options = { builtins: ['unknown', 'unknown'] };
+    expect(api.validate(bytes, options)).toBe(false);
+    const result = api.compile(bytes, options);
+    const rejected = expect(result).rejects.toBeInstanceOf(realm.WebAssemblyCompileError);
+    expect(tasks.map((task) => task.source)).toEqual(['engine']);
+    tasks.shift()!.steps();
+    await rejected;
+  });
+});
+
+describe('WebAssembly implementation', () => {
+  it('can validate and compile converted values without invoking Web IDL', async () => {
+    const { env, realm } = fixture();
+    const bytes = new Uint8Array(emptyModule);
+    const options: WebAssemblyCompileOptions = { builtins: [], importedStringConstants: null };
+    expect(WebAssemblyImpl.validate(bytes, options, env)).toBe(true);
+    const result = WebAssemblyImpl.compile(bytes, options, env);
+    expect(result.backing).toBeInstanceOf(realm.NativePromise);
+    expect(await result.backing).toBeInstanceOf(Reflect.get(realm.WebAssembly, 'Module'));
+  });
+});
+
+function fixture() {
+  const realm = new TestRealm();
+  const tasks: { source: TaskSourceKey; steps: () => void; }[] = [];
+  const world = new BindingWorld<JSEnvironment & { realm: TestRealm; }>(webAssemblyIDLDefinitions);
+  const binding = world.register(realm, (ctx) => ({
+    realm, InternalPromise: ctx.InternalPromise,
+    runInParallel: (steps) => { queueMicrotask(steps); },
+    queueTask(source, steps) {
+      const task = { source, steps };
+      tasks.push(task);
+      return { remove() { const index = tasks.indexOf(task); if (index !== -1) tasks.splice(index, 1); } };
+    },
+  }));
+  const api = world.getRealmBinding(realm)!.installDefinitions().get('WebAssembly') as WebAssemblyAPI;
+  return { api, env: binding.getEnvironment(), realm, tasks };
+}
+
+// (module)
+const emptyModule = [0, 97, 115, 109, 1, 0, 0, 0];

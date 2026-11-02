@@ -18,6 +18,7 @@ import { CSSStyleSheetImpl, styleletIDLDefinitions } from '../stylelet/index';
 
 import type { CSSStyleSheet, QuotaExceededError } from './platform';
 import { domHighResTimeStampIDL, epochTimeStampIDL } from './timing/index';
+import { webAssemblyIDLDefinitions } from './webassembly/index';
 import {
   EventLoop, SandboxAgent, eventHandlerIDL, eventHandlerNonNullIDL,
   onErrorEventHandlerIDL, onErrorEventHandlerNonNullIDL, globalEventHandlersIDL, windowEventHandlersIDL,
@@ -345,6 +346,7 @@ export const browletDefinitions = [
   permissionStatusIDL,
   ...storageIDLDefinitions,
   ...webStorageIDLDefinitions,
+  ...webAssemblyIDLDefinitions,
   fileReaderIDL,
   objectURLIDL,
   ...xhrIDLDefinitions,

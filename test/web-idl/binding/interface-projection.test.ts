@@ -57,7 +57,7 @@ describe('interface projection ownership', () => {
     const exposed = new WeakMap<object, object | null>();
     let preparations = 0;
     const { a, b, realmA, world } = setup({
-      prepareInterfaceProjection(owner) {
+      prepareProjectionOverride(owner) {
         if (owner.primary.name !== 'Child') return;
         preparations++;
         return (value) => exposed.get(value)!;

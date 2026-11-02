@@ -7,7 +7,7 @@ import { prepareCustomElementConstructor } from './html-constructor';
 import { prepareCrossOriginSecurityCheck } from './cross-origin';
 import { prepareMessageEventPorts } from './message-event';
 import { prepareLocationObject } from './location';
-import { prepareWindowProjection } from './window-proxy';
+import { prepareWindowProjectionOverride } from './window-proxy';
 
 /** HTML-owned creation, projection, and annotation behavior supplied to Browlet's binding world. */
 export const htmlExtendedAttributeHooks: ExtendedAttributeHooks<BrowletEnvironment> = {
@@ -20,5 +20,5 @@ export const htmlExtendedAttributeHooks: ExtendedAttributeHooks<BrowletEnvironme
   prepareSecurityCheck: prepareCrossOriginSecurityCheck,
   // Location is the only interface currently handled by this platform-creation hook.
   preparePlatformObject: prepareLocationObject,
-  prepareInterfaceProjection: prepareWindowProjection as ExtendedAttributeHooks<BrowletEnvironment>['prepareInterfaceProjection'],
+  prepareProjectionOverride: prepareWindowProjectionOverride as ExtendedAttributeHooks<BrowletEnvironment>['prepareProjectionOverride'],
 };

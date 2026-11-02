@@ -64,6 +64,9 @@ no getter for a previous replacement. Tracker callbacks must not throw; failures
 use Node's fatal-exception reporting. HTML owns muting, notification timing,
 event dispatch, and console reporting.
 
+`isWebAssemblyModule()` uses V8's existing type predicate on all three bases,
+without enumerating exports or running author code. It requires no engine patch.
+
 `createMicrotaskQueue(requestCheckpoint?)` supplies enqueue/checkpoint operations.
 The optional internal callback requests a deferred checkpoint after an outer
 engine call completes in a context using that queue, including native registry

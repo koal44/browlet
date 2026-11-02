@@ -3,12 +3,10 @@ import { setHostHooks, type JSJobCallback, type JSJobRegistration, type JSFuncti
 
 import type { BrowletEnvironment } from '../environment';
 
-import { createTaskSource } from './event-loop';
+import { jsEngineTaskSource } from './tasks';
 import { JSExecutionContext } from './execution-context';
 import { BrowletRealm } from './realm';
 import { JSScriptOrModule } from './script';
-
-export const jsEngineTaskSource = createTaskSource('JavaScript engine');
 
 // One HTML host installation serves all Browlet instances in this runtime.
 let installed = false;

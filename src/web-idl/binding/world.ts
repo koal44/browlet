@@ -11,7 +11,7 @@ import {
 import { RealmBinding } from './realm';
 import { registerImplementationBindings } from './register';
 import type {
-  AttributeBinding, ExtendedAttributeHooks, HTMLConstructorBinding, InterfaceProjectionSteps,
+  AttributeBinding, ExtendedAttributeHooks, HTMLConstructorBinding, ProjectionOverride,
   PlatformObjectBinding, SecurityCheckBinding,
 } from './extended-attributes';
 
@@ -32,7 +32,7 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
   /** Additional platform creation steps owned by the interface's specification. */
   #platformObjects = new Map<AssembledInterface, PlatformObjectBinding>();
   /** Outward projection rules prepared once for each participating interface. */
-  #interfaceProjections = new Map<AssembledInterface, InterfaceProjectionSteps>();
+  #projectionOverrides = new Map<AssembledInterface, ProjectionOverride>();
   /** Host lookup shared by this world's registered realm bindings. */
   #incumbentEnvironment?: (methodEnv: WebIDLEnvironment) => WebIDLEnvironment | undefined;
 
@@ -91,11 +91,11 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
         }
       }
     }
-    const prepareInterfaceProjection = options.extendedAttributes?.prepareInterfaceProjection;
-    if (prepareInterfaceProjection) {
+    const prepareProjectionOverride = options.extendedAttributes?.prepareProjectionOverride;
+    if (prepareProjectionOverride) {
       for (const assembled of this.#assembly.interfaces.values()) {
-        const project = prepareInterfaceProjection(assembled);
-        if (project) this.#interfaceProjections.set(assembled, project);
+        const project = prepareProjectionOverride(assembled);
+        if (project) this.#projectionOverrides.set(assembled, project);
       }
     }
   }
@@ -151,8 +151,8 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
   }
 
   /** Find outward projection steps for an implementation's actual interface. */
-  getInterfaceProjection(owner: AssembledInterface): InterfaceProjectionSteps | undefined {
-    return this.#interfaceProjections.get(owner);
+  getProjectionOverride(owner: AssembledInterface): ProjectionOverride | undefined {
+    return this.#projectionOverrides.get(owner);
   }
 
   /** Find a realm's binding context in this world without registering it. */

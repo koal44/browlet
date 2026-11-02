@@ -9,9 +9,8 @@ import { createDocumentState } from '../../../src/browlet/browsing/navigation/do
 import { createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/session-history';
 import { Duration } from '../../../src/browlet/timing/clock';
 import { type Task } from '../../../src/browlet/scripting/event-loop';
-import {
-  installHostHooks, jsEngineTaskSource,
-} from '../../../src/browlet/scripting/host-hooks';
+import { installHostHooks } from '../../../src/browlet/scripting/host-hooks';
+import { jsEngineTaskSource } from '../../../src/browlet/scripting/tasks';
 
 afterEach(() => {
   vi.restoreAllMocks();

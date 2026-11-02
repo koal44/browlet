@@ -4,6 +4,10 @@
 namespace node_compat {
 namespace {
 
+void IsWebAssemblyModule(const v8::FunctionCallbackInfo<v8::Value>& args) {
+  args.GetReturnValue().Set(args[0]->IsWasmModuleObject());
+}
+
 void IsWeakRef(const v8::FunctionCallbackInfo<v8::Value>& args) {
   args.GetReturnValue().Set(args[0]->IsWeakRef());
 }
@@ -17,6 +21,7 @@ void IsFinalizationRegistry(const v8::FunctionCallbackInfo<v8::Value>& args) {
 }  // namespace
 
 void InitializeObjectTypes(v8::Local<v8::Object> exports) {
+  NODE_SET_METHOD(exports, "isWebAssemblyModule", IsWebAssemblyModule);
   NODE_SET_METHOD(exports, "isWeakRef", IsWeakRef);
 #if defined(NODE_COMPAT_FINALIZATION_REGISTRY_PREDICATE)
   NODE_SET_METHOD(exports, "isFinalizationRegistry", IsFinalizationRegistry);

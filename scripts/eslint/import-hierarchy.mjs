@@ -41,7 +41,7 @@ export const layers = [
   ['stylelet/cssom'],
   ['stylelet/engine'],
   ['stylelet'],
-  ['browlet/platform', 'browlet/timing', 'browlet/dom/infra', 'browlet/dom/nodes/element-definitions', 'browlet/style'],
+  ['browlet/platform', 'browlet/timing', 'browlet/dom/infra', 'browlet/dom/nodes/element-definitions', 'browlet/style', 'browlet/webassembly'],
   ['browlet/html/microsyntaxes', 'browlet/dom/string-list'],
   ['browlet/dom/nodes/html/attributes'],
   ['browlet/scripting'],

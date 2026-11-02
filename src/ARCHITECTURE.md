@@ -20,6 +20,11 @@ platform object to its implementation. Internal relationships use implementation
 and other post-conversion values; they do not project and immediately unwrap
 objects to call an internal operation.
 
+An engine-owned interface can instead declare `isInstance(value)` for value conversion
+and overload selection. Binding preserves the native object in both directions,
+without an implementation/platform pair or constructor installation. These
+value-only declarations do not claim to implement the engine's interface members.
+
 Declared proxy values such as WindowProxy use an implementation handle internally.
 Their binding declaration supplies `getHandle()` and `getProxy()` to convert
 between public proxies and their retained handles. Receiver resolution selects
@@ -47,7 +52,7 @@ the origin policy and foreign property view. Native ordinary access keeps V8's s
 Untyped `any` and `object` values keep their JavaScript representation.
 
 Interface bindings can register outward projection through
-`prepareInterfaceProjection`. Each platform record captures its actual interface's
+`prepareProjectionOverride`. Each platform record captures its actual interface's
 steps once; all outward projection uses its `project()` operation, including
 typed results, callback receivers, and a Window returned as EventTarget.
 HTML's Window integration exposes the public WindowProxy while it still selects

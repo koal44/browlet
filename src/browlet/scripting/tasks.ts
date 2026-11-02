@@ -38,6 +38,9 @@ export const reportingTaskSource = createTaskSource('reporting');
 // Automation entry is embedder work; HTML still owns task execution and checkpoints.
 export const automationTaskSource = createTaskSource('automation');
 
+// JavaScript engine completions and host jobs share this source.
+export const jsEngineTaskSource = createTaskSource('JavaScript engine');
+
 /** Shared source identities selected by an owner's execution facilities. */
 export const taskSources: Record<TaskSourceKey, TaskSource> = {
   'dom-manipulation': domManipulationTaskSource,
@@ -49,6 +52,7 @@ export const taskSources: Record<TaskSourceKey, TaskSource> = {
   permissions: permissionsTaskSource,
   report: reportingTaskSource,
   automation: automationTaskSource,
+  engine: jsEngineTaskSource,
 };
 
 /** Reference to a queued task that its owner can cancel. */

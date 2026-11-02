@@ -419,6 +419,16 @@ export interface StorageEventInit {
   url?: string;
 }
 
+export interface WebAssemblyCompileOptions {
+  builtins?: Iterable<string>;
+  importedStringConstants?: string | null;
+}
+
+export interface WebAssemblyInstantiatedSource {
+  instance: Instance;
+  module: Module;
+}
+
 export interface ProgressEventInit {
   bubbles?: boolean;
   cancelable?: boolean;
@@ -2213,6 +2223,7 @@ export interface Window extends EventTarget {
   TrustedTypePolicy: TrustedTypePolicyConstructor;
   TrustedTypePolicyFactory: TrustedTypePolicyFactoryConstructor;
   NodeFilter: NodeFilterInterfaceObject;
+  WebAssembly: WebAssembly;
 }
 
 export interface WindowConstructor extends Ctor<EventTargetConstructor> {
@@ -3487,6 +3498,14 @@ export interface StorageEventConstructor extends Ctor<EventConstructor> {
   new (type: string, eventInitDict?: StorageEventInit): StorageEvent;
 }
 
+export interface Module {
+
+}
+
+export interface Instance {
+
+}
+
 export interface FileReader extends EventTarget {
   readAsArrayBuffer(blob: Blob): void;
   readAsBinaryString(blob: Blob): void;
@@ -3743,6 +3762,13 @@ export interface TrustedTypePolicyFactoryConstructor {
   [Symbol.hasInstance](value: unknown): value is TrustedTypePolicyFactory;
 }
 
+export interface WebAssembly {
+  validate(bytes: ArrayBuffer | SharedArrayBuffer | Int8Array<ArrayBufferLike> | Int16Array<ArrayBufferLike> | Int32Array<ArrayBufferLike> | Uint8Array<ArrayBufferLike> | Uint16Array<ArrayBufferLike> | Uint32Array<ArrayBufferLike> | Uint8ClampedArray<ArrayBufferLike> | BigInt64Array<ArrayBufferLike> | BigUint64Array<ArrayBufferLike> | Float16Array<ArrayBufferLike> | Float32Array<ArrayBufferLike> | Float64Array<ArrayBufferLike> | DataView<ArrayBufferLike>, options?: WebAssemblyCompileOptions): boolean;
+  compile(bytes: ArrayBuffer | SharedArrayBuffer | Int8Array<ArrayBufferLike> | Int16Array<ArrayBufferLike> | Int32Array<ArrayBufferLike> | Uint8Array<ArrayBufferLike> | Uint16Array<ArrayBufferLike> | Uint32Array<ArrayBufferLike> | Uint8ClampedArray<ArrayBufferLike> | BigInt64Array<ArrayBufferLike> | BigUint64Array<ArrayBufferLike> | Float16Array<ArrayBufferLike> | Float32Array<ArrayBufferLike> | Float64Array<ArrayBufferLike> | DataView<ArrayBufferLike>, options?: WebAssemblyCompileOptions): Promise<Module>;
+  instantiate(bytes: ArrayBuffer | SharedArrayBuffer | Int8Array<ArrayBufferLike> | Int16Array<ArrayBufferLike> | Int32Array<ArrayBufferLike> | Uint8Array<ArrayBufferLike> | Uint16Array<ArrayBufferLike> | Uint32Array<ArrayBufferLike> | Uint8ClampedArray<ArrayBufferLike> | BigInt64Array<ArrayBufferLike> | BigUint64Array<ArrayBufferLike> | Float16Array<ArrayBufferLike> | Float32Array<ArrayBufferLike> | Float64Array<ArrayBufferLike> | DataView<ArrayBufferLike>, importObject?: object, options?: WebAssemblyCompileOptions): Promise<WebAssemblyInstantiatedSourceResult>;
+  instantiate(moduleObject: Module, importObject?: object): Promise<Instance>;
+}
+
 export interface NavigationResultResult {
   committed?: Promise<NavigationHistoryEntry>;
   finished?: Promise<NavigationHistoryEntry>;
@@ -3761,4 +3787,9 @@ export interface TextEncoderEncodeIntoResultResult {
 export interface StorageEstimateResult {
   quota?: number;
   usage?: number;
+}
+
+export interface WebAssemblyInstantiatedSourceResult {
+  instance: Instance;
+  module: Module;
 }

@@ -7,7 +7,7 @@ import type {
 } from '../../assembly/index';
 import type { PlatformRecord } from '../platform';
 
-import type { InterfaceProjectionSteps } from '../extended-attributes';
+import type { ProjectionOverride } from '../extended-attributes';
 import type { RealmBinding } from '../realm';
 import type { LegacyPropertyMetadata } from './legacy';
 import { MemberBinding, type MemberOwner } from './member';
@@ -26,7 +26,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
   /** Replace the whole constructor entry, before ordinary checks and argument conversion. */
   overrideConstructor?: ConstructorOverrideSteps;
   /** Registered outward projection, independent of the paired platform object's allocation. */
-  interfaceProjection?: InterfaceProjectionSteps;
+  projectionOverride?: ProjectionOverride;
   /** Registered steps and generated functions, keyed by compiled members. */
   members?: Map<IDLMember, MemberBinding>;
 
@@ -217,9 +217,9 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     const { binding: realmBinding, assembled } = this;
     if (this.namespaceObject) return this.namespaceObject;
 
-    const object = realmBinding.realm.createOrdinaryObject(
-      realmBinding.realm.objectPrototype,
-    );
+    const namespaceOverride = assembled.primary.namespaceOverride;
+    const object = namespaceOverride?.(realmBinding.getEnvironment()) ??
+      realmBinding.realm.createOrdinaryObject(realmBinding.realm.objectPrototype);
     this.namespaceObject = object;
     this.defineAttributes(object, 'regular');
     this.defineOperations(object, 'regular');

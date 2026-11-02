@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { JSRealm } from '../../../src/js-engine/index';
 import { createDocumentState } from '../../../src/browlet/browsing/navigation/document-state';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
-import { jsEngineTaskSource } from '../../../src/browlet/scripting/host-hooks';
+import { jsEngineTaskSource } from '../../../src/browlet/scripting/tasks';
 import { createManualUserAgent } from '../../support/browlet-agent';
 import { runInHostTask } from '../../support/tasks';
 

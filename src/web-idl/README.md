@@ -128,6 +128,24 @@ Member queries also apply the contributing
 fragment's requirements and, for interfaces and namespaces, the including owner's.
 The unrestricted `*` remains independent of the globals declared in the assembly.
 
+Namespace declarations can supply operation `invoke` and attribute `get` steps
+without an implementation class. The optional `namespaceOverride(env)` callback
+replaces ordinary namespace allocation. Binding installs the declared members
+on the returned object. WebAssembly supplies its existing realm-owned namespace
+to adapt individual operations while preserving native constructors and objects.
+
+Engine-owned interface values can use `defineInterface({ name, members: [],
+isInstance })`. This checks each supplied value, such as whether an argument is
+a genuine WebAssembly.Module, without running author code. It does not select a
+runtime backend; JS Engine supplies the already-selected check. Input/output
+conversion, unions, and overload selection preserve the
+same object; no implementation class, inheritance, partials, or members accompany
+this value-only declaration. Binding and generated types do not manufacture a
+constructor. The engine continues to own exposure and its existing objects.
+WebAssembly uses this for Module and Instance identities while their full API
+review remains separate. Native checks run only for the types being converted or
+considered as overload candidates, without an ambient object registry.
+
 Consumers use the `assembly/`, `converters/`, `values/`, and `binding/realm/` indexes;
 modules within those folders import their siblings directly. Infra also offers
 an index, while direct foundation imports remain available for narrow consumers,
@@ -804,7 +822,7 @@ allocation. A sandbox can register for internal allocations without installing
 author interfaces. [Browlet's composition root](../browlet/bindings.ts) demonstrates
 both the sandbox and Window paths.
 
-`prepareInterfaceProjection` registers outward projection once per interface in
+`prepareProjectionOverride` registers outward projection once per interface in
 the binding world; each realm's `ImplementationBinding` retains the prepared steps.
 Each `PlatformRecord` captures its actual interface's steps at construction.
 `project()` applies those steps or returns the ordinary cached platform object;

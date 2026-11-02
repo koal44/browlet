@@ -7,7 +7,7 @@ import {
 
 import type { WebIDLRealm } from '../environment';
 import type { IDLAttribute, AssembledInterface } from '../assembly/index';
-import type { InterfaceProjectionSteps } from './extended-attributes';
+import type { ProjectionOverride } from './extended-attributes';
 import type { RealmBinding } from './realm';
 import type { ObservableArrayHandle } from './realm/index';
 
@@ -42,7 +42,7 @@ export class PlatformRecord<T extends object = object> {
   observableArrays?: Map<IDLAttribute, ObservableArrayHandle<unknown, unknown>>;
   setEntries?: Set<unknown>;
   /** Interface-owned projection selected once; its result can change with the implementation's lifetime. */
-  #interfaceProjection: InterfaceProjectionSteps | undefined;
+  #projectionOverride: ProjectionOverride | undefined;
 
   constructor(
     implInst: T,
@@ -51,7 +51,7 @@ export class PlatformRecord<T extends object = object> {
   ) {
     this.assembled = assembled;
     this.binding = binding;
-    this.#interfaceProjection = binding.getImplementationBinding(assembled).interfaceProjection;
+    this.#projectionOverride = binding.getImplementationBinding(assembled).projectionOverride;
     binding.initializeImplementation(implInst, assembled);
     this.implInst = ImplementationStamper.stamp(implInst, this);
   }
@@ -60,7 +60,7 @@ export class PlatformRecord<T extends object = object> {
 
   /** Project the implementation through its registered steps or its ordinary cached platform object. */
   project(): object | null {
-    const project = this.#interfaceProjection;
+    const project = this.#projectionOverride;
     return project ? project(this.implInst) : this.#ensurePlatformObject();
   }
 

@@ -56,6 +56,8 @@ export class NodeAPI {
   cloneSharedArrayBuffer?: (buffer: SharedArrayBuffer, context: VMContext) => SharedArrayBuffer;
   // Requires the V8 length-tracking patch.
   isLengthTrackingArrayBufferView?: (view: ArrayBufferView) => boolean;
+  /** Recognize a native WebAssembly.Module without enumerating its exports. */
+  isWebAssemblyModule?: (value: unknown) => boolean;
   /** Recognize a genuine WeakRef without dereferencing its target. */
   isWeakRef?: (value: unknown) => boolean;
   // Requires the V8 FinalizationRegistry predicate patch.
@@ -117,6 +119,7 @@ export class NodeAPI {
     this.isRegExpStringIterator = this.#loadMethod(backend, 'isRegExpStringIterator');
     this.cloneSharedArrayBuffer = this.#loadMethod(backend, 'cloneSharedArrayBuffer');
     this.isLengthTrackingArrayBufferView = this.#loadMethod(backend, 'isLengthTrackingArrayBufferView');
+    this.isWebAssemblyModule = this.#loadMethod(backend, 'isWebAssemblyModule');
     this.isWeakRef = this.#loadMethod(backend, 'isWeakRef');
     this.isFinalizationRegistry = this.#loadMethod(backend, 'isFinalizationRegistry');
     this.makePrototypeImmutable = this.#loadMethod(backend, 'makePrototypeImmutable');

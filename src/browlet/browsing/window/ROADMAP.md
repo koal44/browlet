@@ -1912,7 +1912,7 @@ EventTargets and post-dispatch cleanup keep their normal behavior.
 
 Binding's `PlatformRecord.project()` supplies the shared author conversion for
 interface and union results and callback receivers. HTML's WindowProxy integration
-registers the Window rule through `prepareInterfaceProjection`; each realm's
+registers the Window rule through `prepareProjectionOverride`; each realm's
 Window `ImplementationBinding` retains it. The record captures those steps once,
 including for EventTarget results and explicit context/world projection.
 Its `platformObject` retains

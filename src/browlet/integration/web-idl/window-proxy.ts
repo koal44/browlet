@@ -1,6 +1,6 @@
 import { InternalError } from '../../../infra/index';
 import type { GlobalAccessHandlers, JSRealm } from '../../../js-engine/index';
-import type { AssembledInterface, BindingContext, InterfaceProjectionSteps } from '../../../web-idl/index';
+import type { AssembledInterface, BindingContext, ProjectionOverride } from '../../../web-idl/index';
 
 import type { WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
 import type { BrowletEnvironment } from '../../environment';
@@ -8,7 +8,7 @@ import type { BrowletEnvironment } from '../../environment';
 import { CrossOriginObjectBinding } from './cross-origin';
 
 /** Expose a Window's current public proxy while preserving its original platform target. */
-export function prepareWindowProjection(owner: AssembledInterface): InterfaceProjectionSteps<WindowImpl> | undefined {
+export function prepareWindowProjectionOverride(owner: AssembledInterface): ProjectionOverride<WindowImpl> | undefined {
   if (owner.primary.name !== 'Window') return;
   return (window) => {
     // SPEC_CLASH(window-event-target-after-navigation): follow Chromium/WebKit's null for replaced Windows; Firefox returns WindowProxy.
