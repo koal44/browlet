@@ -975,12 +975,20 @@ those concrete elements to assemble declarations. Importing that directory's
 index would also reach the collector. Type-only upward references concern the
 reviewed dependency layers, not the number of `..` segments in an import.
 
-`browlet/browsing` groups three components with separate named entry points:
-`navigation`, `window`, and `policy`. Navigation owns browsing contexts,
+`browlet/browsing` groups components with separate named entry points.
+`navigation` owns browsing contexts,
 navigables, document creation, and session-history state. Window owns Window,
 WindowProxy, and Location. Their consumers use the corresponding component's
 index; cooperating modules within navigation import each other directly.
 There is no umbrella browsing barrel.
+
+`history` owns Document-retained History objects; `navigation-api` owns the
+Window-retained Navigation EventTarget. Both sit below Window and retain type-only
+references to the higher navigation coordinator. Window constructs Navigation,
+while Document lazily creates History. History uses its existing environment's
+storage serializer, composed at the Binding boundary, then calls Navigation's
+event operation and Document's URL/history update operation. Those effect owners
+remain explicit dependencies; the API objects do not manipulate history arrays.
 
 Navigable coordinates response preparation, destination context and Window
 selection, document loading, and history commit. NavigationParams carries the

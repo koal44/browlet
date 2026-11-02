@@ -40,6 +40,7 @@ import {
   securityPolicyViolationEventDispositionIDL,
 } from './browsing/policy/csp/index';
 import { TrustedScriptImpl, trustedTypesIDLDefinitions } from './browsing/policy/trusted-types/index';
+import { historyIDL, scrollRestorationIDL } from './browsing/history/index';
 import { AbortControllerImpl, AbortSignalImpl } from './dom/abort/index';
 import {
   DocumentImpl, htmlDocumentIDL, documentReadyStateIDL, documentVisibilityStateIDL,
@@ -57,6 +58,7 @@ import {
   windowPostMessageOptionsIDL, broadcastChannelIDL,
 } from './communication/index';
 import { webStorageIDLDefinitions } from './storage/index';
+import { navigationIDL } from './browsing/navigation-api/index';
 import {
   locationIDL, barPropIDL, WindowImpl, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
   windowIncludesGlobalEventHandlersIDL, windowIncludesWindowEventHandlersIDL, WindowProxyHandle, windowProxyDefinition,
@@ -72,7 +74,7 @@ import {
   timerHandlerIDL, windowOrWorkerGlobalScopeIDL, trustedTypesWindowOrWorkerGlobalScopeIDL,
 } from './global-scope';
 import {
-  structuredSerializeOptionsIDL, structuredDeserialize, type SerializedRecord, structuredSerialize,
+  structuredSerializeOptionsIDL, structuredDeserialize, type SerializedRecord, structuredSerialize, structuredSerializeForStorage,
   structuredClone, structuredSerializeWithTransfer, structuredDeserializeWithTransfer,
 } from './scripting/structured-data/index';
 import { serviceWorkerIDL } from './workers/index';
@@ -251,6 +253,7 @@ export function createBrowletEnvironmentInit(context: BindingContext<BrowletEnvi
     clone: (value, transferList = []) => structuredClone(value, transferList, context),
     // Associate DOMException implementations before structured serialization.
     serialize: (value) => structuredSerialize(context.realizeException(value), context),
+    serializeForStorage: (value) => structuredSerializeForStorage(context.realizeException(value), context),
     deserialize: (record) => structuredDeserialize(record as SerializedRecord, context),
     serializeWithTransfer: (value, transfer) => structuredSerializeWithTransfer(value, transfer, context),
     deserializeWithTransfer: (record) => {
@@ -285,6 +288,8 @@ export const browletDefinitions = [
   ...mathMLIDLDefinitions,
   originIDL,
   locationIDL,
+  historyIDL, scrollRestorationIDL,
+  navigationIDL,
   barPropIDL,
   reportIDL, reportBodyIDL, integrityViolationReportBodyIDL, testReportBodyIDL,
   coepViolationReportBodyIDL, coepInheritanceViolationReportBodyIDL,

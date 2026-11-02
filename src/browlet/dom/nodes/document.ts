@@ -12,7 +12,7 @@ import { createSelectlet, type Selectlet } from '../../../selectlet/index';
 import { decode, getEncoding, utf8DecodeWithoutBOM, utf8Encode, type Encoding } from '../../../encoding/index';
 import {
   aboutBlankURL, areSameOrigin, areSameSite, copyURL, createOpaqueOrigin, effectiveDomain,
-  isRegistrableDomainSuffixOfOrEqualTo, parseHost, serializeHost, serializeOrigin, serializeURL,
+  hostsEqual, isRegistrableDomainSuffixOfOrEqualTo, parseHost, serializeHost, serializeOrigin, serializeURL,
   type Origin, type URLRecord,
 } from '../../../url/index';
 import { HTTPCookie, parseHTTPDate, parseLinkHeader, type CookieHost } from '../../../http/index';
@@ -44,6 +44,7 @@ import { RangeImpl } from '../ranges/index';
 import { NodeIteratorImpl, TreeWalkerImpl, SHOW_ALL, type NodeFilterCallback } from '../traversal/index';
 // The observer retains registrations; rendering input and scheduled notification remain provisional.
 import { IntersectionObserverImpl, type IntersectionObserverEntryImpl } from '../intersection-observer/index';
+import { HistoryImpl } from '../../browsing/history/index';
 import type { NavigationTimingRecord } from '../../performance/index';
 // eslint-disable-next-line browlet/dependency-direction -- DOM's legacy event factory includes HTML-defined event interfaces.
 import { MessageEventImpl } from '../../communication/index';
@@ -260,6 +261,8 @@ export class DocumentImpl extends NodeImpl {
   #scriptBlockingStyleSheetsReady: InternalPromiseWithResolvers<void> | null = null;
   /** Stable factory object associated with this document. */
   #implementation?: DOMImplementationImpl;
+  /** History object retained by this Document, including when its Window is reused. */
+  #history?: HistoryImpl;
   /** Stable script-visible inspection object, separate from the current internal policy record. */
   #permissionsPolicy?: PermissionsPolicyImpl;
   /** Cached live collection returned by document.all. */
@@ -286,6 +289,12 @@ export class DocumentImpl extends NodeImpl {
 
   static is(value: unknown): value is DocumentImpl {
     return value instanceof DocumentImpl;
+  }
+
+  /** Classic history state owned by this Document rather than by its Window. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#doc-history
+  get history(): HistoryImpl {
+    return this.#history ??= new HistoryImpl(this.env);
   }
 
   /** Inspection object retained for this Document, independent of policy record replacement. */
@@ -1042,6 +1051,29 @@ export class DocumentImpl extends NodeImpl {
     this.appendChild(html);
     html.appendChild(head);
     html.appendChild(body);
+  }
+
+  /** Whether classic history may replace this Document's URL without navigating. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#can-have-its-url-rewritten
+  canHaveURLRewritten(targetURL: URLRecord): boolean {
+    const documentURL = this.url;
+    if (
+      targetURL.scheme !== documentURL.scheme || targetURL.username !== documentURL.username ||
+      targetURL.password !== documentURL.password || targetURL.port !== documentURL.port
+    ) return false;
+    if (targetURL.host === null || documentURL.host === null) {
+      if (targetURL.host !== documentURL.host) return false;
+    } else if (!hostsEqual(targetURL.host, documentURL.host)) {
+      return false;
+    }
+
+    if (targetURL.scheme === 'http' || targetURL.scheme === 'https') return true;
+    const documentPath = documentURL.path;
+    const targetPath = targetURL.path;
+    const samePath = typeof documentPath === 'string' ? targetPath === documentPath :
+      Array.isArray(targetPath) && documentPath.length === targetPath.length &&
+      documentPath.every((segment, index) => segment === targetPath[index]);
+    return samePath && (targetURL.scheme === 'file' || targetURL.query === documentURL.query);
   }
 
   /** Update this Document's URL and same-document session history. */

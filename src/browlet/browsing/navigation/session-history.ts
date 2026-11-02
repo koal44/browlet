@@ -1,5 +1,7 @@
 import type { URLRecord } from '../../../url/index';
 
+import type { ScrollRestoration } from '../history/index';
+
 import type { DocumentBackedState, DocumentState } from './document-state';
 
 /** One URL and document state at a joint session-history step. */
@@ -11,6 +13,8 @@ export type SessionHistoryEntry = {
   url: URLRecord;
   /** Live document and retained reload inputs. */
   documentState: DocumentState;
+  /** Whether traversal restores this entry's saved scroll position automatically. */
+  scrollRestorationMode: ScrollRestoration;
 };
 
 /** Create a pending history entry for an existing document. */
@@ -20,8 +24,8 @@ export function createSessionHistoryEntry(
   const url = documentState.document.url;
 
   // The History and Navigation APIs will add their serialized-state,
-  // navigation-key, scroll-restoration, and persisted-user-state slots.
-  return { step: 'pending', url, documentState };
+  // navigation-key, and persisted-user-state slots.
+  return { step: 'pending', url, documentState, scrollRestorationMode: 'auto' };
 }
 
 export type NestedHistory = {

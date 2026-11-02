@@ -215,7 +215,7 @@ Every flag's remaining enforcement owner is explicit:
 
 | Flags | Existing behavior or remaining consumer |
 | --- | --- |
-| navigation; auxiliary navigation; top-level navigation with/without activation; custom-protocol navigation | Navigation target selection, user-activation checks, popup creation, close, and external-protocol handling remain unfinished. `isNavigationOrHistoryUpdateBlocked()` is still a provisional false result, not enforcement. |
+| navigation; auxiliary navigation; top-level navigation with/without activation; custom-protocol navigation | Navigation target selection, user-activation checks, popup creation, close, and external-protocol handling remain unfinished. `isNavigationOrHistoryUpdateBlocked()` is the separate implementation-defined throttle, not sandbox enforcement. |
 | origin | Context/response preparation can select an opaque origin. Origin-sensitive DOM/storage/cookie checks exist, but creator/iframe/srcdoc origin and cookie-URL inheritance still require their lifecycles. |
 | forms; pointer lock | Form submission and pointer-lock entry points must apply their flags. |
 | scripts; automatic features | The environment's scripting predicate reads the scripts flag. Parser/script preparation, automatic media playback, and autofocus still need their owning consumers; parsing the automatic-features flag does not enforce them. |

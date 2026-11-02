@@ -16,6 +16,7 @@ import {
 } from '../../scripting/index';
 import { type EventImpl, EventTargetImpl } from '../../dom/events/index';
 import type { TrustedTypePolicyFactoryImpl } from '../policy/trusted-types/index';
+import type { HistoryImpl } from '../history/index';
 import { HTMLCollectionImpl, type DocumentImpl, type ElementImpl } from '../../dom/nodes/index';
 import { HTMLIFrameElementImpl, HTMLObjectElementImpl } from '../../dom/nodes/html/embedded/index';
 import { HTMLFrameElementImpl } from '../../dom/nodes/html/legacy/index';
@@ -23,6 +24,7 @@ import type { PerformanceImpl } from '../../performance/index';
 import { NavigatorImpl } from '../../navigator/index';
 import { windowPostMessage, type WindowPostMessageOptions } from '../../communication/index';
 import { WindowSessionStorageMixin, WindowLocalStorageMixin, type StorageImpl } from '../../storage/index';
+import { NavigationImpl } from '../navigation-api/index';
 import type { BrowletEnvironment, WindowEnvironment } from '../../environment';
 import type { WindowOrWorkerGlobalScopeMixin, TimerHandler } from '../../global-scope';
 import type { StructuredSerializeOptions } from '../../scripting/structured-data/index';
@@ -62,6 +64,9 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   readonly toolbar: BarPropImpl;
   /** Stable Navigator object for this Window and its clientInformation alias. */
   readonly navigator: NavigatorImpl;
+  /** Navigation API object retained for this Window's lifetime. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#window-navigation-api
+  navigation: NavigationImpl;
   /** Idle callback registrations and scheduling for this Window. */
   idleCallbacks: WindowIdleCallbacks;
   /** Last assigned status string, with no effect on browser UI. */
@@ -93,6 +98,7 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
     this.statusbar = new BarPropImpl(env);
     this.toolbar = new BarPropImpl(env);
     this.navigator = new NavigatorImpl(env);
+    this.navigation = new NavigationImpl(env);
     this.idleCallbacks = new WindowIdleCallbacks(env);
     this.#globalEventHandlersMixin = new GlobalEventHandlersMixin(this);
     this.#windowEventHandlersMixin = new WindowEventHandlersMixin(this);
@@ -134,6 +140,11 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   /** Current document, available after document construction attaches it. */
   get document(): DocumentImpl {
     return this.getAssociatedDocument();
+  }
+
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-history
+  get history(): HistoryImpl {
+    return this.getAssociatedDocument().history;
   }
 
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-name
@@ -649,6 +660,8 @@ export const windowIDL = defineInterface<BrowletEnvironment>({
     roAttr('location', reference('Location'),
       xattr(['PutForwards', 'href'], 'LegacyUnforgeable', ['CrossOrigin', ['Getter', 'Setter']]),
     ),
+    roAttr('history', reference('History')),
+    roAttr('navigation', reference('Navigation'), xattr('Replaceable')),
     roAttr('locationbar', reference('BarProp'), xattr('Replaceable')),
     roAttr('menubar', reference('BarProp'), xattr('Replaceable')),
     roAttr('personalbar', reference('BarProp'), xattr('Replaceable')),

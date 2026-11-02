@@ -203,8 +203,10 @@ export class Navigable {
     throw new InternalError('Navigation stopping and descendant abortion are not implemented');
   }
 
+  /** Implementation-defined navigation throttling; Browlet currently permits every request. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#allowed-to-perform-a-navigation-or-history-update
   isNavigationOrHistoryUpdateBlocked(): boolean {
-    // TODO(HTML navigation): Supply the source, target, and activation state and apply the sandbox navigation flags.
+    // Sandbox navigation permission is a separate check in navigation/history application.
     return false;
   }
 
@@ -612,6 +614,35 @@ export class Traversable extends Navigable implements FetchPromptTarget {
   /** Type-only identification as an eligible Fetch prompt destination. */
   declare [fetchPromptTargetBrand]: true;
 
+  /** Traverse joint history; an omitted source Document denotes a browser-UI request. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#traverse-the-history-by-a-delta
+  traverseHistoryByDelta(_delta: number, _sourceDocument?: DocumentImpl): void {
+    // TODO(HTML 7.4): Snapshot a supplied source and retain its initiator, then append traversal steps.
+    // Select the target from all used steps inside that queue, and apply it with sandbox permission,
+    // navigate-event cancellation, unloading, document/state restoration, and history notifications.
+    throw new InternalError('Session history delta traversal is not implemented');
+  }
+
+  /** Count distinct joint-history steps and locate the selected step within them. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#getting-the-history-object-length-and-index
+  getHistoryLengthAndIndex(step: number): [length: number, index: number] {
+    // https://html.spec.whatwg.org/multipage/browsing-the-web.html#getting-all-used-history-steps
+    // TODO(HTML 7.4): Run within the traversal queue once the provisional synchronous commit is replaced.
+    const entryLists = new Set([this.sessionHistoryEntries]);
+    const usedSteps = new Set<number>();
+    for (const entries of entryLists) {
+      for (const entry of entries) {
+        if (entry.step === 'pending') throw new InternalError('History length requires committed entries');
+        usedSteps.add(entry.step);
+        for (const nested of entry.documentState.nestedHistories) entryLists.add(nested.entries);
+      }
+    }
+    const steps = [...usedSteps].sort((a, b) => a - b);
+    const index = steps.indexOf(step);
+    if (index < 0) throw new InternalError('The selected history step is not present');
+    return [steps.length, index];
+  }
+
   /** Activate the committed entry and retarget its browsing context's WindowProxy. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#apply-the-push/replace-history-step
   // PROVISIONAL: only the supplied top-level entry participates in this history step.
@@ -623,6 +654,8 @@ export class Traversable extends Navigable implements FetchPromptTarget {
     const document = historyEntry.documentState.document;
     if (document === null) return;
 
+    // The full history-step algorithm must also update nonchanging child Documents.
+    [document.history.lengthValue, document.history.index] = this.getHistoryLengthAndIndex(targetStep);
     navigable.currentSessionHistoryEntry = historyEntry;
     navigable.activeSessionHistoryEntry = historyEntry;
     this.currentSessionHistoryStep = targetStep;
@@ -678,6 +711,8 @@ export class TopLevelTraversable extends Traversable {
     const initialHistoryEntry = traversable.activeSessionHistoryEntry;
     initialHistoryEntry.step = 0;
     traversable.sessionHistoryEntries.push(initialHistoryEntry);
+    // Seed the initial entry's script-visible values in the current synchronous creation path.
+    [document.history.lengthValue, document.history.index] = traversable.getHistoryLengthAndIndex(0);
 
     if (opener !== null) {
       const openerNavigable = opener.activeDocument.getNodeNavigable();

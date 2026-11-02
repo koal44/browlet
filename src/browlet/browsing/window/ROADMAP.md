@@ -119,7 +119,7 @@ navigable association, and stable proxy/defaultView identity.
 | Named getter | §7.2.2.3 now supplies child WindowProxy results, eligible name-bearing elements, IDs, live HTMLCollection results, and supported-name ordering; see the audit below. |
 | `top`, `opener`, `parent`, `frameElement` | Declared and implemented in §7.2.2.4 below; automatic child/opener lifecycle producers remain unfinished. |
 | Six BarProp attributes and `status` | Declared and implemented in §7.2.2.5 below, with one inactive-context specification gap. |
-| `location`, `history`, `navigation` | Respectively §§7.2.4, 7.2.5, and 7.2.6. Location's partial implementation is exposed; History and Navigation need their interfaces and the unfinished session-history lifecycle. |
+| `location`, `history`, `navigation` | Respectively §§7.2.4, 7.2.5, and 7.2.6. Location, History attributes and method preparation, and the replaceable Window-owned Navigation identity are exposed. [History preparation](../navigation/ROADMAP.md#html-725-pushreplace-state-preparation) still requires Navigation event handling and URL/history effects; Navigation's remaining interface and lifecycle are unfinished. |
 | `customElements` | [Custom elements](../../dom/nodes/html/custom-elements/ROADMAP.md) owns the registry implementation and state; Window's getter/exposure is still missing. |
 | `focus`, `blur` | [Interaction](../../interaction/ROADMAP.md) owns focusing and user-activation dependencies; Window declarations are absent. |
 | `navigator`, `clientInformation` | [Navigator](../../navigator/ROADMAP.md), HTML §8.10; object creation, shared identity, and the Replaceable alias remain absent. |

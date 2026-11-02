@@ -55,7 +55,9 @@ import { MessageEventImpl, type MessagePortImpl } from './communication/index';
 import { openWindow, WindowImpl, type WindowProxyHandle } from './browsing/window/index';
 import { OriginImpl } from './browsing/index';
 import type { WindowOrWorkerGlobalScopeMixin } from './global-scope';
-import type { StructuredSerializeWithTransferResult, StructuredDeserializeWithTransferResult } from './scripting/structured-data/index';
+import type {
+  SerializedRecord, StructuredSerializeWithTransferResult, StructuredDeserializeWithTransferResult,
+} from './scripting/structured-data/index';
 import type { BrowsingContext, Traversable } from './browsing/navigation/index';
 import type { PermissionStatusImpl } from './integration/permissions/index';
 import type { UserAgent } from './user-agent';
@@ -198,6 +200,8 @@ export interface BrowletEnvironmentInit {
   clone: (value: unknown, transferList?: object[]) => unknown;
   /** Serialize through this environment's binding. */
   serialize: (value: unknown) => object;
+  /** Serialize persistent state, rejecting shared memory and other cluster-bound values. */
+  serializeForStorage: (value: unknown) => SerializedRecord;
   /** Reconstruct a serialized record in this environment's realm. */
   deserialize: (record: object) => unknown;
   /** Serialize now and detach transferred objects, for delivery to another realm later. */
@@ -261,6 +265,8 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   clone;
   /** Serialize through this environment's binding. */
   serialize;
+  /** Serialize persistent state through this environment's binding. */
+  serializeForStorage;
   /** Reconstruct a serialized record in this environment's realm. */
   deserialize;
   /** Serialize now and detach transferred objects, for delivery to another realm later. */
@@ -291,6 +297,7 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     this.createQuotaExceededError = initialization.createQuotaExceededError;
     this.clone = initialization.clone;
     this.serialize = initialization.serialize;
+    this.serializeForStorage = initialization.serializeForStorage;
     this.deserialize = initialization.deserialize;
     this.serializeWithTransfer = initialization.serializeWithTransfer;
     this.deserializeWithTransfer = initialization.deserializeWithTransfer;

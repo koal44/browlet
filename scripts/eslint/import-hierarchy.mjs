@@ -58,9 +58,13 @@ export const layers = [
   ['browlet/dom/ranges', 'browlet/dom/traversal', 'browlet/dom/token-list', 'browlet/dom/intersection-observer'],
   // HTML reflection reuses DOM operations through supplied nodes, without loading their classes.
   ['browlet/html/reflection'],
+  // Documents own History state; History queries Document/navigation through retained types.
+  ['browlet/browsing/history'],
   ['browlet/dom/abort', 'browlet/dom/nodes'],
   ['browlet/dom', 'browlet/performance', 'browlet/navigator'],
   ['browlet/reporting/generate', 'browlet/communication', 'browlet/storage'],
+  // Window owns its Navigation object; the API retains navigation and Document types without loading the loader.
+  ['browlet/browsing/navigation-api'],
   // Window forwards messaging to communication; communication retains Window types only.
   ['browlet/browsing/window'],
   // Origin declarations name the platform implementations; environments dispatch their extraction.

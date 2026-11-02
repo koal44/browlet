@@ -15,6 +15,11 @@ outside consumers use its index, while its modules import each other directly.
   the history step and clears forward entries.
 - `session-history.ts` models entries and nested histories for the active
   top-level traversable; `document-state.ts` retains their document/reload state.
+- [History](../history/history.ts) supplies the Document-owned object, its
+  attributes, and request preparation for its methods. This component owns the
+  entry scroll mode and updates stored length/index through its existing
+  top-level commit path. The lower [Navigation API](../navigation-api/navigation.ts)
+  component supplies Window-owned identity; its events and entry state remain unfinished.
 - `Traversable` owns its session-storage shed across Document replacements.
   Top-level creation clones the opener's top-level shed through the
   [Storage substrate](../../../storage/ROADMAP.md#storage-sheds); auxiliary
@@ -51,6 +56,179 @@ before that document is used to initialize a navigable. The HTML response
 handler uses the lower-level `loader/ResourceReader` to consume bytes and
 `html/parser/HTMLDocumentParser` to parse them in the document's environment.
 
+## HTML §7.2.5: History foundations
+
+Audited the complete [History section](https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-history-interface)
+against HTML `404b3eb` (30 October 2026), on 31 October. This first implementation
+slice stops before `go()`: it exposes `Window.history`, `History`,
+`ScrollRestoration`, and the three attributes. History is an ordinary platform
+object; it requires no new native integration.
+
+`DocumentImpl.history` lazily retains its own implementation. Window's getter
+selects its associated Document's object, so replacing the initial about:blank
+Document creates a new History even when the Window/realm is reused. Activity
+checks use History's relevant global's current associated Document, not a cached
+owning-Document pointer. Borrowed accessors retain the receiver's environment.
+
+The History state, length, and index slots begin at null, 0, and 0. Attribute
+getters read stored state/length after checking full activity. State restoration
+must later supply the deserialized value; the getter does not repeatedly clone
+it. `scrollRestoration` reads/writes the active entry's mode, initially `auto`.
+Web IDL performs enum conversion and ignores invalid enum strings before calling
+the implementation, including on an inactive History. Actual scrolling is not
+implemented by storing the mode.
+
+`Traversable.getHistoryLengthAndIndex()` counts sorted distinct steps across
+top-level and nested entry lists. Initial top-level creation seeds the first
+length/index, and the existing synchronous push/replace commit updates the
+destination's slots before activity notifications. The traversal queue and full
+history-step application remain unfinished: updating nonchanging child Documents,
+state restoration, events, and scroll/user-state restoration are later consumers.
+The accessor does not substitute a live array length for the specified stored slot.
+
+`SPEC_CLASH(history-inactive-state)` follows HTML's unconditional full-activity
+check. In `node-compat/experimental/history-foundations.mjs`, a retained History
+from a replaced initial Window returns cached null in Chromium 156.0.8078.4 and
+WebKit 27.2, while Firefox 157.0 throws SecurityError. These are the observed
+results on 31 October 2026, not a claim that Chromium/WebKit always return cached
+state: the populated-state removal case behaves differently, including repeated
+reads. Eric approved the HTML rule; source and regressions keep that choice.
+
+The remaining passages were considered and retain these owners:
+
+| Passage | Next implementation or dependency |
+| --- | --- |
+| `go`, `back`, `forward`, delta traverse | Request preparation is implemented below; actual traversal and reload remain explicit dependencies. |
+| Shared push/replace steps | Preparation and the public methods are implemented below. Navigate-event firing and `DocumentImpl.updateURLAndHistory()` remain explicit dependencies. |
+| Can have its URL rewritten; URL table | Implemented on Document and covered by the complete example table: compare URL components, not security origins; HTTP(S), file, and other schemes have distinct path/query rules. |
+| Optional state-entry limit | No quota is selected in this slice. If introduced, eviction must remove the entry after the Document's first entry, as specified. |
+| Game and scroll-restoration examples | Require same-document updates, traversal/PopStateEvent, and scroll restoration. Exposing the foundation attributes does not make these examples functional. |
+
+## HTML §7.2.5: Delta traversal requests
+
+`go()`, `back()`, and `forward()` are ordinary `HistoryImpl` methods sharing
+`deltaTraverse()`, exposed through automatic binding. Web IDL supplies the
+signed-long conversion and zero default for `go`; back/forward supply -1/+1 directly, without calling an
+author-replaceable `go`. The implementation checks its receiver's relevant
+global's current Document for full activity, then consults the navigable's
+implementation-defined blocking algorithm. A blocked request returns undefined.
+
+A zero delta calls that Document's `Navigable.reload()` with its default inputs.
+A nonzero delta calls `Traversable.traverseHistoryByDelta(delta, sourceDocument)`;
+child History requests target their containing traversable, while reloading only
+the child. Borrowed methods preserve the receiver Document and the method realm
+for exceptions. Retained History objects follow the same activity and initial
+Window-reuse rules as their attributes.
+
+This slice stops at those navigation owners. Reload retains the explicit
+unfinished boundary described below. Delta traversal also throws before changing
+history: source snapshotting, initiator capture, the traversal queue, and applying
+the traverse history step are missing. Supplying a source denotes script
+involvement (`none`); omitting it denotes `browser UI`. Target selection and the
+out-of-range no-op must happen inside the queue, against then-current distinct
+history steps. The History entry point therefore does not prefilter deltas using
+its stored length or replace traversal with ordinary URL navigation. Applying
+the step must supply sandbox permission, cancellation/unloading, document and
+state restoration, history events, and scrolling.
+
+`history-traversal.test.ts` exercises the projected API and observes requests at
+these owner boundaries; it does not simulate successful history traversal or
+reload. No native changes or new browser compatibility choices are required.
+
+## HTML §7.2.5: Push/replace state preparation
+
+`pushState()` and `replaceState()` are ordinary implementation methods sharing
+`pushOrReplaceState()`. Binding converts the required unused string and optional
+nullable USVString URL before entering the algorithm. Activity is checked before
+`env.serializeForStorage()`; the existing storage serializer supplies a snapshot,
+including cycles, rejects shared memory, and propagates state-getter exceptions.
+The environment operation is composed at the Binding boundary, keeping its
+context out of History. The Document URL and base are read after serialization,
+which can execute author getters. Null and empty URLs bypass parsing entirely.
+
+`DocumentImpl.canHaveURLRewritten()` compares scheme, credentials, host, and port,
+then applies the HTTP(S), file, or other-scheme path/query rules. Origin equality
+and `document.domain` do not grant rewrite permission. The tests include the
+specification's full URL table, normalized hosts, and inherited/opaque origins.
+The implementation-defined blocking policy runs only after serialization and
+URL validation. History passes the same serialized record into the Navigation
+event operation and, if that permits continuation, the URL/history update owner.
+
+This does **not** implement a successful state change yet. The Window now owns a
+minimal `NavigationImpl`, exposed by the replaceable `Window.navigation` getter
+and a nonconstructible EventTarget-derived IDL interface. Replacing the author
+property does not change the internal owner. Initial Window reuse retains it;
+new Windows receive new objects. `firePushReplaceReloadNavigateEvent()` explicitly
+throws until §7.2.6 supplies navigation abortion, disabled-entry/event handling,
+method trackers, NavigateEvent/NavigationDestination, and inner event firing.
+`DocumentImpl.updateURLAndHistory()` independently remains unfinished: it must
+update History and Navigation state and queue the same-document history steps.
+The tests observe these two owner operations without simulating their effects.
+
+The event operation keeps navigation type, destination URL, and same-document
+status positional; all six optional spec inputs are grouped in
+`PushReplaceReloadNavigateEventOptions`. Their documented defaults and concrete
+types remain explicit. This options-record arrangement is reviewed; its
+`SPEC_MISMATCH` marker is removed.
+
+Browser-only probe: `node-compat/experimental/history-state.mjs`, run on
+31 October 2026 with Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2.
+Eric approved all three choices below; the markers also live in History's source.
+
+- `SPEC_CLASH(history-state-serialization-order)`: follow the
+  [shared algorithm](https://html.spec.whatwg.org/multipage/nav-history-apis.html#shared-history-push/replace-state-steps)
+  and Firefox, checking full activity before state serialization. On an already
+  inactive History, Chromium/WebKit instead execute state getters first and can
+  throw their errors or DataCloneError before SecurityError. Blink's
+  `core/frame/history.cc` serializes in the public methods before StateObjectAdded;
+  Gecko's `dom/base/nsHistory.cpp` checks activity before delegating serialization.
+  The intended early check is documented in [HTML #347](https://github.com/whatwg/html/issues/347)
+  and its [editorial repair, #359](https://github.com/whatwg/html/pull/359): the
+  blanket activity rule was easy to miss, so it was moved into each operation's
+  steps. WebKit's `History.idl` instead declares a `SerializedScriptValue` input,
+  causing Binding conversion to serialize before `History::stateObjectAdded()`
+  checks activity. This explains the implementation ordering, but the research
+  found no compatibility rationale for preserving that difference. Keep HTML's order.
+- `SPEC_CLASH(history-state-url-encoding)`: follow HTML's encoding-parse operation
+  and Firefox/WebKit. A windows-1252 Document produces `%E9` for `é` in a query;
+  Chromium produces UTF-8 `%C3%A9`. The receiver's relevant environment determines
+  parsing even when a different Window supplies the method.
+  Blink's `History::UrlForState()` uses the two-argument KURL constructor, without
+  a document-encoding override; Gecko passes `GetDocumentCharacterSet()` to
+  `NS_NewURI()`, and WebKit uses `Document::encodingParseURL()`. HTML explicitly
+  distinguishes [ordinary URL parsing from legacy encoding-aware parsing](https://html.spec.whatwg.org/multipage/urls-and-fetching.html#resolving-urls).
+  Chromium's own [windows-1252 History baseline](https://github.com/chromium/chromium/blob/main/third_party/blink/web_tests/external/wpt/html/infrastructure/urls/resolving-urls/query-encoding/windows-1252_include%3Dhistory-expected.txt)
+  records both methods as FAIL: `%C3%A5` instead of `%E5` for `å`. This is evidence
+  of a known conformance failure, not proof of why it remains unfixed. No deliberate
+  compatibility exception was found; keep the specified Document encoding.
+- `SPEC_GAP(history-state-detached-during-serialization)`: HTML checks activity
+  before serialization, then dereferences the relevant Window's navigable without
+  handling its disappearance. A getter removing its iframe causes all three
+  browsers to throw SecurityError, with the getter read once, for both methods
+  and null, empty, or nonempty URLs. Browlet guards that missing navigable with
+  SecurityError at the later dereference; it does not add an earlier repeated
+  activity check. Navigate-event reentrancy and its own activity checks remain
+  part of the unfinished §7.2.6 dependency.
+  Blink and WebKit's later checks naturally see the detachment after serialization.
+  Gecko also rechecks the Document and principal after cloning in
+  `nsDocShell::AddState()`, explicitly citing [Mozilla bug 634834](https://bugzilla.mozilla.org/show_bug.cgi?id=634834).
+  That historical security fix concerns reentrant cross-origin navigation, rather
+  than this exact iframe-removal case: an earlier check did not survive author
+  code executing during serialization. It supports revalidation after that code.
+  Keep the narrow missing-navigable guard; do not substitute it for the Navigation
+  event algorithm's later lifecycle checks when those are implemented.
+
+The rationale follow-up on 31 October 2026 leaves all three recommendations
+unchanged. The mechanisms above are visible in the source; an intentional reason
+to diverge is not inferred merely from present browser behavior. These are HTML
+and Binding choices and require no engine workaround in Browlet.
+
+All three browsers also preserve DataCloneError-before-URL-error ordering and
+select the URL after a reentrant state getter changes it. Production tests cover
+those orderings, cancellation and exception forwarding, storage-only restrictions,
+and receiver/method realm selection. No state-entry quota is selected; the
+optional eviction rule and the interactive examples remain accounted for above.
+
 ## Missing
 
 Window's [§7.2.2.1 entry points](../window/ROADMAP.md#html-7221-opening-and-closing-windows)
@@ -80,9 +258,11 @@ existing concrete types. `NavigationHistoryBehavior` includes `auto`, while
 resolved commit/history-update inputs use `HistoryHandlingBehavior` (`push` or
 `replace`). All three operations still throw until their effects are implemented.
 
-`navigation-api.ts` currently declares only the opaque `NavigationAPIMethodTracker`
-dependency. It has no factory or usable record implementation. §7.2.6 must supply
-the Navigation and NavigationHistoryEntry owners, tracker fields, realm-owned
+`navigation-api.ts` in this component still declares only the opaque
+`NavigationAPIMethodTracker` dependency. It has no factory or usable record
+implementation. The lower `../navigation-api/` component now supplies Navigation's
+Window-owned identity and unfinished event entry point. §7.2.6 must supply
+its state and NavigationHistoryEntry owners, tracker fields, realm-owned
 committed/finished promises, and their creation/settlement lifecycle. An arbitrary
 object does not satisfy that type. The full `navigate()` input contract does not
 make document-initiated navigation functional.
@@ -110,7 +290,7 @@ Reload coordination remains explicitly unfinished. HTML first selects the active
 Window's Navigation object and history-entry Navigation API state, then fires a
 cancelable reload navigate event (except for browser-UI involvement). Only after
 that event permits continuation may it set `reloadPending` and append traversal
-steps that apply the reload history step. The Navigation object/event/state,
+steps that apply the reload history step. Navigation event/state behavior,
 traversal queue, reload history application, and method-tracker lifecycle are
 missing. `SessionHistoryTraversalQueue` is still an empty identity class and
 `SessionHistoryEntry` does not yet have Navigation API state. The coordinator
@@ -121,10 +301,10 @@ with the later history and navigation algorithms.
 
 | Planned source | Contract | Specification |
 | --- | --- | --- |
-| `history.ts` | `History`, `ScrollRestoration`, state serialization through `scripting/structured-data/`, length/state/go/back/forward, and push/replace state | HTML §7.2.5 and §2.7 |
-| `navigation-api.ts` | `Navigation`, results/options, destination, entries, ongoing navigation, intercept/precommit controllers, transition, activation, and focus/scroll behavior | HTML §7.2.6 |
-| `navigation-history-entry.ts` | `NavigationHistoryEntry`, keys/IDs/state, disposal, and same-document identity | HTML §7.2.6 |
-| `navigation-events.ts` | `NavigateEvent`, current-entry-change, navigate success/error, destination and intercept/precommit callback surfaces | HTML §7.2.6 |
+| existing `../history/history.ts` and navigation owners | state restoration and URL/history, traversal, and reload effects; attributes and all method preparation are implemented above | HTML §7.2.5 and §2.7 |
+| existing `../navigation-api/navigation.ts` | Navigation state, results/options, destination, entries, ongoing navigation, intercept/precommit controllers, transition, activation, and focus/scroll behavior | HTML §7.2.6 |
+| `../navigation-api/navigation-history-entry.ts` | `NavigationHistoryEntry`, keys/IDs/state, disposal, and same-document identity | HTML §7.2.6 |
+| `../navigation-api/navigation-events.ts` | `NavigateEvent`, current-entry-change, navigate success/error, destination and intercept/precommit callback surfaces | HTML §7.2.6 |
 | `lifecycle-events.ts` | `PopStateEvent`, `HashChangeEvent`, `PageSwapEvent`, `PageRevealEvent`, `PageTransitionEvent`, and `BeforeUnloadEvent` | HTML §7.2.7 |
 | `not-restored-reasons.ts` | `NotRestoredReasonDetails`, recursive `NotRestoredReasons`, and history-entry association | HTML §7.2.8 |
 | `traversal.ts` | Traversal queue, apply history step, back/forward/reload | HTML §§7.4.1, 7.4.3, and 7.4.6 |
@@ -152,9 +332,11 @@ history state. Inline-srcdoc creation must combine inherited CSP before selectin
 its origin. Initial blank creator inheritance, history reconstruction, and popup
 creator state remain unfinished.
 
-`isNavigationOrHistoryUpdateBlocked()` still returns a provisional false;
-it has no source/target/activation inputs and does not enforce sandbox navigation
-flags. Target selection must also populate and consult the context's
+`isNavigationOrHistoryUpdateBlocked()` is HTML's implementation-defined
+navigation/history throttle; Browlet currently chooses not to throttle. It is
+not the sandbox navigation-permission check. Navigation/history application
+still needs source/target/activation inputs and sandbox enforcement. Target
+selection must also populate and consult the context's
 `onePermittedSandboxedNavigator`. Popup restrictions, external protocols, dialogs,
 and download consumers remain explicit in the sandbox audit.
 

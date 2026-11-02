@@ -9,6 +9,8 @@ export type DocumentReadyState = "loading" | "interactive" | "complete";
 
 export type DocumentVisibilityState = "visible" | "hidden";
 
+export type ScrollRestoration = "auto" | "manual";
+
 export type SecurityPolicyViolationEventDisposition = "enforce" | "report";
 
 export type ShadowRootMode = "open" | "closed";
@@ -1464,6 +1466,31 @@ export interface LocationConstructor {
   [Symbol.hasInstance](value: unknown): value is Location;
 }
 
+export interface History {
+  readonly length: number;
+  scrollRestoration: ScrollRestoration;
+  readonly state: any;
+  go(delta?: number): void;
+  back(): void;
+  forward(): void;
+  pushState(data: any, unused: string, url?: string | null): void;
+  replaceState(data: any, unused: string, url?: string | null): void;
+}
+
+export interface HistoryConstructor {
+  readonly prototype: History;
+  [Symbol.hasInstance](value: unknown): value is History;
+}
+
+export interface Navigation extends EventTarget {
+
+}
+
+export interface NavigationConstructor extends Ctor<EventTargetConstructor> {
+  readonly prototype: Navigation;
+  [Symbol.hasInstance](value: unknown): value is Navigation;
+}
+
 export interface BarProp {
   readonly visible: boolean;
 }
@@ -1742,6 +1769,9 @@ export interface Window extends EventTarget {
   name: string;
   get location(): Location;
   set location(value: string);
+  readonly history: History;
+  get navigation(): Navigation;
+  set navigation(value: unknown);
   get locationbar(): BarProp;
   set locationbar(value: unknown);
   get menubar(): BarProp;
@@ -1885,6 +1915,8 @@ export interface Window extends EventTarget {
   MathMLElement: MathMLElementConstructor;
   Origin: OriginConstructor;
   Location: LocationConstructor;
+  History: HistoryConstructor;
+  Navigation: NavigationConstructor;
   BarProp: BarPropConstructor;
   ReportBody: ReportBodyConstructor;
   IntegrityViolationReportBody: IntegrityViolationReportBodyConstructor;

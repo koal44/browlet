@@ -869,6 +869,20 @@ throw at explicit unfinished operations. Feature processing and the new/existing
 opening branches are connected, but CSSOM View geometry and URL/history effects
 remain unfinished. `close()` and `stop()` also require their lifecycle operations;
 see the [Window audit](browlet/browsing/window/ROADMAP.md#html-7221-opening-and-closing-windows).
+`Window.history` exposes Document-owned length/state/scrollRestoration attributes.
+The existing top-level commit path updates stored length/index, and entries retain
+their scroll mode. `go/back/forward` perform conversion, activity checks, and
+request preparation, but reload and delta traversal still throw explicit
+unfinished-operation errors. `pushState/replaceState` now serialize for storage,
+validate URL rewriting, and prepare a same-document request. A successful change
+still throws at the explicitly unfinished Navigation event operation, and URL/history
+application is independently unfinished. `Window.navigation` exposes only its
+replaceable, nonconstructible EventTarget identity. Traversal queue/application,
+state restoration, navigate-event cancellation, and
+actual scrolling remain explicit dependencies. Inactive access follows HTML's SecurityError rule,
+including the recorded browser disagreement for retained `state`. See the
+[History audit](browlet/browsing/navigation/ROADMAP.md#html-725-history-foundations)
+and [method preparation](browlet/browsing/navigation/ROADMAP.md#html-725-pushreplace-state-preparation).
 `Window.length` now counts current document-tree child navigables, using retained
 iframe/object/frame associations. Those associations still require internal
 creation/destruction producers; appending a container alone creates no child.
