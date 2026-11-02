@@ -7,12 +7,14 @@ import { TypeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
 
 import { isObject } from './abstract-operations';
+import { isProxyObject } from './built-in-primitives';
 import {
   addon, isAddonContextHandle, isAddonMicrotaskQueueHandle,
   type AddonContextHandle, type AddonMicrotaskQueueHandle, type ContextEvaluationOptions,
 } from './node-addons';
 import type {
-  CollectionIteratorKind, CompiledCode, CompiledScript, ExoticObjectHandlers, GlobalAccessHandlers, GlobalAllocation, GlobalIndexedProperties,
+  CollectionIteratorKind, CompiledCode, CompiledScript, ExoticObjectHandlers, FunctionCompilationOptions,
+  GlobalAccessHandlers, GlobalAllocation, GlobalIndexedProperties,
   GlobalPrototypeKind, GlobalProxy,
   JSFunction, JSIteratorResult, JSRealm,
 } from './realm';
@@ -267,6 +269,44 @@ export function compileScript(
     return new addon.Script(source, { filename, lineOffset, displayErrors: false, importModuleDynamically });
   }
   return new vm.Script(source, { filename, lineOffset, importModuleDynamically } as vm.ScriptOptions);
+}
+
+/** Compile a FunctionBody using the backend that owns its scope and intrinsics. */
+export function compileFunction(
+  source: string, parameters: string[], context: VMContext, options: FunctionCompilationOptions,
+  importModuleDynamically?: ImportModuleDynamically<JSFunction>,
+): JSFunction {
+  if (isAddonContextHandle(context)) {
+    if (!addon.compileFunction) throw new InternalError('Node backend does not provide compileFunction');
+    return addon.compileFunction(source, parameters, { ...options, parsingContext: context });
+  }
+  const scopes = options.contextExtensions;
+  if (scopes.some(isProxyObject)) {
+    // V8 CompileFunction accepts JSObjects but silently rejects JSProxy scopes;
+    // Node's vm.compileFunction then asserts that an exception must be pending.
+    // Validate the original FunctionBody before embedding it in trusted syntax.
+    const unscoped = { ...options, contextExtensions: [] };
+    compileFunction(source, parameters, context, unscoped, importModuleDynamically);
+    // Actual with environments preserve Proxy traps, method receivers and writes.
+    // No factory parameters or locals become extra visible handler bindings.
+    const factorySource = scopes.map((_, index) => `with (this[${index}]) {`).join('') +
+      `return function(${parameters.join(', ')}) {\n${source}\n};` + '}'.repeat(scopes.length);
+    const factory = compileFunction(factorySource, [], context, {
+      ...unscoped, lineOffset: (options.lineOffset ?? 0) - 1,
+    }, importModuleDynamically);
+    const compiled = Reflect.apply(factory, scopes, []) as JSFunction;
+    // ACCOMMODATION(proxy-function-source-name): the literal's source omits the name.
+    // Stock Node's exact source-text requirement remains an approved expected failure.
+    Reflect.defineProperty(compiled, 'name', { value: options.name, configurable: true });
+    return compiled;
+  }
+  const compiled = vm.compileFunction(source, parameters, {
+    ...options, parsingContext: context,
+    importModuleDynamically,
+  } as vm.CompileFunctionOptions) as JSFunction;
+  // Node exposes the function's own name, but cannot update V8's retained source name.
+  Reflect.defineProperty(compiled, 'name', { value: options.name, configurable: true });
+  return compiled;
 }
 
 /** Run retained code without reparsing it or performing a microtask checkpoint. */

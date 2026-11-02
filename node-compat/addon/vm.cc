@@ -352,6 +352,12 @@ void CreateContext(const FunctionCallbackInfo<Value>& args) {
           .IsNothing()) return;
   {
     Context::Scope scope(realm);
+    // Retain the pristine intrinsic in the realm's traced state, before Binding
+    // or author code can replace it. This also survives JS adapter reloads.
+    Local<Value> eval;
+    if (!realm->Global()->Get(realm, Text(isolate, "eval")).ToLocal(&eval) ||
+        realm->GetExtrasBindingObject()->SetPrivate(realm,
+            Private::ForApi(isolate, Text(isolate, "browlet.functionCompilerEval")), eval).IsNothing()) return;
     Local<Value> constructor;
     Local<Value> prototype;
     if (!realm->Global()->Get(realm, Text(isolate, "Object")).ToLocal(&constructor) ||
@@ -434,6 +440,73 @@ void InitializeVmRegistry(const FunctionCallbackInfo<Value>& args) {
     if (extras->SetPrivate(host, key, registry).IsNothing()) return;
   }
   args.GetReturnValue().Set(registry);
+}
+
+void CompileFunction(const FunctionCallbackInfo<Value>& args) {
+  auto isolate = args.GetIsolate();
+  auto host = isolate->GetCurrentContext();
+  Local<Context> realm;
+  if (!GetContext(args, args[1]).ToLocal(&realm)) return;
+  if (!args[0]->IsString() || !args[2]->IsArray() || !args[3]->IsArray() ||
+      !args[4]->IsString() || !args[5]->IsInt32() || !args[6]->IsInt32() ||
+      (!args[9]->IsUndefined() && !args[9]->IsString())) {
+    Fail(isolate, "ERR_INVALID_ARG_TYPE", "Expected a function body, parameters, scopes and source location");
+    return;
+  }
+  std::vector<Local<String>> parameters;
+  auto names = args[2].As<Array>();
+  for (uint32_t index = 0; index < names->Length(); ++index) {
+    Local<Value> value;
+    if (!names->Get(host, index).ToLocal(&value)) return;
+    if (!value->IsString()) {
+      Fail(isolate, "ERR_INVALID_ARG_TYPE", "Expected string parameter names");
+      return;
+    }
+    parameters.push_back(value.As<String>());
+  }
+  std::vector<Local<Object>> extensions;
+  auto scopes = args[3].As<Array>();
+  for (uint32_t index = 0; index < scopes->Length(); ++index) {
+    Local<Value> value;
+    if (!scopes->Get(host, index).ToLocal(&value)) return;
+    if (!value->IsObject()) {
+      Fail(isolate, "ERR_INVALID_ARG_TYPE", "Expected object context extensions");
+      return;
+    }
+    extensions.push_back(value.As<Object>());
+  }
+  Context::Scope entered(realm);
+  Local<v8::Data> options;
+  if (!CompilationOptions(isolate, args[7], args[8]->IsTrue()).ToLocal(&options)) return;
+  ScriptOrigin origin(args[4], args[5].As<Int32>()->Value(), args[6].As<Int32>()->Value(),
+                      false, -1, {}, false, false, false, options);
+  ScriptCompiler::Source source(args[0].As<String>(), origin);
+  Local<Function> function;
+  if (!ScriptCompiler::CompileFunction(realm, &source, parameters.size(), parameters.data(),
+                                      extensions.size(), extensions.data()).ToLocal(&function)) return;
+  // Unlike an own `name` property, SetName also supplies V8's retained source
+  // name without introducing a named-function-expression scope.
+  if (args[9]->IsString()) function->SetName(args[9].As<String>());
+  args.GetReturnValue().Set(function);
+}
+
+// Private to vm.cjs's trusted compiler factory. The public API accepts source,
+// never an arbitrary callback to run with the author policy disabled.
+void InvokeFunctionCompiler(const FunctionCallbackInfo<Value>& args) {
+  auto isolate = args.GetIsolate();
+  auto function = args[0].As<Function>();
+  auto realm = function->GetCreationContext().ToLocalChecked();
+  Context::Scope entered(realm);
+  Local<Value> eval;
+  if (!realm->GetExtrasBindingObject()->GetPrivate(realm,
+          Private::ForApi(isolate, Text(isolate, "browlet.functionCompilerEval"))).ToLocal(&eval) ||
+      args[2].As<Object>()->CreateDataProperty(realm, Text(isolate, "eval"), eval).IsNothing()) return;
+  const bool allowed = realm->IsCodeGenerationFromStringsAllowed();
+  realm->AllowCodeGenerationFromStrings(true);
+  Local<Value> result;
+  const bool completed = function->Call(realm, args[1], 0, nullptr).ToLocal(&result);
+  realm->AllowCodeGenerationFromStrings(allowed);
+  if (completed) args.GetReturnValue().Set(result);
 }
 
 void RunScript(const FunctionCallbackInfo<Value>& args) {
@@ -527,6 +600,8 @@ v8::Local<v8::External> InitializeVm(v8::Local<v8::Object> exports,
     {"createContextHandle", CreateContext},
     {"evaluate", Evaluate},
     {"compileScript", CompileScript},
+    {"compileFunction", CompileFunction},
+    {"invokeFunctionCompiler", InvokeFunctionCompiler},
     {"runScript", RunScript},
     {"isContext", IsContext},
     {"setPropertyDelegate", SetPropertyDelegate},

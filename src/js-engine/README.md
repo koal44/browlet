@@ -24,6 +24,26 @@ the [roadmap](ROADMAP.md) identifies remaining engine/HTML integration work.
 
 ## Environments and allocation
 
+`JSRealm.compileFunction(body, parameters, options)` compiles a FunctionBody in
+its owning context without executing it or consulting eval/Function policy.
+Object scopes are live, ordered outermost first, and honor `Symbol.unscopables`.
+The addon uses public V8 `CompileFunction` and `SetName`; stock Node uses
+`vm.compileFunction`. Stock compilation preserves the function's own name but
+cannot put that name into `Function.prototype.toString()` (an approved expected
+failure). HTML selects the scope and Binding supplies platform objects and
+creates the callback with its explicit callback context. Host-compiled functions
+carry no HTML ScriptOrModule; dynamic import uses the context's loader unless
+the addon caller supplies an explicit function loader.
+
+V8 rejects JavaScript Proxies in `CompileFunction`'s context extensions. JS Engine
+handles those scopes by validating the original FunctionBody, then compiling a
+factory with real `with` environments. This preserves live Proxy operations,
+method receivers, strict bodies, and scope order without native changes or
+additional named bindings. The factory does not execute the handler body. Its
+anonymous function has the correct `.name`, but intrinsic `toString()` omits the
+name on every backend; that exact source-text assertion is an approved expected
+failure. Ordinary object scopes continue through the direct compiler path.
+
 `JSEnvironment` supplies `realm: JSRealm`, `InternalPromise`, `runInParallel()`,
 and `queueTask()`. The environment can be HTML settings, a sandbox, or another host's owner;
 the portable contract requires no browser state. Fetch owns its additional

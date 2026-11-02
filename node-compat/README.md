@@ -21,6 +21,7 @@ the observable constraints of each runtime.
 | --- | --- |
 | Contexts, globals, and microtask queues | [vm.cc](addon/vm.cc), [JavaScript adapters](addon/vm.cjs); [queue tests](test/capabilities.test.cjs), [browser global tests](../test/browlet/browsing/native-global.test.ts) |
 | Retained classic scripts | [vm.cc](addon/vm.cc), [JavaScript adapters](addon/vm.cjs); [compilation, execution, and lifetime tests](test/retained-scripts.test.cjs) |
+| Realm-owned function bodies | [vm.cc](addon/vm.cc), [JavaScript adapter](addon/vm.cjs); [scope, identity, import, and lifetime tests](test/function-compilation.test.cjs) |
 | Source-text and synthetic modules | [vm-modules.cc](addon/vm-modules.cc), [module classes](addon/vm-modules.cjs); [Node API comparisons](test/vm-api.test.cjs), [native linking and lifetime tests](test/modules.test.cjs) |
 | Dynamic-import callbacks | [vm-imports.cc](addon/vm-imports.cc), [loader registration](addon/vm-imports.cjs); [routing, queue, and lifetime tests](test/dynamic-import.test.cjs) |
 | Realm identity and lookup | [realm.cc](addon/realm.cc); [realm tests](test/capabilities.test.cjs) |
@@ -45,6 +46,37 @@ that opaque VM data for context lookup.
 The [native addon suite](test/) also covers lifetime, garbage collection, and runtime selection.
 
 ## Contexts, globals, and optional facilities
+
+`compileFunction(body, parameters, options)` follows Node's function-compilation
+shape, with `parsingContext` required to be an attached addon context handle.
+Supported options are `contextExtensions`, `filename`, `lineOffset`,
+`columnOffset`, and `importModuleDynamically`. The additional `name` option sets
+the retained function source name, without a named-expression self binding.
+Cached data and other options are rejected. Compilation does not execute the
+body, apply eval policy, or run a checkpoint. Public V8 APIs supply this on all
+three bases; no Node/V8 patch was added.
+
+V8 rejects JavaScript Proxy scope extensions. For these scopes, the addon uses a
+validated declaration inside actual `with` environments, captures the function,
+and deletes its temporary declaration binding. This preserves exact named source
+and live lookup without a named-expression self binding. Nonempty names on this
+path must be valid declaration identifiers. A private native entry uses the
+realm's retained pristine eval intrinsic and restores the string-compilation
+allowance after the trusted factory returns or throws. Author bodies and Proxy
+traps do not run during compilation; later calls use the cached function directly.
+Proxy-scoped functions without explicit import loaders share a compilation
+identity, allowing V8 to reuse identical compiler factories without retaining
+individual functions. Each returned function keeps its own scopes and realm.
+Explicit loaders retain separate registrations. The captured scope owns that
+registration so V8's eval cache cannot retain
+discarded functions, loader callbacks, or contexts through the metadata registry.
+The result converter remains available until pending imports complete, even when
+their originating function has already been collected.
+
+Compilation metadata identifies these functions as having no HTML ScriptOrModule.
+An explicit import loader receives the compiled function as its referrer; absent
+that loader, imports use the context fallback. As for the other VM operations,
+imports require the already maintained forwarding export on the custom build.
 
 `setPromiseRejectionTracker(context, tracker)` installs a synchronous
 `tracker(promise, operation, compiledCode)` for code executing in that context;

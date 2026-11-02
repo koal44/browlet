@@ -31,6 +31,18 @@ Agent semantics are not implied by native queue/context support.
 
 ## Next consumers
 
+### Optimized Promise-job snapshots
+
+During the 2 November 2026 consolidation, one full custom/addon unit run crashed
+in `GetCurrentHostDefinedOptions(true)`, called by the existing Promise enqueue
+snapshot. V8 reported missing deoptimization information in
+`OptimizedJSFrame::Summarize`. That addon path is unchanged by this consolidation.
+The affected Stylelet test passes in isolation, as do forced-optimization Promise
+controls. A second full run passes, so no minimal reproducer is established yet.
+The native failure remains open; no optimization, metadata, or assertion was
+disabled. Experimental's `optimized-job-snapshot/README.md` retains the stack,
+engine revision, full-run command, and passing controls for a focused follow-up.
+
 ### Classic scripts and host entry
 
 Integrate HTML Script records with `ParseScript`/`ScriptEvaluation`, settings, source
@@ -63,6 +75,29 @@ bases; stock Node retains its attribution limit. The host scopes the observation
 on its modeled stack without inventing ScriptOrModule provenance. Other platform
 surfaces, implicit author calls, and complete callback/job restoration still need
 their own consumers and regressions; this is not arbitrary frame interception.
+
+### Inline event-handler compilation
+
+HTML §8.1.8.1's [current-value algorithm](https://html.spec.whatwg.org/multipage/webappapis.html#getting-the-current-value-of-the-event-handler)
+needs realm-owned FunctionBody parsing, target-realm syntax errors, an explicit
+document/form/element scope chain where applicable, source locations, and null
+ScriptOrModule identity. `JSRealm.compileFunction(body, parameters, options)` now
+uses public V8 `CompileFunction`/`SetName` on addon contexts and Node's
+`vm.compileFunction` on stock contexts. Its pending signature review marks the
+extraction of compilation from HTML's larger algorithm. It bypasses eval policy,
+preserves live object scopes and unscopables, and gives syntax errors the selected
+realm. The addon registry reports null HTML ScriptOrModule identity for these
+functions; explicit Node-shaped import callbacks still receive the function.
+Proxy scopes use the addon's validated declaration/eval factory because V8's
+direct compiler rejects them. It preserves exact named source, live lookup and
+receivers without a persistent self binding. The private compilation call restores
+author eval policy; the captured scope owns import metadata and its lifetime.
+Stock Node cannot retain the function name in source text; the approved expected
+failure is recorded in [LIMITATIONS](../LIMITATIONS.md#runtime-selection). The
+[HTML handler owner](../browlet/scripting/ROADMAP.md#html-8181-event-handler-idl-invocation)
+retains raw values, lifecycle, policy checks, and callback Binding integration.
+Element/Document scope integration is connected. Form-owner discovery and precise
+exception-source extraction remain owning HTML dependencies. No Node/V8 patch was added.
 
 ### Promise rejection lifecycle
 

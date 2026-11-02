@@ -5,8 +5,8 @@ import { isAbsolute } from 'node:path';
 import { InternalError } from '../infra/internal-error';
 
 import type {
-  CollectionIteratorKind, CompiledCode, CompiledScript, ExoticObjectHandlers, GlobalAccessHandlers, GlobalIndexedProperties,
-  GlobalObject, GlobalPrototypeKind, GlobalProxy,
+  CollectionIteratorKind, CompiledCode, CompiledScript, ExoticObjectHandlers, FunctionCompilationOptions,
+  GlobalAccessHandlers, GlobalIndexedProperties, GlobalObject, GlobalPrototypeKind, GlobalProxy,
   JSFunction, JSIteratorResult,
 } from './realm';
 import type { JSJobCallback, VMContext } from './runtime';
@@ -40,6 +40,10 @@ export class NodeAPI {
   createMicrotaskQueue?: (requestCheckpoint?: () => void) => AddonMicrotaskQueueHandle;
   /** Node-shaped retained scripts; HTML selects the realm when running them. */
   Script?: new (source: string, options?: ContextEvaluationOptions) => CompiledScript;
+  /** Node-shaped FunctionBody compilation, with a retained-source name extension. */
+  compileFunction?: (source: string, parameters: string[], options: FunctionCompilationOptions & {
+    parsingContext: VMContext;
+  }) => JSFunction;
   /** Node-shaped source-text modules bound to an existing context. */
   SourceTextModule?: new (source: string, options: SourceTextModuleOptions) => SourceTextModule;
   /** Node-shaped synthetic modules with named, mutable exports. */
@@ -110,6 +114,7 @@ export class NodeAPI {
     this.createHTMLDDA = this.#loadMethod(backend, 'createHTMLDDA');
     this.createMicrotaskQueue = this.#loadMethod(backend, 'createMicrotaskQueue');
     this.Script = this.#loadMethod(backend, 'Script');
+    this.compileFunction = this.#loadMethod(backend, 'compileFunction');
     this.SourceTextModule = this.#loadMethod(backend, 'SourceTextModule');
     this.SyntheticModule = this.#loadMethod(backend, 'SyntheticModule');
     this.getFunctionRealm = this.#loadMethod(backend, 'getFunctionRealm');

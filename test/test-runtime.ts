@@ -20,6 +20,7 @@ const supported = {
   explicitQueues: !!addon.createMicrotaskQueue,
   finalizationRegistryPredicate: !!addon.isFinalizationRegistry,
   functionRealms: !!addon.getFunctionRealm,
+  namedFunctionSource: !!addon.createContextHandle && !!addon.compileFunction,
   htmlDDA: addon.supportsHTMLDDA,
   hostHooks: !!setHostHooks,
   importMeta: !addon.createContextHandle || addon.supportsImportMeta,

@@ -1,6 +1,7 @@
 'use strict';
 
 const vm = require('node:vm');
+const { types } = require('node:util');
 const { onSettled } = require('node:v8').promiseHooks;
 
 let needsPromiseThenWorkaround = process.versions.node.startsWith('24.');
@@ -8,23 +9,34 @@ let needsPromiseThenWorkaround = process.versions.node.startsWith('24.');
 // Adapt the public options to the native context/evaluation arguments.
 module.exports = (native, initializeGlobalObject) => {
   const entries = new WeakMap();
+  // Proxy functions without explicit loaders use context imports and null script
+  // attribution. Share their metadata so identical factories hit V8's code cache.
+  const proxyFunctionId = Symbol();
   // The Node environment retains this one registry across adapter reloads on
   // every base, independently of the optional dynamic-import router.
   const registry = native.initializeVmRegistry({
-    register(callback, referrer, convertResult) {
+    register(callback, referrer, convertResult, owner) {
       const id = Symbol();
-      entries.set(id, { callback, referrer, convertResult });
+      const entry = { callback, referrer, convertResult };
+      // Eval caches can retain metadata after a compiled closure dies. In that
+      // case its captured scope, rather than the metadata, owns the registration.
+      if (owner !== undefined) entries.set(owner, entry);
+      entries.set(id, owner === undefined ? entry : { reference: new WeakRef(entry), convertResult });
       return id;
     },
-    get(id) { return entries.get(id); },
+    get(id) {
+      const entry = entries.get(id);
+      // A pending import can outlive its compiler scope and still need conversion.
+      return entry?.reference?.deref() ?? entry;
+    },
   });
   const { Module, SourceTextModule, SyntheticModule, WebAssemblyModule, resultForImport, captureWasmIntrinsics } =
     require('./vm-modules.cjs')(native, registerCompilation);
   if (native.installDynamicImportRouter) require('./vm-imports.cjs')(native, registry);
 
-  function registerCompilation(callback, referrer) {
+  function registerCompilation(callback, referrer, owner) {
     checkImportCallback(callback);
-    return registry.register(callback, referrer, resultForImport);
+    return registry.register(callback, referrer, resultForImport, owner);
   }
 
   function checkImportCallback(callback) {
@@ -66,6 +78,63 @@ module.exports = (native, initializeGlobalObject) => {
   const methods = {
     Script,
     Module, SourceTextModule, SyntheticModule, WebAssemblyModule,
+    compileFunction: function compileFunction(source, parameters = [], options = {}) {
+      for (const key of Object.keys(options)) {
+        if (!['parsingContext', 'contextExtensions', 'filename', 'lineOffset', 'columnOffset',
+          'importModuleDynamically', 'name'].includes(key)) {
+          throw new TypeError(`Unsupported node-compat function option: ${key}`);
+        }
+      }
+      const { parsingContext, contextExtensions = [], filename = '', lineOffset = 0,
+        columnOffset = 0, importModuleDynamically, name } = options;
+      const proxyScopes = Array.isArray(contextExtensions) && contextExtensions.some(types.isProxy);
+      const gate = proxyScopes ? Object.create(null) : undefined;
+      const sharedIdentity = proxyScopes && importModuleDynamically === undefined;
+      const id = sharedIdentity ? proxyFunctionId : registerCompilation(importModuleDynamically, null, gate);
+      let compiled;
+      if (proxyScopes) {
+        if (!Array.isArray(parameters)) throw new TypeError('Expected an array of parameter names');
+        parameters = Array.from(parameters);
+        const scopes = Array.from(contextExtensions);
+        if (scopes.some(scope => scope === null || (typeof scope !== 'object' && typeof scope !== 'function'))) {
+          throw new TypeError('Expected object context extensions');
+        }
+        // Validate the FunctionBody before inserting it into generated syntax.
+        compiled = native.compileFunction(source, parsingContext, parameters, [], filename,
+          lineOffset, columnOffset, id, importModuleDynamically !== undefined, name);
+        if (compiled === undefined) throw new TypeError('Invalid function parameters');
+        if (name !== undefined && name !== '' && !/^[$_\p{ID_Start}][$\u200c\u200d\p{ID_Continue}]*$/u.test(name)) {
+          throw new TypeError('A Proxy-scoped function name must be an identifier');
+        }
+        const body = `function ${name ?? ''}(${parameters.join(', ')}) {\n${source}\n}`;
+        // Direct eval creates a deletable declaration binding. An arrow factory
+        // avoids an existing `arguments` binding when that is the requested name.
+        // Delete the temporary name so the handler retains live scope lookup.
+        const named = name !== undefined && name !== '';
+        const factorySource = 'return (() => {' +
+          scopes.map((_, index) => `with (this[${index}]) {`).join('') +
+          `with (this[${scopes.length}]) {` +
+          (named ? `eval(${JSON.stringify(body)});` : `return [${body}, true];`) +
+          '}'.repeat(scopes.length + 1) +
+          (named ? `return [${name}, delete ${name}];` : '') + '})();';
+        const factory = native.compileFunction(factorySource, parsingContext, [], [], filename,
+          lineOffset, columnOffset, id, importModuleDynamically !== undefined);
+        scopes.push(gate);
+        try {
+          const result = native.invokeFunctionCompiler(factory, scopes, gate);
+          if (!result[1]) throw new Error('Temporary function declaration was not removed');
+          compiled = result[0];
+        } finally {
+          // The captured scope object remains empty and cannot shadow author eval.
+          delete gate.eval;
+        }
+      } else {
+        compiled = native.compileFunction(source, parsingContext, parameters, contextExtensions,
+          filename, lineOffset, columnOffset, id, importModuleDynamically !== undefined, name);
+      }
+      if (!sharedIdentity) registry.get(id).referrer = compiled;
+      return compiled;
+    },
     createMicrotaskQueue: callback => native.createMicrotaskQueue(callback, onSettled),
     createContextHandle: function createContextHandle(options = {}) {
       for (const key of Object.keys(options)) {
@@ -131,7 +200,10 @@ module.exports = (native, initializeGlobalObject) => {
     // it has a saved script context to restore when metadata is absent.
     getCompiledCode(options) {
       if (options.length === 0) return undefined;
-      return registry.get(options[2])?.referrer ?? null;
+      const referrer = registry.get(options[2])?.referrer;
+      // A host-compiled function has no HTML ScriptOrModule, even when compiled
+      // while another script is active. Its import callback still receives it.
+      return typeof referrer === 'function' ? null : referrer ?? null;
     },
   };
 };

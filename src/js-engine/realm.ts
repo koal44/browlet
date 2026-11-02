@@ -15,7 +15,7 @@ import {
   type CompiledModule, type ImportModuleDynamically, type ModuleCompilationOptions, type ModuleRequest,
 } from './modules';
 import {
-  associateContext, associateGlobalRealm, associateObjectRealm, cloneSharedArrayBuffer, compileScript,
+  associateContext, associateGlobalRealm, associateObjectRealm, cloneSharedArrayBuffer, compileFunction, compileScript,
   createCollectionIterator, createContext, createExoticObject, createFunctionWithIncumbent, createMicrotaskQueue,
   getContextGlobalAllocation, getContextGlobalProxy,
   makePrototypeImmutable, observePromise, runInContext, runScript, runWithActiveRealm,
@@ -179,8 +179,8 @@ export class JSRealm {
   #incumbentFunctionFactory: RealmFunctionFactory;
   /** Constructor proxies can capture at their existing call/construct traps. */
   #constructibleFunctionFactory: RealmConstructorFactory;
-  /** Uses this context as the referrer for source-string evaluation. */
-  #importModuleDynamically: ImportModuleDynamically<CompiledScript> | undefined;
+  /** Uses this context as the referrer for source-string evaluation and host-compiled functions. */
+  #importModuleDynamically: ImportModuleDynamically<CompiledScript | JSFunction> | undefined;
   /** Recent evaluation code, scoped to this realm's fixed import loader. */
   #evaluations = new Map<string, { filename: string; lineOffset: number; code: CompiledScript; }>();
   #fallbackIteratorNext: Partial<Record<CollectionIteratorKind, JSFunction>> = {};
@@ -208,7 +208,7 @@ export class JSRealm {
       options.globalAccess !== undefined,
     );
     this.#importModuleDynamically = importModuleDynamically && this.supportsDynamicImport
-      ? (specifier, _script, attributes, phase) =>
+      ? (specifier, _referrer, attributes, phase) =>
         importModuleDynamically(specifier, this.#vmContext, attributes, phase)
       : undefined;
     this.#globalAllocation = getContextGlobalAllocation(this.#vmContext);
@@ -710,6 +710,27 @@ export class JSRealm {
     return runWithActiveRealm(this, () => runScript(script, this.#vmContext));
   }
 
+  /**
+   * Compile a named FunctionBody in this realm without executing it.
+   * Required contract: realm-owned syntax errors, non-lexical this, the supplied
+   * object scopes, and null [[ScriptOrModule]]. Host-controlled compilation must
+   * bypass eval/Function string-compilation policy.
+   */
+  // HTML's current-value algorithm needs FunctionBody parsing and OrdinaryFunctionCreate.
+  // https://html.spec.whatwg.org/multipage/webappapis.html#getting-the-current-value-of-the-event-handler
+  // SPEC_MISMATCH: get the current value of the event handler(eventTarget, name) -> EventHandler
+  // Extract only compilation; HTML selects inputs and Binding adapts the returned function.
+  compileFunction(body: string, parameters: string[], options: FunctionCompilationOptions): JSFunction {
+    try {
+      return compileFunction(body, parameters, this.#vmContext, options, this.#importModuleDynamically);
+    } catch (error) {
+      if (isObject(error) && Reflect.getPrototypeOf(error) === this.SyntaxError.prototype) throw error;
+      // eslint-disable-next-line no-restricted-properties -- Node's compiler allocates syntax errors in its host realm.
+      if (!(error instanceof globalThis.SyntaxError)) throw error;
+      throw new this.SyntaxError(error.message);
+    }
+  }
+
   /** Compile module source in this realm without linking or executing it. */
   compileModule(source: string, filename: string, options: ModuleCompilationOptions = {}): CompiledModule {
     return compileModule(source, this.#vmContext, filename, options);
@@ -882,6 +903,21 @@ export type CompiledCode = CompiledScript | CompiledModule;
 export interface CompiledScript {
   runInContext(context: VMContext, options?: { displayErrors?: boolean; }): unknown;
 }
+
+/** Inputs to the unimplemented realm-owned function-body compiler. */
+export type FunctionCompilationOptions = {
+  /** Function name; source text omits it on stock Node and when a Proxy scope needs the factory fallback. */
+  name: string;
+  /**
+   * Object Environment Records outside the function, ordered outermost first,
+   * with [[IsWithEnvironment]] true. Binding supplies Platform objects, not implementations.
+   */
+  contextExtensions: object[];
+  /** Original source location when available; omitted fields must not invent provenance. */
+  filename?: string;
+  lineOffset?: number;
+  columnOffset?: number;
+};
 
 /**
  * Complete dispatch for an extensible, noncallable native exotic object.
