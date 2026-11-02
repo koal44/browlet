@@ -9,9 +9,9 @@
 - `window-proxy.ts`: internal handle retaining the stable platform identity and
   paired Window association across navigation.
 - `location.ts`: Location identity, URL accessors, and navigation preparation.
-- [`../../integration/web-idl/cross-origin.ts`](../../integration/web-idl/cross-origin.ts):
+- [`../../integration/web-idl/bindings/cross-origin.ts`](../../integration/web-idl/bindings/cross-origin.ts):
   HTML's shared cross-origin algorithms and the Web IDL security check.
-- [`../../integration/web-idl/window-proxy.ts`](../../integration/web-idl/window-proxy.ts):
+- [`../../integration/web-idl/bindings/window-proxy.ts`](../../integration/web-idl/bindings/window-proxy.ts):
   native Window caller selection and foreign property dispatch.
 
 ## HTML §7.2.1: cross-origin objects
@@ -377,7 +377,7 @@ stock caller selection and same-origin COOP reporting remain unfinished.
 
 **Caller boundary:** V8 captures the accessing context before entering the Node
 host callback. JS Engine resolves its existing realm reference; HTML's
-[`getWindowProxyAccess()`](../../integration/web-idl/window-proxy.ts) selects the caller's
+[`getWindowProxyAccess()`](../../integration/web-idl/bindings/window-proxy.ts) selects the caller's
 registered binding and invokes `CrossOriginObjectBinding`. A B-authored function
 or borrowed B Reflect operation therefore selects B, including when entered from
 A. Native checks exempt only the exact Node composition context; an unregistered
@@ -614,7 +614,7 @@ own-property query that followed the reused public proxy instead of the original
 global. The maintained native regression reproduces that wrong query without the
 guard; `property-delegate.cc` now selects the original holder consistently.
 The guard now lives in maintained `node-compat/addon/global-access.cc`, with the
-HTML adapter in `integration/web-idl/window-proxy.ts`. Guarded allocation is opt-in;
+HTML adapter in `integration/web-idl/bindings/window-proxy.ts`. Guarded allocation is opt-in;
 ordinary addon contexts keep their existing behavior. Only the exact composing
 Node context bypasses policy. The addon owns the isolate-wide failed-access
 callback, reference-counted across repeated loads and removed at final environment
@@ -1136,7 +1136,7 @@ the first Location access. The IDL stringifier remains the existing own member.
 
 Web IDL's additional platform-creation hook runs after inherited unforgeable members
 are installed and before the final object is stamped. HTML owns the Location steps
-in `integration/web-idl/location.ts`. This splits the specification's creation
+in `integration/web-idl/bindings/location.ts`. This splits the specification's creation
 algorithm: the hook receives an already allocated object, with Web IDL's creation
 step complete. The callable arrangement has a pending `SPEC_MISMATCH` review marker.
 The hook may return a different exotic object later, without stamping its backing
@@ -1866,7 +1866,7 @@ this slice does not change Window's automatic dispatch.
 | --- | --- | --- |
 | existing `opening.ts`, `window.ts`, and navigation owners | Complete `open()`, auxiliary/top-level traversable creation, target selection, opener relationships, session-storage shed cloning, closing, and stopping | HTML §7.2.2.1; HTML §7.3; Storage |
 | existing `window.ts` | Remaining Window members and event-handler mixins; automatic child/opener lifecycle integration | HTML §7.2.2 and owning chapters |
-| existing `window-proxy.ts` and `integration/web-idl/window-proxy.ts` | Resolve the native indexed explicit-receiver gap; finish same-origin COOP reporting; supply stock caller selection; complete missing Window declarations | HTML §7.2.3 |
+| existing `window-proxy.ts` and `integration/web-idl/bindings/window-proxy.ts` | Resolve the native indexed explicit-receiver gap; finish same-origin COOP reporting; supply stock caller selection; complete missing Window declarations | HTML §7.2.3 |
 | existing `location.ts` and navigation owners | Reload coordination and activation/navigation effects; automatic Location exotic dispatch requires the addon | HTML §§7.2.4, 7.4 |
 
 Automatic WindowProxy Get/Set must call the caller binding's

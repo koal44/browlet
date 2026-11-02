@@ -6,7 +6,7 @@ import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext, Navigable, createDocumentState } from '../../../../src/browlet/browsing/navigation/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/index';
-import { CrossOriginObjectBinding } from '../../../../src/browlet/integration/web-idl/cross-origin';
+import { CrossOriginObjectBinding } from '../../../../src/browlet/integration/web-idl/bindings/cross-origin';
 import { getBindingContext, unwrap } from '../../../support/browlet-binding';
 
 // The real caller binding is explicit until WindowProxy traps can select it automatically.

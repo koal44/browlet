@@ -563,7 +563,7 @@ does not throw. This representation has been reviewed and accepted.
 HTML's `HTMLAllCollection` lives beside Document, with its native binding and
 compatibility evidence [recorded above](#htmlallcollection). Form and options
 collections stay with their concrete owners in [html/forms](html/forms/ROADMAP.md).
-The standalone [DOMStringList](../string-list.ts) needs no node-collection
+The standalone [DOMStringList](../lists/string-list.ts) needs no node-collection
 machinery; Document retains it for initialized ancestor origins.
 
 ## Behavioral coverage

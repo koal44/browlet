@@ -338,7 +338,7 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   global-scope queries throw explicitly. They remain suitable for internal
   allocations and clientless work such as Reporting uploads. Public APIs that
   need those settings require a Window or another complete environment.
-  Sources: [environments](browlet/environment.ts),
+  Sources: [environments](browlet/environment/environment.ts),
   [sandbox tests](../test/browlet/scripting/sandbox.test.ts).
 
 ## Promise observation

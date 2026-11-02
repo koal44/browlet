@@ -2,8 +2,8 @@ import { expect, it } from 'vitest';
 
 import { webIDLCommonDefinitions } from '../../src/web-idl/core/index';
 import { validateDefinitions } from '../../src/web-idl/assembly/index';
-import { browletDefinitions } from '../../src/browlet/bindings';
-import type { BrowletEnvironment } from '../../src/browlet/environment';
+import { browletDefinitions } from '../../src/browlet/integration/web-idl/index';
+import type { BrowletEnvironment } from '../../src/browlet/environment/index';
 import { ElementImpl } from '../../src/browlet/dom/nodes/element';
 import { getElementConstructor } from '../../src/browlet/dom/nodes/element-interfaces';
 

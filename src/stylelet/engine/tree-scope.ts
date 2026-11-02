@@ -6,8 +6,8 @@ import { DOMExceptionImpl } from '../../web-idl/core/index';
 import { parseURL } from '../../url/index';
 
 import { parseStylesheetContents } from '../syntax/index';
-import type { StyleletContext } from '../context';
 import { CSSStyleSheetImpl, StyleSheetListImpl, RuleListContext } from '../cssom/index';
+import type { StyleletContext } from '../context';
 
 /** A document or shadow root's stylesheet collections and stylesheet-set selection state. */
 // https://drafts.csswg.org/cssom/#css-style-sheet-collections

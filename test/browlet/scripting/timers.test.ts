@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createManualUserAgent } from '../../support/browlet-agent';
 import { createTestDocument } from '../../support/dom';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/document-state';
-import { createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/session-history';
+import { createDocumentState, createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/state/index';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import { Duration } from
   '../../../src/browlet/timing/clock';

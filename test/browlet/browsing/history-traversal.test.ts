@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/document-state';
+import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { Navigable } from '../../../src/browlet/browsing/navigation/navigable';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl } from '../../../src/browlet/dom/nodes/html/embedded/iframe';

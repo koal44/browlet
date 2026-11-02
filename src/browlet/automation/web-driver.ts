@@ -3,7 +3,7 @@ import { isCallable, isPromiseObject, randomUUID } from '../../js-engine/index';
 import type { URLRecord } from '../../url/index';
 
 import { ClassicScript, ScriptFetchOptions, type BrowletRealm, type ScriptCompletion } from '../scripting/index';
-import type { BrowletEnvironment } from '../environment';
+import type { BrowletEnvironment } from '../environment/index';
 import type { UserAgent } from '../user-agent';
 
 import type {

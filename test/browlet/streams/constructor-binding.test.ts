@@ -7,7 +7,7 @@ import type { WindowProxy } from '../../../src/browlet/platform';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
-import { createWindowEnvironment } from '../../../src/browlet/bindings';
+import { createWindowEnvironment } from '../../../src/browlet/integration/web-idl/index';
 import type { Window } from '../../../src/browlet/platform';
 
 describe('Streams constructor bindings', () => {

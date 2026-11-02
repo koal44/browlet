@@ -1,8 +1,8 @@
 import { InternalError } from '../../../infra/internal-error';
 import { defineInterface, idlType, impl, nullable, reference, roAttr } from '../../../web-idl/core/index';
 
-import type { StyleletEnvironment } from '../../environment';
 import type { CustomPropertyRegistration } from '../../props/index';
+import type { StyleletEnvironment } from '../../environment';
 
 import { CSSRuleImpl } from './rule';
 

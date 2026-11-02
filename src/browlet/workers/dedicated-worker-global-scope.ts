@@ -1,7 +1,7 @@
 import type { FetchResponse } from '../../fetch/index';
 
 import { EmbedderPolicy, queueCOEPInheritanceViolation } from '../browsing/policy/index';
-import type { BrowletEnvironment } from '../environment';
+import type { BrowletEnvironment } from '../environment/index';
 
 import { WorkerGlobalScopeImpl } from './worker-global-scope';
 

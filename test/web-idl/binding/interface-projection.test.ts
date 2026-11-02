@@ -4,7 +4,7 @@ import {
   ctor, defineProxyObject, defineInterface, idlType, impl, op, reference, union,
 } from '../../../src/web-idl/core/index';
 import { BindingWorld } from '../../../src/web-idl/binding/world';
-import { getImplementationRecord, getPlatformRecord } from '../../../src/web-idl/binding/platform';
+import { getImplementationRecord, getPlatformRecord } from '../../../src/web-idl/values/index';
 import type { ExtendedAttributeHooks } from '../../../src/web-idl/binding/extended-attributes';
 
 import { installTestBindings } from '../../support/web-idl-binding';

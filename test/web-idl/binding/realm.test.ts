@@ -10,7 +10,7 @@ import {
 import { DefinitionAssembly } from '../../../src/web-idl/assembly/index';
 import { BindingWorld } from '../../../src/web-idl/binding/world';
 import { RealmBinding, type SecurityCheckType } from '../../../src/web-idl/binding/realm';
-import { getPlatformRecord, PlatformRecord } from '../../../src/web-idl/binding/platform';
+import { getPlatformRecord, PlatformRecord } from '../../../src/web-idl/values/index';
 
 import { getInstalledInterface, getMemberBinding } from '../../support/web-idl-binding';
 import { TestRealm as Realm } from '../../support/web-idl-realm';

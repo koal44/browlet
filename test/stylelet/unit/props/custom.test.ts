@@ -2,7 +2,7 @@ import { styleletEnv } from '../../environment-fixture';
 import { describe, expect, it, vi } from 'vitest';
 
 import { CustomProperty } from '../../../../src/stylelet/props/custom-property';
-import type { CustomPropertyRegistration } from '../../../../src/stylelet/props/registry';
+import type { CustomPropertyRegistration } from '../../../../src/stylelet/props/index';
 import { InterpretedDeclaration } from '../../../../src/stylelet/cssom/declarations/interpreted-declaration';
 import { OptionalDeclarationValue } from '../../../../src/stylelet/values/declaration-value';
 import { guaranteedInvalidValue } from '../../../../src/stylelet/values/guaranteed-invalid';

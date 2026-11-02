@@ -1,7 +1,6 @@
 import { InternalError } from '../../../infra/internal-error';
 import { attr, defineInterface, impl, reference, roAttr, xattr } from '../../../web-idl/core/index';
 
-import type { StyleletEnvironment } from '../../environment';
 import {
   consumeBlock,
   type BlockContents, type ParserInput, type Token, type TokenCursor,
@@ -13,9 +12,10 @@ import {
 import type { InterpretedDeclaration } from '../declarations/index';
 import { CSSDeclarationBlock, CSSStylePropertiesImpl } from '../declarations/index';
 import type { StylePropertyMapImpl } from '../typed/index';
-import { RuleListContext } from './context';
 import type { CSSRuleListImpl } from '../rule-list';
+import type { StyleletEnvironment } from '../../environment';
 
+import { RuleListContext } from './context';
 import type { CSSRuleImpl } from './rule';
 import { CSSGroupingRuleImpl } from './grouping';
 import { CSSNestedDeclarationsImpl } from './nested-declarations';

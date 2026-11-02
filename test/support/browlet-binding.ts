@@ -1,6 +1,6 @@
-import { browletBindingWorld } from '../../src/browlet/bindings';
+import { browletBindingWorld } from '../../src/browlet/integration/web-idl/index';
 import { BrowletRealm, type WindowRealm } from '../../src/browlet/scripting/index';
-import { type BrowletEnvironment } from '../../src/browlet/environment';
+import { type BrowletEnvironment } from '../../src/browlet/environment/index';
 import type { NodeImpl } from '../../src/browlet/dom/nodes/index';
 import type { WindowImpl } from '../../src/browlet/browsing/window/index';
 import type { Node, Window } from '../../src/browlet/platform';

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { internalType } from '../../../src/infra/index';
 import { utf8Encode } from '../../../src/encoding/index';
 import { Browlet } from '../../../src/browlet/browlet';
-import type { BrowletEnvironment } from '../../../src/browlet/environment';
+import type { BrowletEnvironment } from '../../../src/browlet/environment/index';
 import * as scriptClasses from '../../../src/browlet/scripting/script';
 import { JSSourceTextModuleRecord, type JavaScriptModuleScript, type ModuleScript } from '../../../src/browlet/scripting/script';
 import {

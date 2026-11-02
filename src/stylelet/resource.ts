@@ -3,9 +3,10 @@ import {
   fetch, FetchRequest, type Destination, type FetchController, type FetchMode, type FetchResponse,
 } from '../fetch/index';
 
-import type { StyleletEnvironment } from './environment';
 import { UrlValue } from './values/index';
 import type { CSSRuleImpl, CSSStyleDeclarationImpl } from './cssom/index';
+
+import type { StyleletEnvironment } from './environment';
 
 /** Start a CSS resource request in its owning environment; return null if its URL is invalid. */
 // https://drafts.csswg.org/css-values-4/#fetch-a-style-resource

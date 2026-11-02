@@ -1,5 +1,6 @@
 import type { WholeValue } from '../values/index';
-import { getBuiltInProperty, type BaseProperty, type PropertyName } from '../props/index';
+import type { BaseProperty } from '../props/index';
+import { getBuiltInProperty, type PropertyName } from '../props/built-in/index';
 
 // Type parameter: W = whole property value.
 

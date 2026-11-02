@@ -2,7 +2,7 @@ import { InternalError } from '../../../infra/index';
 import type { BufferViewTypeName, StructuredData } from '../../../web-idl/core/index';
 
 import type { AgentCluster } from '../agents';
-import type { BrowletEnvironment } from '../../environment';
+import type { BrowletEnvironment } from '../../environment/index';
 
 /** Serialized graph node; a null cluster means the value is unrestricted. */
 export type SerializedRecord =

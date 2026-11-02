@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import type { BrowletEnvironment } from '../../../src/browlet/environment';
+import type { BrowletEnvironment } from '../../../src/browlet/environment/index';
 import type { PermissionStatusImpl } from '../../../src/browlet/integration/permissions/index';
 import { permissionsTaskSource } from '../../../src/browlet/scripting/index';
 import { PermissionFeature, originPermissionKey, PermissionStore, type PermissionState } from '../../../src/permissions/index';

@@ -1,6 +1,6 @@
 import type { JSFunction } from '../../js-engine/index';
 
-import type { BrowletEnvironment } from '../environment';
+import type { BrowletEnvironment } from '../environment/index';
 
 import type { BrowletRealm } from './realm';
 import type { JSScriptOrModule } from './script';

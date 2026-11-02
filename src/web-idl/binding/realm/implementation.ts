@@ -5,7 +5,7 @@ import type {
   IDLInterfaceMember, IDLConstant, IDLNamedArguments, AssembledInterface, AssembledCallbackInterface,
   AssembledNamespace, DefaultToJSONAttribute, MemberPlacement,
 } from '../../assembly/index';
-import type { PlatformRecord } from '../platform';
+import type { PlatformRecord } from '../../values/index';
 
 import type { ProjectionOverride } from '../extended-attributes';
 import type { RealmBinding } from '../realm';

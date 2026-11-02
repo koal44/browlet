@@ -1,13 +1,13 @@
 import { Browlet } from '../../../../src/browlet/browlet';
-import { browletDefinitions, createBrowletEnvironmentInit } from '../../../../src/browlet/bindings';
-import { SandboxEnvironment, type BrowletEnvironment } from '../../../../src/browlet/environment';
+import { browletDefinitions, createBrowletEnvironmentInit } from '../../../../src/browlet/integration/web-idl/index';
+import { SandboxEnvironment, type BrowletEnvironment } from '../../../../src/browlet/environment/index';
 import { ElementImpl } from '../../../../src/browlet/dom/nodes/index';
 import { HTMLElementImpl } from '../../../../src/browlet/dom/nodes/html/html-element';
 import { htmlQuoteElementImplementations } from '../../../../src/browlet/dom/nodes/html/grouping/quote';
-import type { TokenListAttribute } from '../../../../src/browlet/dom/token-list';
+import type { TokenListAttribute } from '../../../../src/browlet/dom/lists/index';
 import type { Element } from '../../../../src/browlet/platform';
 import { EnumeratedAttribute } from '../../../../src/browlet/html/microsyntaxes/index';
-import { htmlExtendedAttributeHooks } from '../../../../src/browlet/integration/web-idl/index';
+import { htmlExtendedAttributeHooks } from '../../../../src/browlet/integration/web-idl/bindings/index';
 import { HTML_NAMESPACE } from '../../../../src/infra/index';
 import {
   BindingWorld, attr, roAttr, defineInterface, defineTypedef, type Definition, frozenArray, idlType, impl,

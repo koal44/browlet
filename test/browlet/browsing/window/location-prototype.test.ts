@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../../src/browlet/browlet';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
-import { CrossOriginObjectBinding } from '../../../../src/browlet/integration/web-idl/cross-origin';
+import { CrossOriginObjectBinding } from '../../../../src/browlet/integration/web-idl/bindings/cross-origin';
 import { obtainURLOrigin, parseURL } from '../../../../src/url/index';
 import { getBindingContext, getRelevantRealm, project, unwrap } from '../../../support/browlet-binding';
 

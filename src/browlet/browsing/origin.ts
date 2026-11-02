@@ -10,7 +10,7 @@ import { HTMLAnchorElementImpl } from '../dom/nodes/html/text/index';
 import { HTMLAreaElementImpl } from '../dom/nodes/html/embedded/index';
 import { MessageEventImpl } from '../communication/index';
 import { WindowImpl, WindowProxyHandle } from './window/index';
-import type { BrowletEnvironment } from '../environment';
+import type { BrowletEnvironment } from '../environment/index';
 
 /** Retains an origin for identity-preserving copies and origin/site comparisons. */
 // https://html.spec.whatwg.org/multipage/browsers.html#the-origin-interface

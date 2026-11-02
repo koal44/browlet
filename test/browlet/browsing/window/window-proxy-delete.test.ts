@@ -6,7 +6,7 @@ import { BrowsingContext, Navigable, createDocumentState } from '../../../../src
 import { OpenerPolicy } from '../../../../src/browlet/browsing/policy/coop';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/index';
-import { CrossOriginObjectBinding } from '../../../../src/browlet/integration/web-idl/cross-origin';
+import { CrossOriginObjectBinding } from '../../../../src/browlet/integration/web-idl/bindings/cross-origin';
 import { getBindingContext, unwrap } from '../../../support/browlet-binding';
 
 afterEach(() => { vi.restoreAllMocks(); });

@@ -7,7 +7,7 @@ import {
 import { DefinitionAssembly } from '../../../../src/web-idl/assembly/index';
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
 import { RealmBinding } from '../../../../src/web-idl/binding/realm';
-import { getImplementationRecord, PlatformRecord } from '../../../../src/web-idl/binding/platform';
+import { getImplementationRecord, PlatformRecord } from '../../../../src/web-idl/values/index';
 
 import { getInstalledInterface, getMemberBinding } from '../../../support/web-idl-binding';
 import { itPassesWith } from '../../../test-runtime';

@@ -29,7 +29,7 @@ import {
 import { currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../timing/index';
 import { isValidAttributeLocalName, isValidElementLocalName, validateAndExtract } from '../infra/index';
 import { ElementTag } from './element-definitions/index';
-import type { DOMStringListImpl } from '../string-list';
+import type { DOMStringListImpl } from '../lists/index';
 import {
   EventHandlerMap, ModuleMap, SpeculationRulesParseResult, type EventHandlerCallback, type SpeculationRuleSet,
 } from '../../scripting/index';
@@ -50,7 +50,7 @@ import type { NavigationTimingRecord } from '../../performance/index';
 import { MessageEventImpl } from '../../communication/index';
 import type { StorageImpl } from '../../storage/index';
 import type { LocationImpl, WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
-import type { BrowletEnvironment } from '../../environment';
+import type { BrowletEnvironment } from '../../environment/index';
 import type { DocumentParser } from '../../html/parser/index';
 import type { SerializedRecord } from '../../scripting/structured-data/index';
 import type {

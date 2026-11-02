@@ -25,6 +25,20 @@ export function compileHostFunction(source: string, parameters: string[]): JSFun
   return vm.compileFunction(source, parameters) as JSFunction;
 }
 
+/** Compile trusted host steps with captured dependencies and a caller-encoded source URL. */
+export function compileHostSteps<Steps extends (...args: never[]) => unknown>(
+  sourceURL: string, dependencies: Record<string, unknown>, source: string,
+): Steps {
+  // Distinct source labels isolate property and call feedback between generated functions.
+  // Source and parameter names are trusted; exposed functions still need their owning realm.
+  const create = compileHostFunction(`
+    "use strict";
+    return (${source});
+    //# sourceURL=${sourceURL}
+  `, Object.keys(dependencies)) as (...values: unknown[]) => Steps;
+  return create(...Object.values(dependencies));
+}
+
 /** Select handlers using the engine's current realm before entering JavaScript trap functions. */
 export function createExoticObject(
   realmAnchor: object, select: (realm: JSRealm | undefined) => ExoticObjectHandlers,

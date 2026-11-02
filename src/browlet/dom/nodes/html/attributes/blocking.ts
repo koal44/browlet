@@ -1,7 +1,7 @@
 import { asciiLower } from '../../../../../infra/index';
 
 import { splitOnAsciiWhitespace } from '../../../infra/index';
-import type { TokenListAttribute } from '../../../token-list';
+import type { TokenListAttribute } from '../../../lists/index';
 import type { ElementImpl } from '../../element';
 
 /** Tokens recognized by HTML and by a blocking attribute's DOMTokenList.supports(). */

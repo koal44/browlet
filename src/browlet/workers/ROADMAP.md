@@ -122,7 +122,7 @@ structured-clone implementation.
 | `worker-location.ts` | Immutable URL view over a worker global's final response URL | HTML §10.3.3 |
 
 Declarations accompany their implementations; partial contributions stay with
-their primary constructs. Worker settings extend `browlet/environment.ts`; worker-agent acquisition
+their primary constructs. Worker settings extend `browlet/environment/environment.ts`; worker-agent acquisition
 uses `UserAgent`; `WorkerNavigator` and its shared capability
 mixins belong under `navigator/`. Keeping those owners explicit prevents the
 worker processing model from turning into a second browser kernel.

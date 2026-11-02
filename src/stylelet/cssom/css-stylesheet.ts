@@ -8,11 +8,11 @@ import type { Encoding } from '../../encoding/index';
 import { parseURL, type URLRecord } from '../../url/index';
 import type { ReferrerPolicy } from '../../fetch/index';
 
-import type { StyleletEnvironment } from '../environment';
 import { parseStylesheetContents } from '../syntax/index';
-import type { StyleletContext } from '../context';
 import { MediaListImpl } from './media/index';
 import { RuleListContext, type CSSImportRuleImpl, type CSSRuleImpl } from './rules/index';
+import type { StyleletEnvironment } from '../environment';
+import type { StyleletContext } from '../context';
 
 import { CSSRuleListImpl } from './rule-list';
 import { StyleSheetImpl } from './stylesheet';

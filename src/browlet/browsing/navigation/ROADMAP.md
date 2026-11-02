@@ -289,7 +289,7 @@ entry commits, event-driven acceptance/settlement, and finishing policy;
 automatic focus/scroll effects remain unfinished. The full `navigate()` input
 contract and tracker lifecycle do not make document-initiated navigation functional.
 
-`SourceSnapshotParams`, in the shared `navigation/source-snapshot.ts` foundation,
+`SourceSnapshotParams`, in the shared `navigation/state/source-snapshot.ts` foundation,
 captures all five source fields, including policy cloning and the null browser-UI
 case. The non-null source still requires Window's unfinished transient activation.
 Navigation API traversal uses it; navigation, closing, and delta traversal have

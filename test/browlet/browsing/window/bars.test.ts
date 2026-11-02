@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { createDocumentState } from '../../../../src/browlet/browsing/navigation/document-state';
+import { createDocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
 import { parseURL } from '../../../../src/url/index';

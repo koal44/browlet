@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createManualRealm } from '../../../support/browlet-agent';
 import { AgentCluster } from '../../../../src/browlet/scripting/agents';
-import { SandboxEnvironment, type BrowletEnvironment } from '../../../../src/browlet/environment';
-import { createBrowletEnvironmentInit } from '../../../../src/browlet/bindings';
+import { SandboxEnvironment, type BrowletEnvironment } from '../../../../src/browlet/environment/index';
+import { createBrowletEnvironmentInit } from '../../../../src/browlet/integration/web-idl/index';
 import {
   structuredSerialize, structuredSerializeForStorage,
 } from '../../../../src/browlet/scripting/structured-data/serialize';

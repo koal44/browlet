@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
-import { browletDefinitions } from '../../../../src/browlet/bindings';
-import type { BrowletEnvironment } from '../../../../src/browlet/environment';
+import { browletDefinitions } from '../../../../src/browlet/integration/web-idl/index';
+import type { BrowletEnvironment } from '../../../../src/browlet/environment/index';
 import type { ElementImpl } from '../../../../src/browlet/dom/nodes/element';
 import { ElementTag } from '../../../../src/browlet/dom/nodes/element-definitions/element-tag';
 import { HTMLArticleElementImpl } from '../../../../src/browlet/dom/nodes/html/sections/article';

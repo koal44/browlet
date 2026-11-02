@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createSandboxEnvironment } from '../../../../src/browlet/bindings';
+import { createSandboxEnvironment } from '../../../../src/browlet/integration/web-idl/index';
 import { parseTestDocument } from '../../../support/dom';
 import {
   EventTargetImpl,

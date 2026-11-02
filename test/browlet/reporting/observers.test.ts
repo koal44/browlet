@@ -6,7 +6,7 @@ import { Browlet } from '../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
-import { createWindowEnvironment } from '../../../src/browlet/bindings';
+import { createWindowEnvironment } from '../../../src/browlet/integration/web-idl/index';
 import { FetchRequest } from '../../../src/fetch/request';
 import { FetchResponse } from '../../../src/fetch/response';
 import { parseURL } from '../../../src/url/url';

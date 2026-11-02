@@ -3,8 +3,8 @@ import {
   nullable, op, reference, roAttr, xattr,
 } from '../../../web-idl/core/index';
 
-import type { StyleletEnvironment } from '../../environment';
 import { MediaQuery, type MathContext } from '../../values/index';
+import type { StyleletEnvironment } from '../../environment';
 
 /** Retain and edit a media query list; device matching belongs to Conditional Rules. */
 // https://drafts.csswg.org/cssom/#the-medialist-interface

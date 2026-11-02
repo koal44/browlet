@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { BlobData, BlobImpl, BlobReadFailure, type BlobByteSource } from '../../../src/file/index';
 import type { Blob } from '../../../src/browlet/platform';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/document-state';
+import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import type { Task } from '../../../src/browlet/scripting/event-loop';
 import { fileTaskSource } from '../../../src/browlet/scripting/tasks';

@@ -12,7 +12,7 @@ import { EventImpl, type EventInit } from '../../../dom/events/index';
 import { ReportBodyImpl } from '../../../reporting/index';
 import type { ElementImpl, DocumentImpl } from '../../../dom/nodes/index';
 import type { DOMEnvironment } from '../../../dom/index';
-import type { BrowletEnvironment } from '../../../environment';
+import type { BrowletEnvironment } from '../../../environment/index';
 
 import type { ContentSecurityPolicy, CSPDisposition } from './policy';
 

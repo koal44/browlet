@@ -9,8 +9,8 @@ import { FormDataImpl, type FormDataEntry } from '../../../xhr/index';
 import { eventHandlerAttr, EventHandlerMap, type EventHandlerCallback } from '../../scripting/index';
 import { EventTargetImpl } from '../../dom/events/index';
 import type { ElementImpl } from '../../dom/nodes/index';
-import { SourceSnapshotParams } from '../navigation/source-snapshot';
-import type { BrowletEnvironment } from '../../environment';
+import { SourceSnapshotParams } from '../navigation/state/index';
+import type { BrowletEnvironment } from '../../environment/index';
 import type { SerializedRecord } from '../../scripting/structured-data/index';
 import type { NavigationHistoryBehavior, SessionHistoryEntry, UserNavigationInvolvement } from '../navigation/index';
 

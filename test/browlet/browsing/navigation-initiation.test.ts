@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import type { NavigationAPIMethodTracker } from '../../../src/browlet/browsing/navigation-api/method-tracker';
-import { createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/session-history';
+import { createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/state/index';
 import type { NavigationResultResult } from '../../../src/browlet/platform';
 import { serializeURL } from '../../../src/url/index';
 import { getRelevantRealm, unwrap } from '../../support/browlet-binding';

@@ -7,8 +7,7 @@ import { NavigationCurrentEntryChangeEventImpl } from '../../../src/browlet/brow
 import { NavigateEventImpl } from '../../../src/browlet/browsing/navigation-api/navigate-event';
 import { NavigationHistoryEntryImpl } from '../../../src/browlet/browsing/navigation-api/navigation-history-entry';
 import type { NavigationType } from '../../../src/browlet/browsing/navigation-api/navigation';
-import { createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/session-history';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/document-state';
+import { createSessionHistoryEntry, createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { idlType } from '../../../src/web-idl/core/index';
 import { getRelevantRealm, unwrap } from '../../support/browlet-binding';
 import { runInHostTask } from '../../support/tasks';

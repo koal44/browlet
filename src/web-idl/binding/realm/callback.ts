@@ -2,11 +2,12 @@ import { InternalError } from '../../../infra/index';
 import { isCallable, isConstructor, isObject } from '../../../js-engine/index';
 import type { CallbackExceptionBehavior } from '../../core/index';
 
-import type { WebIDLRealm } from '../../environment';
 import type { IDLOperation, AssembledCallbackFunction } from '../../assembly/index';
-import { getImplementationRecord } from '../platform';
-import { IDLPromise, type IDLCallbackFunction, type IDLCallbackInterface } from '../../values/index';
+import {
+  getImplementationRecord, IDLPromise, type IDLCallbackFunction, type IDLCallbackInterface,
+} from '../../values/index';
 import type { ConversionSteps } from '../../converters/index';
+import type { WebIDLRealm } from '../../environment';
 
 import type { RealmBinding } from '../realm';
 

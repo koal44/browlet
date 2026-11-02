@@ -1,6 +1,6 @@
 import type { Browlet } from '../../src/browlet/browlet';
 import type { Window } from '../../src/browlet/platform';
-import { createWindowEnvironment } from '../../src/browlet/bindings';
+import { createWindowEnvironment } from '../../src/browlet/integration/web-idl/index';
 import { getRelevantRealm } from './browlet-binding';
 import { WindowAgent } from '../../src/browlet/scripting/agents';
 

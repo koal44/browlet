@@ -4,7 +4,7 @@ import { brotliCompressSync, gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
 import { getBindingContext, getRelevantRealm, project, unwrap } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
-import { NodeHTTPTransport } from '../../src/browlet/integration/network/node-transport';
+import { NodeHTTPTransport } from '../../src/browlet/integration/host/network/node-transport';
 import { FetchBody } from '../../src/fetch/body';
 import { FetchRequest } from '../../src/fetch/request';
 import { ResponseImpl, type FetchResponse } from '../../src/fetch/response';

@@ -2,7 +2,7 @@ import { InternalError } from '../../../infra/index';
 import { isAccessorDescriptor, isDataDescriptor, ordinarySetWithOwnDescriptor } from '../../../js-engine/index';
 
 import type { IDLOperation, AssembledInterface } from '../../assembly/index';
-import { getImplementationObject, getImplementationRecord, type PlatformRecord } from '../platform';
+import { getImplementationObject, getImplementationRecord, type PlatformRecord } from '../../values/index';
 import type { ConversionSteps } from '../../converters/index';
 
 import type { RealmBinding } from '../realm';

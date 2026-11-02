@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
-import { SourceSnapshotParams } from '../../../src/browlet/browsing/navigation/source-snapshot';
+import { SourceSnapshotParams } from '../../../src/browlet/browsing/navigation/state/index';
 import { unwrap } from '../../support/browlet-binding';
 
 afterEach(() => { vi.restoreAllMocks(); });

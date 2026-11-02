@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import type { WindowProxy } from '../../../src/browlet/platform';
-import { createSandboxEnvironment } from '../../../src/browlet/bindings';
+import { createSandboxEnvironment } from '../../../src/browlet/integration/web-idl/index';
 import { AbortSignalImpl } from '../../../src/browlet/dom/abort/abort-signal';
 import type { AbortAlgorithmHandle } from '../../../src/infra/abort';
 

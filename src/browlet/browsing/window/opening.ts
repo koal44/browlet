@@ -5,7 +5,7 @@ import type { ReferrerPolicy } from '../../../fetch/index';
 
 import { parseInteger } from '../../html/microsyntaxes/index';
 import type { DocumentImpl } from '../../dom/nodes/index';
-import type { BrowletEnvironment } from '../../environment';
+import type { BrowletEnvironment } from '../../environment/index';
 
 import type { WindowProxyHandle } from './window-proxy';
 

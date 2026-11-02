@@ -3,14 +3,15 @@ import type { StampedPlatformObject } from '../web-idl/index';
 import { isHeaderValue } from '../fetch/index';
 import type { SystemColorPalette } from '../stylelet/index';
 
-import type { Document, WindowProxy } from './platform';
 import { type BrowletRealm, installHostHooks } from './scripting/index';
 import type { DocumentImpl, ElementImpl } from './dom/nodes/index';
 import { getSourceCodeLocation, HTMLDocumentParser, type DocumentWrite } from './html/parser/index';
 import { PageEvaluation } from './automation/index';
 import type { AuthenticationPrompt } from './loader/index';
 import { TopLevelTraversable } from './browsing/navigation/index';
-import { browletBindingWorld } from './bindings';
+import { browletBindingWorld } from './integration/web-idl/index';
+
+import type { Document, WindowProxy } from './platform';
 import { UserAgent, type PermissionPrompt, type PermissionChooser } from './user-agent';
 
 /** Hosts one top-level browsing session with navigation and page evaluation. */

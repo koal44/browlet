@@ -14,7 +14,7 @@ not parsed as origins. Delivery algorithms supply the required origin record
 through the internal constructor or `setOrigin()`.
 
 The implementation retains a snapshot of implementation ports.
-[The binding](../integration/web-idl/message-event.ts) projects and freezes that
+[The binding](../integration/web-idl/bindings/message-event.ts) projects and freezes that
 snapshot in the event's realm, reusing it until legacy initialization replaces it.
 Construction does not clone the payload, transfer ports, or send a message.
 

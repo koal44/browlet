@@ -7,9 +7,11 @@ import {
 } from '../../syntax/index';
 import type { WholeValue, Value } from '../../values/index';
 import {
-  getBuiltInProperty, CustomProperty, type PropertyRegistry, type BuiltInPropertyName, type CustomPropertyName,
-  type BaseProperty, type BuiltInProperty, type PropertyContext, type PropertyName,
+  CustomProperty, type CustomPropertyName, type BaseProperty, type BuiltInProperty, type PropertyContext,
 } from '../../props/index';
+import {
+  getBuiltInProperty, type PropertyRegistry, type BuiltInPropertyName, type PropertyName,
+} from '../../props/built-in/index';
 
 // Type parameters: P = property record, W = accepted whole value, N/K = property name.
 

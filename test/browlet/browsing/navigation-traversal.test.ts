@@ -2,9 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
-import type { BrowletEnvironment } from '../../../src/browlet/environment';
+import type { BrowletEnvironment } from '../../../src/browlet/environment/index';
 import type { NavigationResultResult } from '../../../src/browlet/platform';
-import { createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/session-history';
+import { createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/state/index';
 import { navigationAndTraversalTaskSource } from '../../../src/browlet/scripting/tasks';
 import { getRelevantRealm, unwrap } from '../../support/browlet-binding';
 import { runInHostTask } from '../../support/tasks';

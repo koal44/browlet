@@ -1,6 +1,6 @@
 import { defineInterface, impl, nullable, reference, roAttr } from '../../../web-idl/core/index';
 
-import type { BrowletEnvironment } from '../../environment';
+import type { BrowletEnvironment } from '../../environment/index';
 
 import type { NavigationType } from './navigation';
 import type { NavigationHistoryEntryImpl } from './navigation-history-entry';

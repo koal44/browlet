@@ -5,12 +5,12 @@ import { getBindingContext, getRelevantRealm } from '../support/browlet-binding'
 import { Browlet } from '../../src/browlet/browlet';
 import type { Document, Window } from '../../src/browlet/platform';
 import { BrowsingContext } from '../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState } from '../../src/browlet/browsing/navigation/document-state';
+import { createDocumentState } from '../../src/browlet/browsing/navigation/state/index';
 import { Navigable, TopLevelTraversable } from '../../src/browlet/browsing/navigation/navigable';
 import { WindowAgent } from '../../src/browlet/scripting/agents';
-import { createWindowEnvironment } from '../../src/browlet/bindings';
+import { createWindowEnvironment } from '../../src/browlet/integration/web-idl/index';
 import { UserAgent } from '../../src/browlet/user-agent';
-import { BrowletEnvironmentBase } from '../../src/browlet/environment';
+import { BrowletEnvironmentBase } from '../../src/browlet/environment/index';
 import { StorageKey } from '../../src/storage/keys';
 import { createOpaqueOrigin } from '../../src/url/origin';
 import { determineRequestReferrer } from '../../src/fetch/index';

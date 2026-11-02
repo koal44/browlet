@@ -8,7 +8,7 @@ import {
 } from '../../fetch/index';
 
 import type { CORSSettingsState } from '../dom/nodes/html/attributes/index';
-import type { BrowletEnvironment } from '../environment';
+import type { BrowletEnvironment } from '../environment/index';
 import type { ModuleResponsesMap } from '../worklets/index';
 
 import {

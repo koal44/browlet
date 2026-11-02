@@ -6,7 +6,7 @@ import type { DOMHighResTimeStamp } from '../../timing/index';
 import { PolicyContainer, OpenerPolicy, type SandboxingFlagSet } from '../policy/index';
 import type { DocumentImpl } from '../../dom/nodes/index';
 import type { NavigationTimingType } from '../../performance/index';
-import type { BrowletEnvironmentBase } from '../../environment';
+import type { BrowletEnvironmentBase } from '../../environment/index';
 
 import type { UserNavigationInvolvement } from './navigable';
 

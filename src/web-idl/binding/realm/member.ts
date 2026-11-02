@@ -1,16 +1,14 @@
 import { InternalError } from '../../../infra/index';
-import { isObject, type JSFunction, type RealmFunctionSteps } from '../../../js-engine/index';
+import { compileHostSteps, isObject, type JSFunction, type RealmFunctionSteps } from '../../../js-engine/index';
 import {
   hasExtendedAttribute, type AttributeFunctionSteps, type StringifierMember, type ExtendedAttribute,
 } from '../../core/index';
 
-import { compileSteps } from '../../compiler';
 import {
   AssembledInterface, type IDLType, type IDLAttribute, type IDLOperation,
   type AssembledNamespace, type AssembledOverloads,
 } from '../../assembly/index';
-import type { PlatformRecord, StampedImplInstance } from '../platform';
-import { IDLPromise } from '../../values/index';
+import { type PlatformRecord, type StampedImplInstance, IDLPromise } from '../../values/index';
 import { CallbackFunctionConverter, type Converter, type ConversionSteps } from '../../converters/index';
 
 import type { AsyncIteratorSteps } from './async-iterable';
@@ -50,7 +48,8 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
   /** Read a field or accessor with property-access feedback isolated to this interface member. */
   createPropertyGetter(attribute: IDLAttribute, staticTarget?: object): AttributeSteps['get'] {
     const { binding, assembled } = this.#implementationBinding;
-    return compileSteps<AttributeSteps['get']>(`${assembled.primary.name}.${attribute.name}:property-get`,
+    return compileHostSteps<AttributeSteps['get']>(
+      `webidl/${encodeURIComponent(`${assembled.primary.name}.${attribute.name}:property-get`)}`,
       { name: attribute.name, staticTarget, binding }, `function getProperty(receiver) {
         const impl = ${staticTarget === undefined ? 'receiver.implInst' : 'staticTarget'};
         try {
@@ -65,7 +64,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
   /** Assign a field or invoke its setter through the implementation receiver. */
   createPropertySetter(attribute: IDLAttribute): (this: object, value: unknown) => void {
     const { assembled } = this.#implementationBinding;
-    return compileSteps(`${assembled.primary.name}.${attribute.name}:property-set`,
+    return compileHostSteps(`webidl/${encodeURIComponent(`${assembled.primary.name}.${attribute.name}:property-set`)}`,
       { name: attribute.name }, `function setProperty(value) {
         this[name] = value;
       }`,
@@ -77,7 +76,8 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
     name: PropertyKey,
   ): (target: object) => Method {
     const { assembled, binding } = this.#implementationBinding;
-    return compileSteps(`${assembled.primary.name}.${String(name)}:method-get`, { name, binding }, `function getMethod(target) {
+    return compileHostSteps(`webidl/${encodeURIComponent(`${assembled.primary.name}.${String(name)}:method-get`)}`,
+      { name, binding }, `function getMethod(target) {
       try {
         return target[name];
       } catch (exception) {
@@ -138,7 +138,8 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
       interfaceAssembled && !attribute.static && !lenient && !elementType &&
       implementation === attribute && attribute.type.kind !== 'promise' && steps
     ) {
-      getterSteps = compileSteps<RealmFunctionSteps>(`${assembled.primary.name}.${attribute.name}:get`,
+      getterSteps = compileHostSteps<RealmFunctionSteps>(
+        `webidl/${encodeURIComponent(`${assembled.primary.name}.${attribute.name}:get`)}`,
         { realmBinding, assembled: interfaceAssembled, name: attribute.name, type: attribute.type, steps, convertResult },
         `function getAttribute(thisArgument) {
           const receiver = realmBinding.getReceiverRecord(thisArgument, assembled, name, "getter", false);
@@ -242,7 +243,8 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
     // Select ordinary assignment once, as with ordinary attribute getters.
     const captureIncumbent = this.#attributeNeedsIncumbent(attribute, 'set');
     if (!replaceable && !putForwards && !lenientSetter && !observableArrayElementType && steps?.set) {
-      const setterSteps = compileSteps<RealmFunctionSteps>(`${assembled.primary.name}.${attribute.name}:set`,
+      const setterSteps = compileHostSteps<RealmFunctionSteps>(
+        `webidl/${encodeURIComponent(`${assembled.primary.name}.${attribute.name}:set`)}`,
         { realmBinding, interfaceAssembled, attribute, lenient, invalidReceiver, convertInput, enumeration, steps },
         `function setAttribute(thisArgument, argumentsList) {
           const receiver = attribute.static ? null : realmBinding.getReceiverRecord(
@@ -260,7 +262,8 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
         length: 1, name: `set ${attribute.name}`, captureIncumbent,
       });
     }
-    const setterSteps = compileSteps<RealmFunctionSteps>(`${assembled.primary.name}.${attribute.name}:set`,
+    const setterSteps = compileHostSteps<RealmFunctionSteps>(
+      `webidl/${encodeURIComponent(`${assembled.primary.name}.${attribute.name}:set`)}`,
       {
         realmBinding, assembled, interfaceAssembled, attribute, replaceable, putForwards, lenientSetter, lenient,
         observableArrayElementType, enumeration, convertInput, memberBinding: this, invalidReceiver,
@@ -371,7 +374,8 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
     const handleException = (exception: unknown) => this.#handlePromiseException(
       source.returns, exception, realmBinding.getConverter(source.returns),
     );
-    const operationSteps = compileSteps<RealmFunctionSteps>(`${assembled.primary.name}.${name}:operation`,
+    const operationSteps = compileHostSteps<RealmFunctionSteps>(
+      `webidl/${encodeURIComponent(`${assembled.primary.name}.${name}:operation`)}`,
       {
         realmBinding, assembled, source, interfaceAssembled, name, resolve, implementationBinding,
         memberBinding: this, InternalError, missingImplementation, handleException,

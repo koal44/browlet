@@ -1,15 +1,15 @@
 import { asciiLower } from '../../../infra/ascii';
 import { defineInterface, impl, reference, roAttr } from '../../../web-idl/core/index';
 
-import type { StyleletEnvironment } from '../../environment';
 import {
   consumeIdentToken, consumeStringToken, consumeUrlToken, isFunctionBlock, isWhitespaceToken,
   parseAsComponentGrammar, serializeCssIdentifier, serializeCssString,
   type BlockContents, type ComponentValue, type TokenCursor, type TokenList,
 } from '../../syntax/index';
 import type { SelectorNamespaces } from '../../selector/index';
-import type { RuleListContext } from './context';
+import type { StyleletEnvironment } from '../../environment';
 
+import type { RuleListContext } from './context';
 import { CSSRuleImpl } from './rule';
 import { CSSImportRuleImpl } from './import';
 

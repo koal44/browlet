@@ -3,9 +3,9 @@ import {
 } from '../../../web-idl/core/index';
 import type { URLRecord } from '../../../url/core/index';
 
-import type { StyleletEnvironment } from '../../environment';
 import type { SelectorList } from '../../selector/index';
 import type { CSSStyleSheetImpl } from '../css-stylesheet';
+import type { StyleletEnvironment } from '../../environment';
 
 /** Common state and contract for CSS rule implementations. */
 // https://drafts.csswg.org/cssom/#the-cssrule-interface

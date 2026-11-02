@@ -36,17 +36,16 @@ import type { IntersectionObserverMargin } from './dom/intersection-observer/ind
 import type { DocumentImpl } from './dom/nodes/index';
 import type { BroadcastChannelImpl } from './communication/index';
 import type { StorageImpl } from './storage/index';
-import type { BrowletEnvironment, BrowletEnvironmentBase } from './environment';
+import type { BrowletEnvironment, BrowletEnvironmentBase } from './environment/index';
 import { WebDriver, type PageEvaluation } from './automation/index';
 import { HTTPAuthenticationStore } from './loader/index';
 import { BrowsingContextGroup, type Navigable, type TopLevelTraversable } from './browsing/navigation/index';
-import { NodeHTTPTransport, createContentDecoder, supportedContentCodings } from './integration/network/index';
-import { BlobURLEntry, BlobURLStore } from './integration/file/index';
+import { NodeHTTPTransport, createContentDecoder, supportedContentCodings } from './integration/host/network/index';
+import { NodePromise, queueNodeTask, nodeTimerHost } from './integration/host/index';
 import type { PermissionStatusImpl } from './integration/permissions/index';
-import {
-  NodePromise, queueNodeTask, nodeTimerHost, browletDOM,
-} from './integration/index';
-import { createSandboxEnvironment, createWindowEnvironment } from './bindings';
+import { BlobURLEntry, BlobURLStore } from './integration/file/index';
+import { browletDOM } from './integration/index';
+import { createSandboxEnvironment, createWindowEnvironment } from './integration/web-idl/index';
 
 /** Owns browsing contexts and shared browser services that outlive individual documents. */
 export class UserAgent implements

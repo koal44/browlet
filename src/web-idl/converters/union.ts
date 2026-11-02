@@ -4,9 +4,9 @@ import {
 } from '../../js-engine/index';
 
 import type { IDLUnionType, UnionInterfaceCandidate } from '../assembly/index';
-import { getPlatformRecord } from '../binding/platform';
 import {
-  IDLAsyncSequence, IDLCallbackFunction, IDLCallbackInterface, IDLDictionary, CallbackFunctionStamper,
+  getPlatformRecord, IDLAsyncSequence, IDLCallbackFunction, IDLCallbackInterface, IDLDictionary,
+  CallbackFunctionStamper,
 } from '../values/index';
 
 import { Converter, type ConversionSteps } from './converter';

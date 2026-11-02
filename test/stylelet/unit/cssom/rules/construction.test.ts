@@ -2,7 +2,7 @@ import { styleletEnv, styleletEnv as env } from '../../../environment-fixture';
 import { describe, expect, it } from 'vitest';
 
 
-import { builtInRegistry } from '../../../../../src/stylelet/props/registry';
+import { builtInRegistry } from '../../../../../src/stylelet/props/built-in/index';
 import { CustomProperty } from '../../../../../src/stylelet/props/custom-property';
 import { InterpretedDeclaration } from '../../../../../src/stylelet/cssom/declarations/interpreted-declaration';
 import { RuleListContext } from '../../../../../src/stylelet/cssom/rules/context';

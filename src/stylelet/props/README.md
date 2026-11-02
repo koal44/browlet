@@ -1,14 +1,15 @@
 # CSS properties
 
-This folder supplies shared property contracts and registries. The `built-in/`
-folder supplies concrete property grammars, metadata, and property-specific value
-processing. Interpreted occurrences belong to [CSSOM declarations](../cssom/declarations/README.md).
+This folder supplies shared property classes and custom-registration contracts.
+The `built-in/` folder supplies concrete property grammars, metadata,
+property-specific value processing, and their installed registry. Interpreted
+occurrences belong to [CSSOM declarations](../cssom/declarations/README.md).
 The [roadmap](ROADMAP.md) groups missing
 families and their dependencies.
 
 ## Installed properties
 
-The [property registry](registry.ts) installs seven built-in longhands and the
+The [property registry](built-in/registry.ts) installs seven built-in longhands and the
 `margin` shorthand:
 
 | Module | Registered names | Current behavior |
@@ -49,9 +50,9 @@ the effective registrations for computation. Records never capture a document's
 registration during declaration parsing.
 Registered computation still throws explicitly until that lifecycle is implemented.
 
-The [registry module](registry.ts) owns both registry types and custom registrations.
-The built-in object retains the exact type for each supported property name; the
-custom `Map` holds document-specific registrations that can change. A custom
+The [built-in registry](built-in/registry.ts) retains the exact type for each
+supported property name. Shared [registration contracts](registration.ts) describe
+the custom `Map` of document-specific registrations that can change. A custom
 property exists without a registration. `CustomPropertyRegistration` overrides
 the Variables 1 defaults; it is not a second built-in definition table.
 
@@ -195,7 +196,7 @@ The property serializes each ordinary longhand through that longhand's property
 before asking the helper to shorten the resulting text.
 Constructing a shorthand property calls its helper's `attach()`, which inserts it into each
 longhand's `containingShorthands` in CSSOM's preferred order, independently of registry inclusion.
-The single [registry](registry.ts) supplies name lookup for both kinds of property;
+The single [registry](built-in/registry.ts) supplies name lookup for both kinds of property;
 there is no separate shorthand registry or reverse-lookup map. The property and helper classes
 sit below the built-in families and do not load the registry. Families never load
 their collector. Names and ordinary value families retain their concrete types;

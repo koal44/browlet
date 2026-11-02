@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { ComputedStyle } from '../../../../src/stylelet/engine/computed-style';
 import { CSSStylePropertiesImpl } from '../../../../src/stylelet/cssom/declarations/style-properties';
 
-import { propertyRegistry, CustomProperty } from '../../../../src/stylelet/props/index';
+import { propertyRegistry } from '../../../../src/stylelet/props/built-in/index';
+import { CustomProperty } from '../../../../src/stylelet/props/index';
 import { ValueStage } from '../../../../src/stylelet/value-processing/index';
 
 describe('computed-style storage', () => {

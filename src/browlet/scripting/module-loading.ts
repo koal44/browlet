@@ -3,7 +3,7 @@ import type { CompiledModule } from '../../js-engine/index';
 import { idlType } from '../../web-idl/core/index';
 import type { URLRecord } from '../../url/index';
 
-import type { BrowletEnvironment } from '../environment';
+import type { BrowletEnvironment } from '../environment/index';
 
 import { BrowletRealm } from './realm';
 import { JSModuleRecord, JSSyntheticModuleRecord, type JSModuleRequest, type JSScriptRecord } from './script';

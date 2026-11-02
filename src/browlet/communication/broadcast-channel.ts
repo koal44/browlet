@@ -6,7 +6,7 @@ import { StorageKey } from '../../storage/index';
 
 import { domManipulationTaskSource, eventHandlerAttr, EventHandlerMap, type EventHandlerCallback } from '../scripting/index';
 import { EventTargetImpl } from '../dom/events/index';
-import type { BrowletEnvironment } from '../environment';
+import type { BrowletEnvironment } from '../environment/index';
 
 import { MessageEventImpl } from './message-event';
 

@@ -1,7 +1,7 @@
 import { InternalError, type InfraValue } from '../../infra/index';
 import { copyURL, isSpecialURL, serializeURL, urlsEqual, type URLRecord } from '../../url/index';
 
-import type { BrowletEnvironment } from '../environment';
+import type { BrowletEnvironment } from '../environment/index';
 
 import type { BrowletGlobalObject } from './global-object';
 import type { Script } from './script';

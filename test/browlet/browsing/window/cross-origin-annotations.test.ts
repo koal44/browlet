@@ -8,13 +8,13 @@ import {
 import { DefinitionAssembly } from '../../../../src/web-idl/assembly/index';
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
 import { Browlet } from '../../../../src/browlet/browlet';
-import { createSandboxEnvironment } from '../../../../src/browlet/bindings';
-import type { BrowletEnvironment } from '../../../../src/browlet/environment';
+import { createSandboxEnvironment } from '../../../../src/browlet/integration/web-idl/index';
+import type { BrowletEnvironment } from '../../../../src/browlet/environment/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import {
   CrossOriginObjectBinding, prepareCrossOriginObject,
-} from '../../../../src/browlet/integration/web-idl/cross-origin';
-import { htmlExtendedAttributeHooks } from '../../../../src/browlet/integration/web-idl/extended-attributes';
+} from '../../../../src/browlet/integration/web-idl/bindings/cross-origin';
+import { htmlExtendedAttributeHooks } from '../../../../src/browlet/integration/web-idl/bindings/extended-attributes';
 import { getBindingContext, unwrap } from '../../../support/browlet-binding';
 
 describe('cross-origin annotation proof of concept', () => {

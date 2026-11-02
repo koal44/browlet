@@ -3,8 +3,9 @@ import { areSameOrigin, areSameOriginDomain, obtainURLOrigin, parseURL, serializ
 import type { StructuredDictionary } from '../../../http/index';
 import type { FetchResponse } from '../../../fetch/index';
 
-import { isSchemeOrHostSourceExpression, urlMatchesSourceExpression } from './csp/source-expressions';
 import type { ElementImpl } from '../../dom/nodes/index';
+
+import { isSchemeOrHostSourceExpression, urlMatchesSourceExpression } from './source-expressions';
 
 /** Internal policy state, separate from the public PermissionsPolicy inspection interface. */
 // https://w3c.github.io/webappsec-permissions-policy/#permissions-policy

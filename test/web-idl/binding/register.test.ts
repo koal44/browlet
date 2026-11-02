@@ -5,7 +5,7 @@ import {
   arg, atArg, attr, ctor, defineIncludes, defineInterface, defineInterfaceMixin, idlType, impl, iter,
   op, staticOp, roAttr, reference, unwrapArg, stringifier, invokeWith,
 } from '../../../src/web-idl/core/index';
-import { getImplementationObject, getImplementationRecord } from '../../../src/web-idl/binding/platform';
+import { getImplementationObject, getImplementationRecord } from '../../../src/web-idl/values/index';
 import { BindingWorld } from '../../../src/web-idl/binding/world';
 import type { WebIDLEnvironment } from '../../../src/web-idl/environment';
 

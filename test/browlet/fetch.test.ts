@@ -2,7 +2,7 @@ import { createServer, type RequestListener, type ServerResponse } from 'node:ht
 import { afterEach, describe, expect, it } from 'vitest';
 import { Browlet } from '../../src/browlet/browlet';
 import type { WindowProxy } from '../../src/browlet/platform';
-import { createWindowEnvironment } from '../../src/browlet/bindings';
+import { createWindowEnvironment } from '../../src/browlet/integration/web-idl/index';
 import { getRelevantRealm } from '../support/browlet-binding';
 import { BrowsingContext } from '../../src/browlet/browsing/navigation/browsing-context';
 import { closeServer, listen } from './loader/http-fixture';

@@ -4,7 +4,7 @@ import {
   attr, attrFn, onError, ctor, defineEnumeration, defineInterface, idlType, impl, nullable, roAttr,
   reference, op, staticOp, stringifier, xattr,
 } from '../../../../src/web-idl/core/index';
-import { getImplementationObject } from '../../../../src/web-idl/binding/platform';
+import { getImplementationObject } from '../../../../src/web-idl/values/index';
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
 
 import { installTestBindings, validateImplementationMembers } from '../../../support/web-idl-binding';

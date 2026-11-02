@@ -11,7 +11,7 @@ import {
 
 import type { DocumentImpl } from '../../dom/nodes/index';
 import type { DOMStringListImpl } from '../../dom/index';
-import type { BrowletEnvironment, WindowEnvironment } from '../../environment';
+import type { BrowletEnvironment, WindowEnvironment } from '../../environment/index';
 import type { NavigationHistoryBehavior } from '../navigation/index';
 
 /** Retains a Window's Location identity and reads its browsing context's active Document. */

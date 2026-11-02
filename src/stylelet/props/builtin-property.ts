@@ -1,6 +1,7 @@
 import type { ParserInput } from '../syntax/index';
 import { ValueStage } from '../value-processing/index';
 import { WholeValue, type Value, type WholeValueContents, type PendingShorthand } from '../values/index';
+
 import {
   BaseProperty, type AnimationType, type PropertyContext, type PropertyPercentages,
   type ResolvedValueStage, type LogicalPropertyGroup,

@@ -5,86 +5,84 @@ import { fileURLToPath } from 'node:url';
 // Rows run from foundations to consumers. Different components on one row are
 // independent: an import between them still needs review. Only one component's
 // own modules are treated as mutually cooperating peers.
+// Entries name folders and end in '/'. Top-level files belong to their containing
+// component; shared code gets a narrower folder only when it needs a separate layer.
 export const layers = [
-  ['infra'],
-  ['js-engine', 'web-idl/core', 'url/core'],
-  ['web-idl/environment', 'web-idl/compiler'],
-  ['web-idl/assembly'],
-  ['web-idl/binding/platform'],
-  ['web-idl/values'],
-  ['web-idl/converters'],
-  ['web-idl/binding'],
-  ['web-idl/generate'],
-  ['web-idl'],
-  ['streams', 'selectlet'],
-  ['encoding'],
-  ['url'],
-  ['permissions'],
-  ['http', 'storage'],
-  ['mime'],
-  ['file'],
-  ['xhr'],
-  ['fetch'],
-  ['stylelet/environment', 'stylelet/syntax'],
-  ['stylelet/value-processing'],
-  ['stylelet/values/numeric-literal', 'stylelet/values/collections'],
-  ['stylelet/values'],
-  ['stylelet/conditional', 'stylelet/props/base-property', 'stylelet/props/shorthand'],
-  ['stylelet/props/builtin-property', 'stylelet/props/custom-property'],
-  ['stylelet/props/built-in'],
-  ['stylelet/props', 'stylelet/selector'],
-  ['stylelet/context'],
-  ['stylelet/cssom/declarations', 'stylelet/cssom/media'],
-  ['stylelet/cssom/typed'],
-  ['stylelet/cssom/rules/context'],
-  ['stylelet/cssom/rules'],
-  ['stylelet/cssom'],
-  ['stylelet/engine'],
-  ['stylelet'],
-  ['browlet/platform', 'browlet/timing', 'browlet/dom/infra', 'browlet/dom/nodes/element-definitions', 'browlet/style', 'browlet/webassembly'],
-  ['browlet/html/microsyntaxes', 'browlet/dom/string-list'],
-  ['browlet/dom/nodes/html/attributes'],
-  ['browlet/scripting'],
+  ['infra/'],
+  ['js-engine/', 'web-idl/core/', 'url/core/'],
+  ['web-idl/assembly/'],
+  ['web-idl/values/'],
+  ['web-idl/converters/'],
+  ['web-idl/binding/'],
+  ['web-idl/'],
+  ['streams/', 'selectlet/'],
+  ['encoding/'],
+  ['url/'],
+  ['permissions/'],
+  ['http/', 'storage/'],
+  ['mime/'],
+  ['file/'],
+  ['xhr/'],
+  ['fetch/'],
+  ['stylelet/syntax/'],
+  ['stylelet/value-processing/'],
+  ['stylelet/values/numeric-literal/', 'stylelet/values/collections/'],
+  ['stylelet/values/'],
+  ['stylelet/conditional/'],
+  ['stylelet/props/'],
+  ['stylelet/props/built-in/'],
+  ['stylelet/selector/'],
+  ['stylelet/cssom/declarations/', 'stylelet/cssom/media/'],
+  ['stylelet/cssom/typed/'],
+  ['stylelet/cssom/rules/'],
+  ['stylelet/cssom/'],
+  ['stylelet/engine/'],
+  ['stylelet/'],
+  ['browlet/timing/', 'browlet/dom/infra/', 'browlet/dom/nodes/element-definitions/', 'browlet/style/', 'browlet/webassembly/'],
+  ['browlet/html/microsyntaxes/', 'browlet/dom/lists/'],
+  ['browlet/dom/nodes/html/attributes/'],
+  ['browlet/scripting/'],
   // Policy consumes event/report primitives; documents construct and retain policy state.
-  ['browlet/dom/events', 'browlet/reporting'],
+  ['browlet/dom/events/', 'browlet/reporting/'],
   // Feature event payloads can serve Document's legacy factory without loading their producers.
-  ['browlet/storage/events'],
-  // CSP source matching is shared by CSP and Permissions Policy without loading either policy's state.
-  ['browlet/browsing/policy/csp/source-expressions'],
-  ['browlet/browsing/policy'],
-  ['browlet/browsing/policy/csp'],
-  ['browlet/browsing/policy/trusted-types'],
+  ['browlet/storage/events/'],
+  // Policy owns the source-expression algorithms shared with its CSP implementation.
+  ['browlet/browsing/policy/'],
+  ['browlet/browsing/policy/csp/'],
+  ['browlet/browsing/policy/trusted-types/'],
   // Mutation participants retain typed nodes without loading their implementation classes.
-  ['browlet/dom/ranges', 'browlet/dom/traversal', 'browlet/dom/token-list', 'browlet/dom/intersection-observer'],
+  ['browlet/dom/ranges/', 'browlet/dom/traversal/', 'browlet/dom/intersection-observer/'],
   // HTML reflection reuses DOM operations through supplied nodes, without loading their classes.
-  ['browlet/html/reflection'],
+  ['browlet/html/reflection/'],
   // Documents own History state; History queries Document/navigation through retained types.
-  ['browlet/browsing/history'],
-  ['browlet/dom/abort', 'browlet/dom/nodes'],
-  ['browlet/dom', 'browlet/performance', 'browlet/navigator'],
-  ['browlet/reporting/generate', 'browlet/communication', 'browlet/storage'],
+  ['browlet/browsing/history/'],
+  ['browlet/dom/abort/', 'browlet/dom/nodes/'],
+  ['browlet/dom/', 'browlet/performance/', 'browlet/navigator/'],
+  ['browlet/communication/', 'browlet/storage/'],
   // Shared snapshots and history-record operations do not load the navigation coordinator.
-  ['browlet/browsing/navigation/source-snapshot', 'browlet/browsing/navigation/session-history'],
+  ['browlet/browsing/navigation/state/'],
   // Window owns its Navigation object; the API retains navigation and Document types without loading the loader.
-  ['browlet/browsing/navigation-api'],
+  ['browlet/browsing/navigation-api/'],
   // Window forwards messaging to communication; communication retains Window types only.
-  ['browlet/browsing/window'],
+  ['browlet/browsing/window/'],
   // Origin declarations name the platform implementations; environments dispatch their extraction.
-  ['browlet/browsing'],
-  // Full browser settings and global APIs compose the lower facilities.
-  ['browlet/environment', 'browlet/global-scope'],
-  ['browlet/html/parser', 'browlet/scripting/structured-data'],
-  ['browlet/html', 'browlet/workers', 'browlet/automation'],
+  ['browlet/browsing/'],
+  // Browser settings compose the lower facilities.
+  ['browlet/environment/'],
+  ['browlet/html/parser/', 'browlet/scripting/structured-data/'],
+  ['browlet/html/', 'browlet/workers/', 'browlet/automation/'],
   // Navigation composes resource consumption with document creation and parsing.
-  ['browlet/loader'],
-  ['browlet/browsing/navigation'],
-  ['browlet/interaction'],
-  ['browlet/integration/network', 'browlet/integration/xhr', 'browlet/integration/web-idl'],
-  ['browlet/integration/file'],
-  ['browlet/integration'],
-  ['browlet/bindings'],
-  ['browlet/user-agent'],
-  ['browlet'],
+  ['browlet/loader/'],
+  ['browlet/browsing/navigation/'],
+  ['browlet/interaction/'],
+  // Host and feature adapters do not discover Web IDL composition.
+  ['browlet/integration/host/', 'browlet/integration/xhr/', 'browlet/integration/permissions/'],
+  ['browlet/integration/file/'],
+  ['browlet/integration/'],
+  // HTML binding hooks consume implementations; composition assembles their world and environments.
+  ['browlet/integration/web-idl/bindings/'],
+  ['browlet/integration/web-idl/'],
+  ['browlet/'],
 ];
 
 // DOM's node/element family and Web IDL's realm binding components were already
@@ -100,11 +98,10 @@ export function sourcePath(filename) {
   return isAbsolute(path) || path === '..' || path.startsWith('../') ? undefined : path;
 }
 
-/** Find the most specific named owner; a standalone module can be an owner too. */
+/** Find the most specific owning folder, including an import of the folder itself. */
 export function componentFor(path) {
   if (path === undefined) return undefined;
-  const module = path.replace(/(?:\.d)?\.(?:[cm]?[jt]s|tsx)$/, '').replace(/\/index$/, '');
-  return bySpecificity.find(({ id }) => module === id || module.startsWith(`${id}/`));
+  return bySpecificity.find(({ id }) => path.startsWith(id) || path === id.slice(0, -1));
 }
 
 export function importedPath(filename, specifier) {
@@ -127,6 +124,6 @@ export function importPosition(filename, node) {
   if (!target) return { group: 0, order: 0 };
   if (target === owner) return { group: 3, order: 0 };
   const sibling = target.id.split('/')[0] === owner?.id.split('/')[0];
-  const foundation = ['infra', 'js-engine', 'web-idl/core', 'url/core'].includes(target.id);
+  const foundation = ['infra/', 'js-engine/', 'web-idl/core/', 'url/core/'].includes(target.id);
   return { group: sibling && !foundation ? 2 : 1, order: components.indexOf(target) };
 }

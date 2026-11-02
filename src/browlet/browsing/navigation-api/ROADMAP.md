@@ -262,7 +262,7 @@ History movement remains blocked at its explicitly unfinished owners.
   branch precedes pending-request lookup. A duplicate upcoming key instead reuses
   that tracker's promises and original `info`; later dictionary getters still run,
   and every invocation returns a fresh result dictionary. Info is not serialized.
-- `SourceSnapshotParams` in `navigation/source-snapshot.ts` captures the source
+- `SourceSnapshotParams` in `navigation/state/source-snapshot.ts` captures the source
   Document's activation, active sandbox set, download permission, Fetch client,
   and cloned policy container. Its nullable Document input also supplies the
   unrestricted browser-UI case. This navigation-owned foundation is shared by

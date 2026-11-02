@@ -18,7 +18,7 @@ script, timer, and navigation consumers.
 | Owner | Responsibility |
 | --- | --- |
 | `trusted-types/` | Trusted value implementations, policy callbacks and factories, sink metadata, default-policy processing, and compliant-value algorithms |
-| [Global-scope mixin](../../../global-scope.ts) | One policy factory per global, including created policy names, the default policy, and empty trusted values; expose the `trustedTypes` partial beside the existing mixin declaration |
+| [Global-scope mixin](../../../environment/global-scope.ts) | One policy factory per global, including created policy names, the default policy, and empty trusted values; expose the `trustedTypes` partial beside the existing mixin declaration |
 | [CSP](../csp/ROADMAP.md) | Directive matching, policy-creation restrictions, sink requirements, and violation creation/reporting |
 | [DOM nodes](../../../dom/nodes/ROADMAP.md) | Invoke checks at the specified attribute entry points, then retain the existing mutation path |
 | [Parsing](../../../dom/parsing/ROADMAP.md), [sanitization](../../../html/sanitization/ROADMAP.md), and [scripting](../../../scripting/ROADMAP.md) | Supply the later consumers and their actual parser, sanitizer, and execution behavior |

@@ -1,10 +1,10 @@
 import { arg, defineInterface, idlType, impl, integer, op, reference, roAttr, xattr } from '../../../web-idl/core/index';
 
-import type { StyleletEnvironment } from '../../environment';
-import { RuleListContext } from './context';
 import type { CSSRuleListImpl } from '../rule-list';
 import type { CSSStyleSheetImpl } from '../css-stylesheet';
+import type { StyleletEnvironment } from '../../environment';
 
+import { RuleListContext } from './context';
 import { CSSRuleImpl } from './rule';
 
 /** A rule with a retained child-rule list and sheet associations shared through its subtree. */

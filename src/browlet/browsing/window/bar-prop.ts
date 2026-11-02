@@ -1,7 +1,7 @@
 import { InternalError } from '../../../infra/index';
 import { defineInterface, idlType, impl, roAttr } from '../../../web-idl/core/index';
 
-import type { WindowEnvironment } from '../../environment';
+import type { WindowEnvironment } from '../../environment/index';
 
 /** Historical browser-bar state derived from the owning Window's popup classification. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#barprop

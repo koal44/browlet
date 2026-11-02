@@ -1,5 +1,4 @@
-// Shared Reporting implementations. The higher-level generate.ts entry also
-// consumes policy report bodies, which depend on this barrel's base classes.
+// Shared Reporting implementations; the environment composes concrete policy bodies.
 export { ReportingEndpoint } from './endpoint';
 export {
   ReportingObserverImpl, type ReportingObserverOptions, type ReportingObserverCallback,

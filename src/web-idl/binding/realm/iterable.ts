@@ -3,9 +3,8 @@ import { defineDataProperty, defineMethod, isObject, type JSFunction, type JSIte
 
 import type { IDLIterable, AssembledInterface } from '../../assembly/index';
 import {
-  getImplementationRecord, getPlatformRecord, type StampedImplInstance,
-} from '../platform';
-import { IDLCallbackFunction } from '../../values/index';
+  getImplementationRecord, getPlatformRecord, type StampedImplInstance, IDLCallbackFunction,
+} from '../../values/index';
 
 import type { RealmBinding } from '../realm';
 

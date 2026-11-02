@@ -9,7 +9,7 @@ import { colorProperty } from '../../../../src/stylelet/props/built-in/color';
 import type { BaseProperty, PropertyContext } from '../../../../src/stylelet/props/base-property';
 import { BuiltInProperty, type BuiltInPropertyDefinition } from '../../../../src/stylelet/props/builtin-property';
 import { Shorthand } from '../../../../src/stylelet/props/shorthand';
-import { builtInRegistry, type BuiltInPropertyName } from '../../../../src/stylelet/props/registry';
+import { builtInRegistry, type BuiltInPropertyName } from '../../../../src/stylelet/props/built-in/index';
 import { InterpretedDeclaration } from '../../../../src/stylelet/cssom/declarations/interpreted-declaration';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import {

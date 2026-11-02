@@ -1,6 +1,6 @@
-import type { WebIDLRealm } from '../environment';
 import type { IDLType, IDLSequenceType, IDLFrozenArrayType } from '../assembly/index';
 import type { RealmBinding } from '../binding/realm';
+import type { WebIDLRealm } from '../environment';
 
 import type { Converter } from './converter';
 import { AsyncSequenceConverter } from './async-sequence';

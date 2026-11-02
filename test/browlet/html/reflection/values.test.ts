@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DOMTokenListImpl } from '../../../../src/browlet/dom/token-list';
+import { DOMTokenListImpl } from '../../../../src/browlet/dom/lists/index';
 import { createReflectionFixture, createReflectionWorld, tokensAttribute } from './fixture';
 
 describe('HTML reflected values through Web IDL', () => {

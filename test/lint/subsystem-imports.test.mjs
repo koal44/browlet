@@ -16,6 +16,7 @@ const options = [{
     stylelet: ['index', 'environment', 'context'],
     'stylelet/syntax': ['index'], 'stylelet/values': ['index', 'value'],
     'stylelet/values/numeric-literal': ['index'], 'stylelet/values/collections': ['index'],
+    'stylelet/props': ['index', 'built-in/index'],
     'stylelet/cssom': ['index', 'declarations/index', 'media/index', 'typed/index', 'rules/index'],
   },
 }];
@@ -32,6 +33,7 @@ tester.run('subsystem-imports', rule, {
     { filename: styleletFile('values/color'), options, code: "import { parseNumber } from './number';" },
     { filename: styleletFile('values/length'), options, code: "import { lengthLiteral } from './numeric-literal/index';" },
     { filename: styleletFile('values/color'), options, code: "import { MixPercentages } from './collections/index';" },
+    { filename: styleletFile('cssom/declarations/style-declaration'), options, code: "import { propertyRegistry } from '../../props/built-in/index';" },
     { filename: styleletFile('values/numeric-literal/number'), options, code: "import type { Value } from '../value';" },
     { filename: styleletFile('values/color'), options, code: "import type { StyleletEnvironment } from '../environment';" },
     { filename, options, code: "import { tokenize } from '../stylelet/syntax/index';" },
@@ -57,6 +59,11 @@ tester.run('subsystem-imports', rule, {
     },
   ],
   invalid: [
+    {
+      filename: styleletFile('cssom/declarations/style-declaration'), options,
+      code: "import { builtInRegistry } from '../../props/built-in/registry';",
+      errors: [{ messageId: 'entryPoint' }],
+    },
     {
       filename, options: browletOptions, code: "import { InternalPromise } from '../infra/promises';",
       errors: [{ messageId: 'entryPoint' }],

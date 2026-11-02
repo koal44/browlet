@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { NavigateEventImpl } from '../../../src/browlet/browsing/navigation-api/navigate-event';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
-import * as sessionHistory from '../../../src/browlet/browsing/navigation/session-history';
+import * as sessionHistory from '../../../src/browlet/browsing/navigation/state/index';
 import { idlType } from '../../../src/web-idl/core/index';
 import { unwrap } from '../../support/browlet-binding';
 

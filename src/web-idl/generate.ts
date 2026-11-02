@@ -3,13 +3,14 @@ import ts from 'typescript';
 import { InternalError } from '../infra/index';
 import { hasExtendedAttribute, type TypeParameter, type WebIDLType } from './core/index';
 
-import type { WebIDLRealm } from './environment';
 import type {
   DefinitionAssembly, AssembledInterface, AssembledArgument,
   AssembledDictionary, AssembledNamespace, IDLType, IDLInterfaceMember, IDLAttribute,
   IDLOperation, IDLIterable, IDLAsyncIterable, IDLMaplike, IDLSetlike, IDLNullableType, IDLUnionType,
 } from './assembly/index';
 import { matchesExposure } from './assembly/exposure';
+
+import type { WebIDLRealm } from './environment';
 
 /** Options for a module containing platform types, without runtime exports or ambient globals. */
 export interface PlatformTypeOptions {

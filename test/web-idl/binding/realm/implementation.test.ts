@@ -8,7 +8,7 @@ import {
 import { DefinitionAssembly } from '../../../../src/web-idl/assembly/index';
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
 import { RealmBinding } from '../../../../src/web-idl/binding/realm';
-import { PlatformRecord } from '../../../../src/web-idl/binding/platform';
+import { PlatformRecord } from '../../../../src/web-idl/values/index';
 
 import { getMemberBinding } from '../../../support/web-idl-binding';
 import { TestRealm as Realm } from '../../../support/web-idl-realm';

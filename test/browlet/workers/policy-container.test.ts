@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { createSandboxEnvironment } from '../../../src/browlet/bindings';
+import { createSandboxEnvironment } from '../../../src/browlet/integration/web-idl/index';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { WorkerGlobalScopeImpl } from '../../../src/browlet/workers/worker-global-scope';
 import { FetchResponse } from '../../../src/fetch/response';

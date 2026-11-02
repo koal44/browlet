@@ -2,4 +2,4 @@ export type {
   DOMEnvironment, DOMRealm, WindowDOMRealm, WindowDOMAgent, EventImplConstructor,
 } from './environment';
 export { domIDLDefinitions } from './web-idl';
-export { DOMStringListImpl } from './string-list';
+export { DOMStringListImpl } from './lists/index';

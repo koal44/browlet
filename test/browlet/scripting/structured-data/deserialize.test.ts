@@ -10,8 +10,8 @@ import {
   DOMExceptionImpl, isDOMException,
 } from '../../../../src/web-idl/core/dom-exception';
 import type { BrowletRealm } from '../../../../src/browlet/scripting/realm';
-import { SandboxEnvironment, type BrowletEnvironment } from '../../../../src/browlet/environment';
-import { createBrowletEnvironmentInit } from '../../../../src/browlet/bindings';
+import { SandboxEnvironment, type BrowletEnvironment } from '../../../../src/browlet/environment/index';
+import { createBrowletEnvironmentInit } from '../../../../src/browlet/integration/web-idl/index';
 import { AgentCluster } from '../../../../src/browlet/scripting/agents';
 import {
   structuredDeserialize,

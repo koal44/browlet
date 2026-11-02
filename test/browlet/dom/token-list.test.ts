@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
-import { DOMTokenListImpl } from '../../../src/browlet/dom/token-list';
+import { DOMTokenListImpl } from '../../../src/browlet/dom/lists/index';
 import type { ElementImpl } from '../../../src/browlet/dom/nodes/element';
 import { createTestDocument } from '../../support/dom';
 import { unwrap } from '../../support/browlet-binding';

@@ -6,7 +6,7 @@ import { isomorphicDecode } from '../../../../js-engine/index';
 import { stripURLForReporting, type Origin, type URLRecord } from '../../../../url/index';
 import { applyIntegrityAlgorithm, isScriptLikeDestination, type FetchRequest, type FetchResponse } from '../../../../fetch/index';
 
-import type { BrowletEnvironment } from '../../../environment';
+import type { BrowletEnvironment } from '../../../environment/index';
 
 import { CSPDirectives, CSPDirectiveValue, type CSPFetchDirectiveName } from './directives';
 import { CSPViolation } from './violation';

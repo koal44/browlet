@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { createWindowEnvironment } from '../../../src/browlet/bindings';
+import { createWindowEnvironment } from '../../../src/browlet/integration/web-idl/index';
 import { BrowsingContext, TopLevelTraversable, createDocumentState } from '../../../src/browlet/browsing/navigation/index';
 import { MessageChannelImpl } from '../../../src/browlet/communication/index';
 import type { MessageEvent, MessagePort } from '../../../src/browlet/platform';

@@ -2,8 +2,8 @@ import type { DOMElement, DOMProcessingInstruction } from '../../infra/index';
 import { attr, defineInterface, idlType, impl, nullable, reference, roAttr, union, xattr } from '../../web-idl/core/index';
 import { serializeURL, type URLRecord } from '../../url/core/index';
 
-import type { StyleletEnvironment } from '../environment';
 import { MediaListImpl } from './media/index';
+import type { StyleletEnvironment } from '../environment';
 
 import type { CSSStyleSheetImpl } from './css-stylesheet';
 

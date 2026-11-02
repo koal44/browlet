@@ -29,7 +29,7 @@ const subsystemEntryPoints = {
   'stylelet/syntax': ['index'], 'stylelet/value-processing': ['index'],
   'stylelet/values/numeric-literal': ['index'], 'stylelet/values/collections': ['index'],
   'stylelet/conditional': ['index'], 'stylelet/values': ['index', 'value'],
-  'stylelet/props': ['index'], 'stylelet/selector': ['index'],
+  'stylelet/props': ['index', 'built-in/index'], 'stylelet/selector': ['index'],
   'stylelet/cssom': ['index', 'declarations/index', 'media/index', 'typed/index', 'rules/index'],
   'stylelet/engine': ['index'],
 };
@@ -285,7 +285,7 @@ export default defineConfig(
         entryPoints: subsystemEntryPoints,
       }],
       'browlet/incumbent-lookup': ['error', [
-        'src/browlet/bindings.ts',
+        'src/browlet/integration/web-idl/composition.ts',
         'src/browlet/scripting/realm.ts',
         'src/browlet/scripting/event-loop.ts',
         'src/web-idl/binding/world.ts',

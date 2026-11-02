@@ -4,7 +4,7 @@ import { bindAsyncContext, createMicrotaskQueue, type JSMicrotaskQueue } from '.
 import { Duration, monotonicClock, unsafeSharedCurrentTime, UnsafeMoment } from '../timing/index';
 import type { DocumentImpl } from '../dom/nodes/index';
 import type { WindowImpl } from '../browsing/window/index';
-import type { BrowletEnvironment } from '../environment';
+import type { BrowletEnvironment } from '../environment/index';
 
 import { WindowAgent, type Agent } from './agents';
 import { JSExecutionContext } from './execution-context';

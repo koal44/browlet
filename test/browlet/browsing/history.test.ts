@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/document-state';
-import { createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/session-history';
+import { createDocumentState, createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { parseURL } from '../../../src/url/index';
 import { getRelevantRealm, unwrap } from '../../support/browlet-binding';

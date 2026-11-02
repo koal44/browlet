@@ -6,7 +6,7 @@ import type { OpenerPolicyEnforcementResult } from '../../../../src/browlet/brow
 import { EmbedderPolicy } from '../../../../src/browlet/browsing/policy/coep';
 import { OpenerPolicy, sanitizeURLForReport, type OpenerPolicyValue } from '../../../../src/browlet/browsing/policy/coop';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
-import { BrowletEnvironmentBase } from '../../../../src/browlet/environment';
+import { BrowletEnvironmentBase } from '../../../../src/browlet/environment/index';
 import { FetchResponse } from '../../../../src/fetch/response';
 import { createOpaqueOrigin } from '../../../../src/url/origin';
 import { obtainURLOrigin, parseURL } from '../../../../src/url/url';

@@ -2,12 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState } from '../../../../src/browlet/browsing/navigation/document-state';
+import { createDocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
 import { OpenerPolicy } from '../../../../src/browlet/browsing/policy/coop';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
-import { CrossOriginObjectBinding } from '../../../../src/browlet/integration/web-idl/cross-origin';
+import { CrossOriginObjectBinding } from '../../../../src/browlet/integration/web-idl/bindings/cross-origin';
 import { createOpaqueOrigin, obtainURLOrigin, parseHost, parseURL, type Origin } from '../../../../src/url/index';
 import { getBindingContext, unwrap } from '../../../support/browlet-binding';
 

@@ -286,7 +286,7 @@ implementation's existing import map and compares URL keys by value.
 Import-map parsing and normalization remain §8.1.5 work.
 
 The fetch algorithms live together in [script-fetching.ts](script-fetching.ts).
-[BrowletEnvironment](../environment.ts) supplies thin forwarding methods that
+[BrowletEnvironment](../environment/environment.ts) supplies thin forwarding methods that
 select the target settings. Integrity lookup and realm-specific module-type
 permission remain environment operations. The first two fetchers cover:
 
@@ -861,7 +861,7 @@ fetch, link, or evaluate a module.
 Infra retains the [JSON value types and realm-independent conversion](../../infra/json.ts).
 The §6 string and object-conversion algorithms live on [JSRealm](../../js-engine/realm.ts)
 and are exposed through `env.realm`, preserving realm-owned SyntaxErrors. The four
-[JSON-byte algorithms on BrowletEnvironment](../environment.ts) combine Encoding's
+[JSON-byte algorithms on BrowletEnvironment](../environment/environment.ts) combine Encoding's
 UTF-8 primitives with those string operations through `this.realm`. Fetch calls
 the two operations it needs through its environment contract. Neither Infra nor
 JS Engine depends on Encoding.
@@ -2285,16 +2285,16 @@ reclassified or skipped.
 | Source | Current responsibility |
 | --- | --- |
 | `agents.ts` | Agent/cluster records, Window inventory, one EventLoop per Agent, observer creation counters, and batched MutationObserver/slot-change notification |
-| `realm.ts` | Relevant/incumbent ownership and controlled script/callback entry; environment bases and full browser settings live in [`../environment.ts`](../environment.ts) |
+| `realm.ts` | Relevant/incumbent ownership and controlled script/callback entry; environment bases and full browser settings live in [`../environment.ts`](../environment/environment.ts) |
 | `execution-context.ts`, `script.ts` | Explicit contexts, HTML script state/creation, compiled classic/source-text/synthetic records, ModuleRequests, supplied dependency linking, and the Wasm ESM boundary |
 | `script-fetch-options.ts`, `script-fetching.ts`, `module-map.ts` | Fetch options, classic/worker/single-module fetching, document/worker/worklet module-graph orchestration, and cached results/pending callbacks; the environment forwards fetch calls and owns integrity lookup/type permission |
 | `module-loading.ts` | HostLoadImportedModule and supported import attributes, graph pending/visited state, and static/dynamic completion; separate from HTML fetch state |
 | [`../worklets/module-responses-map.ts`](../worklets/module-responses-map.ts) | Downloaded responses and pending notifications shared across a Worklet's globals; separate from their per-environment module maps |
 | `global-object.ts`, `import-map.ts` | Shared HTML global state, import-map parsing/normalization/merging, module specifier resolution, and parse-result creation; Window owns registration |
-| [`../environment.ts`](../environment.ts), [`../dom/events/error-event.ts`](../dom/events/error-event.ts) | Global exception reporting and ErrorEvent; the realm callback and global-scope operation delegate to the environment |
+| [`../environment.ts`](../environment/environment.ts), [`../dom/events/error-event.ts`](../dom/events/error-event.ts) | Global exception reporting and ErrorEvent; the realm callback and global-scope operation delegate to the environment |
 | `event-loop.ts`, `tasks.ts` | Task records, source/queue associations, fully-active gating, deterministic turns, checkpoints, incumbent stack, timing hooks, and coalesced wake-ups |
 | `host-hooks.ts` | Native callback installation for TrustedScript extraction, rejection and exception reporting; custom-engine make/call hooks plus Promise, generic, and timeout job delivery |
-| [`../global-scope.ts`](../global-scope.ts), `timers.ts` | Higher-level global API composition; lower-level active-time waits and Window function timers |
+| [`../environment/global-scope.ts`](../environment/global-scope.ts), `timers.ts` | Higher-level global API composition; lower-level active-time waits and Window function timers |
 | `rendering-opportunity.ts` | Independent opportunity producer, Document render-blocking filter, and ordered rendering pipeline seams |
 | `speculation-rules.ts` | Parse-result creation and an empty-only rule-set record with an explicit parser boundary; Document owns registered sets and Window owns registration/removal/replacement |
 | [Structured data](structured-data/ROADMAP.md) | Graph serialization/deserialization, ArrayBuffer transfer, and the Window structuredClone API |
@@ -2302,7 +2302,7 @@ reclassified or skipped.
 `createWindowEnvironment()` composes the same Window/realm/execution boundary
 for initial browsing and navigation. BrowletEnvironmentBase supplies security,
 navigation state, network partitioning, and the UserAgent before a realm exists.
-The base and full environments live in `browlet/environment.ts`; full environments
+The base and full environments live in `browlet/environment/environment.ts`; full environments
 inherit the base state and add the actual realm, allocation facilities, global, and browser
 policy/reporting operations. They sit above the scripting foundations, which retain
 type-only references to them, and are not re-exported by Scripting's barrel.

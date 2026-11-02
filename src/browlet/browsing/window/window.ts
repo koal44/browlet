@@ -25,8 +25,9 @@ import { NavigatorImpl } from '../../navigator/index';
 import { windowPostMessage, type WindowPostMessageOptions } from '../../communication/index';
 import { WindowSessionStorageMixin, WindowLocalStorageMixin, type StorageImpl } from '../../storage/index';
 import { NavigationImpl } from '../navigation-api/index';
-import type { BrowletEnvironment, WindowEnvironment } from '../../environment';
-import type { WindowOrWorkerGlobalScopeMixin, TimerHandler } from '../../global-scope';
+import type {
+  BrowletEnvironment, WindowEnvironment, WindowOrWorkerGlobalScopeMixin, TimerHandler,
+} from '../../environment/index';
 import type { StructuredSerializeOptions } from '../../scripting/structured-data/index';
 import type { BrowsingContext, Navigable } from '../navigation/index';
 

@@ -5,7 +5,7 @@ import {
 
 import { EventHandlerMap, eventHandlerAttr, type EventHandlerCallback } from '../../scripting/index';
 import { EventTargetImpl } from '../../dom/events/index';
-import type { BrowletEnvironment } from '../../environment';
+import type { BrowletEnvironment } from '../../environment/index';
 
 /** The query result, using DOM's real EventTarget implementation. */
 // https://w3c.github.io/permissions/#permissionstatus-interface

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../../src/browlet/browlet';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
-import type { WindowEnvironment } from '../../../../src/browlet/environment';
+import type { WindowEnvironment } from '../../../../src/browlet/environment/index';
 import type { Location } from '../../../../src/browlet/platform';
 import { DOMExceptionImpl } from '../../../../src/web-idl/core/index';
 import { createOpaqueOrigin, obtainURLOrigin, parseURL, serializeURL } from '../../../../src/url/index';

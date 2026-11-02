@@ -2,16 +2,16 @@ import { asciiLower } from '../../../infra/ascii';
 import { InternalError } from '../../../infra/internal-error';
 import { defineInterface, idlType, impl, nullable, reference, roAttr, xattr } from '../../../web-idl/core/index';
 
-import type { StyleletEnvironment } from '../../environment';
 import {
   consumeStringToken, isFunctionBlock, isWhitespaceToken, TokenCursor, TokenKind,
   type BlockContents, type ComponentValue, type TokenList,
 } from '../../syntax/index';
 import { UrlValue } from '../../values/index';
 import { MediaListImpl } from '../media/index';
-import type { RuleListContext } from './context';
 import type { CSSStyleSheetImpl } from '../css-stylesheet';
+import type { StyleletEnvironment } from '../../environment';
 
+import type { RuleListContext } from './context';
 import { CSSRuleImpl } from './rule';
 
 /** An import's authored URL and conditions; fetching requires its containing sheet. */

@@ -1,10 +1,9 @@
 import {
   endOfIteration, type AsyncIterator, type InternalPromise, type PromiseResultType,
 } from '../../infra/index';
-import { isObject } from '../../js-engine/index';
+import { compileHostSteps, isObject } from '../../js-engine/index';
 import type { CallbackExceptionBehavior, ImplementationClass } from '../core/index';
 
-import { compileSteps } from '../compiler';
 import type {
   IDLType, IDLNullableType, IDLUnionType, IDLSequenceType, IDLRecordType, IDLDictionaryType,
   IDLPromiseType, IDLAsyncSequenceType, AssembledCallable, AssembledDictionary,
@@ -51,7 +50,8 @@ export class ImplementationConverter {
     if (!statements.length) return;
     const label = assembled.arguments.map((argument) => argument.type.conversionKey).join(',');
     // Consume the invocation's fresh list; the intermediate IDL values are no longer needed.
-    return compileSteps(`implementation-arguments:${label}`, dependencies, `function convertArguments(values, context) {
+    return compileHostSteps(`webidl/${encodeURIComponent(`implementation-arguments:${label}`)}`,
+      dependencies, `function convertArguments(values, context) {
       ${statements.join('\n')}
       return values;
     }`);

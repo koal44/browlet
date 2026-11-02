@@ -59,7 +59,7 @@ dependencies without projecting placeholders for missing APIs.
 
 ## DOMStringList
 
-HTML §2.6.5's [DOMStringList](string-list.ts) is a standalone string-list interface
+HTML §2.6.5's [DOMStringList](lists/string-list.ts) is a standalone string-list interface
 beside DOMTokenList. It depends only on Web IDL, with no tree or form dependency.
 Length, indexed reads, `item()`, and exact `contains()` membership use the associated
 list directly, preserving order, duplicates, and exact strings. Its owner supplies

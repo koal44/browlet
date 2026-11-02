@@ -1,74 +1,40 @@
 # Browlet integration
 
-Browlet's cross-specification adapters. [`bindings.ts`](../bindings.ts) composes
-interface and proxy definitions, realm bindings, and execution facilities through
-one shared `BindingWorld`. Implementation algorithms receive their dependencies
-through composition and do not import that module.
+Browlet connects specification implementations, their JavaScript platform, and
+the host through these adapters. Each provider implements contracts owned by its
+consumer; implementations receive the resulting facilities through their
+environment or UserAgent. See the [composition rules](../../ARCHITECTURE.md#choosing-a-dependency).
 
-Outside this directory, bindings and UserAgent are the only production modules
-that import its concrete integrations. Other implementations use the objects supplied by
-their environment or UserAgent; browser-dependent classes can remain here.
+| Owner | Responsibility |
+| --- | --- |
+| [`web-idl/`](web-idl/README.md) | Compose environments, realms, and the shared BindingWorld; collect declarations from their feature owners |
+| [`web-idl/bindings/`](web-idl/bindings/index.ts) | HTML reflection, constructors, cross-origin access, and WindowProxy/Location binding rules |
+| [`host/`](host/index.ts) | Node task turns, timer wake-ups, and browser-owned Promise continuations |
+| [`host/network/`](host/network/index.ts) | Node/Undici HTTP transport and native response decoders |
+| [`file/`](file/index.ts) | FileReader, the browser's Blob URL store, and URL's object-URL declaration contribution |
+| [`xhr/`](xhr/index.ts) | ProgressEvent's browser implementation, declaration, and trusted event firing |
+| [`permissions/`](permissions/index.ts) | PermissionStatus with browser event delivery and lifetime handling |
+| [`dom.ts`](dom.ts) | Implementation access supplied to other subsystems through `userAgent.dom` |
 
-`createWindowEnvironment()` allocates the realm and environment before constructing
-Window and installing its platform global. `createBrowletEnvironmentInit()`
-in `bindings.ts` supplies the bound InternalPromise constructor, host background
-scheduling, DOM document/event/abort allocation, and structured-data functions.
-The environment assigns these directly and discards the initialization record.
-Its Fetch task-delivery method resolves the supplied destination global's
-BrowletRealm, which can differ from the owner's, and queues on HTML's networking
-task source. The environment reads the live global through its realm and resolves
-DOMException lazily because global installation and interface registration finish later.
-The BrowletRealm initially reads security from a `BrowletEnvironmentBase` instance.
-Registration constructs the complete `WindowEnvironment` before global projection;
-it inherits the base state and adds its realm and facilities directly. The composition root
-then constructs Window with that environment, links it to the realm, and installs
-the shared global-scope mixin. The Document lifecycle
-algorithms retain their own initialization. `env.createDocument()` supplies
-the environment through Document's construction declaration; descendant allocation
-uses that same environment's `constructNode()`. Stylelet uses that
-same environment, including `userAgent.dom`, `InternalPromise`, and task delivery. Event creation is
-available before projection.
-`Browlet` constructs UserAgent, which creates its sandbox through bindings and
-exposes the Window-environment factory. Bindings receives the existing owner;
-new browsing contexts use that factory through their UserAgent. UserAgent creates
-Window Agents, while bindings creates the sandbox Agent. Both construct EventLoop
-with `queueNodeTask` for host wake-ups. The loop owns its microtask queue and
-selects the shared clock; integration supplies only the Node facilities.
-The mixin uses `env.clone()` and derives timer ownership from
-`env.realm`, without retaining a Binding Context or a separate execution
-argument. UserAgent supplies `timerHost`; the mixin constructs and retains each
-global's timer state.
+UserAgent consumes host facilities, Blob URL storage, and the DOM adapter directly.
+It creates its sandbox through Web IDL composition and exposes the Window factory
+to browsing algorithms. Web IDL composition consumes the host and feature adapters
+and installs the lower binding hooks. Adapters and binding hooks do not import
+composition; the import hierarchy enforces that direction.
 
-Providers implement contracts owned by the consuming subsystem. Browser-dependent
-implementations such as FileReader stay whole here; domain-local behavior stays
-with its subsystem. See the [composition rules](../../ARCHITECTURE.md#choosing-a-dependency).
+FileReader stays whole here because it combines File API behavior with Browlet's
+EventTarget, task delivery, timing, and ProgressEvent. Its declarations remain
+beside its implementation. Blob URL entries can retain browser-owned MediaSource
+implementations when the [media foundation](../media/ROADMAP.md) exists. UserAgent
+supplies parsing and captured-entry acquisition to URL and Fetch without exposing
+store mutation to Fetch.
 
-- `web-idl/` supplies HTML's extended-attribute handlers to the `BindingWorld`
-  composition in `bindings.ts`. Reflection is prepared after type resolution,
-  once per world. Declarations retain annotations and typed metadata without
-  importing this integration; invocations use the receiver's binding context.
-  Reusable HTML value rules and DOM state remain with their existing owners.
-  Custom-element reaction wrapping is still pending in its owning slice.
-  Its cross-origin binding also supplies the Web IDL security hook and HTML
-  §7.2.1's shared descriptor algorithms. Full WindowProxy and Location traps
-  remain separate work; see the [Window roadmap](../browsing/window/ROADMAP.md#html-721-cross-origin-objects).
-- `xhr/` owns ProgressEvent's browser implementation, declaration, and trusted
-  firing over DOM events. FileReader consumes this same implementation; the
-  standalone XHR package remains independent of Browlet. Binding composition
-  includes its declarations alongside the standalone XHR contributions.
-- `file/` connects File API algorithms to HTML scheduling
-  and owns `FileReader`, whose concrete
-  implementation depends on Browlet's EventTarget, tasks, timing, and events.
-  It also owns the UserAgent's Blob URL store and entries, allowing them to
-  retain browser-owned MediaSource implementations alongside portable Blobs
-  when the [media foundation](../media/ROADMAP.md) is implemented. Its partial
-  URL declaration exposes Blob registration and revocation using the static
-  method's environment. UserAgent supplies parsing and captured-entry
-  acquisition to URL and Fetch without exposing store mutation to Fetch.
-- `node.ts` supplies Node task turns, timer wake-ups, and browser-owned Promise
-  continuations. Composition assigns `queueNodeTask` to event-loop wake-ups and
-  `runInParallel`; HTML keeps its scheduling policy. JS Engine separately supplies
-  the microtask-queue backend, including enqueue and checkpoint operations.
-- `network/` supplies the UserAgent's Node/Undici HTTP transport and per-response
-  native content decoders. Fetch owns request processing and stream delivery;
-  the adapters own connections, TLS, native I/O, and compression facilities.
+The host supplies Node facilities, while HTML retains scheduling policy. UserAgent
+creates Window Agents and composition creates the sandbox Agent; both supply
+`queueNodeTask` for EventLoop wake-ups. JS Engine separately owns the microtask-queue
+backend. Each global's [environment-owned mixin](../environment/global-scope.ts)
+constructs and retains its timer state using the UserAgent's timer host.
+
+Fetch owns request processing and stream delivery. The network adapters own
+connections, TLS, native I/O, and compression facilities. Their separate network
+entry point lets composition use task facilities without loading the transport.

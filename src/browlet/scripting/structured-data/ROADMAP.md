@@ -74,7 +74,7 @@ this focused fix.
 | `serialize.ts`, `deserialize.ts` | Graph traversal, storage mode, target-realm reconstruction, and shared memory |
 | `transfer.ts` | Structured cloning, transfer-list validation, serialization/transfer order, message-wide checks, and receiving steps |
 | `web-idl.ts` | Shared StructuredSerializeOptions declaration |
-| [`../../global-scope.ts`](../../global-scope.ts) | The public WindowOrWorkerGlobalScope contribution |
+| [`../../environment/global-scope.ts`](../../environment/global-scope.ts) | The public WindowOrWorkerGlobalScope contribution |
 | [File](../../../file/index.ts), [DOMException](../../../web-idl/core/dom-exception.ts) | Concrete steps beside the contributing implementations and declarations |
 
 [Web IDL](../../../web-idl/README.md) owns platform identity, exposure checks,

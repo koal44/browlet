@@ -83,7 +83,7 @@ This pass stops before §7.1.3, cross-origin opener policies.
 
 Extraction dependencies now have code owners:
 
-- [WindowOrWorkerGlobalScopeMixin](../global-scope.ts) compares the relevant
+- [WindowOrWorkerGlobalScopeMixin](../environment/global-scope.ts) compares the relevant
   origin with the entry environment's origin using same-origin-domain. Window
   forwards to it. The binding selects the modeled entry environment, including
   borrowed operations; direct host calls without an HTML entry use the operation

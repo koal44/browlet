@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { InfraValue } from '../../src/infra/json';
 import { utf8Encode } from '../../src/encoding/index';
-import { createSandboxEnvironment } from '../../src/browlet/bindings';
+import { createSandboxEnvironment } from '../../src/browlet/integration/web-idl/index';
 
 describe('Infra §6: JSON bytes', () => {
   it('parses with the supplied realm\'s captured JSON.parse and allocation prototypes', () => {

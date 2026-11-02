@@ -1,11 +1,11 @@
 import { createManualEventLoop } from '../../../support/browlet-agent';
-import { createWindowEnvironment } from '../../../../src/browlet/bindings';
+import { createWindowEnvironment } from '../../../../src/browlet/integration/web-idl/index';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { createDocumentState } from '../../../../src/browlet/browsing/navigation/document-state';
+import { createDocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { WindowAgent } from '../../../../src/browlet/scripting/agents';
-import type { WindowEnvironment } from '../../../../src/browlet/environment';
+import type { WindowEnvironment } from '../../../../src/browlet/environment/index';
 import { obtainURLOrigin, parseURL } from '../../../../src/url/url';
 
 /** Compose real Window and navigable state while iframe construction is unfinished. */

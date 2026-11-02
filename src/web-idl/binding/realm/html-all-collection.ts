@@ -2,7 +2,7 @@ import { InternalError } from '../../../infra/internal-error';
 import { addon } from '../../../js-engine/index';
 
 import type { AssembledInterface } from '../../assembly/index';
-import { getImplementationRecord } from '../platform';
+import { getImplementationRecord } from '../../values/index';
 
 import type { ImplementationBinding } from './implementation';
 import {

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { addon } from '../../../../src/js-engine/index';
 import { Browlet } from '../../../../src/browlet/browlet';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
-import { CrossOriginObjectBinding } from '../../../../src/browlet/integration/web-idl/cross-origin';
+import { CrossOriginObjectBinding } from '../../../../src/browlet/integration/web-idl/bindings/cross-origin';
 import { obtainURLOrigin, parseURL, serializeURL } from '../../../../src/url/index';
 import { getBindingContext, getRelevantRealm, unwrap } from '../../../support/browlet-binding';
 

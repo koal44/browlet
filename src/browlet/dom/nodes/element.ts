@@ -9,14 +9,14 @@ import type { CSSStyleSheetImpl, CSSDeclarationBlock } from '../../../stylelet/i
 import { isValidAttributeLocalName, validateAndExtract } from '../infra/index';
 import { ElementTag, type ContentCategory, type ContentModel } from './element-definitions/index';
 import type { LinkStyleMixin } from '../../style/index';
+import { DOMTokenListImpl, type TokenListAttribute } from '../lists/index';
 import type { TaskSource } from '../../scripting/index';
 import type { EventImpl } from '../events/index';
 import type { PermissionsPolicyDirective } from '../../browsing/policy/index';
 import { getTrustedTypeDataForAttribute, type TrustedTypeValue } from '../../browsing/policy/trusted-types/index';
-import { DOMTokenListImpl, type TokenListAttribute } from '../token-list';
 import type { IntersectionObserverRegistration } from '../intersection-observer/index';
 import { ElementAssociations, type ElementConstructor } from '../../html/reflection/index';
-import type { BrowletEnvironment } from '../../environment';
+import type { BrowletEnvironment } from '../../environment/index';
 
 import { NodeImpl, NodeType } from './node';
 import type { AttrImpl } from './attribute';

@@ -3,7 +3,7 @@ import { areSameOrigin, obtainURLOrigin, parseURL, type Origin } from '../../url
 
 import { createTaskSource } from '../scripting/index';
 import type { WindowImpl } from '../browsing/window/index';
-import type { BrowletEnvironment, WindowEnvironment } from '../environment';
+import type { BrowletEnvironment, WindowEnvironment } from '../environment/index';
 import type { StructuredSerializeOptions } from '../scripting/structured-data/index';
 
 import { MessageEventImpl } from './message-event';

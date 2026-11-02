@@ -10,7 +10,7 @@ import { RealmBinding } from '../../../src/web-idl/binding/realm';
 import {
   getImplementationObject, getImplementationRecord, getPlatformObject, getPlatformRecord,
   stampImplementation, isStampedImplInstance, isStampedPlatformObject,
-} from '../../../src/web-idl/binding/platform';
+} from '../../../src/web-idl/values/index';
 
 import { TestRealm as Realm } from '../../support/web-idl-realm';
 

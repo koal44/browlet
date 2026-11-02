@@ -1,12 +1,12 @@
 import { InternalError } from '../../../infra/internal-error';
 import { annotated, attr, defineInterface, impl, reference, roAttr, xattr } from '../../../web-idl/core/index';
 
-import type { StyleletEnvironment } from '../../environment';
 import type { BlockContents, ComponentValue, Token, TokenCursor, TokenList } from '../../syntax/index';
 import { CSSStyleDeclarationImpl } from '../declarations/index';
-import type { RuleListContext } from './context';
 import type { CSSRuleListImpl } from '../rule-list';
+import type { StyleletEnvironment } from '../../environment';
 
+import type { RuleListContext } from './context';
 import { CSSGroupingRuleImpl } from './grouping';
 
 /** Page-rule boundary awaiting page-selector and descriptor grammars. */

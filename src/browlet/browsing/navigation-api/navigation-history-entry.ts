@@ -3,7 +3,7 @@ import { serializeURL } from '../../../url/index';
 
 import { eventHandlerAttr, EventHandlerMap, type EventHandlerCallback } from '../../scripting/index';
 import { EventTargetImpl } from '../../dom/events/index';
-import type { BrowletEnvironment } from '../../environment';
+import type { BrowletEnvironment } from '../../environment/index';
 import type { SessionHistoryEntry } from '../navigation/index';
 
 /** A realm-owned view of one session-history record. */

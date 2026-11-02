@@ -1,7 +1,7 @@
 import { parseURL, urlsEqual, type URLRecord } from '../../url/index';
 
-import type { StyleletEnvironment } from '../environment';
 import { CSSImportRuleImpl, type CSSRuleImpl } from './rules/index';
+import type { StyleletEnvironment } from '../environment';
 
 import type { CSSStyleSheetImpl } from './css-stylesheet';
 

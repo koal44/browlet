@@ -1,12 +1,11 @@
 import { InternalError } from '../../infra/index';
 import { isCallable, isObject } from '../../js-engine/index';
 
-import type { WebIDLRealm } from '../environment';
 import type {
   IDLCallbackFunctionType, IDLCallbackInterfaceType, AssembledCallbackFunction,
 } from '../assembly/index';
-import { getPlatformRecord } from '../binding/platform';
-import { IDLCallbackFunction, IDLCallbackInterface, CallbackFunctionStamper } from '../values/index';
+import { getPlatformRecord, IDLCallbackFunction, IDLCallbackInterface, CallbackFunctionStamper } from '../values/index';
+import type { WebIDLRealm } from '../environment';
 
 import { Converter, type ConversionSteps } from './converter';
 

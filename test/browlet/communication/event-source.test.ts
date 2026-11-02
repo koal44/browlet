@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import type { BrowletEnvironment } from '../../../src/browlet/environment';
+import type { BrowletEnvironment } from '../../../src/browlet/environment/index';
 import type { Event, EventSource, MessageEvent } from '../../../src/browlet/platform';
 import { utf8Encode } from '../../../src/encoding/index';
 import { FetchHeaders } from '../../../src/fetch/headers';

@@ -7,7 +7,7 @@ import type { CSSStyleSheetImpl } from '../../../../../stylelet/index';
 import { ElementTag, ContentCategory } from '../../element-definitions/index';
 import { LinkStyleMixin } from '../../../../style/index';
 import { getBlockingTokens, blockingAttribute } from '../attributes/index';
-import type { BrowletEnvironment } from '../../../../environment';
+import type { BrowletEnvironment } from '../../../../environment/index';
 
 import type { ElementCreationContext } from '../../element';
 import type { DocumentImpl } from '../../document';

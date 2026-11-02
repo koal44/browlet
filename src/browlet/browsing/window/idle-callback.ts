@@ -6,7 +6,7 @@ import {
 
 import { unsafeSharedCurrentTime, type Moment } from '../../timing/index';
 import { idleTaskSource } from '../../scripting/index';
-import type { WindowEnvironment } from '../../environment';
+import type { WindowEnvironment } from '../../environment/index';
 
 /** Owns one Window's idle registrations, periods, and timeout races. */
 export class WindowIdleCallbacks {

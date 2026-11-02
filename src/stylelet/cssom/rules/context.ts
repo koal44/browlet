@@ -1,14 +1,15 @@
-import type { StyleletEnvironment } from '../../environment';
 import type {
   SyntaxDeclaration, StatementAtRule, ComponentValue, BlockContents, ParserInput, TokenList, TokenCursor, Token,
 } from '../../syntax/index';
 import type { PropertyContext } from '../../props/index';
 import type { SelectorList, SelectorNamespaces } from '../../selector/index';
 import type { InterpretedDeclaration } from '../declarations/index';
-import type { CSSStyleRuleImpl } from './style';
-import type { CSSRuleImpl } from './rule';
 import type { CSSRuleListImpl } from '../rule-list';
 import type { CSSStyleSheetImpl } from '../css-stylesheet';
+import type { StyleletEnvironment } from '../../environment';
+
+import type { CSSStyleRuleImpl } from './style';
+import type { CSSRuleImpl } from './rule';
 
 /** One rule list's grammar and enclosing style, retaining the existing allocation owner. */
 // https://drafts.csswg.org/css-syntax-3/#parser-algorithms

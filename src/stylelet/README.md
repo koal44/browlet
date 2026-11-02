@@ -34,7 +34,13 @@ result. [index.ts](index.ts) exports the supported entry points and implementati
 
 Each implemented component has an explicit `index.ts`; imports across its boundary use that
 barrel, while collaborating modules inside it import each other directly.
-`environment.ts` and `context.ts` remain named entries for their existing owners.
+`environment.ts` and `context.ts` remain named entries within the enclosing
+Stylelet component; they do not have individual import-hierarchy layers.
+The property classes and custom-registration contracts stay directly in `props/`.
+Its index exports those shared definitions, while `props/built-in/index.ts` exports
+concrete CSS properties and their registry. The shared classes sit below the
+built-in definitions; a class does not load the registry merely because it needs
+a related property type.
 The public [index](index.ts) also exports Infra's `InternalPromise` for standalone
 hosts supplying `env.InternalPromise`. Implementation modules import it directly from Infra.
 

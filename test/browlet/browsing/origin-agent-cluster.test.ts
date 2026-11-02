@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
-import { BrowletEnvironmentBase } from '../../../src/browlet/environment';
+import { BrowletEnvironmentBase } from '../../../src/browlet/environment/index';
 import { FetchResponse } from '../../../src/fetch/response';
 import { parseURL } from '../../../src/url/url';
 import { unwrap } from '../../support/browlet-binding';

@@ -1,8 +1,8 @@
 import type { JSFunction } from '../../js-engine/index';
 
-import type { WebIDLEnvironment } from '../environment';
 import type { AssembledInterface, IDLAttribute } from '../assembly/index';
-import type { PlatformRecord } from './platform';
+import type { PlatformRecord } from '../values/index';
+import type { WebIDLEnvironment } from '../environment';
 
 import type { BindingContext } from './world';
 import type { SecurityCheckType } from './realm';

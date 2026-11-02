@@ -8,7 +8,7 @@ RuleTester.describe = describe;
 RuleTester.it = it;
 
 const filename = fileURLToPath(new URL('../../src/browlet/example.ts', import.meta.url));
-const allowed = fileURLToPath(new URL('../../src/browlet/bindings.ts', import.meta.url));
+const allowed = fileURLToPath(new URL('../../src/browlet/integration/web-idl/composition.ts', import.meta.url));
 const tester = new RuleTester({ languageOptions: { parser: tseslint.parser } });
 
 tester.run('incumbent-lookup', rule, {
@@ -16,7 +16,7 @@ tester.run('incumbent-lookup', rule, {
     { filename, code: 'loop.prepareToRunCallback(env);' },
     { filename, code: 'class EventLoop { getIncumbentEnvironment() {} }' },
     { filename: allowed, options: [[allowed]], code: 'loop.getIncumbentEnvironment();' },
-    { filename: allowed, options: [['src/browlet/bindings.ts']], code: 'loop.getIncumbentEnvironment();' },
+    { filename: allowed, options: [['src/browlet/integration/web-idl/composition.ts']], code: 'loop.getIncumbentEnvironment();' },
     { filename, code: 'const { env } = inputs;' },
   ],
   invalid: [

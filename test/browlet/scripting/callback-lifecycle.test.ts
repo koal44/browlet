@@ -5,7 +5,7 @@ import { createManualEventLoop } from '../../support/browlet-agent';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { createScriptState } from '../../support/script-state';
 import { installHostHooks } from '../../../src/browlet/scripting/host-hooks';
-import { createBrowletEnvironmentInit, browletBindingWorld } from '../../../src/browlet/bindings';
+import { createBrowletEnvironmentInit, browletBindingWorld } from '../../../src/browlet/integration/web-idl/index';
 import { UserAgent } from '../../../src/browlet/user-agent';
 
 import { createOpaqueOrigin } from '../../../src/url/origin';
@@ -22,9 +22,9 @@ import { BindingWorld } from '../../../src/web-idl/binding/world';
 import { PolicyContainer } from '../../../src/browlet/browsing/policy/container';
 import { ModuleMap } from '../../../src/browlet/scripting/module-map';
 import { Agent, AgentCluster } from '../../../src/browlet/scripting/agents';
-import { BrowletEnvironmentBase } from '../../../src/browlet/environment';
-import { BrowletEnvironment } from '../../../src/browlet/environment';
-import { WindowOrWorkerGlobalScopeMixin } from '../../../src/browlet/global-scope';
+import {
+  BrowletEnvironmentBase, BrowletEnvironment, WindowOrWorkerGlobalScopeMixin,
+} from '../../../src/browlet/environment/index';
 import type { Task } from
   '../../../src/browlet/scripting/event-loop';
 import { Moment, monotonicClock } from '../../../src/browlet/timing/clock';

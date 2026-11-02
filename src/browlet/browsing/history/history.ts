@@ -4,7 +4,7 @@ import {
 } from '../../../web-idl/core/index';
 
 import type { DocumentImpl } from '../../dom/nodes/index';
-import type { BrowletEnvironment } from '../../environment';
+import type { BrowletEnvironment } from '../../environment/index';
 import type { HistoryHandlingBehavior } from '../navigation/index';
 
 /** Document-owned classic history state, exposed through its Window. */

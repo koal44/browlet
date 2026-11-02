@@ -4,8 +4,7 @@ import { defineDataProperty, defineMethod, isObject, type JSFunction } from '../
 import {
   anyType, type IDLAsyncIterable, type AssembledArgument, type AssembledInterface,
 } from '../../assembly/index';
-import { getPlatformRecord, type StampedImplInstance } from '../platform';
-import { IDLPromise } from '../../values/index';
+import { getPlatformRecord, type StampedImplInstance, IDLPromise } from '../../values/index';
 
 import type { RealmBinding } from '../realm';
 

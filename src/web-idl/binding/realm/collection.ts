@@ -4,8 +4,7 @@ import {
 } from '../../../js-engine/index';
 
 import type { IDLType, IDLMaplike, IDLSetlike, AssembledInterface } from '../../assembly/index';
-import type { PlatformRecord } from '../platform';
-import type { IDLMapEntries, IDLSetEntries } from '../../values/index';
+import type { PlatformRecord, IDLMapEntries, IDLSetEntries } from '../../values/index';
 import type { ConversionSteps } from '../../converters/index';
 
 import type { RealmBinding } from '../realm';

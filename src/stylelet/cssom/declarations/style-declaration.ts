@@ -6,12 +6,12 @@ import {
 } from '../../../web-idl/core/index';
 import type { URLRecord } from '../../../url/core/index';
 
-import type { StyleletEnvironment } from '../../environment';
 import { isCustomPropertyName } from '../../syntax/index';
-import { getBuiltInProperty, propertyRegistry } from '../../props/index';
+import { getBuiltInProperty, propertyRegistry } from '../../props/built-in/index';
 import type { CSSRuleImpl } from '../rules/index';
 import type { CSSStyleSheetImpl } from '../css-stylesheet';
 import type { ComputedStyle } from '../../engine/index';
+import type { StyleletEnvironment } from '../../environment';
 
 import { CSSDeclarationBlock } from './declaration-block';
 import { InterpretedDeclaration } from './interpreted-declaration';

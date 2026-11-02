@@ -3,8 +3,7 @@ import {
   dictMember, emptyDictionary, idlType, impl, onError, op, reference, sequence,
 } from '../../web-idl/core/index';
 
-import type { BrowletEnvironment } from '../environment';
-import type { WindowOrWorkerGlobalScopeMixin } from '../global-scope';
+import type { BrowletEnvironment, WindowOrWorkerGlobalScopeMixin } from '../environment/index';
 
 import type { ReportImpl } from './report';
 

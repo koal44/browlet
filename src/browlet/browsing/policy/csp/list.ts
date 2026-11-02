@@ -4,7 +4,7 @@ import type { FetchCSPList, FetchRequest, FetchResponse } from '../../../../fetc
 
 import { SandboxingFlagSet } from '../sandbox';
 import type { DocumentImpl, ElementImpl } from '../../../dom/nodes/index';
-import type { BrowletEnvironment } from '../../../environment';
+import type { BrowletEnvironment } from '../../../environment/index';
 
 import { ContentSecurityPolicy, type CSPDisposition } from './policy';
 import { CSPViolation } from './violation';

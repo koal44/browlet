@@ -6,6 +6,7 @@ import {
   guaranteedInvalidValue, OptionalDeclarationValue, SubstitutionValue,
   WholeValue, RawWholeValue,
 } from '../values/index';
+
 import { BaseProperty, type PropertyContext } from './base-property';
 
 // Type parameter: N = custom property name.

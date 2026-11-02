@@ -96,7 +96,7 @@ null-prototype objects, with entries defined as data properties.
 TypeError for a value without a JSON representation. Both preserve exceptions
 from author getters and toJSON. Serializers add neither a replacer nor spacing.
 
-[BrowletEnvironment's JSON-byte operations](../browlet/environment.ts) combine
+[BrowletEnvironment's JSON-byte operations](../browlet/environment/environment.ts) combine
 these string operations with Encoding's UTF-8 conversion. JS Engine has
 no Encoding dependency. String parsing does not strip a BOM; the byte algorithms
 apply their own decoding rules before entering the realm's JSON parser.
@@ -207,9 +207,11 @@ Stock Node cannot enforce the policy; its automatic caller-selection gap remains
 HTML supplies WindowProxy policy during composition. The addon owns the
 isolate-wide failed-access hook and its registration lifetime; see the
 [access contract](../../node-compat/README.md#native-global-access-checks).
-`compileHostFunction()` separately compiles trusted binding steps in the host,
-independently of the currently executing author realm. Author functions keep
-their realm-owned compilation and policy.
+`compileHostFunction()` compiles trusted code in the host, independently of the
+currently executing author realm. `compileHostSteps()` captures explicit
+dependencies and a caller-encoded source URL around a generated function;
+Web IDL supplies its own labels and algorithms. Author functions keep their
+realm-owned compilation and policy.
 
 Captured host intrinsics can throw host-realm errors. Buffer metadata operations
 translate detached/out-of-bounds DataView failures into Infra TypeError requests;

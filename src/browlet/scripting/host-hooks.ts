@@ -1,7 +1,7 @@
 import { InternalError } from '../../infra/index';
 import { setHostHooks, type JSJobCallback, type JSJobRegistration, type JSFunction, type JSRealm } from '../../js-engine/index';
 
-import type { BrowletEnvironment } from '../environment';
+import type { BrowletEnvironment } from '../environment/index';
 
 import { jsEngineTaskSource } from './tasks';
 import { JSExecutionContext } from './execution-context';

@@ -7,8 +7,8 @@ import {
   BindingWorld, defineInterface, impl, xattr, type BindingContext,
 } from '../../../../src/web-idl/index';
 import { DOMExceptionImpl } from '../../../../src/web-idl/core/dom-exception';
-import { SandboxEnvironment, type BrowletEnvironment } from '../../../../src/browlet/environment';
-import { createBrowletEnvironmentInit } from '../../../../src/browlet/bindings';
+import { SandboxEnvironment, type BrowletEnvironment } from '../../../../src/browlet/environment/index';
+import { createBrowletEnvironmentInit } from '../../../../src/browlet/integration/web-idl/index';
 import { AgentCluster } from '../../../../src/browlet/scripting/agents';
 import type {
   SerializedRecord,

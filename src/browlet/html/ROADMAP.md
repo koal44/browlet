@@ -40,7 +40,7 @@ there is no catch-all `html/infra` module.
 | §2.4 URLs | `src/url` for URL semantics; Document, `<base>`, and `html/reflection/` for HTML integration |
 | §2.5 fetching resources | `dom/nodes/html/attributes/` for shared element attribute definitions below node implementations; `loader/` over the sibling `src/fetch` project for resource lifecycles; sniffing and parser encoding extraction retain their named dependencies |
 | §§2.6.1–2.6.3 reflection | `html/reflection/`, with reusable value parsing in `html/microsyntaxes/` |
-| §§2.6.4–2.6.5 collections | `dom/nodes/` and `dom/nodes/html/forms/` own implementations over shared live collections; `dom/string-list.ts` supplies the independent DOMStringList interface |
+| §§2.6.4–2.6.5 collections | `dom/nodes/` and `dom/nodes/html/forms/` own implementations over shared live collections; `dom/lists/string-list.ts` supplies the independent DOMStringList interface |
 | §2.7 safe passing of structured data | `scripting/structured-data/` |
 
 ### Sections 2.1 and 2.2 audit
@@ -450,7 +450,7 @@ retain their concrete element owners.
 | §2.6.4.1 HTMLAllCollection | [Document-owned live collection](../dom/nodes/html-all-collection.ts) and native callable binding. The [nodes roadmap](../dom/nodes/ROADMAP.md#htmlallcollection) retains the unsupported-backend policy and browser/specification clashes. |
 | §2.6.4.2 HTMLFormControlsCollection and RadioNodeList | [Form collections](../dom/nodes/html/forms/form-controls-collection.ts) implement named lookup and radio values; form membership and radio-group exclusion remain explicit [owner dependencies](../dom/nodes/html/forms/ROADMAP.md#missing-owner-algorithms). |
 | §2.6.4.3 HTMLOptionsCollection | [Options collection](../dom/nodes/html/forms/options-collection.ts) implements length/indexed mutations, add/remove, and selected-index forwarding. Automatic selection, selectedcontent, mutation hooks, and custom-element reactions remain with the [owners](../dom/nodes/html/forms/ROADMAP.md#missing-owner-algorithms). |
-| §2.6.5 DOMStringList | [Independent string list](../dom/string-list.ts), retained with creation-realm ownership by Document ancestry initialization. Its [DOM roadmap](../dom/ROADMAP.md#domstringlist) records the list contract; [Location's getter and entry-origin checks](../browsing/window/ROADMAP.md#html-724-first-slice-document-association-and-reads) are connected. Automatic child lifecycle remains pending. |
+| §2.6.5 DOMStringList | [Independent string list](../dom/lists/string-list.ts), retained with creation-realm ownership by Document ancestry initialization. Its [DOM roadmap](../dom/ROADMAP.md#domstringlist) records the list contract; [Location's getter and entry-origin checks](../browsing/window/ROADMAP.md#html-724-first-slice-document-association-and-reads) are connected. Automatic child lifecycle remains pending. |
 
 The three approved form-membership, radio-group, and automatic-selection
 regressions remain expected failures. These collection interfaces do not complete
@@ -466,14 +466,14 @@ must not become one oversized HTML Document module.
 | --- | --- |
 | §3.1.1 `Document` object | `dom/nodes/document.ts` for the implementation and co-located HTML partial declaration; policy, scripting, and navigation retain their contributed state |
 | §3.1.2 `DocumentOrShadowRoot` | DOM's mixin implementation; focus management supplies `activeElement` |
-| §3.1.3 ancestor origins | Document lifecycle and `browsing/window/location.ts`, using referrer policy, origin records, and `dom/string-list.ts` |
+| §3.1.3 ancestor origins | Document lifecycle and `browsing/window/location.ts`, using referrer policy, origin records, and `dom/lists/string-list.ts` |
 | §3.1.4 resource metadata | Document accessors over URL, Fetch response metadata, cookies, and loader state |
 | §3.1.5 document loading status | Document owns readiness and timing records; `html/parser/` and navigation drive transitions, while `performance/` exposes timing |
 | §3.1.6 render blocking | `loader/` and `style/`, with the blocking set stored by Document |
 | §3.1.7 DOM tree accessors | `dom/nodes/document.ts`, HTML element implementations, and live collection machinery |
 | §§3.2.1 and 3.2.4–3.2.5 semantics, definitions, and content models | Element metadata, conformance tests, and accessibility; most authoring requirements create no runtime algorithm |
 | §3.2.2 elements in the DOM | `dom/nodes/html/` over DOM Element, including unknown-element and namespace behavior |
-| §3.2.3 HTML element constructors | `integration/web-idl/html-constructor.ts`, element declarations, custom-element definition/registry state, and Web IDL |
+| §3.2.3 HTML element constructors | `integration/web-idl/bindings/html-constructor.ts`, element declarations, custom-element definition/registry state, and Web IDL |
 | §3.2.6 global attributes | `dom/nodes/html/attributes/` for shared definitions, HTML element implementations for instance behavior, plus reflection, custom-element reactions, and Stylelet integration |
 | §3.2.7 `innerText` | DOM mutation plus style/layout-derived text collection; it must not be approximated by `textContent` |
 | §3.2.8 bidirectional requirements | Style/layout integration over Unicode bidirectional processing |
@@ -1812,7 +1812,7 @@ collected under one HTML application module.
 | Section | Owner |
 | --- | --- |
 | §8.1 scripting, host hooks, and event loops | `scripting/` |
-| §§8.2–8.3 global-scope and base64 utilities | [`global-scope.ts`](../global-scope.ts) |
+| §§8.2–8.3 global-scope and base64 utilities | [`global-scope.ts`](../environment/global-scope.ts) |
 | §8.4 dynamic markup insertion | `html/parser/dynamic-markup.ts` |
 | §8.5 DOM parsing and serialization | `dom/parsing/`, consuming `html/parser/fragment.ts` |
 | §8.6 sanitization | `html/sanitization/` |

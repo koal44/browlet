@@ -13,7 +13,7 @@ import { guaranteedInvalidValue } from '../../../../src/stylelet/values/guarante
 import { describe, expect, it } from 'vitest';
 
 import type { PropertyContext } from '../../../../src/stylelet/props/base-property';
-import type { CustomPropertyRegistration, CustomPropertyRegistry } from '../../../../src/stylelet/props/registry';
+import type { CustomPropertyRegistration, CustomPropertyRegistry } from '../../../../src/stylelet/props/index';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { ColorKind } from '../../../../src/stylelet/values/color';
 import { CSS_WIDE_KEYWORDS } from '../../../../src/stylelet/values/css-wide';

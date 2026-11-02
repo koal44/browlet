@@ -4,7 +4,7 @@ import { itPassesWith } from '../../test-runtime';
 import type { InternalPromise } from '../../../src/infra/index';
 import { idlType } from '../../../src/web-idl/core/index';
 import { Browlet } from '../../../src/browlet/browlet';
-import type { BrowletEnvironment } from '../../../src/browlet/environment';
+import type { BrowletEnvironment } from '../../../src/browlet/environment/index';
 import { ClassicScript, TextModuleScript, emptyCompletionValue, type ScriptCompletion } from '../../../src/browlet/scripting/script';
 import { ScriptFetchOptions } from '../../../src/browlet/scripting/script-fetch-options';
 import { createTaskSource } from '../../../src/browlet/scripting/event-loop';

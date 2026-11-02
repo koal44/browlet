@@ -1,7 +1,7 @@
 import { defineInterface, idlType, impl, nullable, op, roAttr, xattr } from '../../../web-idl/core/index';
 
 import { ReportBodyImpl } from '../../reporting/index';
-import type { BrowletEnvironment } from '../../environment';
+import type { BrowletEnvironment } from '../../environment/index';
 
 import type { PolicyControlledFeature } from './permissions';
 

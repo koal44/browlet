@@ -9,7 +9,7 @@ import { createSiblingWindow } from '../../support/windows';
 import { Browlet } from '../../../src/browlet/browlet';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { networkingTaskSource } from '../../../src/browlet/scripting/tasks';
-import { queueNodeTask } from '../../../src/browlet/integration/node';
+import { queueNodeTask } from '../../../src/browlet/integration/host/node';
 import {
   BindingWorld, arg, atArg, ctor, defineCallbackFunction, defineInterface, idlType, impl, op,
   promise, reference, roAttr, type WebIDLEnvironment,

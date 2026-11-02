@@ -39,7 +39,7 @@ and use the UTF-8 writer to fill them, so author-visible
 results need no intermediate allocation or copy. Streaming codecs retain their
 Node fast paths and queue state.
 
-Infra's JSON-byte algorithms live on [BrowletEnvironment](../browlet/environment.ts).
+Infra's JSON-byte algorithms live on [BrowletEnvironment](../browlet/environment/environment.ts).
 They combine these UTF-8 helpers with the realm-owned JSON string operations.
 Fetch obtains the two operations it uses through its environment contract.
 Neither Infra nor JS Engine depends on Encoding.

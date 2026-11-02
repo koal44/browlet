@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/session-history';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/document-state';
+import { createSessionHistoryEntry, createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { getRelevantRealm } from '../../support/browlet-binding';
 
 afterEach(() => vi.restoreAllMocks());

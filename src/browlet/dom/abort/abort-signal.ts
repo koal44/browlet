@@ -6,7 +6,7 @@ import {
 
 import { EventHandlerMap, eventHandlerAttr, type EventHandlerCallback } from '../../scripting/index';
 import { EventTargetImpl } from '../events/index';
-import { type BrowletEnvironment } from '../../environment';
+import { type BrowletEnvironment } from '../../environment/index';
 
 /** Tracks cancellation, propagates its reason, and notifies abort listeners. */
 // https://dom.spec.whatwg.org/#interface-AbortSignal

@@ -1,7 +1,7 @@
 import { defineInterface, impl, nullable, reference, roAttr } from '../../../../../web-idl/core/index';
 
 import { ElementAssociations, type ElementConstructor } from '../../../../html/reflection/index';
-import type { BrowletEnvironment } from '../../../../environment';
+import type { BrowletEnvironment } from '../../../../environment/index';
 
 import type { ElementImpl } from '../../element';
 import type { ShadowRootImpl } from '../../shadow-root';

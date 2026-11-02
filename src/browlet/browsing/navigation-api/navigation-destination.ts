@@ -1,7 +1,7 @@
 import { atArg, defineInterface, idlType, impl, invokeWith, op, roAttr } from '../../../web-idl/core/index';
 import { serializeURL, type URLRecord } from '../../../url/index';
 
-import type { BrowletEnvironment } from '../../environment';
+import type { BrowletEnvironment } from '../../environment/index';
 import type { SerializedRecord } from '../../scripting/structured-data/index';
 
 import type { NavigationHistoryEntryImpl } from './navigation-history-entry';

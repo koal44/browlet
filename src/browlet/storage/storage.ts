@@ -4,7 +4,7 @@ import { WebStorageEndpoint, type StorageProxyMap, type StorageType } from '../.
 
 import { domManipulationTaskSource } from '../scripting/index';
 import { StorageEventImpl } from './events/index';
-import type { WindowEnvironment } from '../environment';
+import type { WindowEnvironment } from '../environment/index';
 
 /** A Window-owned view of an existing local or session storage map. */
 // https://html.spec.whatwg.org/multipage/webstorage.html#the-storage-interface

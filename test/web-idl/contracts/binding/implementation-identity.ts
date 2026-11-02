@@ -4,7 +4,7 @@ import { idlType, type StampedImplInstance, type StampedPlatformObject, type Web
 import {
   getImplementationRecord, getPlatformRecord,
   stampImplementation, PlatformRecord,
-} from '../../../../src/web-idl/binding/platform';
+} from '../../../../src/web-idl/values/index';
 import type { RealmBinding } from '../../../../src/web-idl/binding/realm';
 
 declare const binding: RealmBinding;

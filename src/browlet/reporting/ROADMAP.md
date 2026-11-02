@@ -11,9 +11,9 @@ Automatic collection, periodic retirement, and other global lifecycles remain be
 | Owner | Responsibility |
 | --- | --- |
 | `ReportImpl` | Observer-visible fields, producer data, original origin, delivery bookkeeping, copying, and serialization |
-| [`generateReport()`](generate.ts) | Construct a report and its concrete body using the source environment's live settings |
-| [`WindowOrWorkerGlobalScopeMixin`](../global-scope.ts) | Endpoint configuration, outbound queue, observer registrations, replay buffer, and cleanup |
-| [`BrowletEnvironment`](../environment.ts) | Source settings, current reporting URL, and report submission through the actual global |
+| [`BrowletEnvironment.generateReport()`](../environment/environment.ts) | Construct a report and its concrete body using the source environment's live settings |
+| [`WindowOrWorkerGlobalScopeMixin`](../environment/global-scope.ts) | Endpoint configuration, outbound queue, observer registrations, replay buffer, and cleanup |
+| [`BrowletEnvironment`](../environment/environment.ts) | Source settings, current reporting URL, and report submission through the actual global |
 | `ReportingObserverImpl` | Registration options, pending callback batch, and projected observer operations |
 | [`UserAgent`](../user-agent.ts) | Delivery preferences, grouping and copying outbound reports, endpoint bookkeeping, host scheduling, sandbox execution, and Fetch attempts |
 

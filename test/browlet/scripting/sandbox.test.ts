@@ -1,6 +1,6 @@
 import { idlType } from '../../../src/web-idl/core/index';
 import { describe, expect, it, vi } from 'vitest';
-import { createSandboxEnvironment } from '../../../src/browlet/bindings';
+import { createSandboxEnvironment } from '../../../src/browlet/integration/web-idl/index';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { getBindingContext } from '../../support/browlet-binding';
 import { SandboxAgent } from '../../../src/browlet/scripting/agents';

@@ -1,8 +1,8 @@
 import { endOfIteration } from '../../infra/index';
 import { getMethod, isObject, type JSMethod } from '../../js-engine/index';
 
-import type { WebIDLRealm } from '../environment';
 import { anyType, undefinedType, type IDLType, type IDLUndefinedType } from '../assembly/index';
+import type { WebIDLRealm } from '../environment';
 
 import { IDLPromise } from './promise';
 import type { IDLValue } from './value';

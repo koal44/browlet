@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom';
 import { assert, describe, expect, it } from 'vitest';
 
 import type { PropertyContext } from '../../../../src/stylelet/props/base-property';
-import type { CustomPropertyRegistration } from '../../../../src/stylelet/props/registry';
+import type { CustomPropertyRegistration } from '../../../../src/stylelet/props/index';
 import type { CustomPropertyName } from '../../../../src/stylelet/syntax/names';
 import type { URLRecord } from '../../../../src/url/core/index';
 import { RuleListContext } from '../../../../src/stylelet/cssom/rules/context';

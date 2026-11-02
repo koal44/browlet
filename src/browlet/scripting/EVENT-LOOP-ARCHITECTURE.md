@@ -165,7 +165,7 @@ use the DOM-manipulation source, as required by HTML.
 The global-scope mixin owns GlobalTimers. Its active-time waits and execution's
 `timer` task delivery serve both AbortSignal.timeout and Window function timers.
 Retaining an old Window's callback retains its owner across navigation.
-UserAgent supplies the Node `TimerHost` from `integration/node.ts`; the mixin
+UserAgent supplies the Node `TimerHost` from `integration/host/node.ts`; the mixin
 receives it through `env.userAgent.timerHost` and retains its own timer state.
 Infra owns the shared contract: `scheduleTimeout(milliseconds, steps)` returns a
 `TaskHandle` whose `remove()` cancels the wake-up. Native wake-ups may be bounded;

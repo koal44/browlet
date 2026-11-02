@@ -1,7 +1,7 @@
 import { InternalError, type InternalPromise } from '../../infra/index';
 
-import type { WebIDLRealm } from '../environment';
 import type { IDLType } from '../assembly/index';
+import type { WebIDLRealm } from '../environment';
 
 /** A realm-owned promise with its fulfillment type and settlement lifecycle. */
 export class IDLPromise<Type extends IDLType = IDLType> {

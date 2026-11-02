@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getBindingContext, getRelevantRealm, project, unwrap } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
-import { NodeHTTPTransport } from '../../src/browlet/integration/network/node-transport';
+import { NodeHTTPTransport } from '../../src/browlet/integration/host/network/node-transport';
 import { FetchBody } from '../../src/fetch/body';
 import { FetchHeaders } from '../../src/fetch/headers';
 import type { HTTPTransport, HTTPTransportListener, HTTPTransportRequest, HTTPUploadSource } from '../../src/fetch/transport';

@@ -196,13 +196,13 @@ handling can remain at the end of the call.
 | [`StorageEnvironment`](storage/environment.ts) | Full owner with realm, promises, storage maps, permission requests, and task delivery; HTML resolves session ownership and the destination global's event loop |
 | [`PermissionEnvironment`](permissions/environment.ts) | One Permissions owner, policy/activity answers, descriptor conversion, result allocation, and task delivery |
 | [`FetchEnvironmentBase`](fetch/environment.ts) | Extends the Storage view with top-level partition inputs and `determineNetworkPartitionKey()` |
-| HTML [`BrowletEnvironmentBase`](browlet/environment.ts) | Shared browser state before and after realm creation: identity, owner, creation/security state, readiness, and partition derivation |
+| HTML [`BrowletEnvironmentBase`](browlet/environment/environment.ts) | Shared browser state before and after realm creation: identity, owner, creation/security state, readiness, and partition derivation |
 | [`JSEnvironment`](js-engine/environment.ts) | `realm: JSRealm`, `InternalPromise`, background work, and task delivery for an existing owner |
 | [`StreamsEnvironment`](streams/environment.ts) | Extends JSEnvironment with DOM abort creation and HTML structured-data operations |
 | [`FileEnvironment`](file/environment.ts) | Extends the Streams view with native line endings for Blob text processing |
 | [`DOMEnvironment`](browlet/dom/environment.ts) | `realm: DOMRealm` for event behavior and the associated-document query; its Window specialization exposes the Agent's DOM notification state; `createEvent()` supplies event allocation |
 | [`FetchEnvironment`](fetch/environment.ts) | Extends FetchEnvironmentBase and FileEnvironment with Fetch task delivery, exception allocation, and client settings |
-| [`BrowletEnvironment`](browlet/environment.ts) | Full browser environment; extends BrowletEnvironmentBase and satisfies JS Engine, DOM, Fetch, Storage, Stylelet, and Selectlet contracts |
+| [`BrowletEnvironment`](browlet/environment/environment.ts) | Full browser environment; extends BrowletEnvironmentBase and satisfies JS Engine, DOM, Fetch, Storage, Stylelet, and Selectlet contracts |
 | `WindowEnvironment` | Specializes BrowletEnvironment with its Window and live queries of the associated Document |
 | `SandboxEnvironment` | Implements the same binding contract for internal execution; unavailable browser client settings throw explicitly |
 
@@ -437,7 +437,7 @@ operations. `FileEnvironment` adds `nativeLineEnding`, required by Blob processi
 and supplied by the host. These interfaces describe the same existing owner.
 Operations that only need
 JavaScript facilities, such as releasing an existing reader, keep `JSEnvironment`.
-[`createBrowletEnvironmentInit(context)`](browlet/bindings.ts) supplies
+[`createBrowletEnvironmentInit(context)`](browlet/integration/web-idl/composition.ts) supplies
 construction inputs for the binding-aware Promise, DOM allocations, and structured
 data. The environment assigns those functions directly; it retains neither the
 initialization record nor a Binding Context. HTML scheduling and CSP reporting
@@ -790,10 +790,10 @@ Browlet's adapter supplies concrete implementation types instead.
 ### Construction and lifetime
 
 [`Browlet`](browlet/browlet.ts) constructs UserAgent, which creates its sandbox
-through [`bindings.ts`](browlet/bindings.ts) and exposes that module's
-Window-environment factory. Bindings assembles environments for existing owners;
+through [Web IDL composition](browlet/integration/web-idl/composition.ts) and exposes that module's
+Window-environment factory. Composition assembles environments for existing owners;
 it does not construct UserAgent or serve as an implementation service entry.
-UserAgent creates Window Agents; bindings creates the sandbox Agent.
+UserAgent creates Window Agents; composition creates the sandbox Agent.
 Each receives an EventLoop constructed with its host-turn callback. The loop
 creates its engine microtask queue, reads the shared clock, and schedules work as
 it arrives, without a separate start phase or per-turn options. Realm construction
@@ -803,7 +803,7 @@ uses `env.createDocument()`, preserving binding-owned allocation without
 passing Binding Context into the lifecycle algorithms. Main-world inspection for
 tests lives in `test/support/browlet-binding.ts`.
 
-[`createWindowEnvironment()`](browlet/bindings.ts) assembles the environment base,
+[`createWindowEnvironment()`](browlet/integration/web-idl/composition.ts) assembles the environment base,
 WindowRealm, binding, and full settings before constructing Window
 with that environment. Binding registration
 accepts an environment factory because allocation and Promise composition need the new
@@ -828,14 +828,13 @@ does not require updating a second Window reference on Document. DOMImplementati
 likewise takes its environment from its associated document.
 
 The browser environment base and complete environment live together in
-[`browlet/environment.ts`](browlet/environment.ts), above Scripting's realms and
-event loops. The complete environment constructs its
-own `InsecureRequestsPolicy` and calls Reporting's
-[`generateReport()`](browlet/reporting/generate.ts) with its live settings.
-These are owned state and a browser algorithm, not additional constructor dependencies.
-Reporting selects concrete report bodies; UserAgent owns outbound delivery.
-Generation remains a separate, higher-level Reporting entry because policy report
-bodies depend on the base classes exported by Reporting's shared barrel.
+[`browlet/environment/environment.ts`](browlet/environment/environment.ts), above Scripting's realms and
+event loops. The complete environment constructs its own `InsecureRequestsPolicy`
+and implements `generateReport()` using its live settings and the concrete policy
+report bodies. These are owned state and a browser algorithm, not additional
+constructor dependencies. Reporting supplies shared records and observer behavior;
+UserAgent owns outbound delivery. Policy report bodies depend on Reporting's base
+classes, while the environment composes both owners above them.
 Scripting's realms and event loops retain only type references to these browser
 environments. HTML structured-data algorithms use the full `BrowletEnvironment`;
 their standalone tests compose a real `SandboxEnvironment` with its execution
@@ -863,7 +862,7 @@ they have one; reporting can retain the sandbox owner with no client. Cloning
 and preflights preserve both choices. Reserved clients, full settings, and sandbox environments must not be
 substituted for one another just because an algorithm can reach a UserAgent.
 
-The [global-scope mixin](browlet/global-scope.ts) composes each global's timers,
+The [global-scope mixin](browlet/environment/global-scope.ts) composes each global's timers,
 Performance object, Reporting state, and resource associations. It sits above
 the scripting foundations and is not re-exported by their barrel.
 BrowletEnvironment supplies settings, execution, and browser context.
@@ -931,7 +930,7 @@ These folders establish responsibility, not new Environment/Context APIs.
 Style/layout feedback needs explicit update ordering and invalidation, not
 reciprocal engine imports or ambient service discovery.
 
-[Browlet's bindings](browlet/bindings.ts) and
+[Browlet's bindings](browlet/integration/web-idl/composition.ts) and
 [integration modules](browlet/integration/README.md) are explicit composition
 boundaries. They can know both sides of a dependency and capture Binding Context
 in boundary closures. Ordinary algorithms cannot rediscover collaborators
@@ -987,15 +986,13 @@ WindowProxy, and Location. Their consumers use the corresponding component's
 index; cooperating modules within navigation import each other directly.
 There is no umbrella browsing barrel.
 
-`navigation/source-snapshot` is a narrow entry point for capturing source inputs.
-Both the Navigation API and navigation coordinator use it without loading each
-other; the snapshot reads the source Document and retains its navigation inputs.
-
-`navigation/session-history` likewise exposes shared record creation and scroll
-restoration without loading Navigable or the loader. The Navigation API can use
-this narrow entry point; restoration takes an existing entry and must act through
-its Document and shared scrolling facilities. The complete navigation index
-remains the higher-level coordinator entry point.
+`navigation/state/` owns source snapshots, document state, and session-history
+records, with an export-only index. Both the Navigation API and navigation
+coordinator use this foundation without loading Navigable or the loader. Source
+snapshots capture the initiating Document's settings; history records retain the
+Document or the inputs needed to restore it. Scroll restoration takes an existing
+entry and acts through its Document and shared scrolling facilities. The complete
+navigation index remains the higher-level coordinator entry point.
 
 `history` owns Document-retained History objects; `navigation-api` owns the
 Window-retained Navigation EventTarget and its NavigationHistoryEntry objects.
@@ -1028,8 +1025,18 @@ BrowsingContext creates the initial about:blank document before the navigable
 is initialized.
 
 [`import-hierarchy.mjs`](../scripts/eslint/import-hierarchy.mjs) records the reviewed
-component order for import layout and dependency review. Imports put external
-packages first, then other subsystems and foundations (Infra, JS Engine,
+folder order for import layout and dependency review. Every entry ends in `/`
+and names an existing directory; the longest matching folder owns a module.
+Top-level files inherit their containing component. Browlet's UserAgent and browser
+entry consume `integration/web-idl/` composition, which installs the lower
+`integration/web-idl/bindings/` hooks and consumes host and feature adapters.
+The generic Web IDL subsystem's environment contracts and generator remain in
+`web-idl/`; they do not need individual layers.
+Shared code uses its existing owner when that owner fits: JS Engine supplies host
+compilation, Web IDL's `values/` owns platform identity records, and policy owns
+source-expression matching. Browlet's `environment/`, `dom/lists/`, and navigation's
+`state/` provide separate homes where their consumers need a distinct foundation.
+Imports put external packages first, then other subsystems and foundations (Infra, JS Engine,
 Web IDL, Streams, then Encoding), then sibling components, then the current component's
 collaborators.
 Use one blank line between those groups and keep type and runtime imports with
@@ -1051,8 +1058,13 @@ Stylelet has its own [component barrels and dependency order](stylelet/README.md
 The entry-point rule also checks those internal boundaries, including type-only
 references. Changes to Stylelet's layer order require the same ownership review
 as changes to subsystem dependencies.
-`environment.ts` and `context.ts` remain deliberate named entries. The package
-index composes its existing public API; internal components do not import it.
+`environment.ts` and `context.ts` remain deliberate named entries in the enclosing
+Stylelet component. The property classes and custom-registration contracts remain
+directly in `props/`, below its `built-in/` definitions and their registry.
+The `props/index.ts` barrel exports the shared classes and contracts; consumers of
+concrete properties or their registry use `props/built-in/index.ts`.
+The package index composes its existing public API; internal
+components do not import it.
 
 Browlet's [timing foundation](browlet/timing/README.md) supplies shared clocks,
 precision, and time origins without importing DOM or Performance. The Performance
@@ -1084,13 +1096,12 @@ retains that callback's realm and author identity; the handler map does not rece
 Binding Context or discover ownership through a registry.
 
 Policy and CSP sit below the node implementations that construct and retain their
-state. CSP's `source-expressions.ts` is a lower entry point shared by CSP and
+state. Policy's `source-expressions.ts` is a lower entry point shared by CSP and
 Permissions Policy; matching needs only Infra and URL, without loading policy state.
 Their event and report implementations depend on DOM events and shared
 Reporting, which sit below policy. CSP keeps type references to supplied Documents
 and environments without loading their concrete classes. Document retains policy
-initialization; Reporting's separate generator and the complete browser environment
-remain higher consumers.
+initialization; the complete browser environment generates reports above those owners.
 
 Browlet's style mixins sit among its lowest foundations: they load Stylelet and
 retain type references to supplied DOM nodes. Element and style/link elements
@@ -1156,14 +1167,14 @@ nested on their applicable reflection annotation; serialization expands them int
 HTML's separate `[ReflectDefault]` and `[ReflectRange]` syntax. They carry enumerated
 and token-list definitions as `unknown`; declaration tests check those definitions
 and reflection constraints. Browlet supplies
-`htmlExtendedAttributeHooks` from `integration/web-idl/` when constructing its
+`htmlExtendedAttributeHooks` from `integration/web-idl/bindings/` when constructing its
 `BindingWorld`. Its `prepareAttribute` hook prepares accessors once after resolving declaration
 types, retaining them across realm registrations without mutating declarations.
 `BindingWorld` alone owns the prepared-accessor map. Realm registration retrieves
 accessors from that world; `RealmBinding` does not retain another map reference.
 Preparation receives all declaring or including interfaces for each member. HTML
 selects ordinary or internal attribute operations from each owner's implementation
-class through adapters in `integration/web-idl/reflection-target.ts`, so accessors
+class through adapters in `integration/web-idl/bindings/reflection-target.ts`, so accessors
 need no Element/ElementInternals discriminator at invocation.
 Declaration tests check the owner contracts. Shared mixins retain one preparation
 and projected-array cache across their includers.
@@ -1214,7 +1225,7 @@ HTML's remaining roadmap-only areas keep their provisional locations.
 
 NodeList, HTMLCollection, and HTMLAllCollection stay with the node family; form
 and options collections stay beside their concrete element owners.
-[DOMStringList](browlet/dom/string-list.ts) is independent string storage below
+[DOMStringList](browlet/dom/lists/string-list.ts) is independent string storage below
 nodes, alongside the other standalone DOM interfaces. Its associated list's
 owner determines updates; Document ancestor origins retain a serialized snapshot.
 

@@ -6,7 +6,7 @@ import {
 } from '../../../../src/web-idl/core/index';
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
 import type { RealmBinding } from '../../../../src/web-idl/binding/realm';
-import { getPlatformRecord } from '../../../../src/web-idl/binding/platform';
+import { getPlatformRecord } from '../../../../src/web-idl/values/index';
 
 import { TestRealm as Realm } from '../../../support/web-idl-realm';
 

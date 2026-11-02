@@ -4,7 +4,7 @@ import {
   impl, invokeWith,
 } from '../../../web-idl/core/index';
 
-import type { BrowletEnvironment } from '../../environment';
+import type { BrowletEnvironment } from '../../environment/index';
 
 import type { AbortSignalImpl } from './abort-signal';
 

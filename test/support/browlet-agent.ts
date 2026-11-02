@@ -2,7 +2,7 @@ import { vi } from 'vitest';
 import { WindowAgent, type Agent } from '../../src/browlet/scripting/agents';
 import { EventLoop, type EventLoopInit } from '../../src/browlet/scripting/event-loop';
 import { BrowletRealm, type BrowletRealmCreationOptions } from '../../src/browlet/scripting/realm';
-import * as node from '../../src/browlet/integration/node';
+import * as node from '../../src/browlet/integration/host/node';
 import { UserAgent } from '../../src/browlet/user-agent';
 
 /** Leave Window task turns under fixture control while retaining real realm setup. */

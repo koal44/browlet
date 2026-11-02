@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import { fetchStyleResource } from '../../../src/stylelet/resource';
-import type { WindowEnvironment } from '../../../src/browlet/environment';
+import type { WindowEnvironment } from '../../../src/browlet/environment/index';
 import * as fetching from '../../../src/fetch/index';
 import * as urls from '../../../src/url/index';
 import { serializeURL } from '../../../src/url/index';

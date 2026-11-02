@@ -5,7 +5,7 @@ import { obtainURLOrigin, parseURL, serializeOrigin, type Origin } from '../../.
 
 import type { DocumentImpl } from '../../dom/nodes/index';
 import type { HTMLIFrameElementImpl } from '../../dom/nodes/html/embedded/index';
-import type { BrowletEnvironment } from '../../environment';
+import type { BrowletEnvironment } from '../../environment/index';
 
 import { PermissionsPolicy } from './permissions';
 

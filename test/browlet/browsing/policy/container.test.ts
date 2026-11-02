@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
-import { BrowletEnvironmentBase } from '../../../../src/browlet/environment';
+import { BrowletEnvironmentBase } from '../../../../src/browlet/environment/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { PolicyContainer } from '../../../../src/browlet/browsing/policy/container';

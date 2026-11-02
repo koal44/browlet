@@ -6,7 +6,7 @@ import { require as tsRequire } from 'tsx/cjs/api';
 const { generatePlatformTypes } = tsRequire('../src/web-idl/generate.ts', import.meta.url);
 const { DefinitionAssembly } = tsRequire('../src/web-idl/assembly/index.ts', import.meta.url);
 const { reference, webIDLCommonDefinitions } = tsRequire('../src/web-idl/core/index.ts', import.meta.url);
-const { browletDefinitions } = tsRequire('../src/browlet/bindings.ts', import.meta.url);
+const { browletDefinitions } = tsRequire('../src/browlet/integration/web-idl/index.ts', import.meta.url);
 
 const args = process.argv.slice(2);
 if (args.some((arg) => arg !== '--check')) throw new Error('Usage: node scripts/generate-platform-types.mjs [--check]');

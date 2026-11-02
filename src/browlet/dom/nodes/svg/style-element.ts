@@ -4,7 +4,7 @@ import type { CSSStyleSheetImpl } from '../../../../stylelet/index';
 
 import { ElementTag } from '../element-definitions/index';
 import { LinkStyleMixin } from '../../../style/index';
-import type { BrowletEnvironment } from '../../../environment';
+import type { BrowletEnvironment } from '../../../environment/index';
 
 import type { ElementCreationContext } from '../element';
 import { SVGElementImpl } from './element';

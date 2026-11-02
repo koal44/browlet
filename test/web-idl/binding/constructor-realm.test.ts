@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { JSFunction } from '../../../src/js-engine/index';
 import { ctor, defineInterface, impl } from '../../../src/web-idl/core/index';
 import { BindingWorld } from '../../../src/web-idl/binding/world';
-import { getPlatformRecord } from '../../../src/web-idl/binding/platform';
+import { getPlatformRecord } from '../../../src/web-idl/values/index';
 
 import { itPassesWith } from '../../test-runtime';
 import { getInstalledInterface } from '../../support/web-idl-binding';

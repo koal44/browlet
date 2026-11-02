@@ -4,7 +4,7 @@ import {
   asyncIter, defineInterface, defineProxyObject, idlType, impl, iter, maplike, op, setlike,
 } from '../../../../src/web-idl/core/index';
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
-import { getPlatformRecord } from '../../../../src/web-idl/binding/platform';
+import { getPlatformRecord } from '../../../../src/web-idl/values/index';
 
 import { TestRealm } from '../../../support/web-idl-realm';
 

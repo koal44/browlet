@@ -1,12 +1,12 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { createSandboxEnvironment } from '../../../../src/browlet/bindings';
+import { createSandboxEnvironment } from '../../../../src/browlet/integration/web-idl/index';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState } from '../../../../src/browlet/browsing/navigation/document-state';
+import { createDocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
 import { EmbedderPolicy, queueCOEPInheritanceViolation, type EmbedderPolicyValue } from '../../../../src/browlet/browsing/policy/coep';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
-import { BrowletEnvironmentBase } from '../../../../src/browlet/environment';
+import { BrowletEnvironmentBase } from '../../../../src/browlet/environment/index';
 import type { Window } from '../../../../src/browlet/platform';
 import { DedicatedWorkerGlobalScopeImpl } from '../../../../src/browlet/workers/dedicated-worker-global-scope';
 import { WorkerGlobalScopeImpl } from '../../../../src/browlet/workers/worker-global-scope';

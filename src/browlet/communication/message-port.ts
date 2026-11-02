@@ -7,7 +7,7 @@ import {
   createTaskSource, DetachedTransferableStamper, type EventHandlerCallback, type QueuedTaskHandle,
 } from '../scripting/index';
 import { EventTargetImpl } from '../dom/events/index';
-import type { BrowletEnvironment } from '../environment';
+import type { BrowletEnvironment } from '../environment/index';
 import type { StructuredSerializeOptions, StructuredSerializeWithTransferResult } from '../scripting/structured-data/index';
 
 import { MessageEventImpl } from './message-event';

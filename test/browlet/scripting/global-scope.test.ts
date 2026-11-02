@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { createWindowEnvironment } from '../../../src/browlet/bindings';
+import { createWindowEnvironment } from '../../../src/browlet/integration/web-idl/index';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { performTestMicrotaskCheckpoint } from '../test-runtime';
 

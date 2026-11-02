@@ -3,7 +3,7 @@ export type { CompiledModule, ImportModuleDynamically, ModuleCompilationOptions,
 export type { JSEnvironment } from './environment';
 export { addon } from './node-addons';
 export {
-  bindAsyncContext, compileHostFunction, createMicrotaskQueue, getAssociatedRealm,
+  bindAsyncContext, compileHostFunction, compileHostSteps, createMicrotaskQueue, getAssociatedRealm,
   getNativeArrayBufferViewLengthTracking, setHostHooks,
 } from './runtime';
 export * from './abstract-operations';

@@ -1,10 +1,8 @@
 import { InternalError } from '../../../infra/index';
-import { getBufferTypeName, getMethod, hasStringData, isCallable, isObject, type JSMethod } from '../../../js-engine/index';
+import { compileHostSteps, getBufferTypeName, getMethod, hasStringData, isCallable, isObject, type JSMethod } from '../../../js-engine/index';
 
-import { compileSteps } from '../../compiler';
 import type { IDLType, AssembledArgument, AssembledCallable, AssembledOverloads, OverloadGroup } from '../../assembly/index';
-import { getPlatformRecord, type PlatformRecord } from '../platform';
-import { IDLAsyncSequence } from '../../values/index';
+import { getPlatformRecord, type PlatformRecord, IDLAsyncSequence } from '../../values/index';
 
 import type { RealmBinding } from '../realm';
 
@@ -36,7 +34,9 @@ export function createOverloadResolver<Callable extends AssembledCallable>(
   // A single callable needs the argument-count check and conversions, but no
   // candidate search or distinguishing-argument processing.
   // https://webidl.spec.whatwg.org/#dfn-overload-resolution-algorithm
-  return compileSteps<(argumentsList: unknown[]) => ResolvedOverload<Callable>>(`${label}:arguments`, dependencies,
+  return compileHostSteps<(argumentsList: unknown[]) => ResolvedOverload<Callable>>(
+    `webidl/${encodeURIComponent(`${label}:arguments`)}`,
+    dependencies,
     `function convertArguments(argumentsList) {
     if (argumentsList.length < ${callable.minimumArgumentCount}) {
       return throwTypeError(binding, 'No overload accepts this argument count');

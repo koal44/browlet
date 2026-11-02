@@ -1,6 +1,6 @@
 import { atArg, ctor, defineInterface, impl, reference, roAttr } from '../../web-idl/core/index';
 
-import type { BrowletEnvironment } from '../environment';
+import type { BrowletEnvironment } from '../environment/index';
 
 import { MessagePortImpl } from './message-port';
 

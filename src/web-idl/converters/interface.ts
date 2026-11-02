@@ -2,7 +2,7 @@ import { InternalError } from '../../infra/index';
 import { isObject } from '../../js-engine/index';
 
 import type { IDLInterfaceType, IDLProxyType } from '../assembly/index';
-import { getPlatformRecord } from '../binding/platform';
+import { getPlatformRecord } from '../values/index';
 
 import { Converter, type ConversionSteps } from './converter';
 

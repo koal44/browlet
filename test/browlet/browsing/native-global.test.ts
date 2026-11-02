@@ -9,7 +9,7 @@ import type { Window } from '../../../src/browlet/platform';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { AgentCluster, WindowAgent } from '../../../src/browlet/scripting/agents';
 import type { WindowRealm } from '../../../src/browlet/scripting/realm';
-import { createWindowEnvironment } from '../../../src/browlet/bindings';
+import { createWindowEnvironment } from '../../../src/browlet/integration/web-idl/index';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { parseURL } from '../../../src/url/url';
 import { createOpaqueOrigin } from '../../../src/url/origin';

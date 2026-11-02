@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { BindingWorld, reference } from '../../../src/web-idl/index';
 import { Browlet } from '../../../src/browlet/browlet';
-import { DOMStringListImpl, domStringListIDL } from '../../../src/browlet/dom/string-list';
+import { DOMStringListImpl, domStringListIDL } from '../../../src/browlet/dom/lists/index';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/index';
 import type { DOMStringList } from '../../../src/browlet/platform';
 import { getBindingContext, getRelevantRealm, unwrap } from '../../support/browlet-binding';

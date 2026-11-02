@@ -7,7 +7,7 @@ import {
   BindingWorld, defineInterface, idlType, impl, iter, reference, type IterableMember,
 } from '../../../../src/web-idl/index';
 import type { ValuePair } from '../../../../src/web-idl/binding/realm/iterable';
-import { getPlatformRecord } from '../../../../src/web-idl/binding/platform';
+import { getPlatformRecord } from '../../../../src/web-idl/values/index';
 
 import { getMemberBinding } from '../../../support/web-idl-binding';
 import { TestRealm as Realm } from '../../../support/web-idl-realm';

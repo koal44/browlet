@@ -1,8 +1,8 @@
 import { defineInterface, impl, reference, roAttr, xattr } from '../../../web-idl/core/index';
 
-import type { StyleletEnvironment } from '../../environment';
 import type { InterpretedDeclaration } from '../declarations/index';
 import { CSSDeclarationBlock, CSSStylePropertiesImpl } from '../declarations/index';
+import type { StyleletEnvironment } from '../../environment';
 
 import { CSSRuleImpl } from './rule';
 

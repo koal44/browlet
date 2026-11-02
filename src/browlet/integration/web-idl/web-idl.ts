@@ -1,0 +1,147 @@
+import { streamsIDLDefinitions } from '../../../streams/index';
+import { encodingIDLDefinitions } from '../../../encoding/index';
+import { urlIDLDefinitions } from '../../../url/index';
+import { permissionsIDLDefinitions } from '../../../permissions/index';
+import { storageIDLDefinitions } from '../../../storage/index';
+import { fileIDLDefinitions } from '../../../file/index';
+import { xhrIDLDefinitions } from '../../../xhr/index';
+import { fetchIDLDefinitions } from '../../../fetch/index';
+import { styleletIDLDefinitions } from '../../../stylelet/index';
+
+import { domHighResTimeStampIDL, epochTimeStampIDL } from '../../timing/index';
+import { webAssemblyIDLDefinitions } from '../../webassembly/index';
+import {
+  eventHandlerIDL, eventHandlerNonNullIDL, onErrorEventHandlerIDL, onErrorEventHandlerNonNullIDL,
+  globalEventHandlersIDL, windowEventHandlersIDL,
+} from '../../scripting/index';
+import {
+  errorEventIDL, errorEventInitIDL, promiseRejectionEventIDL, promiseRejectionEventInitIDL,
+} from '../../dom/events/index';
+import {
+  reportIDL, reportBodyIDL, testReportBodyIDL, reportingObserverIDL, reportingObserverCallbackIDL,
+  reportingObserverOptionsIDL, reportListIDL,
+} from '../../reporting/index';
+import {
+  integrityViolationReportBodyIDL, coepViolationReportBodyIDL, coepInheritanceViolationReportBodyIDL,
+  permissionsPolicyIDL, documentPermissionsPolicyIDL, iframePermissionsPolicyIDL,
+  permissionsPolicyViolationReportBodyIDL,
+} from '../../browsing/policy/index';
+import {
+  cspViolationReportBodyIDL, securityPolicyViolationEventIDL, securityPolicyViolationEventInitIDL,
+  securityPolicyViolationEventDispositionIDL,
+} from '../../browsing/policy/csp/index';
+import { trustedTypesIDLDefinitions } from '../../browsing/policy/trusted-types/index';
+import { historyIDL, scrollRestorationIDL } from '../../browsing/history/index';
+import {
+  htmlDocumentIDL, documentReadyStateIDL, documentVisibilityStateIDL, htmlOrSVGScriptElementIDL,
+  htmlDocumentOrShadowRootIDL, htmlAllCollectionIDL,
+} from '../../dom/nodes/index';
+import { htmlIDLDefinitions } from '../../dom/nodes/html/index';
+import { mathMLIDLDefinitions } from '../../dom/nodes/mathml/index';
+import { svgIDLDefinitions } from '../../dom/nodes/svg/index';
+import { domIDLDefinitions } from '../../dom/index';
+import { performanceIDL } from '../../performance/index';
+import { navigatorIDLDefinitions } from '../../navigator/index';
+import {
+  messageEventIDL, messageEventInitIDL, messageEventSourceIDL, messagePortIDL, eventSourceIDL, eventSourceInitIDL,
+  messageChannelIDL, messageEventTargetIDL, messagePortIncludesMessageEventTargetIDL, windowPostMessageOptionsIDL,
+  broadcastChannelIDL,
+} from '../../communication/index';
+import { webStorageIDLDefinitions } from '../../storage/index';
+import { navigationIDLDefinitions } from '../../browsing/navigation-api/index';
+import {
+  locationIDL, barPropIDL, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
+  windowIncludesGlobalEventHandlersIDL, windowIncludesWindowEventHandlersIDL, windowProxyDefinition,
+  windowIdleCallbackIDL, idleDeadlineIDL, idleRequestCallbackIDL, idleRequestOptionsIDL,
+} from '../../browsing/window/index';
+import { originIDL } from '../../browsing/index';
+import {
+  highResolutionTimeWindowOrWorkerGlobalScopeIDL, timerHandlerIDL, windowOrWorkerGlobalScopeIDL,
+  trustedTypesWindowOrWorkerGlobalScopeIDL,
+} from '../../environment/index';
+import { structuredSerializeOptionsIDL } from '../../scripting/structured-data/index';
+import { serviceWorkerIDL } from '../../workers/index';
+import { progressEventIDL, progressEventInitIDL } from '../xhr/index';
+import { permissionStatusIDL } from '../permissions/index';
+import { fileReaderIDL, objectURLIDL } from '../file/index';
+
+/** Declarations combined by Browlet's binding world, also available for development validation. */
+export const browletDefinitions = [
+  documentReadyStateIDL,
+  documentVisibilityStateIDL,
+  htmlOrSVGScriptElementIDL,
+  htmlDocumentIDL,
+  htmlDocumentOrShadowRootIDL,
+  htmlAllCollectionIDL,
+  ...htmlIDLDefinitions,
+  ...svgIDLDefinitions,
+  ...mathMLIDLDefinitions,
+  originIDL,
+  locationIDL,
+  historyIDL, scrollRestorationIDL,
+  ...navigationIDLDefinitions,
+  barPropIDL,
+  reportIDL, reportBodyIDL, integrityViolationReportBodyIDL, testReportBodyIDL,
+  coepViolationReportBodyIDL, coepInheritanceViolationReportBodyIDL,
+  permissionsPolicyIDL, documentPermissionsPolicyIDL, iframePermissionsPolicyIDL,
+  permissionsPolicyViolationReportBodyIDL,
+  cspViolationReportBodyIDL,
+  securityPolicyViolationEventIDL, securityPolicyViolationEventInitIDL, securityPolicyViolationEventDispositionIDL,
+  reportingObserverIDL, reportingObserverCallbackIDL, reportingObserverOptionsIDL, reportListIDL,
+  domHighResTimeStampIDL,
+  epochTimeStampIDL,
+  performanceIDL,
+  ...navigatorIDLDefinitions,
+  eventHandlerNonNullIDL,
+  eventHandlerIDL,
+  onErrorEventHandlerNonNullIDL,
+  onErrorEventHandlerIDL,
+  globalEventHandlersIDL,
+  windowEventHandlersIDL,
+  errorEventIDL,
+  errorEventInitIDL,
+  messageEventIDL,
+  messageEventInitIDL,
+  messageEventSourceIDL,
+  messagePortIDL,
+  messageChannelIDL,
+  messageEventTargetIDL,
+  messagePortIncludesMessageEventTargetIDL,
+  broadcastChannelIDL,
+  eventSourceIDL,
+  eventSourceInitIDL,
+  windowPostMessageOptionsIDL,
+  serviceWorkerIDL,
+  promiseRejectionEventIDL,
+  promiseRejectionEventInitIDL,
+  structuredSerializeOptionsIDL,
+  timerHandlerIDL,
+  windowOrWorkerGlobalScopeIDL,
+  highResolutionTimeWindowOrWorkerGlobalScopeIDL,
+  trustedTypesWindowOrWorkerGlobalScopeIDL,
+  windowIDL,
+  windowProxyDefinition,
+  windowEventIDL,
+  windowIdleCallbackIDL, idleDeadlineIDL, idleRequestCallbackIDL, idleRequestOptionsIDL,
+  windowIncludesWindowOrWorkerGlobalScopeIDL,
+  windowIncludesGlobalEventHandlersIDL,
+  windowIncludesWindowEventHandlersIDL,
+  ...domIDLDefinitions,
+  ...styleletIDLDefinitions,
+  ...streamsIDLDefinitions,
+  ...encodingIDLDefinitions,
+  ...fileIDLDefinitions,
+  ...permissionsIDLDefinitions,
+  permissionStatusIDL,
+  ...storageIDLDefinitions,
+  ...webStorageIDLDefinitions,
+  ...webAssemblyIDLDefinitions,
+  fileReaderIDL,
+  objectURLIDL,
+  ...xhrIDLDefinitions,
+  progressEventIDL,
+  progressEventInitIDL,
+  ...urlIDLDefinitions,
+  ...fetchIDLDefinitions,
+  ...trustedTypesIDLDefinitions,
+];

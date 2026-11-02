@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/session-history';
+import { createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import type { NavigationCurrentEntryChangeEvent } from '../../../src/browlet/platform';
 import { createOpaqueOrigin } from '../../../src/url/index';

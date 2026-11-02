@@ -1,7 +1,7 @@
 import { createManualRealm } from '../support/browlet-agent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { browletBindingWorld, createBrowletEnvironmentInit } from '../../src/browlet/bindings';
+import { browletBindingWorld, createBrowletEnvironmentInit } from '../../src/browlet/integration/web-idl/index';
 import { getBindingContext, getRelevantRealm, unwrap } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
 import { WindowImpl } from '../../src/browlet/browsing/window/window';
@@ -13,7 +13,7 @@ import { TextImpl } from '../../src/browlet/dom/nodes/text';
 import type { DocumentImpl } from '../../src/browlet/dom/nodes/document';
 import type { ElementImpl } from '../../src/browlet/dom/nodes/element';
 import { parseHTMLDocument } from '../../src/browlet/html/parser/parse';
-import { SandboxEnvironment } from '../../src/browlet/environment';
+import { SandboxEnvironment } from '../../src/browlet/environment/index';
 import { itPassesWith } from '../test-runtime';
 
 afterEach(() => vi.restoreAllMocks());

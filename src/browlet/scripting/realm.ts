@@ -7,13 +7,13 @@ import {
 import type { CallbackHooks, StampedPlatformObject, WebIDLRealm } from '../../web-idl/index';
 import { serializeURL } from '../../url/index';
 
-import type { Window, WindowProxy } from '../platform';
 import { coarsenedSharedCurrentTime, type DOMHighResTimeStamp } from '../timing/index';
 import type { EventImpl } from '../dom/events/index';
 import type { DocumentImpl } from '../dom/nodes/index';
 import type { DOMRealm, WindowDOMRealm } from '../dom/index';
 import type { WindowImpl, WindowProxyHandle } from '../browsing/window/index';
-import type { BrowletEnvironment, BrowletEnvironmentBase, WindowEnvironment } from '../environment';
+import type { BrowletEnvironment, BrowletEnvironmentBase, WindowEnvironment } from '../environment/index';
+import type { Window, WindowProxy } from '../platform';
 
 import { SandboxAgent, type Agent, type WindowAgent } from './agents';
 import { JSExecutionContext } from './execution-context';

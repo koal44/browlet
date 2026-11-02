@@ -1,13 +1,12 @@
 import type { Definition } from '../../web-idl/core/index';
 
-import { domStringListIDL } from './string-list';
+import { domStringListIDL, domTokenListIDL } from './lists/index';
 import {
   addEventListenerOptionsIDL, eventListenerIDL, eventListenerOptionsIDL, eventTargetIDL, customEventIDL,
   customEventInitIDL, eventIDL, eventInitIDL,
 } from './events/index';
 import { abstractRangeIDL, rangeIDL, staticRangeIDL, staticRangeInitIDL } from './ranges/index';
 import { nodeFilterIDL, nodeIteratorIDL, treeWalkerIDL } from './traversal/index';
-import { domTokenListIDL } from './token-list';
 import { abortControllerIDL, abortSignalIDL } from './abort/index';
 import {
   characterDataIDL, characterDataIncludesChildNodeIDL, characterDataIncludesNonDocumentTypeChildNodeIDL,
@@ -25,7 +24,7 @@ import {
   cdataSectionIDL, domImplementationIDL, xmlDocumentIDL, importNodeOptionsIDL, processingInstructionIDL,
   processingInstructionIncludesLinkStyleIDL,
 } from './nodes/index';
-import type { BrowletEnvironment } from '../environment';
+import type { BrowletEnvironment } from '../environment/index';
 
 export const domIDLDefinitions: Definition<BrowletEnvironment>[] = [
   eventIDL,

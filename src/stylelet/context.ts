@@ -3,8 +3,9 @@ import type {
   DOMOperations, DOMDocument as Document, DOMElement as Element, DOMNode as Node,
 } from '../infra/index';
 
-import type { StyleletEnvironment } from './environment';
 import { RuntimeCache } from './selector/index';
+
+import type { StyleletEnvironment } from './environment';
 
 /** Document-specific selector state, host DOM access, and reusable matching caches. */
 export class StyleletContext {

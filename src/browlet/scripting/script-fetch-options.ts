@@ -1,7 +1,7 @@
 import type { URLRecord } from '../../url/index';
 import type { FetchRequest, ReferrerPolicy, RequestCredentials, RequestPriority } from '../../fetch/index';
 
-import type { BrowletEnvironment } from '../environment';
+import type { BrowletEnvironment } from '../environment/index';
 
 /** Fetch state for a script and its descendants, initialized to HTML's defaults. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#script-fetch-options

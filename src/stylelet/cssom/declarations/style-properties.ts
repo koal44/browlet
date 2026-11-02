@@ -4,7 +4,7 @@ import {
   type AttributeMember,
 } from '../../../web-idl/core/index';
 
-import { propertyRegistry } from '../../props/index';
+import { propertyRegistry } from '../../props/built-in/index';
 
 import { CSSStyleDeclarationImpl } from './style-declaration';
 

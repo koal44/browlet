@@ -1,11 +1,10 @@
 import { InternalError } from '../../infra/index';
-import { defineDataProperty, isObject } from '../../js-engine/index';
+import { compileHostSteps, defineDataProperty, isObject } from '../../js-engine/index';
 
-import type { WebIDLRealm } from '../environment';
-import { compileSteps } from '../compiler';
 import type { IDLDictionaryType } from '../assembly/index';
 import { IDLDictionary } from '../values/index';
 import type { RealmBinding } from '../binding/realm';
+import type { WebIDLRealm } from '../environment';
 
 import { Converter, type ConversionSteps } from './converter';
 
@@ -63,7 +62,9 @@ export class DictionaryConverter<Type extends IDLDictionaryType = IDLDictionaryT
       `[${JSON.stringify(member.name)}]: converted${index}`).join(', ') : '';
     // Nested dictionaries keep their lazy entry steps, so recursion does not
     // expand during compilation. Mutable defaults still run per conversion.
-    return compileSteps<ConversionSteps<IDLDictionary>>(`${assembled.primary.name}:dictionary-input`, dependencies,
+    return compileHostSteps<ConversionSteps<IDLDictionary>>(
+      `webidl/${encodeURIComponent(`${assembled.primary.name}:dictionary-input`)}`,
+      dependencies,
       `function convertDictionary(value) {
         if (!isObject(value) && value !== undefined && value !== null) {
           throw new TypeError('A dictionary value must be an object');

@@ -6,7 +6,7 @@ import { ImportMap, mergeExistingAndNewImportMaps, type BrowletGlobalObject, typ
 import { EventTargetImpl } from '../dom/events/index';
 import { EmbedderPolicy, PolicyContainer } from '../browsing/policy/index';
 import type { DocumentImpl } from '../dom/nodes/index';
-import type { BrowletEnvironment, BrowletEnvironmentBase } from '../environment';
+import type { BrowletEnvironment, BrowletEnvironmentBase } from '../environment/index';
 
 /** Common worker scripting and policy state. */
 // https://html.spec.whatwg.org/multipage/workers.html#workerglobalscope

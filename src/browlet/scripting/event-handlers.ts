@@ -5,7 +5,7 @@ import {
 } from '../../web-idl/core/index';
 
 import type { ErrorEventImpl, EventTargetImpl, EventImpl } from '../dom/events/index';
-import type { BrowletEnvironment } from '../environment';
+import type { BrowletEnvironment } from '../environment/index';
 
 import type { BrowletRealm } from './realm';
 

@@ -3,7 +3,7 @@ import {
   arg, defineInterface, emptyDictionary, idlType, impl, nullable, op, reference, roAttr, unwrapArg,
 } from '../../../../web-idl/core/index';
 
-import type { BrowletEnvironment } from '../../../environment';
+import type { BrowletEnvironment } from '../../../environment/index';
 
 import {
   TrustedHTMLImpl, TrustedScriptImpl, TrustedScriptURLImpl, type TrustedTypeName, type TrustedTypeValue,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createSandboxEnvironment } from '../../../src/browlet/bindings';
+import { createSandboxEnvironment } from '../../../src/browlet/integration/web-idl/index';
 import { parseURL } from '../../../src/url/url';
 import {
   ServiceWorkerGlobalScopeImpl,

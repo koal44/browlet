@@ -8,8 +8,8 @@ import type { FormDataImpl } from '../../../xhr/index';
 import { ErrorEventImpl, EventImpl, type EventInit } from '../../dom/events/index';
 import type { AbortControllerImpl, AbortSignalImpl } from '../../dom/abort/index';
 import type { ElementImpl } from '../../dom/nodes/index';
-import { restoreScrollPositionData } from '../navigation/session-history';
-import type { BrowletEnvironment } from '../../environment';
+import { restoreScrollPositionData } from '../navigation/state/index';
+import type { BrowletEnvironment } from '../../environment/index';
 import type { SerializedRecord } from '../../scripting/structured-data/index';
 
 import type { NavigationType } from './navigation';

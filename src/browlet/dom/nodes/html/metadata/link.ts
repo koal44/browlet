@@ -12,7 +12,7 @@ import {
   corsSettingsAttribute, referrerPolicyAttribute, getBlockingTokens, blockingAttribute,
   fetchPriorityAttribute,
 } from '../attributes/index';
-import type { BrowletEnvironment } from '../../../../environment';
+import type { BrowletEnvironment } from '../../../../environment/index';
 
 import type { ElementCreationContext } from '../../element';
 import type { DocumentImpl } from '../../document';

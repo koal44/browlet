@@ -5,7 +5,7 @@
 [Reflection](https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#reflecting-content-attributes-in-idl-attributes)
 connects content attributes to typed author-facing IDL attributes. Declarations
 carry annotations; Browlet supplies `htmlExtendedAttributeHooks` to `BindingWorld`
-from `integration/web-idl/`. The HTML handler selects rules once after Web IDL
+from `integration/web-idl/bindings/`. The HTML handler selects rules once after Web IDL
 resolves member types, including typedefs and interface implementations. Generic
 Web IDL owns the extension point, conversion, receiver checks, realm selection,
 and platform projection; the hook supplies HTML's behavior.
@@ -46,8 +46,8 @@ from IDL serialization. The source IDL comments retain the specification's notat
 | `rules.ts` | Strings, nullable strings, scalar strings, boolean presence, canonical enumerated keywords, signed/unsigned limits, getter-only ranges, defaults, and finite-double reflection over the existing microsyntax parsers |
 | `element-associations.ts` | Explicit weak associations, live tree-scope and ID lookup, and interface filtering; no platform objects |
 | `../../../web-idl/core/types.ts` and `helpers.ts` | Annotation records and data-only builders carrying opaque enumerated or token-list definitions |
-| `../../integration/web-idl/reflection.ts` | `[Reflect]` variants, `[ReflectEnumerated]`, and `[ReflectTokens]`; prepared accessors, resolved interface filtering, and cached projected arrays |
-| `../../integration/web-idl/reflection-target.ts` | Binding adapters for ordinary DOM attributes or ElementInternals' separate internal content-attribute map |
+| `../../integration/web-idl/bindings/reflection.ts` | `[Reflect]` variants, `[ReflectEnumerated]`, and `[ReflectTokens]`; prepared accessors, resolved interface filtering, and cached projected arrays |
+| `../../integration/web-idl/bindings/reflection-target.ts` | Binding adapters for ordinary DOM attributes or ElementInternals' separate internal content-attribute map |
 
 `ElementImpl` owns lazily created token lists and explicit-reference state.
 `ElementInternalsImpl` owns independent reference state and content-attribute

@@ -6,7 +6,7 @@ import { UserAgent } from '../../src/browlet/user-agent';
 import { getBindingContext, getRelevantRealm, project } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
 import type { AuthenticationPrompt } from '../../src/browlet/loader/authentication';
-import { NodeHTTPTransport } from '../../src/browlet/integration/network/node-transport';
+import { NodeHTTPTransport } from '../../src/browlet/integration/host/network/node-transport';
 import { FetchBody } from '../../src/fetch/body';
 import type { AuthenticationCredentials } from '../../src/fetch/environment';
 import { FetchRequest } from '../../src/fetch/request';

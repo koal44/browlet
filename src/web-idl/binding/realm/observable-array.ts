@@ -1,7 +1,7 @@
 import { InternalError } from '../../../infra/index';
 
 import type { IDLType, IDLAttribute } from '../../assembly/index';
-import type { PlatformRecord } from '../platform';
+import type { PlatformRecord } from '../../values/index';
 
 import type { RealmBinding } from '../realm';
 import { createObservableArray, type ObservableArrayHandle } from './observable-array-exotic';

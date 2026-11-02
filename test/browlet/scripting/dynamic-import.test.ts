@@ -7,7 +7,7 @@ import { FetchHeaders } from '../../../src/fetch/index';
 import { serializeURL } from '../../../src/url/index';
 import { idlType } from '../../../src/web-idl/core/index';
 import { Browlet } from '../../../src/browlet/browlet';
-import type { BrowletEnvironment } from '../../../src/browlet/environment';
+import type { BrowletEnvironment } from '../../../src/browlet/environment/index';
 import { ClassicScript, JavaScriptModuleScript } from '../../../src/browlet/scripting/script';
 import { ScriptFetchOptions } from '../../../src/browlet/scripting/script-fetch-options';
 import { mockHTTPTransport } from '../../fetch/transport-fixture';

@@ -7,7 +7,7 @@ import {
   DOMExceptionImpl, DOMExceptionNames, type BindingContext,
 } from '../../../web-idl/index';
 
-import type { BrowletEnvironment } from '../../environment';
+import type { BrowletEnvironment } from '../../environment/index';
 
 import type {
   SerializedArray, SerializedArrayBuffer, SerializedArrayBufferView,

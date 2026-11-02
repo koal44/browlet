@@ -2,10 +2,11 @@ import type { DOMDocument as Document, DOMElement as Element } from '../infra/in
 import { TypeError } from '../infra/exceptions';
 import { parseURL } from '../url/index';
 
-import type { StyleletOptions } from './environment';
-import { StyleletContext } from './context';
 import type { CSSStyleDeclarationImpl, CSSStyleSheetImpl, CSSStyleSheetInit } from './cssom/index';
 import { CascadeEngine, TreeScope } from './engine/index';
+
+import type { StyleletOptions } from './environment';
+import { StyleletContext } from './context';
 
 /** Host-supplied entry point for one document's stylesheets and current style-query implementation. */
 export class Stylelet {

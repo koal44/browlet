@@ -2,7 +2,7 @@ import { atArg, defineInterface, impl } from '../../web-idl/core/index';
 import type { PermissionsImpl } from '../../permissions/index';
 import type { StorageManagerImpl } from '../../storage/index';
 
-import type { BrowletEnvironment } from '../environment';
+import type { BrowletEnvironment } from '../environment/index';
 
 /** Stable Window navigator identity; independent specifications contribute its capabilities. */
 // https://html.spec.whatwg.org/multipage/system-state.html#the-navigator-object

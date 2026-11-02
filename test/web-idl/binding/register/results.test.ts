@@ -4,7 +4,7 @@ import {
   arg, onError, ctor, defineCallbackFunction, defineDictionary, defineInterface, dictMember, idlType,
   impl, implementationType, nullable, op, promise as promiseType, roAttr, reference, sequence, union,
 } from '../../../../src/web-idl/core/index';
-import { getImplementationObject } from '../../../../src/web-idl/binding/platform';
+import { getImplementationObject } from '../../../../src/web-idl/values/index';
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
 
 import { TestRealm } from '../../../support/web-idl-realm';

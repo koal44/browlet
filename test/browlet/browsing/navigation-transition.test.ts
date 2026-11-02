@@ -6,8 +6,7 @@ import type { NavigationType } from '../../../src/browlet/browsing/navigation-ap
 import { NavigationTransitionImpl } from '../../../src/browlet/browsing/navigation-api/navigation-transition';
 import { NavigationDestinationImpl } from '../../../src/browlet/browsing/navigation-api/navigation-destination';
 import { NavigationHistoryEntryImpl } from '../../../src/browlet/browsing/navigation-api/navigation-history-entry';
-import { createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/session-history';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/document-state';
+import { createSessionHistoryEntry, createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import type { NavigationTransition as BrowletNavigationTransition } from '../../../src/browlet/platform';
 import { getRelevantRealm, unwrap } from '../../support/browlet-binding';
 import { runInHostTask } from '../../support/tasks';

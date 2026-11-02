@@ -3,7 +3,7 @@ import { afterEach, describe, expect, vi } from 'vitest';
 import { getPromiseResult, isPromiseHandled } from '../../../src/js-engine/index';
 import { Browlet } from '../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/document-state';
+import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import type { PromiseRejectionEvent } from '../../../src/browlet/platform';
 import { domManipulationTaskSource } from '../../../src/browlet/scripting/tasks';

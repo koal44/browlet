@@ -8,19 +8,19 @@ import {
   type ImplementationClass, type ImplementationType, type InjectedArgument, type WebIDLType,
 } from '../core/index';
 
-import type { WebIDLEnvironment, WebIDLRealm } from '../environment';
 import {
   AssembledInterface, type IDLType, type IDLDictionaryType,
   type AssembledDictionary, type DefinitionAssembly, type IDLFrozenArrayType,
 } from '../assembly/index';
 import {
   getImplementationRecord, getPlatformRecord, isStampedImplInstance, isStampedPlatformObject, PlatformRecord,
-  stampImplementation, type StampedImplInstance, type StampedPlatformObject,
-} from './platform';
-import { IDLPromise, type IDLMapEntries, type IDLSetEntries } from '../values/index';
+  stampImplementation, type StampedImplInstance, type StampedPlatformObject, IDLPromise, type IDLMapEntries,
+  type IDLSetEntries,
+} from '../values/index';
 import {
   createConverter, DictionaryConverter, ImplementationConverter, type Converter, type ConverterFor,
 } from '../converters/index';
+import type { WebIDLEnvironment, WebIDLRealm } from '../environment';
 
 import {
   AsyncIterableBinding, CallbackBinding, MaplikeBinding, SetlikeBinding, GlobalPlatformObjectBinding,

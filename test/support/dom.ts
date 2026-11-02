@@ -1,6 +1,6 @@
 import { getRelevantRealm } from './browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
-import type { BrowletEnvironment } from '../../src/browlet/environment';
+import type { BrowletEnvironment } from '../../src/browlet/environment/index';
 import type { DocumentImpl } from '../../src/browlet/dom/nodes/document';
 import { parseHTMLDocument } from '../../src/browlet/html/parser/parse';
 

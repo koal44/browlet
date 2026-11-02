@@ -3,17 +3,16 @@ import { createManualEventLoop, createManualRealm } from '../../../support/browl
 import { createTestDocument } from '../../../support/dom';
 
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { createWindowEnvironment } from '../../../../src/browlet/bindings';
+import { createWindowEnvironment } from '../../../../src/browlet/integration/web-idl/index';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { unwrap, project, getBindingContext, getRelevantRealm } from '../../../support/browlet-binding';
 import { Browlet } from '../../../../src/browlet/browlet';
 import type { Window } from '../../../../src/browlet/platform';
 import { BrowletRealm, WindowRealm } from '../../../../src/browlet/scripting/realm';
 import { WindowAgent } from '../../../../src/browlet/scripting/agents';
-import { BrowletEnvironmentBase } from '../../../../src/browlet/environment';
+import { BrowletEnvironmentBase } from '../../../../src/browlet/environment/index';
 import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { createDocumentState } from '../../../../src/browlet/browsing/navigation/document-state';
-import { createSessionHistoryEntry } from '../../../../src/browlet/browsing/navigation/session-history';
+import { createDocumentState, createSessionHistoryEntry } from '../../../../src/browlet/browsing/navigation/state/index';
 import { monotonicClock } from '../../../../src/browlet/timing/clock';
 import { WindowProxyHandle } from '../../../../src/browlet/browsing/window/window-proxy';
 import { WindowImpl } from '../../../../src/browlet/browsing/window/window';

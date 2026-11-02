@@ -42,13 +42,13 @@ Web IDL runtime modules import Core through its index; Core modules import their
 | `binding/realm/callback.ts` | Shared callback invocation, prepared conversions, and captured-context restoration |
 | `binding/realm/overload.ts` | Select a callable and convert its arguments for invocation |
 | `converters/factory.ts` | Select the converter subclass for an assembled type |
-| `compiler.ts` | Compile internal binding and conversion steps with explicit dependencies and separate optimization feedback |
+| JS Engine's `compileHostSteps()` | Compile internal binding and conversion steps with explicit dependencies and separate optimization feedback |
 | `converters/converter.ts` | Base Converter, shared rules and ownership, defaults, and conversion error boundaries |
 | `converters/` | Type-specific Converter subclasses and IDL-to-implementation conversion |
 | `values/` | Runtime IDL dictionaries, callbacks, promises, and iterable/iterator state |
 | `values/callback.ts` | Callback values and their private association with implementation callables |
 | `values/value.ts` | IDL and author value typings, including plain record, sequence, and collection containers |
-| `binding/platform.ts` | The identity record shared by an implementation and its platform object |
+| `values/platform.ts` | The identity record shared by an implementation and its platform object |
 | `binding/realm/global.ts`, `binding/realm/legacy.ts` | Global and legacy platform-object behavior |
 | `binding/realm/iterable.ts`, `binding/realm/async-iterable.ts`, `binding/realm/collection.ts`, `binding/realm/observable-array.ts` | Install interface members and retain their iterator or collection state |
 
@@ -59,6 +59,12 @@ that same object's public operations; there is no separate context object. Files
 under `binding/realm/` are components of that realm binding. They retain a typed
 reference to their owner and call its allocation, identity, conversion, and
 exception services.
+
+JS Engine supplies trusted host compilation; Web IDL supplies its encoded source
+labels and generated algorithms. `values/` supplies platform identity records
+alongside other per-value state, below converters and bindings. The top-level
+environment contracts and generator remain within the `web-idl/` component
+rather than acquiring file-specific layers.
 
 `converters/` owns the base `Converter` and reusable type-specific algorithms;
 `ImplementationConverter` consumes IDL values into implementation values.
@@ -278,7 +284,7 @@ preserve runtime conversion, implementation argument typing, and IDL serializati
 Only the development-time generator follows these refinements and checks their
 expressions and scopes using TypeScript without DOM or Node globals; compiled
 runtime types carry no TypeScript refinements. See `structuredClone` in
-[`global-scope.ts`](../browlet/global-scope.ts) and `CustomEvent` in
+[`global-scope.ts`](../browlet/environment/global-scope.ts) and `CustomEvent` in
 [`event.ts`](../browlet/dom/events/event.ts) for operation and instance examples.
 
 The [TextEncoder declaration](../encoding/text-encoder.ts) uses `JSEnvironment`.
@@ -528,7 +534,7 @@ for `[HTMLConstructor]`.
 The callback receives the invoking realm's context, NewTarget, and active
 function object before ordinary Web IDL constructor checks or argument conversion.
 HTML owns registry/definition selection and construction-stack handling in
-`browlet/integration/web-idl/html-constructor.ts`. It uses Binding Context's
+`browlet/integration/web-idl/bindings/html-constructor.ts`. It uses Binding Context's
 `getPlatformObjectPrototype()` for author prototype access and cross-realm
 fallback, and normal projection for the new or existing implementation. An
 annotated constructor requires its integration hook; it cannot silently fall
@@ -819,7 +825,7 @@ and declaration setup must succeed before the realm binding is published.
 Registration and global installation are distinct. `ctx.install(target)` installs
 exposed definitions; `ctx.projectGlobalObject()` can project into an engine
 allocation. A sandbox can register for internal allocations without installing
-author interfaces. [Browlet's composition root](../browlet/bindings.ts) demonstrates
+author interfaces. [Browlet's composition root](../browlet/integration/web-idl/composition.ts) demonstrates
 both the sandbox and Window paths.
 
 `prepareProjectionOverride` registers outward projection once per interface in
@@ -885,7 +891,7 @@ object. Core's hooks remain engine-independent. Stack access uses the existing
 
 ## Identity and construction
 
-One [`PlatformRecord`](binding/platform.ts) is privately stamped onto both an
+One [`PlatformRecord`](values/platform.ts) is privately stamped onto both an
 implementation and its eventual platform object. It retains the owning realm
 binding and assembled interface. `record.assembled` supplies its name and exact
 serialization and transfer steps. `ctx.isInterfaceExposed(name)` checks exposure

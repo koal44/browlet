@@ -11,7 +11,7 @@
   Definitions are not publicly registered yet. Validation, lifecycle callbacks,
   observed attributes, disable-internals/shadow, and form association remain
   explicit dependencies of the definition algorithm.
-- `integration/web-idl/html-constructor.ts` implements `[HTMLConstructor]` through
+- `integration/web-idl/bindings/html-constructor.ts` implements `[HTMLConstructor]` through
   the existing overridden-constructor binding path. It selects the active
   constructor's registry or current Document's registry, checks the interface,
   creates a custom element or consumes the last upgrade-stack entry, and returns

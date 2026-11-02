@@ -3,7 +3,7 @@ import {
   arg, defineCallbackFunction, defineInterface, DOMExceptionImpl, emptyDictionary, idlType, impl, op, promise, reference,
 } from '../../../web-idl/core/index';
 
-import type { BrowletEnvironment } from '../../environment';
+import type { BrowletEnvironment } from '../../environment/index';
 
 import type { NavigationImpl, NavigationNavigateOptions } from './navigation';
 import type { NavigateEventImpl, NavigationInterceptHandler } from './navigate-event';

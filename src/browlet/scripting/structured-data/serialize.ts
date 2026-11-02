@@ -21,7 +21,7 @@ import {
 } from '../../../web-idl/index';
 
 import { DetachedTransferableStamper } from '../transferable';
-import type { BrowletEnvironment } from '../../environment';
+import type { BrowletEnvironment } from '../../environment/index';
 
 import {
   restrictToSameAgentCluster, isSerializedErrorName,

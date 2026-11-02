@@ -1,7 +1,7 @@
 import { LengthLiteral, PercentageLiteral, type BoxSides, type CanonicalLengthPercentageLiteral } from '../../../stylelet/index';
 
 import type { DocumentImpl, ElementImpl } from '../nodes/index';
-import type { BrowletEnvironment } from '../../environment';
+import type { BrowletEnvironment } from '../../environment/index';
 
 /** Internal observer state; rendering updates and author-facing bindings remain provisional. */
 // https://w3c.github.io/IntersectionObserver/#intersection-observer-interface

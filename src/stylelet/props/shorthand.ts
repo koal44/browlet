@@ -5,6 +5,7 @@ import {
   CssWideValue, FirstValidValue, OptionalDeclarationValue, SubstitutionValue,
   type PendingShorthand, type Value, type WholeValue,
 } from '../values/index';
+
 import type { PropertyContext } from './base-property';
 import type { BuiltInProperty } from './builtin-property';
 

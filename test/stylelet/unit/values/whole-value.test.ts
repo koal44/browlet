@@ -1,7 +1,7 @@
 import { styleletEnv } from '../../environment-fixture';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { PropertyContext } from '../../../../src/stylelet/props/base-property';
-import { builtInRegistry } from '../../../../src/stylelet/props/registry';
+import { builtInRegistry } from '../../../../src/stylelet/props/built-in/index';
 import type { ParserInput } from '../../../../src/stylelet/syntax/parser';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { AutoValue } from '../../../../src/stylelet/values/auto';

@@ -5,18 +5,17 @@ import type { URLRecord } from '../../url/core/index';
 import { ValueStage } from '../value-processing/index';
 import type { PendingShorthand, WholeValue, Value } from '../values/index';
 import {
-  propertyRegistry, CustomProperty, type BuiltInPropertyName,
-  type CustomPropertyName, type CustomPropertyRegistration, type CustomPropertyValue,
-  type CustomPropertyRegistry, type PropertyContext, type PropertyName,
-  type BuiltInProperty,
+  CustomProperty, type CustomPropertyName, type CustomPropertyValue, type PropertyContext, type BuiltInProperty,
+  type CustomPropertyRegistration, type CustomPropertyRegistry,
 } from '../props/index';
+import { propertyRegistry, type BuiltInPropertyName, type PropertyName } from '../props/built-in/index';
 import { matchSelectorList, type Specificity } from '../selector/index';
-import type { StyleletContext } from '../context';
 import { CSSDeclarationBlock, InterpretedDeclaration } from '../cssom/declarations/index';
 import {
   CSSNestedDeclarationsImpl, CSSPropertyRuleImpl, CSSStylePropertiesImpl, CSSStyleRuleImpl,
   CSSStyleSheetImpl, type CSSStyleDeclarationImpl, type CSSStyleSheetInit,
 } from '../cssom/index';
+import type { StyleletContext } from '../context';
 
 import type { TreeScope } from './tree-scope';
 import { ComputedStyle } from './computed-style';

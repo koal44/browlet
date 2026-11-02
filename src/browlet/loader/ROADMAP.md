@@ -139,8 +139,8 @@ call the parse-result lifecycle algorithms. The bounded
 [§8.1.4.9 tests](../../../test/browlet/scripting/speculation-rules-parse-results.test.ts)
 supply parser results and establish no actual speculative loading.
 
-UserAgent composes the [Node transport](../integration/network/node-transport.ts)
-and [native decoders](../integration/network/node-decoder.ts) from `integration/network/`.
+UserAgent composes the [Node transport](../integration/host/network/node-transport.ts)
+and [native decoders](../integration/host/network/node-decoder.ts) from `integration/host/network/`.
 Fetch's internal network algorithm calls the transport. Loopback HTTP/HTTPS tests exercise headers,
 upload/download flow, decoding, and cancellation through the actual HTML loop.
 HTTP/2 uses the temporary [vendor patch](../../../vendor/README.md) to preserve

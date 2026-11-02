@@ -4,10 +4,10 @@ import {
 import { isObject } from '../../js-engine/index';
 import type { DefaultValue, ExtendedAttribute } from '../core/index';
 
-import type { WebIDLRealm } from '../environment';
 import type { IDLType } from '../assembly/index';
 import type { IDLValue, JSValue } from '../values/index';
 import type { RealmBinding } from '../binding/realm';
+import type { WebIDLRealm } from '../environment';
 
 import type { ConverterFor } from './factory';
 

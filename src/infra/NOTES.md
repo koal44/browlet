@@ -122,7 +122,7 @@ accepts JSON-derived values, preserves own-key order, and avoids author array it
 
 The JSON string and object-conversion algorithms live on [JSRealm](../js-engine/realm.ts)
 and are available through `env.realm`; see [JS Engine's JSON contract](../js-engine/README.md#json).
-The four JSON-byte algorithms live on [BrowletEnvironment](../browlet/environment.ts)
+The four JSON-byte algorithms live on [BrowletEnvironment](../browlet/environment/environment.ts)
 and combine Encoding's UTF-8 conversion with those realm-owned string operations.
 Fetch declares the two operations it needs on its environment contract.
 Infra does not depend on an environment, JS Engine, or Encoding to provide its converter.

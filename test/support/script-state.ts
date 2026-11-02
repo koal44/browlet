@@ -1,5 +1,5 @@
 import { InternalError } from '../../src/infra/index';
-import type { BrowletEnvironment } from '../../src/browlet/environment';
+import type { BrowletEnvironment } from '../../src/browlet/environment/index';
 
 /** State for tests of script consumers; deliberately bypasses unfinished parsing. */
 export function createScriptState(env: BrowletEnvironment) {

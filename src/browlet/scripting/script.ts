@@ -4,7 +4,7 @@ import { idlType } from '../../web-idl/core/index';
 import { aboutBlankURL, copyURL, serializeURL, type URLRecord } from '../../url/index';
 import { CSSStyleSheetImpl } from '../../stylelet/index';
 
-import type { BrowletEnvironment } from '../environment';
+import type { BrowletEnvironment } from '../environment/index';
 
 import type { BrowletRealm } from './realm';
 import { JSExecutionContext } from './execution-context';

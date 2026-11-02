@@ -2,11 +2,11 @@ import { InternalError } from '../../infra/index';
 import type { JSRealm } from '../../js-engine/index';
 import { webIDLCommonDefinitions, type Definition } from '../core/index';
 
-import type { WebIDLEnvironment, WebIDLRealm } from '../environment';
 import { DefinitionAssembly, type AssembledInterface, type IDLAttribute } from '../assembly/index';
 import {
   getImplementationRecord, getPlatformRecord, type StampedImplInstance,
-} from './platform';
+} from '../values/index';
+import type { WebIDLEnvironment, WebIDLRealm } from '../environment';
 
 import { RealmBinding } from './realm';
 import { registerImplementationBindings } from './register';

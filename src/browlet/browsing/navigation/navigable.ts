@@ -13,18 +13,19 @@ import type { DocumentImpl, DocumentVisibilityState, ElementImpl } from '../../d
 import { HTMLIFrameElementImpl, type HTMLObjectElementImpl } from '../../dom/nodes/html/embedded/index';
 import type { HTMLFrameElementImpl } from '../../dom/nodes/html/legacy/index';
 import { CustomElementRegistryImpl } from '../../dom/nodes/html/custom-elements/index';
-import type { SourceSnapshotParams } from './source-snapshot';
-import { createSessionHistoryEntry, type SessionHistoryEntry } from './session-history';
+import {
+  createSessionHistoryEntry, createDocumentState, type SessionHistoryEntry, type SourceSnapshotParams,
+  type DocumentBackedState, type DocumentState, type PostResource,
+} from './state/index';
 import type { NavigationAPIMethodTracker } from '../navigation-api/index';
 import type { WindowImpl, WindowProxyHandle } from '../window/index';
-import { BrowletEnvironmentBase } from '../../environment';
+import { BrowletEnvironmentBase } from '../../environment/index';
 import { HTMLDocumentParser, type ScriptHandler } from '../../html/parser/index';
 import type { SerializedRecord } from '../../scripting/structured-data/index';
 import type { ResourceReader } from '../../loader/index';
 import type { UserAgent } from '../../user-agent';
 
 import { BrowsingContext } from './browsing-context';
-import { createDocumentState, type DocumentBackedState, type DocumentState, type PostResource } from './document-state';
 import { NavigationParams } from './params';
 
 /** Owns a navigation destination and its current and active history entries. */

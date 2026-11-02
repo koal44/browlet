@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { BrowletEnvironment } from '../../src/browlet/environment';
+import type { BrowletEnvironment } from '../../src/browlet/environment/index';
 import { Browlet } from '../../src/browlet/browlet';
 import type { WindowProxy } from '../../src/browlet/platform';
 import { getBindingContext, getRelevantRealm } from '../support/browlet-binding';

@@ -4,7 +4,6 @@ import {
   type Definition,
 } from '../web-idl/core/index';
 
-import type { StyleletEnvironment } from './environment';
 import {
   mediaListIDL, styleSheetIDL, styleSheetListIDL, cssStyleSheetIDL, cssStyleSheetInitIDL, legacyCSSStyleSheetIDL, StyleSheetListImpl,
   cssRuleIDL, cssRuleListIDL, cssGroupingRuleIDL, cssStyleRuleIDL, cssNestedDeclarationsIDL, cssPropertyRuleIDL,
@@ -14,6 +13,8 @@ import {
   cssMarginRuleIDL, cssMarginDescriptorsIDL,
 } from './cssom/index';
 import type { TreeScope } from './engine/index';
+
+import type { StyleletEnvironment } from './environment';
 
 // CSSOM permits either DOMString or USVString. Keep DOMString conversion;
 // CSS input preprocessing separately replaces lone surrogates during parsing.

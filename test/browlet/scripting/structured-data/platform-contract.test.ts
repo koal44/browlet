@@ -2,8 +2,8 @@ import { createManualRealm } from '../../../support/browlet-agent';
 import { describe, expect, it, vi } from 'vitest';
 import { structuredSerialize } from '../../../../src/browlet/scripting/structured-data/serialize';
 import { structuredSerializeWithTransfer } from '../../../../src/browlet/scripting/structured-data/transfer';
-import { SandboxEnvironment, type BrowletEnvironment } from '../../../../src/browlet/environment';
-import { createBrowletEnvironmentInit } from '../../../../src/browlet/bindings';
+import { SandboxEnvironment, type BrowletEnvironment } from '../../../../src/browlet/environment/index';
+import { createBrowletEnvironmentInit } from '../../../../src/browlet/integration/web-idl/index';
 import {
   DetachedTransferableStamper,
 } from '../../../../src/browlet/scripting/transferable';

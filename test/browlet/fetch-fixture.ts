@@ -1,7 +1,7 @@
-import { SandboxEnvironment, type BrowletEnvironment } from '../../src/browlet/environment';
+import { SandboxEnvironment, type BrowletEnvironment } from '../../src/browlet/environment/index';
 import { vi } from 'vitest';
 
-import { createBrowletEnvironmentInit } from '../../src/browlet/bindings';
+import { createBrowletEnvironmentInit } from '../../src/browlet/integration/web-idl/index';
 import { createManualUserAgent, createManualRealm } from '../support/browlet-agent';
 import { getBindingContext, getRelevantRealm } from '../support/browlet-binding';
 import { TopLevelTraversable } from '../../src/browlet/browsing/navigation/navigable';

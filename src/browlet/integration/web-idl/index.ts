@@ -1,3 +1,4 @@
-export { htmlExtendedAttributeHooks } from './extended-attributes';
-export { CrossOriginObjectBinding } from './cross-origin';
-export { getWindowProxyAccess } from './window-proxy';
+export {
+  createWindowEnvironment, createSandboxEnvironment, createBrowletEnvironmentInit, browletBindingWorld,
+} from './composition';
+export { browletDefinitions } from './web-idl';

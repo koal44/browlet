@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createWindowEnvironment } from '../../../../src/browlet/bindings';
+import { createWindowEnvironment } from '../../../../src/browlet/integration/web-idl/index';
 import { BrowsingContext, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/index';
 import type { WindowRealm } from '../../../../src/browlet/scripting/realm';
 import type { ElementImpl } from '../../../../src/browlet/dom/nodes/element';

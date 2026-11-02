@@ -6,7 +6,8 @@ import type {
   WholeValue, ColorContext, GradientContext, MathContext, PositionContext, UrlContext,
   SupportsContext, SubstitutionContext, PercentageReferenceValue,
 } from '../values/index';
-import type { RegistryContext } from './registry';
+
+import type { RegistryContext } from './registration';
 
 // Type parameters: W = whole property value, N = property name.
 

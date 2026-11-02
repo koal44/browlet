@@ -5,7 +5,7 @@ import type { JSFunction } from '../../../../src/js-engine/index';
 
 import { Browlet } from '../../../../src/browlet/browlet';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
-import { CrossOriginObjectBinding } from '../../../../src/browlet/integration/web-idl/cross-origin';
+import { CrossOriginObjectBinding } from '../../../../src/browlet/integration/web-idl/bindings/cross-origin';
 import { getBindingContext, unwrap } from '../../../support/browlet-binding';
 
 describe('Window and Location security', () => {

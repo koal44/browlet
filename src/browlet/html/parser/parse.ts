@@ -1,5 +1,5 @@
 import type { DocumentImpl } from '../../dom/nodes/index';
-import type { BrowletEnvironment } from '../../environment';
+import type { BrowletEnvironment } from '../../environment/index';
 
 import { HTMLTreeAdapter } from './tree-adapter';
 

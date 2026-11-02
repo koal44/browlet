@@ -10,7 +10,7 @@ styles consume this lower-level object family.
 `InterpretedDeclaration` values and their importance/order. It can parse text,
 set/remove declarations, and serialize the retained data. It has no DOM owner,
 environment, or CSSOM identity. Supported built-ins come from the small
-[property registry](../../props/registry.ts); custom-property token values are stored
+[property registry](../../props/built-in/registry.ts); custom-property token values are stored
 separately from built-in value representations.
 
 The collection remains a class because it owns ordered replacement, mutation,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState } from '../../../../src/browlet/browsing/navigation/document-state';
+import { createDocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
 import { PermissionsPolicy } from '../../../../src/browlet/browsing/policy/permissions';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';

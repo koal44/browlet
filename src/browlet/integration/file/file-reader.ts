@@ -11,7 +11,7 @@ import {
 import { unsafeSharedCurrentTime } from '../../timing/index';
 import { EventHandlerMap, eventHandlerAttr, type EventHandlerCallback } from '../../scripting/index';
 import { EventTargetImpl } from '../../dom/events/index';
-import { type BrowletEnvironment } from '../../environment';
+import { type BrowletEnvironment } from '../../environment/index';
 import { ProgressEventImpl } from '../xhr/index';
 
 /** Reads Blob data asynchronously and dispatches progress and completion events. */

@@ -1,6 +1,6 @@
 import { ElementImpl } from '../../src/browlet/dom/nodes/index';
 import { ElementInternalsImpl } from '../../src/browlet/dom/nodes/html/custom-elements/index';
-import { DOMTokenListImpl, type TokenListAttribute } from '../../src/browlet/dom/token-list';
+import { DOMTokenListImpl, type TokenListAttribute } from '../../src/browlet/dom/lists/index';
 import { EnumeratedAttribute } from '../../src/browlet/html/microsyntaxes/index';
 import type { AssembledInterface, IDLAttribute, IDLType } from '../../src/web-idl/index';
 

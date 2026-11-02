@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { HTML_NAMESPACE } from '../../../../src/infra/index';
-import { getPlatformRecord } from '../../../../src/web-idl/binding/platform';
+import { getPlatformRecord } from '../../../../src/web-idl/values/index';
 import { createTestDocument } from '../../../support/dom';
 import { itPassesWith } from '../../../test-runtime';
 

@@ -4,7 +4,7 @@ This subsystem implements the [Fetch Standard](https://fetch.spec.whatwg.org/)
 for Browlet and other specification consumers. It owns request/response records,
 policy checks, HTTP transactions, body streams, and the author-facing Fetch APIs.
 
-The [Node adapter](../browlet/integration/network/node-transport.ts) uses Undici's
+The [Node adapter](../browlet/integration/host/network/node-transport.ts) uses Undici's
 dispatcher for HTTP/1.1 and HTTP/2 transport. Browlet implements Fetch behavior
 and supplies its own public objects, streams, and promises. The temporary
 [Undici patches](../../vendor/README.md#undici) preserve transport information
@@ -91,7 +91,7 @@ origin/partition state without pretending to be complete settings objects.
 Native transport callbacks return work through the owner's
 networking tasks. Upload pulls follow transport demand; response backpressure
 pauses both decoding and wire input. A separate
-[decoder](../browlet/integration/network/node-decoder.ts) chain handles each compressed response.
+[decoder](../browlet/integration/host/network/node-decoder.ts) chain handles each compressed response.
 
 ## Bodies and caches
 
@@ -130,7 +130,7 @@ node scripts/with-node.mjs vitest run --project=unit test/fetch test/browlet/fet
 
 For transport investigations, start with the [HTTP/2 regressions](../../test/browlet/fetch-http2.test.ts),
 [response framing](../../test/browlet/fetch-response-framing.test.ts), and
-[Node adapter tests](../../test/browlet/integration/network/).
+[Node adapter tests](../../test/browlet/integration/host/network/).
 Related suites under `test/browlet/loader`, `test/browlet/reporting`, and
 `test/browlet/streams` cover document loading, retained delivery, and stream completion.
 Use real bindings for author conversion and realm behavior, controlled transport

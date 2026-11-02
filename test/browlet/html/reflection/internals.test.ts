@@ -4,7 +4,7 @@ import { ElementImpl } from '../../../../src/browlet/dom/nodes/index';
 import { HTMLElementImpl } from '../../../../src/browlet/dom/nodes/html/index';
 import { ElementInternalsImpl } from '../../../../src/browlet/dom/nodes/html/custom-elements/index';
 import { MutationObserverImpl } from '../../../../src/browlet/dom/nodes/mutation-observer';
-import { elementReflection, internalsReflection } from '../../../../src/browlet/integration/web-idl/reflection-target';
+import { elementReflection, internalsReflection } from '../../../../src/browlet/integration/web-idl/bindings/reflection-target';
 import type { Element, ElementInternals, HTMLElement } from '../../../../src/browlet/platform';
 import { HTML_NAMESPACE } from '../../../../src/infra/index';
 import {
