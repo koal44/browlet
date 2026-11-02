@@ -2,8 +2,8 @@ import { InternalError } from '../../infra/index';
 import type { URLRecord } from '../../url/index';
 import { isLocalURL, type FetchResponse } from '../../fetch/index';
 
-import { ImportMap, mergeExistingAndNewImportMaps, type BrowletGlobalObject, type SpecifierResolutionRecord } from '../scripting/index';
 import { EventTargetImpl } from '../dom/events/index';
+import { ImportMap, mergeExistingAndNewImportMaps, type BrowletGlobalObject, type SpecifierResolutionRecord } from '../scripting/index';
 import { EmbedderPolicy, PolicyContainer } from '../browsing/policy/index';
 import type { DocumentImpl } from '../dom/nodes/index';
 import type { BrowletEnvironment, BrowletEnvironmentBase } from '../environment/index';

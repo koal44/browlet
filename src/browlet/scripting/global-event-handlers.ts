@@ -1,25 +1,106 @@
-import { attr, defineInterfaceMixin, reference } from '../../web-idl/core/index';
+import { defineInterfaceMixin, xattr } from '../../web-idl/core/index';
 
-import type { EventTargetImpl } from '../dom/events/index';
+import { eventHandlerMapAttr } from './event-handlers';
 
-import { EventHandlerMap, type EventHandlerCallback } from './event-handlers';
-
-/** Handler state shared by the GlobalEventHandlers includers. */
+/** Shared supported handlers; the four legacy WebKit event types retain their specified case. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#globaleventhandlers
-// TODO(HTML §8.1.8.2): Add the other handlers and compose this mixin into elements and Document.
-export class GlobalEventHandlersMixin {
-  /** Handler values and listener registrations for this includer. */
-  #handlers: EventHandlerMap;
+export const globalEventHandlers = new Map<string, string>([
+  'abort', 'auxclick', 'beforeinput', 'beforematch', 'beforetoggle', 'blur', 'cancel', 'canplay',
+  'canplaythrough', 'change', 'click', 'close', 'command', 'contextlost', 'contextmenu', 'contextrestored',
+  'copy', 'cuechange', 'cut', 'dblclick', 'drag', 'dragend', 'dragenter', 'dragleave', 'dragover', 'dragstart',
+  'drop', 'durationchange', 'emptied', 'ended', 'error', 'focus', 'formdata', 'input', 'invalid', 'keydown',
+  'keypress', 'keyup', 'load', 'loadeddata', 'loadedmetadata', 'loadstart', 'mousedown', 'mouseenter',
+  'mouseleave', 'mousemove', 'mouseout', 'mouseover', 'mouseup', 'paste', 'pause', 'play', 'playing',
+  'progress', 'ratechange', 'reset', 'resize', 'scroll', 'scrollend', 'securitypolicyviolation', 'seeked',
+  'seeking', 'select', 'slotchange', 'stalled', 'submit', 'suspend', 'timeupdate', 'toggle', 'volumechange',
+  'waiting', 'webkitAnimationEnd', 'webkitAnimationIteration', 'webkitAnimationStart', 'webkitTransitionEnd',
+  'wheel',
+].map((type) => [`on${type.toLowerCase()}`, type]));
 
-  constructor(target: EventTargetImpl) {
-    this.#handlers = new EventHandlerMap(target, [{ name: 'onerror', type: 'error' }]);
-  }
-
-  get onerror(): EventHandlerCallback | null { return this.#handlers.get('onerror'); }
-  set onerror(callback: EventHandlerCallback | null) { this.#handlers.set('onerror', callback); }
-}
-
+/*
+ * interface mixin GlobalEventHandlers {
+ *   attribute EventHandler onabort;
+ *   attribute EventHandler onauxclick;
+ *   attribute EventHandler onbeforeinput;
+ *   attribute EventHandler onbeforematch;
+ *   attribute EventHandler onbeforetoggle;
+ *   attribute EventHandler onblur;
+ *   attribute EventHandler oncancel;
+ *   attribute EventHandler oncanplay;
+ *   attribute EventHandler oncanplaythrough;
+ *   attribute EventHandler onchange;
+ *   attribute EventHandler onclick;
+ *   attribute EventHandler onclose;
+ *   attribute EventHandler oncommand;
+ *   attribute EventHandler oncontextlost;
+ *   attribute EventHandler oncontextmenu;
+ *   attribute EventHandler oncontextrestored;
+ *   attribute EventHandler oncopy;
+ *   attribute EventHandler oncuechange;
+ *   attribute EventHandler oncut;
+ *   attribute EventHandler ondblclick;
+ *   attribute EventHandler ondrag;
+ *   attribute EventHandler ondragend;
+ *   attribute EventHandler ondragenter;
+ *   attribute EventHandler ondragleave;
+ *   attribute EventHandler ondragover;
+ *   attribute EventHandler ondragstart;
+ *   attribute EventHandler ondrop;
+ *   attribute EventHandler ondurationchange;
+ *   attribute EventHandler onemptied;
+ *   attribute EventHandler onended;
+ *   attribute OnErrorEventHandler onerror;
+ *   attribute EventHandler onfocus;
+ *   attribute EventHandler onformdata;
+ *   attribute EventHandler oninput;
+ *   attribute EventHandler oninvalid;
+ *   attribute EventHandler onkeydown;
+ *   attribute EventHandler onkeypress;
+ *   attribute EventHandler onkeyup;
+ *   attribute EventHandler onload;
+ *   attribute EventHandler onloadeddata;
+ *   attribute EventHandler onloadedmetadata;
+ *   attribute EventHandler onloadstart;
+ *   attribute EventHandler onmousedown;
+ *   [LegacyLenientThis] attribute EventHandler onmouseenter;
+ *   [LegacyLenientThis] attribute EventHandler onmouseleave;
+ *   attribute EventHandler onmousemove;
+ *   attribute EventHandler onmouseout;
+ *   attribute EventHandler onmouseover;
+ *   attribute EventHandler onmouseup;
+ *   attribute EventHandler onpaste;
+ *   attribute EventHandler onpause;
+ *   attribute EventHandler onplay;
+ *   attribute EventHandler onplaying;
+ *   attribute EventHandler onprogress;
+ *   attribute EventHandler onratechange;
+ *   attribute EventHandler onreset;
+ *   attribute EventHandler onresize;
+ *   attribute EventHandler onscroll;
+ *   attribute EventHandler onscrollend;
+ *   attribute EventHandler onsecuritypolicyviolation;
+ *   attribute EventHandler onseeked;
+ *   attribute EventHandler onseeking;
+ *   attribute EventHandler onselect;
+ *   attribute EventHandler onslotchange;
+ *   attribute EventHandler onstalled;
+ *   attribute EventHandler onsubmit;
+ *   attribute EventHandler onsuspend;
+ *   attribute EventHandler ontimeupdate;
+ *   attribute EventHandler ontoggle;
+ *   attribute EventHandler onvolumechange;
+ *   attribute EventHandler onwaiting;
+ *   attribute EventHandler onwebkitanimationend;
+ *   attribute EventHandler onwebkitanimationiteration;
+ *   attribute EventHandler onwebkitanimationstart;
+ *   attribute EventHandler onwebkittransitionend;
+ *   attribute EventHandler onwheel;
+ * };
+ */
 export const globalEventHandlersIDL = defineInterfaceMixin({
   name: 'GlobalEventHandlers',
-  members: [attr('onerror', reference('OnErrorEventHandler'))],
+  members: Array.from(globalEventHandlers, ([name]) => ({
+    ...eventHandlerMapAttr(name, name === 'onerror' ? 'OnErrorEventHandler' : 'EventHandler'),
+    ...(name === 'onmouseenter' || name === 'onmouseleave' ? xattr('LegacyLenientThis') : {}),
+  })),
 });

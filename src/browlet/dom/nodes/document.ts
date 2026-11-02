@@ -30,10 +30,11 @@ import { currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../timing
 import { isValidAttributeLocalName, isValidElementLocalName, validateAndExtract } from '../infra/index';
 import { ElementTag } from './element-definitions/index';
 import type { DOMStringListImpl } from '../lists/index';
-import {
-  EventHandlerMap, ModuleMap, SpeculationRulesParseResult, type EventHandlerCallback, type SpeculationRuleSet,
-} from '../../scripting/index';
 import { EventImpl, CustomEventImpl, type EventTargetImpl } from '../events/index';
+import {
+  EventHandlerMap, eventHandlerMapAttr, globalEventHandlers, ModuleMap, SpeculationRulesParseResult,
+  type EventHandlerCallback, type SpeculationRuleSet,
+} from '../../scripting/index';
 import { StorageEventImpl } from '../../storage/events/index';
 import {
   InsecureRequestsPolicy, PolicyContainer, OpenerPolicy, PermissionsPolicy, PermissionsPolicyImpl, SandboxingFlagSet,
@@ -98,6 +99,12 @@ import type { HTMLDialogElementImpl } from './html/interactive/index';
 /** Owns a document tree, node creation, and document loading state. */
 // https://dom.spec.whatwg.org/#interface-document
 export class DocumentImpl extends NodeImpl {
+  /** General and Document-only handler definitions, composed once for all Documents. */
+  static #handlerDefinitions = new Map([
+    ...globalEventHandlers,
+    ['onreadystatechange', 'readystatechange'], ['onvisibilitychange', 'visibilitychange'],
+  ]);
+
   /** Browser settings used by this document's loading, policy, and event operations. */
   declare env: BrowletEnvironment;
   /** The document's URL record, independent of its base URL. */
@@ -228,6 +235,8 @@ export class DocumentImpl extends NodeImpl {
   // https://html.spec.whatwg.org/multipage/dom.html#dom-document-currentscript
   // TODO(HTML §4.12.1): script execution must set/restore this, including null for modules and shadow trees.
   currentScript: HTMLScriptElementImpl | SVGScriptElementImpl | null = null;
+  /** Document event-handler attributes and their registered listeners. */
+  override eventHandlers: EventHandlerMap = new EventHandlerMap(this, DocumentImpl.#handlerDefinitions);
 
   /** Associated browsing context, or null for a detached document. */
   #browsingContext: BrowsingContext | null = null;
@@ -281,8 +290,6 @@ export class DocumentImpl extends NodeImpl {
   #namedCollections = new Map<string, HTMLCollectionImpl>();
   /** Parser input callback installed while document.write() is permitted. */
   #writer?: DocumentWriter;
-  /** Document event-handler attributes and their registered listeners. */
-  #eventHandlers = new EventHandlerMap(this, [{ name: 'onreadystatechange', type: 'readystatechange' }]);
 
   constructor(env: BrowletEnvironment) {
     super(NodeType.Document, null, env);
@@ -494,11 +501,11 @@ export class DocumentImpl extends NodeImpl {
   /** Callback invoked when this document's readiness changes. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#handler-onreadystatechange
   get onreadystatechange(): EventHandlerCallback | null {
-    return this.#eventHandlers.get('onreadystatechange');
+    return this.eventHandlers.get('onreadystatechange');
   }
 
   set onreadystatechange(value: EventHandlerCallback | null) {
-    this.#eventHandlers.set('onreadystatechange', value);
+    this.eventHandlers.set('onreadystatechange', value);
   }
 
   // https://dom.spec.whatwg.org/#dom-document-compatmode
@@ -2325,6 +2332,8 @@ export const htmlDocumentIDL = definePartialInterface({
     roAttr('currentScript', nullable(reference('HTMLOrSVGScriptElement'))),
 
     // TODO(HTML §8.4): open, close, and writeln; complete write's TrustedHTML conversion and insertion steps.
+    // open() must erase every shadow-including inclusive descendant and the relevant global
+    // when this is its associated Document. eraseAllEventListenersAndHandlers() does not traverse.
     op('write', idlType.undefined, [
       arg('text', idlType.DOMString, { variadic: true }),
     ]),
@@ -2333,7 +2342,7 @@ export const htmlDocumentIDL = definePartialInterface({
     attr('onreadystatechange', reference('EventHandler'), {
       ...xattr('LegacyLenientThis'), ...onError('report'),
     }),
-    // TODO(HTML §§6, 8.1): onvisibilitychange and GlobalEventHandlers.
+    eventHandlerMapAttr('onvisibilitychange'),
 
     // Without native [[IsHTMLDDA]], omit the API instead of exposing a truthy substitute.
     // https://html.spec.whatwg.org/#dom-document-all
@@ -2341,6 +2350,13 @@ export const htmlDocumentIDL = definePartialInterface({
       ...xattr('SameObject'), enabled: addon.supportsHTMLDDA,
     }),
   ],
+});
+
+/*
+ * Document includes GlobalEventHandlers;
+ */
+export const documentIncludesGlobalEventHandlersIDL = defineIncludes({
+  interface: 'Document', mixin: 'GlobalEventHandlers',
 });
 
 /** Converted element-creation options supported by the current declaration. */

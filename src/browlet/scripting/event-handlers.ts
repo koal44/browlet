@@ -4,73 +4,92 @@ import {
   nullable, reference, union, type AttributeMember, type IDLCallbackFunctionValue, xattr,
 } from '../../web-idl/core/index';
 
-import type { ErrorEventImpl, EventTargetImpl, EventImpl } from '../dom/events/index';
+import { EventListenerCallback, type ErrorEventImpl, type EventTargetImpl, type EventImpl } from '../dom/events/index';
 import type { BrowletEnvironment } from '../environment/index';
 
 import type { BrowletRealm } from './realm';
 
-// TODO(HTML §8.1.8.1): Add raw content-attribute values/lazy compilation,
-// beforeunload processing, body/frameset target forwarding, and
-// erase-all-handlers. ROADMAP.md records the algorithms and concrete owners.
+// TODO(HTML §8.1.8.1): Add raw source storage/lazy compilation and BeforeUnloadEvent processing.
 /** Retains event-handler attributes and activates their corresponding listeners. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#event-handlers
 export class EventHandlerMap {
+  /** Shared name-to-event-type table; handler mutations must not change these definitions. */
+  #definitions: Map<string, string>;
   /** Attribute names mapped to callbacks and their registered listeners. */
   #handlers = new Map<string, EventHandlerRecord>();
   #target: EventTargetImpl;
 
-  constructor(
-    target: EventTargetImpl,
-    handlers: EventHandlerDefinition[],
-  ) {
+  constructor(target: EventTargetImpl, definitions: Map<string, string>) {
     this.#target = target;
-    for (const { name, type } of handlers) {
-      this.#handlers.set(name, {
-        callback: null,
-        listener: null,
-        type,
-      });
-    }
+    this.#definitions = definitions;
   }
 
+  /** Read the current converted handler value. */
   get(name: string): EventHandlerCallback | null {
-    return this.#handlers.get(name)?.callback ?? null;
+    return this.#handlers.get(name)?.value ?? null;
   }
 
   set(name: string, callback: EventHandlerCallback | null): void {
-    const handler = this.#handlers.get(name);
-    if (!handler) throw new InternalError(`Unknown event handler ${name}`);
+    const handler = this.#getOrCreate(name);
 
     if (callback === null) {
       this.#deactivate(handler);
       return;
     }
 
-    handler.callback = callback;
-    this.#activate(handler);
+    handler.value = callback;
+    // SPEC_CLASH(event-handler-current-event-realm): follow Chromium/WebKit's callback realm; Firefox uses the target realm.
+    // Replacing the callback updates dispatch metadata without moving the listener.
+    if (handler.listener !== null) handler.listener.realm = callback.realm;
+    this.#activate(name, handler);
   }
 
-  #activate(handler: EventHandlerRecord): void {
+  /** Whether the target exposes this handler name. */
+  has(name: string): boolean {
+    return this.#definitions.has(name);
+  }
+
+  /** Reset every handler value and registration, preserving the supported handler names. */
+  deactivateAll(): void {
+    for (const handler of this.#handlers.values()) this.#deactivate(handler);
+  }
+
+  #getOrCreate(name: string): EventHandlerRecord {
+    let handler = this.#handlers.get(name);
+    if (handler) return handler;
+    const type = this.#definitions.get(name);
+    if (type === undefined) throw new InternalError(`Unknown event handler ${name}`);
+    handler = { value: null, listener: null, type };
+    this.#handlers.set(name, handler);
+    return handler;
+  }
+
+  #activate(name: string, handler: EventHandlerRecord): void {
     if (handler.listener !== null) return;
 
-    handler.listener = (event) => {
-      const callback = handler.callback;
+    const listener = (event: EventImpl) => {
       const currentTarget = event.currentTarget;
+      const env = this.#target.env as BrowletEnvironment;
+      // The scripting gate precedes lazy parsing, including syntax-error reporting.
+      if (!env.userAgent.webDriverBiDiScriptingIsEnabled(env)) return;
+      const callback = this.get(name);
       if (callback === null || currentTarget === null) {
         return;
       }
 
-      // The callback declaration's adapter checks target policy and callback
-      // Document activity before entering the author function.
+      // The callback declaration's adapter checks callback Document activity
+      // before entering the author function.
       const specialErrorHandling = isSpecialErrorEvent(event);
       const result: unknown = Reflect.apply(callback, currentTarget, [event]);
       if (specialErrorHandling ? result === true : result === false) event.preventDefault();
     };
+    const realm = handler.value?.realm;
+    handler.listener = new EventListenerCallback(listener, realm, listener);
     this.#target.addEventListener(handler.type, handler.listener);
   }
 
   #deactivate(handler: EventHandlerRecord): void {
-    handler.callback = null;
+    handler.value = null;
     if (handler.listener === null) return;
 
     this.#target.removeEventListener(handler.type, handler.listener);
@@ -81,6 +100,18 @@ export class EventHandlerMap {
 /** Declare an event-handler attribute using the shared HTML callback contract. */
 export function eventHandlerAttr(name: string): AttributeMember {
   return attr(name, reference('EventHandler'));
+}
+
+/** Bind a handler directly to the target's map, including body/frameset forwarding. */
+export function eventHandlerMapAttr(name: string, callbackType = 'EventHandler'): AttributeMember {
+  return attr(name, reference(callbackType), {
+    overrideGet() {
+      return (this as EventTargetImpl).getEventHandlerTarget(name)?.eventHandlers?.get(name) ?? null;
+    },
+    overrideSet(_env, value) {
+      (this as EventTargetImpl).getEventHandlerTarget(name)?.eventHandlers?.set(name, value as EventHandlerCallback | null);
+    },
+  });
 }
 
 /*
@@ -128,37 +159,32 @@ export const onErrorEventHandlerIDL = defineTypedef({
   type: nullable(reference(onErrorEventHandlerNonNullIDL.name)),
 });
 
-type EventHandlerDefinition = {
-  /** IDL attribute name, such as onload. */
-  name: string;
-  /** Event type dispatched to this handler, such as load. */
-  type: string;
-};
-
 type EventHandlerRecord = {
-  /** Converted callback currently stored in the event-handler attribute. */
-  callback: EventHandlerCallback | null;
+  /** Converted callback or inactive value. */
+  value: EventHandlerCallback | null;
   /** Stable listener registered while the attribute has a callback. */
-  listener: ((this: EventTargetImpl, event: EventImpl) => void) | null;
+  listener: EventListenerCallback | null;
   /** Event type used to register and remove the listener. */
   type: string;
 };
 
 /** Converted callback invoked with implementation identities by event dispatch. */
-export type EventHandlerCallback = (
+export type EventHandlerCallback = ((
   this: EventTargetImpl,
   event: EventImpl,
-) => unknown;
+) => unknown) & {
+  /** Author callback realm supplied by Binding; absent for direct internal callbacks. */
+  realm?: BrowletRealm;
+};
 
 // https://html.spec.whatwg.org/multipage/webappapis.html#the-event-handler-processing-algorithm
-// Binding retains the receiving target's environment and the callback's own realm.
+// Binding retains the callback's own realm; invocation supplies the actual handler target.
 // The implementation receives one Event; the adapter selects the author arguments.
 function createEventHandlerCallback(
-  env: BrowletEnvironment,
+  _env: BrowletEnvironment,
   callback: IDLCallbackFunctionValue<BrowletRealm>,
 ): EventHandlerCallback {
-  return function(this: EventTargetImpl, event: EventImpl): unknown {
-    if (!env.userAgent.webDriverBiDiScriptingIsEnabled(env)) return;
+  return Object.assign(function(this: EventTargetImpl, event: EventImpl): unknown {
     const realm = callback.realm;
     if (realm.isWindow() && !realm.getAssociatedDocument().isFullyActive()) return;
     const argumentsList = isSpecialErrorEvent(event)
@@ -167,11 +193,11 @@ function createEventHandlerCallback(
     // Report in the callback realm, as DOM dispatch does for EventListener.
     // The adapter contains the exception before the map applies return-value rules.
     return callback.invoke(argumentsList, 'report', this);
-  };
+  }, { realm: callback.realm });
 }
 
 // HTML's special case requires the event interface, event type, and current target.
 function isSpecialErrorEvent(event: EventImpl): event is ErrorEventImpl {
-  // TODO(HTML §9): Include WorkerGlobalScope when its EventTarget implementation exists.
+  // TODO(HTML workers): Include WorkerGlobalScope with its author projection and handler declarations.
   return event.isErrorEvent() && event.type === 'error' && event.currentTarget?.isWindow() === true;
 }

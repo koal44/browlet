@@ -3,13 +3,16 @@ import {
   defaultPermissionState, type PermissionDescriptor, type PermissionState, type PermissionStatusData,
 } from '../../../permissions/index';
 
-import { EventHandlerMap, eventHandlerAttr, type EventHandlerCallback } from '../../scripting/index';
 import { EventTargetImpl } from '../../dom/events/index';
+import { EventHandlerMap, eventHandlerAttr, type EventHandlerCallback } from '../../scripting/index';
 import type { BrowletEnvironment } from '../../environment/index';
 
 /** The query result, using DOM's real EventTarget implementation. */
 // https://w3c.github.io/permissions/#permissionstatus-interface
 export class PermissionStatusImpl extends EventTargetImpl implements PermissionStatusData {
+  /** Supported handler names shared by all permission statuses. */
+  static #handlerDefinitions = new Map([['onchange', 'change']]);
+
   /** Settings for this result's realm and change notifications. */
   declare env: BrowletEnvironment;
   /** Initialized by createPermissionStatus before the result can be exposed. */
@@ -19,14 +22,14 @@ export class PermissionStatusImpl extends EventTargetImpl implements PermissionS
   /** Latest state set by the feature's permission query algorithm. */
   state: PermissionState = defaultPermissionState;
   /** The onchange attribute shares the ordinary listener list and its retention rules. */
-  #eventHandlers = new EventHandlerMap(this, [{ name: 'onchange', type: 'change' }]);
+  override eventHandlers: EventHandlerMap = new EventHandlerMap(this, PermissionStatusImpl.#handlerDefinitions);
 
   constructor(env: BrowletEnvironment) {
     super(env);
   }
 
-  get onchange(): EventHandlerCallback | null { return this.#eventHandlers.get('onchange'); }
-  set onchange(callback: EventHandlerCallback | null) { this.#eventHandlers.set('onchange', callback); }
+  get onchange(): EventHandlerCallback | null { return this.eventHandlers.get('onchange'); }
+  set onchange(callback: EventHandlerCallback | null) { this.eventHandlers.set('onchange', callback); }
 
   /** Refresh asynchronously; only a changed effective state queues a trusted change event. */
   // https://w3c.github.io/permissions/#dom-permissionstatus-onchange

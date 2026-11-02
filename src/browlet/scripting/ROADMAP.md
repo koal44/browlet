@@ -2268,16 +2268,137 @@ configurations. Two existing implementation-defined `reportError` attribution
 comparisons remain skipped. Typechecking, declaration contracts, touched-file
 ESLint, and diff checks pass. No new failure was reclassified or skipped.
 
+### Activated listener realm and current event
+
+Audited 2026-11-01 against HTML's
+[activate an event handler](https://html.spec.whatwg.org/multipage/webappapis.html#activate-an-event-handler)
+and DOM's [inner invoke](https://dom.spec.whatwg.org/#concept-event-listener-inner-invoke).
+The handler map registered an ordinary internal function, so its DOM listener had
+no associated realm. Handler callbacks consequently saw no `window.event`, even
+though `addEventListener()` callbacks already used DOM's save/set/restore logic.
+
+Binding's existing callback adapter now carries the author callback's realm on
+the internal callable. The handler map gives that realm to its stable
+`EventListenerCallback` and updates it when the handler changes. Callback identity
+and listener position stay intact. DOM continues to own current-event restoration,
+nested dispatch, and the shadow-tree exclusion; no second dispatch path or
+engine/addon change is needed. Direct implementation callbacks can still omit a
+realm, like other internal DOM listeners.
+
+`SPEC_CLASH(event-handler-current-event-realm)`: a same-origin iframe probe assigns
+the iframe's function to the parent's `onstorage`, then replaces it with a parent
+function. Chromium and WebKit expose the event in the current callback's Window;
+Firefox exposes it in the target Window. All three restore the previous value.
+Browlet follows Chromium/WebKit, as approved. HTML permits an arbitrary callback
+context for the internal listener, but that does not settle the associated realm
+used by DOM's current-event steps. Blink's
+[JSEventHandler](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/bindings/core/v8/js_event_handler.h)
+likewise selects the callback's relevant script state for its shared
+[listener dispatch](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/bindings/core/v8/js_based_event_listener.cc).
+
+Four regressions first failed on missing current-event values. They cover nested
+handlers, handler exceptions reported through `onerror`, a ShadowRoot handler,
+and replacement across callback realms without changing listener order.
+
+Validation: nine affected suites pass across Node 24/26/custom, with 180 passing
+tests on each addon build and 179 plus the existing WindowProxy-descriptor
+expected failure in each stock mode. The four new regressions pass everywhere.
+Typechecking and Web IDL declaration contracts pass; 112 import-hierarchy tests
+also pass. No failure was reclassified or skipped.
+
+### Erasing listeners and handlers
+
+HTML's [erase all event listeners and handlers](https://html.spec.whatwg.org/multipage/webappapis.html#erase-all-event-listeners-and-handlers)
+is now `EventTargetImpl.eraseAllEventListenersAndHandlers()`. The receiver is the
+specified target. Each target has one nullable `eventHandlers` association.
+Concrete targets construct their maps with complete shared handler definitions.
+Window combines the GlobalEventHandlers and WindowEventHandlers definitions once;
+Document adds its two dedicated names. MessagePort supplies MessageEventTarget's
+shared definitions and passes its callback map to that mixin. EventHandlerMap
+leaves these definitions unchanged; there is no later registration phase.
+The inherited operation deactivates that map before removing listeners, with no
+target-specific overrides. Every handler owner participates. Targets
+without handlers allocate no map. DOM retains only a type reference to the HTML
+implementation, preserving the runtime dependency direction.
+
+`EventHandlerMap.deactivateAll()` nulls values and unregisters their listeners
+while preserving the supported names for later assignment. This resets handler
+activation as well as author-visible values. DOM's `removeAllEventListeners()`
+stays a separate operation that removes registrations only. Both paths use DOM's
+normal removal steps, including abort-algorithm removal, dispatch-snapshot
+invalidation, and listener-observation hooks. There is no handler registry or
+additional lookup during dispatch. Handler attributes still use one map lookup;
+the nullable association adds one field to EventTarget, and Window allocates
+one handler map instead of two.
+
+The [erasure tests](../../../test/browlet/scripting/event-handler-erasure.test.ts)
+exercise actual projected handler attributes on every existing
+owner, reactivation after repeated erasure, ordinary listeners with abort signals,
+and removal/replacement during a dispatch. A handler already executing can finish
+and its return value still participates in cancellation. Erased registrations
+are skipped in an existing dispatch snapshot; replacements are absent from that
+snapshot. Erasing one target does not erase its descendants or global.
+
+The production caller remains explicit: [document.open()](https://html.spec.whatwg.org/multipage/dynamic-markup-insertion.html#dom-document-open)
+in §8.4 must call this operation on each shadow-including inclusive descendant
+of the Document, then on its relevant global only when that Document is the
+global's associated Document. Its navigation/parser gates, replacement, and
+parsing lifecycle are not implemented by this helper. A TODO beside Document's
+pending dynamic-markup declarations records that connection. Future handler
+owners contribute their definitions to the shared map and inherit erasure.
+
+Validation: all 16 new erasure regressions pass on Node 24/26/custom in stock and
+addon modes. The nine affected suites have 138 passing tests per addon run and
+137 plus the existing WindowProxy-descriptor expected failure per stock run.
+Typechecking, Web IDL declaration contracts, touched-file ESLint, and diff checks
+pass. No failure was reclassified or skipped.
+
+### Handler targets and body/frameset forwarding
+
+HTML's [determine the target of an event handler](https://html.spec.whatwg.org/multipage/webappapis.html#determining-the-target-of-an-event-handler)
+is `EventTargetImpl.getEventHandlerTarget(name)`, overridden by HTMLElement for
+body and frameset. It recognizes WindowEventHandlers names and the Window-reflecting
+body set. Other names and targets keep their original target. Forwarding requires
+an **active** node Document, not a fully active Document or a connected element.
+The resolver checks the current Document each time, including after adoption or
+navigation; it does not cache a Window alongside the element's construction realm.
+
+HTMLBodyElement and HTMLFrameSetElement now include the existing WindowEventHandlers
+declaration and forward `onstorage` to that target's existing map. No forwarded
+entry is allocated on the element. Erasing its listeners leaves the Window's
+handler intact; erasing the Window clears all its aliases. Broader handler
+declarations remain §8.1.8.2 work, including HTMLElement's GlobalEventHandlers
+inclusion before exposing body/frameset `onerror` and the other Window-reflecting
+body attributes. Content-attribute changes and lazy compilation remain below.
+
+The adoption regressions also exposed a callback-adapter error: the BiDi gate
+used the receiving element's construction environment after its handler had been
+forwarded to another Window. Both body and frameset tests ran a callback despite
+the destination Window's disabled scripting policy. The adapter now gets that
+environment from the invocation target. Callback realm, activity checks,
+current-event bookkeeping, exception reporting, and identity remain Binding-owned.
+
+The [target tests](../../../test/browlet/scripting/event-handler-targets.test.ts)
+cover detached elements, Documents without browsing contexts, adoption, borrowed
+accessors, inactive history Documents, active children of inactive Documents,
+listener order and cancellation, separate element/Window erasure, target policy,
+and non-forwarding names. No engine or addon change is involved.
+
+Validation: all 16 target regressions pass across Node 24/26/custom in stock and
+addon modes. Seven affected suites have 94 passing tests per addon run and 93
+plus the existing WindowProxy-descriptor expected failure per stock run.
+Typechecking, Web IDL declaration contracts, touched-file ESLint, and diff checks
+pass. No failure was reclassified or skipped.
+
 Remaining §8.1.8.1 work is explicit:
 
 | Algorithm or state | Remaining work and owner |
 | --- | --- |
-| Determine an event handler's target | Add body/frameset forwarding for Window handlers and the Window-reflecting body set, including the **active** Document check. The broader GlobalEventHandlers/WindowEventHandlers declarations are §8.1.8.2. `onstorage` currently exists on Window only. |
+| Determine an event handler's target | Implemented, with `onstorage` connected on body/frameset. New handler accessors and the content-attribute path must use this resolver; broader GlobalEventHandlers/WindowEventHandlers declarations are §8.1.8.2. |
 | Content-attribute changes and raw handler values | Connect Element attribute changes, retain source body/location, and call the existing CSP inline-behavior algorithm for `script attribute`. Keep the BiDi gate ahead of lazy compilation when this path is added. |
 | Get the current event-handler value | Implement lazy FunctionBody parsing, syntax-error reporting without listener removal, document/form/element scopes, and null ScriptOrModule identity. JS Engine compilation must preserve those scopes; generic source evaluation is not a substitute. These are remaining steps of this subsection, not a reason to skip it. |
-| Special processing and callback types | Window's OnErrorEventHandler path is implemented. Extend the special case to WorkerGlobalScope when its §9 EventTarget exists. Implement OnBeforeUnloadEventHandler's nullable-string conversion/returnValue rules; BeforeUnloadEvent and its navigation producer are §7.2.7 dependencies. |
-| Erase all event listeners and handlers | Add the HTML operation that clears handler values and listeners together. DOM's `removeAllEventListeners()` alone does not clear handler maps; the eventual `document.open()` consumer belongs to §8.4. |
-| Activation's DOM listener wrapper | Finish auditing its associated-realm/current-event metadata alongside the broader handler declarations. The current wrapper is an internal listener; this slice only changes the converted author's callback. |
+| Special processing and callback types | Window's OnErrorEventHandler path is implemented. WorkerGlobalScope's EventTarget base exists; its author projection, handler declarations, and settings/startup remain worker-owner dependencies before extending the error special case. Implement OnBeforeUnloadEventHandler's nullable-string conversion/returnValue rules; BeforeUnloadEvent and its navigation producer are §7.2.7 dependencies. |
+| Erase all event listeners and handlers | Implemented for every current handler owner. The caller selecting descendants and the associated Window is `document.open()` in §8.4 and remains unconnected. |
 
 No engine/addon changes are needed for these slices. Continue within §8.1.8.1;
 do not mark event handlers complete from this slice's tests.
@@ -2287,6 +2408,78 @@ BroadcastChannel, EventSource, and Web IDL callback tests pass in each of the
 six Node 24/26/custom stock/addon configurations. Typechecking, declaration
 contracts, touched-file ESLint, and diff checks pass. No new failure was
 reclassified or skipped.
+
+§8.1.8.2's declarations and inclusions are connected except for the explicitly
+deferred OnBeforeUnloadEventHandler. §8.1.8.3 then defines synthetic
+pointer/click firing; DOM's generic `fireEvent()` is already implemented, but it
+does not supply that algorithm. The current UIEvent/MouseEvent classes are
+abstract placeholders, PointerEvent is absent, and modifier-state input needs
+its host owner. Keep those UI Events/Pointer Events dependencies explicit when
+implementing the event-firing algorithm.
+
+### HTML §8.1.8.2: handler declarations and inclusions
+
+The refreshed HTML source (`404b3eb`) defines 76 GlobalEventHandlers, 18
+WindowEventHandlers, and two Document-only handlers. All are connected except
+`onbeforeunload`, whose distinct callback conversion and return-value rules await
+consolidation with Ged's BeforeUnloadEvent. The full IDL comments retain that
+pending declaration; production does not expose it as an ordinary EventHandler.
+
+GlobalEventHandlers is included on Window, Document, HTMLElement, SVGElement,
+and MathMLElement. WindowEventHandlers is included on Window, HTMLBodyElement,
+and HTMLFrameSetElement. The existing target resolver implements all six
+Window-reflecting body names and the ordinary Window-only names. Document owns
+`onreadystatechange` and `onvisibilitychange`. The mouseenter/mouseleave and
+readystatechange accessors retain LegacyLenientThis. The four legacy WebKit
+handlers register their specified mixed-case event types.
+
+These two mixins now need declarations only: their bindings adapt existing
+EventHandlerMap operations, leaving additional implementation setters such as
+MessagePort's start behavior alone. One complete name-to-event-type table is shared
+per target type; each target uses keyed lookup and allocates records only for
+names it actually uses. DOM listener erasure still deactivates all records while
+preserving the supported names. Common Element attribute processing and Node
+adoption keep HTML/SVG/MathML source and callback
+realm behavior aligned without extra per-namespace hooks.
+
+The regression inventory exercises every declared name through real bindings,
+content attributes, forwarding, case-sensitive dispatch, lenient receivers,
+and SVG/MathML adoption and cloning. DOM's default-passive rules apply to the
+activated listener, including wheel on Window/Document. This slice exposes
+handlers; it does not implement missing media, input, rendering, navigation,
+or other event producers. Other specifications' partial mixins and SVGSVGElement's
+WindowEventHandlers contribution remain with their owners.
+
+Validation: the nine focused handler/dispatch/storage suites exercise 115 cases
+per runtime. All 115 pass on the three addon bases; each stock base has 114
+ordinary passes and the existing expected source-text naming failure. The 13 new
+cases pass everywhere. Generated declarations, typechecking, Web IDL contracts,
+touched-file ESLint, and diff checks pass. No new failure was reclassified.
+
+The reviewed lookup cleanup replaces definition-list scans with one shared Map
+per target type. Window and Document flatten their contributions once; element
+types reuse the general table directly. The other targets also share their fixed
+definitions. EventHandlerMap no longer has a `define()` operation, so construction
+supplies the complete table without a later mutation phase. All 289 focused
+handler and target cases pass on custom/addon; custom/stock has 288 passes and the
+existing source-text expected failure. Typechecking, declaration generation
+checks, and touched-file lint also pass.
+
+The full custom/addon unit run is not green: after updating the intended
+prototype inventory, it has 18,320 passes, 23 existing expected failures,
+18 skips, one TODO, and eight ordinary failures caused by duplicate native host
+hook installation. The existing `wasm-module-brand.test.ts` calls
+`vi.resetModules()`, clearing HTML's module-local installation guard while native
+hooks remain installed in the shared worker isolate. A subsequent Browlet import
+therefore tries to install them again. This reproduces using only unchanged test
+files: run `test/js-engine/wasm-module-brand.test.ts`,
+`test/browlet/html/parser/parse.test.ts`, and
+`test/browlet/streams/promise-dependency.test.ts` with the custom/compat unit runner,
+`--maxWorkers=1 --sequence.shuffle.files --sequence.seed=2`. Three parser cases
+fail; seeds 1 and 3 pass all seven cases. The failures remain ordinary failures;
+repair test isolation separately without weakening the native installation guard.
+An earlier full run also hit the recorded dynamic-import reporting intermittency;
+that case passed both its isolated rerun and the next full run.
 
 ## Present
 

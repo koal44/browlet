@@ -9,8 +9,8 @@ import {
 import { type PermissionDescriptor } from '../../../permissions/index';
 import { CSSStyleSheetImpl } from '../../../stylelet/index';
 
-import { EventLoop, SandboxAgent, BrowletRealm, WindowRealm, installRealmHostHooks } from '../../scripting/index';
 import { EventImpl } from '../../dom/events/index';
+import { EventLoop, SandboxAgent, BrowletRealm, WindowRealm, installRealmHostHooks } from '../../scripting/index';
 import { TrustedScriptImpl } from '../../browsing/policy/trusted-types/index';
 import { AbortControllerImpl, AbortSignalImpl } from '../../dom/abort/index';
 import { DocumentImpl } from '../../dom/nodes/index';

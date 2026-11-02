@@ -1,6 +1,6 @@
 export {
   EventTargetImpl, eventTargetIDL, eventListenerIDL, eventListenerOptionsIDL, addEventListenerOptionsIDL,
-  EventListenerValue,
+  EventListenerCallback,
 } from './event-target';
 export {
   EventImpl, EventPhase, eventIDL, type EventInit, eventInitIDL, CustomEventImpl, customEventIDL,

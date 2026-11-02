@@ -3,10 +3,10 @@ import {
   idlType, impl, op, reference, sequence, xattr, type StructuredData, type TransferSteps,
 } from '../../web-idl/core/index';
 
-import {
-  createTaskSource, DetachedTransferableStamper, type EventHandlerCallback, type QueuedTaskHandle,
-} from '../scripting/index';
 import { EventTargetImpl } from '../dom/events/index';
+import {
+  createTaskSource, DetachedTransferableStamper, EventHandlerMap, type EventHandlerCallback, type QueuedTaskHandle,
+} from '../scripting/index';
 import type { BrowletEnvironment } from '../environment/index';
 import type { StructuredSerializeOptions, StructuredSerializeWithTransferResult } from '../scripting/structured-data/index';
 
@@ -19,7 +19,9 @@ export class MessagePortImpl extends EventTargetImpl {
   declare env: BrowletEnvironment;
   /** Target for delivery; worker integrations can supply their global instead. */
   messageEventTarget: EventTargetImpl = this;
-  messageEventTargetMixin = new MessageEventTargetMixin(this);
+  /** Per-port handlers using the messaging mixin's shared definitions. */
+  override eventHandlers: EventHandlerMap = new EventHandlerMap(this, MessageEventTargetMixin.handlerDefinitions);
+  messageEventTargetMixin = new MessageEventTargetMixin(this.eventHandlers);
   #enabled = false;
   #taskSource = createTaskSource('port message');
   #endpoint = createPortEndpoint(this);

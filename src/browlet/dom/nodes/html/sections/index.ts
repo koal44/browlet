@@ -1,4 +1,4 @@
-export { HTMLBodyElementImpl, htmlBodyElementIDL } from './body';
+export { HTMLBodyElementImpl, htmlBodyElementIDL, htmlBodyElementIncludesWindowEventHandlersIDL } from './body';
 export { HTMLArticleElementImpl } from './article';
 export { HTMLSectionElementImpl } from './section';
 export { HTMLNavElementImpl } from './nav';

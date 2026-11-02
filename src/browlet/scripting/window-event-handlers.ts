@@ -1,25 +1,39 @@
 import { defineInterfaceMixin } from '../../web-idl/core/index';
 
-import type { EventTargetImpl } from '../dom/events/index';
+import { eventHandlerMapAttr } from './event-handlers';
 
-import { eventHandlerAttr, EventHandlerMap, type EventHandlerCallback } from './event-handlers';
-
-/** Window-owned handler state, shared with its eventual body/frameset aliases. */
+/** Window-owned handlers, also exposed by body and frameset through target resolution. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#windoweventhandlers
-// PROVISIONAL: onstorage only; other handlers, element forwarding, and content attributes remain §8.1.8 work.
-export class WindowEventHandlersMixin {
-  /** Handler values and listener registrations for this Window. */
-  #handlers: EventHandlerMap;
+// TODO(HTML §§8.1.8.1, 7.2.7): onbeforeunload needs its callback conversion and BeforeUnloadEvent return-value rules.
+export const windowEventHandlers = new Map<string, string>([
+  'afterprint', 'beforeprint', 'hashchange', 'languagechange', 'message', 'messageerror', 'offline', 'online',
+  'pagehide', 'pagereveal', 'pageshow', 'pageswap', 'popstate', 'rejectionhandled', 'storage',
+  'unhandledrejection', 'unload',
+].map((type) => [`on${type}`, type]));
 
-  constructor(target: EventTargetImpl) {
-    this.#handlers = new EventHandlerMap(target, [{ name: 'onstorage', type: 'storage' }]);
-  }
-
-  get onstorage(): EventHandlerCallback | null { return this.#handlers.get('onstorage'); }
-  set onstorage(callback: EventHandlerCallback | null) { this.#handlers.set('onstorage', callback); }
-}
-
+/*
+ * interface mixin WindowEventHandlers {
+ *   attribute EventHandler onafterprint;
+ *   attribute EventHandler onbeforeprint;
+ *   attribute OnBeforeUnloadEventHandler onbeforeunload;
+ *   attribute EventHandler onhashchange;
+ *   attribute EventHandler onlanguagechange;
+ *   attribute EventHandler onmessage;
+ *   attribute EventHandler onmessageerror;
+ *   attribute EventHandler onoffline;
+ *   attribute EventHandler ononline;
+ *   attribute EventHandler onpagehide;
+ *   attribute EventHandler onpagereveal;
+ *   attribute EventHandler onpageshow;
+ *   attribute EventHandler onpageswap;
+ *   attribute EventHandler onpopstate;
+ *   attribute EventHandler onrejectionhandled;
+ *   attribute EventHandler onstorage;
+ *   attribute EventHandler onunhandledrejection;
+ *   attribute EventHandler onunload;
+ * };
+ */
 export const windowEventHandlersIDL = defineInterfaceMixin({
   name: 'WindowEventHandlers',
-  members: [eventHandlerAttr('onstorage')],
+  members: Array.from(windowEventHandlers, ([name]) => eventHandlerMapAttr(name)),
 });

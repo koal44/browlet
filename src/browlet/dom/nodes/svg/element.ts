@@ -3,6 +3,7 @@ import { defineIncludes, defineInterface, impl } from '../../../../web-idl/core/
 import type { CSSDeclarationBlock, CSSStylePropertiesImpl } from '../../../../stylelet/index';
 
 import { ElementCSSInlineStyleMixin } from '../../../style/index';
+import { EventHandlerMap, globalEventHandlers } from '../../../scripting/index';
 
 import { ElementImpl } from '../element';
 import { HTMLOrSVGOrMathMLElementMixin, htmlOrSVGOrMathMLElementIDL } from '../html-or-svg-or-mathml-element';
@@ -10,6 +11,8 @@ import { HTMLOrSVGOrMathMLElementMixin, htmlOrSVGOrMathMLElementIDL } from '../h
 /** Base implementation for elements in the SVG namespace. */
 // https://svgwg.org/svg2-draft/types.html#InterfaceSVGElement
 export class SVGElementImpl extends ElementImpl {
+  override eventHandlers: EventHandlerMap = new EventHandlerMap(this, globalEventHandlers);
+
   /** Common HTML, SVG, and MathML state and attribute behavior. */
   #htmlOrSVGOrMathMLElementMixin = new HTMLOrSVGOrMathMLElementMixin(this);
   /** Owns inline declarations independently of the lazily created CSSOM object. */
@@ -72,6 +75,13 @@ export const svgElementIDL = defineInterface({
   implementation: impl(SVGElementImpl),
   namespaceURI: SVG_NAMESPACE,
   members: [],
+});
+
+/*
+ * SVGElement includes GlobalEventHandlers;
+ */
+export const svgElementIncludesGlobalEventHandlersIDL = defineIncludes({
+  interface: 'SVGElement', mixin: 'GlobalEventHandlers',
 });
 
 /*

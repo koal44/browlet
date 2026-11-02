@@ -3,8 +3,8 @@ import {
 } from '../../../web-idl/core/index';
 import { TreeScope, type CSSStyleSheetImpl, type StyleSheetListImpl } from '../../../stylelet/index';
 
-import { EventHandlerMap, eventHandlerAttr, type EventHandlerCallback } from '../../scripting/index';
 import type { EventImpl, EventTargetImpl } from '../events/index';
+import { EventHandlerMap, eventHandlerAttr, type EventHandlerCallback } from '../../scripting/index';
 
 import { DocumentFragmentImpl } from './document-fragment';
 import type { ElementImpl } from './element';
@@ -18,6 +18,9 @@ import type { CustomElementRegistryImpl } from './html/custom-elements/index';
 /** Root of an element's shadow tree and its event propagation boundary. */
 // https://dom.spec.whatwg.org/#interface-shadowroot
 export class ShadowRootImpl extends DocumentFragmentImpl {
+  /** Supported handler names shared by all shadow roots. */
+  static #handlerDefinitions = new Map([['onslotchange', 'slotchange']]);
+
   /** Host element whose shadow tree this root contains. */
   declare host: ElementImpl;
   /** Whether the host exposes this root through its shadowRoot attribute. */
@@ -38,13 +41,13 @@ export class ShadowRootImpl extends DocumentFragmentImpl {
   customElementRegistry: CustomElementRegistryImpl | null = null;
   /** Whether adoption must preserve an explicitly absent registry. */
   keepCustomElementRegistryNull = false;
+  /** IDL handler registration shares the ordinary event listener ordering. */
+  override eventHandlers: EventHandlerMap = new EventHandlerMap(this, ShadowRootImpl.#handlerDefinitions);
 
   /** Focus and style-sheet behavior shared with documents. */
   #documentOrShadowRootMixin: DocumentOrShadowRootMixin;
   /** Retained collection identities, created only when this root participates in styling. */
   #styleScope: TreeScope | undefined;
-  /** IDL handler registration shares the ordinary event listener ordering. */
-  #eventHandlers = new EventHandlerMap(this, [{ name: 'onslotchange', type: 'slotchange' }]);
 
   constructor(host: ElementImpl, mode: ShadowRootMode) {
     super(host.nodeDocument, host);
@@ -58,11 +61,11 @@ export class ShadowRootImpl extends DocumentFragmentImpl {
 
   /** Handler for slot-change events bubbling through this root. */
   get onslotchange(): EventHandlerCallback | null {
-    return this.#eventHandlers.get('onslotchange');
+    return this.eventHandlers.get('onslotchange');
   }
 
   set onslotchange(callback: EventHandlerCallback | null) {
-    this.#eventHandlers.set('onslotchange', callback);
+    this.eventHandlers.set('onslotchange', callback);
   }
 
   /** Focused element visible within this shadow tree. */

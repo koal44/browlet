@@ -6,8 +6,8 @@ import {
 import { areSameOrigin, urlsEqual, type URLRecord } from '../../../url/index';
 import { FormDataImpl, type FormDataEntry } from '../../../xhr/index';
 
-import { eventHandlerAttr, EventHandlerMap, type EventHandlerCallback } from '../../scripting/index';
 import { EventTargetImpl } from '../../dom/events/index';
+import { eventHandlerAttr, EventHandlerMap, type EventHandlerCallback } from '../../scripting/index';
 import type { ElementImpl } from '../../dom/nodes/index';
 import { SourceSnapshotParams } from '../navigation/state/index';
 import type { BrowletEnvironment } from '../../environment/index';
@@ -26,6 +26,12 @@ import { NavigationPrecommitControllerImpl } from './navigation-precommit-contro
 /** Window-owned view of contiguous same-origin session history. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#navigation-interface
 export class NavigationImpl extends EventTargetImpl {
+  /** Supported handler names shared by all Navigation objects. */
+  static #handlerDefinitions = new Map([
+    ['onnavigate', 'navigate'], ['onnavigatesuccess', 'navigatesuccess'],
+    ['onnavigateerror', 'navigateerror'], ['oncurrententrychange', 'currententrychange'],
+  ]);
+
   declare env: BrowletEnvironment;
   /** Realm-owned entries; history application supplies their session-history records. */
   entryList: NavigationHistoryEntryImpl[] = [];
@@ -48,12 +54,7 @@ export class NavigationImpl extends EventTargetImpl {
   /** Traversal requests awaiting event firing, in insertion order by destination key. */
   upcomingTraverseAPIMethodTrackers = new Map<string, NavigationAPIMethodTracker>();
   /** Attribute listeners for navigation requests, completion, and current-entry changes. */
-  #eventHandlers = new EventHandlerMap(this, [
-    { name: 'onnavigate', type: 'navigate' },
-    { name: 'onnavigatesuccess', type: 'navigatesuccess' },
-    { name: 'onnavigateerror', type: 'navigateerror' },
-    { name: 'oncurrententrychange', type: 'currententrychange' },
-  ]);
+  override eventHandlers: EventHandlerMap = new EventHandlerMap(this, NavigationImpl.#handlerDefinitions);
 
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#navigation-current-entry
   get currentEntry(): NavigationHistoryEntryImpl | null {
@@ -76,17 +77,17 @@ export class NavigationImpl extends EventTargetImpl {
     return this.currentEntryIndex !== this.entryList.length - 1;
   }
 
-  get onnavigate(): EventHandlerCallback | null { return this.#eventHandlers.get('onnavigate'); }
-  set onnavigate(callback: EventHandlerCallback | null) { this.#eventHandlers.set('onnavigate', callback); }
+  get onnavigate(): EventHandlerCallback | null { return this.eventHandlers.get('onnavigate'); }
+  set onnavigate(callback: EventHandlerCallback | null) { this.eventHandlers.set('onnavigate', callback); }
 
-  get onnavigatesuccess(): EventHandlerCallback | null { return this.#eventHandlers.get('onnavigatesuccess'); }
-  set onnavigatesuccess(callback: EventHandlerCallback | null) { this.#eventHandlers.set('onnavigatesuccess', callback); }
+  get onnavigatesuccess(): EventHandlerCallback | null { return this.eventHandlers.get('onnavigatesuccess'); }
+  set onnavigatesuccess(callback: EventHandlerCallback | null) { this.eventHandlers.set('onnavigatesuccess', callback); }
 
-  get onnavigateerror(): EventHandlerCallback | null { return this.#eventHandlers.get('onnavigateerror'); }
-  set onnavigateerror(callback: EventHandlerCallback | null) { this.#eventHandlers.set('onnavigateerror', callback); }
+  get onnavigateerror(): EventHandlerCallback | null { return this.eventHandlers.get('onnavigateerror'); }
+  set onnavigateerror(callback: EventHandlerCallback | null) { this.eventHandlers.set('onnavigateerror', callback); }
 
-  get oncurrententrychange(): EventHandlerCallback | null { return this.#eventHandlers.get('oncurrententrychange'); }
-  set oncurrententrychange(callback: EventHandlerCallback | null) { this.#eventHandlers.set('oncurrententrychange', callback); }
+  get oncurrententrychange(): EventHandlerCallback | null { return this.eventHandlers.get('oncurrententrychange'); }
+  set oncurrententrychange(callback: EventHandlerCallback | null) { this.eventHandlers.set('oncurrententrychange', callback); }
 
   /** Cancel the active event and reset its focus and scroll bookkeeping. */
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#abort-the-ongoing-navigation

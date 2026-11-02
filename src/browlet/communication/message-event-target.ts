@@ -1,18 +1,20 @@
 import { defineInterfaceMixin } from '../../web-idl/core/index';
 
-import { eventHandlerAttr, EventHandlerMap, type EventHandlerCallback } from '../scripting/index';
-import type { EventTargetImpl } from '../dom/events/index';
+import { eventHandlerAttr, type EventHandlerMap, type EventHandlerCallback } from '../scripting/index';
 
 /** Event-handler attributes shared by ports and worker messaging targets. */
 // https://html.spec.whatwg.org/multipage/web-messaging.html#messageeventtarget
 export class MessageEventTargetMixin {
+  /** Messaging names supplied when an includer constructs its handler map. */
+  static handlerDefinitions = new Map([
+    ['onmessage', 'message'], ['onmessageerror', 'messageerror'],
+  ]);
+
+  /** This messaging target's shared handler map. */
   #handlers: EventHandlerMap;
 
-  constructor(target: EventTargetImpl) {
-    this.#handlers = new EventHandlerMap(target, [
-      { name: 'onmessage', type: 'message' },
-      { name: 'onmessageerror', type: 'messageerror' },
-    ]);
+  constructor(handlers: EventHandlerMap) {
+    this.#handlers = handlers;
   }
 
   get onmessage(): EventHandlerCallback | null { return this.#handlers.get('onmessage'); }

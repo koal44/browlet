@@ -11,12 +11,12 @@ import { styleletIDLDefinitions } from '../../../stylelet/index';
 import { domHighResTimeStampIDL, epochTimeStampIDL } from '../../timing/index';
 import { webAssemblyIDLDefinitions } from '../../webassembly/index';
 import {
+  errorEventIDL, errorEventInitIDL, promiseRejectionEventIDL, promiseRejectionEventInitIDL,
+} from '../../dom/events/index';
+import {
   eventHandlerIDL, eventHandlerNonNullIDL, onErrorEventHandlerIDL, onErrorEventHandlerNonNullIDL,
   globalEventHandlersIDL, windowEventHandlersIDL,
 } from '../../scripting/index';
-import {
-  errorEventIDL, errorEventInitIDL, promiseRejectionEventIDL, promiseRejectionEventInitIDL,
-} from '../../dom/events/index';
 import {
   reportIDL, reportBodyIDL, testReportBodyIDL, reportingObserverIDL, reportingObserverCallbackIDL,
   reportingObserverOptionsIDL, reportListIDL,
@@ -34,7 +34,7 @@ import { trustedTypesIDLDefinitions } from '../../browsing/policy/trusted-types/
 import { historyIDL, scrollRestorationIDL } from '../../browsing/history/index';
 import {
   htmlDocumentIDL, documentReadyStateIDL, documentVisibilityStateIDL, htmlOrSVGScriptElementIDL,
-  htmlDocumentOrShadowRootIDL, htmlAllCollectionIDL,
+  htmlDocumentOrShadowRootIDL, htmlAllCollectionIDL, documentIncludesGlobalEventHandlersIDL,
 } from '../../dom/nodes/index';
 import { htmlIDLDefinitions } from '../../dom/nodes/html/index';
 import { mathMLIDLDefinitions } from '../../dom/nodes/mathml/index';
@@ -71,6 +71,7 @@ export const browletDefinitions = [
   documentVisibilityStateIDL,
   htmlOrSVGScriptElementIDL,
   htmlDocumentIDL,
+  documentIncludesGlobalEventHandlersIDL,
   htmlDocumentOrShadowRootIDL,
   htmlAllCollectionIDL,
   ...htmlIDLDefinitions,

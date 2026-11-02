@@ -1,4 +1,4 @@
-import type { EventListenerValue } from '../dom/events/index';
+import type { EventListenerCallback } from '../dom/events/index';
 
 import { WorkerGlobalScopeImpl } from './worker-global-scope';
 
@@ -13,7 +13,7 @@ export abstract class ServiceWorkerGlobalScopeImpl extends WorkerGlobalScopeImpl
   protected abstract eventTypesToHandle: ReadonlySet<string>;
 
   // https://dom.spec.whatwg.org/#legacy-obtain-service-worker-fetch-event-listener-callbacks
-  getFetchEventListenerCallbacks(): EventListenerValue[] {
+  getFetchEventListenerCallbacks(): EventListenerCallback[] {
     return this.getEventListenerCallbacks('fetch');
   }
 

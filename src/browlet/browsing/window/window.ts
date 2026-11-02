@@ -8,13 +8,13 @@ import type { FetchRequestInfo, FetchRequestInit, ResponseImpl } from '../../../
 import type { CSSStylePropertiesImpl } from '../../../stylelet/index';
 
 import { ElementTag } from '../../dom/nodes/element-definitions/index';
+import { type EventImpl, EventTargetImpl } from '../../dom/events/index';
 import {
   ImportMap, mergeExistingAndNewImportMaps, domManipulationTaskSource,
-  GlobalEventHandlersMixin, WindowEventHandlersMixin, type EventHandlerCallback,
+  EventHandlerMap, globalEventHandlers, windowEventHandlers,
   type ImportMapParseResult, type BrowletGlobalObject, type SpecifierResolutionRecord,
   type SpeculationRulesParseResult, type TimerAction,
 } from '../../scripting/index';
-import { type EventImpl, EventTargetImpl } from '../../dom/events/index';
 import type { TrustedTypePolicyFactoryImpl } from '../policy/trusted-types/index';
 import type { HistoryImpl } from '../history/index';
 import { HTMLCollectionImpl, type DocumentImpl, type ElementImpl } from '../../dom/nodes/index';
@@ -39,6 +39,9 @@ import { WindowIdleCallbacks, type IdleRequestCallback, type IdleRequestOptions 
 /** Owns a document global and forwards shared browser facilities to its global-scope mixin. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-window-object
 export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
+  /** Complete supported-name table shared by all Windows. */
+  static #handlerDefinitions = new Map([...globalEventHandlers, ...windowEventHandlers]);
+
   declare env: WindowEnvironment;
   // HTML §8.1.3.3 — internal global state, retained when the associated Document changes.
   // TODO: Connect engine rejection notifications, checkpoint delivery, and import-map processing.
@@ -49,6 +52,8 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   resolvedModuleSet = new Set<SpecifierResolutionRecord>();
   /** Event currently being invoked in this Window, restored after each listener. @deprecated */
   event: EventImpl | undefined = undefined;
+  /** Shared map populated by this Window's handler mixins. */
+  override eventHandlers: EventHandlerMap = new EventHandlerMap(this, WindowImpl.#handlerDefinitions);
   /** Stable Location object; Web IDL forwards author assignments to its href. */
   readonly location: LocationImpl;
   /** Location-bar object retained even if its public attribute is replaced. */
@@ -86,10 +91,6 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   #namedCollections = new Map<string, HTMLCollectionImpl>();
   /** Shared global facilities installed during environment composition. */
   #globalScopeMixin: WindowOrWorkerGlobalScopeMixin | null = null;
-  /** Shared element/document/global handler attributes owned by this Window. */
-  #globalEventHandlersMixin: GlobalEventHandlersMixin;
-  /** Window-specific event-handler attributes backed by this Window's listener registrations. */
-  #windowEventHandlersMixin: WindowEventHandlersMixin;
   /** Session-storage access for this Window's current Document. */
   #windowSessionStorageMixin: WindowSessionStorageMixin;
   /** Local-storage access for this Window's current Document. */
@@ -108,8 +109,6 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
     this.navigator = new NavigatorImpl(env);
     this.navigation = new NavigationImpl(env);
     this.idleCallbacks = new WindowIdleCallbacks(env);
-    this.#globalEventHandlersMixin = new GlobalEventHandlersMixin(this);
-    this.#windowEventHandlersMixin = new WindowEventHandlersMixin(this);
     this.#windowSessionStorageMixin = new WindowSessionStorageMixin(this);
     this.#windowLocalStorageMixin = new WindowLocalStorageMixin(this);
   }
@@ -234,14 +233,6 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   get localStorage(): StorageImpl {
     return this.#windowLocalStorageMixin.localStorage;
   }
-
-  /** Handler for runtime errors and explicitly dispatched error events. */
-  get onerror(): EventHandlerCallback | null { return this.#globalEventHandlersMixin.onerror; }
-  set onerror(callback: EventHandlerCallback | null) { this.#globalEventHandlersMixin.onerror = callback; }
-
-  /** Handler for changes made through other matching Storage objects. */
-  get onstorage(): EventHandlerCallback | null { return this.#windowEventHandlersMixin.onstorage; }
-  set onstorage(callback: EventHandlerCallback | null) { this.#windowEventHandlersMixin.onstorage = callback; }
 
   /** Whether this Window currently has unconsumed transient user activation. */
   // https://html.spec.whatwg.org/multipage/interaction.html#transient-activation

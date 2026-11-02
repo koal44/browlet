@@ -8,10 +8,10 @@ import { TextDecoderImpl, utf8Encode } from '../../encoding/index';
 import { obtainURLOrigin, serializeURL, type URLRecord } from '../../url/index';
 import { fetch, isFilteredResponse, type FetchController, type FetchRequest, type FetchResponse } from '../../fetch/index';
 
+import { EventTargetImpl } from '../dom/events/index';
 import {
   createTaskSource, eventHandlerAttr, EventHandlerMap, type EventHandlerCallback,
 } from '../scripting/index';
-import { EventTargetImpl } from '../dom/events/index';
 import type { BrowletEnvironment } from '../environment/index';
 
 import { MessageEventImpl } from './message-event';
@@ -19,20 +19,22 @@ import { MessageEventImpl } from './message-event';
 /** Receives a UTF-8 event stream and reconnects until closed or rejected by the server. */
 // https://html.spec.whatwg.org/multipage/server-sent-events.html#the-eventsource-interface
 export class EventSourceImpl extends EventTargetImpl {
+  /** Supported handler names shared by all event sources. */
+  static #handlerDefinitions = new Map([
+    ['onopen', 'open'], ['onmessage', 'message'], ['onerror', 'error'],
+  ]);
+
   declare env: BrowletEnvironment;
   withCredentials: boolean;
   readyState = EventSourceState.Connecting;
+  /** Connection and message handlers backed by this source's listener registrations. */
+  override eventHandlers: EventHandlerMap = new EventHandlerMap(this, EventSourceImpl.#handlerDefinitions);
   #url: URLRecord;
   #request: FetchRequest;
   #controller?: FetchController;
   #reconnectionTime = 3000;
   #lastEventID = '';
   #retryTimer?: TaskHandle;
-  #eventHandlers = new EventHandlerMap(this, [
-    { name: 'onopen', type: 'open' },
-    { name: 'onmessage', type: 'message' },
-    { name: 'onerror', type: 'error' },
-  ]);
 
   constructor(url: string, eventSourceInitDict: EventSourceInit, env: BrowletEnvironment) {
     super(env);
@@ -53,14 +55,14 @@ export class EventSourceImpl extends EventTargetImpl {
 
   get url(): string { return serializeURL(this.#url); }
 
-  get onopen(): EventHandlerCallback | null { return this.#eventHandlers.get('onopen'); }
-  set onopen(callback: EventHandlerCallback | null) { this.#eventHandlers.set('onopen', callback); }
+  get onopen(): EventHandlerCallback | null { return this.eventHandlers.get('onopen'); }
+  set onopen(callback: EventHandlerCallback | null) { this.eventHandlers.set('onopen', callback); }
 
-  get onmessage(): EventHandlerCallback | null { return this.#eventHandlers.get('onmessage'); }
-  set onmessage(callback: EventHandlerCallback | null) { this.#eventHandlers.set('onmessage', callback); }
+  get onmessage(): EventHandlerCallback | null { return this.eventHandlers.get('onmessage'); }
+  set onmessage(callback: EventHandlerCallback | null) { this.eventHandlers.set('onmessage', callback); }
 
-  get onerror(): EventHandlerCallback | null { return this.#eventHandlers.get('onerror'); }
-  set onerror(callback: EventHandlerCallback | null) { this.#eventHandlers.set('onerror', callback); }
+  get onerror(): EventHandlerCallback | null { return this.eventHandlers.get('onerror'); }
+  set onerror(callback: EventHandlerCallback | null) { this.eventHandlers.set('onerror', callback); }
 
   /** Also used by HTML's forcibly-close steps during permanent document cleanup. */
   // https://html.spec.whatwg.org/multipage/server-sent-events.html#dom-eventsource-close

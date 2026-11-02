@@ -78,10 +78,11 @@ evaluation-phase `HostLoadImportedModule`. The available §8.1.7 scheduling
 operations are implemented; its [remaining dependencies](browlet/scripting/ROADMAP.md#outstanding-event-loop-work)
 retain their owner and engine boundaries. §8.1.8.1's existing IDL event handlers
 now check target automation policy and callback Document activity. Window's
-`onerror` also supplies its five arguments and return-true cancellation. Continue
+`onerror` also supplies its five arguments and return-true cancellation. Body and
+frameset `onstorage` now forward to their current active Document's Window. Continue
 within [event handlers](browlet/scripting/ROADMAP.md#html-8181-event-handler-idl-invocation)
-with target forwarding, content attributes, and beforeunload processing;
-the subsection is not complete.
+with content attributes and beforeunload processing; the subsection is not complete.
+Broader handler declarations are §8.1.8.2.
 Source/deferred imports and the HTML Wasm parser remain explicit boundaries.
 Later host-hook algorithms must be connected before judging
 the complete model; the uncertain cross-realm observer test is skipped.

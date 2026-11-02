@@ -18,6 +18,21 @@ import { itPassesWith } from '../test-runtime';
 
 afterEach(() => vi.restoreAllMocks());
 
+// HTML's GlobalEventHandlers mixin, shared by the Document and HTMLElement inventories below.
+const globalEventHandlerNames = [
+  'onabort', 'onauxclick', 'onbeforeinput', 'onbeforematch', 'onbeforetoggle', 'onblur', 'oncancel',
+  'oncanplay', 'oncanplaythrough', 'onchange', 'onclick', 'onclose', 'oncommand', 'oncontextlost',
+  'oncontextmenu', 'oncontextrestored', 'oncopy', 'oncuechange', 'oncut', 'ondblclick', 'ondrag',
+  'ondragend', 'ondragenter', 'ondragleave', 'ondragover', 'ondragstart', 'ondrop', 'ondurationchange',
+  'onemptied', 'onended', 'onerror', 'onfocus', 'onformdata', 'oninput', 'oninvalid', 'onkeydown',
+  'onkeypress', 'onkeyup', 'onload', 'onloadeddata', 'onloadedmetadata', 'onloadstart', 'onmousedown',
+  'onmouseenter', 'onmouseleave', 'onmousemove', 'onmouseout', 'onmouseover', 'onmouseup', 'onpaste',
+  'onpause', 'onplay', 'onplaying', 'onprogress', 'onratechange', 'onreset', 'onresize', 'onscroll',
+  'onscrollend', 'onsecuritypolicyviolation', 'onseeked', 'onseeking', 'onselect', 'onslotchange',
+  'onstalled', 'onsubmit', 'onsuspend', 'ontimeupdate', 'ontoggle', 'onvolumechange', 'onwaiting',
+  'onwebkitanimationend', 'onwebkitanimationiteration', 'onwebkitanimationstart', 'onwebkittransitionend', 'onwheel',
+];
+
 describe('Browlet DOM binding', () => {
   it('projects the Window global through its Web IDL interface', () => {
     const browlet = createBrowlet();
@@ -375,6 +390,7 @@ describe('Browlet DOM binding', () => {
       'getElementsByTagName',
       'getElementsByTagNameNS',
       'head',
+      'hidden',
       'images',
       'implementation',
       'importNode',
@@ -383,7 +399,7 @@ describe('Browlet DOM binding', () => {
       'lastModified',
       'links',
       'moveBefore',
-      'onreadystatechange',
+      ...[...globalEventHandlerNames, 'onreadystatechange', 'onvisibilitychange'].sort(),
       'permissionsPolicy',
       'plugins',
       'prepend',
@@ -397,6 +413,7 @@ describe('Browlet DOM binding', () => {
       Symbol.unscopables,
       'title',
       'URL',
+      'visibilityState',
       'write',
     ]);
     expect(ownKeys(getPrototype(browlet, 'Element'))).toEqual([
@@ -465,6 +482,7 @@ describe('Browlet DOM binding', () => {
       'inert',
       'lang',
       'nonce',
+      ...globalEventHandlerNames,
       'style',
       'title',
       'translate',

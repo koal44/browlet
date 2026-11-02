@@ -1,4 +1,4 @@
-export { HTMLFrameSetElementImpl, htmlFrameSetElementIDL } from './frameset';
+export { HTMLFrameSetElementImpl, htmlFrameSetElementIDL, htmlFrameSetElementIncludesWindowEventHandlersIDL } from './frameset';
 export { HTMLFrameElementImpl, htmlFrameElementIDL } from './frame';
 export { HTMLDirectoryElementImpl, htmlDirectoryElementIDL } from './dir';
 export { HTMLFontElementImpl, htmlFontElementIDL } from './font';

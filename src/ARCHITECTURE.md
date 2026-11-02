@@ -386,8 +386,9 @@ Module-specific context/async restoration remains a separate dependency.
 `BrowletEnvironment.reportException()` combines that global's reporting flag with
 DOM ErrorEvent dispatch. The realm's existing reporting callback and Window's
 `reportError()` method forward directly to it. ErrorEvent lives beside the
-other DOM events, keeping scripting foundations independent of DOM implementation
-imports. Classic runners report before their modeled realm context is popped,
+other DOM events; the environment owns its allocation and dispatch rather than
+the scripting reporter. Classic runners report before their modeled realm
+context is popped,
 but that context has no script; parse failures also have no script record.
 They therefore pass their script explicitly. Other callers use the modeled
 running-script lookup. An unattached browser realm rejects reporting with an
@@ -1069,9 +1070,31 @@ components do not import it.
 Browlet's [timing foundation](browlet/timing/README.md) supplies shared clocks,
 precision, and time origins without importing DOM or Performance. The Performance
 API consumes timing and DOM events. Event, EventTarget, and the UI Events
-specializations form one component in `browlet/dom/events`; its implementation
-modules import each other directly. XHR's ProgressEvent lives in browser
-integration and reuses that event machinery.
+specializations form one component in `browlet/dom/events`, below HTML scripting;
+its implementation modules import each other directly. HTML handler activation
+uses its `EventListenerCallback` with Binding-supplied callback-realm metadata, so DOM
+owns current-event bookkeeping for handlers and ordinary listeners alike. The
+event component retains only type references to HTML/node owners. XHR's
+ProgressEvent lives in browser integration and reuses that event machinery.
+
+HTML's `eraseAllEventListenersAndHandlers()` is an EventTarget operation.
+Each target retains one nullable `eventHandlers` association. Concrete targets
+construct their map with optional initial handler definitions. Window and
+MessagePort pass their maps to their handler mixins, which add supported names
+through `define()`. Window's handler mixins share one map. The inherited erasure
+method deactivates the associated map before removing listeners. DOM retains only
+a type reference to HTML's map, with no runtime import or handler registry. Targets without
+handlers allocate no map. DOM's separate `removeAllEventListeners()` operation
+continues to remove registrations only. The later `document.open()` algorithm owns
+selecting the Document's shadow-including inclusive descendants and associated Window.
+
+Handler target selection is an EventTarget operation overridden by HTMLElement
+for body/frameset forwarding. It resolves the current node Document on access,
+so adoption changes the alias without moving or erasing the old Window's handler.
+Forwarded handlers have no element-owned map entry. Their callback adapter checks
+the actual invocation target's environment, independently of the element's binding
+realm and the callback's realm. Currently `onstorage` uses this path; other handler
+declarations and content attributes remain in the scripting roadmap.
 
 Web Storage's `storage/events` is a separate component below DOM nodes and
 `storage`. Document's legacy event factory imports that narrow entry point;
@@ -1087,9 +1110,9 @@ UserAgent weakly tracks live Storage objects for broadcast discovery, including
 objects retained after Document replacement. Mutations queue recipient-owned
 StorageEvents through the existing DOM-manipulation task source; the registry
 does not retain storage maps or introduce another scheduler.
-Window composes `WindowEventHandlersMixin` for its `onstorage` IDL attribute.
-The mixin reuses `EventHandlerMap` for callbacks and listener registration;
-it does not create storage objects or add another delivery path.
+WindowEventHandlers binds `onstorage` to Window's existing `EventHandlerMap`
+for callbacks and listener registration. The declaration-only mixin does not
+create storage objects or add another delivery path.
 The EventHandler declaration's callback adapter checks the receiving environment's
 BiDi policy and the callback realm's Document activity before invocation. Web IDL
 retains that callback's realm and author identity; the handler map does not receive

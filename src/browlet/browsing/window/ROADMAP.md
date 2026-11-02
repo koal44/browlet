@@ -126,7 +126,7 @@ navigable association, and stable proxy/defaultView identity.
 | `originAgentCluster` | Implemented and exposed in the [§7.1.2 audit](../ROADMAP.md#same-origin-relaxation-origin-and-origin-keyed-clusters). |
 | `alert` overloads, `confirm`, `prompt`, `print` | HTML's simple-dialog and printing algorithms; user-agent prompt/printing effects and Window bindings remain unfinished. |
 | `postMessage` overloads and `WindowPostMessageOptions` | [Communication](../../communication/ROADMAP.md), HTML §9.3; integrated declarations, target-origin handling, and delivery use the shared structured-data algorithms. Caller attribution and WindowProxy descriptor dispatch remain dependencies. |
-| GlobalEventHandlers and WindowEventHandlers includes | Window composes GlobalEventHandlers (`onerror`) and WindowEventHandlers (`onstorage`) over the shared handler machinery. Other handlers, element forwarding, and content attributes remain [scripting](../../scripting/ROADMAP.md) and element dependencies. |
+| GlobalEventHandlers and WindowEventHandlers includes | HTML's general and ordinary Window handlers use the shared map, with body/frameset forwarding and lazy content attributes. Beforeunload's special callback and return-value rules remain [scripting](../../scripting/ROADMAP.md) work pending consolidation of BeforeUnloadEvent. |
 | Obsolete Window partial | [Legacy HTML](../../html/legacy/ROADMAP.md); the IDL's reference does not bring those algorithms into this pass. |
 
 Window script settings are audited in §7.2.2.6 below. Complete proxy behavior
@@ -1953,7 +1953,8 @@ the shared structured-data algorithms and target agent's event loop. Its
 `CrossOrigin` metadata participates in Binding's invocation checks. Full
 WindowProxy property access must select the caller-bound descriptor helpers for
 cross-origin calls; the permissive proxy currently returns the target's method instead.
-WindowEventHandlers currently supplies `onstorage`; `onmessage`/`onmessageerror` remain unimplemented.
+WindowEventHandlers now supplies `onmessage`/`onmessageerror` along with the other
+ordinary Window handlers. Beforeunload's special processing remains pending.
 See the [§9.3 dependencies](../../communication/ROADMAP.md#93-cross-document-messaging).
 Window now owns activation timestamps, the history-action predicate, and
 history-action consumption across the top-level traversable. Input notification,

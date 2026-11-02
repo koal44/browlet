@@ -54,6 +54,19 @@ has addition/removal and default-passive hooks. A concrete Window, input,
 worker, or service-worker consumer should implement the behavior it owns; do
 not add a generic `listener-observation.ts` registry in advance.
 
+HTML §8.1.8.1's `eraseAllEventListenersAndHandlers()` uses the existing removal
+path after deactivating the target's shared `eventHandlers` map. Concrete targets
+construct their map with one complete shared definition table; records are
+allocated on first assignment or content-attribute input. Definition groups are
+composed once per target type. GlobalEventHandlers and WindowEventHandlers are now
+declaration-only: their bindings use the target resolver and map directly.
+Erasure is inherited without
+target-specific overrides. The HTML map is a type-only dependency, and targets
+without handlers retain null. The separate DOM
+`removeAllEventListeners()` operation does not reset handler values. Selection
+of descendants and the associated Window remains with `document.open()` in
+HTML §8.4; see the [handler audit](../../scripting/ROADMAP.md#erasing-listeners-and-handlers).
+
 ## Remaining closure
 
 | Owner | Contract | Specification |

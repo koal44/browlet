@@ -5,6 +5,7 @@ import {
   DOMExceptionNames, DOMExceptionImpl,
 } from '../../../web-idl/core/index';
 
+import type { EventHandlerMap } from '../../scripting/index';
 import type { AbortSignalImpl } from '../abort/index';
 import type { ShadowRootMode } from '../nodes/index';
 import type { DOMEnvironment, DOMRealm, EventImplConstructor } from '../environment';
@@ -17,6 +18,8 @@ import { MouseEventImpl } from './ui-event';
 export class EventTargetImpl {
   /** Environment that owns this target's event allocations. */
   env: DOMEnvironment;
+  /** Shared HTML handler state, allocated by targets that expose handler attributes. */
+  eventHandlers: EventHandlerMap | null = null;
   /** Registrations in insertion order, including their signal cleanup handles. */
   #eventListenerList: EventListenerRecord[] = [];
 
@@ -34,7 +37,7 @@ export class EventTargetImpl {
   // https://dom.spec.whatwg.org/#dom-eventtarget-addeventlistener
   addEventListener(
     type: string,
-    callback: EventListenerValue | EventListenerCallback | null,
+    callback: EventListenerCallback | EventListenerSteps | null,
     options: AddEventListenerOptions | boolean = { capture: false, once: false },
   ): void {
     // https://dom.spec.whatwg.org/#event-flatten-more
@@ -43,7 +46,7 @@ export class EventTargetImpl {
     const listener: EventListenerRecord = {
       abortAlgorithm: null,
       type,
-      callback: callback === null ? null : EventListenerValue.from(callback),
+      callback: callback === null ? null : EventListenerCallback.from(callback),
       capture,
       passive,
       once,
@@ -58,17 +61,17 @@ export class EventTargetImpl {
   // https://dom.spec.whatwg.org/#dom-eventtarget-removeeventlistener
   removeEventListener(
     type: string,
-    callback: EventListenerValue | EventListenerCallback | null,
+    callback: EventListenerCallback | EventListenerSteps | null,
     options: EventListenerOptions | boolean = { capture: false },
   ): void {
     // https://dom.spec.whatwg.org/#concept-flatten-options
     const capture = typeof options === 'boolean' ? options : options.capture;
     const callbackValue = callback === null
       ? null
-      : EventListenerValue.from(callback);
+      : EventListenerCallback.from(callback);
     const listener = this.#eventListenerList.find((candidate) =>
       candidate.type === type &&
-      EventListenerValue.same(candidate.callback, callbackValue) &&
+      EventListenerCallback.same(candidate.callback, callbackValue) &&
       candidate.capture === capture);
 
     if (listener) this.#removeListener(listener);
@@ -113,6 +116,19 @@ export class EventTargetImpl {
     }
   }
 
+  /** Reset this target's handler values and remove all listener registrations. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#erase-all-event-listeners-and-handlers
+  eraseAllEventListenersAndHandlers(): void {
+    this.eventHandlers?.deactivateAll();
+    this.removeAllEventListeners();
+  }
+
+  /** Target that owns a named handler; HTML body and frameset elements can forward to a Window. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#determining-the-target-of-an-event-handler
+  getEventHandlerTarget(_name: string): EventTargetImpl | null {
+    return this;
+  }
+
   /** The next dispatch target; subclasses define their event ancestry. */
   getEventParent(_event: EventImpl): EventTargetImpl | null {
     return null;
@@ -120,8 +136,8 @@ export class EventTargetImpl {
 
   /** Return the retained listener callback values for Service Worker's legacy lookup. */
   // https://dom.spec.whatwg.org/#legacy-obtain-service-worker-fetch-event-listener-callbacks
-  getEventListenerCallbacks(type: string): EventListenerValue[] {
-    const callbacks: EventListenerValue[] = [];
+  getEventListenerCallbacks(type: string): EventListenerCallback[] {
+    const callbacks: EventListenerCallback[] = [];
 
     for (const listener of this.#eventListenerList) {
       if (listener.type === type && listener.callback !== null) {
@@ -499,7 +515,7 @@ export class EventTargetImpl {
 
     const duplicate = this.#eventListenerList.some((candidate) =>
       candidate.type === listener.type &&
-      EventListenerValue.same(candidate.callback, listener.callback) &&
+      EventListenerCallback.same(candidate.callback, listener.callback) &&
       candidate.capture === listener.capture);
 
     if (duplicate) return;
@@ -583,7 +599,7 @@ export const eventListenerIDL = defineCallbackInterface<DOMEnvironment>({
   // Event dispatch retains the callback realm and original object identity in
   // addition to the callback-interface invocation steps.
   overrideCbConversion(_env, cbValue) {
-    return new EventListenerValue(
+    return new EventListenerCallback(
       cbValue.object,
       cbValue.realm,
       (event, currentTarget) => {
@@ -632,7 +648,7 @@ export const addEventListenerOptionsIDL = defineDictionary({
   ],
 });
 
-type EventListenerCallback = (this: EventTargetImpl, event: EventImpl) => void;
+type EventListenerSteps = (this: EventTargetImpl, event: EventImpl) => void;
 
 // https://dom.spec.whatwg.org/#concept-event-listener
 type EventListenerRecord = {
@@ -641,7 +657,7 @@ type EventListenerRecord = {
   /** Event name matched against event.type. */
   type: string;
   /** Listener identity and invocation steps; null callbacks are not registered. */
-  callback: EventListenerValue | null;
+  callback: EventListenerCallback | null;
   /** Selects the capturing pass rather than the bubbling pass. */
   capture: boolean;
   /** Prevents cancellation; null selects the target's default passive policy. */
@@ -681,11 +697,11 @@ const LEGACY_EVENT_TYPES = new Map([
 ]);
 
 /** Retains a listener's identity, callback realm, and invocation steps. */
-export class EventListenerValue {
+export class EventListenerCallback {
   /** Original callback object used to match registrations and removals. */
   readonly object: object;
-  /** Callback realm, absent for direct implementation listeners. */
-  readonly realm: DOMRealm | undefined;
+  /** Callback realm; handler replacement can update it without re-registering this listener. */
+  realm: DOMRealm | undefined;
   #invoke: (
     event: EventImpl,
     currentTarget: EventTargetImpl,
@@ -701,10 +717,10 @@ export class EventListenerValue {
     this.#invoke = invoke;
   }
 
-  static from(callback: EventListenerValue | EventListenerCallback): EventListenerValue {
-    if (callback instanceof EventListenerValue) return callback;
+  static from(callback: EventListenerCallback | EventListenerSteps): EventListenerCallback {
+    if (callback instanceof EventListenerCallback) return callback;
 
-    return new EventListenerValue(
+    return new EventListenerCallback(
       callback,
       undefined,
       (event, currentTarget) => callback.call(currentTarget, event),
@@ -712,7 +728,7 @@ export class EventListenerValue {
   }
 
   /** Compare the original callback objects retained by listener conversions. */
-  static same(left: EventListenerValue | null, right: EventListenerValue | null): boolean {
+  static same(left: EventListenerCallback | null, right: EventListenerCallback | null): boolean {
     if (left === null || right === null) return left === right;
     return left.object === right.object;
   }

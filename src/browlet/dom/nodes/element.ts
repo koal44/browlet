@@ -10,8 +10,8 @@ import { isValidAttributeLocalName, validateAndExtract } from '../infra/index';
 import { ElementTag, type ContentCategory, type ContentModel } from './element-definitions/index';
 import type { LinkStyleMixin } from '../../style/index';
 import { DOMTokenListImpl, type TokenListAttribute } from '../lists/index';
-import type { TaskSource } from '../../scripting/index';
 import type { EventImpl } from '../events/index';
+import type { TaskSource } from '../../scripting/index';
 import type { PermissionsPolicyDirective } from '../../browsing/policy/index';
 import { getTrustedTypeDataForAttribute, type TrustedTypeValue } from '../../browsing/policy/trusted-types/index';
 import type { IntersectionObserverRegistration } from '../intersection-observer/index';
@@ -507,7 +507,7 @@ export class ElementImpl extends NodeImpl {
     this.attributeChanged(localName, oldValue, value, namespaceURI);
   }
 
-  /** Apply element-specific reactions to an attribute change. */
+  /** Apply common attribute reactions, including handlers supported by HTML, SVG, and MathML. */
   // https://dom.spec.whatwg.org/#concept-element-attributes-change-ext
   attributeChanged(
     localName: string, oldValue: string | null, newValue: string | null,

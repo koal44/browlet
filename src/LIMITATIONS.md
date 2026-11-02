@@ -157,9 +157,16 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
 - **HTML event handlers are partially implemented.** Existing IDL handlers retain
   callback identity and listener order, check the target's BiDi scripting policy,
   and skip callbacks whose own Window Document is not fully active. Window's
-  `onerror` uses five arguments and cancels only on boolean `true`. Content
-  attributes, body/frameset forwarding, beforeunload processing,
-  and most GlobalEventHandlers/WindowEventHandlers members remain unfinished.
+  `onerror` uses five arguments and cancels only on boolean `true`. Current-event
+  bookkeeping follows the callback's realm, including handler replacement;
+  Chromium/WebKit agree, while Firefox uses the target's realm. Body/frameset
+  Window handlers and the six Window-reflecting names forward to the current
+  active Document's Window, including after adoption. HTML's GlobalEventHandlers,
+  the ordinary WindowEventHandlers, and Document-only handlers are connected.
+  Beforeunload's special callback conversion and return-value processing remain
+  unfinished, so its attribute is not exposed yet.
+  Internal handler/listener erasure works for existing targets; `document.open()`
+  still needs its §8.4 selection and lifecycle hookup.
   BiDi has no session overrides yet. See the
   [event-handler audit](browlet/scripting/ROADMAP.md#html-8181-event-handler-idl-invocation).
 

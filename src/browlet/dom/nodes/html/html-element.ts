@@ -9,6 +9,8 @@ import { parseOrderedSet, splitOnAsciiWhitespace } from '../../infra/index';
 import { ContentCategory, ElementTag, type ElementSanitization } from '../element-definitions/index';
 import { ElementCSSInlineStyleMixin } from '../../../style/index';
 import { dirAttribute, getMicrodataURLAttribute, isGlobalContentAttribute, translateAttribute } from './attributes/index';
+import type { EventTargetImpl } from '../../events/index';
+import { EventHandlerMap, globalEventHandlers } from '../../../scripting/index';
 
 import { ElementImpl } from '../element';
 import type { NodeImpl } from '../node';
@@ -19,6 +21,16 @@ import { collectItemProperties } from './microdata';
 /** Base implementation for elements in the HTML namespace. */
 // https://html.spec.whatwg.org/multipage/dom.html#htmlelement
 export class HTMLElementImpl extends ElementImpl {
+  // WindowEventHandlers names and the Window-reflecting body element event handler set.
+  // onbeforeunload remains in this target set while its special invocation rules await integration.
+  static #windowHandlerNames = new Set([
+    'onafterprint', 'onbeforeprint', 'onbeforeunload', 'onhashchange', 'onlanguagechange',
+    'onmessage', 'onmessageerror', 'onoffline', 'ononline', 'onpageswap', 'onpagehide',
+    'onpagereveal', 'onpageshow', 'onpopstate', 'onrejectionhandled', 'onstorage',
+    'onunhandledrejection', 'onunload',
+    'onblur', 'onerror', 'onfocus', 'onload', 'onresize', 'onscroll',
+  ]);
+
   static {
     this.prototype.isAllNamedElement = false;
     // Localization must set lang to the target language and recursively process style as CSS.
@@ -39,6 +51,8 @@ export class HTMLElementImpl extends ElementImpl {
 
   /** Shared names whose rendered values determine their own direction when dir is auto. */
   declare directionalityAttributes: string[];
+
+  override eventHandlers: EventHandlerMap = new EventHandlerMap(this, globalEventHandlers);
 
   /** Whether an ancestor's auto-direction scan always skips this element and its descendants. */
   declare protected excludeFromAutoDirection: boolean;
@@ -73,6 +87,17 @@ export class HTMLElementImpl extends ElementImpl {
 
   get style(): CSSStylePropertiesImpl {
     return this.#inlineStyleMixin.style;
+  }
+
+  /** Resolve forwarding from the current node Document, independently of DOM attachment. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#determining-the-target-of-an-event-handler
+  override getEventHandlerTarget(name: string): EventTargetImpl | null {
+    if (this.tag !== ElementTag.HTMLBody && this.tag !== ElementTag.HTMLFrameset) return this;
+    if (!HTMLElementImpl.#windowHandlerNames.has(name)) return this;
+    const document = this.nodeDocument;
+    // Active, not fully active: an inactive ancestor does not change this handler's target.
+    if (document.getNodeNavigable() === null) return null;
+    return document.getRelevantGlobalObject();
   }
 
   /** An HTML element creates an item when its namespace-less itemscope attribute is present. */
@@ -277,6 +302,7 @@ export class HTMLElementImpl extends ElementImpl {
     namespace: string | null,
   ): void {
     super.attributeChanged(localName, oldValue, newValue, namespace);
+
     if (namespace === null && localName === this.#microdataURLAttribute) {
       this.#microdataURLValue = newValue === null ? '' : (this.nodeDocument.encodingParseAndSerializeURL(newValue) ?? '');
     }

@@ -9,31 +9,31 @@ import {
 } from '../../../file/index';
 
 import { unsafeSharedCurrentTime } from '../../timing/index';
-import { EventHandlerMap, eventHandlerAttr, type EventHandlerCallback } from '../../scripting/index';
 import { EventTargetImpl } from '../../dom/events/index';
+import { EventHandlerMap, eventHandlerAttr, type EventHandlerCallback } from '../../scripting/index';
 import { type BrowletEnvironment } from '../../environment/index';
 import { ProgressEventImpl } from '../xhr/index';
 
 /** Reads Blob data asynchronously and dispatches progress and completion events. */
 // https://w3c.github.io/FileAPI/#APIASynch
 export class FileReaderImpl extends EventTargetImpl {
+  /** Supported handler names shared by all readers. */
+  static #handlerDefinitions = new Map([
+    ['onloadstart', 'loadstart'], ['onprogress', 'progress'], ['onload', 'load'],
+    ['onabort', 'abort'], ['onerror', 'error'], ['onloadend', 'loadend'],
+  ]);
+
   /** Owner supplying file-reading task delivery and realm allocation. */
   declare env: BrowletEnvironment;
   /** Packaged contents of the completed read, or null before completion. */
   result: string | ArrayBuffer | null = null;
   /** Retained File API failure, or null before a read fails. */
   error: DOMExceptionImpl | null = null;
+  /** Read lifecycle handlers backed by this reader's listener registrations. */
+  override eventHandlers: EventHandlerMap = new EventHandlerMap(this, FileReaderImpl.#handlerDefinitions);
   #state: FileReaderState = 'empty';
   /** Identity and pending tasks of the read that may still deliver events. */
   #operation: FileReadOperation | null = null;
-  #eventHandlers = new EventHandlerMap(this, [
-    { name: 'onloadstart', type: 'loadstart' },
-    { name: 'onprogress', type: 'progress' },
-    { name: 'onload', type: 'load' },
-    { name: 'onabort', type: 'abort' },
-    { name: 'onerror', type: 'error' },
-    { name: 'onloadend', type: 'loadend' },
-  ]);
 
   constructor(env: BrowletEnvironment) {
     super(env);
@@ -49,51 +49,51 @@ export class FileReaderImpl extends EventTargetImpl {
   }
 
   get onloadstart(): EventHandlerCallback | null {
-    return this.#eventHandlers.get('onloadstart');
+    return this.eventHandlers.get('onloadstart');
   }
 
   set onloadstart(callback: EventHandlerCallback | null) {
-    this.#eventHandlers.set('onloadstart', callback);
+    this.eventHandlers.set('onloadstart', callback);
   }
 
   get onprogress(): EventHandlerCallback | null {
-    return this.#eventHandlers.get('onprogress');
+    return this.eventHandlers.get('onprogress');
   }
 
   set onprogress(callback: EventHandlerCallback | null) {
-    this.#eventHandlers.set('onprogress', callback);
+    this.eventHandlers.set('onprogress', callback);
   }
 
   get onload(): EventHandlerCallback | null {
-    return this.#eventHandlers.get('onload');
+    return this.eventHandlers.get('onload');
   }
 
   set onload(callback: EventHandlerCallback | null) {
-    this.#eventHandlers.set('onload', callback);
+    this.eventHandlers.set('onload', callback);
   }
 
   get onabort(): EventHandlerCallback | null {
-    return this.#eventHandlers.get('onabort');
+    return this.eventHandlers.get('onabort');
   }
 
   set onabort(callback: EventHandlerCallback | null) {
-    this.#eventHandlers.set('onabort', callback);
+    this.eventHandlers.set('onabort', callback);
   }
 
   get onerror(): EventHandlerCallback | null {
-    return this.#eventHandlers.get('onerror');
+    return this.eventHandlers.get('onerror');
   }
 
   set onerror(callback: EventHandlerCallback | null) {
-    this.#eventHandlers.set('onerror', callback);
+    this.eventHandlers.set('onerror', callback);
   }
 
   get onloadend(): EventHandlerCallback | null {
-    return this.#eventHandlers.get('onloadend');
+    return this.eventHandlers.get('onloadend');
   }
 
   set onloadend(callback: EventHandlerCallback | null) {
-    this.#eventHandlers.set('onloadend', callback);
+    this.eventHandlers.set('onloadend', callback);
   }
 
   readAsArrayBuffer(blob: BlobImpl): void {

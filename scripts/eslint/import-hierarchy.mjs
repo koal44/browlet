@@ -41,9 +41,11 @@ export const layers = [
   ['browlet/timing/', 'browlet/dom/infra/', 'browlet/dom/nodes/element-definitions/', 'browlet/style/', 'browlet/webassembly/'],
   ['browlet/html/microsyntaxes/', 'browlet/dom/lists/'],
   ['browlet/dom/nodes/html/attributes/'],
+  // HTML handlers use DOM's host-neutral listener values and dispatch metadata.
+  ['browlet/dom/events/'],
   ['browlet/scripting/'],
   // Policy consumes event/report primitives; documents construct and retain policy state.
-  ['browlet/dom/events/', 'browlet/reporting/'],
+  ['browlet/reporting/'],
   // Feature event payloads can serve Document's legacy factory without loading their producers.
   ['browlet/storage/events/'],
   // Policy owns the source-expression algorithms shared with its CSP implementation.

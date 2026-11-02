@@ -1,5 +1,5 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/core/index';
+import { ctor, defineIncludes, defineInterface, impl, xattr } from '../../../../../web-idl/core/index';
 
 import { ElementTag, flowContent } from '../../element-definitions/index';
 
@@ -35,8 +35,6 @@ export class HTMLBodyElementImpl extends HTMLElementImpl {
  *
  *   // also has obsolete members
  * };
- *
- * HTMLBodyElement includes WindowEventHandlers;
  */
 export const htmlBodyElementIDL = defineInterface({
   name: 'HTMLBodyElement',
@@ -48,4 +46,12 @@ export const htmlBodyElementIDL = defineInterface({
   members: [
     ctor([], xattr('HTMLConstructor')),
   ],
+});
+
+/*
+ * HTMLBodyElement includes WindowEventHandlers;
+ */
+export const htmlBodyElementIncludesWindowEventHandlersIDL = defineIncludes({
+  interface: htmlBodyElementIDL.name,
+  mixin: 'WindowEventHandlers',
 });

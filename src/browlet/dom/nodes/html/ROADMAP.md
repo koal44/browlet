@@ -57,13 +57,13 @@ The remaining identity dependencies are registered as minimal implementations:
 
 | Elements | Owner | Missing behavior |
 | --- | --- | --- |
-| `html`, `body` | `document/html.ts`, `sections/body.ts` | Body WindowEventHandlers and obsolete reflected members |
+| `html`, `body` | `document/html.ts`, `sections/body.ts` | Body forwards `onstorage`; remaining handler declarations/content attributes and obsolete reflected members |
 | `a`, `area` | `text/anchor.ts`, `embedded/area.ts` | Hyperlink mixins, reflected attributes, navigation/activation, and area geometry |
 | `map` | `embedded/map.ts` | Name reflection and the areas collection; lookup already returns HTMLMapElementImpl |
 | `hr` | `grouping/hr.ts` | Obsolete reflected members |
 | `datalist`, `button`, `textarea` | `forms/` | Datalist options/suggestions; button and textarea form association, reflection, validation, editing/commands, and activation |
 | `meta` | `metadata/meta.ts` | Reflected attributes and metadata/pragma processing |
-| `frame`, `frameset` | `legacy/` | Reflected attributes, frame navigation/layout, and frameset WindowEventHandlers |
+| `frame`, `frameset` | `legacy/` | Frameset forwards `onstorage`; remaining handler declarations/content attributes, reflected attributes, and frame navigation/layout |
 
 These fragments expose their interfaces and shared HTML constructors, without
 standing in for the missing element-specific APIs. Their consuming algorithms can use

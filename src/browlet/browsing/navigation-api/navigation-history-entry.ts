@@ -1,19 +1,22 @@
 import { atArg, defineInterface, idlType, impl, invokeWith, nullable, op, roAttr } from '../../../web-idl/core/index';
 import { serializeURL } from '../../../url/index';
 
-import { eventHandlerAttr, EventHandlerMap, type EventHandlerCallback } from '../../scripting/index';
 import { EventTargetImpl } from '../../dom/events/index';
+import { eventHandlerAttr, EventHandlerMap, type EventHandlerCallback } from '../../scripting/index';
 import type { BrowletEnvironment } from '../../environment/index';
 import type { SessionHistoryEntry } from '../navigation/index';
 
 /** A realm-owned view of one session-history record. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#navigationhistoryentry
 export class NavigationHistoryEntryImpl extends EventTargetImpl {
+  /** Supported handler names shared by all history entries. */
+  static #handlerDefinitions = new Map([['ondispose', 'dispose']]);
+
   declare env: BrowletEnvironment;
   /** Retained session-history identity, shared by entries in different Window realms. */
   sessionHistoryEntry: SessionHistoryEntry;
   /** Disposal listener for entries removed from the Navigation list. */
-  #eventHandlers = new EventHandlerMap(this, [{ name: 'ondispose', type: 'dispose' }]);
+  override eventHandlers: EventHandlerMap = new EventHandlerMap(this, NavigationHistoryEntryImpl.#handlerDefinitions);
 
   constructor(sessionHistoryEntry: SessionHistoryEntry, env: BrowletEnvironment) {
     super(env);
@@ -55,8 +58,8 @@ export class NavigationHistoryEntryImpl extends EventTargetImpl {
     return document.isFullyActive() && this.sessionHistoryEntry.documentState.document === document;
   }
 
-  get ondispose(): EventHandlerCallback | null { return this.#eventHandlers.get('ondispose'); }
-  set ondispose(callback: EventHandlerCallback | null) { this.#eventHandlers.set('ondispose', callback); }
+  get ondispose(): EventHandlerCallback | null { return this.eventHandlers.get('ondispose'); }
+  set ondispose(callback: EventHandlerCallback | null) { this.eventHandlers.set('ondispose', callback); }
 
   /** Deserialize fresh state into the method environment selected by Binding. */
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-navigationhistoryentry-getstate

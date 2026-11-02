@@ -26,6 +26,7 @@ import { cssStyleSheetIDL, type CSSStyleSheetImpl, type StyleletEnvironment } fr
 
 import { Moment, UnsafeMoment, monotonicClock, EnvironmentTiming } from '../timing/index';
 import type { CORSSettingsState } from '../dom/nodes/html/attributes/index';
+import { ErrorEventImpl, EventTargetImpl, PromiseRejectionEventImpl, type EventImpl } from '../dom/events/index';
 import {
   fetchClassicScript, fetchClassicWorkerScript, fetchClassicWorkerImportedScript,
   fetchExternalModuleScriptGraph, fetchModulepreloadModuleScriptGraph, fetchInlineModuleScriptGraph,
@@ -37,7 +38,6 @@ import {
   type JSModuleRequest, type ModuleFetchCallback, type PerformScriptFetch,
   type EventLoop, type WindowRealm, type WindowAgent, type JSExecutionContext, type BrowletGlobalObject,
 } from '../scripting/index';
-import { ErrorEventImpl, EventTargetImpl, PromiseRejectionEventImpl, type EventImpl } from '../dom/events/index';
 import { ReportImpl, ReportBodyImpl, TestReportBodyImpl } from '../reporting/index';
 import {
   InsecureRequestsPolicy, PermissionsPolicy, reportPermissionsPolicyViolation, reportPotentialPermissionsPolicyViolation,

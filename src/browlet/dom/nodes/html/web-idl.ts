@@ -9,7 +9,7 @@ import { HTMLElementImpl } from './html-element';
 import {
   HTMLAddressElementImpl, HTMLArticleElementImpl, HTMLAsideElementImpl, HTMLFooterElementImpl,
   HTMLHeaderElementImpl, HTMLHGroupElementImpl, HTMLNavElementImpl, HTMLSectionElementImpl,
-  htmlBodyElementIDL, htmlHeadingElementIDL,
+  htmlBodyElementIDL, htmlBodyElementIncludesWindowEventHandlersIDL, htmlHeadingElementIDL,
 } from './sections/index';
 import {
   HTMLDDElementImpl, HTMLDTElementImpl, HTMLFigCaptionElementImpl, HTMLFigureElementImpl,
@@ -36,7 +36,8 @@ import {
   HTMLAcronymElementImpl, HTMLBaseFontElementImpl, HTMLBigElementImpl, HTMLCenterElementImpl,
   HTMLNoBRElementImpl, HTMLNoEmbedElementImpl, HTMLNoFramesElementImpl, HTMLPlainTextElementImpl,
   HTMLRBElementImpl, HTMLRTCElementImpl, HTMLStrikeElementImpl, HTMLTTElementImpl, htmlFrameElementIDL,
-  htmlFrameSetElementIDL, htmlDirectoryElementIDL, htmlFontElementIDL, htmlMarqueeElementIDL,
+  htmlFrameSetElementIDL, htmlFrameSetElementIncludesWindowEventHandlersIDL,
+  htmlDirectoryElementIDL, htmlFontElementIDL, htmlMarqueeElementIDL,
   htmlParamElementIDL,
 } from './legacy/index';
 import { htmlUnknownElementIDL } from './html-unknown-element';
@@ -248,6 +249,7 @@ export const htmlIDLDefinitions: Definition[] = [
   htmlLinkElementIDL,
   htmlLinkElementIncludesLinkStyleIDL,
   htmlBodyElementIDL,
+  htmlBodyElementIncludesWindowEventHandlersIDL,
   htmlHeadingElementIDL,
   htmlParagraphElementIDL,
   htmlHRElementIDL,
@@ -310,6 +312,7 @@ export const htmlIDLDefinitions: Definition[] = [
   htmlDetailsElementIDL,
   htmlDialogElementIDL,
   htmlFrameSetElementIDL,
+  htmlFrameSetElementIncludesWindowEventHandlersIDL,
   htmlFrameElementIDL,
   htmlDirectoryElementIDL,
   htmlFontElementIDL,

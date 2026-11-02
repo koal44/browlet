@@ -62,12 +62,12 @@ the recipient Document is not fully active. Blink likewise uses the recipient
 Storage object and DOM-manipulation delivery in `StorageArea::EnqueueStorageEvent`.
 
 Window's `onstorage` attribute and `addEventListener('storage', ...)` both receive
-these broadcasts. Window composes `WindowEventHandlersMixin`, which delegates
-handler identity, listener ordering, replacement, deactivation, and return-value
-rules to the existing `EventHandlerMap`. Installing a handler does not acquire
-a Storage object. This first mixin slice declares only `onstorage`; body/frameset
-aliases, content-attribute compilation, and the other Window handlers remain
-HTML §§4 and 8 dependencies. All recipients currently live in one Node runtime;
+these broadcasts. The WindowEventHandlers declaration binds `onstorage` to the
+existing `EventHandlerMap`, which owns handler identity, listener ordering,
+replacement, deactivation, and return-value rules. Installing a handler does not
+acquire a Storage object. HTML §8.1.8 also connects body/frameset aliases,
+content-attribute compilation, and the other ordinary Window handlers.
+All recipients currently live in one Node runtime;
 cross-thread/process storage synchronization remains a backend dependency.
 
 ## §§12.2.2–12.2.3: Window storage getters

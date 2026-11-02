@@ -10,6 +10,115 @@ import { getRelevantRealm } from '../../support/browlet-binding';
 afterEach(() => vi.restoreAllMocks());
 
 describe('HTML event-handler processing', () => {
+  it('sets and restores the current event through nested handler dispatch', async () => {
+    const browser = await createBrowser();
+    expect(await browser.evaluate(() => {
+      const trace: boolean[] = [];
+      const outer = new StorageEvent('storage');
+      const inner = new ErrorEvent('error');
+      onstorage = (event) => {
+        trace.push(window.event === event);
+        dispatchEvent(inner);
+        trace.push(window.event === event);
+      };
+      onerror = () => {
+        trace.push(window.event === inner);
+        return true;
+      };
+      addEventListener('storage', (event) => { trace.push(window.event === event); });
+      dispatchEvent(outer);
+      trace.push(window.event === undefined);
+      return trace;
+    })).toEqual([true, true, true, true, true]);
+  });
+
+  it('restores the current event after reporting a handler exception', async () => {
+    const browser = await createBrowser();
+    expect(await browser.evaluate(() => {
+      const trace: boolean[] = [];
+      const outer = new StorageEvent('storage');
+      const failure = new Error('handler failure');
+      onstorage = (event) => {
+        trace.push(window.event === event);
+        throw failure;
+      };
+      onerror = (_message, _source, _line, _column, error) => {
+        trace.push(window.event instanceof ErrorEvent && window.event.error === error && error === failure);
+        return true;
+      };
+      addEventListener('storage', (event) => { trace.push(window.event === event); });
+      dispatchEvent(outer);
+      trace.push(window.event === undefined);
+      return trace;
+    })).toEqual([true, true, true, true]);
+  });
+
+  it('does not replace the current event for a handler inside a shadow tree', async () => {
+    const browser = await createBrowser();
+    expect(await browser.evaluate(() => {
+      const host = document.createElement('div');
+      document.body.append(host);
+      const shadow = host.attachShadow({ mode: 'open' });
+      const slot = document.createElement('slot');
+      shadow.append(slot);
+      const outer = new StorageEvent('storage');
+      const trace: boolean[] = [];
+      shadow.onslotchange = () => { trace.push(window.event === outer); };
+      onstorage = () => {
+        slot.dispatchEvent(new Event('slotchange', { bubbles: true }));
+        trace.push(window.event === outer);
+      };
+      dispatchEvent(outer);
+      trace.push(window.event === undefined);
+      return trace;
+    })).toEqual([true, true, true]);
+  });
+
+  it('follows the current callback realm without moving the activated listener', async () => {
+    const target = await createBrowser();
+    const source = createSibling(target);
+    const trace: unknown[] = [];
+    Reflect.set(source.window, 'otherWindow', target.window);
+    Reflect.set(target.window, 'otherWindow', source.window);
+    Reflect.set(source.window, 'trace', trace);
+    Reflect.set(target.window, 'trace', trace);
+    await source.evaluation.evaluate(() => {
+      const targetWindow = Reflect.get(globalThis, 'otherWindow') as Window;
+      const trace = Reflect.get(globalThis, 'trace') as unknown[];
+      Reflect.set(globalThis, 'handler', (event: Event) => {
+        trace.push(['source', window.event === event, targetWindow.event === undefined]);
+      });
+    });
+    await target.evaluate(() => {
+      const sourceWindow = Reflect.get(globalThis, 'otherWindow') as Window;
+      const trace = Reflect.get(globalThis, 'trace') as unknown[];
+      addEventListener('storage', () => { trace.push('before'); });
+      onstorage = (event) => {
+        trace.push(['target', window.event === event, sourceWindow.event === undefined]);
+      };
+      Reflect.set(globalThis, 'handler', onstorage);
+      addEventListener('storage', () => { trace.push('after'); });
+    });
+
+    const targetHandler: unknown = Reflect.get(target.window, 'handler');
+    const sourceHandler: unknown = Reflect.get(source.window, 'handler');
+    const dispatch = () => target.window.dispatchEvent(new target.window.StorageEvent('storage'));
+    dispatch();
+    Reflect.set(target.window, 'onstorage', sourceHandler);
+    dispatch();
+    Reflect.set(target.window, 'onstorage', targetHandler);
+    dispatch();
+
+    expect(trace).toEqual([
+      'before', ['target', true, true], 'after',
+      'before', ['source', true, true], 'after',
+      'before', ['target', true, true], 'after',
+    ]);
+    expect(target.window.event).toBeUndefined();
+    expect(source.window.event).toBeUndefined();
+    expect(target.window.onstorage).toBe(targetHandler);
+  });
+
   it('invokes a Window error handler with all five error details and the public Window receiver', async () => {
     const browser = await createBrowser();
     expect(browser.window.onerror).toBeNull();

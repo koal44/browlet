@@ -4,8 +4,8 @@ import {
 } from '../../web-idl/core/index';
 import { StorageKey } from '../../storage/index';
 
-import { domManipulationTaskSource, eventHandlerAttr, EventHandlerMap, type EventHandlerCallback } from '../scripting/index';
 import { EventTargetImpl } from '../dom/events/index';
+import { domManipulationTaskSource, eventHandlerAttr, EventHandlerMap, type EventHandlerCallback } from '../scripting/index';
 import type { BrowletEnvironment } from '../environment/index';
 
 import { MessageEventImpl } from './message-event';
@@ -13,14 +13,17 @@ import { MessageEventImpl } from './message-event';
 /** Broadcasts cloned messages to matching channels in the same user agent. */
 // https://html.spec.whatwg.org/multipage/web-messaging.html#broadcastchannel
 export class BroadcastChannelImpl extends EventTargetImpl {
+  /** Supported handler names shared by all channels. */
+  static #handlerDefinitions = new Map([
+    ['onmessage', 'message'], ['onmessageerror', 'messageerror'],
+  ]);
+
   declare env: BrowletEnvironment;
   name: string;
+  /** Message handlers backed by this channel's listener registrations. */
+  override eventHandlers: EventHandlerMap = new EventHandlerMap(this, BroadcastChannelImpl.#handlerDefinitions);
   #closed = false;
   #reference = new WeakRef(this);
-  #eventHandlers = new EventHandlerMap(this, [
-    { name: 'onmessage', type: 'message' },
-    { name: 'onmessageerror', type: 'messageerror' },
-  ]);
 
   constructor(name: string, env: BrowletEnvironment) {
     super(env);
@@ -28,11 +31,11 @@ export class BroadcastChannelImpl extends EventTargetImpl {
     env.userAgent.broadcastChannels.add(this.#reference);
   }
 
-  get onmessage(): EventHandlerCallback | null { return this.#eventHandlers.get('onmessage'); }
-  set onmessage(callback: EventHandlerCallback | null) { this.#eventHandlers.set('onmessage', callback); }
+  get onmessage(): EventHandlerCallback | null { return this.eventHandlers.get('onmessage'); }
+  set onmessage(callback: EventHandlerCallback | null) { this.eventHandlers.set('onmessage', callback); }
 
-  get onmessageerror(): EventHandlerCallback | null { return this.#eventHandlers.get('onmessageerror'); }
-  set onmessageerror(callback: EventHandlerCallback | null) { this.#eventHandlers.set('onmessageerror', callback); }
+  get onmessageerror(): EventHandlerCallback | null { return this.eventHandlers.get('onmessageerror'); }
+  set onmessageerror(callback: EventHandlerCallback | null) { this.eventHandlers.set('onmessageerror', callback); }
 
   /** Whether this channel's global currently participates in broadcasting. */
   // https://html.spec.whatwg.org/multipage/web-messaging.html#eligible-for-messaging

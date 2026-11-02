@@ -1,5 +1,5 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/core/index';
+import { ctor, defineIncludes, defineInterface, impl, xattr } from '../../../../../web-idl/core/index';
 
 import { ElementTag } from '../../element-definitions/index';
 
@@ -22,8 +22,6 @@ export class HTMLFrameSetElementImpl extends HTMLElementImpl {
  *   [CEReactions, Reflect] attribute DOMString cols;
  *   [CEReactions, Reflect] attribute DOMString rows;
  * };
- *
- * HTMLFrameSetElement includes WindowEventHandlers;
  */
 export const htmlFrameSetElementIDL = defineInterface({
   name: 'HTMLFrameSetElement',
@@ -35,4 +33,12 @@ export const htmlFrameSetElementIDL = defineInterface({
   members: [
     ctor([], xattr('HTMLConstructor')),
   ],
+});
+
+/*
+ * HTMLFrameSetElement includes WindowEventHandlers;
+ */
+export const htmlFrameSetElementIncludesWindowEventHandlersIDL = defineIncludes({
+  interface: htmlFrameSetElementIDL.name,
+  mixin: 'WindowEventHandlers',
 });

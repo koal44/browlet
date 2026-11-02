@@ -4,23 +4,24 @@ import {
   sequence, staticOp, xattr, DOMExceptionNames,
 } from '../../../web-idl/core/index';
 
-import { EventHandlerMap, eventHandlerAttr, type EventHandlerCallback } from '../../scripting/index';
 import { EventTargetImpl } from '../events/index';
+import { EventHandlerMap, eventHandlerAttr, type EventHandlerCallback } from '../../scripting/index';
 import { type BrowletEnvironment } from '../../environment/index';
 
 /** Tracks cancellation, propagates its reason, and notifies abort listeners. */
 // https://dom.spec.whatwg.org/#interface-AbortSignal
 export class AbortSignalImpl extends EventTargetImpl implements AbortSignal {
+  /** Supported handler names shared by all signals. */
+  static #handlerDefinitions = new Map([['onabort', 'abort']]);
+
+  /** Handler values and listener registrations for this signal. */
+  override eventHandlers: EventHandlerMap = new EventHandlerMap(this, AbortSignalImpl.#handlerDefinitions);
   #abortAlgorithms = new Set<AbortAlgorithmHandleImpl>();
   /** True once this signal is configured to follow other signals. */
   #dependent = false;
   /** Signals to abort with this signal, in registration order. */
   #dependentSignals = new WeakOrderedSet<AbortSignalImpl>();
   #env: BrowletEnvironment;
-  #eventHandlers = new EventHandlerMap(this, [{
-    name: 'onabort',
-    type: 'abort',
-  }]);
   /** Undefined until aborted; then shared with dependent signals. */
   // Keep writes in #setAbortReason so retention follows the aborted state.
   #reason: unknown = undefined;
@@ -93,11 +94,11 @@ export class AbortSignalImpl extends EventTargetImpl implements AbortSignal {
   }
 
   get onabort(): EventHandlerCallback | null {
-    return this.#eventHandlers.get('onabort');
+    return this.eventHandlers.get('onabort');
   }
 
   set onabort(callback: EventHandlerCallback | null) {
-    this.#eventHandlers.set('onabort', callback);
+    this.eventHandlers.set('onabort', callback);
   }
 
   /** Throw the stored reason if this signal has aborted. */

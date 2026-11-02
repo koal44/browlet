@@ -18,7 +18,7 @@ export {
 export { documentOrShadowRootIDL, htmlDocumentOrShadowRootIDL } from './document-or-shadow-root';
 export { DocumentTypeImpl, documentTypeIDL, documentTypeIncludesChildNodeIDL } from './document-type';
 export {
-  DocumentImpl, documentIDL, htmlDocumentIDL,
+  DocumentImpl, documentIDL, htmlDocumentIDL, documentIncludesGlobalEventHandlersIDL,
   documentReadyStateIDL, documentVisibilityStateIDL, htmlOrSVGScriptElementIDL,
   XMLDocumentImpl, xmlDocumentIDL, type ImportNodeOptions, importNodeOptionsIDL,
   type ElementCreationOptions, elementCreationOptionsIDL, documentIncludesParentNodeIDL,
