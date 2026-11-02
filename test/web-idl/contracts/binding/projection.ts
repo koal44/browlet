@@ -1,5 +1,5 @@
 import {
-  atArg, attrFn, ctor, BindingWorld, defineCallbackInterface, defineInterface,
+  atArg, ctor, BindingWorld, defineCallbackInterface, defineInterface,
   idlType, impl, isStampedImplInstance, isStampedPlatformObject, op, roAttr, serializeDefinition,
   type BindingContext, type Definition, type StampedImplInstance, type StampedPlatformObject,
   type PlatformRecord, type WebIDLEnvironment, type WebIDLRealm,
@@ -19,7 +19,6 @@ declare const minimalRealm: WebIDLRealm;
 class Example { value = 1; }
 
 atArg(0, (env) => env);
-attrFn<WebIDLEnvironment>((env) => function value() { return env.realm.globalObject; });
 // @ts-expect-error An undeclared environment exposes no host facilities.
 atArg(0, (env) => env.realm.eventTimeStamp());
 
@@ -42,12 +41,12 @@ const definition = defineInterface<HostEnvironment>({
       { constructWith: [atArg(0, (env) => env.realm.eventTimeStamp())] },
     ),
     roAttr('time', idlType.double, {
-      overrideGet(env) { return env.realm.eventTimeStamp(); },
+      overrideGet({ relevant: env }) { return env.realm.eventTimeStamp(); },
     }),
     op('read', idlType.double,
       [],
       {
-        overrideInvoke(env) {
+        overrideInvoke({ relevant: env }) {
           env.createEvent();
           return env.realm.eventTimeStamp();
         },

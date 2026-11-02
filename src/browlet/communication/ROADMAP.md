@@ -14,8 +14,8 @@ not parsed as origins. Delivery algorithms supply the required origin record
 through the internal constructor or `setOrigin()`.
 
 The implementation retains a snapshot of implementation ports.
-[The binding](../integration/web-idl/bindings/message-event.ts) projects and freezes that
-snapshot in the event's realm, reusing it until legacy initialization replaces it.
+Its FrozenArray attribute type selects projection and freezing in the event's
+realm, reusing the snapshot until legacy initialization replaces it.
 Construction does not clone the payload, transfer ports, or send a message.
 
 Dependencies brought forward:

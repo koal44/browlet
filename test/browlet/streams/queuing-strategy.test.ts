@@ -58,6 +58,29 @@ describe('Streams queuing strategies', () => {
     expect(Reflect.apply(size, undefined, ['chunk'])).toBe(1);
     expect(size.length).toBe(0);
     expect(size.name).toBe('size');
+    expect(Object.hasOwn(size, 'prototype')).toBe(false);
+    expect(() => { Reflect.construct(size, []); }).toThrow(TypeError);
+  });
+
+  it('preserves the byteLength getter receiver, result, and thrown value', () => {
+    const window = createBrowlet().window;
+    const Strategy = getConstructor(window, 'ByteLengthQueuingStrategy');
+    const strategy = Reflect.construct(Strategy, [{ highWaterMark: 1 }]) as object;
+    const size = Reflect.get(strategy, 'size') as CallableFunction;
+    const result = {};
+    const chunk = {
+      get byteLength() {
+        expect(this).toBe(chunk);
+        return result;
+      },
+    };
+    expect(Reflect.apply(size, null, [chunk])).toBe(result);
+    const thrown = new Error('byteLength getter failed');
+    const throwingChunk = { get byteLength() { throw thrown; } };
+    let caught: unknown;
+    try { Reflect.apply(size, null, [throwingChunk]); }
+    catch (error) { caught = error; }
+    expect(caught).toBe(thrown);
   });
 
   it('reads primitive byteLength in the receiver realm even when its getter is borrowed first', () => {

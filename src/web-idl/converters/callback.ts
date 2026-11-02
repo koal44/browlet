@@ -9,7 +9,7 @@ import type { WebIDLRealm } from '../environment';
 
 import { Converter, type ConversionSteps } from './converter';
 
-/** Capture an author function's realm and callback context for later invocation. */
+/** Capture an author function's realm and callback environment for later invocation. */
 export class CallbackFunctionConverter<Type extends IDLCallbackFunctionType = IDLCallbackFunctionType> extends Converter<Type> {
 
   /** Prepare the nullable legacy attribute rule without altering the shared ordinary converter. */
@@ -19,7 +19,7 @@ export class CallbackFunctionConverter<Type extends IDLCallbackFunctionType = ID
       if (!isObject(value)) return null;
       try {
         return new IDLCallbackFunction(
-          assembled, value, getCallbackRealm(value, converter.realm), converter.realm.callbacks.captureContext(), converter.binding.callbacks,
+          assembled, value, getCallbackRealm(value, converter.realm), converter.realm.callbacks.captureEnvironment(), converter.binding.callbacks,
         );
       } catch (error) {
         return converter.throwConversionError(error);
@@ -34,7 +34,7 @@ export class CallbackFunctionConverter<Type extends IDLCallbackFunctionType = ID
         return this.throwTypeError(`${assembled.primary.name} is not callable`);
       }
       return new IDLCallbackFunction(
-        assembled, value, getCallbackRealm(value, this.realm), this.realm.callbacks.captureContext(), this.binding.callbacks,
+        assembled, value, getCallbackRealm(value, this.realm), this.realm.callbacks.captureEnvironment(), this.binding.callbacks,
       );
     };
   }
@@ -48,13 +48,13 @@ export class CallbackFunctionConverter<Type extends IDLCallbackFunctionType = ID
   }
 }
 
-/** Capture an author callback object while leaving operation lookup until invocation. */
+/** Capture an author callback object and environment, leaving operation lookup until invocation. */
 export class CallbackInterfaceConverter<Type extends IDLCallbackInterfaceType = IDLCallbackInterfaceType> extends Converter<Type> {
   protected createInputSteps(): ConversionSteps<IDLCallbackInterface> {
     const assembled = this.type.assembled;
     return (value) => {
       if (!isObject(value)) return this.throwTypeError(`${assembled.primary.name} is not an object`);
-      return new IDLCallbackInterface(assembled, value, getCallbackRealm(value, this.realm), this.realm.callbacks.captureContext(), this.binding.callbacks);
+      return new IDLCallbackInterface(assembled, value, getCallbackRealm(value, this.realm), this.realm.callbacks.captureEnvironment(), this.binding.callbacks);
     };
   }
 

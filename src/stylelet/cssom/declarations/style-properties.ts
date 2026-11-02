@@ -60,7 +60,7 @@ function createPropertyAttributes(): AttributeMember[] {
       overrideGet() {
         return (this as CSSStylePropertiesImpl).getPropertyValue(property);
       },
-      overrideSet(_env, value) {
+      overrideSet(_environments, value) {
         (this as CSSStylePropertiesImpl).setProperty(property, value as string);
       },
     });

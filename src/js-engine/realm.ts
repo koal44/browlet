@@ -177,7 +177,8 @@ export class JSRealm {
   #callableFunctionFactory: RealmFunctionFactory;
   /** Nonconstructible native entries, using the ordinary callable factory when unavailable. */
   #incumbentFunctionFactory: RealmFunctionFactory;
-  #constructibleFunctionFactory: RealmFunctionFactory;
+  /** Constructor proxies can capture at their existing call/construct traps. */
+  #constructibleFunctionFactory: RealmConstructorFactory;
   /** Uses this context as the referrer for source-string evaluation. */
   #importModuleDynamically: ImportModuleDynamically<CompiledScript> | undefined;
   /** Recent evaluation code, scoped to this realm's fixed import loader. */
@@ -321,13 +322,17 @@ export class JSRealm {
       callableFunctionFactorySource,
       this.#vmContext,
     ) as RealmFunctionFactory;
-    this.#incumbentFunctionFactory = (steps) =>
-      createFunctionWithIncumbent(this.#vmContext, (incumbent, receiver, argumentsList) =>
-        this.callWithIncumbent(incumbent, steps, receiver, argumentsList)) ?? this.#callableFunctionFactory(steps);
+    this.#incumbentFunctionFactory = (steps) => {
+      // Native API functions normalize primitive receivers. A native apply trap
+      // receives the original receiver as an argument, before any JavaScript entry.
+      const entry = createFunctionWithIncumbent(this.#vmContext, (incumbent, _receiver, args) =>
+        this.callWithIncumbent(incumbent, steps, args[1], args[2] as unknown[]));
+      return entry ? new Proxy<typeof entry>(entry, { apply: entry }) : this.#callableFunctionFactory(steps);
+    };
     this.#constructibleFunctionFactory = runInContext(
       constructibleFunctionFactorySource,
       this.#vmContext,
-    ) as RealmFunctionFactory;
+    ) as RealmConstructorFactory;
 
     // Native lookup uses the context identity; fallback lookup also needs these prototype anchors.
     associateContext(this.#vmContext, this);
@@ -399,12 +404,10 @@ export class JSRealm {
     steps: RealmFunctionSteps<Result>,
     options: RealmFunctionOptions,
   ): JSFunction<Result> {
-    const factory = options.constructible
-      ? this.#constructibleFunctionFactory
-      : options.captureIncumbent
-        ? this.#incumbentFunctionFactory
-        : this.#callableFunctionFactory;
-    const function_ = factory(steps);
+    const factory = options.captureIncumbent ? this.#incumbentFunctionFactory : this.#callableFunctionFactory;
+    const function_ = options.constructible
+      ? this.#constructibleFunctionFactory(steps, options.captureIncumbent ? factory : undefined)
+      : factory(steps);
 
     Object.defineProperties(function_, {
       length: {
@@ -988,11 +991,16 @@ export type JSFunction<Result = unknown> = (
   ...argumentsList: unknown[]
 ) => Result;
 
+/** A JavaScript function object with an object-valued prototype property. */
+export interface JSFunctionWithPrototype extends JSFunction {
+  prototype: object;
+}
+
 export type RealmFunctionOptions = {
   name: string;
   length: number;
   constructible?: boolean;
-  /** Use a native entry for incumbent-sensitive, nonconstructible platform functions when supported. */
+  /** Use native entries for incumbent-sensitive calls and construction when supported. */
   captureIncumbent?: boolean;
 };
 
@@ -1011,6 +1019,11 @@ type RealmFunctionFactory = <Result>(
   steps: RealmFunctionSteps<Result>,
 ) => JSFunction<Result>;
 
+type RealmConstructorFactory = <Result>(
+  steps: RealmFunctionSteps<Result>,
+  capture: RealmFunctionFactory | undefined,
+) => JSFunction<Result>;
+
 const callableFunctionFactorySource = `
   (steps) => {
     "use strict";
@@ -1026,16 +1039,23 @@ const callableFunctionFactorySource = `
 // [[Construct]] would first allocate a discarded receiver and read
 // newTarget.prototype before the binding's own prototype lookup.
 const constructibleFunctionFactorySource = `
-  ((Proxy) => (steps) => {
+  ((Proxy) => (steps, capture) => {
     "use strict";
     const target = function(...argumentsList) {
       return steps(this, argumentsList, undefined);
     };
-    const function_ = new Proxy(target, {
+    const handler = {
       construct(_target, argumentsList, newTarget) {
         return steps(undefined, argumentsList, newTarget);
       },
-    });
+    };
+    if (capture) {
+      // A native trap observes the caller before entering these JavaScript steps.
+      // Read the private argument array by index, without consulting author iterators.
+      handler.construct = capture((_receiver, args) => steps(undefined, args[1], args[2]));
+      handler.apply = capture((_receiver, args) => steps(args[1], args[2], undefined));
+    }
+    const function_ = new Proxy(target, handler);
     target.prototype.constructor = function_;
     return function_;
   })(Proxy)

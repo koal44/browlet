@@ -86,8 +86,8 @@ Binding derives entry capture from these parameters, callback conversions, and
 forwarding targets; declarations do not repeat a capture flag. Location's bindings
 select entry and incumbent inputs separately before calling its implementation.
 Direct incumbent lookup stays in the lint-allowlisted composition, Binding, and
-callback-lifecycle modules. Binding callback parameters through the incumbent cannot
-have defaults or rest syntax, because capture selection uses declared arity.
+callback-lifecycle modules. Injected argument resolver parameters through the incumbent
+cannot have defaults or rest syntax, because those inputs still use declared arity.
 
 Specification-owned platform creation uses `preparePlatformObject` at the same
 composition boundary. Web IDL installs the own members first; HTML can then add

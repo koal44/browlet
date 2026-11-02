@@ -33,11 +33,8 @@ export type PrimaryInterfaceDefinition<Env = unknown, Impl extends object = obje
   // Project metadata: implementation identity, construction dependencies, and projection hooks.
   /** One or more implementation classes, with their construction and projection hooks. */
   implementation?: InterfaceImplementation<Env, Impl> | InterfaceImplementation<Env, Impl>[];
-  /**
-   * Recognize an engine-provided instance, such as a WebAssembly.Module, without author code.
-   * Check each converted value and preserve its identity; the engine owns constructors and members.
-   */
-  isInstance?: (value: unknown) => boolean;
+  /** Use engine-provided instances and, optionally, its interface object instead of ordinary implementation binding. */
+  interfaceOverride?: InterfaceOverride<Env>;
   /** Select HTMLAllCollection's native identity and call behavior, using its declared `item` operation. */
   documentAll?: true;
 
@@ -47,6 +44,18 @@ export type PrimaryInterfaceDefinition<Env = unknown, Impl extends object = obje
   namespaceURI?: string;
   /** Element local names exposing this interface; the host may construct more specific implementations. */
   localNames?: string[];
+};
+
+/** Binding overrides for an interface whose instances are supplied by the engine. */
+export type InterfaceOverride<Env = unknown> = {
+  /** Recognize a supplied platform object without inspecting author properties or running author code. */
+  isInstance: (platformObject: unknown) => boolean;
+  /**
+   * Supply the existing constructor and its prototype at binding installation;
+   * omit to provide only instance conversion. Invocation and incumbent capture
+   * belong to the constructor member's overrideConstruct and overrideCapturesIncumbent.
+   */
+  getInterfaceObject?: (env: Env) => object;
 };
 
 /** One concrete implementation of an interface, with its construction dependencies and hooks. */
@@ -223,8 +232,11 @@ export type NamespaceDefinition<Env = unknown> = {
   /** Extended attributes applying to this namespace. */
   extendedAttributes?: ExtendedAttribute[];
 
-  /** Override ordinary namespace allocation; Binding installs the declared members on the returned object. */
-  namespaceOverride?: (env: Env) => object;
+  /**
+   * Supply the namespace object during binding installation; Binding installs its declared members.
+   * Later calls capture an incumbent only when their member declaration or argument types require it.
+   */
+  overrideNamespace?: (env: Env) => object;
 };
 
 /** Declare a namespace object and its members. */
@@ -271,7 +283,10 @@ export type CallbackInterfaceDefinition<Env = unknown> = {
   exposed?: Exposed;
   /** Extended attributes applying to this callback interface. */
   extendedAttributes?: ExtendedAttribute[];
-  /** Override conversion of the IDL callback interface into the implementation's value. */
+  /**
+   * Adapt an IDL callback interface into the implementation's value.
+   * JS-to-IDL conversion has already captured its callback context; this hook does not recapture it.
+   */
   overrideCbConversion?: (
     this: undefined, env: Env, callback: IDLCallbackInterfaceValue<PropertyOf<Env, 'realm'>>,
   ) => unknown;
@@ -304,7 +319,10 @@ export type CallbackFunctionDefinition<Env = unknown> = {
   /** TypeScript parameters of the generated callback type alias. */
   typeParameters?: TypeParameter[];
 
-  /** Override conversion into an implementation callable; Binding preserves the callback's author identity. */
+  /**
+   * Adapt an IDL callback into an implementation callable, preserving the author's identity.
+   * JS-to-IDL conversion has already captured its callback context; this hook does not recapture it.
+   */
   overrideCbConversion?: (
     this: undefined, env: Env, callback: IDLCallbackFunctionValue<PropertyOf<Env, 'realm'>>,
   ) => CallableFunction;

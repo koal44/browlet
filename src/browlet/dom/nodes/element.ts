@@ -919,7 +919,7 @@ export const elementIDL = defineInterface({
     op('matches', idlType.boolean, [arg('selectors', idlType.DOMString)]),
     op('webkitMatchesSelector', idlType.boolean,
       [arg('selectors', idlType.DOMString)],
-      { overrideInvoke(_env, selectors) { return (this as ElementImpl).matches(selectors); } },
+      { overrideInvoke(_environments, selectors) { return (this as ElementImpl).matches(selectors); } },
     ),
     op('getElementsByTagName', reference('HTMLCollection'), [arg('qualifiedName', idlType.DOMString)]),
     op('getElementsByTagNameNS', reference('HTMLCollection'), [

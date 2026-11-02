@@ -103,21 +103,12 @@ function getReflectionRules(type: IDLType, reflection: ReflectionExtendedAttribu
   return reflectDouble(mode === 'ReflectPositive', defaultValue);
 }
 
-/** Preserve a custom getter and omit readonly setters when constructing the final binding. */
+/** Reflect only the declared accessors; Binding retains ordinary or overridden ReflectSetter getters. */
 function createAttributeBinding<T extends ReflectedTarget>(
   member: IDLAttribute, reflection: ReflectionExtendedAttribute, accessors: AttributeBinding<BrowletEnvironment, T>,
 ): AttributeBinding<BrowletEnvironment, T> {
-  let get = accessors.get;
-  if (reflection.name === 'ReflectSetter') {
-    const customGet = member.overrideGet;
-    get = customGet
-      ? function(ctx, methodCtx, incumbentEnv) {
-        return customGet.call(this, ctx.getEnvironment(), methodCtx.getEnvironment(), incumbentEnv);
-      }
-      : function() { return Reflect.get(this, member.name); };
-  }
   return {
-    get,
+    get: reflection.name === 'ReflectSetter' ? undefined : accessors.get,
     set: member.readonly ? undefined : accessors.set,
   };
 }

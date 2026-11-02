@@ -29,8 +29,8 @@ function registerNamespaceImplementation(binding: RealmBinding, assembled: Assem
     const memberBinding = implementationBinding.getOrCreateMemberBinding(member);
     if (member.kind === 'operation' && member.overrideInvoke) {
       memberBinding.operationSteps = createDefinedOperationSteps(member.overrideInvoke, member, binding);
-    } else if (member.kind === 'attribute' && (member.overrideGet || member.attributeFunction)) {
-      registerDefinedAttribute(memberBinding, member, assembled, binding);
+    } else if (member.kind === 'attribute' && member.overrideGet) {
+      registerDefinedAttribute(memberBinding, member, binding);
     }
   }
 }
@@ -40,7 +40,7 @@ function registerInterfaceImplementation(
   binding: RealmBinding,
   assembled: AssembledInterface,
 ): void {
-  if (assembled.implementations.length === 0) return;
+  if (assembled.implementations.length === 0 && !assembled.primary.interfaceOverride?.getInterfaceObject) return;
   const definition = assembled.implementations.length === 1 ? assembled.implementations[0] : undefined;
 
   const implClass = definition?.implClass;
@@ -51,9 +51,9 @@ function registerInterfaceImplementation(
     switch (member.kind) {
       case 'attribute': {
         const accessors = binding.world.getAttributeBinding(member, assembled);
-        if (accessors || member.attributeFunction || member.overrideGet || member.overrideSet) {
+        if (accessors || member.overrideGet || member.overrideSet) {
           registerDefinedAttribute(
-            memberBinding, member, assembled, binding, accessors,
+            memberBinding, member, binding, accessors, member.static ? implClass : undefined,
           );
         } else {
           if (member.static && !implClass) throw missingMemberBinding(assembled, member);
@@ -81,7 +81,9 @@ function registerInterfaceImplementation(
             kind: 'construct',
             steps: (values) => {
               const args = convert ? convert(values, binding) : values;
-              return binding.callImplementation(construct, undefined, [binding.getEnvironment(), ...args]);
+              return binding.callImplementation(construct, undefined, [
+                binding.getOverrideEnvironments(member.overrideCapturesIncumbent), ...args,
+              ]);
             },
           };
           break;
@@ -221,44 +223,33 @@ function missingMemberBinding(
   );
 }
 
-// Register explicit getter, setter, or attribute-function adapters.
+// Register explicit getter or setter adapters.
 // Supplies attribute behavior to Web IDL §3.7.6 Attributes.
 function registerDefinedAttribute(
   memberBinding: MemberBinding,
   member: IDLAttribute,
-  assembled: AssembledInterface | AssembledNamespace,
   binding: RealmBinding,
   accessors?: AttributeBinding,
+  staticTarget?: object,
 ): void {
-  const createSteps = member.attributeFunction;
   const get = member.overrideGet;
   const set = member.overrideSet;
-  const getterNeedsIncumbent = (get?.length ?? 0) >= 3;
-  const setterNeedsIncumbent = (set?.length ?? 0) >= 4;
-  const steps: AttributeSteps = {
-    // Invoke a declared getter or obtain its realm-owned attribute function.
-    get(receiver) {
-      const owner = receiver?.binding ?? binding;
-      if (createSteps) {
-        return owner.getImplementationBinding(assembled).getOrCreateMemberBinding(member).getAttributeFunction(member, () => createSteps.call(undefined, owner.getEnvironment()));
-      }
-      const methodEnv = binding.getEnvironment();
-      const incumbentEnv = getterNeedsIncumbent ? binding.world.getIncumbentEnvironment(methodEnv) : undefined;
-      if (accessors) {
-        return binding.callImplementation(accessors.get, receiver?.implInst ?? null, [owner, binding, incumbentEnv]);
-      }
-      if (!get) {
-        throw new InternalError(
-          `Web IDL attribute ${member.name} has no getter binding`,
-        );
-      }
-      return binding.callImplementation(
-        get,
-        receiver?.implInst ?? null,
-        [owner.getEnvironment(), methodEnv, incumbentEnv],
-      );
-    },
-  };
+  const capturesIncumbent = member.overrideCapturesIncumbent;
+  const reflectedGet = accessors?.get;
+  let getter: AttributeSteps['get'];
+  if (reflectedGet) {
+    getter = (receiver) => binding.callImplementation(
+      reflectedGet, receiver?.implInst ?? null, [receiver?.binding ?? binding],
+    );
+  } else if (get) {
+    getter = (receiver) => binding.callImplementation(
+      get, receiver?.implInst ?? null,
+      [(receiver?.binding ?? binding).getOverrideEnvironments(capturesIncumbent, binding)],
+    );
+  } else {
+    getter = memberBinding.createPropertyGetter(member, staticTarget);
+  }
+  const steps: AttributeSteps = { get: memberBinding.createFrozenArrayGetter(member, getter) };
   if ((accessors?.set || set) && !member.readonly) {
     const convert = binding.implementationConverter.createConverter(member.type, {
       callbackExceptionBehavior: member.callbackExceptionBehavior,
@@ -270,15 +261,12 @@ function registerDefinedAttribute(
         binding.callImplementation(accessors.set, receiver?.implInst ?? null, [operationBinding, converted]);
         return;
       }
-      const methodEnv = binding.getEnvironment();
       binding.callImplementation(
         set!,
         receiver?.implInst ?? null,
         [
-          operationBinding.getEnvironment(),
+          operationBinding.getOverrideEnvironments(capturesIncumbent, binding),
           converted,
-          methodEnv,
-          setterNeedsIncumbent ? binding.world.getIncumbentEnvironment(methodEnv) : undefined,
         ],
       );
     };
@@ -335,12 +323,13 @@ function createDefinedOperationSteps(
   const convert = binding.implementationConverter.createArgumentConverter(assembled);
   return (receiver, values) => {
     const operationBinding = receiver?.binding ?? binding;
+    const args = convert ? convert(values, operationBinding) : values;
     return binding.callImplementation(
       invoke,
       receiver?.implInst ?? null,
       [
-        operationBinding.getEnvironment(),
-        ...(convert ? convert(values, operationBinding) : values),
+        operationBinding.getOverrideEnvironments(assembled.overrideCapturesIncumbent, binding),
+        ...args,
       ],
     );
   };
@@ -395,7 +384,10 @@ function registerAttribute(
   binding: RealmBinding,
   staticTarget?: object,
 ): void {
-  const steps: AttributeSteps = { get: memberBinding.createPropertyGetter(member, staticTarget) };
+  const get = memberBinding.createPropertyGetter(member, staticTarget);
+  const steps: AttributeSteps = {
+    get: memberBinding.createFrozenArrayGetter(member, get),
+  };
   if (!member.readonly) {
     const set = memberBinding.createPropertySetter(member);
     const convert = binding.implementationConverter.createConverter(member.type, {

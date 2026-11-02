@@ -22,7 +22,7 @@ export class TestRealm extends JSRealm implements WebIDLRealm {
       options.isGlobalPrototypeChainMutable ?? false;
     this.secureContext = options.secureContext ?? false;
     this.callbacks = {
-      captureContext: () => this,
+      captureEnvironment: () => null,
       cleanUpAfterRunningCallback: () => {},
       cleanUpAfterRunningScript: () => {},
       getAssociatedRealm: (value) => {

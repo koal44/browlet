@@ -1,7 +1,7 @@
 import { RangeError } from '../infra/exceptions';
-import { getV, type JSEnvironment } from '../js-engine/index';
+import { getV, type JSEnvironment, type JSFunction, type JSRealm } from '../js-engine/index';
 import {
-  arg, attrFn, onError, ctor, defineCallbackFunction, defineDictionary, defineInterface,
+  arg, onError, ctor, defineCallbackFunction, defineDictionary, defineInterface,
   dictMember, idlType, impl, roAttr, reference,
 } from '../web-idl/core/index';
 
@@ -93,10 +93,24 @@ export const queuingStrategyInitIDL = defineDictionary({
  * };
  */
 export class ByteLengthQueuingStrategyImpl {
+  static #sizeFunctions = new WeakMap<JSRealm, JSFunction>();
+
   #highWaterMark: number;
 
   constructor(init: QueuingStrategyInit) {
     this.#highWaterMark = init.highWaterMark;
+  }
+
+  /** Return the size function shared by all byte-length strategies in this realm. */
+  static getSizeFunction(realm: JSRealm): JSFunction {
+    let size = this.#sizeFunctions.get(realm);
+    if (!size) {
+      size = realm.createFunction((_receiver, [chunk]) => getV(chunk, 'byteLength', realm), {
+        length: 1, name: 'size',
+      });
+      this.#sizeFunctions.set(realm, size);
+    }
+    return size;
   }
 
   get highWaterMark(): number {
@@ -114,12 +128,9 @@ export const byteLengthQueuingStrategyIDL = defineInterface<JSEnvironment>({
     ctor([arg('init', reference('QueuingStrategyInit'))]),
     roAttr('highWaterMark', idlType.unrestrictedDouble),
     // BINDING_INTEGRATION: primitive chunks use the size function's owning realm.
-    roAttr('size', reference('Function'), attrFn((env) => {
-      const { realm } = env;
-      return function size(chunk: unknown) {
-        return getV(chunk, 'byteLength', realm);
-      };
-    })),
+    roAttr('size', reference('Function'), {
+      overrideGet({ relevant: env }) { return ByteLengthQueuingStrategyImpl.getSizeFunction(env.realm); },
+    }),
   ],
 });
 
@@ -137,10 +148,22 @@ export const byteLengthQueuingStrategyIDL = defineInterface<JSEnvironment>({
  * };
  */
 export class CountQueuingStrategyImpl {
+  static #sizeFunctions = new WeakMap<JSRealm, JSFunction<number>>();
+
   #highWaterMark: number;
 
   constructor(init: QueuingStrategyInit) {
     this.#highWaterMark = init.highWaterMark;
+  }
+
+  /** Return the size function shared by all count strategies in this realm. */
+  static getSizeFunction(realm: JSRealm): JSFunction<number> {
+    let size = this.#sizeFunctions.get(realm);
+    if (!size) {
+      size = realm.createFunction(() => 1, { length: 0, name: 'size' });
+      this.#sizeFunctions.set(realm, size);
+    }
+    return size;
   }
 
   get highWaterMark(): number {
@@ -150,15 +173,15 @@ export class CountQueuingStrategyImpl {
 
 // -- Web IDL ------------------------------------------------------------
 
-export const countQueuingStrategyIDL = defineInterface({
+export const countQueuingStrategyIDL = defineInterface<JSEnvironment>({
   name: 'CountQueuingStrategy',
   exposed: '*',
   implementation: impl(CountQueuingStrategyImpl),
   members: [
     ctor([arg('init', reference('QueuingStrategyInit'))]),
     roAttr('highWaterMark', idlType.unrestrictedDouble),
-    roAttr('size', reference('Function'), attrFn(() => {
-      return function size() { return 1; };
-    })),
+    roAttr('size', reference('Function'), {
+      overrideGet({ relevant: env }) { return CountQueuingStrategyImpl.getSizeFunction(env.realm); },
+    }),
   ],
 });

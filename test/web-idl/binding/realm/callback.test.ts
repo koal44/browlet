@@ -12,11 +12,11 @@ import { BindingWorld } from '../../../../src/web-idl/binding/world';
 import { RealmBinding } from '../../../../src/web-idl/binding/realm';
 import { missingArgument } from '../../../../src/web-idl/binding/realm/callback';
 
-import { getMemberBinding } from '../../../support/web-idl-binding';
+import { createBinding, getMemberBinding } from '../../../support/web-idl-binding';
 import { TestRealm as Realm } from '../../../support/web-idl-realm';
 
 describe('Web IDL callbacks', () => {
-  it('captures callback context and invokes functions in their associated realm', () => {
+  it('captures the callback environment and invokes functions in their associated realm', () => {
     const { binding, callbackRealm } = createCallbackBinding();
     const ctx = { binding: binding, realm: binding.realm };
     const order: string[] = [];
@@ -49,7 +49,7 @@ describe('Web IDL callbacks', () => {
     ]);
   });
 
-  it('reuses callback conversion without sharing allocation realms or captured contexts', () => {
+  it('reuses callback conversion without sharing allocation realms or captured environments', () => {
     const targetRealm = new Realm();
     const definition = defineCallbackFunction({
       name: 'SampleValues', returns: idlType.double,
@@ -61,15 +61,15 @@ describe('Web IDL callbacks', () => {
     const binding = new RealmBinding(
       new DefinitionAssembly([definition]), targetRealm, new BindingWorld([]), (ctx) => ({ realm: ctx.realm }),
     );
-    const capture = vi.spyOn(targetRealm.callbacks, 'captureContext');
+    const capture = vi.spyOn(targetRealm.callbacks, 'captureEnvironment');
     for (const realm of [new Realm(), new Realm()]) {
       const callback = realm.evaluate(`(values, ...extra) => {
         if (!(values instanceof Array)) throw new Error('Wrong argument realm');
         return globalThis.fail ? Infinity : values[0] + extra.length;
       }`, 'prepared-callback.js');
-      const firstContext = {};
-      const secondContext = {};
-      capture.mockReturnValueOnce(firstContext).mockReturnValueOnce(secondContext);
+      const firstEnv = binding.getEnvironment();
+      const secondEnv = createBinding().binding.getEnvironment();
+      capture.mockReturnValueOnce(firstEnv).mockReturnValueOnce(secondEnv);
       const values = [0, 1].map(() => binding.getConverter(binding.assembly.getIDLType(reference(definition.name))).jsToIDL(callback));
       const prepare = vi.spyOn(realm.callbacks, 'prepareToRunCallback');
       const clean = vi.spyOn(realm.callbacks, 'cleanUpAfterRunningCallback');
@@ -77,21 +77,21 @@ describe('Web IDL callbacks', () => {
         if (!IDLCallbackFunction.is(value)) throw new Error('Expected a converted callback');
         expect(value.invoke([[4], 1, 2], 'rethrow')).toBe(6);
       }
-      expect(prepare.mock.calls).toEqual([[firstContext], [secondContext]]);
+      expect(prepare.mock.calls).toEqual([[firstEnv], [secondEnv]]);
       Reflect.set(realm.globalObject, 'fail', true);
       const value = values[0]!;
       if (!IDLCallbackFunction.is(value)) throw new Error('Expected a converted callback');
       expect(() => value.invoke([[4]], 'rethrow')).toThrow(realm.TypeError);
-      expect(clean.mock.calls).toEqual([[firstContext], [secondContext], [firstContext]]);
+      expect(clean.mock.calls).toEqual([[firstEnv], [secondEnv], [firstEnv]]);
     }
   });
 
   it('round-trips and invokes callback-interface objects in their associated realm', () => {
     const { binding, callbackRealm, targetRealm } = createCallbackBinding();
     const ctx = { binding: binding, realm: binding.realm };
-    const callbackContext = {};
-    vi.spyOn(targetRealm.callbacks, 'captureContext')
-      .mockReturnValue(callbackContext);
+    const callbackEnv = binding.getEnvironment();
+    vi.spyOn(targetRealm.callbacks, 'captureEnvironment')
+      .mockReturnValue(callbackEnv);
     const prepareCallback = vi.spyOn(
       callbackRealm.callbacks,
       'prepareToRunCallback',
@@ -116,8 +116,8 @@ describe('Web IDL callbacks', () => {
 
     expect(ctx.binding.getConverter(ctx.binding.assembly.getIDLType(reference('NumberHandler')), ctx.realm).idlToJS(value)).toBe(object);
     expect(value.callUserObjectOperation('handleEvent', [2])).toBe(3);
-    expect(prepareCallback).toHaveBeenCalledExactlyOnceWith(callbackContext);
-    expect(cleanUpCallback).toHaveBeenCalledExactlyOnceWith(callbackContext);
+    expect(prepareCallback).toHaveBeenCalledExactlyOnceWith(callbackEnv);
+    expect(cleanUpCallback).toHaveBeenCalledExactlyOnceWith(callbackEnv);
     expect(prepareTargetCallback).not.toHaveBeenCalled();
     expect(() => ctx.binding.getConverter(ctx.binding.assembly.getIDLType(reference('NumberHandler')), ctx.realm).jsToIDL(1)).toThrow(targetRealm.TypeError);
   });
@@ -127,7 +127,7 @@ describe('Web IDL callbacks', () => {
     const ctx = { binding: binding, realm: binding.realm };
     const functionType = union(reference('Increment'), idlType.DOMString);
     const interfaceType = union(reference('NumberHandler'), idlType.DOMString);
-    const capture = vi.spyOn(targetRealm.callbacks, 'captureContext');
+    const capture = vi.spyOn(targetRealm.callbacks, 'captureEnvironment');
     const functionConverter = binding.getConverter(binding.assembly.getIDLType(functionType));
     const interfaceConverter = binding.getConverter(binding.assembly.getIDLType(interfaceType));
     functionConverter.getInputSteps();
@@ -136,9 +136,9 @@ describe('Web IDL callbacks', () => {
 
     for (const realm of [targetRealm, callbackRealm]) {
       capture.mockClear();
-      const functionContext = {};
-      const interfaceContext = {};
-      capture.mockReturnValueOnce(functionContext).mockReturnValueOnce(interfaceContext);
+      const functionEnv = binding.getEnvironment();
+      const interfaceEnv = createBinding().binding.getEnvironment();
+      capture.mockReturnValueOnce(functionEnv).mockReturnValueOnce(interfaceEnv);
       const callback = realm.evaluate('(value) => value + 1', 'union-callback.js');
       const object = realm.evaluate('({ handleEvent(value) { return value + 2; } })', 'union-callback-interface.js');
       const functionRecord = functionConverter.jsToIDL(callback);
@@ -148,8 +148,8 @@ describe('Web IDL callbacks', () => {
       }
 
       expect(capture).toHaveBeenCalledTimes(2);
-      expect(functionRecord.callbackContext).toBe(functionContext);
-      expect(interfaceRecord.callbackContext).toBe(interfaceContext);
+      expect(functionRecord.callbackEnv).toBe(functionEnv);
+      expect(interfaceRecord.callbackEnv).toBe(interfaceEnv);
       expect(functionRecord.realm).toBe(realm);
       expect(interfaceRecord.realm).toBe(realm);
       expect(ctx.binding.getConverter(ctx.binding.assembly.getIDLType(functionType), ctx.realm).idlToJS(functionRecord)).toBe(callback);

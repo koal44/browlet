@@ -36,7 +36,7 @@ export function validateImplementationMembers<Env>(definition: PrimaryInterfaceD
     let method = true;
     switch (member.kind) {
       case 'attribute':
-        if (member.overrideGet || member.overrideSet || member.attributeFunction ||
+        if (member.overrideGet || member.overrideSet ||
           member.extendedAttributes?.some((attribute) => attribute.kind === 'reflection')) continue;
         method = false;
         name = member.name;

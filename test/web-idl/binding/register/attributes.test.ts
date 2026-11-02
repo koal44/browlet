@@ -1,7 +1,7 @@
 import { assert, describe, expect, it, vi } from 'vitest';
 
 import {
-  attr, attrFn, onError, ctor, defineEnumeration, defineInterface, idlType, impl, nullable, roAttr,
+  attr, onError, ctor, defineEnumeration, defineInterface, idlType, impl, nullable, roAttr,
   reference, op, staticOp, stringifier, xattr,
 } from '../../../../src/web-idl/core/index';
 import { getImplementationObject } from '../../../../src/web-idl/values/index';
@@ -18,7 +18,7 @@ describe('Web IDL implementation attribute registration', () => {
       members: [
         ctor(),
         roAttr('environments', idlType.any, {
-          overrideGet(env, methodEnv) { return [env.realm, methodEnv.realm]; },
+          overrideGet({ relevant: env, callee: methodEnv }) { return [env.realm, methodEnv.realm]; },
         }),
       ],
     });
@@ -42,7 +42,7 @@ describe('Web IDL implementation attribute registration', () => {
         ctor(),
         attr('value', idlType.DOMString, {
           overrideGet() { return ''; },
-          overrideSet(env, value, methodEnv) { values.push([this, env.realm, value, methodEnv.realm]); },
+          overrideSet({ relevant: env, callee: methodEnv }, value) { values.push([this, env.realm, value, methodEnv.realm]); },
         }),
       ],
     });
@@ -60,7 +60,7 @@ describe('Web IDL implementation attribute registration', () => {
     expect(convert).toHaveBeenCalledOnce();
   });
 
-  it('derives capture from accessor inputs through forwarding without converting twice', () => {
+  it('propagates explicit accessor capture through forwarding without converting twice', () => {
     const incumbent = { realm: new Realm() };
     const received: unknown[] = [];
     class DestinationImpl {
@@ -77,7 +77,8 @@ describe('Web IDL implementation attribute registration', () => {
         name: 'Destination', exposed: '*', implementation: impl(DestinationImpl),
         members: [ctor(), attr('value', idlType.DOMString, {
           overrideGet() { return (this as DestinationImpl).read(); },
-          overrideSet(_env, value, _methodEnv, incumbentEnv) { (this as DestinationImpl).write(value as string, incumbentEnv); },
+          overrideCapturesIncumbent: true,
+          overrideSet({ incumbent: incumbentEnv }, value) { (this as DestinationImpl).write(value as string, incumbentEnv); },
         })],
       }),
       defineInterface({
@@ -88,7 +89,8 @@ describe('Web IDL implementation attribute registration', () => {
             ...xattr(['PutForwards', 'value']),
           }),
           roAttr('read', idlType.DOMString, {
-            overrideGet(_env, _methodEnv, incumbentEnv) { return (this as ForwarderImpl).read(incumbentEnv); },
+            overrideCapturesIncumbent: true,
+            overrideGet({ incumbent: incumbentEnv }) { return (this as ForwarderImpl).read(incumbentEnv); },
           }),
         ],
       }),
@@ -106,36 +108,37 @@ describe('Web IDL implementation attribute registration', () => {
       expect(Reflect.get(object, 'read')).toBe('read');
       expect(received).toEqual([incumbent, incumbent]);
       const captured = create.mock.calls.filter(([, options]) => options.captureIncumbent).map(([, options]) => options.name);
-      expect(captured).toEqual(['set value', 'set destination', 'get read']);
+      expect(captured).toEqual(['get value', 'set value', 'set destination', 'get read']);
     } finally { create.mockRestore(); }
   });
 
-  it('creates shared function-valued attributes with ordinary call behavior', () => {
+  it('preserves functions returned by getter overrides', () => {
     class AttributeFunctionImpl {}
-    const callback = function(this: unknown, ...args: unknown[]) {
-      return { receiver: this, args };
-    };
+    const realm = new Realm();
+    const firstFunction = realm.createFunction((receiver, args) => ({ receiver, args }), { name: 'first', length: 0 });
+    const secondFunction = realm.createFunction(() => 1, { name: 'second', length: 0 });
     const definition = defineInterface({
       name: 'AttributeFunction', exposed: '*', implementation: impl(AttributeFunctionImpl),
       members: [
         ctor(),
-        roAttr('first', reference('Function'), attrFn(() => callback)),
-        roAttr('second', reference('Function'), attrFn(() => callback)),
+        roAttr('first', reference('Function'), { overrideGet() { return firstFunction; } }),
+        roAttr('second', reference('Function'), { overrideGet() { return secondFunction; } }),
       ],
     });
     const bindings = new BindingWorld([definition]);
-    const { realm } = installTestBindings(bindings);
+    installTestBindings(bindings, realm);
     const Constructor = Reflect.get(realm.globalObject, definition.name) as new() => object;
     const first = new Constructor();
     const second = new Constructor();
     const function_ = Reflect.get(first, 'first') as CallableFunction;
 
+    expect(function_).toBe(firstFunction);
     expect(function_).toBe(Reflect.get(first, 'first'));
     expect(function_).toBe(Reflect.get(second, 'first'));
     expect(function_).not.toBe(Reflect.get(first, 'second'));
     expect(function_).toBeInstanceOf(realm.Function);
     expect(function_.name).toBe('first');
-    expect(function_.length).toBe(callback.length);
+    expect(function_.length).toBe(0);
     expect(Object.hasOwn(function_, 'prototype')).toBe(false);
     expect(() => { Reflect.construct(function_, []); }).toThrow(TypeError);
     const receiver = {};
@@ -152,14 +155,15 @@ describe('Web IDL implementation attribute registration', () => {
   it('calls the declared setter of a function-valued attribute', () => {
     class AttributeFunctionImpl {}
     let assignedResult: unknown;
+    const handler = () => 1;
     const definition = defineInterface({
       name: 'AttributeFunction', exposed: '*', implementation: impl(AttributeFunctionImpl),
       members: [
         ctor(),
         attr('handler', reference('Function'), {
-          ...attrFn(() => () => 1),
           ...onError('rethrow'),
-          overrideSet(_env, value) { assignedResult = (value as () => unknown)(); },
+          overrideGet() { return handler; },
+          overrideSet(_environments, value) { assignedResult = (value as () => unknown)(); },
         }),
       ],
     });

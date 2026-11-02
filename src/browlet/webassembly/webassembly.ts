@@ -79,10 +79,10 @@ export interface WebAssemblyInstantiatedSource {
 
 // Value recognition only: native constructors/members remain on the existing namespace for the §§5.1–5.2 audit.
 export const webAssemblyModuleIDL = defineInterface({
-  name: 'Module', members: [], isInstance: isWebAssemblyModule,
+  name: 'Module', members: [], interfaceOverride: { isInstance: isWebAssemblyModule },
 });
 export const webAssemblyInstanceIDL = defineInterface({
-  name: 'Instance', members: [], isInstance: isWebAssemblyInstance,
+  name: 'Instance', members: [], interfaceOverride: { isInstance: isWebAssemblyInstance },
 });
 
 const moduleType = implementationType<JSWebAssemblyModule>(reference('Module'));
@@ -111,7 +111,7 @@ export const webAssemblyCompileOptionsIDL = defineDictionary({
 export const webAssemblyIDL = defineNamespace<JSEnvironment>({
   name: 'WebAssembly',
   exposed: '*',
-  namespaceOverride: (env) => env.realm.WebAssembly,
+  overrideNamespace: (env) => env.realm.WebAssembly,
   members: [
     op('validate', idlType.boolean,
       [
@@ -120,7 +120,7 @@ export const webAssemblyIDL = defineNamespace<JSEnvironment>({
           optional: true, default: emptyDictionary,
         }),
       ],
-      { overrideInvoke: (env, bytes, options) => WebAssemblyImpl.validate(bytes, options, env) },
+      { overrideInvoke: ({ callee: env }, bytes, options) => WebAssemblyImpl.validate(bytes, options, env) },
     ),
     op('compile', promise(moduleType),
       [
@@ -129,7 +129,7 @@ export const webAssemblyIDL = defineNamespace<JSEnvironment>({
           optional: true, default: emptyDictionary,
         }),
       ],
-      { overrideInvoke: (env, bytes, options) => WebAssemblyImpl.compile(bytes, options, env) },
+      { overrideInvoke: ({ callee: env }, bytes, options) => WebAssemblyImpl.compile(bytes, options, env) },
     ),
     op('instantiate', promise(instantiatedSourceType),
       [
@@ -139,11 +139,11 @@ export const webAssemblyIDL = defineNamespace<JSEnvironment>({
           optional: true, default: emptyDictionary,
         }),
       ],
-      { overrideInvoke: (env, bytes, imports, options) => WebAssemblyImpl.instantiateBytes(bytes, imports, options, env) },
+      { overrideInvoke: ({ callee: env }, bytes, imports, options) => WebAssemblyImpl.instantiateBytes(bytes, imports, options, env) },
     ),
     op('instantiate', promise(instanceType),
       [arg('moduleObject', moduleType), arg('importObject', idlType.object, { optional: true })],
-      { overrideInvoke: (env, module, imports) => WebAssemblyImpl.instantiateModule(module, imports, env) },
+      { overrideInvoke: ({ callee: env }, module, imports) => WebAssemblyImpl.instantiateModule(module, imports, env) },
     ),
   ],
 });

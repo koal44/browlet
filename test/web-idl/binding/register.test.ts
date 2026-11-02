@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { DOMExceptionImpl, DOMExceptionNames } from '../../../src/web-idl/core/dom-exception';
 import {
   arg, atArg, attr, ctor, defineIncludes, defineInterface, defineInterfaceMixin, idlType, impl, iter,
-  op, staticOp, roAttr, reference, unwrapArg, stringifier, invokeWith,
+  op, staticOp, roAttr, reference, unwrapArg, stringifier, invokeWith, type OverrideEnvironments,
 } from '../../../src/web-idl/core/index';
 import { getImplementationObject, getImplementationRecord } from '../../../src/web-idl/values/index';
 import { BindingWorld } from '../../../src/web-idl/binding/world';
@@ -308,7 +308,7 @@ describe('Web IDL implementation registration', () => {
         arg('value', idlType.DOMString),
       ],
       {
-        overrideInvoke(env: WebIDLEnvironment, value) {
+        overrideInvoke({ relevant: env }: OverrideEnvironments<WebIDLEnvironment>, value) {
           expect(env.realm).toBe(realm);
           return `bound:${String(value)}`;
         },

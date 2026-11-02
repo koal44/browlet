@@ -1,6 +1,7 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 
 import type { JSFunction } from '../../../src/js-engine/index';
+import { TypeError as ImplementationTypeError } from '../../../src/infra/index';
 import {
   BindingWorld, attr, ctor, defineIncludes, defineInterface, defineInterfaceMixin, defineTypedef,
   hasExtendedAttribute, idlType, impl, reference, reflect, xattr,
@@ -137,6 +138,33 @@ describe('Web IDL extended-attribute integration', () => {
     expect(valueMember.overrideSet).toBeUndefined();
     const ordinary = project(new BindingWorld(definitions));
     expect(ordinary.object.value).toBe(3);
+  });
+
+  it('keeps the ordinary live getter when an extension supplies only a setter', () => {
+    const writes: WebIDLEnvironment[] = [];
+    const world = new BindingWorld(definitions, {
+      extendedAttributes: {
+        prepareAttribute(member, owners) {
+          if (!hasExtendedAttribute(member.extendedAttributes, 'Reflect')) return;
+          const accessors: AttributeBinding<WebIDLEnvironment, ExampleImpl> = {
+            set(ctx, value) { writes.push(ctx.getEnvironment()); this.value = value as number; },
+          };
+          return new Map(owners.map((owner) => [owner, accessors as AttributeBinding]));
+        },
+      },
+    });
+    const first = project(world);
+    const second = project(world);
+    const borrowed = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(second.object), 'value')!;
+    expect(borrowed.get!.call(first.object)).toBe(3);
+    borrowed.set!.call(first.object, { valueOf: () => 15.9 });
+    expect(first.object.value).toBe(15);
+    expect(writes).toEqual([first.env]);
+    let failure = new TypeError('Live getter');
+    Object.defineProperty(first.implementation, 'value', { get() { throw failure; } });
+    expect(() => { borrowed.get!.call(first.object); }).toThrow(failure);
+    failure = new ImplementationTypeError('Requested TypeError');
+    expect(() => { borrowed.get!.call(first.object); }).toThrow(second.env.realm.TypeError);
   });
 
   it('prepares a shared mixin member once with different accessors for its includers', () => {

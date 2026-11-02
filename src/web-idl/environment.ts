@@ -21,10 +21,11 @@ export interface WebIDLRealm extends JSRealm {
 
 /** Host lifecycle and realm association for Web IDL callbacks. */
 export interface CallbackHooks {
-  captureContext(): object;
-  cleanUpAfterRunningCallback(context: object): void;
+  /** Capture the callback environment, or null when the host has none. */
+  captureEnvironment(): WebIDLEnvironment | null;
+  cleanUpAfterRunningCallback(env: WebIDLEnvironment | null): void;
   cleanUpAfterRunningScript(): void;
   getAssociatedRealm(value: object): WebIDLRealm;
-  prepareToRunCallback(context: object): void;
+  prepareToRunCallback(env: WebIDLEnvironment | null): void;
   prepareToRunScript(): void;
 }

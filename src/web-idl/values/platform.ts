@@ -27,7 +27,7 @@ export function isStampedPlatformObject(platformObject: unknown): platformObject
   return PlatformObjectStamper.get(platformObject) !== undefined;
 }
 
-/** The shared record for an implementation instance and its eventual platform object. */
+/** The shared record for an implementation and its platform object; native interfaces use one object for both. */
 export class PlatformRecord<T extends object = object> {
   /** Implementation paired with this record's platform object. */
   implInst: StampedImplInstance<T>;
@@ -42,25 +42,30 @@ export class PlatformRecord<T extends object = object> {
   observableArrays?: Map<IDLAttribute, ObservableArrayHandle<unknown, unknown>>;
   setEntries?: Set<unknown>;
   /** Interface-owned projection selected once; its result can change with the implementation's lifetime. */
-  #projectionOverride: ProjectionOverride | undefined;
+  #overrideProjection: ProjectionOverride | undefined;
 
   constructor(
     implInst: T,
     assembled: AssembledInterface,
     binding: RealmBinding,
+    platformObject?: object,
   ) {
     this.assembled = assembled;
     this.binding = binding;
-    this.#projectionOverride = binding.getImplementationBinding(assembled).projectionOverride;
-    binding.initializeImplementation(implInst, assembled);
+    // A supplied platform object already has its implementation state and native properties.
+    if (!platformObject) {
+      this.#overrideProjection = binding.getImplementationBinding(assembled).overrideProjection;
+      binding.initializeImplementation(implInst, assembled);
+    }
     this.implInst = ImplementationStamper.stamp(implInst, this);
+    if (platformObject) this.platformObject = PlatformObjectStamper.stamp(platformObject, this);
   }
 
   get realm(): WebIDLRealm { return this.binding.realm; }
 
   /** Project the implementation through its registered steps or its ordinary cached platform object. */
   project(): object | null {
-    const project = this.#projectionOverride;
+    const project = this.#overrideProjection;
     return project ? project(this.implInst) : this.#ensurePlatformObject();
   }
 
@@ -143,37 +148,27 @@ export function stampImplementation<T extends object>(
   return new PlatformRecord(implInst, assembled, binding).implInst;
 }
 
-// Project helper: read the platform object's attached record.
+/** Read the shared record through its platform-object stamp, without checking a world or associating it. */
 export function getPlatformRecord(platformObject: unknown): PlatformRecord | undefined {
   return PlatformObjectStamper.get(platformObject);
 }
 
-// Project helper: read the implementation instance's attached record.
-export function getImplementationRecord<T extends object>(
-  implInst: T,
-): PlatformRecord<T> | undefined;
-export function getImplementationRecord(
-  implInst: unknown,
-): PlatformRecord | undefined;
-export function getImplementationRecord(
-  implInst: unknown,
-): PlatformRecord | undefined {
+/** Read the same shared record through its implementation stamp, without checking a world or associating it. */
+export function getImplementationRecord<T extends object>(implInst: T): PlatformRecord<T> | undefined;
+export function getImplementationRecord(implInst: unknown): PlatformRecord | undefined;
+export function getImplementationRecord(implInst: unknown): PlatformRecord | undefined {
   return ImplementationStamper.get(implInst);
 }
 
 /** Read an established platform association; unlike world.unwrap(), this does not select or check a world. */
 export function getImplementationObject(platformObject: StampedPlatformObject): StampedImplInstance;
-export function getImplementationObject(
-  platformObject: unknown,
-): StampedImplInstance | undefined;
+export function getImplementationObject(platformObject: unknown): StampedImplInstance | undefined;
 export function getImplementationObject(platformObject: unknown): StampedImplInstance | undefined {
   return getPlatformRecord(platformObject)?.implInst;
 }
 
 // Project helper: retrieve the platform object paired with an implementation.
-export function getPlatformObject(
-  implInst: unknown,
-): StampedPlatformObject | undefined {
+export function getPlatformObject(implInst: unknown): StampedPlatformObject | undefined {
   return getImplementationRecord(implInst)?.platformObject;
 }
 

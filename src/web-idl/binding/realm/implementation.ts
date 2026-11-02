@@ -1,5 +1,5 @@
 import { InternalError } from '../../../infra/index';
-import type { JSFunction } from '../../../js-engine/index';
+import type { JSFunction, JSFunctionWithPrototype } from '../../../js-engine/index';
 
 import type {
   IDLInterfaceMember, IDLConstant, IDLNamedArguments, AssembledInterface, AssembledCallbackInterface,
@@ -26,12 +26,12 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
   /** Replace the whole constructor entry, before ordinary checks and argument conversion. */
   overrideConstructor?: ConstructorOverrideSteps;
   /** Registered outward projection, independent of the paired platform object's allocation. */
-  projectionOverride?: ProjectionOverride;
+  overrideProjection?: ProjectionOverride;
   /** Registered steps and generated functions, keyed by compiled members. */
   members?: Map<IDLMember, MemberBinding>;
 
   /** Retained platform objects preserve their identities for this construct and realm. */
-  interfaceObject?: InterfaceObject;
+  interfaceObject?: JSFunctionWithPrototype;
   interfacePrototypeObject?: object;
   namespaceObject?: object;
   legacyCallbackInterfaceObject?: JSFunction;
@@ -65,16 +65,24 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
   // https://webidl.spec.whatwg.org/#interface-object
   getInterfaceObject(
     this: ImplementationBinding<AssembledInterface>,
-  ): InterfaceObject {
+  ): JSFunctionWithPrototype {
     const { binding: realmBinding, assembled } = this;
     if (this.interfaceObject) return this.interfaceObject;
+
+    const override = assembled.primary.interfaceOverride;
+    if (override?.getInterfaceObject) {
+      return this.#getOverriddenInterfaceObject(
+        override.getInterfaceObject(realmBinding.getEnvironment()) as JSFunctionWithPrototype,
+      );
+    }
 
     const constructors = assembled.getConstructors(
       (entry) => assembled.isMemberExposed(entry, realmBinding.realm),
     );
     const overrideConstructor = this.overrideConstructor;
     const resolve = createOverloadResolver(constructors, realmBinding, `${assembled.primary.name}:constructor`);
-    // TODO: Capture the incumbent at constructible entry. The MutationObserver regression in
+    // TODO: Infer entry capture for callback-typed constructors, beyond explicit overrideCapturesIncumbent.
+    // The MutationObserver regression in
     // test/browlet/communication/window-messaging.test.ts saves outer A instead of constructor caller B.
     // SPEC_CLASH(mutation-observer-callback-incumbent): expect caller B per Web IDL and Chromium/Firefox; WebKit saves outer A.
     const object: JSFunction = realmBinding.realm.createFunction(
@@ -105,6 +113,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
       },
       {
         constructible: true,
+        captureIncumbent: constructors.callables.some((constructor) => constructor.overrideCapturesIncumbent),
         length: constructors.minimumArgumentCount,
         name: assembled.primary.name,
       },
@@ -217,8 +226,8 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     const { binding: realmBinding, assembled } = this;
     if (this.namespaceObject) return this.namespaceObject;
 
-    const namespaceOverride = assembled.primary.namespaceOverride;
-    const object = namespaceOverride?.(realmBinding.getEnvironment()) ??
+    const overrideNamespace = assembled.primary.overrideNamespace;
+    const object = overrideNamespace?.(realmBinding.getEnvironment()) ??
       realmBinding.realm.createOrdinaryObject(realmBinding.realm.objectPrototype);
     this.namespaceObject = object;
     this.defineAttributes(object, 'regular');
@@ -227,6 +236,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
 
     for (const interfaceAssembled of realmBinding.assembly.interfaces.inNamespace(assembled.primary.name)) {
       if (!interfaceAssembled.isExposed(realmBinding.realm)) continue;
+      if (!interfaceAssembled.hasInterfaceObject()) continue;
       defineProperty(object, interfaceAssembled.primary.name, {
         configurable: true,
         enumerable: false,
@@ -252,6 +262,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     if (this.interfacePrototypeObject) {
       return this.interfacePrototypeObject;
     }
+    if (assembled.primary.interfaceOverride) return this.getInterfaceObject().prototype;
 
     this.assertOrdinaryProjection();
 
@@ -516,6 +527,48 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     return this.legacyPropertyMetadata;
   }
 
+  /** Retain the supplied constructor and prototype, adapting only the declared members. */
+  #getOverriddenInterfaceObject(
+    this: ImplementationBinding<AssembledInterface>,
+    interfaceObject: JSFunctionWithPrototype,
+  ): JSFunctionWithPrototype {
+    const { binding: realmBinding, assembled } = this;
+    const prototype = interfaceObject.prototype;
+    const constructors = assembled.getConstructors(
+      (entry) => assembled.isMemberExposed(entry, realmBinding.realm),
+    );
+    if (constructors.callables.length) {
+      const resolve = createOverloadResolver(constructors, realmBinding, `${assembled.name}:constructor`);
+      const construct = (_target: JSFunction, argumentsList: unknown[], newTarget: JSFunction) => {
+        const overload = resolve(argumentsList);
+        const behavior = realmBinding.getMemberBinding(assembled, overload.callable)!.constructorBehavior!;
+        return realmBinding.constructPlatformObject(assembled, behavior, overload.values, newTarget);
+      };
+      const captureIncumbent = constructors.callables.some((constructor) => constructor.overrideCapturesIncumbent);
+      // Preserve the native prototype and undeclared static members while adapting construction.
+      interfaceObject = new Proxy<JSFunctionWithPrototype>(interfaceObject, {
+        apply: () => realmBinding.throwTypeError(`Failed to construct '${assembled.name}': use the 'new' operator.`),
+        // The trap can be a nonconstructible native function: capture must precede host JavaScript.
+        construct: captureIncumbent ? realmBinding.realm.createFunction((_receiver, args) =>
+          construct(args[0] as JSFunction, args[1] as unknown[], args[2] as JSFunction),
+        { name: 'construct', length: 3, captureIncumbent: true }) : construct,
+      });
+      defineProperty(prototype, 'constructor', {
+        value: interfaceObject, writable: true, enumerable: false, configurable: true,
+      });
+      defineProperty(interfaceObject, 'length', {
+        value: constructors.minimumArgumentCount, writable: false, enumerable: false, configurable: true,
+      });
+      defineProperty(interfaceObject, 'name', {
+        value: assembled.name, writable: false, enumerable: false, configurable: true,
+      });
+    }
+    this.interfaceObject = interfaceObject;
+    this.interfacePrototypeObject = prototype;
+    this.defineOperations(interfaceObject, 'static');
+    return interfaceObject;
+  }
+
   #defineConstant(
     target: object,
     constant: IDLConstant,
@@ -585,8 +638,6 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
 
 export type BoundConstruct = AssembledInterface | AssembledNamespace | AssembledCallbackInterface;
 export type IDLMember = IDLInterfaceMember | IDLNamedArguments;
-
-type InterfaceObject = JSFunction & { prototype: object; };
 
 type ImplementationCreationSteps = () => object;
 

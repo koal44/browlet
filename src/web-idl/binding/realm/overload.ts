@@ -341,7 +341,7 @@ function containsImplementedInterface(
 ): boolean {
   return type.candidates.interfaces.some((candidate) => {
     if (candidate.kind === 'interface') {
-      const isInstance = candidate.assembled.primary.isInstance;
+      const isInstance = candidate.assembled.primary.interfaceOverride?.isInstance;
       if (isInstance) return isInstance(value);
       return record?.implements(candidate.assembled);
     }

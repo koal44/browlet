@@ -16,8 +16,8 @@ describe('Web IDL namespace objects', () => {
     const namespace = defineNamespace<Environment>({
       name: 'Tools',
       exposed: ['Window'],
-      namespaceOverride: (env) => env.namespace,
-      members: [roAttr('version', idlType.DOMString, { overrideGet: (env) => env.version })],
+      overrideNamespace: (env) => env.namespace,
+      members: [roAttr('version', idlType.DOMString, { overrideGet: ({ relevant: env }) => env.version })],
     });
     const partial = definePartialNamespace<Environment>({
       name: 'Tools',
@@ -25,7 +25,7 @@ describe('Web IDL namespace objects', () => {
       members: [op('double', idlType.long,
         [arg('value', idlType.long)],
         {
-          overrideInvoke(_env, value) {
+          overrideInvoke(_environments, value) {
             expect(this).toBe(null);
             return value * 2;
           },

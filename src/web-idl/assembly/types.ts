@@ -111,6 +111,7 @@ abstract class Type {
     if (seen.has(type)) return false;
     seen.add(type);
     switch (type.kind) {
+      // Callback context is part of the IDL value, including when overrideCbConversion adapts it afterward.
       case 'callback-function': case 'callback-interface': return true;
       case 'nullable': return type.innerType.#checkCallbackContext(seen);
       case 'sequence': case 'frozen-array': case 'observable-array': return type.elementType.#checkCallbackContext(seen);

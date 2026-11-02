@@ -18,6 +18,11 @@ import {
 } from '../../../src/web-idl/core/index';
 
 describe('Web IDL declarations and serialization', () => {
+  it('serializes nullable frozen-array attributes', () => {
+    const member = roAttr('entries', nullable(frozenArray(idlType.DOMString)));
+    expect(serializeMember(member)).toBe('readonly attribute FrozenArray<DOMString>? entries;');
+  });
+
   it('serializes implementation references using their declared IDL names', () => {
     class ExampleImpl {}
     class ConsumerImpl {}

@@ -11,7 +11,7 @@ import {
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
 import type { WebIDLEnvironment, WebIDLRealm } from '../../../../src/web-idl/index';
 
-import { installTestBindings } from '../../../support/web-idl-binding';
+import { createBinding, installTestBindings } from '../../../support/web-idl-binding';
 import { TestRealm as Realm } from '../../../support/web-idl-realm';
 
 describe('Web IDL implementation callback conversion', () => {
@@ -317,7 +317,7 @@ describe('Web IDL implementation callback conversion', () => {
     expect(new Constructor().construct(Build)).toBe(6);
   });
 
-  it('retains callback realms and captured contexts through explicit construction', () => {
+  it('retains callback realms and captured environments through explicit construction', () => {
     class FactoryOwnerImpl {
       construct(callback: StampedCallbackFunction, realm: WebIDLRealm): unknown {
         return CallbackFunctionStamper.get(callback).construct([4], realm);
@@ -352,9 +352,9 @@ describe('Web IDL implementation callback conversion', () => {
         return Reflect.get(target, property, receiver);
       }
     })`, 'adapted-constructor.js');
-    const firstContext = {};
-    const secondContext = {};
-    vi.spyOn(realm.callbacks, 'captureContext').mockReturnValueOnce(firstContext).mockReturnValueOnce(secondContext);
+    const firstEnv = createBinding().binding.getEnvironment();
+    const secondEnv = createBinding().binding.getEnvironment();
+    vi.spyOn(realm.callbacks, 'captureEnvironment').mockReturnValueOnce(firstEnv).mockReturnValueOnce(secondEnv);
     const prepareScript = vi.spyOn(callbackRealm.callbacks, 'prepareToRunScript');
     const cleanScript = vi.spyOn(callbackRealm.callbacks, 'cleanUpAfterRunningScript');
     const prepareCallback = vi.spyOn(callbackRealm.callbacks, 'prepareToRunCallback');
@@ -365,7 +365,7 @@ describe('Web IDL implementation callback conversion', () => {
     Reflect.set(callbackRealm.globalObject, 'fail', true);
     expect(() => owner.construct(callback)).toThrow(callbackRealm.TypeError);
     expect(prototypeReads.count).toBe(2);
-    expect(prepareCallback.mock.calls).toEqual([[firstContext], [secondContext]]);
+    expect(prepareCallback.mock.calls).toEqual([[firstEnv], [secondEnv]]);
     expect(cleanCallback.mock.calls).toEqual(prepareCallback.mock.calls);
     expect(prepareScript).toHaveBeenCalledTimes(2);
     expect(cleanScript).toHaveBeenCalledTimes(2);

@@ -234,7 +234,7 @@ describe('Implementation arrays', () => {
         ctor(
           [arg('block', idlType.boolean)],
           {
-            overrideConstruct(_env, block) {
+            overrideConstruct(_environments, block) {
               return block ? new BlockQuoteImpl('created', blockQuoteDependency) : new QImpl('created', qDependency);
             },
           },

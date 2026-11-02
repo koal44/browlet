@@ -101,7 +101,7 @@ export const htmlOptionsCollectionIDL = defineInterface({
       {
         ...xattr('CEReactions'),
         special: 'setter',
-        overrideInvoke(_env, index, option) {
+        overrideInvoke(_environments, index, option) {
           (this as HTMLOptionsCollectionImpl).setOption(index, option);
         },
       },

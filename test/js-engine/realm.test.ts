@@ -7,7 +7,7 @@ import {
 } from '../../src/js-engine/index';
 
 describe('JavaScript Realm', () => {
-  it('captures realm intrinsics and creates realm-owned functions', () => {
+  it.each([false, true])('captures intrinsics and creates realm-owned functions (incumbent capture: %s)', (captureIncumbent) => {
     const realm = new JSRealm();
     const Array_ = realm.Array;
     const BigInt_ = realm.BigInt;
@@ -22,14 +22,14 @@ describe('JavaScript Realm', () => {
         newTarget,
         thisArgument,
       }),
-      { length: 2, name: 'perform' },
+      { captureIncumbent, length: 2, name: 'perform' },
     );
     const constructible = realm.createFunction(
       (_thisArgument, argumentsList, newTarget) => ({
         argumentsList,
         newTarget,
       }),
-      { constructible: true, length: 1, name: 'Example' },
+      { captureIncumbent, constructible: true, length: 1, name: 'Example' },
     );
 
     expect(Array_).toBe(Reflect.get(realm.globalObject, 'Array'));
@@ -54,6 +54,9 @@ describe('JavaScript Realm', () => {
     expect(Reflect.apply(callable, undefined, [])).toMatchObject({
       thisArgument: undefined,
     });
+    for (const receiver of [null, 7, 'text', true]) {
+      expect(Reflect.apply(callable, receiver, []).thisArgument).toBe(receiver);
+    }
 
     const instance = Reflect.construct(constructible, ['value']) as {
       argumentsList: unknown[];
@@ -83,7 +86,7 @@ describe('JavaScript Realm', () => {
     expect(realm.TypeError).toBe(TypeError_);
   });
 
-  it('passes call arguments without invoking author iterator methods', () => {
+  it.each([false, true])('passes call and constructor arguments without author iterators (incumbent capture: %s)', (captureIncumbent) => {
     const realm = new JSRealm();
     realm.evaluate(`
       Object.getPrototypeOf([][Symbol.iterator]()).next = () => {
@@ -94,13 +97,20 @@ describe('JavaScript Realm', () => {
     for (const constructible of [false, true]) {
       const callable = realm.createFunction(
         (thisArgument, argumentsList) => ({ thisArgument, argumentsList }),
-        { constructible, length: 2, name: 'perform' },
+        { captureIncumbent, constructible, length: 2, name: 'perform' },
       );
       const result = Reflect.apply(callable, undefined, ['a', 'b']);
       expect(result.thisArgument).toBeUndefined();
       expect(result.argumentsList.length).toBe(2);
       expect(result.argumentsList[0]).toBe('a');
       expect(result.argumentsList[1]).toBe('b');
+      if (constructible) {
+        const instance = Reflect.construct(callable, ['a', 'b']) as typeof result;
+        expect(instance.thisArgument).toBeUndefined();
+        expect(instance.argumentsList.length).toBe(2);
+        expect(instance.argumentsList[0]).toBe('a');
+        expect(instance.argumentsList[1]).toBe('b');
+      }
     }
   });
 

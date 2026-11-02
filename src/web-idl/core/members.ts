@@ -1,6 +1,6 @@
 import type {
   CallbackExceptionBehavior, ConstantValue, DefaultValue, Exposed, ExtendedAttribute,
-  ImplementationClass, InjectedArgument, ReferenceType, TypeParameter, WebIDLType,
+  ImplementationClass, InjectedArgument, OverrideEnvironments, ReferenceType, TypeParameter, WebIDLType,
 } from './types';
 
 // Member sets
@@ -75,13 +75,13 @@ export type AttributeMember<Env = unknown> = {
   /** Backend capability gate; the declaration remains available to generated types. */
   enabled?: boolean;
 
-  // Project metadata: member steps, returned function creation, and callback exception policy.
-  /** Override property reading; declare a third positional parameter to request the incumbent. */
-  overrideGet?: (this: object | null, env: Env, methodEnv: Env, incumbentEnv: Env | undefined) => unknown;
-  /** Override property writing with a converted value; declare a fourth positional parameter to request the incumbent. */
-  overrideSet?: (this: object | null, env: Env, value: unknown, methodEnv: Env, incumbentEnv: Env | undefined) => void;
-  /** Create the steps for a cached realm-owned function returned by this attribute. */
-  attributeFunction?: (this: undefined, env: Env) => AttributeFunctionSteps;
+  // Project metadata: member steps and callback exception policy.
+  /** Override property reading with the selected environments. */
+  overrideGet?: (this: object | null, environments: OverrideEnvironments<Env>) => unknown;
+  /** Override property writing with the selected environments and converted value. */
+  overrideSet?: (this: object | null, environments: OverrideEnvironments<Env>, value: unknown) => void;
+  /** Request entry-time incumbent capture for both accessors, independently of their implementation. */
+  overrideCapturesIncumbent?: boolean;
   /** Report or rethrow exceptions from an author callback assigned to this attribute. */
   callbackExceptionBehavior?: CallbackExceptionBehavior;
   /** Algorithms invoked before changing the implementation's observable-array backing list. */
@@ -96,9 +96,6 @@ export type ObservableArraySteps = {
   delete?(this: object, value: unknown, index: number): void;
 };
 
-/** Steps for an attribute's returned function, receiving author-side `this` and arguments. */
-export type AttributeFunctionSteps = (this: unknown, ...argumentsList: unknown[]) => unknown;
-
 /** An author-facing constructor overload and its implementation creation steps. */
 export type ConstructorMember<Env = unknown, Values extends unknown[] = unknown[]> = {
   /** Member discriminator supplied by `ctor()`. */
@@ -112,7 +109,9 @@ export type ConstructorMember<Env = unknown, Values extends unknown[] = unknown[
 
   // Project metadata: implementation construction and argument injection.
   /** Override implementation construction after argument conversion; return the new implementation. */
-  overrideConstruct?: (this: undefined, env: Env, ...values: Values) => object;
+  overrideConstruct?: (this: undefined, environments: OverrideEnvironments<Env>, ...values: Values) => object;
+  /** Request caller capture before conversion, independently of how this constructor is implemented. */
+  overrideCapturesIncumbent?: boolean;
   /** Injected arguments for public construction; cannot accompany implementation-level `constructWith`. */
   constructWith?: InjectedArgument<Env>[];
   /** Initialize the preallocated implementation supplied as `this`, using converted arguments. */
@@ -145,9 +144,11 @@ export type OperationMember<Env = unknown, Values extends unknown[] = unknown[]>
   // Project metadata: invocation, argument injection, and legacy property support.
   /**
    * Override implementation-method invocation with converted arguments and return the implementation result.
-   * The environment belongs to the receiver, or the method for a static operation; `this` is the implementation or null.
+   * The environments distinguish the receiver from the invoked callable; `this` is the implementation or null.
    */
-  overrideInvoke?: (this: object | null, env: Env, ...values: Values) => unknown;
+  overrideInvoke?: (this: object | null, environments: OverrideEnvironments<Env>, ...values: Values) => unknown;
+  /** Request caller capture before conversion, independently of how this operation is implemented. */
+  overrideCapturesIncumbent?: boolean;
   /** Injected arguments for an automatically bound implementation method. */
   invokeWith?: InjectedArgument<Env>[];
   /** Supported indices and membership checks for a legacy indexed getter. */

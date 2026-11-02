@@ -4,7 +4,7 @@ import {
   type CompiledModule, type ModuleRequest,
   type GlobalObject, type GlobalThis, type JSRealmOptions, type RealmFunctionSteps,
 } from '../../js-engine/index';
-import type { CallbackHooks, StampedPlatformObject, WebIDLRealm } from '../../web-idl/index';
+import type { CallbackHooks, StampedPlatformObject, WebIDLEnvironment, WebIDLRealm } from '../../web-idl/index';
 import { serializeURL } from '../../url/index';
 
 import { coarsenedSharedCurrentTime, type DOMHighResTimeStamp } from '../timing/index';
@@ -77,9 +77,9 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
     this.#baseEnv = options.baseEnv;
     this.callbacks = {
       // Web IDL §§3.2.16 and 3.2.19; HTML §8.1.3.3.
-      captureContext: () => {
+      captureEnvironment: () => {
         const env = this.#env;
-        if (env === undefined) return this;
+        if (env === undefined) return null;
         const loop = env.responsibleEventLoop;
         // ACCOMMODATION(node-v8-execution-contexts): A direct Node-host call
         // has no modeled entry. Capture its binding environment here rather
@@ -90,9 +90,9 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
         ) return env;
         return loop.getIncumbentEnvironment();
       },
-      cleanUpAfterRunningCallback: (context) => {
-        const env = this.#getCallbackEnvironment(context);
-        if (env !== undefined) {
+      cleanUpAfterRunningCallback: (callbackEnv) => {
+        const env = this.#getCallbackEnvironment(callbackEnv);
+        if (env !== null) {
           env.responsibleEventLoop.cleanUpAfterRunningCallback(env);
         }
       },
@@ -104,9 +104,9 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
       },
       getAssociatedRealm: (value) =>
         BrowletRealm.getAssociatedRealm(value) ?? this,
-      prepareToRunCallback: (context) => {
-        const env = this.#getCallbackEnvironment(context);
-        if (env !== undefined) {
+      prepareToRunCallback: (callbackEnv) => {
+        const env = this.#getCallbackEnvironment(callbackEnv);
+        if (env !== null) {
           this.agent.eventLoop.prepareToRunCallback(env);
         }
       },
@@ -340,15 +340,14 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
       () => steps(receiver, argumentsList, undefined));
   }
 
-  #getCallbackEnvironment(
-    context: object,
-  ): BrowletEnvironment | undefined {
-    if (this.#env === undefined && context instanceof BrowletRealm) return undefined;
-    const env = context as BrowletEnvironment;
-    if (env.realm.#env === env) {
-      return env;
+  #getCallbackEnvironment(callbackEnv: WebIDLEnvironment | null): BrowletEnvironment | null {
+    if (callbackEnv === null) {
+      if (this.#env === undefined) return null;
+    } else {
+      const { realm } = callbackEnv;
+      if (realm instanceof BrowletRealm && realm.#env === callbackEnv) return realm.#env;
     }
-    throw new InternalError('A callback context is not a browser environment');
+    throw new InternalError('A callback environment is not a browser environment');
   }
 }
 

@@ -709,7 +709,7 @@ export const windowIDL = defineInterface<BrowletEnvironment>({
     attr('opener', idlType.any, {
       ...xattr('CrossOrigin'),
       overrideGet() { return (this as WindowImpl).opener?.platform ?? null; },
-      overrideSet(env, value) {
+      overrideSet({ relevant: env }, value) {
         if (value === null) (this as WindowImpl).disownOpener();
         else if (!Reflect.defineProperty(env.realm.globalObject, 'opener', {
           value, writable: true, enumerable: true, configurable: true,
@@ -718,7 +718,7 @@ export const windowIDL = defineInterface<BrowletEnvironment>({
     }),
     roAttr('parent', nullable(reference('WindowProxy')), xattr('Replaceable', 'CrossOrigin')),
     roAttr('frameElement', nullable(reference('Element')), {
-      overrideGet(_env, methodEnv) { return (this as WindowImpl).getFrameElement(methodEnv); },
+      overrideGet({ callee: methodEnv }) { return (this as WindowImpl).getFrameElement(methodEnv); },
     }),
     op('open', nullable(reference('WindowProxy')),
       [
@@ -729,7 +729,7 @@ export const windowIDL = defineInterface<BrowletEnvironment>({
         ),
       ],
       {
-        overrideInvoke(env, url, target, features) {
+        overrideInvoke({ relevant: env }, url, target, features) {
           const eventLoop = env.responsibleEventLoop;
           // Direct host calls use the operation's environment, as Origin.from does.
           const entryEnv = eventLoop.executionContextStack.length === 0

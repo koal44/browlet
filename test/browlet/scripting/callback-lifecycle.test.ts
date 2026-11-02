@@ -5,7 +5,9 @@ import { createManualEventLoop } from '../../support/browlet-agent';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { createScriptState } from '../../support/script-state';
 import { installHostHooks } from '../../../src/browlet/scripting/host-hooks';
-import { createBrowletEnvironmentInit, browletBindingWorld } from '../../../src/browlet/integration/web-idl/index';
+import {
+  createBrowletEnvironmentInit, createSandboxEnvironment, browletBindingWorld,
+} from '../../../src/browlet/integration/web-idl/index';
 import { UserAgent } from '../../../src/browlet/user-agent';
 
 import { createOpaqueOrigin } from '../../../src/url/origin';
@@ -19,6 +21,7 @@ import {
   defineCallbackFunction, idlType, reference,
 } from '../../../src/web-idl/core/index';
 import { BindingWorld } from '../../../src/web-idl/binding/world';
+import type { WebIDLEnvironment } from '../../../src/web-idl/environment';
 import { PolicyContainer } from '../../../src/browlet/browsing/policy/container';
 import { ModuleMap } from '../../../src/browlet/scripting/module-map';
 import { Agent, AgentCluster } from '../../../src/browlet/scripting/agents';
@@ -49,6 +52,34 @@ describe('HTML callback and script-entry lifecycle', () => {
     expect(env.realmExecutionContext).toBe(realm.executionContext);
     expect(realm.executionContext.realm).toBe(realm);
     expect(context.getEnvironment()).toBe(env);
+  });
+
+  it('runs sandbox callbacks without entering the HTML callback lifecycle', () => {
+    const env = createSandboxEnvironment();
+    const { realm, responsibleEventLoop: loop } = env;
+    const binding = browletBindingWorld.getRealmBinding(realm)!;
+    const prepare = vi.spyOn(loop, 'prepareToRunCallback');
+    const clean = vi.spyOn(loop, 'cleanUpAfterRunningCallback');
+    const run = vi.fn();
+    const callback = realm.createFunction(run, { name: 'sandboxCallback', length: 0 });
+    const value = binding.getConverter(binding.assembly.getIDLType(reference('VoidFunction'))).jsToIDL(callback);
+    if (!IDLCallbackFunction.is(value)) throw new Error('Expected a converted callback');
+
+    expect(value.callbackEnv).toBeNull();
+    value.invoke([], 'rethrow');
+    expect(run).toHaveBeenCalledOnce();
+    expect(prepare).not.toHaveBeenCalled();
+    expect(clean).not.toHaveBeenCalled();
+    expect(loop.backupIncumbentEnvironmentStack).toEqual([]);
+  });
+
+  it('requires an attached environment before entering a browser callback', () => {
+    const agent = new TestAgent(createTestMicrotaskQueue());
+    const { realm } = createTestRealm(agent, 'callback-environment');
+
+    expect(() => realm.callbacks.prepareToRunCallback(null)).toThrow('not a browser environment');
+    expect(() => realm.callbacks.prepareToRunCallback({ realm })).toThrow('not a browser environment');
+    expect(agent.eventLoop.backupIncumbentEnvironmentStack).toEqual([]);
   });
 
   it('creates a default global and returns the retained realm execution context', () => {
@@ -126,17 +157,17 @@ describe('HTML callback and script-entry lifecycle', () => {
     const loop = agent.eventLoop;
 
     expect(() => loop.getIncumbentEnvironment()).toThrow('backup incumbent settings stack is empty');
-    expect(b.realm.callbacks.captureContext()).toBe(b.env);
+    expect(b.realm.callbacks.captureEnvironment()).toBe(b.env);
     loop.prepareToRunCallback(a.env);
     try {
-      expect(b.realm.callbacks.captureContext()).toBe(a.env);
+      expect(b.realm.callbacks.captureEnvironment()).toBe(a.env);
     } finally {
       loop.cleanUpAfterRunningCallback(a.env);
     }
     loop.runScriptEvaluation(a.env, () => {
-      expect(b.realm.callbacks.captureContext()).toBe(a.env);
+      expect(b.realm.callbacks.captureEnvironment()).toBe(a.env);
     });
-    expect(b.realm.callbacks.captureContext()).toBe(b.env);
+    expect(b.realm.callbacks.captureEnvironment()).toBe(b.env);
   });
 
   it('distinguishes entry, incumbent, current, and relevant realms, settings, and globals', () => {
@@ -375,10 +406,10 @@ describe('HTML callback and script-entry lifecycle', () => {
     const first = createTestRealm(agent, 'first-registration');
     const second = createTestRealm(agent, 'second-registration');
     const callbackRealm = createTestRealm(agent, 'callback');
-    const observations: { incumbent: object; task: Task | null; }[] = [];
+    const observations: { incumbent: WebIDLEnvironment | null; task: Task | null; }[] = [];
     const callback = callbackRealm.realm.createFunction(() => {
       observations.push({
-        incumbent: callbackRealm.realm.callbacks.captureContext(),
+        incumbent: callbackRealm.realm.callbacks.captureEnvironment(),
         task: agent.eventLoop.currentlyRunningTask,
       });
     }, { name: 'observe', length: 0 });
@@ -402,7 +433,7 @@ describe('HTML callback and script-entry lifecycle', () => {
       expect(task?.scriptEvaluationEnvironments)
         .toEqual(new Set([callbackRealm.env]));
     }
-    expect(callbackRealm.realm.callbacks.captureContext()).toBe(callbackRealm.env);
+    expect(callbackRealm.realm.callbacks.captureEnvironment()).toBe(callbackRealm.env);
     expect(agent.eventLoop.currentlyRunningTask).toBeNull();
   });
 
@@ -422,7 +453,7 @@ describe('HTML callback and script-entry lifecycle', () => {
       new BindingWorld([]), (ctx) => ({ realm: ctx.realm }),
     );
     let observation: {
-      incumbent: object;
+      incumbent: WebIDLEnvironment | null;
       checkpointCount: number;
       task: Task | null;
     } | undefined;
@@ -431,7 +462,7 @@ describe('HTML callback and script-entry lifecycle', () => {
       () => {
         observation = {
           checkpointCount: checkpoint.mock.calls.length,
-          incumbent: callbackRealm.realm.callbacks.captureContext(),
+          incumbent: callbackRealm.realm.callbacks.captureEnvironment(),
           task: agent.eventLoop.currentlyRunningTask,
         };
       },
@@ -480,7 +511,7 @@ describe('HTML callback and script-entry lifecycle', () => {
     entry.context.install(entry.realm.globalObject);
     const observations: string[] = [];
     const observe = entry.realm.createFunction(() => {
-      const incumbent = entry.realm.callbacks.captureContext();
+      const incumbent = entry.realm.callbacks.captureEnvironment();
       observations.push(incumbent === author.env ? 'B' : incumbent === entry.env ? 'A' : 'other');
     }, { name: 'observe', length: 0 });
     const register = author.realm.evaluate(
@@ -512,10 +543,9 @@ describe('HTML callback and script-entry lifecycle', () => {
 
     firstLoop.prepareToRunCallback(first.env);
     try {
-      expect(first.realm.callbacks.captureContext()).toBe(first.env);
-      expect(second.realm.callbacks.captureContext()).toBe(second.env);
-      expect(() => second.realm.agent.eventLoop
-        .prepareToRunCallback(first.env))
+      expect(first.realm.callbacks.captureEnvironment()).toBe(first.env);
+      expect(second.realm.callbacks.captureEnvironment()).toBe(second.env);
+      expect(() => second.realm.callbacks.prepareToRunCallback(first.env))
         .toThrow('another event loop');
     } finally {
       firstLoop.cleanUpAfterRunningCallback(first.env);

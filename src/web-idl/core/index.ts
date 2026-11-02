@@ -19,7 +19,7 @@ export {
   getCommonImplementationClass,
 } from './declarations';
 export type {
-  PrimaryInterfaceDefinition, PartialInterfaceDefinition, InterfaceImplementation,
+  PrimaryInterfaceDefinition, PartialInterfaceDefinition, InterfaceImplementation, InterfaceOverride,
   InterfaceMixinDefinition, PartialInterfaceMixinDefinition, IncludesDefinition,
   DictionaryDefinition, PartialDictionaryDefinition,
   NamespaceDefinition, PartialNamespaceDefinition,
@@ -29,13 +29,13 @@ export type {
 
 export type {
   InterfaceMember, MixinMember, NamespaceMember, ConstructorMember,
-  ConstantMember, AttributeMember, AttributeFunctionSteps, OperationMember, NamedGetterMember, StringifierMember,
+  ConstantMember, AttributeMember, OperationMember, NamedGetterMember, StringifierMember,
   IterableMember, AsyncIterableMember, MaplikeMember, SetlikeMember,
   DictionaryMember, ArgumentDefinition, IndexedGetterDeclaration, ObservableArraySteps,
 } from './members';
 
 export {
-  ctor, attr, roAttr, attrFn, op, staticOp, arg, dictMember, constant, stringifier,
+  ctor, attr, roAttr, op, staticOp, arg, dictMember, constant, stringifier,
   iter, asyncIter, maplike, setlike, indexedGetter,
   reference, implementationType, nullable, union, sequence, asyncSequence, record, promise,
   frozenArray, observableArray, annotated, tsType,
@@ -55,7 +55,7 @@ export type {
   PositiveInfinity, NegativeInfinity, NotANumber, UndefinedDefault, EmptySequence, EmptyDictionary,
   Exposed, ExtendedAttribute, NamedArgumentsExtendedAttribute,
   ReflectionExtendedAttribute,
-  ImplementationClass, ImplementationType, InjectedArgument, CallbackExceptionBehavior,
+  ImplementationClass, ImplementationType, InjectedArgument, CallbackExceptionBehavior, OverrideEnvironments,
   IDLCallbackFunctionValue, IDLCallbackInterfaceValue,
 } from './types';
 

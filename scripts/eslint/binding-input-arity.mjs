@@ -6,7 +6,7 @@ export default {
     type: 'problem',
     schema: [],
     messages: {
-      positional: 'Binding detects incumbent inputs by declared arity. Use positional parameters without defaults or rest parameters through incumbentEnv.',
+      positional: 'Binding detects injected incumbent inputs by declared arity. Use positional parameters without defaults or rest parameters through incumbentEnv.',
     },
   },
   create(context) {

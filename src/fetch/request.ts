@@ -719,7 +719,7 @@ export const requestIDL = defineInterface<FetchEnvironment>({
         arg('init', reference('RequestInit'), { optional: true, default: emptyDictionary }),
       ],
       {
-        overrideConstruct(env, input, init): RequestImpl {
+        overrideConstruct({ relevant: env }, input, init): RequestImpl {
           return RequestImpl.create(
             input as FetchRequestInfo, init as FetchRequestInit,
             env,

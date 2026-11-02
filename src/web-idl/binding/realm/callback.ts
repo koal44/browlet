@@ -7,7 +7,7 @@ import {
   getImplementationRecord, IDLPromise, type IDLCallbackFunction, type IDLCallbackInterface,
 } from '../../values/index';
 import type { ConversionSteps } from '../../converters/index';
-import type { WebIDLRealm } from '../../environment';
+import type { WebIDLEnvironment, WebIDLRealm } from '../../environment';
 
 import type { RealmBinding } from '../realm';
 
@@ -46,7 +46,7 @@ export class CallbackBinding {
     const invoker = this.getInvoker(operation, cbValue.realm);
 
     try {
-      return runCallback(cbValue.realm, cbValue.callbackContext, () => {
+      return runCallback(cbValue.realm, cbValue.callbackEnv, () => {
         let function_: unknown = cbValue.object;
         let receiver = projectCallbackReceiver(thisArgument);
 
@@ -110,7 +110,7 @@ export class CallbackInvoker {
     this.canReportExceptions = returns.kind === 'undefined' || returns.kind === 'any';
   }
 
-  /** Invoke the callback's author function using its associated realm and captured context. */
+  /** Invoke the callback's author function using its associated realm and captured environment. */
   // https://webidl.spec.whatwg.org/#invoke-a-callback-function
   invoke(
     cbValue: IDLCallbackFunction,
@@ -122,7 +122,7 @@ export class CallbackInvoker {
     const function_ = cbValue.object;
     if (!isCallable(function_)) return this.jsToIDLResult(undefined);
     try {
-      return runCallback(cbValue.realm, cbValue.callbackContext, () => {
+      return runCallback(cbValue.realm, cbValue.callbackEnv, () => {
         const result = Reflect.apply(
           function_, projectCallbackReceiver(thisArgument), this.idlToJSArguments(argumentsList),
         );
@@ -144,7 +144,7 @@ export class CallbackInvoker {
       // IsConstructor runs before preparing to enter the callback's realm.
       throw new currentRealm.TypeError(`${cbValue.assembled.primary.name} is not a constructor`);
     }
-    return runCallback(cbValue.realm, cbValue.callbackContext, () => {
+    return runCallback(cbValue.realm, cbValue.callbackEnv, () => {
       const result = Reflect.construct(constructor, this.idlToJSArguments(argumentsList));
       return this.jsToIDLResult(result);
     });
@@ -219,17 +219,17 @@ function projectCallbackReceiver(
 // https://webidl.spec.whatwg.org/#call-a-user-objects-operation
 function runCallback<Result>(
   realm: WebIDLRealm,
-  callbackContext: object,
+  callbackEnv: WebIDLEnvironment | null,
   steps: () => Result,
 ): Result {
   const { callbacks } = realm;
   callbacks.prepareToRunScript();
   try {
-    callbacks.prepareToRunCallback(callbackContext);
+    callbacks.prepareToRunCallback(callbackEnv);
     try {
       return steps();
     } finally {
-      callbacks.cleanUpAfterRunningCallback(callbackContext);
+      callbacks.cleanUpAfterRunningCallback(callbackEnv);
     }
   } finally {
     callbacks.cleanUpAfterRunningScript();

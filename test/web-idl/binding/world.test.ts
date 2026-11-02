@@ -244,7 +244,7 @@ describe('Web IDL binding worlds and realm registration', () => {
         op('createBoundResult', reference(resultIDL.name),
           [],
           {
-            overrideInvoke(env) {
+            overrideInvoke({ relevant: env }) {
               expect(env.realm).toBe(receiverRealm);
               return new ResultImpl();
             },
@@ -315,8 +315,8 @@ describe('Web IDL binding worlds and realm registration', () => {
       name: 'Receiver', exposed: '*', implementation: impl(ReceiverImpl),
       members: [
         attr('owner', idlType.object, {
-          overrideGet(env) { return env.realm.globalObject; },
-          overrideSet(env, value) {
+          overrideGet({ relevant: env }) { return env.realm.globalObject; },
+          overrideSet({ relevant: env }, value) {
             expect(this).toBe(implInst);
             setterEnv = env;
             setterValue = value;

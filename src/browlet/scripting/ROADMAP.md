@@ -2210,9 +2210,17 @@ This first slice covers the existing IDL-handler path, not the entire subsection
 registrations. Replacing a non-null callback keeps its listener position;
 deactivation removes it, and reactivation appends a listener. Web IDL supplies
 legacy nullable conversion, author identity, argument/receiver projection, and
-callback context. Returning exactly `false` uses DOM's cancellation operation,
+callback environment. Returning exactly `false` uses DOM's cancellation operation,
 which respects both `cancelable` and passive listeners. Chromium, Firefox, and
 WebKit agree with that behavior; no cancellation correction was needed.
+
+The shared Web IDL callback value now retains `callbackEnv: WebIDLEnvironment | null`.
+`captureEnvironment()` captures the incumbent environment; unbound realms and the
+internal sandbox return null rather than a realm object. Callback preparation
+still validates the browser environment and its event-loop ownership. The sandbox
+regression exercises real Binding conversion and invocation without entering HTML
+callback bookkeeping; standalone Web IDL fixtures use bound environments when
+testing captured identity and null when no host environment is needed.
 
 The processing algorithm's target BiDi scripting check and callback-realm
 fully-active check were missing. Both now run in the event-handler declaration's

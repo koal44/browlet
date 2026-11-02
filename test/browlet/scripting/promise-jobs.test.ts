@@ -96,7 +96,7 @@ describe('HTML Promise jobs', () => {
     expect(prepare).toHaveBeenCalledTimes(4);
     expect(cleanup).toHaveBeenCalledTimes(4);
     expect(loop.currentlyRunningTask).toBeNull();
-    expect(realm.callbacks.captureContext()).toBe(realm.env);
+    expect(realm.callbacks.captureEnvironment()).toBe(realm.env);
   });
 
   itPassesWith('hostHooks').each(['resolve', 'reject'] as const)('queues handlerless propagation without preparing a script realm (%s)', (settlement) => {

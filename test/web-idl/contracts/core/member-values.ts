@@ -23,7 +23,7 @@ defineInterface({
   members: [op('consume', idlType.undefined,
     [arg('value', sharedType)],
     {
-      overrideInvoke(_env, value) {
+      overrideInvoke(_environments, value) {
         const instance: FirstImpl | SecondImpl = value;
         if (instance instanceof FirstImpl) instance.first.toFixed();
         else instance.second.toUpperCase();
@@ -45,7 +45,7 @@ definePartialInterface<ExampleEnvironment>({
     op('consume', idlType.undefined,
       [arg('value', tsType(reference(Example), 'Example<T>'))],
       {
-        overrideInvoke(_env, value) {
+        overrideInvoke(_environments, value) {
           value.value.toFixed();
           // @ts-expect-error Platform type refinements preserve converted implementation typing.
           value.missing;
@@ -56,7 +56,7 @@ definePartialInterface<ExampleEnvironment>({
     staticOp('read', idlType.double,
       [arg('example', reference(Example)), arg('name', idlType.DOMString)],
       {
-        overrideInvoke(env, example, name) {
+        overrideInvoke({ relevant: env }, example, name) {
           env.realm.globalObject;
           example.value.toFixed();
           name.toUpperCase();
@@ -71,7 +71,7 @@ definePartialInterface<ExampleEnvironment>({
     op('optional', idlType.undefined,
       [arg('name', idlType.DOMString, { optional: true })],
       {
-        overrideInvoke(_env, name) {
+        overrideInvoke(_environments, name) {
           name?.toUpperCase();
           // @ts-expect-error An omitted optional argument has no string value.
           name.toUpperCase();
@@ -80,12 +80,12 @@ definePartialInterface<ExampleEnvironment>({
     ),
     op('defaulted', idlType.undefined,
       [arg('name', idlType.DOMString, { optional: true, default: '' })],
-      { overrideInvoke(_env, name) { name.toUpperCase(); } },
+      { overrideInvoke(_environments, name) { name.toUpperCase(); } },
     ),
     op('many', idlType.undefined,
       [arg('first', nullable(exampleType)), arg('names', idlType.DOMString, { variadic: true })],
       {
-        overrideInvoke(_env, first, ...names) {
+        overrideInvoke(_environments, first, ...names) {
           first?.value.toFixed();
           names.map((name) => name.toUpperCase());
           // @ts-expect-error Each variadic argument has the declared type.
@@ -96,7 +96,7 @@ definePartialInterface<ExampleEnvironment>({
     op('adapted', idlType.undefined,
       [arg('options', idlType.object, cbDict('Options')), arg('value', idlType.object, unwrapArg(Example))],
       {
-        overrideInvoke(_env, options, value) {
+        overrideInvoke(_environments, options, value) {
           // @ts-expect-error Dictionary adaptation has no declared implementation result type.
           options.value;
           // @ts-expect-error Custom unwrapping may preserve the original object.
@@ -107,7 +107,7 @@ definePartialInterface<ExampleEnvironment>({
     op('forwardReference', idlType.undefined,
       [arg('example', reference('Example'))],
       {
-        overrideInvoke(_env, example) {
+        overrideInvoke(_environments, example) {
           // @ts-expect-error A string reference alone does not identify an implementation class.
           example.value;
         },
@@ -121,7 +121,7 @@ defineInterface({
   members: [
     ctor(
       [arg('name', idlType.DOMString)],
-      { overrideConstruct(_env, name) { return { name: name.toUpperCase() }; } },
+      { overrideConstruct(_environments, name) { return { name: name.toUpperCase() }; } },
     ),
   ],
 });

@@ -4,14 +4,14 @@ import type { CallbackExceptionBehavior, IDLCallbackFunctionValue, IDLCallbackIn
 
 import type { AssembledCallbackFunction, AssembledCallbackInterface } from '../assembly/index';
 import type { CallbackBinding } from '../binding/realm/callback';
-import type { WebIDLRealm } from '../environment';
+import type { WebIDLEnvironment, WebIDLRealm } from '../environment';
 
-/** An author callback object with its declaration, realm, and captured callback context. */
+/** An author callback object with its declaration, realm, and captured callback environment. */
 export class IDLCallbackInterface<Realm extends WebIDLRealm = WebIDLRealm> implements IDLCallbackInterfaceValue<Realm> {
   /** Declared operations and optional implementation adapter. */
   assembled: AssembledCallbackInterface;
-  /** Host context captured at conversion and restored during invocation. */
-  callbackContext: object;
+  /** Environment captured at conversion and restored during invocation; null for an unbound host. */
+  callbackEnv: WebIDLEnvironment | null;
   /** Original author object, preserved for identity and dynamic method lookup. */
   object: object;
   /** Callback realm, which owns argument allocation and return-conversion failures. */
@@ -25,12 +25,12 @@ export class IDLCallbackInterface<Realm extends WebIDLRealm = WebIDLRealm> imple
     assembled: AssembledCallbackInterface,
     object: object,
     realm: Realm,
-    callbackContext: object,
+    callbackEnv: WebIDLEnvironment | null,
     binding: CallbackBinding,
   ) {
     this.assembled = assembled;
     this.#binding = binding;
-    this.callbackContext = callbackContext;
+    this.callbackEnv = callbackEnv;
     this.object = object;
     this.realm = realm;
   }
@@ -51,17 +51,17 @@ export class IDLCallbackInterface<Realm extends WebIDLRealm = WebIDLRealm> imple
   }
 }
 
-/** An author function with its declaration, realm, and captured invocation context. */
+/** An author function with its declaration, realm, and captured callback environment. */
 export class IDLCallbackFunction implements IDLCallbackFunctionValue<WebIDLRealm> {
   /** Declared argument and return conversions. */
   assembled: AssembledCallbackFunction;
-  /** Host context captured at conversion and restored during invocation. */
-  callbackContext: object;
+  /** Environment captured at conversion and restored during invocation; null for an unbound host. */
+  callbackEnv: WebIDLEnvironment | null;
   /** Original author object; legacy callbacks may be non-callable. */
   object: object;
   /** Callback realm, which owns argument allocation and return-conversion failures. */
   realm: WebIDLRealm;
-  /** Reused implementation callable for this conversion's captured context. */
+  /** Reused implementation callable for this conversion's captured environment. */
   boundCallback?: StampedCallbackFunction;
   /** Private identity tested without invoking author Proxy traps. */
   #brand = undefined;
@@ -72,12 +72,12 @@ export class IDLCallbackFunction implements IDLCallbackFunctionValue<WebIDLRealm
     assembled: AssembledCallbackFunction,
     object: object,
     realm: WebIDLRealm,
-    callbackContext: object,
+    callbackEnv: WebIDLEnvironment | null,
     binding: CallbackBinding,
   ) {
     this.assembled = assembled;
     this.#binding = binding;
-    this.callbackContext = callbackContext;
+    this.callbackEnv = callbackEnv;
     this.object = object;
     this.realm = realm;
   }
@@ -105,7 +105,7 @@ export type StampedCallbackFunction = ((...args: unknown[]) => unknown) & Callba
 
 /** Retain a converted callback on its implementation callable without public properties. */
 export class CallbackFunctionStamper extends Stamper {
-  /** Original author object, callback realm, captured context, and declared conversions. */
+  /** Original author object, callback realm, captured environment, and declared conversions. */
   #callback: IDLCallbackFunction;
 
   private constructor(boundCallback: CallableFunction, cbValue: IDLCallbackFunction) {

@@ -64,14 +64,24 @@ export class SequenceConverter<Type extends IDLSequenceType | IDLFrozenArrayType
 
 /** A frozen-array input projects converted elements immediately; output preserves that array. */
 export class FrozenArrayConverter<Type extends IDLFrozenArrayType = IDLFrozenArrayType> extends SequenceConverter<Type> {
+  /** Completed IDL arrays retain their identity across converters, bindings, and realms. */
+  static #createdArrays = new WeakSet<readonly unknown[]>();
+
   /** Element projection used to create each incoming frozen array. */
   #project?: ConversionSteps<unknown[]>;
+
+  /** Distinguish completed IDL arrays from implementation lists, which can also be frozen. */
+  static isCreatedArray(value: readonly unknown[]): boolean {
+    return FrozenArrayConverter.#createdArrays.has(value);
+  }
 
   /** Project converted sequence entries into an array in this realm, then freeze it. */
   // https://webidl.spec.whatwg.org/#dfn-create-frozen-array
   createFrozenArray(values: readonly unknown[]): readonly unknown[] {
     const project = this.#project ??= super.createOutputSteps();
-    return Object.freeze(project(values));
+    const array = Object.freeze(project(values));
+    FrozenArrayConverter.#createdArrays.add(array);
+    return array;
   }
 
   // https://webidl.spec.whatwg.org/#create-frozen-array-from-iterable

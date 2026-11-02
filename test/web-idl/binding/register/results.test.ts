@@ -92,7 +92,7 @@ describe('Web IDL implementation result conversion', () => {
         op('createdPromiseResult', promiseType(resultType),
           [],
           {
-            overrideInvoke(env) {
+            overrideInvoke({ relevant: env }) {
               return env.InternalPromise.resolve(createResult('created promise'), resultType);
             },
           },
@@ -100,7 +100,7 @@ describe('Web IDL implementation result conversion', () => {
         op('resolvedPromiseResult', promiseType(resultType),
           [],
           {
-            overrideInvoke(env) {
+            overrideInvoke({ relevant: env }) {
               const result = env.InternalPromise.withResolvers(resultType);
               result.resolve(createResult('resolved promise'));
               return result.promise;
@@ -110,7 +110,7 @@ describe('Web IDL implementation result conversion', () => {
         op('reactedPromiseResult', promiseType(resultType),
           [],
           {
-            overrideInvoke(env) {
+            overrideInvoke({ relevant: env }) {
               return env.InternalPromise.resolve(undefined, idlType.undefined).then(() => createResult('reacted promise'), undefined, resultType);
             },
           },
@@ -122,7 +122,7 @@ describe('Web IDL implementation result conversion', () => {
             ),
           ],
           {
-            overrideInvoke(_env, callback) {
+            overrideInvoke(_environments, callback) {
               (callback as (
                 direct: NestedResultImpl,
                 union: NestedResultImpl,

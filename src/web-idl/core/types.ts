@@ -365,6 +365,19 @@ export type ImplementationClass<T extends object = object> = {
 /** Whether a converted author callback reports an exception or propagates it to its caller. */
 export type CallbackExceptionBehavior = 'report' | 'rethrow';
 
+/**
+ * Environments selected by Binding for a member override after argument conversion.
+ * Incumbent capture adds entry machinery and a host lookup, so overrides request it explicitly.
+ */
+export type OverrideEnvironments<Env = unknown> = {
+  /** Receiver's environment; the callee's environment for constructors, static and namespace members. */
+  relevant: Env;
+  /** Environment of the invoked constructor, operation or accessor. */
+  callee: Env;
+  /** Calling environment; undefined unless overrideCapturesIncumbent requests it and the host supplies one. */
+  incumbent: Env | undefined;
+};
+
 /** A construction or invocation dependency inserted among converted author arguments. */
 export type InjectedArgument<Env = unknown> = {
   /** Zero-based index in the final implementation argument list. */

@@ -290,6 +290,7 @@ export const locationIDL = defineInterface<BrowletEnvironment>({
   implementation: impl(LocationImpl),
   members: [
     attr('href', idlType.USVString, {
+      overrideCapturesIncumbent: true,
       overrideGet: locationGetter('href'),
       overrideSet: locationSetter('setHref'),
       ...xattr('LegacyUnforgeable', ['CrossOrigin', 'Setter']),
@@ -299,24 +300,31 @@ export const locationIDL = defineInterface<BrowletEnvironment>({
       overrideGet: locationGetter('origin'), ...xattr('LegacyUnforgeable'),
     }),
     attr('protocol', idlType.USVString, {
+      overrideCapturesIncumbent: true,
       overrideGet: locationGetter('protocol'), overrideSet: locationSetter('setProtocol'), ...xattr('LegacyUnforgeable'),
     }),
     attr('host', idlType.USVString, {
+      overrideCapturesIncumbent: true,
       overrideGet: locationGetter('host'), overrideSet: locationSetter('setHost'), ...xattr('LegacyUnforgeable'),
     }),
     attr('hostname', idlType.USVString, {
+      overrideCapturesIncumbent: true,
       overrideGet: locationGetter('hostname'), overrideSet: locationSetter('setHostname'), ...xattr('LegacyUnforgeable'),
     }),
     attr('port', idlType.USVString, {
+      overrideCapturesIncumbent: true,
       overrideGet: locationGetter('port'), overrideSet: locationSetter('setPort'), ...xattr('LegacyUnforgeable'),
     }),
     attr('pathname', idlType.USVString, {
+      overrideCapturesIncumbent: true,
       overrideGet: locationGetter('pathname'), overrideSet: locationSetter('setPathname'), ...xattr('LegacyUnforgeable'),
     }),
     attr('search', idlType.USVString, {
+      overrideCapturesIncumbent: true,
       overrideGet: locationGetter('search'), overrideSet: locationSetter('setSearch'), ...xattr('LegacyUnforgeable'),
     }),
     attr('hash', idlType.USVString, {
+      overrideCapturesIncumbent: true,
       overrideGet: locationGetter('hash'), overrideSet: locationSetter('setHash'), ...xattr('LegacyUnforgeable'),
     }),
     op('assign', idlType.undefined,
@@ -355,7 +363,7 @@ export const locationIDL = defineInterface<BrowletEnvironment>({
 function locationGetter(
   name: 'href' | 'origin' | 'protocol' | 'host' | 'hostname' | 'port' | 'pathname' | 'search' | 'hash' | 'ancestorOrigins',
 ): NonNullable<AttributeMember<BrowletEnvironment>['overrideGet']> {
-  return function(_env, methodEnv) {
+  return function({ callee: methodEnv }) {
     const location = this as LocationImpl;
     location.checkEntryOrigin(entryEnvironment(methodEnv));
     return location[name];
@@ -366,7 +374,7 @@ function locationGetter(
 function locationSetter(
   setter: 'setHref' | 'setProtocol' | 'setHost' | 'setHostname' | 'setPort' | 'setPathname' | 'setSearch' | 'setHash',
 ): NonNullable<AttributeMember<BrowletEnvironment>['overrideSet']> {
-  return function(_env, value, methodEnv, incumbentEnv) {
+  return function({ callee: methodEnv, incumbent: incumbentEnv }, value) {
     (this as LocationImpl)[setter](value as string, entryEnvironment(methodEnv), (incumbentEnv ?? methodEnv) as WindowEnvironment);
   };
 }
@@ -375,6 +383,7 @@ function locationSetter(
 function entryEnvironment(methodEnv: BrowletEnvironment): BrowletEnvironment {
   const loop = methodEnv.responsibleEventLoop;
   // Borrowing another Window's method does not change the retained script entry.
-  // The empty-stack fallback matches direct host calls to Window.open and Origin.from.
-  return loop.executionContextStack.length === 0 ? methodEnv : loop.entryExecutionContext.realm.env;
+  // Native incumbent capture can add a context even on a direct host call.
+  // Only a retained HTML entry supplies the entry environment; otherwise use the callee.
+  return loop.executionContextStack.findLast((context) => context === context.realm.executionContext)?.realm.env ?? methodEnv;
 }

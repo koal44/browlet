@@ -39,8 +39,9 @@ from the runtime.
 Implementations receive converted records and callable steps. Web IDL's
 `cbDict()` preserves member-access order and the original source,
 sink, or transformer as the callback receiver. Binding also projects controllers,
-adapts Promise results, and realizes exceptions. Strategy `size` functions use
-`attrFn()` and Binding's existing per-realm identity cache.
+adapts Promise results, and realizes exceptions. Each queuing strategy implementation
+caches its shared `size` function by realm. Its `overrideGet` selects the receiver's
+relevant realm, including when another realm's getter is borrowed.
 
 Borrowed reads receive the method's environment for immediate validation failures.
 Enqueue, write, byte-controller close, reader/writer release, termination, and

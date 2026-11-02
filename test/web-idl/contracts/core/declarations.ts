@@ -1,20 +1,35 @@
 import {
-  arg, atArg, attr, attrFn, ctor, defineCallbackInterface, defineInterface, defineProxyObject,
-  dictMember, domExceptionIDL, idlType, impl, invokeWith, op, sequence, staticOp, tsType,
+  arg, atArg, attr, ctor, defineCallbackInterface, defineInterface, defineProxyObject,
+  dictMember, domExceptionIDL, frozenArray, idlType, impl, invokeWith, op, roAttr, sequence, staticOp, tsType,
   reflect, webIDLCommonDefinitions, xattr,
   type SerialSteps, type TransferSteps, type NamedGetterMember,
 } from '../../../../src/web-idl/core/index';
 
 class Example {}
 attr<{ id: number; }>('bound', idlType.DOMString, {
-  overrideGet(_env, _methodEnv, incumbentEnv) { return incumbentEnv?.id; },
-  overrideSet(_env, _value, _methodEnv, incumbentEnv) { const id: number | undefined = incumbentEnv?.id; void id; },
+  overrideCapturesIncumbent: true,
+  overrideGet({ relevant, callee, incumbent }) {
+    const own: number = relevant.id;
+    const invoked: number = callee.id;
+    const caller: number | undefined = incumbent?.id;
+    return [own, invoked, caller];
+  },
+  overrideSet({ incumbent: incumbentEnv }, _value) { const id: number | undefined = incumbentEnv?.id; void id; },
 });
 atArg<{ id: number; }>(0, (_env, _methodEnv, incumbentEnv) => incumbentEnv?.id);
-// @ts-expect-error Capture follows the input dependency, not a separate accessor flag.
-attr('manual', idlType.DOMString, { captureIncumbent: { set: true } });
-// @ts-expect-error Operations likewise declare inputs instead of a capture flag.
-op('manual', idlType.undefined, [], { captureIncumbent: true });
+roAttr('entries', frozenArray(idlType.DOMString));
+// @ts-expect-error The flag explicitly belongs to the member override.
+attr('manual', idlType.DOMString, { captureIncumbent: true });
+// @ts-expect-error Capture is one boolean for the member's overrides.
+attr('manual', idlType.DOMString, { overrideCapturesIncumbent: { set: true } });
+// Implementations can discover callbacks inside opaque inputs, as Wasm imports do.
+op('opaqueCallbacks', idlType.undefined, [arg('imports', idlType.object)], { overrideCapturesIncumbent: true });
+ctor([arg('imports', idlType.object)], { overrideCapturesIncumbent: true });
+// @ts-expect-error Operations use the same explicit override flag as accessors.
+op('oldFlag', idlType.undefined, [], { captureIncumbent: true });
+// @ts-expect-error Constructors use the same explicit override flag as accessors.
+ctor([], { captureIncumbent: true });
+
 defineInterface({ name: 'Example', implementation: impl(Example), members: [] });
 defineInterface({
   name: 'HTMLAllCollection', documentAll: true, implementation: impl(Example),
@@ -137,7 +152,6 @@ atArg(0, (env) => env.missing);
 ctor([], { constructWith: [{ index: 0, resolve: 42 }] });
 // @ts-expect-error Static operations select their own static flag.
 staticOp('create', idlType.object, [], { static: false });
-attr('size', idlType.any, attrFn(() => () => 1));
 // @ts-expect-error Callback dictionary conversion names a dictionary.
 arg('source', idlType.object, { callbackDictionary: 42 });
 // @ts-expect-error Callback exception behavior is report or rethrow.
@@ -166,15 +180,15 @@ defineInterface<ExampleEnvironment>({
     ctor(
       [arg('name', idlType.DOMString)],
       {
-        overrideConstruct(env, name) {
+        overrideConstruct({ relevant: env }, name) {
           name.toUpperCase();
           return { name, token: env.token };
         },
       },
     ),
     attr('name', idlType.DOMString, {
-      overrideGet(env) { return env.realm.name; },
-      overrideSet(env, value) {
+      overrideGet({ relevant: env }) { return env.realm.name; },
+      overrideSet({ relevant: env }, value) {
         env.realm.name = value as string;
         // @ts-expect-error Ordinary declaration steps cannot perform Web IDL conversion.
         env.jsToImpl(value, idlType.DOMString);

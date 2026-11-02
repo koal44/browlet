@@ -17,7 +17,7 @@ describe('platform declaration generation', () => {
   it('retains native interface value types without inventing constructors', () => {
     const assembly = new DefinitionAssembly([
       defineInterface({
-        name: 'NativeValue', members: [], isInstance: () => false, exposed: '*',
+        name: 'NativeValue', members: [], interfaceOverride: { isInstance: () => false }, exposed: '*',
         ...xattr(['LegacyNamespace', 'Host']),
       }),
       defineNamespace({
@@ -34,6 +34,29 @@ describe('platform declaration generation', () => {
       import type { Host, NativeValue } from './platform';
       declare const host: Host;
       const value: Promise<NativeValue> = host.read();
+    `)).toEqual([]);
+  });
+
+  it('exposes declared static operations on a supplied native constructor', () => {
+    const assembly = new DefinitionAssembly([
+      defineInterface({
+        name: 'NativeValue', interfaceOverride: { isInstance: () => false, getInterfaceObject: () => Map },
+        exposed: '*', ...xattr(['LegacyNamespace', 'Host']),
+        members: [staticOp('read', idlType.DOMString,
+          [arg('value', reference('NativeValue')), arg('name', idlType.DOMString)],
+        )],
+      }),
+      defineNamespace({ name: 'Host', exposed: '*', members: [] }),
+    ]);
+    expect(compile(generatePlatformTypes(assembly), `
+      import type { Host, NativeValue } from './platform';
+      declare const host: Host;
+      declare const value: NativeValue;
+      const result: string = host.NativeValue.read(value, 'name');
+      // @ts-expect-error The second argument is required.
+      host.NativeValue.read(value);
+      // @ts-expect-error Constructor conversion has not been declared by this slice.
+      new host.NativeValue();
     `)).toEqual([]);
   });
 

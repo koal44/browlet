@@ -90,40 +90,68 @@ objects enter as parameters. Exposed functions still come from the owning realm'
 function factory. Generated bodies require runtime coverage because TypeScript
 checks only the surrounding contracts.
 
+The four member overrides (`overrideGet`, `overrideSet`, `overrideConstruct`,
+`overrideInvoke`) receive an `OverrideEnvironments` object first, followed by
+converted arguments. `relevant` belongs to the receiver and `callee` to the invoked
+callable. For constructors, static members and namespace members they are the same.
+`incumbent` is supplied only when the declaration sets `overrideCapturesIncumbent: true`;
+otherwise it is `undefined`, even if argument conversion independently needs capture.
+The flag alone requests entry capture; Binding does not require a corresponding
+override callback. An attribute's flag covers both accessors. For example:
+
+```ts
+{
+  overrideCapturesIncumbent: true,
+  overrideSet({ relevant, callee, incumbent }, value) { /* use converted value */ },
+}
+```
+
 The composition root supplies `BindingWorld`'s `getIncumbentEnvironment(methodEnv)`
-callback. Injected argument resolvers and attribute getters request that input by
-declaring a third positional parameter; setters declare a fourth. For example,
-`atArg(index, (_env, _methodEnv, incumbentEnv) => incumbentEnv)` forwards it to an
-implementation. There is no input descriptor or capture flag. The lookup runs
-after successful argument conversion and only when requested. A missing provider
-is a composition error; a provider can return `undefined` for a direct host call
-without an incumbent. Location's binding uses its existing method-environment
-accommodation in that case; postMessage requires an incumbent.
+callback. The lookup runs after successful argument conversion and only when
+requested. A missing provider is a composition error; a provider can return
+`undefined` for a direct host call without an incumbent. Location's binding uses
+its existing callee-environment accommodation in that case; postMessage requires
+an incumbent. Capture adds native entry machinery and a host lookup, so leave it
+disabled when the override only needs its relevant or callee environment.
+
+Injected argument resolvers retain their positional contract. For example,
+`atArg(index, (_env, _methodEnv, incumbentEnv) => incumbentEnv)` forwards the caller
+to an implementation, requesting capture through its third parameter without a flag.
 
 Declared arity is an authoring convention, not analysis of the callback body.
 The `binding-input-arity` lint rule rejects defaults and rest parameters through
-the incumbent position on contextually typed binding callbacks. Keep those
+the incumbent position on contextually typed injected argument resolvers. Keep those
 callbacks typed by the declaration contract so the rule can check them.
 
-Binding derives native capture when preparing a callable function. It examines
-declared inputs and synchronous callback conversions, including nested dictionaries
+Binding selects native capture when preparing a callable function. It examines
+the override flag, injected inputs and synchronous callback conversions, including nested dictionaries
 and containers. `[PutForwards]` carries the requirement through its getter and
 target setter, including aliases, nullable interfaces, inheritance, and forwarding
 chains. Forwarding uses the setter realm's captured ordinary Reflect Get/Set so
 nested exotic access preserves the caller and navigation source.
 Overloads share one entry, so any applicable declaration requiring capture selects
 that factory for the group. Ordinary functions keep the cheaper callable factory.
+An implementation that discovers callbacks inside an opaque `object` argument,
+such as Wasm imports, declares `overrideCapturesIncumbent: true` on its operation or
+constructor. This requests entry capture without inventing a Web IDL callback
+dictionary or an unused injected argument. The implementation still performs
+its own type-directed callback processing.
 
 On addon backends, capture precedes conversion and lasts for the complete invocation.
+Native apply traps preserve the original receiver, including null and primitives;
+raw V8 API functions would normalize it. Constructor proxies use native construct
+traps while preserving newTarget and the existing prototype lookup order. This
+uses the existing nonconstructible native entry; no new addon API is required.
 It changes neither receiver ownership nor HTML Script provenance. Stock Node retains
-its missing-entry limitation. Constructors still need a constructible native entry;
-this change does not add one. Promise fulfillment and async-sequence element
+its missing-entry limitation. Promise fulfillment and async-sequence element
 conversion happen later and need their own callback/job context, not the original
 member's entry. The [constructor regressions](../../test/browlet/communication/window-messaging.test.ts)
-demonstrate the missing native entry: A calling B to construct C's MutationObserver
+still demonstrate the missing automatic selection for callback-typed constructors:
+A calling B to construct C's MutationObserver
 saves A instead of B for its callback. A callback-taking legacy factory fixture
-fails the same way; both are approved expected failures on all backends, with
-passing A-only controls. Direct
+fails the same way. Explicit constructor capture now works, but deriving it for
+these existing constructors/factories remains separate; both are approved expected
+failures on all backends, with passing A-only controls. Direct
 incumbent lookup is lint-restricted to the composition root, Binding dispatch,
 realm callback-lifecycle, and event-loop modules; implementations receive the input.
 
@@ -134,23 +162,76 @@ Member queries also apply the contributing
 fragment's requirements and, for interfaces and namespaces, the including owner's.
 The unrestricted `*` remains independent of the globals declared in the assembly.
 
-Namespace declarations can supply operation `invoke` and attribute `get` steps
-without an implementation class. The optional `namespaceOverride(env)` callback
+Namespace declarations can supply operation `overrideInvoke` and attribute `overrideGet` steps
+without an implementation class. The optional `overrideNamespace(env)` callback
 replaces ordinary namespace allocation. Binding installs the declared members
 on the returned object. WebAssembly supplies its existing realm-owned namespace
 to adapt individual operations while preserving native constructors and objects.
 
-Engine-owned interface values can use `defineInterface({ name, members: [],
-isInstance })`. This checks each supplied value, such as whether an argument is
+Engine-owned interfaces group their binding hooks under `interfaceOverride`:
+
+```ts
+interfaceOverride: {
+  isInstance: isWebAssemblyModule,
+  getInterfaceObject: (env) => env.realm.WebAssemblyModule,
+}
+```
+
+`getInterfaceObject` runs during binding installation. Incumbent capture belongs
+to the constructor or operation member because it applies when author code calls
+that member, not when Binding obtains the interface object.
+
+`isInstance(platformObject)` checks whether a supplied value, such as an argument, is
 a genuine WebAssembly.Module, without running author code. It does not select a
 runtime backend; JS Engine supplies the already-selected check. Input/output
-conversion, unions, and overload selection preserve the
-same object; no implementation class, inheritance, partials, or members accompany
-this value-only declaration. Binding and generated types do not manufacture a
-constructor. The engine continues to own exposure and its existing objects.
-WebAssembly uses this for Module and Instance identities while their full API
-review remains separate. Native checks run only for the types being converted or
-considered as overload candidates, without an ambient object registry.
+conversion, unions, and overload selection preserve the same object.
+
+Omitting `getInterfaceObject` provides only value conversion; Binding and generated
+types do not manufacture a constructor, including inside a supplied namespace.
+Supplying it returns the engine's existing constructor for declared static operations.
+Binding installs those operations with ordinary argument and return conversion
+and exposes their generated types. Without a
+declared constructor, the supplied constructor and prototype keep their identities.
+
+A declared constructor must supply `overrideConstruct`, returning a genuine native
+instance. Binding puts a Proxy around the supplied constructor to apply ordinary
+argument conversion before selecting `newTarget.prototype` and invoking those
+construction steps. Binding stamps the result with a `PlatformRecord` whose
+implementation and platform identities are both that native object, recording the
+constructor's realm before applying the selected prototype. The original prototype remains
+shared; its `constructor` property points to the adapted constructor. Undeclared
+static members remain native, and constructor name/length follow the declaration.
+The engine constructor captured on the realm remains available to implementation
+steps without recursively invoking the adapter.
+
+WebAssembly uses these facilities for `new Module()`, `new Instance()`, `new Memory()`,
+`new Table()`, `new Global()`, and `Module.customSections()`.
+Instance members, inheritance, partials, and mixins are still unsupported for native
+interfaces. `validateDefinitions()` checks these declaration constraints during
+development; ordinary assembly and construction trust the declared hooks.
+The reviewed native `Instance.exports` getter remains intact. It accepts genuine
+Instances even without a binding record; its generated member type is still a
+[documented dependency](../browlet/webassembly/ROADMAP.md#52-reviewed-instance-constructor-and-exports).
+Memory, Table, and Global likewise retain their native instance members while Binding adapts their constructors.
+Conversion and overload checks use their declared types. Generic record lookup
+checks the world's assembled native declarations without an ambient object registry.
+
+Native records bypass ordinary implementation initialization and platform-object
+allocation. Conversion, projection, unwrapping, and record/realm lookup share
+`BindingWorld.getObjectRecord()`: an existing stamp keeps its owner; an untracked
+native object gets both stamps when JS Engine can recover its registered creation
+realm exactly. Frozen objects remain usable and acquire no observable properties.
+The native Promise from `compile()` stays untouched; its Module is associated only
+when Binding encounters it. With no addon, stock Node cannot establish that owner
+reliably, so native values created outside our constructor adapter remain usable
+but unassociated. Values from unregistered realms or another world likewise never
+acquire a fabricated or replacement owner in the receiving world.
+
+There is one record type, `PlatformRecord`. The free `getPlatformRecord(platformObject)`
+and `getImplementationRecord(implInst)` functions read that same record through the
+two private stamps. They neither check the world nor associate an untracked object.
+The world/context `getObjectRecord(platformObjectOrImplInst)` accepts either identity,
+checks ownership, and can establish the native association described above.
 
 Consumers use the `assembly/`, `converters/`, `values/`, and `binding/realm/` indexes;
 modules within those folders import their siblings directly. Infra also offers
@@ -310,13 +391,16 @@ dependencies or `methodEnv` for allocations belonging to the invoked member's
 realm. Constructors supply the same environment in both positions. Binding
 selects these owners and retains conversion, projection, and exception realization.
 
-Explicit attribute getters receive `(env, methodEnv, incumbentEnv)` for the receiver and getter
-realms. HTML's `frameElement` uses the latter for its current-origin check.
-Explicit setters receive `(env, value, methodEnv, incumbentEnv)`, with `value` already converted;
-Location uses the setter environment to select the entry, and receives the incumbent
-from Binding. Binding integration getters receive the corresponding two Binding
-Contexts and the requested incumbent environment;
-adapters must convert those to environments before forwarding declaration steps.
+Explicit attribute getters receive `{ relevant, callee, incumbent }` for the receiver,
+invoked getter, and requested caller environments. HTML's `frameElement` uses
+`callee` for its current-origin check. Explicit setters receive that same bundle
+followed by the converted value. Location uses the setter environment to select
+the entry, and receives the incumbent from Binding.
+Prepared integration accessors receive the receiver's Binding Context for their
+own conversion and allocation work. A prepared getter is optional: `[ReflectSetter]`
+supplies only the reflected setter, leaving Binding to select the declaration's
+`overrideGet` or ordinary implementation getter. The HTML adapter does not reconstruct
+environments or forward declaration callbacks.
 
 Declaration callbacks obtain owner state and execution facilities through the
 selected environment. Browlet supplies bound node and AbortSignal allocation
@@ -340,7 +424,9 @@ operation conversion and invocation machinery. `serializedType`, when present,
 changes only emitted Web IDL, letting Window/Document spell the result `object`
 while their concrete result types select normal projection. It does not change
 TypeScript output or introduce a string index signature.
-Use `attrFn()` for an attribute whose value is a retained built-in function.
+For attributes returning retained built-in functions, use `overrideGet` to return
+the function cached by the owning subsystem for the receiver's relevant realm.
+Binding preserves that function's identity through result conversion.
 `cbDict()` selects the original dictionary object as the receiver for its callback
 members.
 
@@ -363,29 +449,45 @@ in Core. The `IDL…` prefix identifies these values without boxing every value.
 | Value | Payload and retained information |
 | --- | --- |
 | `IDLDictionary` | Converted member record, distinguished from ordinary objects during union conversion |
-| `IDLCallbackFunction`, `IDLCallbackInterface` | Author object, declaration, callback realm, captured context, and a reference to the callback binding |
+| `IDLCallbackFunction`, `IDLCallbackInterface` | Author object, declaration, callback realm, captured environment, and a reference to the callback binding |
 | `IDLPromise` | Realm-owned promise, fulfillment type, resolving functions, and settlement state |
 | `IDLAsyncSequence` | Author iterable, selected iterator method, iteration kind, and element type |
 | `IDLSequence`, `IDLRecord`, `IDLMapEntries`, `IDLSetEntries` | Existing Array, Map, or Set containers holding converted values |
 
 Callback values expose invocation methods that delegate to `CallbackBinding`.
 That realm component owns shared `CallbackInvoker` plans, dynamic operation
-lookup, and context restoration. `values/callback.ts` owns the stamp associating
+lookup, and environment restoration. `values/callback.ts` owns the stamp associating
 an implementation callable with its IDL callback value. A callback declaration's
 `overrideCbConversion(env, cbValue)` hook receives Core's `IDLCallbackInterfaceValue` or
 `IDLCallbackFunctionValue` view of the existing IDL value: its author object,
 callback realm, and invocation operation.
+The callback context is captured during JS-to-IDL conversion, before this adapter
+runs. Callback types require that context even without an override; their
+`capturesCallbackContext` property explicitly supplies the entry-capture requirement.
+An adapter does not opt into capture or replace the stored context with its own.
 This is a type boundary, with no additional object or allocation. The adapter
 cannot access assembly or binding internals through that view.
 Callback-function adapters return an implementation callable; Binding stamps and
 reuses it so projecting a handler attribute still returns the original author
 object. The adapter selects its invocation's exception policy and receives the
 declared IDL result. HTML's event-handler adapter uses this seam to check the
-target's automation policy and the callback Document's activity before entering
+callback Document's activity before entering
 author code. It also selects the five error details for Window's special
 `onerror` invocation. Ordinary callbacks retain the default invocation/result adapter.
-The value captures its own callback context; sharing a plan never shares that
-context or the original author object.
+The handler map checks the target's automation policy before lazy compilation.
+`BindingContext.createCallbackFunction()` creates a declared callback for an
+internally compiled function. It takes an explicit environment, typed as the
+binding's `Env`, and uses the existing conversion and identity machinery.
+HTML's lazy Window and element handlers use that path with their Document environment, rather
+than capturing whichever author script first reads or dispatches the handler.
+Each value retains `callbackEnv: WebIDLEnvironment | null`, obtained from
+`captureEnvironment()` or supplied explicitly. This is Web IDL's callback context:
+HTML captures the incumbent environment, which can differ from the callback realm's
+environment. Unbound hosts use null; a realm object is not an absence marker.
+The host's preparation and cleanup hooks accept the same type. Browlet validates
+the captured environment's ownership and permits null only for unbound realms,
+including its internal sandbox. Sharing a plan never shares a captured environment
+or the original author object.
 
 `IDLAsyncSequence.open()` creates an `AsyncSequenceIterator` for each traversal.
 It advances and closes the iterator and applies the caller's yielded-value
@@ -461,7 +563,7 @@ must become a callable before the implementation can use it.
 The `idlToImpl` step changes an already-converted IDL value into the
 representation consumed by implementation code. It does not repeat author
 coercion or validation. A callback's callable retains the original function,
-realm, and captured context. Numbers and strings already have their implementation
+realm, and captured environment. Numbers and strings already have their implementation
 representation. `ImplementationConverter.createArgumentConverter()` prepares those choices
 for a callable; `createConverter()` prepares the choice for one argument or member type.
 The one-shot `idlToImpl()` entry invokes those same rules. Installed members and
@@ -653,7 +755,7 @@ while sparse dictionaries collect only present entries
 before creating the record. Both produce ordinary objects with own data properties,
 including `__proto__`. Arbitrary Web IDL records still use a Map during conversion.
 Each `CallbackInvoker` retains argument and return converters per callable and
-callback realm. The callback value separately captures the current callback context;
+callback realm. The callback value separately captures the current callback environment;
 that invocation state is never shared through a cached conversion plan.
 Bound implementation callbacks retain the callback invoker and result converter,
 so invocation does not rediscover the callback contract.
@@ -670,7 +772,7 @@ consumer yet; HTML custom-element upgrade will need this operation. Construction
 uses the original author function, preserving callback realm and lifecycle handling.
 The caller supplies the current realm because non-constructor rejection precedes
 entry into the callback realm. Callback values retain the callback binding, realm, and
-captured callback context; they do not retain the original conversion realm for
+captured callback environment; they do not retain the original conversion realm for
 this later error.
 Runtime consumers use assembled class instances,
 which retain their original declarations as `primary`. All realms registered in
@@ -997,6 +1099,17 @@ preserves its JavaScript value; Binding cannot infer an undeclared interface.
 Existing buffer results retain their identity and realm. When an algorithm needs
 a new buffer, its implementation allocates through the owning environment's
 execution facilities before returning it.
+
+FrozenArray attributes automatically adapt implementation lists. Binding reads
+the property normally and retains one frozen projection per source list and
+member in the receiver's realm, including for borrowed getters. Nullable lists
+remain null; replacing a list creates a new snapshot without changing earlier
+arrays. Implementations must replace the list when membership changes.
+Arrays already created by Web IDL input conversion or `createFrozenArray()` keep
+their identity and original realm. The converter recognizes these arrays through
+private weak membership, so freezing an implementation list does not accidentally
+bypass projection. Explicit input conversion still creates a fresh array even
+when its input is already a converted frozen array.
 
 Implementations receive converted callbacks and dictionaries, not original
 author inputs. Bound callbacks retain original identity, invocation receiver,

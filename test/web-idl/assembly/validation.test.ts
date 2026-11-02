@@ -5,7 +5,7 @@ import {
   arg, atArg, cbDict, ctor, defineCallbackFunction, defineCallbackInterface, defineDictionary, defineEnumeration,
   defineIncludes, defineInterface, defineInterfaceMixin, defineNamespace, definePartialDictionary,
   definePartialInterface, definePartialInterfaceMixin, definePartialNamespace, defineTypedef,
-  idlType, impl, invokeWith, nullable, observableArray, op, reference, roAttr, sequence,
+  idlType, impl, invokeWith, nullable, observableArray, op, reference, roAttr, sequence, staticOp,
   type Definition, type InjectedArgument,
 } from '../../../src/web-idl/core/index';
 import { DefinitionAssembly, validateDefinitions } from '../../../src/web-idl/assembly/index';
@@ -25,6 +25,45 @@ describe('Web IDL declaration validation', () => {
     const definitions = [definePartialInterface({ name: 'Missing', members: [] })];
     expect(() => new DefinitionAssembly(definitions)).not.toThrow();
     expect(() => validateDefinitions(definitions)).toThrowError(InternalError);
+  });
+
+  it('validates interface overrides separately from trusted assembly', () => {
+    const interfaceOverride = { isInstance: () => false, getInterfaceObject: () => Map };
+    const native = { name: 'NativeMap', members: [], interfaceOverride };
+    const invalid: Definition[][] = [
+      [defineInterface({
+        name: 'NativeMap', members: [],
+        // @ts-expect-error JavaScript declarations must supply instance recognition too.
+        interfaceOverride: { getInterfaceObject: () => Map },
+      })],
+      [defineInterface({
+        ...native, interfaceOverride: { isInstance: () => false },
+        members: [staticOp('read', idlType.undefined, [])],
+      })],
+      [defineInterface({ ...native, members: [op('read', idlType.undefined, [])] })],
+      [defineInterface({ ...native, members: [ctor([])] })],
+      [defineInterface({ ...native, implementation: impl(class {}) })],
+      [defineInterface({ ...native, inherits: 'Parent' }), defineInterface({ name: 'Parent', members: [] })],
+      [defineInterface(native), definePartialInterface({ name: 'NativeMap', members: [] })],
+      [defineInterface(native), defineInterfaceMixin({ name: 'Extras', members: [] }),
+        defineIncludes({ interface: 'NativeMap', mixin: 'Extras' })],
+    ];
+    for (const definitions of invalid) {
+      expect(() => new DefinitionAssembly(definitions)).not.toThrow();
+      expect(() => validateDefinitions(definitions)).toThrowError(InternalError);
+    }
+  });
+
+  it('validates native interface declarations without invoking recognition or creation callbacks', () => {
+    const unavailable = (): never => { throw new Error('Validation must not call runtime hooks'); };
+    expect(() => validateDefinitions([defineInterface({
+      name: 'NativeMap',
+      interfaceOverride: { isInstance: unavailable, getInterfaceObject: unavailable },
+      members: [ctor([], { overrideConstruct: unavailable }), staticOp('read', idlType.undefined, [])],
+    })])).not.toThrow();
+    expect(() => validateDefinitions([defineInterface({
+      name: 'NativeMap', members: [], interfaceOverride: { isInstance: unavailable },
+    })])).not.toThrow();
   });
 
   it.each([

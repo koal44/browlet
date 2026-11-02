@@ -97,7 +97,7 @@ describe('Web IDL legacy property registration', () => {
           [arg('key', keyType), arg('value', idlType.long)],
           {
             special: 'setter',
-            overrideInvoke(_env, key, value) {
+            overrideInvoke(_environments, key, value) {
               (this as CollectionImpl).values.set(String(key), value);
             },
           },
@@ -137,7 +137,7 @@ describe('Web IDL legacy property registration', () => {
           [arg('name', idlType.DOMString)],
           {
             special: 'deleter',
-            overrideInvoke(_env, name) {
+            overrideInvoke(_environments, name) {
               return name !== 'retained' && (this as CollectionImpl).values.delete(name);
             },
           },

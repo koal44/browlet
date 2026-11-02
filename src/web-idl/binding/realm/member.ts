@@ -1,15 +1,13 @@
 import { InternalError } from '../../../infra/index';
 import { compileHostSteps, isObject, type JSFunction, type RealmFunctionSteps } from '../../../js-engine/index';
-import {
-  hasExtendedAttribute, type AttributeFunctionSteps, type StringifierMember, type ExtendedAttribute,
-} from '../../core/index';
+import { hasExtendedAttribute, type StringifierMember, type ExtendedAttribute } from '../../core/index';
 
 import {
   AssembledInterface, type IDLType, type IDLAttribute, type IDLOperation,
   type AssembledNamespace, type AssembledOverloads,
 } from '../../assembly/index';
 import { type PlatformRecord, type StampedImplInstance, IDLPromise } from '../../values/index';
-import { CallbackFunctionConverter, type Converter, type ConversionSteps } from '../../converters/index';
+import { CallbackFunctionConverter, FrozenArrayConverter, type Converter, type ConversionSteps } from '../../converters/index';
 
 import type { AsyncIteratorSteps } from './async-iterable';
 import type { ImplementationBinding, BoundConstruct } from './implementation';
@@ -32,8 +30,9 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
   asyncIteratorSteps?: AsyncIteratorSteps;
   valuePairsSteps?: ValuePairsSteps;
 
+  /** Frozen snapshots by implementation list identity, belonging to this member's realm. */
+  #frozenArrays: WeakMap<readonly unknown[], readonly unknown[]> | undefined;
   /** Platform functions retain their identities after their first installation. */
-  #attributeFunction: JSFunction | undefined;
   #getter: JSFunction | undefined;
   #operation: JSFunction | undefined;
   #setter: JSFunction | undefined;
@@ -61,6 +60,28 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
     );
   }
 
+  /** Adapt FrozenArray list getters automatically; other attribute types keep their existing steps. */
+  createFrozenArrayGetter(attribute: IDLAttribute, get: AttributeSteps['get']): AttributeSteps['get'] {
+    const { binding, assembled } = this.#implementationBinding;
+    const type = attribute.type.kind === 'nullable' ? attribute.type.innerType : attribute.type;
+    if (type.kind !== 'frozen-array') return get;
+    return (receiver) => {
+      const values = get(receiver) as readonly unknown[] | null;
+      if (values === null || FrozenArrayConverter.isCreatedArray(values)) return values;
+      const owner = receiver?.binding ?? binding;
+      const member = owner === binding
+        ? this
+        : owner.getImplementationBinding(assembled).getOrCreateMemberBinding(attribute);
+      const cache = member.#frozenArrays ??= new WeakMap();
+      let array = cache.get(values);
+      if (!array) {
+        array = owner.createFrozenArray(values, type);
+        cache.set(values, array);
+      }
+      return array;
+    };
+  }
+
   /** Assign a field or invoke its setter through the implementation receiver. */
   createPropertySetter(attribute: IDLAttribute): (this: object, value: unknown) => void {
     const { assembled } = this.#implementationBinding;
@@ -84,25 +105,6 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
         throw binding.realizeException(exception);
       }
     }`);
-  }
-
-  /** Retain the function returned by this attribute in its receiver's realm. */
-  getAttributeFunction(
-    this: MemberBinding<MemberOwner>,
-    attribute: IDLAttribute,
-    createSteps: () => AttributeFunctionSteps,
-  ): JSFunction {
-    if (this.#attributeFunction) return this.#attributeFunction;
-    const realmBinding = this.#implementationBinding.binding;
-
-    const steps = createSteps();
-    return this.#attributeFunction = realmBinding.realm.createFunction((thisArgument, argumentsList) => {
-      try {
-        return Reflect.apply(steps, thisArgument, argumentsList);
-      } catch (exception) {
-        throw realmBinding.realizeException(exception);
-      }
-    }, { length: steps.length, name: attribute.name });
   }
 
   /** Retain the realm-owned getter function and its prepared conversions. */
@@ -424,6 +426,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
     return realmBinding.realm.createFunction(operationSteps, {
       length: operations.minimumArgumentCount, name,
       captureIncumbent: operations.callables.some((operation) =>
+        operation.overrideCapturesIncumbent ||
         operation.invokeWith?.some(({ resolve }) => resolve.length >= 3) ||
         operation.arguments.some((argument) =>
           argument.type.capturesCallbackContext || argument.callbackDictionary?.capturesCallbackContext)),
@@ -494,13 +497,15 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
     owner: MemberOwner = this.#implementationBinding.assembled,
     seen = new Set<IDLAttribute>(),
   ): boolean {
+    if (attribute.overrideCapturesIncumbent) return true;
     if (accessor === 'get') {
       while (attribute.inherit && owner instanceof AssembledInterface) {
         attribute = owner.getInheritedAttribute(attribute);
+        if (attribute.overrideCapturesIncumbent) return true;
         do { owner = owner.parentAssembled!; }
         while (!owner.members.some((entry) => entry.member === attribute));
       }
-      return (attribute.overrideGet?.length ?? 0) >= 3;
+      return false;
     }
     if (seen.has(attribute)) return false;
     seen.add(attribute);
@@ -521,7 +526,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
       return false;
     }
     if (attribute.readonly) return false;
-    return attribute.type.capturesCallbackContext || (attribute.overrideSet?.length ?? 0) >= 4;
+    return attribute.type.capturesCallbackContext;
   }
 
   // Extracted from Web IDL §3.7.6 Attributes and §3.7.7 Operations — reject promise results when invocation
@@ -538,7 +543,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
 
 /** Member adapters receive the instance's binding record, or null for static/namespace members. */
 export type AttributeSteps = {
-  get(receiver: PlatformRecord | null): unknown;
+  get(this: void, receiver: PlatformRecord | null): unknown;
   set?(receiver: PlatformRecord | null, value: unknown): void;
 };
 

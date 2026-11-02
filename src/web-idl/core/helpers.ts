@@ -52,16 +52,6 @@ export function roAttr<Env = unknown>(
   return member;
 }
 
-/**
- * Return one built-in function per attribute and receiver realm, named after the attribute.
- * The factory receives the owning environment; the returned steps supply the function's length.
- */
-export function attrFn<Env = unknown>(
-  createSteps: NonNullable<AttributeOptions<Env>['attributeFunction']>,
-): Pick<AttributeOptions<Env>, 'attributeFunction'> {
-  return { attributeFunction: createSteps };
-}
-
 /** Declare an operation overload; automatic binding calls the implementation method of the same name. */
 // https://webidl.spec.whatwg.org/#idl-operations
 export function op<Env = unknown, const Args extends ArgumentDefinition[] = ArgumentDefinition[]>(

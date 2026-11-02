@@ -160,6 +160,11 @@ export function getAssociatedRealm(value: object): JSRealm | undefined {
   return jsRuntime.getAssociatedRealm(value);
 }
 
+/** Find the engine's creation realm without prototype or active-evaluation guesses; unavailable on stock Node. */
+export function getCreationRealm(value: object): JSRealm | undefined {
+  return getNativeRealm ? RealmStamper.get(getNativeRealm(value)) : undefined;
+}
+
 export function createContext(
   microtaskQueue: JSMicrotaskQueue,
   reuseGlobalProxyFrom?: VMContext,

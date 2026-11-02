@@ -45,11 +45,8 @@ export type HTMLConstructorBinding<Env extends WebIDLEnvironment = WebIDLEnviron
 
 /** Prepared extended-attribute accessors, called after receiver validation and value conversion. */
 export type AttributeBinding<Env = unknown, Receiver extends object | null = object | null> = {
-  /** May forward a custom declaration getter, including its method and incumbent environments (ReflectSetter). */
-  get: (
-    this: Receiver, ctx: BindingContext<Env & WebIDLEnvironment>, methodCtx: BindingContext<Env & WebIDLEnvironment>,
-    incumbentEnv: Env | undefined,
-  ) => unknown;
+  /** Replace property reading; omit to retain the declaration override or ordinary implementation getter. */
+  get?: (this: Receiver, ctx: BindingContext<Env & WebIDLEnvironment>) => unknown;
   /** Runs the prepared reflection setter; custom declaration setters use AttributeMember.overrideSet instead. */
   set?: (this: Receiver, ctx: BindingContext<Env & WebIDLEnvironment>, value: unknown) => void;
 };

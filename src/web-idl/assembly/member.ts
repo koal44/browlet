@@ -183,7 +183,7 @@ export class OverloadGroup<Callable extends AssembledCallable> {
     if (distinguishingIndex >= 0) {
       for (const callable of callables) {
         for (const type of callable.getArgument(distinguishingIndex)!.type.candidates.interfaces) {
-          const isInstance = type.kind === 'interface' && type.assembled.primary.isInstance;
+          const isInstance = type.kind === 'interface' && type.assembled.primary.interfaceOverride?.isInstance;
           if (isInstance && !this.instanceChecks.includes(isInstance)) this.instanceChecks.push(isInstance);
         }
       }

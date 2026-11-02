@@ -68,7 +68,7 @@ class PlatformTypeGenerator {
       for (const name of collection.keys()) this.#names.set(name, this.#reserve(name));
     }
     for (const assembled of assembly.interfaces.values()) {
-      if (assembled.hasInterfaceObject() && !assembled.primary.isInstance) {
+      if (assembled.hasInterfaceObject()) {
         this.#objects.set(assembled, this.#reserve(`${assembled.name}Constructor`));
       }
     }
