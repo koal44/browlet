@@ -14,6 +14,7 @@ import { HTMLIFrameElementImpl, type HTMLObjectElementImpl } from '../../dom/nod
 import type { HTMLFrameElementImpl } from '../../dom/nodes/html/legacy/index';
 import { CustomElementRegistryImpl } from '../../dom/nodes/html/custom-elements/index';
 import type { SourceSnapshotParams } from './source-snapshot';
+import { createSessionHistoryEntry, type SessionHistoryEntry } from './session-history';
 import type { NavigationAPIMethodTracker } from '../navigation-api/index';
 import type { WindowImpl, WindowProxyHandle } from '../window/index';
 import { BrowletEnvironmentBase } from '../../environment';
@@ -25,7 +26,6 @@ import type { UserAgent } from '../../user-agent';
 import { BrowsingContext } from './browsing-context';
 import { createDocumentState, type DocumentBackedState, type DocumentState, type PostResource } from './document-state';
 import { NavigationParams } from './params';
-import { createSessionHistoryEntry, type SessionHistoryEntry } from './session-history';
 
 /** Owns a navigation destination and its current and active history entries. */
 // https://html.spec.whatwg.org/multipage/document-sequences.html#navigable
@@ -746,6 +746,14 @@ export class Traversable extends Navigable implements FetchPromptTarget {
     // TODO(HTML 7.4.6): Apply the history step with cancellation enabled and navigation type 'traverse'.
     // Check sandbox permission, beforeunload/navigate cancellation, and restore Documents/history with event/tracker notifications.
     throw new InternalError('Traverse history-step application is not implemented');
+  }
+
+  /** Resume an intercepted same-document traversal after its cancellation checks have passed. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#resume-applying-the-traverse-history-step
+  resumeTraverseHistoryStep(_step: number, _userInvolvement: UserNavigationInvolvement): void {
+    // TODO(HTML 7.4.6): Apply the history step with checkForCancelation false, null source/initiator,
+    // the supplied user involvement, and navigation type 'traverse', within the traversal queue.
+    throw new InternalError('Resuming an intercepted history traversal is not implemented');
   }
 
   /** Activate the committed entry and retarget its browsing context's WindowProxy. */

@@ -10,7 +10,6 @@ import type { NavigateEventImpl, NavigationInterceptHandler } from './navigate-e
 
 /** Event-owned controller supplied to precommit handlers before a navigation commits. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#navigationprecommitcontroller
-// TODO(HTML §7.2.6.10.4): Event firing must create and deliver this before committing the intercepted navigation.
 export class NavigationPrecommitControllerImpl {
   /** Environment owning the controller's platform object. */
   env: BrowletEnvironment;

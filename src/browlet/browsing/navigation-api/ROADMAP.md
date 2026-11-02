@@ -107,14 +107,11 @@ from §7.2.6.4.
   `pageshow`; disposal runs afterward. Tests supply that caller's inputs and
   `pageshow` explicitly and verify real task-source and inactive-Document gating.
   They do not demonstrate an implemented bfcache or traversal pipeline.
-- Same-document entry changes remain explicitly blocked before mutation in
-  `updateEntriesForSameDocumentNavigation()`. The complete operation also needs
-  the ongoing method tracker's committed notification before author callbacks,
-  captured ongoing event/tracker state, current-entry-change followed by disposal,
-  intercept commit handlers, and script preparation/cleanup to prevent intervening
-  microtask checkpoints. Existing execution facilities cover the last dependency;
-  the third slice below supplies tracker settlement, while NavigateEvent state
-  and the same-document integration remain missing.
+- Same-document entry changes are implemented by
+  `updateEntriesForSameDocumentNavigation()`: list mutation, tracker notification
+  before author callbacks, captured event/tracker state, current-entry-change,
+  disposal, and postcommit handlers within script preparation/cleanup. The
+  postcommit slice below records ordering, completion, and remaining §7.4 callers.
 
 ### Browser evidence and teardown dependency
 
@@ -223,9 +220,9 @@ document-initiated navigation or reload. Full navigation must supply:
 
 - Navigate-event acceptance: clear pending, register the ongoing tracker, preserve
   upcoming traversal identity, and invoke commit/finish/reject at the specified
-  points. Same-document entry commits remain blocked until event/intercept handling
-  and script batching are present. Transition, focus/scroll flags, and abort-event
-  propagation are still absent.
+  points. These operations, same-document entry updates, transitions, focus/scroll
+  policy, and abort propagation are implemented in the subsequent slices below.
+  Full navigation still needs to call them at its actual lifecycle boundaries.
 - Actual fetching, cancellation, navigation/traversal queues, history commits, and
   unload/reload effects. Cross-document loads, non-navigating 204/205 responses,
   attachment downloads, and non-intercepted reloads must leave the original method
@@ -381,17 +378,17 @@ that Firefox's missing member does not conceal its destination behavior.
 
 | Requirement | Current owner and missing connection |
 | --- | --- |
-| Transition creation | §7.2.6.10.4 inner event firing must create it only after event dispatch when interception state is not `none`, retaining the current entry and the event's exact destination. No production caller exists yet. |
-| Transition commit and completion | `commit a NavigateEvent` must resolve committed after entry/URL mutation. Handler completion must fire navigatesuccess before resolving finished and clearing the active transition. The retained object's settlement operations are implemented; these producers and their ordering are not. |
-| Ongoing event and focus/scroll state | Added in the sixth slice, with initial values and cancellation resets. Event firing must install the event/initialize state; focusing steps must update the focus flag; interception and history application must consume the scroll flag. |
+| Transition creation | §7.2.6.10.4 inner event firing now creates it after event dispatch when interception state is not `none`, retaining the current entry and the event's exact destination. |
+| Transition commit and completion | `commit a NavigateEvent` now resolves committed after its owner effect returns; entry/URL mutation remains unfinished. Handler completion must fire navigatesuccess before resolving finished and clearing the active transition. The settlement operation exists; its success producer remains unfinished. |
+| Ongoing event and focus/scroll state | Added in the sixth slice, with initial values and cancellation resets. Event firing installs the event and initializes state; focusing steps must update the focus flag; interception and history application must consume the scroll flag. |
 | Abort the ongoing navigation / abort a NavigateEvent | Implemented in the sixth slice below. Event, loading, and traversal producers still need to invoke them. Error extraction still lacks source-location diagnostics as recorded in the scripting roadmap. |
 | Inform the API about aborting navigation | Implemented in the seventh slice: the caller supplies its event loop (or null for parallel work); the active Window's loop runs the notification immediately or receives a navigation-and-traversal task. The notification repeatedly aborts because callbacks can start another navigation. Production callers remain unconnected below. |
 | Child navigable destruction | The seventh slice supplies the notification: inform about abortion, then snapshot upcoming traversal values and reject each with a fresh owner-realm AbortError. Actual child destruction does not yet invoke it. |
-| Destination creation and updates | Event firing must supply traversal entry/state or null-entry serialized state, URL, and original document classification. The precommit controller now updates this same object; its creation/delivery by event firing remains unfinished. |
+| Destination creation and updates | Event firing supplies traversal entry/state or null-entry serialized state, URL, and original document classification. The precommit controller updates this same object and is delivered during precommit execution. |
 
-Tests supply transition/destination values at the unfinished event-producer
-boundary, then exercise the real projected interfaces. They do not demonstrate
-working interception, automatic cancellation, or history movement.
+The original interface tests supply transition/destination values directly.
+Later firing and precommit tests cover their automatic creation and cancellation;
+history movement remains unfinished.
 
 Validation: all 17 new tests and all 135 cases across the eight affected
 Navigation suites pass on Node 24.19.0, Node 26.8.1, and custom Node, both stock
@@ -604,7 +601,7 @@ ownership. Resolve the markers with Eric after that comparison.
 
 | Caller | Missing work and required handoff |
 | --- | --- |
-| Push/replace/reload navigate-event firing (§7.2.6.10.4) | The existing explicit stub must notify before accepting a new event/tracker and before checking disabled entries/events. History push/replace already reaches that stub. Navigation/Location, fragment navigation, reload, and other navigation producers must establish execution on the affected Window before event firing. |
+| Push/replace/reload navigate-event firing (§7.2.6.10.4) | History now reaches preparation and aborts the previous navigation before disabled-entry and activity checks. This Window-local entry obtains the loop from its own environment; no loop argument was added to History or the firing operation. Navigation/Location, fragment navigation, reload, and other navigation producers still need their execution handoffs audited. |
 | [Download the hyperlink](https://html.spec.whatwg.org/multipage/links.html#downloading-hyperlinks) (§4.6.5) | For a non-browser-UI request that proceeds after its download navigate event, notify the subject element's node navigable before the parallel download work. Its node Document supplies the local environment. Hyperlink activation/download and download-event production remain unfinished. |
 | Child navigable destruction (§7.3.3) | Iframe/legacy-frame removal must clear content navigable, invoke the child notification, then destroy documents/descendants, remove nested history, update traversal history, and notify BiDi. The removing container's Document supplies the caller loop; the child's active Document supplies the destination loop. They can differ. |
 | Setting the ongoing navigation (§7.4.2.5) | Navigable still lacks its navigation-ID/`traversal`/null state and setter. The setter must notify before changing a different value. Navigation startup can originate in a different Document; the `javascript:` navigation path is explicitly queued to the target Window. Fragment navigation and stop-loading also call this setter. Preserve the distinction between invoking it and the history algorithms' direct state assignments. |
@@ -657,7 +654,7 @@ updates leave activation unchanged. The current entry must be initialized first.
 | --- | --- |
 | Full history-step application (§7.4.6.2) | Supply the previous active entry and resolved NavigationType. Audit HTML's ordering of activation before the later reactivation entry-list reconciliation: a newly visible predecessor might not yet be in the retained list. Preserve the old Document's initial-about:blank flag until replacement selection; an evicted unlisted predecessor currently throws explicitly rather than guessing that flag. The synchronous top-level new-Document commit is only one producer. |
 | Reload and traversal | Navigable's explicit unfinished operations must deliver their own `reload`/`traverse` types and restored entry state. A host same-URL load currently resolves to `replace`; it is not evidence of reload support. |
-| Same-document entry updates (§7.2.6.4) | The unfinished mutation/event producer must preserve the activation and its retained endpoints even if they leave the list. State updates to a retained session-history record remain visible through that entry. |
+| Same-document entry updates (§7.2.6.4) | Entry updates preserve the activation and its retained endpoints even if they leave the list. State updates to a retained session-history record remain visible through that entry. Full §7.4 history application remains unconnected. |
 | `pageswap` (§7.2.7.4, §7.4.6.2) | Its event, outgoing-document lifecycle, redirect-chain same-origin check, and View Transition integration are unfinished. It creates a **separate** activation in the outgoing Document's realm, with `from` equal to its current entry and a destination selected by navigation type; it must not mutate `navigation.activation`. |
 | Request referrer policy and history eviction | The existing entry getters consume retained policy; source-snapshot policy capture and complete Document eviction/restoration remain navigation-coordinator dependencies. |
 
@@ -773,11 +770,11 @@ trusted event at the unfinished production boundary.
 
 | Dependency | Required work |
 | --- | --- |
-| Event production (§7.2.6.10.4) | Initialize destination, flags, signal/controller, user involvement, classic History state, and ongoing Navigation state. Compute interception/cancellation eligibility, including URL rewrite and cross-document traversal restrictions. The History handoff still throws explicitly. |
-| Precommit controller (§7.2.6.10.2) | Operations are implemented below. §7.2.6.10.4 must create it in the event's realm, deliver it to precommit handlers, and advance event state when committing/finishing. |
-| Precommit/commit/finish (§7.2.6.10.4–5) | Invoke the converted callbacks, await their promises, handle reentrancy/cancellation, commit URL/history and trackers, settle the transition, dispatch success/error, and drive loading/accessibility feedback. Registered callbacks are not yet executed by a navigation producer. |
-| Focus and scroll (§7.2.6.10.5) | Supply autofocus/focus-change and sequential-navigation state; restore traversal scroll data or consult the Document's indicated part for beginning/fragment scroll, with CSSOM View effects. The scroll operation remains an explicit throwing boundary. |
-| Engine wake-up integration | Before implementing asynchronous handler completion, integrate Vin's main event-loop/addon work and test idle progress without a manual rescue checkpoint. Keep queue notification in JS Engine/node-compat, not NavigateEvent. |
+| Event production (§7.2.6.10.4) | Preparation, dispatch, tracker acceptance, and eligibility checks are implemented below. History is connected; other navigation/lifecycle callers remain unfinished. |
+| Precommit controller (§7.2.6.10.2) | Operations, realm-owned delivery, and commit-state invalidation are implemented below. |
+| Precommit/commit/finish (§7.2.6.10.4–5) | Callback execution, commit coordination, entry updates, settlement, and manual focus/scroll finishing are implemented below. Full URL/history effects and loading/accessibility feedback remain unfinished. |
+| Focus and scroll (§7.2.6.10.5) | Policy decisions and effect selection are implemented below. Shared autofocus/focus state, sequential navigation, indicated-part selection, saved scroll data, and CSSOM View effects remain explicit dependencies. |
+| Engine wake-up integration | Vin's event-loop/addon work is integrated. Same-Agent cross-Window callbacks and idle progress through the supported host bridge are tested without rescue checkpoints. The raw cross-Agent host probe remains separate. |
 
 Vin review: main `2746a1bf` adds Promise-settlement wake-ups after the Atomics and
 WebAssembly completion work. Activation and this synchronous registration slice
@@ -841,15 +838,12 @@ the older source. Sources:
 [WebKit controller](https://github.com/WebKit/WebKit/blob/713192fabebfdd2955aa596c262c33bfbf3d50be/Source/WebCore/page/NavigationPrecommitController.cpp#L53),
 and [WPT redirect options](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622782fe62529bb3a4809780da01d6c/testing/web-platform/tests/navigation-api/precommit-handler/precommitHandler-redirect-options.html).
 
-Remaining integration is §7.2.6.10.4 event firing: create the controller in the
-event's realm, pass it through the callback binding, and drive precommit/commit,
-failure, and handler completion. The producer must supply the trusted event's
-Navigation target and its tracker registration; tests supply these through real
-dispatch at that unfinished boundary. Event state must eventually reject
-retained controllers after commit/finish. Actual URL/history updates and
-scroll/focus effects remain with their existing owners. The asynchronous
-completion path still needs the Vin integration recorded above and idle-progress
-coverage; these synchronous operations do not resolve that dependency.
+The later §7.2.6.10.4 execution slice now creates and delivers the controller
+through Binding, waits for precommit handlers, and processes their failure.
+The commit slice now advances event state and rejects later use of retained
+controllers. Postcommit completion, actual URL/history updates, and scroll/focus
+effects remain with their existing owners. The precommit slice below
+records the integrated scheduling baseline and its idle-progress coverage.
 
 Blink additionally rejects explicit push redirection in its
 [trivial-history contexts](https://chromium.googlesource.com/chromium/src/+/1136757f47c7e2b6cc593f871a5d79fc0e9834b4/third_party/blink/renderer/core/frame/local_frame.cc#679):
@@ -866,6 +860,389 @@ configuration, with and without the addon; no new expected failures were needed.
 Generated declarations, type checking, ESLint, import rules, and whitespace checks
 pass. The custom addon uses the previously recorded matching main artifact.
 
+## Navigate-event preparation (§7.2.6.10.4)
+
+Audited the complete [firing section](https://html.spec.whatwg.org/multipage/nav-history-apis.html#navigate-event-firing)
+against HTML `404b3eb` (also the live 30 October version). This bounded slice
+implemented its three preparation algorithms and the shared inner algorithm's
+disabled-entry return. The following slice adds shared dispatch and cancellation.
+
+- Traversal selects an entry by session-history record identity. Only an entry
+  present in this Navigation supplies destination state; absent entries get
+  serialized null, independently of whether their Document is the same one.
+- Push/replace/reload aborts ongoing navigation first, including reentrant
+  replacement events. It then drops the supplied tracker if entries became
+  disabled, rechecks Document activity, and prepares the destination with
+  separate Navigation and classic History state. Disabled trackers remain
+  unsettled as specified; they are not accepted into ongoing navigation.
+- Downloads prepare a cross-document push destination with serialized null
+  and the exact filename, including an empty string. The following slice moves
+  abortion before preparation, with an approved browser/spec conflict below.
+- All three create trusted events through the owner's existing event factory
+  and retain the destination's environment for projection. Form entries and
+  source elements remain concrete inputs for the shared firing algorithm.
+
+The first real abortion caller is now History push/replace. Its Document owns
+Navigation and supplies the loop through that environment. Tests execute the
+projected History methods and observe synchronous abortion before preparation
+and URL/history update. They also cover deactivation by an abort listener.
+This supports the existing-owner arrangement for this caller; it does not settle
+the provisional Navigable signature for child destruction or parallel producers.
+The deferred decision above remains open, with no new ambient execution state.
+
+The full firing section was read. Its dependencies, updated by the next slice, are:
+
+| Dependency | Owner and required behavior |
+| --- | --- |
+| Shared event initialization and dispatch | Implemented through cancellation and intercepted-transition creation. FormData adopts the supplied entry list; form submission does not yet produce it. |
+| History-action activation and browser visual transitions | Window owns history-action timestamps, the predicate, and consumption (§6.4); input/automation notification and transient/sticky activation remain absent. Browlet displays no cached history rendering, so the event's visual flag is false. Introducing that UI requires its presentation state; a current/active history entry alone is insufficient. |
+| Interception and precommit | Implemented: owner-realm transition/controller creation, adapted callback execution, waiting for all results, and failure routing. Vin's scheduling integration is included, with supported host-bridge idle-progress tests. |
+| Commit and same-document entries | Commit and entry updates are implemented, including tracker notification, currententrychange, disposal, and captured-handler invocation. Document URL/history updates and traversal queue/resume remain explicit unfinished owners. |
+| Postcommit completion and failure | Handler invocation, wait-for-all, activity/abortion guards, tracker/transition settlement, and success/error delivery are implemented. Nonintercepted and manually managed intercepted completion work; automatic focus/scroll effects remain unfinished. |
+| Navigation producers | General navigation, fragments, reload, traversal/history application, and hyperlink download must call the appropriate preparation entry point, respecting exclusions for browser-UI and another Window's cross-document navigation. Only classic History is connected so far. |
+
+Tests substitute only the unfinished inner firing and URL/history effect when
+observing preparation; they do not establish dispatched-event or completed
+navigation conformance. The disabled-event cases use the real inner early return.
+No new browser disagreement or callable-shape change was introduced.
+
+Validation: the 16 new preparation tests and 48 existing History/abortion tests
+pass on Node 24.19.0, Node 26.8.1, and custom Node, each with and without the addon.
+No expected failures were added. Generated declarations, TypeScript/type
+contracts, ESLint, import rules, and whitespace checks pass. Custom validation
+reused the matching main artifact documented above; no engine/addon was rebuilt.
+
+## Navigate-event dispatch and cancellation (§7.2.6.10.4)
+
+The shared firing algorithm now accepts its method tracker (including selection
+from the upcoming traversal map), initializes all event data, and dispatches
+through DOM. URL rewriting and same-document status determine interception;
+top-level status, user involvement, and history-action activation determine
+traversal cancellation. Hash-change detection excludes classic History state.
+AbortController/signal and FormData are created for the event owner; FormData
+adopts the original entry list instead of copying it.
+
+Cancellation consumes history activation when appropriate, aborts the signal,
+rejects the tracker, and delivers navigateerror. A replacement installed by
+nested dispatch survives the outer event's return. An intercepted event creates
+its transition after dispatch, with the existing handled promises. The stopping
+point of that slice was precommit-handler execution and `NavigateEventImpl.commit()`.
+The following slices implement precommit execution and commit coordination;
+entry/history effects still throw explicit unfinished-operation errors. No successful
+navigation or postcommit completion is simulated. The shared firing algorithm
+is therefore not complete, even though its canceled-request branch is usable
+by real History calls.
+
+History activation uses Window-owned timestamps and methods; Document's new
+shadow-inclusive descendant-navigable helper supplies consumption across nested
+and cross-origin active Windows. This differs from the light-tree child list used
+for Window indexed access. Input notification, automation, close-watcher
+notification, transient/sticky activation, and the UserActivation interface
+remain in the [interaction inventory](../../interaction/ROADMAP.md).
+
+Eric approved these two choices, recorded alongside their source branches:
+
+| Conflict | Evidence and chosen behavior |
+| --- | --- |
+| `SPEC_CLASH(navigation-download-abort-order)` | Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2 abort an ongoing intercepted navigation before dispatching a download event, including a canceled download. HTML §4.6.5 places the notification after an allowed event, which cannot satisfy shared firing's no-ongoing-event assertion. Browlet aborts before download preparation, including reentrant replacements. The focused regression first threw `A navigate event is already ongoing`, then passed with this ordering. |
+| `SPEC_CLASH(navigation-destination-default-state)` | HTML explicitly defaults destination state to serialized null. Chromium/Firefox return undefined for History and download events; WebKit returns undefined for downloads but the classic History state for pushState. Browlet keeps HTML's null and separate state systems. Explicit Navigation API state remains unchanged. |
+
+Browser probe: `node-compat/experimental/navigation-event-firing.mjs`, run after
+page load from a page script, so automation's evaluation gesture does not affect
+`userInitiated`. All three agree on programmatic History/fragment cancellation,
+hash-change discrimination, and signal abortion. The download ordering relates
+to [HTML #11802](https://github.com/whatwg/html/issues/11802) and its
+[caller-side repair #11983](https://github.com/whatwg/html/pull/11983);
+Gecko's `Navigation::FireDownloadRequestNavigateEvent` explicitly aborts first.
+The eventual hyperlink producer still needs an audit of accepted-download
+cleanup and the specified later notification; this canceled-request fix does not
+complete that lifecycle. Traversal's actual abortion handoff likewise belongs to
+its unfinished history-application caller.
+
+Tests exercise real projected History cancellation, event/destination/signal
+realms, form-list adoption, tracker selection/rejection, reentrancy, restricted
+traversal cancellation, and transition creation. Only unfinished commit is
+substituted when a test needs to inspect an accepted event. Activation tests
+provide timestamps and child associations at the missing producer boundaries;
+they cover shadow trees, nesting, other origins, and detached/retired Windows.
+The following precommit slice adds asynchronous execution and idle-progress
+coverage after integrating Vin's scheduling work.
+
+Validation: all 147 tests in the eight affected History, Navigation, and activation
+suites pass on Node 24.19.0, Node 26.8.1, and custom Node, each with and without
+the addon; there are no expected failures in this selection. Generated declarations,
+type checks/contracts, touched-file ESLint, import rules, and diff whitespace
+checks pass. The custom-addon run reused the matching artifact described above
+(SHA-256 `91A11D6287A2D0283A286F215B26399D67D112F94B1A90B2C19E83EABDA14808`);
+no engine or addon was rebuilt.
+
+## Precommit execution and failure (§7.2.6.10.4)
+
+The shared firing algorithm now creates one owner-realm controller and invokes
+every converted precommit callback after event dispatch. Binding supplies
+argument projection, return conversion, and Promise rejection for synchronous
+throws. The implementation observes those results directly on the Navigation
+owner's queue: Web IDL's [wait for all](https://webidl.spec.whatwg.org/#wait-for-all)
+runs completion in the last input reaction, without a `Promise.all().then()`
+aggregate reaction. All handlers are invoked before observations are installed;
+one rejection does not prevent later handlers from running. Only the first
+rejection reaches failure processing.
+
+Fulfillment hands the captured tracker to `NavigateEventImpl.commit()`. That
+operation ignores inactive or aborted events before the commit coordination
+described below. Failure likewise checks activity and abortion, requires the
+ongoing event, and uses the existing abort operation to reject tracker/transition
+promises, signal abortion, and fire `navigateerror`. Precommit failure does not
+invoke finishing, as specified. Postcommit failure now reaches the implemented
+`finish(false)` policy; automatic focus reset remains a §6.6 dependency. Late completion after a
+replacement navigation leaves the replacement untouched.
+
+Eric approved these two conflicts, also marked at callback invocation:
+
+| Conflict | Evidence and chosen behavior |
+| --- | --- |
+| `SPEC_CLASH(navigation-precommit-receiver)` | HTML omits a callback receiver, so Web IDL supplies undefined; Firefox 157.0 agrees. Chromium 156.0.8078.4 supplies the NavigateEvent. Browlet follows HTML/Firefox, including a strict callback created in another Window. |
+| `SPEC_CLASH(navigation-precommit-rejection-timing)` | Web IDL's callback-exception algorithm creates a rejected Promise and converts it to the declared return type; [JS-to-Promise conversion](https://webidl.spec.whatwg.org/#js-to-promise) wraps it in a new capability. Those adoption steps put Browlet's error after a microtask queued just after the request. Chromium/Firefox deliver the error before that microtask. Browlet retains the written conversion and its established Binding behavior, without a Navigation shortcut. |
+
+Browser evidence is reproducible in
+`node-compat/experimental/navigation-precommit-execution.mjs`. Chromium and
+Firefox agree that all callbacks run, share one controller, see the transition,
+and preserve the rejection reason across signal/error/result delivery. WebKit
+27.2 has precommit disabled, so this probe establishes no live WebKit result.
+Blink's `NavigateEvent::MaybeCommitImmediately()` explicitly passes the event to
+`Invoke`; Gecko's `Navigation::InnerNavigateEventFiringAlgorithm()` calls the
+handler without a receiver. The older WebKit source also omits that receiver.
+The initial timing expectation reproduced the browser order, failed against
+the written Web IDL conversion, and was updated only after the choice above.
+
+The ten focused tests cover direct History rejection, invocation/microtask order,
+waiting for every handler, the captured tracker, first-rejection selection,
+same-Agent cross-Window controller ownership/redirect, late completions,
+inactive owners, and idle fulfillment/rejection through `exposeFunction()`.
+Accepted-event tests substitute only the unfinished commit effect; rejection
+tests use actual dispatch and cleanup. Idle tests read host-visible data without
+evaluating page code or forcing a checkpoint.
+
+This branch was rebased onto Vin's folded `6abe4e9c` scheduling work. All 15
+reviewed commits were preserved (range-diff shows only surrounding context in
+the Navigation entry commit). Matching ignored addon artifacts were copied from
+main after verifying identical native source; no engine or addon was rebuilt.
+
+An exploratory test injected live callbacks between two independent Browlet
+Agents from Node. On official Node 24/26 with the addon, invocation succeeded,
+but its completion stayed queued until a rescue checkpoint. Current custom Node
+delivers the rejection without rescue; Node 24 without the addon rejects the
+callback's event-loop ownership earlier. This is separate from a page's
+cross-Window callback in one Agent. Eric approved retaining the ordinary failing reproduction as
+`node-compat/experimental/navigation-precommit-cross-agent.mts`, outside the
+production slice. Its required idle-progress assertion remains failing rather
+than asserting the stall as correct. See the adjacent Experimental findings;
+the direct host cross-Agent contract remains open.
+
+Validation: all 157 tests in the nine affected History, Navigation, and activation
+suites pass on Node 24.19.0, Node 26.8.1, and custom Node, each with and without
+the addon. No expected failures are used in this selection. Generated declarations,
+type checks/contracts, touched-file ESLint, import rules, and diff whitespace
+checks pass. The separate Experimental probe retains its required idle-progress
+assertion and exits nonzero on the two official addon runtimes.
+
+The subsequent slices below supply commit coordination, retained-controller
+invalidation, same-document entries, and postcommit handlers. URL/history effects,
+automatic focus, scrolling effects, and loading UI remain unfinished.
+Destruction and navigation producers still need to invoke the existing abortion
+notifications. None is filled in by the successful precommit handoff tests.
+
+## Navigate-event commit coordination (§7.2.6.10.4)
+
+`NavigateEventImpl.commit()` implements the
+[commit algorithm](https://html.spec.whatwg.org/multipage/nav-history-apis.html#commit-a-navigate-event)
+around its unfinished owner operations. It checks Document activity and abortion,
+captures the original transition, and prepares the owning environment to run
+script. This holds the modeled context across author callbacks; cleanup runs in
+`finally`, including when an unfinished dependency throws. No new scheduling or
+engine mechanism was needed.
+
+Interception advances to committed before selecting its effect:
+
+| Navigation type | Connected owner operation and remaining dependency |
+| --- | --- |
+| push / replace | `DocumentImpl.updateURLAndHistory()` receives the current destination URL, classic History serialized state, and navigation type. Its §7.4.4 URL/history effects remain unfinished. |
+| reload | `NavigationImpl.updateEntriesForSameDocumentNavigation()` receives the navigable's active entry. The subsequent slices implement entry/tracker/currententrychange/disposal/handlers and finishing policy. Automatic focus/scroll effects remain dependencies. |
+| traverse | Suppress normal scroll restoration, map user initiation to activation/none, and append traversal work. The callback invokes `Traversable.resumeTraverseHistoryStep()` with the destination step. The §7.3.2 queue and §7.4.6 resumed history application remain explicit throwing operations. Resumption must apply history with cancellation checks disabled and null source/initiator; it must not repeat the original traversal's cancellation checks. |
+
+After the effect returns, commit resolves the original transition's committed
+promise. A nonintercepted cross-document request releases its method tracker
+without settling its results; same-document and intercepted requests retain it
+for entry-update/completion producers. An unintercepted request leaves URL/history
+effects to its caller. The postcommit slice below supplies the success producer;
+automatically managed focus/scroll still depends on its unfinished effects.
+
+Eric approved two source-marked choices, reproduced by
+`node-compat/experimental/navigation-commit.mjs`:
+
+| Conflict | Evidence and chosen behavior |
+| --- | --- |
+| `SPEC_CLASH(navigation-commit-reentrancy)` | A currententrychange listener starts a replacement with a pending precommit handler. HTML's late lookup and Firefox 157.0 resolve the replacement transition even though its URL and method result have not committed. Chromium 156.0.8078.4 keeps it pending. Browlet captures the original transition before callbacks, preserving that result while retaining HTML's later settlement point. The tested WebKit 27.2 build has precommit disabled, so it supplies no result for this case. |
+| `SPEC_CLASH(navigation-transition-commit-order)` | All three browsers run currententrychange and intercept handlers before queued microtasks. For a transition observer registered by currententrychange, Firefox delivers the observer after an intercept-handler microtask; Chromium/WebKit deliver it before that microtask. Browlet follows HTML/Firefox: resolve after the history-update call and its callbacks return. |
+
+The source arrangements explain that timing: Blink's
+[`NavigationApi::UpdateForNavigation()`](https://github.com/chromium/chromium/blob/1136757f47c7e2b6cc593f871a5d79fc0e9834b4/third_party/blink/renderer/core/navigation_api/navigation_api.cc#L272)
+resolves the transition before currententrychange; Gecko's
+[`CommitNavigateEvent()`](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622782fe62529bb3a4809780da01d6c/dom/navigation/Navigation.cpp#L614)
+uses HTML's later lookup; WebKit's
+[`setupInterceptionState()`](https://github.com/WebKit/WebKit/blob/713192fabebfdd2955aa596c262c33bfbf3d50be/Source/WebCore/page/Navigation.cpp#L1210)
+resolves before its separate interception-handler processing. These are different
+implementation arrangements, not evidence that Chromium uses Browlet's capture.
+
+Seventeen focused tests cover branch inputs, active-vs-current entry selection,
+queued traversal resumption, scroll suppression, method-tracker ownership,
+script context across real bound event callbacks, cleanup after dependency
+failures, original-transition protection, and activity/abortion guards. A public
+precommit-fulfillment test now observes the real commit state and the retained
+controller's InvalidStateError from both redirect and addHandler. Tests substitute
+only the entry/history effect or traversal queue when checking downstream
+ordering; separate cases retain each unfinished dependency's throwing boundary.
+These tests do not establish completed URL mutation, traversal, or postcommit
+handler execution.
+
+Validation: the 17 commit tests and 157 existing Navigation/History/activation
+tests pass on Node 24.19.0, Node 26.8.1, and custom Node, each with and without
+the addon. No expected failures or skips were added. Generated declarations,
+type contracts, touched-file ESLint, import checks, and diff whitespace checks
+pass. This slice uses the matching artifacts retained from the rebase; no addon
+or engine was rebuilt. The independent cross-Agent Experimental probe remains
+with Vin and was not changed as part of this work.
+
+## Same-document entry updates and postcommit handlers (§§7.2.6.4, 7.2.6.10.4)
+
+`NavigationImpl.updateEntriesForSameDocumentNavigation()` now implements the
+[entry-update algorithm](https://html.spec.whatwg.org/multipage/nav-history-apis.html#update-the-navigation-api-entries-for-a-same-document-navigation).
+Push removes forward entries and appends a new entry; replace creates a new
+entry at the current index; traverse selects an existing entry by session-history
+identity; reload retains the entry list and index. Removed entries receive trusted
+dispose events in list order. The method tracker receives its committed entry and
+serialized state before any author callback.
+
+The operation captures the ongoing event and tracker, prepares the owning
+environment to run script, then fires currententrychange, disposal events, and
+the captured event's handlers. Cleanup runs in `finally`. Callbacks may start a
+replacement navigation; the original handlers still run, as HTML and all three
+browsers require, but their later completion observes the aborted signal and
+leaves the replacement alone.
+
+`runInterceptCommitHandlers()` implements the
+[handler steps](https://html.spec.whatwg.org/multipage/nav-history-apis.html#navigate-event-intercept-commit-handler-steps).
+Binding has already adapted the callbacks and their Promise results. Invoke all
+handlers before observing results, then use direct InternalPromise observations
+for Web IDL's wait-for-all; no aggregate Promise adds a reaction. An empty list
+uses one resolved Promise. Only the first rejection reaches the existing failure
+operation. Success checks activity and abortion, clears the ongoing event,
+finishes it, settles the captured method tracker, fires navigatesuccess, and
+settles the original transition without clearing a replacement.
+
+The browser-only `node-compat/experimental/navigation-postcommit.mjs` probe ran
+against Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2. Eric approved the
+ordering and original-transition choices; thrown-handler conversion retains the
+previously approved Web IDL rule used for precommit callbacks.
+
+| Source marker | Evidence and chosen behavior |
+| --- | --- |
+| `SPEC_CLASH(navigation-postcommit-dispose-order)` | HTML, Firefox, and WebKit deliver currententrychange, dispose, then handlers. Chromium invokes handlers between currententrychange and dispose. Follow HTML. |
+| `SPEC_CLASH(navigation-postcommit-handler-receiver)` | HTML/Web IDL, Firefox, and WebKit use undefined for a strict handler's receiver. Chromium supplies the NavigateEvent. Follow HTML and the existing callback machinery. |
+| `SPEC_CLASH(navigation-postcommit-empty-timing)` | HTML's explicit resolved Promise places completion after microtasks queued in entry/disposal callbacks, before one queued after the request. Chromium/Firefox agree. WebKit delivers success before the entry/disposal microtasks. Retain the specified resolved Promise. |
+| `SPEC_CLASH(navigation-postcommit-rejection-timing)` | All three browsers report a thrown handler's error before the after-request microtask. Web IDL's exception-to-Promise conversion and subsequent return-type conversion put it afterward in Browlet. Retain the shared Binding conversion, as approved for precommit, without a Navigation-specific shortcut. |
+| `SPEC_CLASH(navigation-success-reentrancy)` | A navigatesuccess listener starts an intercepted replacement whose handler remains pending. HTML's late transition lookup and all three tested browsers leave the original transition unfinished, fulfill the replacement prematurely, and clear navigation.transition. Capture the original transition before finishing/callbacks, settle that transition, and clear only that same registration. |
+| `SPEC_GAP(navigation-entry-update-without-event)` | HTML captures the nullable ongoing event but unconditionally passes it to handler steps requiring an event. Blink and Gecko guard the call. Browlet likewise performs entry updates and events without inventing a NavigateEvent or success notification when none exists. The §7.4.6 history-application caller still needs integration coverage, including restored Documents whose latest entry changes. |
+
+Source evidence explains the browser differences:
+[Blink NavigationApi](https://github.com/chromium/chromium/blob/1136757f47c7e2b6cc593f871a5d79fc0e9834b4/third_party/blink/renderer/core/navigation_api/navigation_api.cc)
+invokes handlers before disposal, and
+[NavigateEvent](https://github.com/chromium/chromium/blob/1136757f47c7e2b6cc593f871a5d79fc0e9834b4/third_party/blink/renderer/core/navigation_api/navigate_event.cc)
+supplies the event receiver. [Gecko Navigation](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622782fe62529bb3a4809780da01d6c/dom/navigation/Navigation.cpp)
+uses disposal before handlers, no explicit callback receiver, and the resolved
+empty-list Promise. [WebKit Navigation](https://github.com/WebKit/WebKit/blob/713192fabebfdd2955aa596c262c33bfbf3d50be/Source/WebCore/page/Navigation.cpp)
+also omits the receiver but passes the empty list directly to its settlement
+observer. All three success paths look up the transition after author callbacks.
+
+This slice initially supplied `NavigateEventImpl.finish()`'s state-only early steps:
+nonintercepted events need no focus/scroll effects; an intercepted precommit
+failure can become finished; repeated or invalid early finishing is rejected.
+The scroll/focus slice below completes the finishing policy around explicit
+automatic-effect dependencies. Manually managed intercepted success/failure now
+uses that real finishing operation.
+
+Tests exercise real bindings, trusted event ordering and identities, list mutation,
+state installation before callbacks, captured-event reentrancy, transition
+protection, all-handler completion, first rejection, inactive completion, a
+same-Agent foreign-Window Promise, and idle progress through the supported host
+bridge. They substitute the unfinished §7.4 URL/history effect; the later
+scroll/focus slice removes their finishing substitute by using manual policies.
+Separate assertions retain the actual throwing dependencies. No test claims completed URL/history,
+traversal, focus, or scrolling. The independent cross-Agent host probe stays with
+Vin and is unchanged.
+
+Validation: 204 tests across 13 Navigation/History/activation suites pass on
+Node 24.19.0, Node 26.8.1, and custom Node 27.0.0-pre, each with and without the
+addon. This includes 22 new entry-update/postcommit tests. No expected failures
+or skips were added. Generated declarations, TypeScript/contracts, touched-file
+ESLint, import rules, and diff whitespace checks pass. The matching artifacts
+retained from the main rebase were used; no addon or engine rebuild was needed.
+
+## Scroll and focus policy (§7.2.6.10.5)
+
+The [finishing algorithm](https://html.spec.whatwg.org/multipage/nav-history-apis.html#navigateevent-finish)
+now calls the focus-reset decision first, processes scrolling only on fulfillment,
+and then marks the event finished. Nonintercepted and failed-precommit early
+returns retain their specified behavior. Repeated finishing remains invalid.
+
+`potentiallyResetFocus()` consumes and clears Navigation's focus-change flag
+before honoring that flag or the manual focus choice. Null and after-transition
+both request the missing automatic focus operation. `potentiallyProcessScrollBehavior()`
+skips an already-scrolled event and the manual choice; null and after-transition
+request processing. Public `scroll()` bypasses the automatic/manual decision.
+Processing sets the scrolled state before invoking its effect, as HTML specifies,
+including when the still-unfinished effect throws. It never silently claims that
+the viewport moved.
+
+The remaining requirements are accounted for at these source boundaries:
+
+| Requirement | Current owner and explicit dependency |
+| --- | --- |
+| Automatic focus reset | `NavigateEventImpl.potentiallyResetFocus()` stops after the implemented guards. HTML §6.6 must select the Document's autofocus delegate, fall back to body/document element, run focusing steps with the viewport fallback, and move the sequential focus navigation starting point. `interaction/focus.ts` has only a minimal area type; focus chains, inertness, shadow delegation, actual focus events, and viewport focus are not implemented. |
+| Author/user focus changes | HTML's focus update steps must set `NavigationImpl.focusChangedDuringOngoingNavigation`. The field and consumer exist, but there is no real producer yet; tests supply that state explicitly. A separate Navigation-only activeElement would contradict the shared focus model. |
+| Traversal scroll | `processScrollBehavior()` calls `restoreScrollPositionData()` with the navigable's active entry, independently of its current traversal entry. The session-history operation still throws: saved position data, restorable regions, user-scroll state, optional retries during content loading, and scroll anchoring need the §7.4.6.3/CSSOM View audit. Navigation does not insert an extra History scrollRestoration-mode check here. |
+| Beginning versus fragment | `Document.indicatedPart` explicitly awaits §7.4.6.3's HTML selection and MIME-specific rules for other document types. Null selects `scrollToBeginning()`; an element or the top sentinel selects `scrollToFragment()`. |
+| Beginning scroll | `Document.scrollToBeginning()` awaits CSSOM View §3.1: viewport/scrolling-area beginning edges, current position and ongoing smooth scroll, and the root element supplied to the scroll operation. This is not invariably the numeric position (0, 0). |
+| Fragment scroll | `Document.scrollToFragment()` awaits target-element updates for null/top/element, ancestor revealing, CSSOM View scrolling into view, focusing with a viewport fallback, and the sequential starting point. Manual **focus reset** does not suppress fragment scrolling's separate focusing step. |
+| Callback reentrancy from automatic focus | Focus/blur listeners and their navigation/detachment effects need integration tests when the shared focus producer exists. This slice does not simulate those callbacks or claim their lifecycle ordering is complete. |
+
+The standalone browser probe `node-compat/experimental/navigation-scroll-focus.mjs`
+ran five cases on Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2. All agree:
+manual focus/scroll preserves the current button and offset for fulfilled and
+rejected handlers; rejection does not perform automatic scroll; a handler's focus
+change survives default focus reset; explicit scroll still reaches and focuses
+the fragment under manual automatic policies. Second scroll and post-finish
+scroll throw InvalidStateError. These cases require no new SPEC_CLASH choice.
+The ordinary finishing/skip branches also match
+[Blink](https://github.com/chromium/chromium/blob/1136757f47c7e2b6cc593f871a5d79fc0e9834b4/third_party/blink/renderer/core/navigation_api/navigate_event.cc),
+[Gecko](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622782fe62529bb3a4809780da01d6c/dom/events/NavigateEvent.cpp),
+and [WebKit](https://github.com/WebKit/WebKit/blob/713192fabebfdd2955aa596c262c33bfbf3d50be/Source/WebCore/page/NavigateEvent.cpp).
+Their full autofocus/layout implementations remain evidence for those future
+owner audits, not behavior implemented by this slice.
+
+The 22 finishing/selection tests cover state transitions, flag consumption,
+manual/default policies, focus-before-scroll, failure skipping scroll, active-entry
+selection, and explicit dependency failures. All 12 postcommit tests now use the
+real finishing operation with manual choices, including idle fulfillment/rejection
+and same-Agent cross-Window callbacks. They still supply the unfinished §7.4
+URL/history effect; no focus or viewport behavior is faked as production support.
+
+Validation: all 226 selected tests across 14 suites pass on Node 24.19.0,
+Node 26.8.1, and custom Node 27.0.0-pre, with and without the addon. Typechecking,
+type-contract tests, touched-file lint, repository import checks, and whitespace
+checks pass. No expected failures or skips were added, and no addon or engine
+build was required.
+
 ## Requirement and dependency inventory
 
 The [introduction](https://html.spec.whatwg.org/multipage/nav-history-apis.html#navigation-api-intro)
@@ -879,7 +1256,7 @@ Navigation IDL are accounted for below.
 | `NavigationType` values and their meanings | Declared; push/replace correspond to resolved history handling, reload and traverse retain distinct categories. |
 | Initialization for a new Document | Implemented and connected to the existing top-level commit. The complete §7.4.6 history application must provide the same inputs. |
 | Reactivation | §7.2.6.4 reconciliation and deferred disposal implemented. The §7.4.6 bfcache/history-traversal caller and its `pageshow` ordering remain unconnected. |
-| Same-document entry changes | Explicit unfinished entry point in §7.2.6.4: push/replace/traverse list mutation, tracker committed notification before author callbacks, current-entry-change before disposal, intercept commit handlers, and script preparation/cleanup suppressing intervening microtask checkpoints. |
+| Same-document entry changes | §7.2.6.4 list mutation, tracker committed notification before callbacks, currententrychange, disposal, captured postcommit handlers, and script preparation/cleanup implemented. Intercepted reload reaches this operation; full §7.4 URL/history and traversal callers remain unfinished. |
 | Entries falling off a capped history list | HTML itself leaves disposal unspecified ([#8620](https://github.com/whatwg/html/issues/8620)); Browlet has no history-size cap. Revisit when implementing eviction, rather than silently discarding entries. |
 | Request-policy URL hiding | Getter implemented. `createHistoryEntry()` still needs navigation's source-snapshot request referrer/policy capture; the destination response policy is not a substitute. Tests supply this retained state directly. |
 | `updateCurrentEntry()` and its required-state dictionary | Implemented §7.2.6.6, with storage serialization and trusted `NavigationCurrentEntryChangeEvent` (§7.2.7.1). |
@@ -887,12 +1264,11 @@ Navigation IDL are accounted for below.
 | `navigate`, `reload`; options and NavigationResult | §7.2.6.7 preparation and results implemented; valid effects still stop at explicit Navigable dependencies. |
 | Method trackers and committed/finished lifecycle | §7.2.6.8 state, setup, settlement, event abortion, and Navigable abort/child-destruction notifications implemented. Their navigation/traversal/destruction producers remain explicit above. |
 | `traverseTo`, `back`, `forward` | §7.2.6.7 selection, no-op success, deduplication, source capture, and queued failure handling implemented. Traversal activation and traversal queue/history application remain explicit dependencies. |
-| `transition` | §7.2.6.8 nullable attribute, NavigationTransition state/getters, promise settlement, and event-abortion cleanup implemented. Production, success/commit, and lifecycle integration remain explicit above. |
+| `transition` | §7.2.6.8 attribute, state/getters, event production, commit/abort, and postcommit settlement implemented, including original-transition protection. Manual interception finishes; automatic focus/scroll, URL/history, and lifecycle integration remain explicit above. |
 | `activation` | §7.2.6.9 interface, retained state, and update operation implemented; top-level new-Document commits populate it. Full history/reactivation/reload and separate pageswap production remain explicit above. |
-| `navigate` firing, cancellation and exceptions to firing | Ongoing-event state and abort/error delivery implemented. Pending §7.2.6.10: event firing, location-bar and other-Window cross-document exclusions; restricted cancellation for child/cross-origin traversals and repeated canceled traversals; user involvement. The existing History handoff still throws at its explicit unfinished event operation. |
-| Interception and asynchronous completion | NavigationDestination's §7.2.6.10.3 interface and NavigateEvent constructor/data, shared checks, intercept registration, scroll validation, and precommit-controller operations are implemented. Event production and the rest of §7.2.6.10 remain pending: cross-origin interception restrictions, hash/download discrimination, controller delivery, handler execution/completion, committed versus finished ordering, success events, loading UI, and scroll/focus effects. |
+| `navigate` firing, cancellation and exceptions to firing | Preparation, shared dispatch, tracker acceptance, and cancellation are implemented, including restricted traversal cancellation and history-action consumption. History is the connected producer. Caller exclusions, other lifecycle producers, input activation, and completion dependencies remain above. |
+| Interception and asynchronous completion | Destination/event interfaces, interception registration, hash/download discrimination, transition creation, scroll validation, precommit controller/execution, commit coordination, postcommit handlers/settlement, and finishing policy are implemented. Full URL/history effects, loading UI, and automatic focus/scroll effects remain unfinished. |
 
-Next area: §7.2.6.10.4 navigate-event firing, beginning with a bounded preparation
-and event-production slice. §7.2.6.10.3 NavigationDestination is already covered.
-Precommit/commit, scrolling/focus, and complete navigation effects remain
-explicit until their own algorithms are audited.
+Next area in document order: §7.2.7 event interfaces. Automatic focus remains
+HTML §6.6 work; full URL/history, scrolling, traversal, and lifecycle producers
+remain in §7.3/§7.4 and CSSOM View, with the boundaries above kept explicit.

@@ -3,8 +3,8 @@ import {
   arg, atArg, defineDictionary, defineEnumeration, defineInterface, dictMember, DOMExceptionImpl, emptyDictionary,
   idlType, impl, invokeWith, nullable, op, promise, reference, roAttr, sequence, type DOMException,
 } from '../../../web-idl/core/index';
-import { areSameOrigin, type URLRecord } from '../../../url/index';
-import type { FormDataEntry } from '../../../xhr/index';
+import { areSameOrigin, urlsEqual, type URLRecord } from '../../../url/index';
+import { FormDataImpl, type FormDataEntry } from '../../../xhr/index';
 
 import { eventHandlerAttr, EventHandlerMap, type EventHandlerCallback } from '../../scripting/index';
 import { EventTargetImpl } from '../../dom/events/index';
@@ -18,8 +18,10 @@ import { NavigationHistoryEntryImpl } from './navigation-history-entry';
 import { NavigationActivationImpl } from './navigation-activation';
 import { NavigationCurrentEntryChangeEventImpl } from './navigation-current-entry-change-event';
 import { NavigationAPIMethodTracker } from './method-tracker';
-import type { NavigationTransitionImpl } from './navigation-transition';
-import type { NavigateEventImpl } from './navigate-event';
+import { NavigationTransitionImpl } from './navigation-transition';
+import { NavigateEventImpl } from './navigate-event';
+import { NavigationDestinationImpl } from './navigation-destination';
+import { NavigationPrecommitControllerImpl } from './navigation-precommit-controller';
 
 /** Window-owned view of contiguous same-origin session history. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#navigation-interface
@@ -29,7 +31,7 @@ export class NavigationImpl extends EventTargetImpl {
   entryList: NavigationHistoryEntryImpl[] = [];
   /** Position in the entry list, or -1 before initialization. */
   currentEntryIndex = -1;
-  /** Ongoing intercepted transition; navigate-event firing must install, settle, and clear it. */
+  /** Ongoing intercepted transition; commit and completion must settle and clear it. */
   transition: NavigationTransitionImpl | null = null;
   /** Most recent cross-document activation, retained while the associated Document is inactive. */
   // SPEC_CLASH(navigation-activation-inactive): HTML/Firefox/WebKit retain this value; Chromium's getter returns null while inactive.
@@ -37,6 +39,7 @@ export class NavigationImpl extends EventTargetImpl {
   /** Accepted navigate event, retained until completion or abortion. */
   ongoingNavigateEvent: NavigateEventImpl | null = null;
   /** Whether focusing steps changed focus during this navigation. */
+  // TODO(HTML §6.6.4): Focus update steps must set this flag when author/user focus actually changes.
   focusChangedDuringOngoingNavigation = false;
   /** Whether interception replaces the usual history scroll restoration. */
   suppressNormalScrollRestorationDuringOngoingNavigation = false;
@@ -44,7 +47,7 @@ export class NavigationImpl extends EventTargetImpl {
   ongoingAPIMethodTracker: NavigationAPIMethodTracker | null = null;
   /** Traversal requests awaiting event firing, in insertion order by destination key. */
   upcomingTraverseAPIMethodTrackers = new Map<string, NavigationAPIMethodTracker>();
-  /** Attribute listeners; navigate/success event production remains unfinished. */
+  /** Attribute listeners for navigation requests, completion, and current-entry changes. */
   #eventHandlers = new EventHandlerMap(this, [
     { name: 'onnavigate', type: 'navigate' },
     { name: 'onnavigatesuccess', type: 'navigatesuccess' },
@@ -313,25 +316,221 @@ export class NavigationImpl extends EventTargetImpl {
 
   /** Update an entry list and its navigation notifications as one same-document commit. */
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#update-the-navigation-api-entries-for-a-same-document-navigation
-  updateEntriesForSameDocumentNavigation(_destinationSHE: SessionHistoryEntry, _navigationType: NavigationType): void {
+  updateEntriesForSameDocumentNavigation(destinationSHE: SessionHistoryEntry, navigationType: NavigationType): void {
     if (this.hasEntriesAndEventsDisabled()) return;
-    // TODO(HTML 7.2.6.4): Mutate push/replace/traverse entries; notify the ongoing method tracker
-    // before author events using notifyCommittedToEntry(); capture the ongoing event/tracker;
-    // prepare/clean up script around currententrychange, disposal, and intercept commit handlers.
-    // Do not apply only the list edits.
-    throw new InternalError('Same-document Navigation entry updates and commit notifications are not implemented');
+    const oldCurrentEntry = this.currentEntry!;
+    let disposedEntries: NavigationHistoryEntryImpl[] = [];
+    if (navigationType === 'traverse') {
+      this.currentEntryIndex = this.getEntryIndex(destinationSHE);
+      if (this.currentEntryIndex === -1) throw new InternalError('Traversal requires an existing Navigation entry');
+    } else if (navigationType === 'push') {
+      disposedEntries = this.entryList.splice(++this.currentEntryIndex);
+    } else if (navigationType === 'replace') {
+      disposedEntries.push(oldCurrentEntry);
+    }
+    if (navigationType === 'push' || navigationType === 'replace') {
+      this.entryList[this.currentEntryIndex] = new NavigationHistoryEntryImpl(destinationSHE, this.env);
+    }
+    this.ongoingAPIMethodTracker?.notifyCommittedToEntry(this.currentEntry!);
+    const event = this.ongoingNavigateEvent;
+    const apiMethodTracker = this.ongoingAPIMethodTracker;
+    const loop = this.env.responsibleEventLoop;
+    loop.prepareToRunScript(this.env);
+    try {
+      this.fireEvent('currententrychange', NavigationCurrentEntryChangeEventImpl, (baseEvent) => {
+        const change = baseEvent as NavigationCurrentEntryChangeEventImpl;
+        change.navigationType = navigationType;
+        change.from = oldCurrentEntry;
+      });
+      // SPEC_CLASH(navigation-postcommit-dispose-order): Follow HTML/Firefox/WebKit; Chromium invokes handlers before disposal.
+      for (const entry of disposedEntries) entry.fireEvent('dispose');
+      // SPEC_GAP(navigation-entry-update-without-event): HTML passes a nullable ongoing event to nonnullable handler steps.
+      // Like Blink/Gecko, update and notify without invoking handlers when there was no event.
+      if (event !== null) this.runInterceptCommitHandlers(event, apiMethodTracker);
+    } finally {
+      loop.cleanUpAfterRunningScript(this.env);
+    }
   }
 
-  /** Decide whether push, replace, or reload may continue after its navigate event. */
+  /** Prepare a traversal destination, exposing state only for an entry in this Navigation's list. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#fire-a-traverse-navigate-event
+  fireTraverseNavigateEvent(destinationSHE: SessionHistoryEntry, userInvolvement: UserNavigationInvolvement = 'none'): boolean {
+    const event = this.env.createEvent(NavigateEventImpl) as NavigateEventImpl;
+    const entry = this.entryList.find((candidate) => candidate.sessionHistoryEntry === destinationSHE) ?? null;
+    const state = entry === null ? this.env.serializeForStorage(null) : destinationSHE.navigationAPIState;
+    const destination = new NavigationDestinationImpl(
+      destinationSHE.url, entry, state, destinationSHE.documentState.document === this.env.getAssociatedDocument(), this.env,
+    );
+    return this.innerNavigateEventFiring('traverse', event, destination, userInvolvement, null, null, null);
+  }
+
+  /** Abort previous navigation, then prepare the push, replace, or reload event's destination and state. */
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#fire-a-push/replace/reload-navigate-event
   firePushReplaceReloadNavigateEvent(
-    _navigationType: NavigationType, _destinationURL: URLRecord, _isSameDocument: boolean,
-    _options: PushReplaceReloadNavigateEventOptions = {},
+    navigationType: NavigationType, destinationURL: URLRecord, isSameDocument: boolean,
+    options: PushReplaceReloadNavigateEventOptions = {},
   ): boolean {
-    // TODO(HTML 7.2.6): Abort previous navigation, handle disabled entries/events and tracker state,
-    // create NavigateEvent/NavigationDestination with the event's controller and matching signal,
-    // initialize focus/scroll state, and run the inner event/cancellation algorithm.
-    throw new InternalError('Navigation API navigate-event firing is not implemented');
+    const document = this.env.getAssociatedDocument()!;
+    const navigable = document.getNodeNavigable();
+    if (navigable === null) throw new InternalError('Navigate-event preparation requires a live node navigable');
+    // This Window-local entry point is reached by History's owning Document.
+    // TODO(navigation-abort-caller-loop): Audit the other producers' handoffs before removing the provisional loop parameter.
+    navigable.informNavigationAPIAboutAbortingNavigation(this.env.responsibleEventLoop);
+    let tracker = options.apiMethodTracker ?? null;
+    // Abortion callbacks can deactivate the Document, so do not move this check before notification.
+    if (this.hasEntriesAndEventsDisabled() && tracker !== null) {
+      tracker.pending = false;
+      tracker = null;
+    }
+    if (!document.isFullyActive()) return false;
+
+    const event = this.env.createEvent(NavigateEventImpl) as NavigateEventImpl;
+    event.classicHistoryAPIState = options.classicHistoryAPIState ?? null;
+    // SPEC_CLASH(navigation-destination-default-state): Keep HTML's null default separate from classic History state.
+    // Chromium/Firefox use undefined; WebKit exposes classic History state for pushState instead.
+    const destination = new NavigationDestinationImpl(
+      destinationURL, null, options.navigationAPIState ?? this.env.serializeForStorage(null), isSameDocument, this.env,
+    );
+    return this.innerNavigateEventFiring(
+      navigationType, event, destination, options.userInvolvement ?? 'none',
+      options.sourceElement ?? null, options.formDataEntryList ?? null, null, tracker,
+    );
+  }
+
+  /** Abort previous navigation before preparing the download event. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#fire-a-download-request-navigate-event
+  fireDownloadRequestNavigateEvent(
+    destinationURL: URLRecord, userInvolvement: UserNavigationInvolvement, sourceElement: ElementImpl | null, filename: string,
+  ): boolean {
+    // SPEC_CLASH(navigation-download-abort-order): All three browsers abort before dispatch; HTML's later download notification violates firing's ongoing-event assertion.
+    // https://github.com/whatwg/html/issues/11802 — the caller's later notification is insufficient for an already ongoing navigation.
+    while (this.ongoingNavigateEvent !== null) this.abortOngoingNavigation();
+    const event = this.env.createEvent(NavigateEventImpl) as NavigateEventImpl;
+    // SPEC_CLASH(navigation-destination-default-state): Follow HTML's serialized null; browsers expose undefined for downloads.
+    const destination = new NavigationDestinationImpl(destinationURL, null, this.env.serializeForStorage(null), false, this.env);
+    return this.innerNavigateEventFiring('push', event, destination, userInvolvement, sourceElement, null, filename);
+  }
+
+  /** Initialize and dispatch the event, cancel the request, or continue to interception and commit. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#inner-navigate-event-firing-algorithm
+  innerNavigateEventFiring(
+    navigationType: NavigationType, event: NavigateEventImpl, destination: NavigationDestinationImpl,
+    userInvolvement: UserNavigationInvolvement, sourceElement: ElementImpl | null,
+    formDataEntryList: FormDataEntry[] | null, downloadRequestFilename: string | null,
+    apiMethodTracker: NavigationAPIMethodTracker | null = null,
+  ): boolean {
+    if (this.hasEntriesAndEventsDisabled()) {
+      if (this.ongoingAPIMethodTracker !== null || this.upcomingTraverseAPIMethodTrackers.size !== 0 || apiMethodTracker !== null) {
+        throw new InternalError('Disabled Navigation must not retain method trackers');
+      }
+      return true;
+    }
+    if (this.ongoingAPIMethodTracker !== null) throw new InternalError('A navigate event must not replace an ongoing method tracker');
+    if (destination.entry !== null) {
+      if (apiMethodTracker !== null) throw new InternalError('Traversal must select its upcoming method tracker');
+      const key = destination.entry.key;
+      if (key === '') throw new InternalError('A traversal destination must expose its key');
+      apiMethodTracker = this.upcomingTraverseAPIMethodTrackers.get(key) ?? null;
+      this.upcomingTraverseAPIMethodTrackers.delete(key);
+    }
+    if (apiMethodTracker !== null) {
+      this.ongoingAPIMethodTracker = apiMethodTracker;
+      apiMethodTracker.pending = false;
+    }
+    const document = this.env.getAssociatedDocument()!;
+    const window = document.getRelevantGlobalObject()!;
+    const navigable = window.navigable;
+    if (navigable === null) throw new InternalError('Navigate-event dispatch requires a live navigable');
+    event.canIntercept = document.canHaveURLRewritten(destination.urlRecord) &&
+      (destination.sameDocument || navigationType !== 'traverse');
+    const traverseCanBeCanceled = navigable.isTopLevelTraversable && destination.sameDocument &&
+      (userInvolvement !== 'browser UI' || window.hasHistoryActionActivation());
+    event.cancelable = navigationType !== 'traverse' || traverseCanBeCanceled;
+    event.type = 'navigate';
+    event.navigationType = navigationType;
+    event.destination = destination;
+    event.downloadRequest = downloadRequestFilename;
+    event.info = apiMethodTracker?.info;
+    // Browlet does not show cached history renderings. Connect their presentation state if that UI is introduced.
+    event.hasUAVisualTransition = false;
+    event.sourceElement = sourceElement;
+    event.abortController = this.env.createAbortController();
+    event.signal = event.abortController.signal;
+    const currentURL = document.url;
+    event.hashChange = event.classicHistoryAPIState === null && destination.sameDocument &&
+      urlsEqual(destination.urlRecord, currentURL, true) && destination.urlRecord.fragment !== currentURL.fragment;
+    event.userInitiated = userInvolvement !== 'none';
+    event.formData = formDataEntryList === null ? null : FormDataImpl.fromEntries(formDataEntryList, this.env);
+    if (this.ongoingNavigateEvent !== null) throw new InternalError('A navigate event is already ongoing');
+    this.ongoingNavigateEvent = event;
+    this.focusChangedDuringOngoingNavigation = false;
+    this.suppressNormalScrollRestorationDuringOngoingNavigation = false;
+    if (!this.dispatch(event)) {
+      if (navigationType === 'traverse') window.consumeHistoryActionUserActivation();
+      // A nested navigation can already have aborted this event and installed its own replacement.
+      if (!event.signal.aborted) this.abortOngoingNavigation();
+      return false;
+    }
+    if (event.interceptionState !== 'none') {
+      const from = this.currentEntry;
+      if (from === null) throw new InternalError('An intercepted navigation requires a current entry');
+      this.transition = new NavigationTransitionImpl(navigationType, from, event.destination, this.env);
+    }
+    if (event.navigationPrecommitHandlerList.length === 0) {
+      event.commit(apiMethodTracker);
+    } else {
+      const controller = new NavigationPrecommitControllerImpl(event, this.env);
+      // SPEC_CLASH(navigation-precommit-receiver): Follow HTML/Web IDL and Firefox's undefined receiver; Chromium supplies the event.
+      // SPEC_CLASH(navigation-precommit-rejection-timing): Keep Web IDL's callback Promise wrapping; browsers deliver thrown failures earlier.
+      const promises = event.navigationPrecommitHandlerList.map((handler) => handler(controller));
+      // Web IDL "wait for all": no aggregate Promise and extra reaction before the completion steps.
+      let remaining = promises.length;
+      let rejected = false;
+      for (const promise of promises) {
+        this.env.InternalPromise.fromInternal(promise).observe(() => {
+          if (--remaining === 0) event.commit(apiMethodTracker);
+        }, (reason) => {
+          if (rejected) return;
+          rejected = true;
+          event.processHandlerFailure(reason);
+        });
+      }
+    }
+    return event.interceptionState === 'none';
+  }
+
+  /** Invoke the captured event's postcommit callbacks, then finish or abort that navigation. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#navigate-event-intercept-commit-handler-steps
+  runInterceptCommitHandlers(event: NavigateEventImpl, apiMethodTracker: NavigationAPIMethodTracker | null): void {
+    // SPEC_CLASH(navigation-postcommit-handler-receiver): HTML/Firefox/WebKit use Web IDL's undefined receiver; Chromium supplies the event.
+    // SPEC_CLASH(navigation-postcommit-rejection-timing): Keep Web IDL's callback Promise wrapping; all three browsers deliver thrown failures earlier.
+    const promises = event.navigationHandlerList.map((handler) => handler());
+    // SPEC_CLASH(navigation-postcommit-empty-timing): Follow HTML/Chromium/Firefox's resolved-promise reaction; WebKit completes earlier.
+    if (promises.length === 0) promises.push(this.env.InternalPromise.resolve(undefined, idlType.undefined));
+    let remaining = promises.length;
+    let rejected = false;
+    for (const promise of promises) {
+      this.env.InternalPromise.fromInternal(promise).observe(() => {
+        if (--remaining !== 0) return;
+        if (!event.env.getAssociatedDocument()!.isFullyActive()) return;
+        if (event.abortController === null) throw new InternalError('NavigateEvent has no abort controller');
+        if (event.abortController.signal.aborted) return;
+        if (this.ongoingNavigateEvent !== event) throw new InternalError('Completion requires the ongoing navigate event');
+        // SPEC_CLASH(navigation-success-reentrancy): HTML and all three browsers can settle and clear a replacement from navigatesuccess.
+        // Retain the original transition through finishing and author callbacks instead.
+        const transition = this.transition;
+        this.ongoingNavigateEvent = null;
+        event.finish(true);
+        apiMethodTracker?.resolveFinished();
+        this.fireEvent('navigatesuccess');
+        transition?.resolveFinished();
+        if (this.transition === transition) this.transition = null;
+      }, (reason) => {
+        if (rejected) return;
+        rejected = true;
+        event.processHandlerFailure(reason);
+      });
+    }
   }
 
   /** Reuse a pending destination request or prepare its queued traversal. */
@@ -426,7 +625,7 @@ export const navigationTypeIDL = defineEnumeration({
   values: ['push', 'replace', 'reload', 'traverse'] satisfies NavigationType[],
 });
 
-// TODO(HTML 7.2.6.10): navigate-event firing, interception, and transition commit/success producers.
+// TODO(HTML §§6.6, 7.4; CSSOM View): Automatic focus/scroll effects and the complete history/navigation producers.
 // Navigation and traversal effects remain in Navigable/Traversable.
 export const navigationIDL = defineInterface<BrowletEnvironment>({
   name: 'Navigation',

@@ -69,6 +69,13 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   navigation: NavigationImpl;
   /** Idle callback registrations and scheduling for this Window. */
   idleCallbacks: WindowIdleCallbacks;
+  /** Last user activation time, initially +Infinity; transient consumption can set -Infinity. */
+  // https://html.spec.whatwg.org/multipage/interaction.html#last-activation-timestamp
+  // TODO(HTML 6.4): Input/automation activation notification must update this and notify close watchers.
+  lastActivationTimestamp = Infinity;
+  /** Activation time most recently consumed by a history action, retained with this Window. */
+  // https://html.spec.whatwg.org/multipage/interaction.html#last-history-action-activation-timestamp
+  lastHistoryActionActivationTimestamp = Infinity;
   /** Last assigned status string, with no effect on browser UI. */
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-window-status
   status = '';
@@ -238,8 +245,31 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   /** Whether this Window currently has unconsumed transient user activation. */
   // https://html.spec.whatwg.org/multipage/interaction.html#transient-activation
   hasTransientActivation(): boolean {
-    // TODO(HTML 6.4): Track activation timestamps, expiry, notification, and consumption.
+    // TODO(HTML 6.4): Supply duration/expiry, activation notification, and transient consumption.
     throw new InternalError('Window transient activation is not implemented');
+  }
+
+  /** Whether a user activation remains available for a history action, independently of transient expiry. */
+  // https://html.spec.whatwg.org/multipage/interaction.html#history-action-activation
+  hasHistoryActionActivation(): boolean {
+    return this.lastHistoryActionActivationTimestamp !== this.lastActivationTimestamp;
+  }
+
+  /** Consume history-action activation across this Window's top-level traversable. */
+  // https://html.spec.whatwg.org/multipage/interaction.html#consume-history-action-user-activation
+  consumeHistoryActionUserActivation(): void {
+    const navigable = this.navigable;
+    if (navigable === null) return;
+    const top = navigable.topLevelTraversable;
+    const document = top.activeDocument;
+    if (document === null) throw new InternalError('History activation consumption requires an active top-level Document');
+    const navigables = document.getDescendantNavigables();
+    navigables.push(top);
+    for (const descendant of navigables) {
+      const window = descendant.activeWindow;
+      if (window === null) throw new InternalError('History activation consumption requires each active Window');
+      window.lastHistoryActionActivationTimestamp = window.lastActivationTimestamp;
+    }
   }
 
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-window-close

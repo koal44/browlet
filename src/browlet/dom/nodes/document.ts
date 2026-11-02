@@ -323,6 +323,13 @@ export class DocumentImpl extends NodeImpl {
     return serializeURL(this.getBaseURL());
   }
 
+  /** Part identified by the current URL fragment, including the special top-of-document value. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#the-indicated-part-of-the-document
+  get indicatedPart(): ElementImpl | 'top' | null {
+    // TODO(HTML §7.4.6.3): HTML fragment selection; non-HTML Documents require their MIME type's fragment rules.
+    throw new InternalError('Document indicated-part selection is not implemented');
+  }
+
   // https://dom.spec.whatwg.org/#dom-document-characterset
   get characterSet(): string {
     return this.encoding;
@@ -1096,6 +1103,21 @@ export class DocumentImpl extends NodeImpl {
     throw new InternalError('URL and history updates are not implemented');
   }
 
+  /** Scroll the viewport to its beginning edges using CSSOM View's scroll operation. */
+  // https://drafts.csswg.org/cssom-view/#scroll-to-the-beginning-of-the-document
+  scrollToBeginning(): void {
+    // TODO(CSSOM View §3.1): Viewport/scrolling-area geometry, ongoing smooth scroll, and root-element association.
+    throw new InternalError('Document viewport scrolling is not implemented');
+  }
+
+  /** Reveal, scroll to, and focus the current fragment target. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#scroll-to-the-fragment-identifier
+  scrollToFragment(): void {
+    // TODO(HTML §7.4.6.3): Update target element, reveal ancestors, scroll into view, focus with a viewport fallback,
+    // and move the sequential focus navigation starting point; null/top have separate target-reset behavior.
+    throw new InternalError('Document fragment scrolling is not implemented');
+  }
+
   /** Retarget this document's browsing context to its Window and enable execution. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#make-active
   makeActive(): void {
@@ -1533,6 +1555,23 @@ export class DocumentImpl extends NodeImpl {
   getNodeNavigable(): Navigable | null {
     const navigable = this.browsingContext?.navigable;
     return navigable?.activeDocument === this ? navigable : null;
+  }
+
+  /** Collect descendant navigables through shadow trees and their active Documents, in tree order. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#descendant-navigables
+  getDescendantNavigables(): Navigable[] {
+    const navigables: Navigable[] = [];
+    for (let node = this.firstChild; node !== null; node = node.nextShadowIncludingDescendant(this)) {
+      if (!node.isElement()) continue;
+      const tag = node.tag;
+      if (tag !== ElementTag.HTMLIframe && tag !== ElementTag.HTMLObject && tag !== ElementTag.HTMLFrame) continue;
+      const child = (node as HTMLIFrameElementImpl | HTMLObjectElementImpl | HTMLFrameElementImpl).contentNavigable;
+      if (child === null) continue;
+      const document = child.activeDocument;
+      if (document === null) throw new InternalError('Descendant navigation requires an active Document');
+      navigables.push(child, ...document.getDescendantNavigables());
+    }
+    return navigables;
   }
 
   /** Collect the current child navigables in document tree order, excluding shadow trees. */

@@ -163,12 +163,20 @@ Window-owned `NavigationImpl`, exposed by the replaceable `Window.navigation` ge
 and a nonconstructible EventTarget-derived IDL interface. Replacing the author
 property does not change the internal owner. Initial Window reuse retains it;
 new Windows receive new objects. Entry read access has since been added in the
-[Navigation API slice](../navigation-api/ROADMAP.md). `firePushReplaceReloadNavigateEvent()` explicitly
-throws until §7.2.6 supplies navigation abortion, disabled-entry/event handling,
-method-tracker integration, NavigateEvent/NavigationDestination, and inner event firing.
+[Navigation API slice](../navigation-api/ROADMAP.md). `firePushReplaceReloadNavigateEvent()` now
+aborts previous navigation, handles disabled entries/events, and dispatches
+the trusted event with its destination and tracker. Canceled History requests
+return without updating URL/state. Precommit handlers run and can reject the
+request. Navigate-event commit now holds the script context, selects its owner
+operation, and settles its transition afterward. Navigation's same-document
+entry/tracker/event updates and postcommit handler coordinator are implemented;
+intercepted finishing now works with manual focus/scroll policies. Automatic
+effects remain explicit dependencies. Accepted History
+changes still reach the explicit URL/history boundary.
 `DocumentImpl.updateURLAndHistory()` independently remains unfinished: it must
 update History and Navigation state and queue the same-document history steps.
-The tests observe these two owner operations without simulating their effects.
+Preparation tests observe unfinished owner operations; event-firing tests now
+also cancel real projected History calls without substituting event dispatch.
 
 The event operation keeps navigation type, destination URL, and same-document
 status positional; all six optional spec inputs are grouped in
@@ -276,8 +284,9 @@ current-entry-change events, and reactivation reconciliation queues disposal;
 the §7.4.6 reactivation caller must still supply inputs before `pageshow`.
 `Navigation.navigate()`/`reload()` now prepare requests with serialized state and
 real trackers. Its traversal methods also select/deduplicate destinations and
-prepare queued history work and failure delivery; §7.2.6 must still supply
-same-document entry commits and event-driven acceptance/settlement. The full `navigate()` input
+prepare queued history work and failure delivery. §7.2.6 supplies same-document
+entry commits, event-driven acceptance/settlement, and finishing policy;
+automatic focus/scroll effects remain unfinished. The full `navigate()` input
 contract and tracker lifecycle do not make document-initiated navigation functional.
 
 `SourceSnapshotParams`, in the shared `navigation/source-snapshot.ts` foundation,
@@ -340,8 +349,8 @@ requires comparing a parameter-free handoff through their existing Documents/env
 | existing `../history/history.ts` and navigation owners | state restoration and URL/history, traversal, and reload effects; attributes and all method preparation are implemented above | HTML §7.2.5 and §2.7 |
 | existing `../navigation-api/navigation.ts` | Navigation state, results/options, entries, ongoing navigation, activation, and focus/scroll behavior; transition getter is implemented, with event production still missing | HTML §7.2.6 |
 | existing `../navigation-api/navigation-transition.ts` and `navigation-destination.ts` | Transition/destination state, interfaces, and promise settlement are implemented; event and precommit producers remain | HTML §§7.2.6.8 and 7.2.6.10.3 |
-| existing `../navigation-api/navigation-history-entry.ts` | Read interface, state, and reactivation disposal are implemented; same-document disposal and reload/session restoration remain | HTML §7.2.6 |
-| existing `../navigation-api/navigation-current-entry-change-event.ts` | Implemented for state updates; same-document commit producer remains | HTML §7.2.7.1 |
+| existing `../navigation-api/navigation-history-entry.ts` | Read interface, state, reactivation and same-document disposal implemented; full reload/session restoration remains | HTML §7.2.6 |
+| existing `../navigation-api/navigation-current-entry-change-event.ts` | Implemented for state and same-document entry updates; full history-application caller remains | HTML §7.2.7.1 |
 | `../navigation-api/navigation-events.ts` | `NavigateEvent`, navigate success/error, and intercept/precommit callback surfaces; consume the implemented destination object | HTML §7.2.6 |
 | `lifecycle-events.ts` | `PopStateEvent`, `HashChangeEvent`, `PageSwapEvent`, `PageRevealEvent`, `PageTransitionEvent`, and `BeforeUnloadEvent` | HTML §7.2.7 |
 | `not-restored-reasons.ts` | `NotRestoredReasonDetails`, recursive `NotRestoredReasons`, and history-entry association | HTML §7.2.8 |

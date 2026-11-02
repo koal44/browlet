@@ -1955,8 +1955,10 @@ WindowProxy property access must select the caller-bound descriptor helpers for
 cross-origin calls; the permissive proxy currently returns the target's method instead.
 WindowEventHandlers currently supplies `onstorage`; `onmessage`/`onmessageerror` remain unimplemented.
 See the [§9.3 dependencies](../../communication/ROADMAP.md#93-cross-document-messaging).
-User activation and focus likewise associate state with Window while retaining
-their algorithms under `interaction/`.
+Window now owns activation timestamps, the history-action predicate, and
+history-action consumption across the top-level traversable. Input notification,
+transient/sticky activation, `UserActivation`, and focus remain
+[interaction work](../../interaction/ROADMAP.md).
 
 ## Removal condition
 

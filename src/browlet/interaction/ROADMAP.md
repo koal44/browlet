@@ -63,6 +63,22 @@ not acquire their state. Likewise, `VisibilityStateEntry` uses the shared
 Performance timeline while the visibility transition itself remains an HTML
 lifecycle concern.
 
+## History-action activation dependency
+
+Navigation event cancellation now uses Window's two retained activation
+timestamps, `hasHistoryActionActivation()`, and
+`consumeHistoryActionUserActivation()`. Consumption covers the active Windows
+of the top-level traversable, including nested and shadow-tree navigables of
+other origins. Document's `getDescendantNavigables()` supplies that tree; the
+Window methods keep this foundation below the full interaction subsystem.
+
+The timestamps still have no input-event or automation producer. Activation
+notification must select ancestors and same-origin descendants, record current
+high-resolution time, and notify close watchers before dispatch. Transient
+duration/expiry/consumption, sticky activation, `UserActivation`/Navigator, and
+the WebDriver notification hook remain §6.4 work. Tests supply activation times
+directly; this does not claim that a click or an automation request activates a Window.
+
 ## Focused-area dependency
 
 HTML §3.1.2 exposes `DocumentOrShadowRoot.activeElement`; its implementation
@@ -80,6 +96,16 @@ selector state, and focus APIs must consume that same model.
 
 The active-element tests supply only this missing state. Ordinary public
 `activeElement` reads still throw, and no focus/blur API has been approximated.
+
+Navigation's §7.2.6.10.5 finishing policy now consumes
+`NavigationImpl.focusChangedDuringOngoingNavigation` before considering automatic
+reset. Focus update steps must produce that flag; tests currently supply it.
+Automatic reset still throws after its guards. Its remaining sequence is
+autofocus delegate, body/document-element fallback, focusing with a viewport
+fallback, then moving the sequential focus navigation starting point. Keep this
+on the shared focus model, including focus-event reentrancy and Document teardown.
+Fragment scrolling has a separate focusing step; manual navigation focus reset
+does not suppress that step.
 
 ## Removal condition
 

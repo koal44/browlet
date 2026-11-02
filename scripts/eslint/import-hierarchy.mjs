@@ -63,8 +63,8 @@ export const layers = [
   ['browlet/dom/abort', 'browlet/dom/nodes'],
   ['browlet/dom', 'browlet/performance', 'browlet/navigator'],
   ['browlet/reporting/generate', 'browlet/communication', 'browlet/storage'],
-  // Source snapshots serve the Navigation API and coordinator without loading navigation effects.
-  ['browlet/browsing/navigation/source-snapshot'],
+  // Shared snapshots and history-record operations do not load the navigation coordinator.
+  ['browlet/browsing/navigation/source-snapshot', 'browlet/browsing/navigation/session-history'],
   // Window owns its Navigation object; the API retains navigation and Document types without loading the loader.
   ['browlet/browsing/navigation-api'],
   // Window forwards messaging to communication; communication retains Window types only.

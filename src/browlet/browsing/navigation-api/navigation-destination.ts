@@ -8,7 +8,6 @@ import type { NavigationHistoryEntryImpl } from './navigation-history-entry';
 
 /** Destination shared by a navigate event and its transition. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#navigationdestination
-// TODO(HTML §7.2.6.10.4): Event firing must supply the initial destination; precommit redirects update it.
 export class NavigationDestinationImpl {
   /** Environment owning this destination's platform identity. */
   env: BrowletEnvironment;

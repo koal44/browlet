@@ -986,6 +986,12 @@ There is no umbrella browsing barrel.
 Both the Navigation API and navigation coordinator use it without loading each
 other; the snapshot reads the source Document and retains its navigation inputs.
 
+`navigation/session-history` likewise exposes shared record creation and scroll
+restoration without loading Navigable or the loader. The Navigation API can use
+this narrow entry point; restoration takes an existing entry and must act through
+its Document and shared scrolling facilities. The complete navigation index
+remains the higher-level coordinator entry point.
+
 `history` owns Document-retained History objects; `navigation-api` owns the
 Window-retained Navigation EventTarget and its NavigationHistoryEntry objects.
 Navigation owns its realm's entry list; each entry refers to a shared session-history

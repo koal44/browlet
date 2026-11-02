@@ -1,9 +1,9 @@
+import { InternalError } from '../../../infra/index';
 import { randomUUID } from '../../../js-engine/index';
 import type { URLRecord } from '../../../url/index';
 
 import type { ScrollRestoration } from '../history/index';
 import type { SerializedRecord } from '../../scripting/structured-data/index';
-
 import type { DocumentBackedState, DocumentState } from './document-state';
 
 /** One URL and document state at a joint session-history step. */
@@ -38,6 +38,14 @@ export function createSessionHistoryEntry(
     navigationAPIKey: randomUUID(), navigationAPIID: randomUUID(),
     scrollRestorationMode: 'auto',
   };
+}
+
+/** Attempt restoration of an entry's saved scrollable regions, unless the user has scrolled. */
+// https://html.spec.whatwg.org/multipage/browsing-the-web.html#restore-scroll-position-data
+export function restoreScrollPositionData(_entry: SessionHistoryEntry): void {
+  // TODO(HTML §7.4.6.3): Retained scroll position data, restorable regions, and has-been-scrolled-by-the-user state.
+  // Restoration can retry while content loads; scroll anchoring and CSSOM View supply the resulting positions.
+  throw new InternalError('Session-history scroll restoration is not implemented');
 }
 
 export type NestedHistory = {

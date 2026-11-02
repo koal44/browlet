@@ -116,7 +116,7 @@ describe('Navigation entry reactivation', () => {
         current: browser.window.navigation.currentEntry === old, state: old.getState() as unknown,
       });
     };
-    // Same-document navigation is unfinished; use the implemented reconciliation boundary to change current during a getter.
+    // Supply the §7.4 history-application effect while serialization is running.
     browser.window.navigation.updateCurrentEntry({
       state: {
         get value() { navigation.updateEntriesForReactivation(entries, entries[1]!); return 'outer'; },
@@ -124,14 +124,6 @@ describe('Navigation entry reactivation', () => {
     });
     expect(events).toEqual([{ from: true, current: false, state: { value: 'outer' } }]);
     expect(browser.window.navigation.currentEntry!.getState()).toBeUndefined();
-  });
-
-  it('leaves same-document commit work explicitly blocked before mutation', async () => {
-    const { navigation, entries } = await fixture();
-    const previous = [...navigation.entryList];
-    expect(() => navigation.updateEntriesForSameDocumentNavigation(entries[1]!, 'replace')).toThrow('commit notifications');
-    expect(navigation.entryList).toEqual(previous);
-    expect(navigation.currentEntryIndex).toBe(0);
   });
 });
 

@@ -1,4 +1,4 @@
-import { InternalError, type InternalPromise } from '../../../infra/index';
+import { assertNever, InternalError, type InternalPromise } from '../../../infra/index';
 import {
   arg, atArg, ctor, defineCallbackFunction, defineDictionary, defineEnumeration, defineInterface, dictMember,
   DOMExceptionImpl, emptyDictionary, idlType, impl, nullable, op, promise, reference, roAttr,
@@ -8,12 +8,14 @@ import type { FormDataImpl } from '../../../xhr/index';
 import { ErrorEventImpl, EventImpl, type EventInit } from '../../dom/events/index';
 import type { AbortControllerImpl, AbortSignalImpl } from '../../dom/abort/index';
 import type { ElementImpl } from '../../dom/nodes/index';
+import { restoreScrollPositionData } from '../navigation/session-history';
 import type { BrowletEnvironment } from '../../environment';
 import type { SerializedRecord } from '../../scripting/structured-data/index';
 
 import type { NavigationType } from './navigation';
 import type { NavigationDestinationImpl } from './navigation-destination';
 import type { NavigationPrecommitHandler } from './navigation-precommit-controller';
+import type { NavigationAPIMethodTracker } from './method-tracker';
 
 /** Navigation event data, interception choices, and cancellation. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#navigateevent
@@ -55,7 +57,6 @@ export class NavigateEventImpl extends EventImpl {
   /** Controller installed by trusted event production; author construction supplies only a signal. */
   abortController: AbortControllerImpl | null = null;
   /** Serialized History state supplied by push/replace event production. */
-  // TODO(HTML §7.2.6.10): The firing algorithm must supply the classic History API state.
   classicHistoryAPIState: SerializedRecord | null = null;
 
   constructor(type: string, eventInitDict: NavigateEventInit, env: BrowletEnvironment) {
@@ -95,7 +96,6 @@ export class NavigateEventImpl extends EventImpl {
     // HTML permits console warnings for overwritten choices; retain the latest value without warning.
     if (options.focusReset !== undefined) this.focusResetBehavior = options.focusReset;
     if (options.scroll !== undefined) this.scrollBehavior = options.scroll;
-    // TODO(HTML §7.2.6.10): Event completion invokes the lists, commits, and applies focus/scroll choices.
   }
 
   /** Request the navigation's scroll processing after commit and before it has already scrolled. */
@@ -118,12 +118,124 @@ export class NavigateEventImpl extends EventImpl {
     if (this.defaultPrevented) throw new DOMExceptionImpl('The navigate event was canceled', 'InvalidStateError');
   }
 
+  /** Commit the accepted event before its navigation or intercepted handlers continue. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#commit-a-navigate-event
+  commit(apiMethodTracker: NavigationAPIMethodTracker | null): void {
+    const document = this.env.getAssociatedDocument()!;
+    if (!document.isFullyActive()) return;
+    if (this.abortController === null) throw new InternalError('NavigateEvent has no abort controller');
+    if (this.abortController.signal.aborted) return;
+    const navigation = document.getRelevantGlobalObject()!.navigation;
+    const navigable = document.getNodeNavigable()!;
+    const endResultIsSameDocument = this.interceptionState !== 'none' || this.destination.sameDocument;
+    // SPEC_CLASH(navigation-commit-reentrancy): Keep replacement transitions pending, as Chromium does.
+    // HTML/Firefox's later lookup can settle a replacement still waiting for precommit.
+    const transition = navigation.transition;
+    const loop = this.env.responsibleEventLoop;
+    loop.prepareToRunScript(this.env);
+    try {
+      if (this.interceptionState !== 'none') {
+        this.interceptionState = 'committed';
+        switch (this.navigationType) {
+          case 'push':
+          case 'replace':
+            document.updateURLAndHistory(this.destination.urlRecord, this.classicHistoryAPIState, this.navigationType);
+            break;
+          case 'reload':
+            navigation.updateEntriesForSameDocumentNavigation(navigable.activeSessionHistoryEntry, 'reload');
+            break;
+          case 'traverse': {
+            navigation.suppressNormalScrollRestorationDuringOngoingNavigation = true;
+            const userInvolvement = this.userInitiated ? 'activation' : 'none';
+            navigable.traversable.appendSessionHistoryTraversalSteps(() => {
+              const step = this.destination.entry?.sessionHistoryEntry.step;
+              if (step === undefined || step === 'pending') throw new InternalError('Traversal requires a committed destination entry');
+              navigable.traversable.resumeTraverseHistoryStep(step, userInvolvement);
+            });
+            break;
+          }
+          default: assertNever(this.navigationType);
+        }
+      }
+      // SPEC_CLASH(navigation-transition-commit-order): Follow HTML/Firefox's settlement after history callbacks;
+      // Chromium/WebKit settle earlier relative to intercept-handler microtasks.
+      transition?.resolveCommitted();
+      if (!endResultIsSameDocument && apiMethodTracker !== null) apiMethodTracker.cleanup();
+    } finally {
+      loop.cleanUpAfterRunningScript(this.env);
+    }
+  }
+
+  /** Ignore obsolete handler failures, or finish and abort the ongoing event with its rejection reason. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#process-navigate-event-handler-failure
+  processHandlerFailure(reason: unknown): void {
+    const document = this.env.getAssociatedDocument()!;
+    if (!document.isFullyActive()) return;
+    if (this.abortController === null) throw new InternalError('NavigateEvent has no abort controller');
+    if (this.abortController.signal.aborted) return;
+    if (document.getRelevantGlobalObject()!.navigation.ongoingNavigateEvent !== this) {
+      throw new InternalError('A handler failure requires the ongoing navigate event');
+    }
+    if (this.interceptionState !== 'intercepted') this.finish(false);
+    this.abort(reason);
+  }
+
+  /** Finish interception, including its focus and optional scroll effects. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#navigateevent-finish
+  finish(didFulfill: boolean): void {
+    if (this.interceptionState === 'finished') throw new InternalError('NavigateEvent is already finished');
+    if (this.interceptionState === 'intercepted') {
+      if (didFulfill || this.navigationPrecommitHandlerList.length === 0) {
+        throw new InternalError('Only failed precommit can finish before committing');
+      }
+      this.interceptionState = 'finished';
+      return;
+    }
+    if (this.interceptionState === 'none') return;
+    this.potentiallyResetFocus();
+    if (didFulfill) this.potentiallyProcessScrollBehavior();
+    this.interceptionState = 'finished';
+  }
+
+  /** Respect author focus changes and manual control before requesting automatic focus reset. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#potentially-reset-the-focus
+  potentiallyResetFocus(): void {
+    if (this.interceptionState !== 'committed' && this.interceptionState !== 'scrolled') {
+      throw new InternalError('Focus reset requires a committed or scrolled navigate event');
+    }
+    const navigation = this.env.getAssociatedDocument()!.getRelevantGlobalObject()!.navigation;
+    const focusChanged = navigation.focusChangedDuringOngoingNavigation;
+    navigation.focusChangedDuringOngoingNavigation = false;
+    if (focusChanged || this.focusResetBehavior === 'manual') return;
+    // TODO(HTML §6.6): Select the Document's autofocus delegate, falling back to its body/document element;
+    // run focusing steps with the viewport fallback and move the sequential focus navigation starting point.
+    // These need the shared focus-area/chain model, not a Navigation-only activeElement approximation.
+    throw new InternalError('Navigation focus reset requires autofocus and focusing steps');
+  }
+
+  /** Automatically scroll only when interception has not already scrolled or requested manual control. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#potentially-process-scroll-behavior
+  potentiallyProcessScrollBehavior(): void {
+    if (this.interceptionState !== 'committed' && this.interceptionState !== 'scrolled') {
+      throw new InternalError('Scroll completion requires a committed or scrolled navigate event');
+    }
+    if (this.interceptionState === 'scrolled' || this.scrollBehavior === 'manual') return;
+    this.processScrollBehavior();
+  }
+
   /** Apply history scroll restoration or the destination Document's initial/fragment scroll. */
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#process-scroll-behavior
   processScrollBehavior(): void {
-    // TODO(HTML §7.2.6.10.5): Restore scroll position data for traversal, otherwise consult the
-    // Document's indicated part and scroll to its beginning or fragment (CSSOM View integration).
-    throw new InternalError('NavigateEvent scroll processing is not yet implemented');
+    if (this.interceptionState !== 'committed') throw new InternalError('Scroll processing requires a committed navigate event');
+    this.interceptionState = 'scrolled';
+    const document = this.env.getAssociatedDocument()!;
+    if (this.navigationType === 'traverse') {
+      restoreScrollPositionData(document.getNodeNavigable()!.activeSessionHistoryEntry);
+    } else if (document.indicatedPart === null) {
+      document.scrollToBeginning();
+    } else {
+      document.scrollToFragment();
+    }
   }
 
   /** Signal cancellation, notify Navigation, and reject its unfinished results. */

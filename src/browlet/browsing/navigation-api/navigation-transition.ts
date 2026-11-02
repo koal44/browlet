@@ -9,7 +9,7 @@ import type { NavigationDestinationImpl } from './navigation-destination';
 
 /** Retains the endpoints and independent commit/completion promises of an intercepted navigation. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#navigationtransition
-// TODO(HTML 7.2.6.10): Event firing, commit, and success must drive creation and fulfillment; abortion is connected.
+// TODO(HTML §§6.6, 7.4; CSSOM View): Automatic focus/scroll effects; manual interception can finish now.
 export class NavigationTransitionImpl {
   /** Environment owning the transition and both promises. */
   env: BrowletEnvironment;
@@ -51,7 +51,7 @@ export class NavigationTransitionImpl {
   }
 
   /** Settle completion after the event producer has fired navigatesuccess. */
-  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#inner-navigate-event-firing-algorithm
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#navigate-event-intercept-commit-handler-steps
   resolveFinished(): void {
     this.#finished.resolve(undefined);
   }

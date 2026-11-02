@@ -874,9 +874,12 @@ The existing top-level commit path updates stored length/index, and entries reta
 their scroll mode. `go/back/forward` perform conversion, activity checks, and
 request preparation, but reload and delta traversal still throw explicit
 unfinished-operation errors. `pushState/replaceState` now serialize for storage,
-validate URL rewriting, and prepare a same-document request. A successful change
-still throws at the explicitly unfinished Navigation event operation, and URL/history
-application is independently unfinished. `Window.navigation` exposes its
+validate URL rewriting, and dispatch a trusted navigate event. Cancellation leaves
+the URL/state unchanged. Precommit handlers run and can reject the change.
+Commit coordinates script execution, interception state, owner operations, and
+transition settlement, but accepted History changes still reach the explicit
+unfinished URL/history application boundary.
+`Window.navigation` exposes its
 replaceable, nonconstructible EventTarget identity, entry-list reads, and
 NavigationHistoryEntry metadata/state. New top-level Document commits initialize
 the contiguous same-origin list; initial about:blank, inactive, and opaque-origin
@@ -894,18 +897,20 @@ ineligible predecessors. Full traversal/reload/reactivation and separate
 leave the retained activation alone. `navigate()` and `reload()` now perform
 conversion/validation, prepare serialized state, and own commit/completion promises,
 but valid requests still throw at the unfinished Navigable operations. Tracker
-settlement is implemented; navigate-event acceptance and navigation effect producers
-must call it. Document's unload counter is checked but its lifecycle producers
+settlement and event acceptance/cancellation are implemented; commit/completion
+producers remain unfinished. Document's unload counter is checked but its lifecycle producers
 are still missing. `traverseTo()`, `back()`, and `forward()` now select destinations,
 resolve the current-entry case, and reuse pending requests. Their new-request
 path still stops at transient activation, then the unfinished traversal queue
 and history-step application. Source capture and queued failure handling are
 implemented, including protection against an obsolete failure deleting a newer
 request. `navigation.transition`, NavigationTransition, and NavigationDestination
-now expose retained state and realm-owned commit/completion promises. They still
-need navigate-event firing to create them, commit/success producers to settle and
-clear the transition, and event production to deliver the precommit controller
-that updates the destination.
+now expose retained state and realm-owned commit/completion promises. Intercepted
+event dispatch creates the transition; commit settles its committed promise
+after its owner operation returns. Entry/history effects and the success producer
+that settles finished and clears the transition remain unfinished. Precommit
+execution delivers the owner controller, waits for converted handler promises,
+and processes rejection. Commit rejects later use of the retained controller.
 NavigateEvent now exposes its constructor/data, and internal cancellation aborts
 its signal, fires navigateerror, and rejects the original tracker/transition without
 clearing replacements created by callbacks. Navigable's notification entry points
@@ -917,14 +922,32 @@ NavigateEvent now validates `intercept()` and `scroll()`, registers converted
 precommit/postcommit handlers, and retains focus/scroll choices.
 NavigationPrecommitController redirects the retained destination/options and
 appends postcommit handlers, protecting replacement trackers from reentrant
-state getters. Creating/delivering the controller and committing its destination
-remain event-production work; actual scroll processing still throws explicitly.
-Handler execution/completion, automatic event production,
-and the navigation/child-destruction lifecycle callers remain unfinished. Future
-handler completion also requires the ongoing engine wake-up integration and
-idle-progress tests. See the [Navigation API inventory](browlet/browsing/navigation-api/ROADMAP.md).
+state getters. Controller creation/delivery and its commit-state invalidation
+are connected; destination effects and actual scroll processing still throw explicitly.
+Traversal, push/replace/reload, and download event preparation now create their
+destinations; History reaches the preparation operation and aborts ongoing
+navigation before rechecking activity. Disabled Navigation entries skip dispatch;
+enabled entries initialize data, dispatch, cancel, or create an intercepted transition.
+History-action activation state and consumption now cover the top-level traversable,
+including shadow trees and other origins; input/automation notification and
+transient/sticky activation remain missing. `hasUAVisualTransition` is false because
+Browlet does not display cached history renderings; adding that UI must supply its
+presentation state. Commit selects URL/history update, same-document reload
+entry update, or queued traversal resumption. Navigation's same-document entry
+mutation, tracker notification, currententrychange/disposal, and postcommit
+handler coordinator and finishing policy are implemented. Nonintercepted and
+manually managed intercepted completion work. Automatic focus reset still needs
+the shared §6.6 focus model and its focus-change producer. Scrolling selects
+active-entry restoration or beginning/fragment scrolling, but saved positions,
+indicated-part selection, and CSSOM View viewport effects remain explicit stubs.
+URL/history updates, traversal queue/resumption, and the other navigation/child-
+destruction lifecycle callers remain unfinished. Precommit
+completion has idle-progress coverage through the supported host bridge after
+integrating the scheduling repairs. Node-injected callbacks between independent
+Browlet Agents retain a separate failing Experimental probe; same-Agent
+cross-Window callbacks pass. See the [Navigation API inventory](browlet/browsing/navigation-api/ROADMAP.md).
 Traversal queue/application,
-state restoration, automatic navigate-event cancellation, and
+state restoration, navigation lifecycle cancellation, and
 actual scrolling remain explicit dependencies. Inactive access follows HTML's SecurityError rule,
 including the recorded browser disagreement for retained `state`. See the
 [History audit](browlet/browsing/navigation/ROADMAP.md#html-725-history-foundations)
