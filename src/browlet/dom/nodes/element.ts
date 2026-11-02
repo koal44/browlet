@@ -41,6 +41,7 @@ import {
 import { ParentNodeMixin, parentNodeIDL } from './parent-node';
 import { SlottableMixin, slottableIDL } from './slottable';
 import type { HTMLSlotElementImpl } from './html/index';
+import type { HTMLFormElementImpl } from './html/forms/index';
 
 const classAttribute: TokenListAttribute = { name: 'class', supportedTokens: null };
 
@@ -251,6 +252,11 @@ export class ElementImpl extends NodeImpl {
       lists.set(name, list);
     }
     return list;
+  }
+
+  /** Non-HTML elements have no form owner; HTML specializes association discovery. */
+  getFormOwner(): HTMLFormElementImpl | null {
+    return null;
   }
 
   /** Current HTML content-category membership, including for elements from other namespaces. */
@@ -513,6 +519,19 @@ export class ElementImpl extends NodeImpl {
     localName: string, oldValue: string | null, newValue: string | null,
     namespace: string | null,
   ): void {
+    // https://html.spec.whatwg.org/multipage/webappapis.html#event-handler-content-attributes
+    if (namespace === null && localName.startsWith('on')) {
+      const handlers = this.getEventHandlerTarget(localName)?.eventHandlers;
+      // Only declared handlers participate; unrelated on-prefixed attributes remain ordinary attributes.
+      if (handlers?.has(localName)) {
+        if (newValue === null) {
+          handlers.set(localName, null);
+        } else if (!this.nodeDocument.policyContainer.cspList?.isInlineAttributeBlocked(this, 'script attribute', newValue)) {
+          // A DOM-created Document still has its initially empty CSP list.
+          handlers.setSource(localName, newValue, this.nodeDocument.URL);
+        }
+      }
+    }
     if (namespace !== null) return;
     this.#attributeTokenLists?.get(localName)?.updateTokens(newValue);
     this.#elementAssociations?.clear(localName);

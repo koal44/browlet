@@ -7,8 +7,9 @@ import {
 
 import type { EventHandlerMap } from '../../scripting/index';
 import type { AbortSignalImpl } from '../abort/index';
-import type { ShadowRootMode } from '../nodes/index';
+import type { NodeImpl, ShadowRootMode } from '../nodes/index';
 import type { DOMEnvironment, DOMRealm, EventImplConstructor } from '../environment';
+import type { WindowImpl } from '../../browsing/window/index';
 
 import { EventPhase, type EventImpl, type EventPathItem } from './event';
 import { MouseEventImpl } from './ui-event';
@@ -162,8 +163,6 @@ export class EventTargetImpl {
 
     while (target.isNode()) {
       const root = target.getTreeRoot();
-      if (root === null) return target;
-
       const host = root.getShadowRootHost();
       if (host === null) return target;
 
@@ -196,19 +195,16 @@ export class EventTargetImpl {
     return null;
   }
 
-  isNode(): boolean {
+  isNode(): this is NodeImpl {
     return false;
   }
 
   /** Whether this target is a node rooted in a shadow tree. */
   isNodeInShadowTree(): boolean {
-    if (!this.isNode()) return false;
-
-    const root = this.getTreeRoot();
-    return root !== null && root.getShadowRootHost() !== null;
+    return this.isNode() && this.getRoot().isShadowRoot();
   }
 
-  isWindow(): boolean {
+  isWindow(): this is WindowImpl {
     return false;
   }
 

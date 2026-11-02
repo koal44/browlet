@@ -23,6 +23,22 @@ and stock VM contexts; official compat bases retain the approved expected failur
 in [dynamic-import tests](../test/browlet/scripting/dynamic-import.test.ts).
 See the [VM API contract](../node-compat/README.md#contexts-globals-and-optional-facilities).
 
+**`node-function-source-name`:** Stock Node's `vm.compileFunction` exposes no
+operation for setting V8's retained source name. Compiled inline handlers have
+the correct `.name`, realm, scope, and behavior, but their intrinsic
+`toString()` omits the name. All three addon bases supply the name using public
+V8 `Function::SetName`, without an engine patch. The exact source-text assertion
+is an approved stock-only expected failure in the
+[function-compilation tests](../test/js-engine/function-compilation.test.ts).
+
+**`proxy-function-source-name`:** V8's function compiler rejects JavaScript Proxy
+scope objects, including Browlet's platform Document. JS Engine uses a validated
+FunctionBody and a `with`-scope factory for these cases. Behavior, object identity,
+and `.name` are preserved, but intrinsic `Function.prototype.toString()` shows an
+anonymous function on all six runtimes. The exact named-source assertion remains
+an approved expected failure in the function-compilation suite. No addon or
+Node/V8 change is required by this fallback.
+
 **`node-function-import-referrer`:** Identical `Function` bodies can reuse the
 first creating script's import loader on Node 26 and custom Node, reproducing
 through both the addon and Node's own VM API. The Node 24 control passes. Custom
@@ -672,15 +688,21 @@ Removal, named deletion, and clearing queue storage events for other matching
 objects, with delivery gated by Document activity. `setItem()` and named writes
 check bottle and shelf quotas before mutation and broadcast changed values.
 Window's IDL `onstorage` receives these changes with its public WindowProxy receiver.
-Body/frameset handler aliases,
-inline handler compilation, and storage synchronization across separate
-threads/processes remain pending.
+Body/frameset handler aliases and inline compilation are connected. Storage
+synchronization across separate threads/processes remains pending.
 Storage keys are origin-only; third-party partitioning/blocking, expiry,
 per-site storage access policies, and coordinated cookie/storage clearing
 remain unimplemented privacy-policy integrations.
 See the [Web Storage roadmap](browlet/storage/ROADMAP.md).
 
 ## HTML integration gates
+
+- **Element content handlers are partial.** HTML elements expose `onclick` and
+  `onerror`, with lazy Document/element scopes and body/frameset forwarding.
+  Form-associated elements stop at the explicit `getFormOwner()` stub until
+  §4.10.18.3 supplies association; assigned function handlers remain usable.
+  Remaining names, SVG/MathML/Document mixin inclusions, and exact diagnostic
+  source locations remain unfinished. See the [handler inventory](browlet/scripting/ROADMAP.md#html-8181-event-handler-idl-invocation).
 
 - **Temporal's HTML clock requires custom Node with the addon.** Windows in every
   isolation mode install their environment's live, precision-limited wall clock. Stock mode and

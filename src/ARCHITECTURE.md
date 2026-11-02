@@ -77,6 +77,12 @@ arguments and implementation receivers. Binding selects the environment and owns
 conversion and projection. Reflection and HTML construction use composition-time
 binding adapters selected by declarative annotations; declarations themselves
 do not receive BindingContext.
+Lazy Window and HTML element handlers use a composition-supplied
+`WindowEnvironment.createEventHandler` factory. HTML selects the current node
+Document and form owner, and owns raw source, policy, and caching. Binding
+projects the Document/form/element scopes; JSRealm compiles in that Document's
+realm. The factory supplies its own environment when creating the declared callback.
+Implementations do not receive a Binding Context or perform author conversion.
 Explicit accessors receive both the receiver's environment and the invoked
 accessor's environment, keeping receiver state distinct from current-realm checks.
 Setters receive the converted value before the method environment. Injected argument
@@ -1079,9 +1085,10 @@ ProgressEvent lives in browser integration and reuses that event machinery.
 
 HTML's `eraseAllEventListenersAndHandlers()` is an EventTarget operation.
 Each target retains one nullable `eventHandlers` association. Concrete targets
-construct their map with optional initial handler definitions. Window and
-MessagePort pass their maps to their handler mixins, which add supported names
-through `define()`. Window's handler mixins share one map. The inherited erasure
+construct their map with optional initial handler definitions. Handler mixins add
+supported names through `define()`. GlobalEventHandlers retains its includer so
+IDL access can resolve body/frameset forwarding; other mixins retain the map
+directly. Each includer's handler mixins share one map. The inherited erasure
 method deactivates the associated map before removing listeners. DOM retains only
 a type reference to HTML's map, with no runtime import or handler registry. Targets without
 handlers allocate no map. DOM's separate `removeAllEventListeners()` operation
@@ -1091,10 +1098,11 @@ selecting the Document's shadow-including inclusive descendants and associated W
 Handler target selection is an EventTarget operation overridden by HTMLElement
 for body/frameset forwarding. It resolves the current node Document on access,
 so adoption changes the alias without moving or erasing the old Window's handler.
-Forwarded handlers have no element-owned map entry. Their callback adapter checks
+Forwarded handler values and listeners stay on the Window's map. Their callback adapter checks
 the actual invocation target's environment, independently of the element's binding
-realm and the callback's realm. Currently `onstorage` uses this path; other handler
-declarations and content attributes remain in the scripting roadmap.
+realm and the callback's realm. Currently `onstorage` and `onerror` use this path;
+ordinary HTML element `onclick` stays local. Broader declarations remain in the
+scripting roadmap.
 
 Web Storage's `storage/events` is a separate component below DOM nodes and
 `storage`. Document's legacy event factory imports that narrow entry point;

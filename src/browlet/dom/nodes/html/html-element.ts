@@ -17,6 +17,7 @@ import type { NodeImpl } from '../node';
 import type { AttrImpl } from '../attribute';
 import { HTMLOrSVGOrMathMLElementMixin } from '../html-or-svg-or-mathml-element';
 import { collectItemProperties } from './microdata';
+import type { HTMLFormElementImpl } from './forms/index';
 
 /** Base implementation for elements in the HTML namespace. */
 // https://html.spec.whatwg.org/multipage/dom.html#htmlelement
@@ -98,6 +99,28 @@ export class HTMLElementImpl extends ElementImpl {
     // Active, not fully active: an inactive ancestor does not change this handler's target.
     if (document.getNodeNavigable() === null) return null;
     return document.getRelevantGlobalObject();
+  }
+
+  /** Query the form association, rather than inferring it from ancestry. */
+  // https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#form-owner
+  override getFormOwner(): HTMLFormElementImpl | null {
+    // TODO(HTML §4.10.18.3): Retain and reset form owners, including external form
+    // attributes, parser association, adoption, and form-associated custom elements.
+    // Images retain a legacy form owner even though they are not form controls.
+    switch (this.tag) {
+      case ElementTag.HTMLButton:
+      case ElementTag.HTMLFieldset:
+      case ElementTag.HTMLInput:
+      case ElementTag.HTMLImg:
+      case ElementTag.HTMLObject:
+      case ElementTag.HTMLOutput:
+      case ElementTag.HTMLSelect:
+      case ElementTag.HTMLTextarea:
+        throw new InternalError('Form-owner association is not implemented');
+      default:
+        if (this.isFormAssociatedCustomElement()) throw new InternalError('Form-owner association is not implemented');
+        return null;
+    }
   }
 
   /** An HTML element creates an item when its namespace-less itemscope attribute is present. */

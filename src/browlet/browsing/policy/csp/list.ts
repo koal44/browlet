@@ -7,6 +7,7 @@ import type { DocumentImpl, ElementImpl } from '../../../dom/nodes/index';
 import type { BrowletEnvironment } from '../../../environment/index';
 
 import { ContentSecurityPolicy, type CSPDisposition } from './policy';
+import type { CSPInlineAttributeType } from './directives';
 import { CSPViolation } from './violation';
 
 const policyHeaders: [name: string, disposition: CSPDisposition][] = [
@@ -131,17 +132,20 @@ export class CSPList implements FetchCSPList {
     return false;
   }
 
-  /** Report every rejected style attribute; only enforcing policies prevent its application. */
+  /** Report every rejected inline attribute; true means an enforcing policy blocks its behavior. */
   // https://w3c.github.io/webappsec-csp/#should-block-inline
-  // Specialized to style attributes; script and style-block checks have separate consumers.
-  isStyleAttributeBlocked(element: ElementImpl, source: string): boolean {
+  // Attribute consumers only; script/style element bodies still need their own checks.
+  isInlineAttributeBlocked(element: ElementImpl, type: CSPInlineAttributeType, source: string): boolean {
+    const scriptAttribute = type === 'script attribute';
+    const directive = scriptAttribute ? 'script-src-attr' : 'style-src-attr';
+    const fallback = scriptAttribute ? 'script-src' : 'style-src';
     let blocked = false;
     for (const policy of this.policies) {
       // https://w3c.github.io/webappsec-csp/#directive-fallback-list
-      const sources = policy.directives.get('style-src-attr') ??
-        policy.directives.get('style-src') ?? policy.directives.get('default-src');
-      if (sources === undefined || sources.matchesStyleAttribute(source)) continue;
-      const violation = new CSPViolation(policy, 'style-src-attr', 'inline', element.nodeDocument.env);
+      const sources = policy.directives.get(directive) ??
+        policy.directives.get(fallback) ?? policy.directives.get('default-src');
+      if (sources === undefined || sources.matchesInlineAttribute(type, source)) continue;
+      const violation = new CSPViolation(policy, directive, 'inline', element.nodeDocument.env);
       violation.element = element;
       // SPEC_CLASH(csp-style-attribute-sample): Follow CSP/Chromium/Firefox;
       // WebKit currently omits style-attribute samples despite report-sample.

@@ -1086,7 +1086,7 @@ export abstract class NodeImpl extends EventTargetImpl {
     return this.getRoot();
   }
 
-  override isNode(): boolean {
+  override isNode(): this is NodeImpl {
     return true;
   }
 
@@ -1124,7 +1124,9 @@ export abstract class NodeImpl extends EventTargetImpl {
 
   /** Run node-specific adoption steps after this node's document has changed. */
   // https://dom.spec.whatwg.org/#concept-node-adopt-ext
-  protected adoptingSteps(_oldDocument: DocumentImpl): void {}
+  protected adoptingSteps(_oldDocument: DocumentImpl): void {
+    this.eventHandlers?.updateUncompiledRealm(this.nodeDocument.env.realm);
+  }
 
   /** Run node-specific connection work after the insertion batch is complete. */
   // https://dom.spec.whatwg.org/#concept-node-post-connection-ext

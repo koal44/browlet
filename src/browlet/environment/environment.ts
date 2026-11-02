@@ -36,7 +36,8 @@ import {
   taskSources, domManipulationTaskSource, type Script,
   type ScriptFetchOptions, type ModuleMap, type ModuleType,
   type JSModuleRequest, type ModuleFetchCallback, type PerformScriptFetch,
-  type EventLoop, type WindowRealm, type WindowAgent, type JSExecutionContext, type BrowletGlobalObject,
+  type EventLoop, type WindowRealm, type WindowAgent, type JSExecutionContext,
+  type BrowletGlobalObject, type EventHandlerCallback,
 } from '../scripting/index';
 import { ReportImpl, ReportBodyImpl, TestReportBodyImpl } from '../reporting/index';
 import {
@@ -48,8 +49,9 @@ import {
 } from '../browsing/policy/index';
 import { ContentSecurityPolicy } from '../browsing/policy/csp/index';
 import type { AbortControllerImpl, AbortSignalImpl } from '../dom/abort/index';
-import { NodeImpl, type DocumentImpl } from '../dom/nodes/index';
+import { NodeImpl, type DocumentImpl, type ElementImpl } from '../dom/nodes/index';
 import { HTMLAnchorElementImpl } from '../dom/nodes/html/text/index';
+import type { HTMLFormElementImpl } from '../dom/nodes/html/forms/index';
 import { HTMLAreaElementImpl } from '../dom/nodes/html/embedded/index';
 import type { DOMEnvironment, DOMStringListImpl, EventImplConstructor } from '../dom/index';
 import { MessageEventImpl, type MessagePortImpl } from '../communication/index';
@@ -939,9 +941,17 @@ export class SandboxEnvironment extends BrowletEnvironment {
 export class WindowEnvironment extends BrowletEnvironment {
   /** Realm retaining this Window's global, execution context, and settings identity. */
   declare realm: WindowRealm;
+  /** Compile and bind a lazy handler in its current Document's Window environment. */
+  createEventHandler;
 
-  constructor(realm: WindowRealm, baseEnv: BrowletEnvironmentBase, initialization: BrowletEnvironmentInit) {
+  constructor(realm: WindowRealm, baseEnv: BrowletEnvironmentBase, initialization: BrowletEnvironmentInit & {
+    createEventHandler: (
+      this: WindowEnvironment, name: string, body: string, filename: string,
+      element: ElementImpl | null, form: HTMLFormElementImpl | null,
+    ) => EventHandlerCallback;
+  }) {
     super(realm, baseEnv, initialization);
+    this.createEventHandler = initialization.createEventHandler;
   }
 
   /** Window implementation whose current Document supplies browser state. */

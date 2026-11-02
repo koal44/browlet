@@ -65,7 +65,7 @@ or digests when available instead of reading twice.
 
 HTML §3.2.6.5 now calls the inline CSP check for `style` attribute input through
 the [style integration](../../../style/ROADMAP.md#style-attributes--html-3265).
-`CSPList.isStyleAttributeBlocked(element, source)` specializes
+`CSPList.isInlineAttributeBlocked(element, 'style attribute', source)` specializes
 [should-block-inline](https://w3c.github.io/webappsec-csp/#should-block-inline)
 to `style attribute`, returning a boolean. It selects `style-src-attr`, then
 `style-src`, then `default-src`; an empty present directive stops fallback.
@@ -101,6 +101,38 @@ regressions cover pre-CSSOM checks, parser input, both dispositions and multiple
 policies, report targets/samples, adoption, namespaces, and CSSOM bypass. Source
 list regressions cover all three hashes, UTF-8 input, equivalent hash encodings,
 fallback inputs, and keywords. No new expected failures or skips are needed.
+
+## Script-attribute policy prerequisite
+
+The same `CSPList.isInlineAttributeBlocked(element, type, source)` operation now
+accepts `script attribute`. It retains the existing boolean result (`true` means
+an enforcing policy blocks) and violation delivery. Source selection is
+`script-src-attr`, then `script-src`, then `default-src`; an empty present
+directive stops fallback. Rejected policies report effective directive
+`script-src-attr`, including when a fallback supplied the source list. Report-only
+policies report without blocking; only the selected list supplies `report-sample`.
+
+The shared attribute matcher permits exact UTF-8 hashes only with `unsafe-hashes`.
+Nonces never authorize attributes. For script attributes, `strict-dynamic` also
+suppresses `unsafe-inline`; it does not grant trust to handler source. The existing
+decoded-digest choice above is retained. Style matching is unchanged.
+
+HTML §8.1.8.1 now calls this check before storing raw body/frameset Window handler
+source; blocked writes retain the prior handler while updating the DOM attribute.
+Report-only policies permit compilation. General element handlers still need
+their declarations and scope integration in the
+[remaining steps](../../../scripting/ROADMAP.md#html-8181-event-handler-idl-invocation).
+Script/style element bodies need separate checks outside this attribute API.
+
+The 29 script-attribute tests cover fallback, keywords, exact hashes, multiple
+policies, report-only behavior, samples, and adopted/removed elements. Policy
+inputs use implementations; violation delivery exercises real Window bindings.
+These tests do not claim that assigning an HTML handler attribute executes code.
+
+Validation: 156 script/style attribute and source-list tests pass on all six
+Node 24/26/custom stock/addon configurations. All 351 CSP tests pass on the custom
+addon build. Typechecking, Web IDL declaration contracts, and touched-file ESLint
+pass. No new expected failures or skips were introduced.
 
 ## String-compilation consumer
 
@@ -195,8 +227,10 @@ documentation cleanup does not refresh those observations.
   because `CSPList` requires its self origin; separate initially empty state from
   later origin association without fabricating an opaque origin.
 - **Elements:** inline script and style-block checks, script preparation, and
-  element/preload integration. Style-attribute checks are implemented above;
-  parsing the remaining directives is not enforcement.
+  element/preload integration. Style-attribute checks are connected; the
+  script-attribute check now gates lazy body/frameset Window handlers. General
+  element handlers still await their declarations and scope integration. Parsing the
+  remaining directives is not enforcement.
 - **Navigation:** form-action, navigation and frame-ancestor checks with real
   nested contexts, navigation state, and response policies.
 - **Globals:** worker/worklet initialization and violation construction;

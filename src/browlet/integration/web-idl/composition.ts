@@ -13,7 +13,7 @@ import { EventImpl } from '../../dom/events/index';
 import { EventLoop, SandboxAgent, BrowletRealm, WindowRealm, installRealmHostHooks } from '../../scripting/index';
 import { TrustedScriptImpl } from '../../browsing/policy/trusted-types/index';
 import { AbortControllerImpl, AbortSignalImpl } from '../../dom/abort/index';
-import { DocumentImpl } from '../../dom/nodes/index';
+import { DocumentImpl, ElementImpl } from '../../dom/nodes/index';
 import { DOMStringListImpl } from '../../dom/index';
 import { MessagePortImpl } from '../../communication/index';
 import { WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
@@ -77,7 +77,24 @@ export function createWindowEnvironment(
       context = browletBindingWorld.register(realm, (binding) => {
         // https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
         // All consumers retain this environment; its realm supplies the installed global.
-        env = new WindowEnvironment(realm, baseEnv, createBrowletEnvironmentInit(binding));
+        env = new WindowEnvironment(realm, baseEnv, {
+          ...createBrowletEnvironmentInit(binding),
+          // HTML current-value steps 3.9–3.12: compile in this Window's realm,
+          // then create the callback with this environment as callback context.
+          createEventHandler(name, body, filename, element, form) {
+            const specialErrorHandler = element === null && name === 'onerror';
+            const parameters = specialErrorHandler ? ['event', 'source', 'lineno', 'colno', 'error'] : ['event'];
+            // Outermost first: global, Document, form owner, then the element.
+            // Binding preserves each object's platform identity, including after adoption.
+            const contextExtensions: object[] = [];
+            if (element !== null) contextExtensions.push(binding.project(DocumentImpl, element.nodeDocument)!);
+            if (form !== null) contextExtensions.push(binding.project(ElementImpl, form)!);
+            if (element !== null) contextExtensions.push(binding.project(ElementImpl, element)!);
+            const callback = this.realm.compileFunction(body, parameters, { name, filename, contextExtensions });
+            return binding.createCallbackFunction(callback,
+              reference(specialErrorHandler ? 'OnErrorEventHandlerNonNull' : 'EventHandlerNonNull'), this);
+          },
+        });
         env.creationURL = creationURL;
         env.topLevelCreationURL = topLevelCreationURL;
         env.topLevelOrigin = topLevelOrigin;

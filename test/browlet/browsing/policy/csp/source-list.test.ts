@@ -20,21 +20,21 @@ describe('CSP style-attribute source lists', () => {
     [["'nonce-abc'"], false],
     [["'unsafe-hashes'"], false],
   ] as [string[], boolean][])('matches %j: %s', (tokens, expected) => {
-    expect(new CSPDirectiveValue(tokens).matchesStyleAttribute('opacity: .5')).toBe(expected);
+    expect(new CSPDirectiveValue(tokens).matchesInlineAttribute('style attribute', 'opacity: .5')).toBe(expected);
   });
 
   it.each(['sha256', 'sha384', 'sha512'])('checks the exact UTF-8 source with %s only when unsafe-hashes is present', (algorithm) => {
     const source = '--text: "שלום 😀"; opacity: .5';
     const digest = createHash(algorithm).update(source).digest('base64');
     const hash = `'${algorithm}-${digest}'`;
-    expect(new CSPDirectiveValue([hash]).matchesStyleAttribute(source)).toBe(false);
-    expect(new CSPDirectiveValue(["'unsafe-inline'", hash]).matchesStyleAttribute(source)).toBe(false);
+    expect(new CSPDirectiveValue([hash]).matchesInlineAttribute('style attribute', source)).toBe(false);
+    expect(new CSPDirectiveValue(["'unsafe-inline'", hash]).matchesInlineAttribute('style attribute', source)).toBe(false);
     const list = new CSPDirectiveValue(["'UNSAFE-HASHES'", hash]);
-    expect(list.matchesStyleAttribute(source)).toBe(true);
-    expect(list.matchesStyleAttribute(`${source} `)).toBe(false);
+    expect(list.matchesInlineAttribute('style attribute', source)).toBe(true);
+    expect(list.matchesInlineAttribute('style attribute', `${source} `)).toBe(false);
     for (const spelling of [digest.replace(/=+$/, ''), digest.replace(/\+/g, '-').replace(/\//g, '_')]) {
       expect(new CSPDirectiveValue(["'unsafe-hashes'", `'${algorithm.toUpperCase()}-${spelling}'`])
-        .matchesStyleAttribute(source)).toBe(true);
+        .matchesInlineAttribute('style attribute', source)).toBe(true);
     }
   });
 
@@ -44,7 +44,7 @@ describe('CSP style-attribute source lists', () => {
     const different = createHash('sha512').update('opacity: .2').digest('base64');
     expect(new CSPDirectiveValue([
       "'unsafe-hashes'", "'sha256-a'", `'sha512-${different}'`, `'sha256-${matching}'`,
-    ]).matchesStyleAttribute(source)).toBe(true);
+    ]).matchesInlineAttribute('style attribute', source)).toBe(true);
   });
 });
 

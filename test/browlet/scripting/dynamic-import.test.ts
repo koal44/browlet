@@ -44,6 +44,31 @@ describe('HTML dynamic import', () => {
     expect(requests).toEqual(['https://modules.test/child.js']);
   });
 
+  testImport('does not associate a lazily compiled inline handler with the script reading its getter', async () => {
+    const { env, requests } = await fixture({ '/child.js': 'export const foo = 5;' });
+    const observation = await observe(env, () => classic(env, `
+      document.body.setAttribute('onstorage', 'return import("./child.js");');
+      onstorage();
+    `));
+    expect(fulfilled(await settled(env, observation))).toMatchObject({ foo: 5 });
+    // The reading script lives under /app/. An inline handler uses the current
+    // document API base even when its compilation and invocation happen there.
+    expect(requests).toEqual(['https://modules.test/child.js']);
+    expect(env.realm.loadedModules.size).toBe(1);
+  });
+
+  testImport('uses the document import base through the Proxy-scoped element handler factory', async () => {
+    const { env, requests } = await fixture({ '/child.js': 'export const foo = 5;' });
+    const observation = await observe(env, () => classic(env, `
+      const element = document.createElement('div');
+      element.setAttribute('onclick', 'return import("./child.js");');
+      element.onclick();
+    `));
+    expect(fulfilled(await settled(env, observation))).toMatchObject({ foo: 5 });
+    expect(requests).toEqual(['https://modules.test/child.js']);
+    expect(env.realm.loadedModules.size).toBe(1);
+  });
+
   testImport('retains a module referrer across await and calls from another Window', async () => {
     const owner = await fixture({ '/app/child.js': 'export const answer = 42;' });
     const caller = await fixture({});

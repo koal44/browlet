@@ -556,7 +556,7 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   }
 
   /** Identify this event target as a Window for event-dispatch rules. */
-  override isWindow(): boolean {
+  override isWindow(): this is WindowImpl {
     return true;
   }
 

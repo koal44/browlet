@@ -102,12 +102,13 @@ export class CSPDirectiveValue {
     });
   }
 
-  /** Match style-attribute source, where nonces cannot authorize and hashes require unsafe-hashes. */
+  /** Match attribute source, where nonces cannot authorize and hashes require unsafe-hashes. */
   // https://w3c.github.io/webappsec-csp/#match-element-to-source-list
-  matchesStyleAttribute(source: string): boolean {
+  matchesInlineAttribute(type: CSPInlineAttributeType, source: string): boolean {
+    const scriptAttribute = type === 'script attribute';
     let unsafeInline = false;
     let unsafeHashes = false;
-    let hasNonceOrHash = false;
+    let excludesUnsafeInline = false;
     const hashes: { algorithm: IntegrityAlgorithm; value: string; }[] = [];
     for (const token of this.tokens) {
       const keyword = asciiLower(token);
@@ -115,19 +116,21 @@ export class CSPDirectiveValue {
         unsafeInline = true;
       } else if (keyword === "'unsafe-hashes'") {
         unsafeHashes = true;
+      } else if (scriptAttribute && keyword === "'strict-dynamic'") {
+        excludesUnsafeInline = true;
       } else if (nonceSourcePattern.test(token)) {
-        hasNonceOrHash = true;
+        excludesUnsafeInline = true;
       } else {
         const match = hashSourcePattern.exec(token);
         if (match === null) continue;
-        hasNonceOrHash = true;
+        excludesUnsafeInline = true;
         hashes.push({ algorithm: asciiLower(match[1]!) as IntegrityAlgorithm, value: match[2]! });
       }
     }
     // SPEC_CLASH(csp-style-attribute-nonce): Follow CSP/Chromium/Firefox;
     // a nonce source suppresses unsafe-inline and cannot authorize attributes.
     // WebKit instead authorizes a style attribute when the element's nonce matches.
-    if (unsafeInline && !hasNonceOrHash) return true;
+    if (unsafeInline && !excludesUnsafeInline) return true;
     if (!unsafeHashes || hashes.length === 0) return false;
 
     const bytes = utf8Encode(source);
@@ -143,6 +146,9 @@ export class CSPDirectiveValue {
     return false;
   }
 }
+
+/** Inline attribute consumers; script/style element bodies have separate nonce and parser rules. */
+export type CSPInlineAttributeType = 'script attribute' | 'style attribute';
 
 /** Names of source directives governing external requests and their fallbacks. */
 export type CSPFetchDirectiveName = 'default-src' | 'child-src' | 'connect-src' | 'font-src' | 'frame-src' |

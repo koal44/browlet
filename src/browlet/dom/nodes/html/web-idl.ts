@@ -186,7 +186,7 @@ export const htmlElementIDL = defineInterface({
   ],
 });
 
-// TODO(HTML): include GlobalEventHandlers and ElementContentEditable when their implementations exist.
+// TODO(HTML): include ElementContentEditable when its implementation exists.
 // Missing members and their owning algorithms are inventoried in ../../../html/ROADMAP.md.
 
 /*
@@ -218,6 +218,13 @@ export const htmlElementIncludesElementCSSInlineStyleIDL = defineIncludes({
 });
 
 /*
+ * HTMLElement includes GlobalEventHandlers;
+ */
+export const htmlElementIncludesGlobalEventHandlersIDL = defineIncludes({
+  interface: 'HTMLElement', mixin: 'GlobalEventHandlers',
+});
+
+/*
  * HTMLElement includes HTMLOrSVGOrMathMLElement;
  */
 export const htmlElementIncludesHTMLOrSVGOrMathMLElementIDL = defineIncludes({
@@ -230,6 +237,7 @@ export const htmlIDLDefinitions: Definition[] = [
   elementInternalsIDL,
   htmlElementIDL,
   htmlElementIncludesElementCSSInlineStyleIDL,
+  htmlElementIncludesGlobalEventHandlersIDL,
   htmlElementIncludesHTMLOrSVGOrMathMLElementIDL,
   showPopoverOptionsIDL,
   togglePopoverOptionsIDL,

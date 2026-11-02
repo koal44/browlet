@@ -5,11 +5,12 @@ import {
 } from '../../web-idl/core/index';
 
 import { EventListenerCallback, type ErrorEventImpl, type EventTargetImpl, type EventImpl } from '../dom/events/index';
+import type { DOMRealm } from '../dom/environment';
 import type { BrowletEnvironment } from '../environment/index';
 
 import type { BrowletRealm } from './realm';
 
-// TODO(HTML §8.1.8.1): Add raw source storage/lazy compilation and BeforeUnloadEvent processing.
+// TODO(HTML §8.1.8.1): Add OnBeforeUnloadEventHandler processing using §7.2.7's BeforeUnloadEvent.
 /** Retains event-handler attributes and activates their corresponding listeners. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#event-handlers
 export class EventHandlerMap {
@@ -24,9 +25,37 @@ export class EventHandlerMap {
     this.#definitions = definitions;
   }
 
-  /** Read the current converted handler value. */
+  /** Realm recorded on the listener until its raw handler has been compiled. */
+  get #uncompiledRealm(): DOMRealm {
+    return this.#target.isNode() ? this.#target.nodeDocument.env.realm : this.#target.env.realm;
+  }
+
+  /** Resolve a stored callback, compiling raw source only when its value is needed. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#getting-the-current-value-of-the-event-handler
   get(name: string): EventHandlerCallback | null {
-    return this.#handlers.get(name)?.value ?? null;
+    const handler = this.#handlers.get(name);
+    if (!handler) return null;
+    if (handler.value === null || typeof handler.value === 'function') return handler.value;
+    const target = this.#target;
+    const element = target.isNode() && target.isElement() ? target : null;
+    const document = element?.nodeDocument ?? (target.isWindow() ? target.getAssociatedDocument() : null);
+    if (document === null) throw new InternalError('Raw handlers require an element or Window');
+    if (document.browsingContext === null || document.activeSandboxingFlagSet.has('sandboxed-scripts')) return null;
+    const form = element?.getFormOwner() ?? null;
+    const env = document.getRelevantGlobalObject()!.env;
+    try {
+      handler.value = env.createEventHandler(name, handler.value.body, handler.value.filename, element, form);
+      if (handler.listener !== null) handler.listener.realm = handler.value.realm;
+    } catch (error) {
+      if (!(error instanceof env.realm.SyntaxError)) throw error;
+      // Parsing failure clears the value, not the listener or its registration order.
+      handler.value = null;
+      // TODO(HTML §8.1.4.6): ErrorEventImpl.extractErrorInformation() still lacks
+      // source URL/line/column metadata; do not substitute host stack frames.
+      env.reportException(error, false, null);
+      return null;
+    }
+    return handler.value;
   }
 
   set(name: string, callback: EventHandlerCallback | null): void {
@@ -47,6 +76,24 @@ export class EventHandlerMap {
   /** Whether the target exposes this handler name. */
   has(name: string): boolean {
     return this.#definitions.has(name);
+  }
+
+  /** Retain a CSP-allowed content attribute without parsing or executing its body. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#event-handler-content-attributes
+  setSource(name: string, body: string, filename: string): void {
+    const handler = this.#getOrCreate(name);
+    handler.value = { body, filename };
+    if (handler.listener !== null) handler.listener.realm = this.#uncompiledRealm;
+    this.#activate(name, handler);
+  }
+
+  /** Adoption changes the future callback realm only while a handler remains uncompiled. */
+  updateUncompiledRealm(realm: BrowletRealm): void {
+    for (const handler of this.#handlers.values()) {
+      if (handler.value !== null && typeof handler.value !== 'function' && handler.listener !== null) {
+        handler.listener.realm = realm;
+      }
+    }
   }
 
   /** Reset every handler value and registration, preserving the supported handler names. */
@@ -83,7 +130,7 @@ export class EventHandlerMap {
       const result: unknown = Reflect.apply(callback, currentTarget, [event]);
       if (specialErrorHandling ? result === true : result === false) event.preventDefault();
     };
-    const realm = handler.value?.realm;
+    const realm = typeof handler.value === 'function' ? handler.value.realm : this.#uncompiledRealm;
     handler.listener = new EventListenerCallback(listener, realm, listener);
     this.#target.addEventListener(handler.type, handler.listener);
   }
@@ -160,8 +207,10 @@ export const onErrorEventHandlerIDL = defineTypedef({
 });
 
 type EventHandlerRecord = {
-  /** Converted callback or inactive value. */
-  value: EventHandlerCallback | null;
+  /** Converted callback, internal raw uncompiled handler, or inactive value. */
+  // TODO(HTML parser source locations): Retain attribute line/column when supplied
+  // by the tokenizer. DOM attribute setters currently supply the Document URL.
+  value: EventHandlerCallback | { body: string; filename: string; } | null;
   /** Stable listener registered while the attribute has a callback. */
   listener: EventListenerCallback | null;
   /** Event type used to register and remove the listener. */

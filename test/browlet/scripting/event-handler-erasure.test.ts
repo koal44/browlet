@@ -158,7 +158,8 @@ async function createBrowser() {
 
 function handlerTargets(): HandlerTargetCase[] {
   return [
-    { name: 'Window', handlers: ['onerror', 'onstorage'], create: (browser) => ({ target: browser.window }) },
+    { name: 'Window', handlers: ['onclick', 'onerror', 'onstorage'], create: (browser) => ({ target: browser.window }) },
+    { name: 'HTMLElement', handlers: ['onclick', 'onerror'], create: (browser) => ({ target: browser.window.document.createElement('div') }) },
     { name: 'Document', handlers: ['onreadystatechange'], create: (browser) => ({ target: browser.window.document }) },
     {
       name: 'ShadowRoot', handlers: ['onslotchange'],

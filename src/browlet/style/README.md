@@ -49,8 +49,9 @@ retains an optional `CSSDeclarationBlock` and an optional
 | Cascade reads inline data | Return the existing block or null without creating inline CSSOM. A null provider result is authoritative; it must not trigger parsing of blocked raw text. |
 
 The policy operation is
-[`CSPList.isStyleAttributeBlocked()`](../browsing/policy/csp/list.ts). It
-authorizes raw inline source and reports policy violations; it does not parse
+[`CSPList.isInlineAttributeBlocked()`](../browsing/policy/csp/list.ts) with
+type `style attribute`. It authorizes raw inline source and reports policy
+violations; it does not parse
 CSS or selectively allow property names. Hash matching precedes CSS parsing
 because source spelling matters. Policy is read from the current node document,
 including after adoption. See the [CSP evidence](../browsing/policy/csp/ROADMAP.md#style-attribute-consumer).

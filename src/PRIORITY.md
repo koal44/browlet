@@ -81,7 +81,11 @@ now check target automation policy and callback Document activity. Window's
 `onerror` also supplies its five arguments and return-true cancellation. Body and
 frameset `onstorage` now forward to their current active Document's Window. Continue
 within [event handlers](browlet/scripting/ROADMAP.md#html-8181-event-handler-idl-invocation)
-with content attributes and beforeunload processing; the subsection is not complete.
+with beforeunload processing once Ged's §7.2.7 event interface is consolidated.
+Window and HTML element content attributes now use CSP checks, raw storage, and
+lazy realm-owned FunctionBody compilation with projected Document/form/element
+scopes. Form-owner discovery (§4.10.18.3) and precise source-location reporting
+remain explicit dependencies. The subsection is not complete.
 Broader handler declarations are §8.1.8.2.
 Source/deferred imports and the HTML Wasm parser remain explicit boundaries.
 Later host-hook algorithms must be connected before judging

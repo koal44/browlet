@@ -30,7 +30,7 @@ This introduction inventories consumers; it does not define a new dispatcher.
 | --- | --- |
 | HTML script elements | [Script state](../dom/nodes/html/scripting/script.ts), parser handoff, and [Browlet's script handler](../browlet.ts) exist. Formal classic/module records, preparation/readiness, script fetching, and execution checks remain §§4.12 and 8.1.4 work. |
 | `javascript:` navigation | The [navigation path](../browsing/navigation/ROADMAP.md) is missing; do not treat generic evaluation as its implementation. |
-| Event listeners and handlers | DOM listeners and the [IDL-handler core](event-handlers.ts) run callbacks. Window composes [GlobalEventHandlersMixin](global-event-handlers.ts) for `onerror` and [WindowEventHandlersMixin](window-event-handlers.ts) for `onstorage`. Window error handlers use five arguments and return-true cancellation. Other global handlers, body/frameset forwarding, content-attribute compilation, and beforeunload rules remain §8.1.8 work. |
+| Event listeners and handlers | DOM listeners and the [IDL-handler core](event-handlers.ts) run callbacks. Window and HTML elements compose [GlobalEventHandlersMixin](global-event-handlers.ts) for `onclick`/`onerror`; Window also composes [WindowEventHandlersMixin](window-event-handlers.ts) for `onstorage`. Body/frameset forwarding, raw attributes, and lazy compilation are connected for those names. Window error handlers use five arguments and return-true cancellation. Form discovery, broader declarations, and beforeunload rules remain explicit dependencies. |
 | SVG scripting | [SVGScriptElement](../dom/nodes/svg/script-element.ts) supplies identity only. Its attributes, preparation, loading, and execution remain SVG-owned dependencies. |
 
 ### §8.1.2: agent state and allocation
@@ -2369,7 +2369,7 @@ entry is allocated on the element. Erasing its listeners leaves the Window's
 handler intact; erasing the Window clears all its aliases. Broader handler
 declarations remain §8.1.8.2 work, including HTMLElement's GlobalEventHandlers
 inclusion before exposing body/frameset `onerror` and the other Window-reflecting
-body attributes. Content-attribute changes and lazy compilation remain below.
+body attributes. Content-attribute changes and lazy compilation are described below.
 
 The adoption regressions also exposed a callback-adapter error: the BiDi gate
 used the receiving element's construction environment after its handler had been
@@ -2390,18 +2390,48 @@ plus the existing WindowProxy-descriptor expected failure per stock run.
 Typechecking, Web IDL declaration contracts, touched-file ESLint, and diff checks
 pass. No failure was reclassified or skipped.
 
+The next dependency check found that the existing CSP inline check supported only
+style attributes. The [shared attribute policy check](../browsing/policy/csp/ROADMAP.md#script-attribute-policy-prerequisite)
+now also supports `script attribute`, including its directive fallbacks, hashes,
+and violation reporting. HTML now calls it before storing source on the currently
+supported body/frameset Window handlers.
+
+Raw values retain the body and Document URL without executing or parsing them.
+The IDL getter and dispatch share `EventHandlerMap.get()`: sandboxed or detached
+Documents leave raw source intact, syntax errors clear the value but retain the
+listener position, and successful compilation caches the converted callback.
+`WindowEnvironment.createEventHandler` is a composition-supplied Binding
+factory: JSRealm compiles the body; the factory passes its own environment to
+Binding, independent of whichever script first requests it. The BiDi gate
+now precedes that lazy path in dispatch. The existing callback adapter still
+owns argument selection, activity checks, exception policy, and identity.
+
+The addon exposes Node-shaped `compileFunction` using public V8 APIs, with an
+additional retained-source `name` option. No engine patch was added. Stock Node
+compiles and invokes handlers but omits the name from intrinsic source text;
+that exact assertion is an approved expected failure. A retained-script import
+regression verifies the document API base, rather than the getter caller's script
+base. Official addon imports retain their existing forwarding-export limitation.
+
 Remaining §8.1.8.1 work is explicit:
 
 | Algorithm or state | Remaining work and owner |
 | --- | --- |
 | Determine an event handler's target | Implemented, with `onstorage` connected on body/frameset. New handler accessors and the content-attribute path must use this resolver; broader GlobalEventHandlers/WindowEventHandlers declarations are §8.1.8.2. |
-| Content-attribute changes and raw handler values | Connect Element attribute changes, retain source body/location, and call the existing CSP inline-behavior algorithm for `script attribute`. Keep the BiDi gate ahead of lazy compilation when this path is added. |
-| Get the current event-handler value | Implement lazy FunctionBody parsing, syntax-error reporting without listener removal, document/form/element scopes, and null ScriptOrModule identity. JS Engine compilation must preserve those scopes; generic source evaluation is not a substitute. These are remaining steps of this subsection, not a reason to skip it. |
+| Content-attribute changes and raw handler values | Connected for currently declared Window handlers via body/frameset. `HTMLElementImpl.attributeChanged()` uses the target resolver and CSP before storing source. Broader names await §8.1.8.2 declarations. Tokenizer attribute line/column delivery is still missing; the raw record explicitly retains only its Document URL. |
+| Get the current event-handler value | Window compilation, syntax errors, caching, and callback creation are connected. General elements still need current-node-Document and projected Document/form/element scopes; `EventHandlerMap.get()` throws at that unsupported branch. Form-owner association belongs to §4.10.18.3 and remains unimplemented. The engine accepts object scopes already; HTML/Binding must supply the correct objects. ErrorEvent source URL/line/column extraction remains the explicit §8.1.4.6 TODO in `ErrorEventImpl.extractErrorInformation()`. |
 | Special processing and callback types | Window's OnErrorEventHandler path is implemented. WorkerGlobalScope's EventTarget base exists; its author projection, handler declarations, and settings/startup remain worker-owner dependencies before extending the error special case. Implement OnBeforeUnloadEventHandler's nullable-string conversion/returnValue rules; BeforeUnloadEvent and its navigation producer are §7.2.7 dependencies. |
 | Erase all event listeners and handlers | Implemented for every current handler owner. The caller selecting descendants and the associated Window is `document.open()` in §8.4 and remains unconnected. |
 
-No engine/addon changes are needed for these slices. Continue within §8.1.8.1;
-do not mark event handlers complete from this slice's tests.
+Continue within §8.1.8.1; the current Window path does not complete the element
+scope or beforeunload portions of the subsection.
+
+Window lazy-compilation validation: nine affected unit suites pass across all
+six Node 24/26/custom stock/addon configurations, retaining the approved runtime
+failures. All thirteen inline-handler cases pass everywhere, including parser
+delivery. The 88 selected native checks pass on each addon base (with existing
+unsupported-hook/import expectations). Typechecking, Web IDL contracts, ESLint,
+and diff checks pass. Experimental retains the initial public-V8 compiler probe.
 
 Initial guard-slice validation: 140 focused handler, Storage, AbortSignal, FileReader,
 BroadcastChannel, EventSource, and Web IDL callback tests pass in each of the
@@ -2534,7 +2564,7 @@ evaluation and automation do not acquire this gate automatically.
 | Script records/classic scripts | Production fetch/run callers, complete active-script/source metadata, worker-imported synchronous pause, and timing; retained compiled execution and modeled context restoration are connected |
 | Module scripts/maps | Engine parse/load/link/evaluate, import attributes, dynamic import, host hooks, and script-element callers; HTML fetch/run orchestration and import-map algorithms are present |
 | Error reporting | Source locations, complete script attribution, and dedicated-worker propagation; native rejection notifications, slot queries, and checkpoint delivery are connected on addon bases |
-| Event handlers | Content-attribute compilation, Window/body/frameset targeting, remaining global handler declarations, worker error handlers, and beforeunload behavior |
+| Event handlers | Content-attribute changes/compilation, remaining global handler declarations, worker error handlers, and beforeunload behavior; Window/body/frameset targeting is implemented |
 | DOM checkpoint consumers | Custom-element reactions; MutationObserver and signal-slot delivery already use the existing checkpoint |
 | Task routing/lifecycle | Worker restrictions and complete loop teardown; element-task routing through the retained relevant global is implemented |
 | Global utilities/timers | Origin/base64/image APIs and isolation exposure; worker suspension; handler timing; TrustedScript/CSP/classic-script string timers |
