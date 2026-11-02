@@ -1,7 +1,8 @@
 import type { PropertyOf } from '../../infra/util';
 
 import type {
-  IDLCallbackInterfaceValue, Exposed, ExtendedAttribute, ImplementationClass, InjectedArgument, TypeParameter, WebIDLType,
+  IDLCallbackFunctionValue, IDLCallbackInterfaceValue, Exposed, ExtendedAttribute,
+  ImplementationClass, InjectedArgument, TypeParameter, WebIDLType,
 } from './types';
 import type {
   ArgumentDefinition, CallbackInterfaceMember, DictionaryMember, InterfaceMember,
@@ -262,8 +263,8 @@ export type CallbackInterfaceDefinition<Env = unknown> = {
   exposed?: Exposed;
   /** Extended attributes applying to this callback interface. */
   extendedAttributes?: ExtendedAttribute[];
-  /** Turn the IDL callback, including its invocation method, into the implementation's value. */
-  toImpl?: (
+  /** Override conversion of the IDL callback interface into the implementation's value. */
+  overrideCbConversion?: (
     this: undefined, env: Env, callback: IDLCallbackInterfaceValue<PropertyOf<Env, 'realm'>>,
   ) => unknown;
 
@@ -280,7 +281,7 @@ export function defineCallbackInterface<Env = unknown>(
 }
 
 /** The arguments and result conversion of an author-supplied callback function. */
-export type CallbackFunctionDefinition = {
+export type CallbackFunctionDefinition<Env = unknown> = {
   /** Declaration discriminator supplied by `defineCallbackFunction()`. */
   kind: 'callback-function';
   /** IDL identifier used to refer to this callback type. */
@@ -294,13 +295,18 @@ export type CallbackFunctionDefinition = {
 
   /** TypeScript parameters of the generated callback type alias. */
   typeParameters?: TypeParameter[];
+
+  /** Override conversion into an implementation callable; Binding preserves the callback's author identity. */
+  overrideCbConversion?: (
+    this: undefined, env: Env, callback: IDLCallbackFunctionValue<PropertyOf<Env, 'realm'>>,
+  ) => CallableFunction;
 };
 
 /** Declare conversion for calls into an author-supplied function. */
 // https://webidl.spec.whatwg.org/#idl-callback-functions
-export function defineCallbackFunction(
-  definition: Omit<CallbackFunctionDefinition, 'kind'>,
-): CallbackFunctionDefinition {
+export function defineCallbackFunction<Env = unknown>(
+  definition: Omit<CallbackFunctionDefinition<Env>, 'kind'>,
+): CallbackFunctionDefinition<Env> {
   return { kind: 'callback-function', ...definition };
 }
 
@@ -388,7 +394,7 @@ export type Definition<Env = unknown> =
   | DictionaryDefinition
   | PartialDictionaryDefinition
   | EnumerationDefinition
-  | CallbackFunctionDefinition
+  | CallbackFunctionDefinition<Env>
   | TypedefDefinition
   | ProxyObjectDefinition
   | IncludesDefinition;

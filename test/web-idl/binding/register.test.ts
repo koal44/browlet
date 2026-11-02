@@ -294,7 +294,7 @@ describe('Web IDL implementation registration', () => {
     const constructor = ctor(
       [arg('value', idlType.DOMString)],
       {
-        invoke(env: WebIDLEnvironment, value) {
+        initialize(env: WebIDLEnvironment, value) {
           DeclarativeExampleImpl.initialize(
             this as DeclarativeExampleImpl,
             String(value),
@@ -308,7 +308,7 @@ describe('Web IDL implementation registration', () => {
         arg('value', idlType.DOMString),
       ],
       {
-        invoke(env: WebIDLEnvironment, value) {
+        overrideInvoke(env: WebIDLEnvironment, value) {
           expect(env.realm).toBe(realm);
           return `bound:${String(value)}`;
         },
@@ -411,7 +411,7 @@ describe('Web IDL implementation registration', () => {
         ctor(
           [arg('value', idlType.DOMString)],
           {
-            invoke(_env, value) {
+            initialize(_env, value) {
               ProductImpl.initialize(this as ProductImpl, String(value));
             },
           },
@@ -473,7 +473,7 @@ describe('Web IDL implementation registration', () => {
       }),
       members: [{
         arguments: [],
-        invoke() {},
+        initialize() {},
         kind: 'constructor',
       }],
     });
@@ -553,11 +553,11 @@ describe('Web IDL implementation registration', () => {
       exposed: ['Window'],
       implementation: impl(ExceptionSourceImpl),
       members: [
-        ctor([], { invoke() {} }),
+        ctor([], { initialize() {} }),
         staticOp('requested', idlType.undefined,
           [],
           {
-            invoke() {
+            overrideInvoke() {
               throw new DOMExceptionImpl('requested', DOMExceptionNames.invalidState);
             },
           },
@@ -565,7 +565,7 @@ describe('Web IDL implementation registration', () => {
         staticOp('arbitrary', idlType.undefined,
           [],
           {
-            invoke() { throw arbitrary; },
+            overrideInvoke() { throw arbitrary; },
           },
         ),
       ],

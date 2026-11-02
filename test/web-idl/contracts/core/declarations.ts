@@ -7,8 +7,8 @@ import {
 
 class Example {}
 attr<{ id: number; }>('bound', idlType.DOMString, {
-  get(_env, _methodEnv, incumbentEnv) { return incumbentEnv?.id; },
-  set(_env, _value, _methodEnv, incumbentEnv) { const id: number | undefined = incumbentEnv?.id; void id; },
+  overrideGet(_env, _methodEnv, incumbentEnv) { return incumbentEnv?.id; },
+  overrideSet(_env, _value, _methodEnv, incumbentEnv) { const id: number | undefined = incumbentEnv?.id; void id; },
 });
 atArg<{ id: number; }>(0, (_env, _methodEnv, incumbentEnv) => incumbentEnv?.id);
 // @ts-expect-error Capture follows the input dependency, not a separate accessor flag.
@@ -144,13 +144,13 @@ arg('source', idlType.object, { callbackDictionary: 42 });
 dictMember('callback', idlType.object, { callbackExceptionBehavior: 'ignore' });
 // @ts-expect-error Indexed getters must declare how unsupported indices are identified.
 op('item', idlType.object, [], { indexedGetter: { getSupportedPropertyIndices() { return [0]; } } });
-ctor([], { construct() { return {}; } });
+ctor([], { overrideConstruct() { return {}; } });
 // @ts-expect-error Backing allocation belongs to Binding, not declaration hooks.
 impl(Example, { allocatePlatformObject() { return {}; } });
 // @ts-expect-error document.all uses declarative interface metadata, not an allocation callback.
 impl(Example, { createHTMLAllCollection() { return {}; } });
 impl(Example, { initializeImplementation() {} });
-defineCallbackInterface({ name: 'Callback', members: [], toImpl() {} });
+defineCallbackInterface({ name: 'Callback', members: [], overrideCbConversion() {} });
 
 type ExampleEnvironment = { realm: { name: string; }; token: object; };
 defineInterface<ExampleEnvironment>({
@@ -166,15 +166,15 @@ defineInterface<ExampleEnvironment>({
     ctor(
       [arg('name', idlType.DOMString)],
       {
-        construct(env, name) {
+        overrideConstruct(env, name) {
           name.toUpperCase();
           return { name, token: env.token };
         },
       },
     ),
     attr('name', idlType.DOMString, {
-      get(env) { return env.realm.name; },
-      set(env, value) {
+      overrideGet(env) { return env.realm.name; },
+      overrideSet(env, value) {
         env.realm.name = value as string;
         // @ts-expect-error Ordinary declaration steps cannot perform Web IDL conversion.
         env.jsToImpl(value, idlType.DOMString);
@@ -191,7 +191,7 @@ defineInterface<ExampleEnvironment>({
 });
 defineCallbackInterface<ExampleEnvironment>({
   name: 'PortableCallback', members: [op('run', idlType.undefined)],
-  toImpl(env, callback) {
+  overrideCbConversion(env, callback) {
     env.token satisfies object;
     callback.realm.name.toUpperCase();
     callback.object satisfies object;

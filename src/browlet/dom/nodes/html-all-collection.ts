@@ -90,7 +90,7 @@ export const htmlAllCollectionIDL = defineInterface({
       {
         ...indexedGetter((collection: HTMLAllCollectionImpl) => collection.getSupportedPropertyIndices(),
           { unsupportedValue: null }),
-        invoke(_env, index) {
+        overrideInvoke(_env, index) {
           return (this as HTMLAllCollectionImpl).getIndexedElement(index);
         },
       },

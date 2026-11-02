@@ -178,7 +178,7 @@ export const treeWalkerIDL = defineInterface({
     roAttr('root', reference('Node'), xattr('SameObject')),
     roAttr('whatToShow', idlType.unsignedLong),
     roAttr('filter', nullable(reference('NodeFilter')), {
-      get() { return getNodeFilterCallback((this as TreeWalkerImpl).filter); },
+      overrideGet() { return getNodeFilterCallback((this as TreeWalkerImpl).filter); },
     }),
     attr('currentNode', reference('Node')),
     op('parentNode', nullable(reference('Node'))),

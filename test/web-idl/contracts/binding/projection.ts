@@ -42,12 +42,12 @@ const definition = defineInterface<HostEnvironment>({
       { constructWith: [atArg(0, (env) => env.realm.eventTimeStamp())] },
     ),
     roAttr('time', idlType.double, {
-      get(env) { return env.realm.eventTimeStamp(); },
+      overrideGet(env) { return env.realm.eventTimeStamp(); },
     }),
     op('read', idlType.double,
       [],
       {
-        invoke(env) {
+        overrideInvoke(env) {
           env.createEvent();
           return env.realm.eventTimeStamp();
         },
@@ -63,7 +63,7 @@ impl(Example, {
 const callbackDefinition = defineCallbackInterface<HostEnvironment>({
   name: 'Callback',
   members: [],
-  toImpl(_env, cbValue) {
+  overrideCbConversion(_env, cbValue) {
     cbValue.realm.eventTimeStamp();
     return cbValue.object;
   },

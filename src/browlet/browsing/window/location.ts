@@ -290,34 +290,34 @@ export const locationIDL = defineInterface<BrowletEnvironment>({
   implementation: impl(LocationImpl),
   members: [
     attr('href', idlType.USVString, {
-      get: locationGetter('href'),
-      set: locationSetter('setHref'),
+      overrideGet: locationGetter('href'),
+      overrideSet: locationSetter('setHref'),
       ...xattr('LegacyUnforgeable', ['CrossOrigin', 'Setter']),
       stringifier: true,
     }),
     roAttr('origin', idlType.USVString, {
-      get: locationGetter('origin'), ...xattr('LegacyUnforgeable'),
+      overrideGet: locationGetter('origin'), ...xattr('LegacyUnforgeable'),
     }),
     attr('protocol', idlType.USVString, {
-      get: locationGetter('protocol'), set: locationSetter('setProtocol'), ...xattr('LegacyUnforgeable'),
+      overrideGet: locationGetter('protocol'), overrideSet: locationSetter('setProtocol'), ...xattr('LegacyUnforgeable'),
     }),
     attr('host', idlType.USVString, {
-      get: locationGetter('host'), set: locationSetter('setHost'), ...xattr('LegacyUnforgeable'),
+      overrideGet: locationGetter('host'), overrideSet: locationSetter('setHost'), ...xattr('LegacyUnforgeable'),
     }),
     attr('hostname', idlType.USVString, {
-      get: locationGetter('hostname'), set: locationSetter('setHostname'), ...xattr('LegacyUnforgeable'),
+      overrideGet: locationGetter('hostname'), overrideSet: locationSetter('setHostname'), ...xattr('LegacyUnforgeable'),
     }),
     attr('port', idlType.USVString, {
-      get: locationGetter('port'), set: locationSetter('setPort'), ...xattr('LegacyUnforgeable'),
+      overrideGet: locationGetter('port'), overrideSet: locationSetter('setPort'), ...xattr('LegacyUnforgeable'),
     }),
     attr('pathname', idlType.USVString, {
-      get: locationGetter('pathname'), set: locationSetter('setPathname'), ...xattr('LegacyUnforgeable'),
+      overrideGet: locationGetter('pathname'), overrideSet: locationSetter('setPathname'), ...xattr('LegacyUnforgeable'),
     }),
     attr('search', idlType.USVString, {
-      get: locationGetter('search'), set: locationSetter('setSearch'), ...xattr('LegacyUnforgeable'),
+      overrideGet: locationGetter('search'), overrideSet: locationSetter('setSearch'), ...xattr('LegacyUnforgeable'),
     }),
     attr('hash', idlType.USVString, {
-      get: locationGetter('hash'), set: locationSetter('setHash'), ...xattr('LegacyUnforgeable'),
+      overrideGet: locationGetter('hash'), overrideSet: locationSetter('setHash'), ...xattr('LegacyUnforgeable'),
     }),
     op('assign', idlType.undefined,
       [arg('url', idlType.USVString)],
@@ -347,14 +347,14 @@ export const locationIDL = defineInterface<BrowletEnvironment>({
       },
     ),
     roAttr('ancestorOrigins', reference('DOMStringList'), {
-      get: locationGetter('ancestorOrigins'), ...xattr('LegacyUnforgeable'),
+      overrideGet: locationGetter('ancestorOrigins'), ...xattr('LegacyUnforgeable'),
     }),
   ],
 });
 
 function locationGetter(
   name: 'href' | 'origin' | 'protocol' | 'host' | 'hostname' | 'port' | 'pathname' | 'search' | 'hash' | 'ancestorOrigins',
-): NonNullable<AttributeMember<BrowletEnvironment>['get']> {
+): NonNullable<AttributeMember<BrowletEnvironment>['overrideGet']> {
   return function(_env, methodEnv) {
     const location = this as LocationImpl;
     location.checkEntryOrigin(entryEnvironment(methodEnv));
@@ -365,7 +365,7 @@ function locationGetter(
 // Binding selects execution inputs after conversion; implementations own URL parsing and navigation.
 function locationSetter(
   setter: 'setHref' | 'setProtocol' | 'setHost' | 'setHostname' | 'setPort' | 'setPathname' | 'setSearch' | 'setHash',
-): NonNullable<AttributeMember<BrowletEnvironment>['set']> {
+): NonNullable<AttributeMember<BrowletEnvironment>['overrideSet']> {
   return function(_env, value, methodEnv, incumbentEnv) {
     (this as LocationImpl)[setter](value as string, entryEnvironment(methodEnv), (incumbentEnv ?? methodEnv) as WindowEnvironment);
   };

@@ -23,8 +23,8 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
   createImplementation?: ImplementationCreationSteps;
   /** Initialize implementation state before establishing its platform identity. */
   initializeImplementation?: ImplementationInitializationSteps;
-  /** Replace ordinary constructor invocation when the declaration supplies custom steps. */
-  overriddenConstructor?: OverriddenConstructorSteps;
+  /** Replace the whole constructor entry, before ordinary checks and argument conversion. */
+  overrideConstructor?: ConstructorOverrideSteps;
   /** Registered outward projection, independent of the paired platform object's allocation. */
   interfaceProjection?: InterfaceProjectionSteps;
   /** Registered steps and generated functions, keyed by compiled members. */
@@ -72,15 +72,15 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     const constructors = assembled.getConstructors(
       (entry) => assembled.isMemberExposed(entry, realmBinding.realm),
     );
-    const overridden = this.overriddenConstructor;
+    const overrideConstructor = this.overrideConstructor;
     const resolve = createOverloadResolver(constructors, realmBinding, `${assembled.primary.name}:constructor`);
     // TODO: Capture the incumbent at constructible entry. The MutationObserver regression in
     // test/browlet/communication/window-messaging.test.ts saves outer A instead of constructor caller B.
     // SPEC_CLASH(mutation-observer-callback-incumbent): expect caller B per Web IDL and Chromium/Firefox; WebKit saves outer A.
     const object: JSFunction = realmBinding.realm.createFunction(
       (_thisArgument, argumentsList, newTarget) => {
-        if (overridden) {
-          return overridden(argumentsList, newTarget, object);
+        if (overrideConstructor) {
+          return overrideConstructor(argumentsList, newTarget, object);
         }
         if (constructors.callables.length === 0) {
           return realmBinding.throwTypeError('Illegal constructor');
@@ -592,7 +592,7 @@ type ImplementationCreationSteps = () => object;
 
 type ImplementationInitializationSteps = (value: object) => void;
 
-type OverriddenConstructorSteps = (
+type ConstructorOverrideSteps = (
   argumentsList: unknown[],
   newTarget: JSFunction | undefined,
   activeFunction: JSFunction,

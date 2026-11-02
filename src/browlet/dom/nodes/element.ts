@@ -853,7 +853,7 @@ export const elementIDL = defineInterface({
   implementation: impl(ElementImpl),
   members: [
     roAttr('namespaceURI', nullable(idlType.DOMString), {
-      get() { return (this as ElementImpl).namespaceURI || null; },
+      overrideGet() { return (this as ElementImpl).namespaceURI || null; },
     }),
     roAttr('prefix', nullable(idlType.DOMString)),
     roAttr('localName', idlType.DOMString),
@@ -910,7 +910,7 @@ export const elementIDL = defineInterface({
     ),
     op('attachShadow', reference('ShadowRoot'), [arg('init', reference('ShadowRootInit'))]),
     roAttr('shadowRoot', nullable(reference('ShadowRoot')), {
-      get() {
+      overrideGet() {
         const shadow = (this as ElementImpl).shadowRoot;
         return shadow?.mode === 'open' ? shadow : null;
       },
@@ -919,7 +919,7 @@ export const elementIDL = defineInterface({
     op('matches', idlType.boolean, [arg('selectors', idlType.DOMString)]),
     op('webkitMatchesSelector', idlType.boolean,
       [arg('selectors', idlType.DOMString)],
-      { invoke(_env, selectors) { return (this as ElementImpl).matches(selectors); } },
+      { overrideInvoke(_env, selectors) { return (this as ElementImpl).matches(selectors); } },
     ),
     op('getElementsByTagName', reference('HTMLCollection'), [arg('qualifiedName', idlType.DOMString)]),
     op('getElementsByTagNameNS', reference('HTMLCollection'), [

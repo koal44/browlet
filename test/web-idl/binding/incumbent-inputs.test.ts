@@ -22,8 +22,8 @@ describe('Binding invocation inputs', () => {
       defineInterface({
         name: 'Holder', exposed: '*', implementation: impl(Holder), members: [
           ctor(), attr('value', idlType.DOMString, {
-            get(env, methodEnv, incumbentEnv) { return (this as Holder).read(resolve(env, methodEnv, incumbentEnv)); },
-            set(env, value, methodEnv, incumbentEnv) {
+            overrideGet(env, methodEnv, incumbentEnv) { return (this as Holder).read(resolve(env, methodEnv, incumbentEnv)); },
+            overrideSet(env, value, methodEnv, incumbentEnv) {
               (this as Holder).write(value as string, resolve(env, methodEnv, incumbentEnv));
             },
           }),
@@ -76,8 +76,8 @@ describe('Binding invocation inputs', () => {
       defineInterface({
         name: 'Destination', exposed: '*', implementation: impl(Destination), members: [
           attr('value', idlType.DOMString, {
-            get() { return (this as Destination).read(); },
-            set(_env, value, _methodEnv, incumbentEnv) { (this as Destination).write(value as string, incumbentEnv); },
+            overrideGet() { return (this as Destination).read(); },
+            overrideSet(_env, value, _methodEnv, incumbentEnv) { (this as Destination).write(value as string, incumbentEnv); },
           }),
         ],
       }),
@@ -131,7 +131,7 @@ describe('Binding invocation inputs', () => {
       defineInterface({
         name: 'Source', exposed: '*', implementation: impl(Source), members: [
           ctor(), roAttr('destination', reference('Destination'), {
-            get(_env, _methodEnv, incumbentEnv) { return (this as Source).read(incumbentEnv); },
+            overrideGet(_env, _methodEnv, incumbentEnv) { return (this as Source).read(incumbentEnv); },
             ...xattr(['PutForwards', 'value']),
           }),
         ],

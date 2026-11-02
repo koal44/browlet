@@ -429,7 +429,7 @@ export const responseIDL = defineInterface<FetchEnvironment>({
         arg('init', reference('ResponseInit'), { optional: true, default: emptyDictionary }),
       ],
       {
-        construct(env, body, init) {
+        overrideConstruct(env, body, init) {
           return ResponseImpl.create(body as BodyInitValue | null, init as FetchResponseInit, env);
         },
       },

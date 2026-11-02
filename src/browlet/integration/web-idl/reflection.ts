@@ -109,7 +109,7 @@ function createAttributeBinding<T extends ReflectedTarget>(
 ): AttributeBinding<BrowletEnvironment, T> {
   let get = accessors.get;
   if (reflection.name === 'ReflectSetter') {
-    const customGet = member.get;
+    const customGet = member.overrideGet;
     get = customGet
       ? function(ctx, methodCtx, incumbentEnv) {
         return customGet.call(this, ctx.getEnvironment(), methodCtx.getEnvironment(), incumbentEnv);

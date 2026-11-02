@@ -62,19 +62,19 @@ describe('Web IDL implementation result conversion', () => {
         op('nullableResult', nullable(resultType),
           [],
           {
-            invoke() { return createResult('nullable'); },
+            overrideInvoke() { return createResult('nullable'); },
           },
         ),
         op('unionResult', union(resultType, idlType.DOMString),
           [],
           {
-            invoke() { return createResult('union'); },
+            overrideInvoke() { return createResult('union'); },
           },
         ),
         op('sequenceResult', sequence(resultType),
           [],
           {
-            invoke() {
+            overrideInvoke() {
               const value = createResult('sequence');
               return [value, value];
             },
@@ -83,7 +83,7 @@ describe('Web IDL implementation result conversion', () => {
         op('dictionaryResult', reference(resultDictionaryIDL.name),
           [],
           {
-            invoke() {
+            overrideInvoke() {
               const value = createResult('dictionary');
               return { first: value, second: value };
             },
@@ -92,7 +92,7 @@ describe('Web IDL implementation result conversion', () => {
         op('createdPromiseResult', promiseType(resultType),
           [],
           {
-            invoke(env) {
+            overrideInvoke(env) {
               return env.InternalPromise.resolve(createResult('created promise'), resultType);
             },
           },
@@ -100,7 +100,7 @@ describe('Web IDL implementation result conversion', () => {
         op('resolvedPromiseResult', promiseType(resultType),
           [],
           {
-            invoke(env) {
+            overrideInvoke(env) {
               const result = env.InternalPromise.withResolvers(resultType);
               result.resolve(createResult('resolved promise'));
               return result.promise;
@@ -110,7 +110,7 @@ describe('Web IDL implementation result conversion', () => {
         op('reactedPromiseResult', promiseType(resultType),
           [],
           {
-            invoke(env) {
+            overrideInvoke(env) {
               return env.InternalPromise.resolve(undefined, idlType.undefined).then(() => createResult('reacted promise'), undefined, resultType);
             },
           },
@@ -122,7 +122,7 @@ describe('Web IDL implementation result conversion', () => {
             ),
           ],
           {
-            invoke(_env, callback) {
+            overrideInvoke(_env, callback) {
               (callback as (
                 direct: NestedResultImpl,
                 union: NestedResultImpl,

@@ -54,11 +54,11 @@ const definition = defineInterface<BrowletEnvironment>({
     attr('custom', idlType.USVString, xattr(reflectSetter())),
     attr('environments', idlType.DOMString, {
       ...xattr(reflectSetter()),
-      get(env, methodEnv) { return `${env === (this as ElementImpl).env}:${env === methodEnv}`; },
+      overrideGet(env, methodEnv) { return `${env === (this as ElementImpl).env}:${env === methodEnv}`; },
     }),
     attr('incumbentEnvironments', idlType.DOMString, {
       ...xattr(reflectSetter()),
-      get(env, methodEnv, incumbentEnv) { return `${incumbentEnv === env}:${incumbentEnv === methodEnv}`; },
+      overrideGet(env, methodEnv, incumbentEnv) { return `${incumbentEnv === env}:${incumbentEnv === methodEnv}`; },
     }),
     roAttr('tokens', reference('DOMTokenList'),
       xattr('SameObject', ['PutForwards', 'value'], reflectTokens(tokensAttribute)),

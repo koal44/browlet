@@ -27,7 +27,7 @@ describe('Web IDL initial objects', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name)).overriddenConstructor = (argumentsList, newTarget, activeFunction) => ({
+    binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name)).overrideConstructor = (argumentsList, newTarget, activeFunction) => ({
       activeFunction,
       argumentsList,
       newTarget,

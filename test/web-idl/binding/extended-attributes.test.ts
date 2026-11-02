@@ -133,8 +133,8 @@ describe('Web IDL extended-attribute integration', () => {
 
     // Preparation must not replace the declaration's type or mutate shared getter/setter metadata.
     expect(valueMember.type).toEqual(reference('Count'));
-    expect(valueMember.get).toBeUndefined();
-    expect(valueMember.set).toBeUndefined();
+    expect(valueMember.overrideGet).toBeUndefined();
+    expect(valueMember.overrideSet).toBeUndefined();
     const ordinary = project(new BindingWorld(definitions));
     expect(ordinary.object.value).toBe(3);
   });

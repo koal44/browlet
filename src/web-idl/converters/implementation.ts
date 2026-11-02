@@ -138,6 +138,14 @@ export class ImplementationConverter {
     }
     if (type.kind === 'callback-function') {
       const callbackAssembled = type.assembled;
+      const convertCallback = callbackAssembled.primary.overrideCbConversion;
+      if (convertCallback) {
+        const convert: ImplConverter<IDLCallbackFunction, StampedCallbackFunction> = (value, context) =>
+          value.boundCallback ??= CallbackFunctionStamper.stamp(
+            realmBinding.callImplementation(convertCallback, undefined, [context.getEnvironment(), value]), value,
+          );
+        return convert as ImplConverter;
+      }
       const convertResult = this.#createResultConverter(callbackAssembled.returns, {});
       const convert: ImplConverter<IDLCallbackFunction, StampedCallbackFunction> = (value, context, callbackThis) =>
         this.#bindCallbackFunction(
@@ -151,9 +159,9 @@ export class ImplementationConverter {
       return this.#getDictionaryConverter(type.assembled, options.callbackExceptionBehavior) as ImplConverter;
     }
     if (type.kind === 'callback-interface') {
-      const toImpl = type.assembled.primary.toImpl;
-      const convert: ImplConverter<IDLCallbackInterface> = toImpl
-        ? (value, context) => realmBinding.callImplementation(toImpl, undefined, [context.getEnvironment(), value])
+      const convertCallback = type.assembled.primary.overrideCbConversion;
+      const convert: ImplConverter<IDLCallbackInterface> = convertCallback
+        ? (value, context) => realmBinding.callImplementation(convertCallback, undefined, [context.getEnvironment(), value])
         : (value) => value;
       return convert as ImplConverter;
     }

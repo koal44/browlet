@@ -123,7 +123,7 @@ describe('Promise and async sequence implementation conversion', () => {
     const failure = new Error('implementation conversion failed');
     const convert = vi.fn(() => { throw failure; });
     const handler = defineCallbackInterface({
-      name: 'Handler', members: [op('run', idlType.undefined)], toImpl: convert,
+      name: 'Handler', members: [op('run', idlType.undefined)], overrideCbConversion: convert,
     });
     const realm = new TestRealm();
     const context = new BindingWorld([handler]).register(realm, (ctx) => ({ realm: ctx.realm }));

@@ -582,7 +582,7 @@ export const eventListenerIDL = defineCallbackInterface<DOMEnvironment>({
   name: 'EventListener',
   // Event dispatch retains the callback realm and original object identity in
   // addition to the callback-interface invocation steps.
-  toImpl(_env, cbValue) {
+  overrideCbConversion(_env, cbValue) {
     return new EventListenerValue(
       cbValue.object,
       cbValue.realm,

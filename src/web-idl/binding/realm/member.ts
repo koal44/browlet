@@ -496,7 +496,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
         do { owner = owner.parentAssembled!; }
         while (!owner.members.some((entry) => entry.member === attribute));
       }
-      return (attribute.get?.length ?? 0) >= 3;
+      return (attribute.overrideGet?.length ?? 0) >= 3;
     }
     if (seen.has(attribute)) return false;
     seen.add(attribute);
@@ -517,7 +517,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
       return false;
     }
     if (attribute.readonly) return false;
-    return attribute.type.capturesCallbackContext || (attribute.set?.length ?? 0) >= 4;
+    return attribute.type.capturesCallbackContext || (attribute.overrideSet?.length ?? 0) >= 4;
   }
 
   // Extracted from Web IDL §3.7.6 Attributes and §3.7.7 Operations — reject promise results when invocation

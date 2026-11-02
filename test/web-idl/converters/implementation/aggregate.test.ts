@@ -106,7 +106,7 @@ describe('Sequence and record conversion through implementations', () => {
     let calls = 0;
     const callback = defineCallbackInterface({
       name: 'Reader', members: [op('read', idlType.long)],
-      toImpl: (_env, cbValue) => () => cbValue.callUserObjectOperation('read', []),
+      overrideCbConversion: (_env, cbValue) => () => cbValue.callUserObjectOperation('read', []),
     });
     const world = new BindingWorld([callback]);
     const realm = new TestRealm();

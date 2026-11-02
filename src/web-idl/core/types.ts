@@ -383,6 +383,16 @@ export type IDLCallbackInterfaceValue<Realm = unknown> = {
   callUserObjectOperation(operationName: string, argumentsList: unknown[], thisArgument?: unknown): unknown;
 };
 
+/** A converted callback function available to its declaration's implementation adapter. */
+export type IDLCallbackFunctionValue<Realm = unknown> = {
+  /** Original author object, including non-callable legacy attribute values. */
+  object: object;
+  /** Callback realm retained independently of the receiving implementation's environment. */
+  realm: Realm;
+  /** Invoke through Binding's argument/result conversion and callback lifecycle handling. */
+  invoke(argumentsList: unknown[], exceptionBehavior: CallbackExceptionBehavior | undefined, thisArgument?: unknown): unknown;
+};
+
 // Platform declaration generation
 
 /** A TypeScript parameter scoped to a generated declaration or callable. */

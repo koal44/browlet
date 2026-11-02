@@ -26,7 +26,7 @@ export function getNodeFilterCallback(filter: NodeFilterCallback | null): IDLCal
 // https://dom.spec.whatwg.org/#interface-nodefilter
 export const nodeFilterIDL = defineCallbackInterface({
   name: 'NodeFilter', exposed: 'Window',
-  toImpl(_env, callback): NodeFilterCallback {
+  overrideCbConversion(_env, callback): NodeFilterCallback {
     const filter: NodeFilterCallback = {
       acceptNode: (node) => callback.callUserObjectOperation('acceptNode', [node]) as number,
     };

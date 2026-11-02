@@ -19,7 +19,7 @@ export const objectURLIDL = definePartialInterface<BrowletEnvironment>({
     staticOp('createObjectURL', idlType.DOMString,
       [arg('obj', reference(BlobImpl))],
       {
-        invoke(env, object) {
+        overrideInvoke(env, object) {
           return env.userAgent.blobURLStore.add(object, env);
         },
       },
@@ -27,7 +27,7 @@ export const objectURLIDL = definePartialInterface<BrowletEnvironment>({
     staticOp('revokeObjectURL', idlType.undefined,
       [arg('url', idlType.DOMString)],
       {
-        invoke(env, url) {
+        overrideInvoke(env, url) {
           env.userAgent.blobURLStore.revoke(url, env);
         },
       },

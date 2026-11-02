@@ -35,7 +35,7 @@ function registerInterfaceImplementation(
     switch (member.kind) {
       case 'attribute': {
         const accessors = binding.world.getAttributeBinding(member, assembled);
-        if (accessors || member.attributeFunction || member.get || member.set) {
+        if (accessors || member.attributeFunction || member.overrideGet || member.overrideSet) {
           registerDefinedAttribute(
             memberBinding, member, assembled, binding, accessors,
           );
@@ -54,12 +54,12 @@ function registerInterfaceImplementation(
         if (hasExtendedAttribute(member.extendedAttributes, 'HTMLConstructor')) {
           const construct = binding.world.getHTMLConstructorBinding(assembled);
           if (!construct) throw new InternalError('[HTMLConstructor] requires HTML constructor hooks');
-          implementationBinding.overriddenConstructor = (_values, newTarget, activeFunction) =>
+          implementationBinding.overrideConstructor = (_values, newTarget, activeFunction) =>
             binding.callImplementation(construct, undefined, [binding, newTarget, activeFunction]);
           break;
         }
-        if (member.construct) {
-          const construct = member.construct;
+        if (member.overrideConstruct) {
+          const construct = member.overrideConstruct;
           const convert = binding.implementationConverter.createArgumentConverter(member);
           memberBinding.constructorBehavior = {
             kind: 'construct',
@@ -73,11 +73,11 @@ function registerInterfaceImplementation(
         if (!definition) {
           throw new InternalError(`${assembled.name} has multiple implementations; its constructor must select one explicitly`);
         }
-        if (member.invoke) {
+        if (member.initialize) {
           memberBinding.constructorBehavior = {
             kind: 'initialize',
-            steps: createDefinedConstructorSteps(
-              member.invoke, member, binding,
+            steps: createConstructorInitializationSteps(
+              member.initialize, member, binding,
             ),
           };
         } else {
@@ -95,9 +95,9 @@ function registerInterfaceImplementation(
       }
       case 'operation': {
         if (hasExtendedAttribute(member.extendedAttributes, 'Default')) break;
-        if (member.invoke) {
+        if (member.overrideInvoke) {
           memberBinding.operationSteps = createDefinedOperationSteps(
-            member.invoke, member, binding,
+            member.overrideInvoke, member, binding,
           );
         } else {
           const method = member.namedGetter ?? member.name;
@@ -215,8 +215,8 @@ function registerDefinedAttribute(
   accessors?: AttributeBinding,
 ): void {
   const createSteps = member.attributeFunction;
-  const get = member.get;
-  const set = member.set;
+  const get = member.overrideGet;
+  const set = member.overrideSet;
   const getterNeedsIncumbent = (get?.length ?? 0) >= 3;
   const setterNeedsIncumbent = (set?.length ?? 0) >= 4;
   const steps: AttributeSteps = {
@@ -271,15 +271,15 @@ function registerDefinedAttribute(
 }
 
 // Adapt converted constructor arguments for a declared initializer.
-function createDefinedConstructorSteps(
-  invoke: NonNullable<IDLConstructor['invoke']>,
+function createConstructorInitializationSteps(
+  initialize: NonNullable<IDLConstructor['initialize']>,
   assembled: AssembledCallable,
   binding: RealmBinding,
 ): ConstructorSteps {
   const convert = binding.implementationConverter.createArgumentConverter(assembled);
   return (receiver, values) => {
     binding.callImplementation(
-      invoke,
+      initialize,
       receiver,
       [
         binding.getEnvironment(),
@@ -312,7 +312,7 @@ function createImplementationConstructorSteps(
 
 // Adapt converted arguments and the receiver environment for a declared invocation.
 function createDefinedOperationSteps(
-  invoke: NonNullable<IDLOperation['invoke']>,
+  invoke: NonNullable<IDLOperation['overrideInvoke']>,
   assembled: IDLOperation,
   binding: RealmBinding,
 ): OperationSteps {

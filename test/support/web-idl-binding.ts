@@ -36,13 +36,13 @@ export function validateImplementationMembers<Env>(definition: PrimaryInterfaceD
     let method = true;
     switch (member.kind) {
       case 'attribute':
-        if (member.get || member.set || member.attributeFunction ||
+        if (member.overrideGet || member.overrideSet || member.attributeFunction ||
           member.extendedAttributes?.some((attribute) => attribute.kind === 'reflection')) continue;
         method = false;
         name = member.name;
         break;
       case 'operation':
-        if (member.invoke || hasExtendedAttribute(member.extendedAttributes, 'Default')) continue;
+        if (member.overrideInvoke || hasExtendedAttribute(member.extendedAttributes, 'Default')) continue;
         name = member.name;
         break;
       case 'named-getter':

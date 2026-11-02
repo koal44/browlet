@@ -94,7 +94,7 @@ describe('Implementation arrays', () => {
         attr('value', idlType.DOMString),
         op('self', reference(BaseImpl),
           [],
-          { invoke() { return this; } },
+          { overrideInvoke() { return this; } },
         ),
       ],
     })];
@@ -207,7 +207,7 @@ describe('Implementation arrays', () => {
         name: 'Base', exposed: '*', implementation: impl(BaseImpl),
         members: [op('describe', idlType.DOMString,
           [],
-          { invoke() { return BaseImpl.prototype.describe.call(this); } },
+          { overrideInvoke() { return BaseImpl.prototype.describe.call(this); } },
         )],
       }),
       defineInterface({
@@ -234,12 +234,12 @@ describe('Implementation arrays', () => {
         ctor(
           [arg('block', idlType.boolean)],
           {
-            construct(_env, block) {
+            overrideConstruct(_env, block) {
               return block ? new BlockQuoteImpl('created', blockQuoteDependency) : new QImpl('created', qDependency);
             },
           },
         ),
-        staticOp('label', idlType.DOMString, [], { invoke() { return 'shared'; } }),
+        staticOp('label', idlType.DOMString, [], { overrideInvoke() { return 'shared'; } }),
       ],
     }]);
     const context = world.register(new TestRealm(), (ctx) => ({ realm: ctx.realm }));

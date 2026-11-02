@@ -29,7 +29,7 @@ const constructorImport = "import { ctor } from '../../src/web-idl/index';\n";
 const flattenedConstructor = `ctor([
   arg('input', reference('RequestInfo')),
 ], {
-  construct(ctx, input) {
+  overrideConstruct(ctx, input) {
     return createRequest(ctx, input);
   },
 });`;
@@ -91,7 +91,7 @@ tester.run('web-idl-operation-layout', rule, {
     arg('index', type),
   ],
   {
-    invoke: item,
+    overrideInvoke: item,
   },
 );`,
     },
@@ -109,7 +109,7 @@ tester.run('web-idl-operation-layout', rule, {
       code: constructorImport + `ctor(
   [arg('input', reference('RequestInfo'))],
   {
-    construct(ctx, input) {
+    overrideConstruct(ctx, input) {
       return createRequest(ctx, input);
     },
   },
@@ -117,7 +117,7 @@ tester.run('web-idl-operation-layout', rule, {
     },
     {
       name: 'compact constructor',
-      code: constructorImport + "ctor([arg('input', type)], { construct: createRequest });",
+      code: constructorImport + "ctor([arg('input', type)], { overrideConstruct: createRequest });",
     },
     {
       name: 'constructor with no binding',
@@ -174,9 +174,9 @@ tester.run('web-idl-operation-layout', rule, {
     {
       name: 'aliased writable attribute with options',
       code: "import { attr as attribute } from '../../src/web-idl/core/index.js';\n" +
-        "attribute(\n  'value', type, { get: readValue });",
+        "attribute(\n  'value', type, { overrideGet: readValue });",
       output: "import { attr as attribute } from '../../src/web-idl/core/index.js';\n" +
-        "attribute('value', type, { get: readValue });",
+        "attribute('value', type, { overrideGet: readValue });",
       errors: [{ messageId: 'header' }],
     },
     {
@@ -231,7 +231,7 @@ tester.run('web-idl-operation-layout', rule, {
     {
       name: 'inline empty array before multiline binding',
       code: declarationImport + `op('text', type, [], {
-  invoke: text,
+  overrideInvoke: text,
 });`,
       errors: [{ messageId: 'argument' }, { messageId: 'argument' }, { messageId: 'closing' }],
     },
@@ -253,7 +253,7 @@ tester.run('web-idl-operation-layout', rule, {
     {
       name: 'inline empty array before multiline constructor binding',
       code: constructorImport + `ctor([], {
-  construct: createRequest,
+  overrideConstruct: createRequest,
 });`,
       errors: [{ messageId: 'argument' }, { messageId: 'argument' }, { messageId: 'closing' }],
     },

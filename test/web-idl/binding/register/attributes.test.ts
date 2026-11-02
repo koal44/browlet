@@ -18,7 +18,7 @@ describe('Web IDL implementation attribute registration', () => {
       members: [
         ctor(),
         roAttr('environments', idlType.any, {
-          get(env, methodEnv) { return [env.realm, methodEnv.realm]; },
+          overrideGet(env, methodEnv) { return [env.realm, methodEnv.realm]; },
         }),
       ],
     });
@@ -41,8 +41,8 @@ describe('Web IDL implementation attribute registration', () => {
       members: [
         ctor(),
         attr('value', idlType.DOMString, {
-          get() { return ''; },
-          set(env, value, methodEnv) { values.push([this, env.realm, value, methodEnv.realm]); },
+          overrideGet() { return ''; },
+          overrideSet(env, value, methodEnv) { values.push([this, env.realm, value, methodEnv.realm]); },
         }),
       ],
     });
@@ -76,8 +76,8 @@ describe('Web IDL implementation attribute registration', () => {
       defineInterface({
         name: 'Destination', exposed: '*', implementation: impl(DestinationImpl),
         members: [ctor(), attr('value', idlType.DOMString, {
-          get() { return (this as DestinationImpl).read(); },
-          set(_env, value, _methodEnv, incumbentEnv) { (this as DestinationImpl).write(value as string, incumbentEnv); },
+          overrideGet() { return (this as DestinationImpl).read(); },
+          overrideSet(_env, value, _methodEnv, incumbentEnv) { (this as DestinationImpl).write(value as string, incumbentEnv); },
         })],
       }),
       defineInterface({
@@ -88,7 +88,7 @@ describe('Web IDL implementation attribute registration', () => {
             ...xattr(['PutForwards', 'value']),
           }),
           roAttr('read', idlType.DOMString, {
-            get(_env, _methodEnv, incumbentEnv) { return (this as ForwarderImpl).read(incumbentEnv); },
+            overrideGet(_env, _methodEnv, incumbentEnv) { return (this as ForwarderImpl).read(incumbentEnv); },
           }),
         ],
       }),
@@ -159,7 +159,7 @@ describe('Web IDL implementation attribute registration', () => {
         attr('handler', reference('Function'), {
           ...attrFn(() => () => 1),
           ...onError('rethrow'),
-          set(_env, value) { assignedResult = (value as () => unknown)(); },
+          overrideSet(_env, value) { assignedResult = (value as () => unknown)(); },
         }),
       ],
     });

@@ -115,8 +115,8 @@ export const cssPageDescriptorsIDL = defineInterface({
   ].map((name) => {
     const property = name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
     return attr(name, annotated(reference('CSSOMString'), xattr('LegacyNullToEmptyString')), {
-      get() { return (this as CSSPageDescriptorsImpl).getPropertyValue(property); },
-      set(_env, value) { (this as CSSPageDescriptorsImpl).setProperty(property, value as string); },
+      overrideGet() { return (this as CSSPageDescriptorsImpl).getPropertyValue(property); },
+      overrideSet(_env, value) { (this as CSSPageDescriptorsImpl).setProperty(property, value as string); },
     });
   }),
 });

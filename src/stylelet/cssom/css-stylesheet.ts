@@ -375,7 +375,7 @@ export const cssStyleSheetIDL = defineInterface<StyleletEnvironment>({
         default: emptyDictionary, optional: true,
       })],
       {
-        construct(env, options) {
+        overrideConstruct(env, options) {
           return CSSStyleSheetImpl.createConstructed(options, env.getAssociatedDocument()!, env);
         },
       },

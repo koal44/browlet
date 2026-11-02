@@ -57,10 +57,10 @@ function createPropertyAttributes(): AttributeMember[] {
   return attributes.map(([attribute, property]) => {
     return attr(attribute, annotated(reference('CSSOMString'), xattr('LegacyNullToEmptyString')), {
       ...xattr('CEReactions'),
-      get() {
+      overrideGet() {
         return (this as CSSStylePropertiesImpl).getPropertyValue(property);
       },
-      set(_env, value) {
+      overrideSet(_env, value) {
         (this as CSSStylePropertiesImpl).setProperty(property, value as string);
       },
     });

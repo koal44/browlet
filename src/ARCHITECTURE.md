@@ -1051,6 +1051,10 @@ does not retain storage maps or introduce another scheduler.
 Window composes `WindowEventHandlersMixin` for its `onstorage` IDL attribute.
 The mixin reuses `EventHandlerMap` for callbacks and listener registration;
 it does not create storage objects or add another delivery path.
+The EventHandler declaration's callback adapter checks the receiving environment's
+BiDi policy and the callback realm's Document activity before invocation. Web IDL
+retains that callback's realm and author identity; the handler map does not receive
+Binding Context or discover ownership through a registry.
 
 Policy and CSP sit below the node implementations that construct and retain their
 state. CSP's `source-expressions.ts` is a lower entry point shared by CSP and

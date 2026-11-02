@@ -137,7 +137,7 @@ export const nodeIteratorIDL = defineInterface({
     roAttr('pointerBeforeReferenceNode', idlType.boolean),
     roAttr('whatToShow', idlType.unsignedLong),
     roAttr('filter', nullable(reference('NodeFilter')), {
-      get() { return getNodeFilterCallback((this as NodeIteratorImpl).filter); },
+      overrideGet() { return getNodeFilterCallback((this as NodeIteratorImpl).filter); },
     }),
     op('nextNode', nullable(reference('Node'))),
     op('previousNode', nullable(reference('Node'))),

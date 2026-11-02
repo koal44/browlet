@@ -656,8 +656,8 @@ export const windowIDL = defineInterface<BrowletEnvironment>({
     roAttr('top', nullable(reference('WindowProxy')), xattr('LegacyUnforgeable', 'CrossOrigin')),
     attr('opener', idlType.any, {
       ...xattr('CrossOrigin'),
-      get() { return (this as WindowImpl).opener?.platform ?? null; },
-      set(env, value) {
+      overrideGet() { return (this as WindowImpl).opener?.platform ?? null; },
+      overrideSet(env, value) {
         if (value === null) (this as WindowImpl).disownOpener();
         else if (!Reflect.defineProperty(env.realm.globalObject, 'opener', {
           value, writable: true, enumerable: true, configurable: true,
@@ -666,7 +666,7 @@ export const windowIDL = defineInterface<BrowletEnvironment>({
     }),
     roAttr('parent', nullable(reference('WindowProxy')), xattr('Replaceable', 'CrossOrigin')),
     roAttr('frameElement', nullable(reference('Element')), {
-      get(_env, methodEnv) { return (this as WindowImpl).getFrameElement(methodEnv); },
+      overrideGet(_env, methodEnv) { return (this as WindowImpl).getFrameElement(methodEnv); },
     }),
     op('open', nullable(reference('WindowProxy')),
       [
@@ -677,7 +677,7 @@ export const windowIDL = defineInterface<BrowletEnvironment>({
         ),
       ],
       {
-        invoke(env, url, target, features) {
+        overrideInvoke(env, url, target, features) {
           const eventLoop = env.responsibleEventLoop;
           // Direct host calls use the operation's environment, as Origin.from does.
           const entryEnv = eventLoop.executionContextStack.length === 0

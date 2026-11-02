@@ -165,7 +165,7 @@ describe('Web IDL implementation callback conversion', () => {
       exposed: ['Window'],
       implementation: impl(CallbackProjectionImpl),
       members: [
-        ctor([], { invoke() {} }),
+        ctor([], { initialize() {} }),
         roAttr('callback', reference(increment.name)),
         roAttr('callbackUnion', reference(callbackOrString.name)),
         roAttr('nativeCallback', reference(increment.name)),

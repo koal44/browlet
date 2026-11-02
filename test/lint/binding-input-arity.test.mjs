@@ -14,8 +14,8 @@ type Env = { name: string };
 type Input = (env: Env, methodEnv: Env, incumbentEnv: Env | undefined) => unknown;
 declare function atArg(index: number, resolve: Input): void;
 type Attribute = {
-  get?: Input;
-  set?: (env: Env, value: unknown, methodEnv: Env, incumbentEnv: Env | undefined) => void;
+  overrideGet?: Input;
+  overrideSet?: (env: Env, value: unknown, methodEnv: Env, incumbentEnv: Env | undefined) => void;
 };
 declare function attr(options: Attribute): void;
 declare const env: Env;
@@ -26,17 +26,17 @@ tester.run('binding-input-arity', rule, {
   valid: [
     'atArg(0, (owner) => owner);',
     'atArg(0, (_env, _methodEnv, incumbentEnv) => incumbentEnv);',
-    'attr({ get(owner, method, incumbent) { return incumbent; }, set(owner, value, method, incumbent) {} });',
+    'attr({ overrideGet(owner, method, incumbent) { return incumbent; }, overrideSet(owner, value, method, incumbent) {} });',
     'const unrelated = (value = 1, ...rest: unknown[]) => value;',
   ].map(testCase),
   invalid: [
     'atArg(0, (owner = env, method, incumbent) => incumbent);',
     'atArg(0, (owner, method, incumbent = env) => incumbent);',
     'atArg(0, (...inputs) => inputs[2]);',
-    'attr({ get(owner, method, incumbent = env) { return incumbent; } });',
-    'attr({ set(owner, value = null, method, incumbent) {} });',
+    'attr({ overrideGet(owner, method, incumbent = env) { return incumbent; } });',
+    'attr({ overrideSet(owner, value = null, method, incumbent) {} });',
     'const getter: Input = (owner, method, incumbent = env) => incumbent;',
-    'const attribute: Attribute = { set: (owner, value, ...inputs) => {} };',
+    'const attribute: Attribute = { overrideSet: (owner, value, ...inputs) => {} };',
   ].map((code) => ({ ...testCase(code), errors: [{ messageId: 'positional' }] })),
 });
 

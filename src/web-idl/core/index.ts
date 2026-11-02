@@ -55,7 +55,8 @@ export type {
   PositiveInfinity, NegativeInfinity, NotANumber, UndefinedDefault, EmptySequence, EmptyDictionary,
   Exposed, ExtendedAttribute, NamedArgumentsExtendedAttribute,
   ReflectionExtendedAttribute,
-  ImplementationClass, ImplementationType, InjectedArgument, CallbackExceptionBehavior, IDLCallbackInterfaceValue,
+  ImplementationClass, ImplementationType, InjectedArgument, CallbackExceptionBehavior,
+  IDLCallbackFunctionValue, IDLCallbackInterfaceValue,
 } from './types';
 
 export {

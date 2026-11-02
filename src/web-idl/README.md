@@ -205,6 +205,27 @@ attribute may also expose a stored implementation field. Use explicit bindings
 for boundary adaptation or forwarding to an existing primitive, not to move
 independently meaningful specification behavior out of the implementation.
 
+Replacement hooks use `override` followed by the Binding step they replace:
+
+| Declaration hook | Replaced behavior |
+| --- | --- |
+| Attribute `overrideGet` / `overrideSet` | Reading or writing the implementation property |
+| Operation `overrideInvoke` | Calling the implementation method |
+| Constructor `overrideConstruct` | Constructing the implementation after argument conversion |
+| Callback `overrideCbConversion` | Converting the IDL callback into the implementation's callback representation |
+
+These hooks retain the surrounding Binding checks and conversions. A constructor's
+`initialize` instead receives an already allocated implementation as `this`.
+It is distinct from `initializeImplementation`, which initializes retained state
+before platform identity is established, including for internal allocation.
+The runtime's `overrideConstructor` replaces the whole constructor entry, before
+ordinary constructor checks and argument conversion; HTML uses it for `[HTMLConstructor]`.
+
+Keep `prepare...` for hooks that prepare bindings during setup. Additional
+initialization, security checks, and observable-array mutation steps retain names
+describing that work. `invokeWith`, `constructWith`, `atArg`, and `onError` configure
+arguments or exception policy without replacing the normal Binding step.
+
 Declarations take one environment type, which also determines their realm type.
 For example, `defineInterface<DOMEnvironment>()` gives its callbacks both
 `env.createEvent()` and `env.realm.eventTimeStamp()`.
@@ -326,11 +347,18 @@ in Core. The `IDL…` prefix identifies these values without boxing every value.
 Callback values expose invocation methods that delegate to `CallbackBinding`.
 That realm component owns shared `CallbackInvoker` plans, dynamic operation
 lookup, and context restoration. `values/callback.ts` owns the stamp associating
-an implementation callable with its IDL callback value. A callback interface's
-`toImpl(env, cbValue)` hook receives Core's `IDLCallbackInterfaceValue` view of the
-existing IDL value: its author object, callback realm, and invocation operation.
+an implementation callable with its IDL callback value. A callback declaration's
+`overrideCbConversion(env, cbValue)` hook receives Core's `IDLCallbackInterfaceValue` or
+`IDLCallbackFunctionValue` view of the existing IDL value: its author object,
+callback realm, and invocation operation.
 This is a type boundary, with no additional object or allocation. The adapter
 cannot access assembly or binding internals through that view.
+Callback-function adapters return an implementation callable; Binding stamps and
+reuses it so projecting a handler attribute still returns the original author
+object. The adapter selects its invocation's exception policy and receives the
+declared IDL result. HTML's event-handler adapter uses this seam to check the
+target's automation policy and the callback Document's activity before entering
+author code. Ordinary callbacks retain the default invocation/result adapter.
 The value captures its own callback context; sharing a plan never shares that
 context or the original author object.
 
@@ -476,8 +504,8 @@ Operation and reaction-boundary wrapping are not implemented by this hook yet.
 The `prepareHTMLConstructor(owner)` hook receives Browlet's
 `prepareCustomElementConstructor`, which prepares `[HTMLConstructor]` superclass
 steps for custom-element construction after assembly. BindingWorld retains each
-prepared override; realm registration connects it to the existing constructor
-invocation path for `[HTMLConstructor]`.
+prepared override; realm registration installs it as `ImplementationBinding.overrideConstructor`
+for `[HTMLConstructor]`.
 The callback receives the invoking realm's context, NewTarget, and active
 function object before ordinary Web IDL constructor checks or argument conversion.
 HTML owns registry/definition selection and construction-stack handling in

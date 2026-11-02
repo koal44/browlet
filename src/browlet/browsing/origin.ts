@@ -79,7 +79,7 @@ export const originIDL = defineInterface<BrowletEnvironment>({
         )),
       ],
       {
-        invoke(env, value) {
+        overrideInvoke(env, value) {
           const handle = WindowProxyHandle.getHandle(value);
           const target = handle === undefined ? value : handle.windowImplementation;
           const eventLoop = env.responsibleEventLoop;

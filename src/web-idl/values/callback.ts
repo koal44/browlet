@@ -1,6 +1,6 @@
 import { Stamper } from '../../infra/index';
 import { isObject } from '../../js-engine/index';
-import type { CallbackExceptionBehavior, IDLCallbackInterfaceValue } from '../core/index';
+import type { CallbackExceptionBehavior, IDLCallbackFunctionValue, IDLCallbackInterfaceValue } from '../core/index';
 
 import type { WebIDLRealm } from '../environment';
 import type { AssembledCallbackFunction, AssembledCallbackInterface } from '../assembly/index';
@@ -52,7 +52,7 @@ export class IDLCallbackInterface<Realm extends WebIDLRealm = WebIDLRealm> imple
 }
 
 /** An author function with its declaration, realm, and captured invocation context. */
-export class IDLCallbackFunction {
+export class IDLCallbackFunction implements IDLCallbackFunctionValue<WebIDLRealm> {
   /** Declared argument and return conversions. */
   assembled: AssembledCallbackFunction;
   /** Host context captured at conversion and restored during invocation. */

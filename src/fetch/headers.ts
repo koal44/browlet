@@ -633,7 +633,7 @@ export const headersIDL = defineInterface({
       [arg('init', reference('HeadersInit'), { optional: true })],
       {
         // https://fetch.spec.whatwg.org/#dom-headers
-        invoke(_env, init) {
+        initialize(_env, init) {
           if (init !== undefined) (this as HeadersImpl).fill(init as HeadersInitValue);
         },
       },

@@ -294,8 +294,8 @@ dictionary AddEventListenerOptions : EventListenerOptions {
     const member = attr('loading', idlType.DOMString, xattr('CEReactions', annotation));
     expect(annotation.enumerated).toBe(enumerated);
     expect(member.extendedAttributes?.[1]).toBe(annotation);
-    expect(member.get).toBeUndefined();
-    expect(member.set).toBeUndefined();
+    expect(member.overrideGet).toBeUndefined();
+    expect(member.overrideSet).toBeUndefined();
     expect(serializeMember(member)).toBe('[CEReactions, ReflectEnumerated] attribute DOMString loading;');
 
     const tokenList = { name: 'tokens', supportedTokens: new Set(['render']) };

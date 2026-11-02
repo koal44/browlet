@@ -378,7 +378,7 @@ export class IDLCallbackInterfaceType extends Type {
   constructor(assembled: AssembledCallbackInterface, attributes: ExtendedAttribute[] = []) {
     super(attributes);
     this.assembled = assembled;
-    this.canPassToImpl = !assembled.primary.toImpl;
+    this.canPassToImpl = !assembled.primary.overrideCbConversion;
   }
 }
 

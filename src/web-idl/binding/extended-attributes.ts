@@ -13,7 +13,7 @@ export type ExtendedAttributeHooks<Env extends WebIDLEnvironment = WebIDLEnviron
   prepareAttribute?: (
     attribute: IDLAttribute, owners: AssembledInterface[],
   ) => Map<AssembledInterface, AttributeBinding<Env>> | undefined;
-  /** Prepare HTML's overridden constructor steps for an annotated interface. */
+  /** Prepare HTML's constructor-entry override for an annotated interface. */
   prepareHTMLConstructor?: (owner: AssembledInterface) => HTMLConstructorBinding<Env> | undefined;
   /** Prepare an annotated interface's invocation policy, selected by the actual receiver. */
   prepareSecurityCheck?: (owner: AssembledInterface) => SecurityCheckBinding<Env> | undefined;
@@ -50,6 +50,6 @@ export type AttributeBinding<Env = unknown, Receiver extends object | null = obj
     this: Receiver, ctx: BindingContext<Env & WebIDLEnvironment>, methodCtx: BindingContext<Env & WebIDLEnvironment>,
     incumbentEnv: Env | undefined,
   ) => unknown;
-  /** Runs the prepared reflection setter; custom declaration setters use AttributeMember.set instead. */
+  /** Runs the prepared reflection setter; custom declaration setters use AttributeMember.overrideSet instead. */
   set?: (this: Receiver, ctx: BindingContext<Env & WebIDLEnvironment>, value: unknown) => void;
 };

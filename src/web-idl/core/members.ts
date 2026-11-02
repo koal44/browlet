@@ -76,10 +76,10 @@ export type AttributeMember<Env = unknown> = {
   enabled?: boolean;
 
   // Project metadata: member steps, returned function creation, and callback exception policy.
-  /** Read with receiver and getter environments; declare a third positional parameter to request the incumbent. */
-  get?: (this: object | null, env: Env, methodEnv: Env, incumbentEnv: Env | undefined) => unknown;
-  /** Store the converted value; declare a fourth positional parameter to request the incumbent. */
-  set?: (this: object | null, env: Env, value: unknown, methodEnv: Env, incumbentEnv: Env | undefined) => void;
+  /** Override property reading; declare a third positional parameter to request the incumbent. */
+  overrideGet?: (this: object | null, env: Env, methodEnv: Env, incumbentEnv: Env | undefined) => unknown;
+  /** Override property writing with a converted value; declare a fourth positional parameter to request the incumbent. */
+  overrideSet?: (this: object | null, env: Env, value: unknown, methodEnv: Env, incumbentEnv: Env | undefined) => void;
   /** Create the steps for a cached realm-owned function returned by this attribute. */
   attributeFunction?: (this: undefined, env: Env) => AttributeFunctionSteps;
   /** Report or rethrow exceptions from an author callback assigned to this attribute. */
@@ -111,12 +111,12 @@ export type ConstructorMember<Env = unknown, Values extends unknown[] = unknown[
   extendedAttributes?: ExtendedAttribute[];
 
   // Project metadata: implementation construction and argument injection.
-  /** Return a new implementation from the owning environment and converted arguments. */
-  construct?: (this: undefined, env: Env, ...values: Values) => object;
+  /** Override implementation construction after argument conversion; return the new implementation. */
+  overrideConstruct?: (this: undefined, env: Env, ...values: Values) => object;
   /** Injected arguments for public construction; cannot accompany implementation-level `constructWith`. */
   constructWith?: InjectedArgument<Env>[];
   /** Initialize the preallocated implementation supplied as `this`, using converted arguments. */
-  invoke?: (this: object, env: Env, ...values: Values) => void;
+  initialize?: (this: object, env: Env, ...values: Values) => void;
 
   /** Additional TypeScript parameters scoped to this generated constructor overload. */
   typeParameters?: TypeParameter[];
@@ -144,10 +144,10 @@ export type OperationMember<Env = unknown, Values extends unknown[] = unknown[]>
 
   // Project metadata: invocation, argument injection, and legacy property support.
   /**
-   * Run with converted arguments and return the implementation result.
+   * Override implementation-method invocation with converted arguments and return the implementation result.
    * The environment belongs to the receiver, or the method for a static operation; `this` is the implementation or null.
    */
-  invoke?: (this: object | null, env: Env, ...values: Values) => unknown;
+  overrideInvoke?: (this: object | null, env: Env, ...values: Values) => unknown;
   /** Injected arguments for an automatically bound implementation method. */
   invokeWith?: InjectedArgument<Env>[];
   /** Supported indices and membership checks for a legacy indexed getter. */

@@ -244,7 +244,7 @@ describe('Web IDL binding worlds and realm registration', () => {
         op('createBoundResult', reference(resultIDL.name),
           [],
           {
-            invoke(env) {
+            overrideInvoke(env) {
               expect(env.realm).toBe(receiverRealm);
               return new ResultImpl();
             },
@@ -315,8 +315,8 @@ describe('Web IDL binding worlds and realm registration', () => {
       name: 'Receiver', exposed: '*', implementation: impl(ReceiverImpl),
       members: [
         attr('owner', idlType.object, {
-          get(env) { return env.realm.globalObject; },
-          set(env, value) {
+          overrideGet(env) { return env.realm.globalObject; },
+          overrideSet(env, value) {
             expect(this).toBe(implInst);
             setterEnv = env;
             setterValue = value;
@@ -325,7 +325,7 @@ describe('Web IDL binding worlds and realm registration', () => {
         op('fail', idlType.undefined,
           [],
           {
-            invoke() { throw new InternalTypeError('Implementation failure'); },
+            overrideInvoke() { throw new InternalTypeError('Implementation failure'); },
           },
         ),
       ],
@@ -665,7 +665,7 @@ describe('Web IDL binding worlds and realm registration', () => {
       name: 'InternalNewExample',
       exposed: '*',
       implementation: impl(InternalNewImpl),
-      members: [ctor([], { invoke() { publicConstructions++; } })],
+      members: [ctor([], { initialize() { publicConstructions++; } })],
     });
     const interfaces = new BindingWorld([interfaceIDL]);
     const realm = new Realm();
