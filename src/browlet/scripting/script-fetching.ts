@@ -88,14 +88,16 @@ export function fetchClassicWorkerScript(
   else fetch(request, { processResponseConsumeBody }, fetchClient);
 }
 
-/** Synchronously fetch an importScripts() dependency; the required pause is unfinished. */
+/** Synchronously fetch an importScripts() dependency; its blocking host wait is unfinished. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-classic-worker-imported-script
 export function fetchClassicWorkerImportedScript(
   _url: URLRecord, _env: BrowletEnvironment, _performFetch?: PerformScriptFetch,
 ): ClassicScript {
   // TODO(HTML §8.1.4.2): Fetch, pause until its response/body arrives, enforce JavaScript MIME,
   // throw NetworkError on failure, then create the script with the response's muted-error state.
-  // Do not start asynchronous work until the synchronous continuation can actually be resumed.
+  // EventLoop.pauseUntil supplies the guard, but Fetch still needs a host completion
+  // that can progress while this Node thread is blocked. Do not start an
+  // asynchronous fetch whose response/body delivery requires that same thread.
   throw new InternalError('Classic worker-imported script fetching requires synchronous pause (HTML §8.1.4.2)');
 }
 

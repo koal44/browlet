@@ -48,7 +48,8 @@ and evaluate, with CSS exports projected through Binding. §8.1.6.7.3 now connec
 static and dynamic graph loading to the resolver and fetchers. Wasm ESM
 parsing, module-specific context restoration, and creation timing retain
 explicit unfinished boundaries. Worker-imported scripts
-still need synchronous pause. §8.1.3.4 now has settings/object scripting predicates;
+still need a synchronous Fetch host wait; the event loop's pause guard alone
+cannot supply it. §8.1.3.4 now has settings/object scripting predicates;
 §8.1.4.4 has classic/module runners and the running-script lookup. Child Document
 activity follows retained container ancestry, and ancestor changes notify child
 Documents and wake their queued tasks. Automatic child lifecycle remains unfinished.
@@ -73,7 +74,10 @@ now supplies module specifier resolution and import-map parsing, normalization,
 and merging. The approved merge conflicts follow Chromium/WebKit, with Firefox's
 differences recorded. Script-element callers and console warning output remain
 explicit dependencies. The §8.1.6 host-hook audit has connected static and dynamic
-evaluation-phase `HostLoadImportedModule`; continue with §8.1.7 event loops.
+evaluation-phase `HostLoadImportedModule`. Element tasks and event-loop pausing
+are implemented. Continue with idle-period processing and callbacks in §8.1.7;
+its [remaining dependencies](browlet/scripting/ROADMAP.md#outstanding-event-loop-work)
+retain their owner and engine boundaries.
 Source/deferred imports and the HTML Wasm parser remain explicit boundaries.
 Later host-hook algorithms must be connected before judging
 the complete model; the uncertain cross-realm observer test is skipped.
@@ -174,9 +178,11 @@ path. Implement the named portion of a roadmap, not every future feature in it.
 [scripting/event loop](browlet/scripting/ROADMAP.md),
 [timing](browlet/timing/README.md), [performance](browlet/performance/ROADMAP.md),
 [abort](browlet/dom/abort/ROADMAP.md), and
-[browsing](browlet/browsing/ROADMAP.md) owners. Add element task destinations
-and checkpoint consumers when needed. Worker suspension, timer strings, and
-idle periods await their actual script/global/rendering consumers. Follow the
+[browsing](browlet/browsing/ROADMAP.md) owners. Element task destinations retain
+their creation global; add checkpoint consumers at their owning algorithms.
+Worker suspension and timer strings retain their script/global dependencies.
+Continue HTML's idle-period steps with explicit rendering and idle-callback
+dependencies. Follow the
 bounded [microsyntax slices](browlet/html/microsyntaxes/ROADMAP.md); reflection
 consumes their value algorithms, while media matching retains its style/host
 dependency gate.

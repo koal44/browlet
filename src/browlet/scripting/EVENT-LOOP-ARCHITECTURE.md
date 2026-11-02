@@ -43,6 +43,11 @@ Event-handler attributes are listener/callback state, not a scheduling mechanism
 
 ## Task turns and routing
 
+`ElementImpl.queueTask()` routes through its retained environment's realm and
+the existing global-task operation. Its task uses the creation Window's loop
+and associated Document, even after adoption changes the element's node document.
+No binding lookup or new runtime dependency is needed at the call site.
+
 The loop coalesces host wake-ups and runs one deterministic turn: choose/remove
 a runnable task, install it, execute with cleanup, checkpoint, and request another
 host turn while runnable work remains. A future bounded batch must still perform
@@ -91,6 +96,17 @@ continuation. Synchronous script/Binding wrappers cannot surround that suspensio
 and still clean up in their original `finally`. This operation supplies controlled
 algorithm continuations, not arbitrary author-stack capture. Concrete callers own
 their readiness notifications and abort handling.
+
+`EventLoop.pauseUntil(waitForGoal, env)` instead retains the current task and stack
+through a synchronous host wait. It suppresses this loop's task/checkpoint
+dispatch and coalesces wake-ups until the wait returns or throws; it never pumps
+Node or inserts a checkpoint. The caller supplies the current environment for
+clock sampling, independently of the running script passed to pause accounting.
+The wait must complete without queued callbacks on the blocked thread. Real
+dialog/worker-fetch hosts, any required UI refresh, and Long Animation Frames
+accounting remain separate dependencies. A blocking host wait also blocks other
+Agents sharing that Node thread; the loop-local guard does not supply independent
+worker execution.
 
 Shared time is sampled in processing-model order. Task-start, long-task-reporting,
 and task-end hooks leave Long Tasks/Long Animation Frames to their owners.

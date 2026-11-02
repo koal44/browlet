@@ -677,7 +677,7 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     fetchClassicWorkerScript(url, fetchClient, destination, this, onComplete, performFetch);
   }
 
-  /** Synchronously fetch an importScripts() dependency; the required pause is unfinished. */
+  /** Synchronously fetch an importScripts() dependency; its blocking host wait is unfinished. */
   fetchClassicWorkerImportedScript(url: URLRecord, performFetch?: PerformScriptFetch): ClassicScript {
     return fetchClassicWorkerImportedScript(url, this, performFetch);
   }

@@ -198,7 +198,9 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   custom/compat and stock VM modules; official compat bases still receive empty
   metadata. The [integration tests](../test/browlet/scripting/import-meta.test.ts)
   retain those expected failures. Worker `importScripts()` fetching
-  requires an unavailable synchronous pause. Existing direct evaluation remains
+  still lacks a synchronous Fetch host wait: `EventLoop.pauseUntil()` guards task and
+  checkpoint delivery, but cannot make same-thread asynchronous I/O complete
+  while that thread is blocked. Existing direct evaluation remains
   separate, and HTML script/worker startup does not call these fetchers yet. See the
   [script-creation audit](browlet/scripting/ROADMAP.md#html-8143-creating-scripts).
 

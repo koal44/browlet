@@ -431,8 +431,8 @@ replaced; these are fetch orchestration tests, not worker/worklet startup tests.
 - `fetchClassicWorkerImportedScript()` is an explicit throwing skeleton. Unlike
   the two callback-based classic fetchers, this algorithm pauses synchronously
   until Fetch completes, then returns a script or throws NetworkError. The
-  [event-loop pause dependency](#outstanding-event-loop-work) is not supplied by today's
-  asynchronous Fetch task delivery. Do not substitute a Promise return or launch
+  [synchronous host wait](#html-8173-pausing) is not supplied by today's asynchronous
+  Fetch task delivery. Do not substitute a Promise return or launch
   a fetch that cannot finish before this method returns.
 - Descendant loading now connects static/dynamic JavaScript/CSS/JSON/text graphs through
   HostLoadImportedModule. Source/deferred requests, Wasm parsing,
@@ -1722,7 +1722,7 @@ first failed with no wake-up after attaching a child, and only the ancestor's
 loop waking after restoration. They retain blocked tasks and per-source order
 through restoration across three distinct agents. Their graphs use the existing
 container seam; this does not implement automatic iframe creation or history
-traversal. The element-task wrapper still waits for its first consumer. Idle,
+traversal. The later element-task slice below supplies its routing operation. Idle,
 rendering, worker lifecycle, and checkpoint-tail dependencies remain below.
 
 Validation: the six focused task, timer, lifecycle, indexed-access, and permission
@@ -1730,6 +1730,28 @@ status suites pass across all six runtime configurations. Each addon run has 112
 ordinary passes and two existing expected failures; each stock run has 111 passes
 and three existing expected failures. All three new regressions pass everywhere.
 Typechecking, declaration contracts, touched-file ESLint, and diff checks pass.
+
+### HTML §8.1.7.2 element tasks
+
+`ElementImpl.queueTask(source, steps)` implements
+[queue an element task](https://html.spec.whatwg.org/multipage/webappapis.html#queue-an-element-task)
+through the element's retained environment and existing global-task routing.
+Adoption changes its node document, not its relevant global. The task therefore
+keeps the creation Window's event loop and associated Document, including that
+Document's fully-active gate. An element created in a Document without a browsing
+context still uses its creation Window's associated Document for task delivery.
+
+The [element-task regressions](../../../test/browlet/scripting/element-task.test.ts)
+use real projected HTML/SVG elements and public document creation/adoption,
+with controlled host turns. They cover shared-source ordering with global tasks,
+creation in a detached Document, adoption between distinct agent loops before
+and after queueing, and independent source/destination Document activity.
+This is an internal HTML operation; no author-facing member or native change
+is needed. Future element algorithms can call it directly.
+
+Validation: all 34 focused element-task, task-routing, and Document-activity
+cases pass on all six runtime configurations, including six new cases.
+Typechecking, declaration contracts, touched-file lint, and diff checks pass.
 
 ### HTML §8.1.7.3 rendering document order
 
@@ -1991,6 +2013,42 @@ on custom/compat; the other configurations retain 61 ordinary passes, two approv
 expected failures, and that same skip. Typechecking, declaration contracts,
 touched-file ESLint, and diff checks pass.
 
+### HTML §8.1.7.3 pausing
+
+`EventLoop.pauseUntil(waitForGoal, env)` implements the loop-owned portion of
+[pause](https://html.spec.whatwg.org/multipage/webappapis.html#pause): it samples
+the supplied current global's clock, retains the task and modeled execution
+stack, suppresses task/checkpoint delivery throughout a synchronous host wait,
+and measures the elapsed duration before restoring delivery. It neither spins
+the Node loop nor performs a checkpoint at entry or return. Exceptions from the
+host still restore delivery.
+
+The callable shape uses a synchronous wait instead of an abstract goal. Its
+`undefined` result excludes asynchronous callbacks. The caller must supply a
+wait that returns only after the goal is met; Promise settlement or callbacks
+queued on the blocked Node thread cannot provide that wait. A test uses an
+independent Node worker and an atomic notification to exercise actual blocking
+and resumption without polling. No addon or engine changes are required.
+
+The remaining dependencies stay explicit:
+
+- A UI host must reflect pending rendering/UI state when necessary (pause step
+  3); the headless runtime has no UI to update. Dialog and synchronous Fetch
+  consumers still need their concrete host waits. This operation does not make
+  `importScripts()` fetching synchronous, nor does it create independent HTML
+  workers. A blocking host effect also blocks other work sharing its Node thread.
+- [Long Animation Frames §3.2.2](https://w3c.github.io/long-animation-frames/#record-pause-duration)
+  owns pause accounting. The optional `TaskTimingHooks.recordPauseDuration`
+  receives the elapsed `Duration` and running script explicitly, instead of
+  finding an event loop through ambient state. Document frame timing and
+  pending-script records remain unimplemented; supplying this hook is not an
+  implementation of their accounting algorithm.
+
+The [pause tests](../../../test/browlet/scripting/event-loop-pause.test.ts) cover
+real blocking, retained execution state, suppressed delivery and coalesced
+wake-ups, clock/attribution inputs, host failure cleanup, and loop-local guarding.
+Idle-period timestamp behavior is covered with the idle-period implementation.
+
 ### HTML §§8.1.7.4–8.1.7.5 task sources and cross-specification delivery
 
 All five generic sources have shared identities in `tasks.ts`: DOM manipulation,
@@ -2101,7 +2159,7 @@ evaluation and automation do not acquire this gate automatically.
 | Error reporting | Source locations, complete script attribution, and dedicated-worker propagation; native rejection notifications, slot queries, and checkpoint delivery are connected on addon bases |
 | Event handlers | Content-attribute compilation, Window/body/frameset targeting, global handler mixins, and special error/beforeunload behavior |
 | DOM checkpoint consumers | Custom-element reactions; MutationObserver and signal-slot delivery already use the existing checkpoint |
-| Task routing/lifecycle | Element-task wrapper using the relevant global, worker restrictions, and complete loop teardown |
+| Task routing/lifecycle | Worker restrictions and complete loop teardown; element-task routing through the retained relevant global is implemented |
 | Global utilities/timers | Origin/base64/image APIs and isolation exposure; worker suspension; handler timing; TrustedScript/CSP/classic-script string timers |
 | Rendering/idle | AnimationFrameProvider, real rendering hooks, idle callbacks, deadlines, and lifecycle cleanup |
 | Workers/worklets | Real globals/settings, production callers of Agent allocation, execution readiness, termination, and engine enforcement |
@@ -2160,9 +2218,10 @@ media, or parser caller is not by itself a reason to omit the scheduling operati
 
 | Operation | Work available in Browlet | Exact remaining dependency or boundary |
 | --- | --- | --- |
+| [Queue an element task](https://html.spec.whatwg.org/multipage/webappapis.html#queue-an-element-task) | Implemented on `ElementImpl.queueTask()`, forwarding to its retained creation realm's global-task operation. | No missing scheduling dependency. Adoption changes the node document but not the task's global; future element algorithms supply the source and steps. |
 | [Await a stable state](https://html.spec.whatwg.org/multipage/webappapis.html#await-a-stable-state) | Implemented on `env.awaitStableState()`, with shared-queue idle wake-ups and optional parallel continuation. | Image/media algorithms still need to supply their own synchronous sections and continuations; the scheduling operation itself is implemented. |
 | [Spin the event loop](https://html.spec.whatwg.org/multipage/webappapis.html#spin-the-event-loop) | Implemented on `EventLoop.spinUntil()`: suspend modeled state, checkpoint, register the wait, and resume on the original task source with saved state and metadata. | Callers must lower their remaining steps and cleanup into the continuation. The parser already has stylesheet/script continuations to migrate; complete preparation, readiness, nesting, and abort handling belong to its [script runner](../html/parser/ROADMAP.md). Arbitrary synchronous author calls are not resumable through this helper. |
-| [Pause](https://html.spec.whatwg.org/multipage/webappapis.html#pause) | Retain the current global, sample time before/after, and prevent task dispatch while a host wait is active. | The waiting step must block the current author call while its goal can still be satisfied; an asynchronous Promise alone does not do that. A synchronous host wait/UI effect is missing. [Record pause duration](https://w3c.github.io/long-animation-frames/#record-pause-duration) separately needs Document frame timing and a pending script entry. |
+| [Pause](https://html.spec.whatwg.org/multipage/webappapis.html#pause) | `EventLoop.pauseUntil()` retains the task/stack, samples the current global's clock, and suppresses tasks/checkpoints throughout a caller-supplied synchronous wait. | Dialog and synchronous Fetch callers need real blocking host effects whose goals can progress without this thread's callbacks. A UI host must reflect pending state where necessary. [Record pause duration](https://w3c.github.io/long-animation-frames/#record-pause-duration) separately needs Document frame timing and a pending script entry; its call site is present. |
 | [Window idle periods](https://html.spec.whatwg.org/multipage/webappapis.html#idle-deadline-computation) | Initialize render/idle timestamps, handle the no-runnable-task branch, and calculate the 50ms deadline with timer/render bounds and per-Window coarsening. | Timers already retain expiry estimates, but need to expose the specified deadlines in the shared time domain. Rendering needs animation-frame callback state and refresh/pending-render inputs. The final [start an idle period](https://w3c.github.io/requestidlecallback/#start-an-idle-period-algorithm) call needs that specification's callback lists and delivery algorithm. These do not prevent implementing the preceding HTML steps. |
 | [Rendering](https://html.spec.whatwg.org/multipage/webappapis.html#update-the-rendering) | Document ordering and the ordered update pipeline are present. | The production refresh host and the owners of individual resize, scroll, animation, layout, paint, and observation steps remain absent; an ordered hook is not an implementation of its operation. |
 | Performance reporting | Task timing and long-task call sites are present. | [Long Tasks reporting](https://w3c.github.io/longtasks/#report-long-tasks) and Long Animation Frames task/script/frame records and algorithms are missing. |
@@ -2172,19 +2231,14 @@ media, or parser caller is not by itself a reason to omit the scheduling operati
 The stable-state operation and its parallel-microtask specification clash are
 recorded [above](#html-8173-stable-state-scheduling), followed by the controlled
 spinning operation. These implementations do not close the remaining processing
-model. The next bounded slice can implement the element-task wrapper below,
-then proceed through the available idle-period steps and their exact dependencies.
+model. Element-task routing is also implemented. Pause supplies the loop-owned
+synchronous guard and timing; its host effects and performance owner remain
+separate. The next slice supplies idle-period processing and callbacks.
 
 Preserve a single queue for Promise jobs and HTML microtasks. Do not put a
 TypeScript microtask queue beside V8's queue or claim a worker closing flag
 implements shutdown. Worker/worklet Agent records alone also do not configure
 V8's CanBlock or shared-memory isolation; those gates remain with the engine.
-
-The unimplemented [queue an element task](https://html.spec.whatwg.org/multipage/webappapis.html#queue-an-element-task)
-wrapper must use the element's relevant global/creation realm, not its mutable
-node document after adoption. Existing Binding ownership and global-task routing
-are its foundations; a future caller is not a prerequisite. Keep the route
-cycle-safe and test adoption across realms.
 
 ## Validation
 

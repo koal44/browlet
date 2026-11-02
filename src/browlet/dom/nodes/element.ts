@@ -9,6 +9,7 @@ import type { CSSStyleSheetImpl, CSSDeclarationBlock } from '../../../stylelet/i
 import { isValidAttributeLocalName, validateAndExtract } from '../infra/index';
 import { ElementTag, type ContentCategory, type ContentModel } from './element-definitions/index';
 import type { LinkStyleMixin } from '../../style/index';
+import type { TaskSource } from '../../scripting/index';
 import type { EventImpl } from '../events/index';
 import type { PermissionsPolicyDirective } from '../../browsing/policy/index';
 import { getTrustedTypeDataForAttribute, type TrustedTypeValue } from '../../browsing/policy/trusted-types/index';
@@ -205,6 +206,12 @@ export class ElementImpl extends NodeImpl {
 
   set manualSlotAssignment(slot: WeakRef<HTMLSlotElementImpl> | null) {
     this.#slottableMixin.manualSlotAssignment = slot;
+  }
+
+  /** Queue steps on this element's creation global, retained across document adoption. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#queue-an-element-task
+  queueTask(source: TaskSource, steps: () => void): void {
+    this.env.realm.queueGlobalTask(source, steps);
   }
 
   /** Whether localization may translate this element's translatable attributes and direct text children. */

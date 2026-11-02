@@ -1,7 +1,7 @@
 import { InternalError, type TaskCreationOptions } from '../../infra/index';
 import { bindAsyncContext, createMicrotaskQueue, type JSMicrotaskQueue } from '../../js-engine/index';
 
-import { unsafeSharedCurrentTime, type UnsafeMoment } from '../timing/index';
+import { Duration, unsafeSharedCurrentTime, type UnsafeMoment } from '../timing/index';
 import type { DocumentImpl } from '../dom/nodes/index';
 import type { BrowletEnvironment } from '../environment';
 
@@ -30,6 +30,7 @@ export class EventLoop {
   #scriptEntryTasks: (Task | null)[] = [];
   #currentlyRunningTask: Task | null = null;
   #runningTaskTurn = false;
+  #paused = false;
   #performingMicrotaskCheckpoint = false;
   /** Work arriving outside an HTML task needs a host checkpoint wake-up. */
   #microtaskCheckpointRequested = false;
@@ -101,6 +102,7 @@ export class EventLoop {
   /** Run one eligible task and its checkpoint; return false when none is runnable. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#event-loop-processing-model
   runTaskTurn(): boolean {
+    if (this.#paused) return false;
     const init = this.#init;
     if (this.#runningTaskTurn || this.#currentlyRunningTask !== null) {
       throw new InternalError('An event loop cannot run a task reentrantly');
@@ -356,6 +358,40 @@ export class EventLoop {
     });
   }
 
+  /**
+   * Block the current task in a synchronous host wait, retaining its execution stack.
+   * The caller supplies the current environment and a wait that returns only when
+   * its goal is met. The wait must not run author code or depend on this thread's
+   * queued callbacks; a Promise or asynchronous wait cannot satisfy this contract.
+   */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#pause
+  pauseUntil(waitForGoal: () => undefined, env: BrowletEnvironment): void {
+    if (env.responsibleEventLoop !== this) {
+      throw new InternalError('The current environment belongs to another event loop');
+    }
+    if (this.#currentlyRunningTask === null || this.#paused) {
+      throw new InternalError('Pausing requires a running, unpaused task');
+    }
+
+    // Capture the current global's clock before entering the host. It need not
+    // belong to the task's Document or the script used for performance attribution.
+    const timing = env.timing;
+    const timeBeforePause = timing.currentHighResolutionTime();
+    this.#paused = true;
+    try {
+      // TODO(HTML pause step 3): A UI host must synchronously reflect pending
+      // rendering/UI state where necessary. The headless host has no such UI.
+      waitForGoal();
+      const duration = new Duration(timing.currentHighResolutionTime().milliseconds - timeBeforePause.milliseconds);
+      // TODO(Long Animation Frames §3.2.2): Supply record-pause-duration when
+      // Document frame timing and pending-script records have an implementation.
+      this.#init.taskTiming?.recordPauseDuration?.(duration, this.runningScript);
+    } finally {
+      this.#paused = false;
+      this.#requestTurnIfNeeded();
+    }
+  }
+
   /** Conditional checkpoint at a Browlet-controlled parser entry. */
   performMicrotaskCheckpointIfStackEmpty(): void {
     if (this.executionContextStack.length === 0) {
@@ -366,7 +402,7 @@ export class EventLoop {
   /** Drain the shared queue, then schedule notifications for pending rejections. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#perform-a-microtask-checkpoint
   performMicrotaskCheckpoint(): void {
-    if (this.#performingMicrotaskCheckpoint) return;
+    if (this.#paused || this.#performingMicrotaskCheckpoint) return;
 
     this.#microtaskCheckpointRequested = false;
     this.#performingMicrotaskCheckpoint = true;
@@ -510,13 +546,14 @@ export class EventLoop {
 
   #requestTurnIfNeeded(): void {
     if (
-      this.#turnRequested ||
+      this.#paused || this.#turnRequested ||
       (!this.#microtaskCheckpointRequested && !this.hasRunnableTasks())
     ) return;
 
     this.#turnRequested = true;
     this.#init.requestTurn(() => {
       try {
+        if (this.#paused) return;
         if (this.#microtaskCheckpointRequested) this.performMicrotaskCheckpoint();
         else this.runTaskTurn();
       } finally {
@@ -550,6 +587,10 @@ export type TaskTimingHooks = {
     endTime: UnsafeMoment,
     document: DocumentImpl,
   ): void;
+  // https://w3c.github.io/long-animation-frames/#record-pause-duration
+  // The performance owner receives the running script explicitly, rather than
+  // discovering the loop or its execution stack through ambient state.
+  recordPauseDuration?(this: void, duration: Duration, script: Script | null): void;
 };
 
 export type LongTaskReporter = {
