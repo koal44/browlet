@@ -343,6 +343,13 @@ and replacement conditions. The remaining implementation boundaries are:
   The non-destructive detach-key predicate remains unavailable.
 - Captured intrinsic/brand probes support structured data without taking over
   HTML graph traversal, serialization policy, or DataCloneError construction.
+- `realm.createWebAssemblyImportCall(module, importIndex, callback)` completes
+  native result conversion within the returned call, using that realm for
+  conversion errors. The addon owns signature decoding and cached Wasm bridges;
+  HTML retains the original callback's script/settings lifecycle. Stock mode
+  returns the callback unchanged, so V8 performs conversion after scope cleanup.
+  [The addon contract](../../node-compat/README.md#webassembly-imported-function-conversion)
+  records supported binary encodings and the extra Wasm call cost.
 
 Tests in [test/js-engine](../../test/js-engine/) cover these contracts. Browser
 integration tests additionally establish actual realm, binding, and HTML task

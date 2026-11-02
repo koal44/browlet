@@ -3,7 +3,7 @@ import { types as nodeTypes } from 'node:util';
 import { InternalError } from '../infra/internal-error';
 
 import { addon } from './node-addons';
-import type { JSRealm } from './realm';
+import type { JSFunction, JSRealm } from './realm';
 
 /* eslint-disable @typescript-eslint/no-wrapper-object-types -- These operations inspect boxed primitive objects. */
 
@@ -42,6 +42,29 @@ export const isWeakSetObject: (value: unknown) => value is WeakSet<object> = nod
 /** Recognize a genuine Module across realms. Select the native or fallback check once at initialization. */
 export const isWebAssemblyModule = (addon.isWebAssemblyModule ?? isWebAssemblyModuleFallback) as
   (value: unknown) => value is JSWebAssemblyModule;
+
+/** Read native import declarations without consulting replaceable author-facing methods. */
+export function getWebAssemblyModuleImports(module: JSWebAssemblyModule): JSWebAssemblyModuleImport[] {
+  return Reflect.apply(wasmModuleImports, undefined, [module]);
+}
+
+/** Recognize engine functions that must retain their identity when imported by another Wasm module. */
+export function isWebAssemblyFunction(value: unknown): value is JSFunction {
+  if (typeof value !== 'function') return false;
+  // HACK: a private funcref table validates the initializer even for zero growth.
+  // It accepts native Wasm functions, but rejects ordinary, bound, and proxied JS
+  // functions without reading their properties. No entry is added or retained.
+  // Node/V8 has no public predicate; this avoids an engine patch or internal headers.
+  try { Reflect.apply(wasmTableGrow, wasmFunctionProbeTable, [0, value]); return true; }
+  catch (error) { if (error instanceof nativeTypeError) return false; throw error; }
+}
+
+/** Engine import metadata in the order used for import-object lookup. */
+export interface JSWebAssemblyModuleImport {
+  module: string;
+  name: string;
+  kind: 'function' | 'global' | 'memory' | 'table' | 'tag';
+}
 
 /** Check the engine's Instance brand without changing its identity or consulting its prototype. */
 export function isWebAssemblyInstance(value: unknown): value is JSWebAssemblyInstance {
@@ -384,16 +407,21 @@ const finalizationRegistryUnregister = typeof FinalizationRegistry === 'undefine
   );
 const brandProbe = {};
 const nativeStructuredClone = globalThis.structuredClone;
-const nativeWebAssembly = Reflect.get(globalThis, 'WebAssembly') as {
-  Module: { new (bytes: Uint8Array): JSWebAssemblyModule; exports: (value: unknown) => unknown; };
+const nativeWebAssembly = Reflect.get(globalThis, 'WebAssembly') as unknown as {
+  Module: {
+    new (bytes: Uint8Array): JSWebAssemblyModule;
+    exports: (value: unknown) => unknown;
+    imports: (module: JSWebAssemblyModule) => JSWebAssemblyModuleImport[];
+  };
   Instance: { new (module: JSWebAssemblyModule, imports: object): object; prototype: object; };
   Memory: { prototype: object; };
-  Table: { prototype: object; };
+  Table: { new (descriptor: { element: string; initial: number; maximum: number; }): object; prototype: object; };
   LinkError: { prototype: object; };
   Tag: new (descriptor: { parameters: string[]; }) => object;
   Exception: { new (tag: object, payload: unknown[]): object; prototype: object; };
 };
 const wasmModuleExports = nativeWebAssembly.Module.exports;
+const wasmModuleImports = nativeWebAssembly.Module.imports;
 const wasmInstanceExports = getAccessor<unknown>(nativeWebAssembly.Instance.prototype, 'exports');
 const wasmMemoryGrow = Reflect.get(nativeWebAssembly.Memory.prototype, 'grow') as (this: object, delta: unknown) => unknown;
 const wasmMemoryProbe = {
@@ -401,6 +429,8 @@ const wasmMemoryProbe = {
   [Symbol.toPrimitive](): never { throw wasmMemoryProbe; },
 };
 const wasmTableLength = getAccessor<unknown>(nativeWebAssembly.Table.prototype, 'length');
+const wasmTableGrow = Reflect.get(nativeWebAssembly.Table.prototype, 'grow') as (this: object, delta: number, value: unknown) => unknown;
+const wasmFunctionProbeTable = new nativeWebAssembly.Table({ element: 'anyfunc', initial: 0, maximum: 0 });
 const wasmInstanceConstructor = nativeWebAssembly.Instance;
 const wasmGlobalLinkErrorPrototype = nativeWebAssembly.LinkError.prototype;
 // Compiled once, only without the addon. No start function or imported callbacks.

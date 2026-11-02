@@ -9,7 +9,7 @@ import {
   type ByteSequence, type JSBufferView, type JSBufferViewName,
 } from './buffers';
 import { isObject } from './abstract-operations';
-import type { JSWebAssemblyTag } from './built-in-primitives';
+import type { JSWebAssemblyModule, JSWebAssemblyTag } from './built-in-primitives';
 import { addon, isAddonContextHandle } from './node-addons';
 import {
   compileModule, createDefaultExportModule, moduleRequests, linkModule, evaluateModule, moduleNamespace,
@@ -578,6 +578,19 @@ export class JSRealm {
     });
     return IteratorStamper.stamp(iterator, { kind, next, running: false }) as
       StampedIterator<MapIterator<Value> | SetIterator<Value>>;
+  }
+
+  /**
+   * Call a function import, completing native result conversion before returning.
+   * importIndex follows Module.imports(), including visible non-function imports.
+   * This realm owns conversion exceptions; HTML supplies the callback scope.
+   * Without the addon, returns the original callback without enclosing conversion.
+   */
+  createWebAssemblyImportCall(module: JSWebAssemblyModule, importIndex: number, callback: JSFunction): JSFunction {
+    // Stock fallback limitation: arbitrary Modules expose no signatures without
+    // the addon. Returning the original callback leaves V8's result conversion
+    // outside the host scope. The addon path above this fallback supplies the fix.
+    return addon.createWebAssemblyImportCall?.(module, importIndex, callback, this.WebAssemblyInstance) ?? callback;
   }
 
   /** Copy bytes into independent storage in this realm. */

@@ -7,8 +7,9 @@ import { InternalError } from '../infra/internal-error';
 import type {
   CollectionIteratorKind, CompiledCode, CompiledScript, ExoticObjectHandlers, FunctionCompilationOptions,
   GlobalAccessHandlers, GlobalIndexedProperties, GlobalObject, GlobalPrototypeKind, GlobalProxy,
-  JSFunction, JSIteratorResult,
+  JSFunction, JSFunctionWithPrototype, JSIteratorResult,
 } from './realm';
+import type { JSWebAssemblyModule } from './built-in-primitives';
 import type { JSJobCallback, VMContext } from './runtime';
 import type { ImportModuleDynamically, ModuleOptions, SourceTextModule, SourceTextModuleOptions, SyntheticModule } from './modules';
 
@@ -64,6 +65,10 @@ export class NodeAPI {
   isWebAssemblyModule?: (value: unknown) => boolean;
   /** Recognize a native Global by its internal type without reading or converting its value. */
   isWebAssemblyGlobal?: (value: unknown) => boolean;
+  /** Invoke an imported callback with its native result conversion inside the call. */
+  createWebAssemblyImportCall?: (
+    module: JSWebAssemblyModule, importIndex: number, callback: JSFunction, instanceConstructor: JSFunctionWithPrototype,
+  ) => JSFunction;
   /** Recognize a genuine WeakRef without dereferencing its target. */
   isWeakRef?: (value: unknown) => boolean;
   // Requires the V8 FinalizationRegistry predicate patch.
@@ -128,6 +133,7 @@ export class NodeAPI {
     this.isLengthTrackingArrayBufferView = this.#loadMethod(backend, 'isLengthTrackingArrayBufferView');
     this.isWebAssemblyModule = this.#loadMethod(backend, 'isWebAssemblyModule');
     this.isWebAssemblyGlobal = this.#loadMethod(backend, 'isWebAssemblyGlobal');
+    this.createWebAssemblyImportCall = this.#loadMethod(backend, 'createWebAssemblyImportCall');
     this.isWeakRef = this.#loadMethod(backend, 'isWeakRef');
     this.isFinalizationRegistry = this.#loadMethod(backend, 'isFinalizationRegistry');
     this.makePrototypeImmutable = this.#loadMethod(backend, 'makePrototypeImmutable');

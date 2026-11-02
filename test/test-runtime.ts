@@ -33,6 +33,7 @@ const supported = {
   promiseRejections: !!addon.setPromiseRejectionTracker &&
     !!addon.isPromiseHandled && !!addon.getPromiseResult,
   temporalClock: !!addon.setTemporalHostSystemUTCEpochNanosecondsCallback,
+  wasmImportCalls: !!addon.createWebAssemblyImportCall,
   'v24+': nodeMajor >= 24,
   'v26+': nodeMajor >= 26,
 };

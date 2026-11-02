@@ -33,11 +33,12 @@ is an approved stock-only expected failure in the
 
 **`proxy-function-source-name`:** V8's function compiler rejects JavaScript Proxy
 scope objects, including Browlet's platform Document. JS Engine uses a validated
-FunctionBody and a `with`-scope factory for these cases. Behavior, object identity,
-and `.name` are preserved, but intrinsic `Function.prototype.toString()` shows an
-anonymous function on all six runtimes. The exact named-source assertion remains
-an approved expected failure in the function-compilation suite. No addon or
-Node/V8 change is required by this fallback.
+FunctionBody and a `with`-scope factory for these cases. Stock Node preserves
+behavior, object identity, and `.name`, but intrinsic `Function.prototype.toString()`
+shows an anonymous function. Its exact named-source assertions remain approved
+stock-only expected failures. All three addon bases use a declaration factory
+with a deletable name binding, preserving named source without changing live
+lookup. This requires only the maintained addon, with no Node/V8 patch.
 
 **`node-function-import-referrer`:** Identical `Function` bodies can reuse the
 first creating script's import loader on Node 26 and custom Node, reproducing
@@ -257,6 +258,31 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   chaining another embedder's replacement of the isolate-wide callback is unsupported.
   See the [completion contract](browlet/scripting/ROADMAP.md#native-webassembly-completion)
   and [regressions](../test/browlet/scripting/wasm-completion.test.ts).
+
+- **Wasm host-callback integration remains partial.** Constructor, Module, and
+  byte instantiation now adapt imported JavaScript functions using the existing
+  realm callback hooks. Callback bodies run with script/callback preparation and
+  cleanup, including nested calls and throws; native Wasm functions and other
+  import values retain their identities. With the addon, a generated Wasm bridge
+  finishes scalar coercion and multi-value iteration inside that scope, including
+  throws. Stock mode still performs that conversion after cleanup; its four
+  ordinary regressions retain the gap. The addon's narrow metadata reader rejects
+  unsupported experimental shared-everything/descriptor/continuation/string-view
+  types, exact-function imports, and unknown binary encodings on first adapted
+  invocation. Revisit this before enabling those proposals or upgrading to a
+  runtime that enables them by default. Custom page-size limits are future
+  compatibility work; the current V8 decoder does not accept them. Ordinary
+  shared memories and memory64 are supported. The bridge adds a Wasm round trip
+  and caches bridges by Module/signature.
+  See the [addon contract](../node-compat/README.md#webassembly-imported-function-conversion).
+  Native entry capture now saves B when A calls B to import a callback from C,
+  while its later body runs in C's modeled realm. Constructor, Module, and byte
+  instantiation all declare that requirement. Stock backends without the add-on
+  still save A; the three ordinary regressions retain that limitation. This is Wasm
+  import integration,
+  not skipped Web IDL argument conversion: imports are intentionally an IDL
+  `object`, not a callback dictionary. See the
+  [§5.6 review](browlet/webassembly/ROADMAP.md#56-first-slice-exported-functions-and-the-host-callback-boundary).
 
 - **`SPEC_CLASH(wasm-module-start-timing)`:** Native `WebAssembly.instantiate(module)`
   reads imports and runs the start function before returning. The draft requires
@@ -732,8 +758,9 @@ See the [Web Storage roadmap](browlet/storage/ROADMAP.md).
 
 ## HTML integration gates
 
-- **Element content handlers are partial.** HTML elements expose `onclick` and
-  `onerror`, with lazy Document/element scopes and body/frameset forwarding.
+- **Element content handlers retain explicit dependencies.** HTML, SVG, and MathML
+  elements expose HTML's GlobalEventHandlers, with lazy Document/element scopes
+  and body/frameset Window forwarding.
   Form-associated elements stop at the explicit `getFormOwner()` stub until
   §4.10.18.3 supplies association; assigned function handlers remain usable.
   Exact diagnostic source locations remain unfinished. Handler contributions

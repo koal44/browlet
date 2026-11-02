@@ -15,7 +15,7 @@ for (const method of [
   'createFunctionWithIncumbent', 'registerGlobalGetter',
   'setPropertyDelegate', 'setPropertyHandlers',
   'setPromiseRejectionTracker', 'isPromiseHandled', 'getPromiseResult',
-  'setWasmAsyncCompletionCallback',
+  'setWasmAsyncCompletionCallback', 'createWebAssemblyImportCall',
 ]) {
   assert.equal(typeof compat[method], 'function', `Missing required addon capability: ${method}`);
 }

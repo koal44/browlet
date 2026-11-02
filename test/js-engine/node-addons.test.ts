@@ -16,6 +16,7 @@ describe('Node add-on API', () => {
     expect(api.setPropertyHandlers).toBeUndefined();
     expect(api.isWeakRef).toBeUndefined();
     expect(api.isWebAssemblyGlobal).toBeUndefined();
+    expect(api.createWebAssemblyImportCall).toBeUndefined();
     expect(api.isFinalizationRegistry).toBeUndefined();
     expect(api.supportsHTMLDDA).toBe(false);
   });
@@ -31,6 +32,10 @@ describe('Node add-on API', () => {
     expect(addon.isWebAssemblyGlobal(global)).toBe(true);
     expect(addon.isWebAssemblyGlobal({})).toBe(false);
     expect(addon.isWebAssemblyGlobal(new Proxy(global, {}))).toBe(false);
+  });
+
+  it('exposes Wasm import conversion only when the native backend is enabled', () => {
+    expect(typeof addon.createWebAssemblyImportCall).toBe(addon.createContextHandle ? 'function' : 'undefined');
   });
 
   itPassesWith('htmlDDA')('allocates an undetectable callable through the native backend', () => {

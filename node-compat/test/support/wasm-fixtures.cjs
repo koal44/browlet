@@ -2,7 +2,7 @@
 
 // Tiny binary fixtures, with Wasm instruction bytes at each call site. No WAT
 // compiler, copied engine test harness, or downloaded dependency is required.
-const kind = { function: 0, table: 1, memory: 2, global: 3 };
+const kind = { function: 0, table: 1, memory: 2, global: 3, tag: 4 };
 function binary({ types = [[[], [0x7f]]], imports = [], functions = [],
   tables = [], memories = [], globals = [], exports = [], start } = {}) {
   const sections = [];

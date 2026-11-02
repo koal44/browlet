@@ -87,7 +87,10 @@ describe('WebAssembly implementation', () => {
 function fixture() {
   const realm = new TestRealm();
   const tasks: { source: TaskSourceKey; steps: () => void; }[] = [];
-  const world = new BindingWorld<JSEnvironment & { realm: TestRealm; }>(webAssemblyIDLDefinitions);
+  const world = new BindingWorld<JSEnvironment & { realm: TestRealm; }>(webAssemblyIDLDefinitions, {
+    // This standalone host has no HTML caller environment to capture.
+    getIncumbentEnvironment: () => undefined,
+  });
   const binding = world.register(realm, (ctx) => ({
     realm, InternalPromise: ctx.InternalPromise,
     runInParallel: (steps) => { queueMicrotask(steps); },

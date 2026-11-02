@@ -16,6 +16,7 @@
 #include "vm-imports.h"
 #include "vm-modules.h"
 #include "wasm-completion.h"
+#include "wasm-functions.h"
 
 namespace node_compat {
 namespace {
@@ -27,6 +28,7 @@ void Initialize(v8::Local<v8::Object> exports, v8::Local<v8::Value>,
   InitializeVmImports(exports, context, vm_data);
   InitializeVmModules(exports, context, vm_data);
   InitializeWasmCompletion(exports, context, vm_data);
+  InitializeWasmFunctions(exports);
   InitializeCodeGeneration(exports);
   InitializeExceptionReporting(exports, context, vm_data);
   InitializeTemporal(exports);

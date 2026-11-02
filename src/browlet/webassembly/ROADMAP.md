@@ -900,6 +900,163 @@ Generated constructor/dictionary types are connected. As for the preceding
 native interfaces, generated types for the retained native instance members
 remain a Binding dependency. The next section is §5.6, Exported Functions.
 
+### §5.6 first slice: Exported Functions and the host-callback boundary
+
+The [exported-function tests](../../../test/browlet/webassembly/exported-functions.test.ts)
+exercise native functions through Browlet's author realms. The function object,
+address/cache, Wasm execution, and primitive conversions belong to V8; there is
+no Web IDL interface to generate. Exported functions retain their native
+identities; the adapter below wraps their JavaScript imports.
+
+Thirteen passing checks cover builtin name/length descriptors and nonconstruction;
+alias and cross-realm re-export identity; numeric conversion and argument order;
+missing/surplus arguments; scalar and multiple-result shapes and allocation realms;
+externref/funcref identity; vector-signature rejection before coercion; callee-realm
+traps; strict host-call receivers; multi-value host iterables and arity checking;
+and preservation of JavaScript/Wasm exception identities. The fixtures spell out
+their Wasm declarations and build only small, closed binary sections.
+**Host integration:** The specification's “create a host function” algorithm
+captures incumbent settings when a JavaScript function is imported. Each later
+invocation prepares script execution in the function's realm, prepares a callback
+with those stored settings, and cleans up both on return or throw. These steps
+are the browser embedder's responsibility. V8's successful call/conversion behavior
+does not supply Browlet's modeled HTML entries.
+
+`createInstance()` and `instantiateModule()` share a lazy import adapter;
+byte-input instantiation reaches the latter. It uses captured native import
+metadata to wrap only JavaScript function imports as V8 reads their fields.
+Fresh proxy targets preserve frozen import objects, getter receivers, duplicate
+lookup order, and abrupt completion. Native metadata omits the same compile-time
+builtins and string constants as V8's import lookup. Function-valued externref
+globals remain ordinary data.
+
+Native Wasm functions pass through unchanged: `InstanceBuilder::ProcessImportedFunction()`
+retains native function references before resolving the call specifically to
+preserve their identity. JS Engine recognizes these through zero growth of a
+private zero-length funcref table. That check accepts native Wasm functions,
+rejects JS/bound/proxied functions without reading author properties, and neither
+stores the candidate nor changes the table. The inline HACK comment records why
+this public-API check is used instead of a V8 patch or internal headers.
+
+For JavaScript imports, the adapter captures settings at registration and uses
+the original callable's realm hooks on each invocation. Associated-realm lookup
+is deferred until invocation, so even an already-revoked callable Proxy can be
+imported and fails only when called. Preparation and cleanup now pass for all
+three instantiation paths and for nested callbacks that throw. Re-export identity,
+frozen data/accessor imports, builtin/import alignment, bound/proxied callbacks,
+revocation timing, and captured-intrinsic checks protect the integration.
+
+Byte-input instantiation saves its initiating settings across compilation and
+restores them around the later import reads. The internal Promise observer is
+a Node host function, so the custom engine's Promise hooks do not supply its
+HTML incumbent automatically. Without this local accommodation, callback capture
+throws during the continuation. A foreign-compilation regression verifies that
+both import getters and later callbacks retain the initiating settings instead
+of adopting the compiler's realm; cleanup restores the preceding state.
+
+The consolidated adapter uses `captureEnvironment()` and its
+`WebIDLEnvironment | null` result, including null for unbound hosts. Attached
+browser environments still use the same incumbent lookup; the typed callback
+environment does not supply the missing settings in this internal Promise
+continuation, so the local accommodation remains necessary.
+
+The import argument is intentionally an IDL `object`, not a recursively converted
+callback dictionary. Both the native-interface constructor override and the
+namespace operation still perform their declared Web IDL conversion. The adaptation
+belongs to Wasm's type-directed import algorithm; functions can also be
+ordinary externref-global data and must not all be wrapped indiscriminately.
+The Instance constructor and both instantiate overloads now explicitly request
+entry-time incumbent capture with `overrideCapturesIncumbent: true`. Binding cannot
+infer that requirement from an opaque `object` type. The existing native function entry observes B before the
+host implementation runs, so A calling B to register C's callback saves B while
+later invocation enters C. The constructor uses a native function as its existing
+Proxy's construct trap; it needs neither a second constructor Proxy nor a new
+addon API. Byte-input registration also saves B through later compilation and
+import reads.
+
+Member overrides receive `{ relevant, callee, incumbent }` followed by converted
+values. Capture stays opt-in because native entry and incumbent lookup add work;
+ordinary overrides such as the Fetch constructors leave it disabled. Binding
+never parses override signatures. Its existing callback conversions and injected
+arguments still supply their own capture requirements, and forwarding accessors
+propagate those requirements. See [Web IDL's contract](../../web-idl/README.md).
+
+The shared function factory preserves the receiver through a native apply trap.
+The broader tests exposed an existing raw-native-entry normalization of undefined,
+null, and primitive receivers; passing the original receiver as a trap argument
+fixes that without changing the addon. Explicit capture also works with the
+ordinary constructible function factory, preserving prototype identity, newTarget,
+and argument transport without consulting author iterators. Automatic selection
+for other callback-typed constructors remains its separate documented dependency.
+The independent Web IDL callback suite passes its 15 cases on Node 24 with the
+addon, including its existing preparation/cleanup checks.
+
+**Result-conversion integration:** V8's `src/builtins/wasm-to-js.tq` converts the
+result after calling JavaScript. The addon now reads the compiled Module's bytes
+through public V8 APIs and generates an import/re-export bridge with the original
+signature. JS Engine supplies that converted call; the existing HTML callback
+`try/finally` encloses scalar coercion and multi-value iteration, including throws.
+No Node or V8 patch is needed. A weak cache owns decoded metadata and compiled
+bridges per Module/signature; individual callbacks keep their own instances.
+
+The reader preserves recursive groups and indexed reference types rather than
+implementing Wasm conversion. Native reflection still determines visible import
+order, excluding compile-time builtins and string constants. A captured Instance
+exports getter and private tuple iterable protect conversion from author prototype
+replacement. Native tests cover mixed imports, canonical reference identity,
+conversion-error realms, revoked Proxies, disabled author compilation, GC lifetime,
+and worker isolates. [The addon contract](../../../node-compat/README.md#webassembly-imported-function-conversion)
+records the supported encodings and the extra call/instantiation cost.
+
+**Remaining boundaries:** Stock Node cannot recover signatures from arbitrary
+Modules and retains the four stock-only expected result-scope failures. Unknown experimental
+binary encodings fail explicitly on first adapted invocation. Extend the reader
+before enabling shared-everything, descriptor, continuation, or string-view types
+and exact-function imports, or adopting a runtime that enables those proposals
+by default. These are known limits, not an exhaustive proposal audit. Custom
+page-size limits are future compatibility work beyond the current V8 decoder;
+ordinary shared memories and memory64 already work.
+
+Production validation on 2 November 2026: all 33 exported-function/callback
+tests pass with each rebuilt addon. The 382-test WebAssembly/JS Engine selection
+has no ordinary failures with Node 24, Node 26, or custom Node plus addon; the
+existing engine-dependent expected failures remain. All three stock runs retain
+exactly the same seven ordinary failures (four result scopes and three incumbents).
+The 355-case native suite passes on all three bases, with the existing custom-only
+installer skip. Typechecking, Web IDL type contracts, and scoped ESLint pass.
+
+The A-to-B-to-C regressions cover constructor, Module, and byte instantiation.
+They pass with the addon; stock backends still save A because JavaScript alone
+cannot observe B's author frame at entry. The foreign async fixture supplies an
+active Document so completion tasks can run. No Node or V8 patch or addon rebuild was needed.
+
+After consolidation review on 2 November, Eric approved classifying those seven
+stock-only limitations as expected failures. The required assertions remain
+unchanged: result conversion requires `wasmImportCalls`, and incumbent capture
+requires `platformEntries`. All three addon builds still require ordinary passes.
+
+Earlier validation on 2 November 2026, before the result-conversion bridge,
+including the grouped override environments:
+the 32 exported-function/callback checks report 28 passes and four ordinary
+result-conversion failures on all three addon builds. Without the addon, the three
+incumbent checks also fail (25 passes, seven ordinary failures). The final
+211-test selection covers explicit capture, native interface and namespace overrides,
+JS Engine, WebAssembly, Window messaging, and Location across all six configurations,
+with no additional failures. Complete Node 24/addon and custom/addon unit runs each
+cover 18,426 tests with only those four ordinary failures; existing expected failures
+and idle skips remain unchanged. Both full runs complete unsharded with two workers.
+Those earlier runs used an 8 GiB launcher workaround. Consolidation replaces it
+with Vitest 5.0.5, which fixes the strong mock registry retaining discarded Window
+realms in reused workers. The launcher again preserves Node's normal heap limit
+and caller options. Typechecking, the separate Web IDL type contracts, scoped
+ESLint, and whitespace checks pass.
+
+The full §5.6 text was read, including the value/address conversion algorithms.
+Numeric/reference cases and earlier Memory/Table address checks retain native
+conversion. Exported GC-object and exception-reference behavior still needs its
+type-specific review in §§5.8–5.9. This slice does not complete §5.6 or establish
+that a Node/V8 patch is necessary for the remaining host integration.
+
 ## 2. Web API
 
 | Sections, in order | Browser work |
@@ -1000,8 +1157,10 @@ The remaining native constructors and interface members remain separate review w
 
 The `JSTag` getter and Module/Instance/Memory/Table/Global constructors are now bound;
 the cross-realm JSTag limitations above are accepted engine limitations for now.
-§5.5's Global binding fixes its three constructor regressions. The next
-document-order section is §5.6, Exported Functions. The native imports()/exports() reflection methods retain
+§5.5's Global binding fixes its three constructor regressions. §5.6's imported
+callback lifecycle now encloses native result conversion with the addon; stock
+mode and unsupported experimental binary encodings remain explicit limitations.
+The native imports()/exports() reflection methods retain
 their reviewed behavior; their generated static-method types remain to be connected
 without replacing the accepted native descriptor property order.
 Retain the accepted compiled-module startup timing limitation.

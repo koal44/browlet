@@ -199,6 +199,43 @@ registry retaining their contexts. [Tests](test/wasm-completion.test.cjs) cover
 deferred success/error delivery, thenables, context separation, native defaults,
 detachment, collection, and worker teardown.
 
+### WebAssembly imported function conversion
+
+`createWebAssemblyImportCall(module, importIndex, callback, instanceConstructor)`
+returns a lazy callable that finishes native result conversion before returning.
+The index follows native `Module.imports()`, including visible non-function imports.
+JS Engine supplies the instantiating realm's captured Instance constructor;
+HTML enters and exits the original callback's script/settings scope around the call.
+
+[wasm-functions.cc](addon/wasm-functions.cc) uses public V8 APIs to copy a compiled
+Module's bytes and compile generated import/re-export bridges. The narrow
+[metadata reader](addon/wasm-functions.cjs) preserves the complete type section,
+including recursive groups and indexed reference types. V8 still owns conversion
+and type validation. A weak Module cache retains metadata and compiled bridges by
+signature; each callback gets its own lazily instantiated bridge. That adds a Wasm
+round trip. Callback identities and foreign realms are not retained by the cache.
+
+The internal bridge compiler does not apply author byte-compilation policy to
+an already compiled Module. It neither changes that policy nor enables reflection
+flags or replaces engine callbacks. The constructor and exports accessor are
+captured, and converted multi-value results use a private iterable so later
+native conversion cannot invoke an author-replaced Array iterator after cleanup.
+
+The reader handles standard function/struct/array types, subtypes, recursive
+groups, references, and all five import kinds. Known unsupported proposal
+encodings include shared-everything, descriptor, continuation, and string-view
+types, plus exact-function imports. The corresponding V8 proposals are disabled
+by default on all three supported bases. Extend the reader before enabling them
+or adopting a runtime that enables them by default; this is not a prerequisite
+for the next JS API section. Ordinary shared memories and memory64 already work.
+Custom page-size limits are future compatibility work: the current V8 decoder
+does not accept that encoding. This is a list of known limits, not a claim of
+exhaustive proposal coverage. Unsupported encodings raise an error on first
+adapted invocation rather than silently shortening the callback scope.
+Stock mode has no Module-byte access and retains the documented result-scope gap.
+See [native regression tests](test/wasm-functions.test.cjs) and
+[HTML callback tests](../test/browlet/webassembly/exported-functions.test.ts).
+
 ### WebAssembly modules
 
 `new WebAssemblyModule(bytes, { context, identifier })` is an addon extension:
