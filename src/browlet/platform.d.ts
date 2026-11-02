@@ -169,6 +169,10 @@ export interface StructuredSerializeOptions {
   transfer?: Iterable<object>;
 }
 
+export interface IdleRequestOptions {
+  timeout?: number;
+}
+
 export interface EventInit {
   bubbles?: boolean;
   cancelable?: boolean;
@@ -393,6 +397,8 @@ export type VoidFunction = () => void;
 export type ReportingObserverCallback = (reports: Array<Report>, observer: ReportingObserver) => void;
 
 export type EventHandlerNonNull = (event: Event) => any;
+
+export type IdleRequestCallback = (deadline: IdleDeadline) => void;
 
 export type MutationCallback = (mutations: Array<MutationRecord>, observer: MutationObserver) => void;
 
@@ -1766,6 +1772,8 @@ export interface Window extends EventTarget {
   postMessage(message: any, options?: WindowPostMessageOptions): void;
   get event(): Event | undefined;
   set event(value: unknown);
+  requestIdleCallback(callback: IdleRequestCallback, options?: IdleRequestOptions): number;
+  cancelIdleCallback(handle: number): void;
   getComputedStyle(elt: Element, pseudoElt?: string | null): CSSStyleProperties;
   readonly isSecureContext: boolean;
   readonly crossOriginIsolated: boolean;
@@ -1891,6 +1899,7 @@ export interface Window extends EventTarget {
   ServiceWorker: ServiceWorkerConstructor;
   PromiseRejectionEvent: PromiseRejectionEventConstructor;
   Window: WindowConstructor;
+  IdleDeadline: IdleDeadlineConstructor;
   Event: EventConstructor;
   CustomEvent: CustomEventConstructor;
   EventTarget: EventTargetConstructor;
@@ -1986,6 +1995,16 @@ export interface Window extends EventTarget {
 export interface WindowConstructor extends Ctor<EventTargetConstructor> {
   readonly prototype: Window;
   [Symbol.hasInstance](value: unknown): value is Window;
+}
+
+export interface IdleDeadline {
+  timeRemaining(): number;
+  readonly didTimeout: boolean;
+}
+
+export interface IdleDeadlineConstructor {
+  readonly prototype: IdleDeadline;
+  [Symbol.hasInstance](value: unknown): value is IdleDeadline;
 }
 
 export interface Event {

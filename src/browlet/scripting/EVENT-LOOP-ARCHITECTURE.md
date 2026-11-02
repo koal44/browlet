@@ -7,7 +7,8 @@ delivery. The [scripting roadmap](ROADMAP.md) owns unfinished algorithms;
 
 ## Browlet's decision
 
-Each Agent owns one unique EventLoop. Several loops can share a Node isolate
+Each Agent owns one unique EventLoop; its constructor also associates the loop
+with that Agent. Several loops can share a Node isolate
 and thread; a loop is not a Window, Document, realm, or browsing context.
 The EventLoop owns task queues, per-source queue associations, the current task,
 the microtask/checkpoint boundary, and Window rendering-opportunity state.
@@ -118,13 +119,37 @@ through that update and rebuilt for the next task. Autofocus flushing applies
 only to top-level traversables. The production refresh host and rendering-phase
 owners remain unfinished; the producer does not implement those operations.
 
+After task accounting or a checkpoint-only host turn, a Window loop with no
+runnable work begins its idle-period steps. Blocked tasks do not prevent this.
+Its deadline callback reads current same-loop timer estimates and pending
+render/refresh inputs, caps the deadline at 50ms from the idle start, and coarsens
+it for each receiving Window. Timer estimates are translated from their global's
+origin into shared time before comparison.
+
+Each Window owns a `WindowIdleCallbacks` containing its pending/runnable lists,
+registration IDs, deadlines, and wake-ups. Window forwards the two author API
+methods; the loop starts periods on the owned object and document cleanup clears it.
+Idle callbacks and timeout callbacks use the shared idle task source and Binding's
+conversion/reporting. Registration and Document reactivation request one host
+turn; reposting within a period schedules one deadline wake-up, without polling.
+Timeout waits use elapsed time, while their delivery tasks require a fully active
+Document. Destruction releases callbacks and host timers. Deadline closures retain
+their own period start so a retained IdleDeadline cannot acquire a later budget.
+
+`EventLoopInit.idleRendering` supplies pending-frame predictions and refresh rate
+when a rendering owner is connected. The current headless runtime has no frame
+producer, so only its 50ms and timer bounds apply. An empty idle period never
+requests another turn just because the loop remains idle. The owning
+[roadmap](ROADMAP.md#html-8173-idle-period-processing) identifies each dependency
+and the timer-clock specification conflict.
+
 `env.queueTask(source, steps, options?)` queues work for the execution owner
 using the shared source keys in Infra. `scripting/tasks.ts` maps those keys to
 source identities. `BrowletRealm.queueGlobalTask()` captures the global's associated
 Document and routes through its Agent. Options carry timer nesting metadata.
 Low-level queueing can instead select an explicit loop and Document.
-The future element wrapper must route through the element's relevant global,
-not its current node document after adoption. Avoid implied-loop/Document calls.
+Element tasks route through the element's relevant global, not its current node
+document after adoption. Avoid implied-loop/Document calls.
 
 Fetch has an explicit callback destination, which can differ from the body
 stream's owner. Fetch's `queueFetchTask()` selects a parallel queue or calls

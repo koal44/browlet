@@ -1217,6 +1217,7 @@ export class DocumentImpl extends NodeImpl {
     if (!this.salvageable) {
       for (const source of global.eventSources) source.close();
       global.timers.clear();
+      this.getRelevantGlobalObject()?.idleCallbacks.clear();
     }
     env.userAgent.blobURLStore.removeForEnvironment(env);
     // TODO: connect fullscreen, media, service-worker, and lock cleanup as implemented.

@@ -870,7 +870,12 @@ of adding reverse lookups or duplicate lifetime flags.
 
 HTML owns tasks, activity gating, and checkpoint policy. JS Engine supplies the
 microtask-queue backend; Node wake-ups do not choose HTML ordering. Each HTML
-Agent's event loop shares its queue with the Agent's realms.
+Agent's event loop shares its queue with the Agent's realms. The loop retains
+its owning Agent; Window idle processing uses that Agent's existing Window set.
+Each Window composes a `WindowIdleCallbacks` for its callback lists and timeout
+races; the loop supplies the deadline and dispatches their document-gated idle tasks.
+Binding owns callback conversion, exception reporting, and `IdleDeadline` projection. Rendering
+predictions remain an explicit input from the unfinished rendering owner.
 [The event-loop architecture](browlet/scripting/EVENT-LOOP-ARCHITECTURE.md) owns
 the detailed contract and backend accommodations.
 
@@ -1204,8 +1209,10 @@ parsing and geometry integrations must be reviewed against those boundaries.
 A partial interface/dictionary/namespace amends its primary implementation.
 Keep each contribution as a separate partial declaration with its feature owner,
 or beside the primary declaration until that owner exists. Its implementation
-members belong to the primary object. An external package can export a declaration
-contribution and use an explicit integration seam. A stateful interface mixin
+members belong to the primary object, which can delegate cohesive state and
+behavior to an owned object, as Window does with `WindowIdleCallbacks`. Binding
+still targets the primary object's members. An external package can export a
+declaration contribution and use an explicit integration seam. A stateful interface mixin
 gets a `FooMixin` composed into each includer. Includers forward its members through
 their own API; callers do not need access to the composed mixin. Declaration-only
 mixins need no runtime class. Binding projects this complete implementation graph.

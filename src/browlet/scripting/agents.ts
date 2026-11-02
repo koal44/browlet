@@ -35,6 +35,7 @@ export abstract class Agent {
   protected constructor(canBlock: boolean, eventLoop: EventLoop) {
     this.canBlock = canBlock;
     this.eventLoop = eventLoop;
+    eventLoop.agent = this;
     this.signifier = Symbol('Agent');
   }
 

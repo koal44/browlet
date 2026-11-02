@@ -20,6 +20,9 @@ export const renderingTaskSource =
 // https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html#timer-task-source
 export const timerTaskSource = createTaskSource('timer');
 
+// https://w3c.github.io/requestidlecallback/#start-an-idle-period-algorithm
+export const idleTaskSource = createTaskSource('idle');
+
 // https://w3c.github.io/FileAPI/#task-source
 export const fileTaskSource = createTaskSource('file reading');
 

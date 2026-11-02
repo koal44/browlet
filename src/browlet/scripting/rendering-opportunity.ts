@@ -66,10 +66,6 @@ export class WindowRenderingProducer {
 
   #updateRendering(): void {
     const frameTimestamp = this.#agent.eventLoop.lastRenderOpportunityTime;
-    if (frameTimestamp === null) {
-      throw new InternalError('A rendering task needs a rendering-opportunity time');
-    }
-
     const documents = this.#collectRenderableDocuments();
     let unsafeStyleAndLayoutStartTime: UnsafeMoment | null = null;
     for (const phase of renderingUpdatePhases) {

@@ -9,7 +9,7 @@ export {
 export { WindowEventHandlersMixin, windowEventHandlersIDL } from './window-event-handlers';
 export {
   createTaskSource, EventLoop, type EventLoopInit, type TaskTimingHooks, type LongTaskReporter,
-  type TaskQueueSelector, Task, type TaskSource,
+  type TaskQueueSelector, type WindowIdleRendering, Task, type TaskSource,
 } from './event-loop';
 export { installHostHooks, installRealmHostHooks, jsEngineTaskSource } from './host-hooks';
 export { JSExecutionContext } from './execution-context';
@@ -45,7 +45,7 @@ export {
 export { SpeculationRulesParseResult, SpeculationRuleSet } from './speculation-rules';
 export {
   domManipulationTaskSource, userInteractionTaskSource, networkingTaskSource,
-  navigationAndTraversalTaskSource, renderingTaskSource, fileTaskSource, timerTaskSource,
+  navigationAndTraversalTaskSource, renderingTaskSource, fileTaskSource, timerTaskSource, idleTaskSource,
   storageTaskSource, permissionsTaskSource, reportingTaskSource, automationTaskSource, taskSources, type QueuedTaskHandle,
 } from './tasks';
 export { GlobalTimers, type TimerAction, type GlobalTimersOptions, type TimerKey } from './timers';

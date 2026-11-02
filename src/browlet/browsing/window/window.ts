@@ -10,8 +10,8 @@ import type { CSSStylePropertiesImpl } from '../../../stylelet/index';
 import { ElementTag } from '../../dom/nodes/element-definitions/index';
 import {
   ImportMap, mergeExistingAndNewImportMaps, domManipulationTaskSource, WindowEventHandlersMixin, type EventHandlerCallback,
-  type ImportMapParseResult,
-  type BrowletGlobalObject, type SpecifierResolutionRecord, type SpeculationRulesParseResult, type TimerAction,
+  type ImportMapParseResult, type BrowletGlobalObject, type SpecifierResolutionRecord,
+  type SpeculationRulesParseResult, type TimerAction,
 } from '../../scripting/index';
 import { type EventImpl, EventTargetImpl } from '../../dom/events/index';
 import type { TrustedTypePolicyFactoryImpl } from '../policy/trusted-types/index';
@@ -30,6 +30,7 @@ import type { BrowsingContext, Navigable } from '../navigation/index';
 import { LocationImpl } from './location';
 import { BarPropImpl } from './bar-prop';
 import type { WindowProxyHandle } from './window-proxy';
+import { WindowIdleCallbacks, type IdleRequestCallback, type IdleRequestOptions } from './idle-callback';
 
 /** Owns a document global and forwards shared browser facilities to its global-scope mixin. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-window-object
@@ -60,6 +61,8 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   readonly toolbar: BarPropImpl;
   /** Stable Navigator object for this Window and its clientInformation alias. */
   readonly navigator: NavigatorImpl;
+  /** Idle callback registrations and scheduling for this Window. */
+  idleCallbacks: WindowIdleCallbacks;
   /** Last assigned status string, with no effect on browser UI. */
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-window-status
   status = '';
@@ -87,6 +90,7 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
     this.statusbar = new BarPropImpl(env);
     this.toolbar = new BarPropImpl(env);
     this.navigator = new NavigatorImpl(env);
+    this.idleCallbacks = new WindowIdleCallbacks(env);
     this.#windowEventHandlersMixin = new WindowEventHandlersMixin(this);
     this.#windowSessionStorageMixin = new WindowSessionStorageMixin(this);
     this.#windowLocalStorageMixin = new WindowLocalStorageMixin(this);
@@ -299,6 +303,16 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   /** Cancel an active interval or timeout using its converted timer ID. */
   clearInterval(id: number): void {
     this.getWindowOrWorkerGlobalScopeMixin().clearTimer(id);
+  }
+
+  /** Register a converted callback with this Window's idle scheduler. */
+  requestIdleCallback(callback: IdleRequestCallback, options: IdleRequestOptions): number {
+    return this.idleCallbacks.request(callback, options);
+  }
+
+  /** Cancel a registration in this Window's pending or runnable idle callbacks. */
+  cancelIdleCallback(handle: number): void {
+    this.idleCallbacks.cancel(handle);
   }
 
   /** Queue a converted callback on this Window's event loop. */

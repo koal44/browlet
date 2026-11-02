@@ -114,6 +114,13 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
 
 ## Scheduling and callback context
 
+- **`window-idle-rendering`:** `requestIdleCallback`, cancellation, deadlines,
+  and timeout delivery are implemented for the headless Window runtime.
+  AnimationFrameProvider and a production rendering host must still supply
+  pending-frame predictions and refresh rate through `EventLoopInit.idleRendering`.
+  The implementation does not invent a display rate or simulate rendering. See the
+  [idle-period dependencies](browlet/scripting/ROADMAP.md#html-8173-idle-period-processing).
+
 - **Forcibly aborting running scripts is unsupported and deferred.** Browlet,
   page JavaScript, and the Node caller share a JavaScript execution thread. An
   infinite loop prevents same-thread callers, timers, and abort listeners from

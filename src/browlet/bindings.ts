@@ -59,6 +59,7 @@ import { webStorageIDLDefinitions } from './storage/index';
 import {
   locationIDL, barPropIDL, WindowImpl, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
   windowIncludesWindowEventHandlersIDL, WindowProxyHandle, windowProxyDefinition,
+  windowIdleCallbackIDL, idleDeadlineIDL, idleRequestCallbackIDL, idleRequestOptionsIDL,
 } from './browsing/window/index';
 import { originIDL } from './browsing/index';
 import {
@@ -322,6 +323,7 @@ export const browletDefinitions = [
   windowIDL,
   windowProxyDefinition,
   windowEventIDL,
+  windowIdleCallbackIDL, idleDeadlineIDL, idleRequestCallbackIDL, idleRequestOptionsIDL,
   windowIncludesWindowOrWorkerGlobalScopeIDL,
   windowIncludesWindowEventHandlersIDL,
   ...domIDLDefinitions,

@@ -1779,6 +1779,101 @@ Validation: all 40 focused rendering and task tests pass on each of the six
 runtime configurations, including six new rendering cases. Typechecking,
 declaration contracts, touched-file ESLint, and diff checks pass.
 
+### HTML §8.1.7.3 idle-period processing
+
+The [idle branch](https://html.spec.whatwg.org/multipage/webappapis.html#idle-deadline-computation)
+now runs after task accounting, on a turn with no runnable task, and after a
+checkpoint-only host turn. The loop retains its Agent to select Window loops
+and their existing Window collection. Both render/idle timestamps start at zero.
+Blocked Document tasks do not prevent idleness; work queued during a checkpoint
+does. Idle processing does not request another turn unless its consumer queues work.
+
+The supplied deadline callback recomputes the 50ms cap from the period's start,
+the earliest timer estimate across same-loop Windows, and the next refresh when
+rendering is pending. It coarsens the result for each receiving Window's isolation
+capability. Timer estimates stay with GlobalTimers and reflect its existing
+completion, destruction, and active-time suspension behavior.
+
+`SPEC_CLASH(idle-timer-time-origin)`: HTML's
+[run steps after a timeout](https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html#run-steps-after-a-timeout)
+stores current-high-resolution-time-plus-delay in the active-timer map. That
+timestamp is relative to the global's time origin. The idle algorithm compares
+it directly with an unsafe shared timestamp. Browlet adds the timer owner's
+time origin before comparing, preserving the intended wait when Windows have
+different origins. The regression checks 40ms and 12ms timers with distinct
+origins and a shorter timer on an unrelated loop. This choice reconciles the
+two clock domains; it does not rely on a browser-behavior comparison.
+
+The subsequent Request Idle Callback slice connects this calculation directly
+to each Window's pending/runnable lists and delivery. `EventLoopInit.idleRendering`
+now contains only the remaining rendering prediction: the Window's
+[animation-frame callback map](https://html.spec.whatwg.org/multipage/imagebitmap-and-animations.html#list-of-animation-frame-callbacks)
+or the rendering host's predicted updates, plus its refresh rate. AnimationFrameProvider
+and the production rendering host remain unfinished. The headless runtime supplies
+no fake rendering state or display rate; its 50ms and timer bounds still apply.
+The [idle-period tests](../../../test/browlet/scripting/idle-period.test.ts) cover
+live timer/render changes, per-Window precision, task/checkpoint ordering,
+inactive Documents, non-Window agents, and retained deadlines across periods.
+
+Initial-slice validation: all 68 focused idle-period, timer, task, activity, rendering, and
+stable-state cases pass on all six runtime configurations, including 14 new
+idle-period cases. Checkpoint tests run in real host turns, outside the test
+runner's microtasks. Typechecking, declaration contracts, touched-file lint,
+and diff checks pass.
+
+### Request Idle Callback §§4–7
+
+The [21 May 2025 draft](https://www.w3.org/TR/2025/WD-requestidlecallback-20250521/)
+is checked out at `_web-platform/specs/w3c-requestidlecallback`, commit `c460478`.
+Sections 1–2 are informative; section 3 establishes conformance rules. Sections
+4–5 are implemented by a `WindowIdleCallbacks` owned by each Window, a separate
+Window partial declaration, and `IdleDeadlineImpl`. Window retains the two API
+forwarding methods; the owned object holds the lists, counter, deadline, and
+delivery/wake-up bookkeeping. Binding converts callbacks,
+options, handles, and deadline arguments and reports callback exceptions.
+
+Pending callbacks become runnable at the next eligible period. Existing runnable
+callbacks precede reposted work; each callback is a separate idle-source task.
+Ordinary runnable work can end a period early. A single host timer waits for that
+period's deadline before trying another period; no idle polling is installed.
+Expired or unavailable budgets leave registrations pending, as permitted by the
+specification; a positive timeout supplies an independent delivery path.
+
+Unlike HTML timers, §4.1 waits elapsed time, not fully-active time. Expired waits
+queue tasks in absolute-deadline order, with registration order breaking ties;
+delivery still uses HTML's Document activity gate. Idle, timeout, and cancellation
+all remove the same registration, so a queued losing task cannot deliver twice.
+Unsalvageable Document cleanup cancels retained callbacks and native wake-ups.
+
+The internal getDeadline callback returns our existing coarsened `Moment` rather
+than an untyped DOM timestamp. `timeRemaining()`
+subtracts precision-limited readings in the same shared clock domain, clamps at
+zero, and exposes milliseconds. §6's isolation-dependent precision is applied to
+both readings. Each period retains its own start: a regression first observed an
+old deadline incorrectly moving from 1050 to 1110 when a later period began.
+That closure is corrected. Section 7 contains only a security placeholder.
+
+`SPEC_CLASH(idle-deadline-time-origin)`: Request Idle Callback §4.3 subtracts
+[current high resolution time](https://www.w3.org/TR/hr-time-3/#dfn-current-high-resolution-time),
+which is relative to a global's time origin, from the shared absolute deadline
+supplied by HTML. Browlet subtracts two coarsened shared moments, preserving the
+specified remaining duration independently of the Window's time origin. Blink's
+`core/scheduler/idle_deadline.cc` likewise subtracts `TimeTicks::Now()` from its
+`TimeTicks` deadline (and coarsens the resulting duration). This clock-domain
+repair is separate from the timer-estimate conflict described above.
+
+Optional hidden-page throttling and timeout padding are not enabled. Rendering
+prediction remains the dependency described above; this does not add animation
+frames, a renderer, polling, or addon/engine facilities.
+
+Validation: 91 focused idle-callback, idle-period, timer, task, activity,
+rendering, and stable-state cases pass in each of the six runtime configurations
+(official Node 24/26 and custom Node, addon off/on). The 22 new idle-callback
+cases cover projected API behavior and controlled scheduling, cancellation,
+timeout races, callback exceptions, inactivity, cleanup, and clock precision.
+The retained-deadline regression also passes. Typechecking, declaration contracts,
+touched-file lint, and diff checks pass; no new expected failures were needed.
+
 ### HTML §8.1.7.3 microtask-checkpoint audit
 
 The checkpoint's reentrancy guard, shared-queue drain, current-task bookkeeping,
@@ -2047,7 +2142,10 @@ The remaining dependencies stay explicit:
 The [pause tests](../../../test/browlet/scripting/event-loop-pause.test.ts) cover
 real blocking, retained execution state, suppressed delivery and coalesced
 wake-ups, clock/attribution inputs, host failure cleanup, and loop-local guarding.
-Idle-period timestamp behavior is covered with the idle-period implementation.
+An already-requested checkpoint also leaves the idle-period timestamp unchanged
+until the paused task resumes. All seven cases and the adjacent scheduling suites
+pass on all six runtime configurations (86 tests per configuration). Typechecking,
+type contracts, touched-file ESLint, and diff checks pass.
 
 ### HTML §§8.1.7.4–8.1.7.5 task sources and cross-specification delivery
 
@@ -2161,7 +2259,7 @@ evaluation and automation do not acquire this gate automatically.
 | DOM checkpoint consumers | Custom-element reactions; MutationObserver and signal-slot delivery already use the existing checkpoint |
 | Task routing/lifecycle | Worker restrictions and complete loop teardown; element-task routing through the retained relevant global is implemented |
 | Global utilities/timers | Origin/base64/image APIs and isolation exposure; worker suspension; handler timing; TrustedScript/CSP/classic-script string timers |
-| Rendering/idle | AnimationFrameProvider, real rendering hooks, idle callbacks, deadlines, and lifecycle cleanup |
+| Rendering/idle | Idle API, callback delivery, timeouts, and cleanup are connected; AnimationFrameProvider and the production rendering/refresh host remain |
 | Workers/worklets | Real globals/settings, production callers of Agent allocation, execution readiness, termination, and engine enforcement |
 
 Secure-context exposure, structured cloning, Fetch, reportError, and function timers already
@@ -2222,7 +2320,7 @@ media, or parser caller is not by itself a reason to omit the scheduling operati
 | [Await a stable state](https://html.spec.whatwg.org/multipage/webappapis.html#await-a-stable-state) | Implemented on `env.awaitStableState()`, with shared-queue idle wake-ups and optional parallel continuation. | Image/media algorithms still need to supply their own synchronous sections and continuations; the scheduling operation itself is implemented. |
 | [Spin the event loop](https://html.spec.whatwg.org/multipage/webappapis.html#spin-the-event-loop) | Implemented on `EventLoop.spinUntil()`: suspend modeled state, checkpoint, register the wait, and resume on the original task source with saved state and metadata. | Callers must lower their remaining steps and cleanup into the continuation. The parser already has stylesheet/script continuations to migrate; complete preparation, readiness, nesting, and abort handling belong to its [script runner](../html/parser/ROADMAP.md). Arbitrary synchronous author calls are not resumable through this helper. |
 | [Pause](https://html.spec.whatwg.org/multipage/webappapis.html#pause) | `EventLoop.pauseUntil()` retains the task/stack, samples the current global's clock, and suppresses tasks/checkpoints throughout a caller-supplied synchronous wait. | Dialog and synchronous Fetch callers need real blocking host effects whose goals can progress without this thread's callbacks. A UI host must reflect pending state where necessary. [Record pause duration](https://w3c.github.io/long-animation-frames/#record-pause-duration) separately needs Document frame timing and a pending script entry; its call site is present. |
-| [Window idle periods](https://html.spec.whatwg.org/multipage/webappapis.html#idle-deadline-computation) | Initialize render/idle timestamps, handle the no-runnable-task branch, and calculate the 50ms deadline with timer/render bounds and per-Window coarsening. | Timers already retain expiry estimates, but need to expose the specified deadlines in the shared time domain. Rendering needs animation-frame callback state and refresh/pending-render inputs. The final [start an idle period](https://w3c.github.io/requestidlecallback/#start-an-idle-period-algorithm) call needs that specification's callback lists and delivery algorithm. These do not prevent implementing the preceding HTML steps. |
+| [Window idle periods](https://html.spec.whatwg.org/multipage/webappapis.html#idle-deadline-computation) | Implemented timestamps, idle branch, live 50ms/timer/render deadline, and per-Window coarsening. Window's idle API, callback lists, task delivery, timeout races, and cleanup are connected. | `WindowIdleRendering` still needs AnimationFrameProvider state and the production rendering/refresh host. Headless delivery uses the 50ms and timer bounds without a fake display rate; see the [idle-period slice](#html-8173-idle-period-processing) and [Request Idle Callback](#request-idle-callback-47). |
 | [Rendering](https://html.spec.whatwg.org/multipage/webappapis.html#update-the-rendering) | Document ordering and the ordered update pipeline are present. | The production refresh host and the owners of individual resize, scroll, animation, layout, paint, and observation steps remain absent; an ordered hook is not an implementation of its operation. |
 | Performance reporting | Task timing and long-task call sites are present. | [Long Tasks reporting](https://w3c.github.io/longtasks/#report-long-tasks) and Long Animation Frames task/script/frame records and algorithms are missing. |
 | Worker rendering/shutdown | Task queues and Agent records exist. | [Worker event-loop processing](https://html.spec.whatwg.org/multipage/webappapis.html#event-loop-processing-model) requires a real WorkerGlobalScope, its closing state, supported dedicated-worker animation callbacks, and the [run a worker](https://html.spec.whatwg.org/multipage/workers.html#run-a-worker) continuation. A closing flag alone cannot implement shutdown. |
@@ -2231,9 +2329,16 @@ media, or parser caller is not by itself a reason to omit the scheduling operati
 The stable-state operation and its parallel-microtask specification clash are
 recorded [above](#html-8173-stable-state-scheduling), followed by the controlled
 spinning operation. These implementations do not close the remaining processing
-model. Element-task routing is also implemented. Pause supplies the loop-owned
-synchronous guard and timing; its host effects and performance owner remain
-separate. The next slice supplies idle-period processing and callbacks.
+model. Element-task routing, HTML's idle-period calculation, and Request Idle
+Callback's API and delivery are also implemented. Pause now supplies the
+loop-owned synchronous guard and timing; its host effects and performance owner
+remain separate. Worker, performance, rendering, and checkpoint operations have
+the exact owner dependencies recorded above.
+
+The available loop-owned scheduling operations in this audit are now covered.
+Continue in document order with §8.1.8 Events. Keep the listed owner/host
+dependencies and native checkpoint questions open; this does not establish
+complete §8.1.7 conformance.
 
 Preserve a single queue for Promise jobs and HTML microtasks. Do not put a
 TypeScript microtask queue beside V8's queue or claim a worker closing flag

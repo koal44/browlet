@@ -1,10 +1,12 @@
 import { InternalError, type TaskCreationOptions } from '../../infra/index';
 import { bindAsyncContext, createMicrotaskQueue, type JSMicrotaskQueue } from '../../js-engine/index';
 
-import { Duration, unsafeSharedCurrentTime, type UnsafeMoment } from '../timing/index';
+import { Duration, monotonicClock, unsafeSharedCurrentTime, UnsafeMoment } from '../timing/index';
 import type { DocumentImpl } from '../dom/nodes/index';
+import type { WindowImpl } from '../browsing/window/index';
 import type { BrowletEnvironment } from '../environment';
 
+import { WindowAgent, type Agent } from './agents';
 import { JSExecutionContext } from './execution-context';
 import type { BrowletRealm } from './realm';
 import { JSScriptOrModule, type Script } from './script';
@@ -14,10 +16,14 @@ import { JSScriptOrModule, type Script } from './script';
 /** Runs an agent's HTML tasks and coordinates its microtask checkpoints. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#event-loops
 export class EventLoop {
+  /** Owning Agent, or null until Agent construction attaches this loop. */
+  agent: Agent | null = null;
   /** Engine queue shared by this Agent's realms, using the selected backend. */
   microtaskQueue: JSMicrotaskQueue;
   /** Most recent rendering opportunity reported by the host. */
-  lastRenderOpportunityTime: UnsafeMoment | null = null;
+  lastRenderOpportunityTime = new UnsafeMoment(monotonicClock, 0);
+  /** Shared timestamp at the start of the latest Window idle period. */
+  lastIdlePeriodStartTime = new UnsafeMoment(monotonicClock, 0);
   /** Explicit context stack for this loop's agent, including retained realm contexts. */
   executionContextStack: JSExecutionContext[] = [];
   /** Incumbent environments retained across host callback entry. */
@@ -34,6 +40,8 @@ export class EventLoop {
   #performingMicrotaskCheckpoint = false;
   /** Work arriving outside an HTML task needs a host checkpoint wake-up. */
   #microtaskCheckpointRequested = false;
+  /** A registration or period deadline needs one idle scheduling opportunity. */
+  #idlePeriodRequested = false;
   #init: EventLoopInit;
   #turnRequested = false;
   #taskQueues = new Set<Set<Task>>();
@@ -93,10 +101,19 @@ export class EventLoop {
     return this.runningExecutionContext?.scriptOrModule?.script ?? null;
   }
 
-  hasRunnableTasks(): boolean {
-    return [...this.#taskQueues].some((queue) =>
-      findFirstRunnableTask(queue) !== undefined,
-    );
+  hasRunnableTasks(exceptSource?: TaskSource): boolean {
+    for (const queue of this.#taskQueues) {
+      for (const task of queue) {
+        if (task.source !== exceptSource && task.isRunnable) return true;
+      }
+    }
+    return false;
+  }
+
+  /** Wake once for a new idle registration or the end of its preceding period. */
+  requestIdlePeriod(): void {
+    this.#idlePeriodRequested = true;
+    this.#requestTurnIfNeeded();
   }
 
   /** Run one eligible task and its checkpoint; return false when none is runnable. */
@@ -112,7 +129,10 @@ export class EventLoop {
       .filter((queue) =>
         findFirstRunnableTask(queue) !== undefined,
       );
-    if (runnableTaskQueues.length === 0) return false;
+    if (runnableTaskQueues.length === 0) {
+      this.#startIdlePeriod();
+      return false;
+    }
 
     const selectedTaskQueueView = (
       init.selectTaskQueue ?? selectFirstTaskQueue
@@ -165,6 +185,7 @@ export class EventLoop {
         oldestTask.document,
       );
     }
+    this.#startIdlePeriod();
     if (taskError !== null) throw taskError.value;
     return true;
   }
@@ -506,6 +527,15 @@ export class EventLoop {
   }
 
   notifyTaskRunnabilityChanged(): void {
+    // Reactivation may make retained idle registrations eligible without a task.
+    if (this.agent instanceof WindowAgent) {
+      for (const window of this.agent.windowObjects) {
+        if (window.idleCallbacks.hasPending) {
+          this.#idlePeriodRequested = true;
+          break;
+        }
+      }
+    }
     this.#requestTurnIfNeeded();
   }
 
@@ -515,6 +545,43 @@ export class EventLoop {
 
   getTaskQueues(): ReadonlySet<ReadonlySet<Task>> {
     return this.#taskQueues;
+  }
+
+  /** Offer idle work a live deadline only after runnable tasks have drained. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#idle-deadline-computation
+  #startIdlePeriod(): void {
+    this.#idlePeriodRequested = false;
+    const agent = this.agent;
+    if (!(agent instanceof WindowAgent) || this.hasRunnableTasks()) return;
+
+    const startTime = this.lastIdlePeriodStartTime = unsafeSharedCurrentTime();
+    // The headless runtime has no frame producer. A rendering host must supply
+    // animation-frame/pending-render state and refresh rate when it is connected.
+    const rendering = this.#init.idleRendering;
+
+    const computeDeadline = (): UnsafeMoment => {
+      let deadline = startTime.milliseconds + 50;
+      let hasPendingRenders = false;
+      for (const window of agent.windowObjects) {
+        if (rendering?.hasPendingRenders(window)) hasPendingRenders = true;
+        const { env } = window;
+        const timerDeadline = window.getWindowOrWorkerGlobalScopeMixin().timers.getNextTimeoutDeadline();
+        if (timerDeadline !== null) {
+          // SPEC_CLASH(idle-timer-time-origin): HTML compares relative timer
+          // timestamps with shared monotonic time. Translate by the owning
+          // Window's origin before comparing; see ROADMAP.md's idle-period slice.
+          deadline = Math.min(deadline, env.timeOrigin.addDuration(timerDeadline).milliseconds);
+        }
+      }
+      if (hasPendingRenders && rendering !== undefined) {
+        deadline = Math.min(deadline, this.lastRenderOpportunityTime.milliseconds + 1000 / rendering.getRefreshRate());
+      }
+      return new UnsafeMoment(monotonicClock, deadline);
+    };
+
+    for (const window of agent.windowObjects) {
+      window.idleCallbacks.startIdlePeriod(() => computeDeadline().coarsen(window.env.crossOriginIsolatedCapability));
+    }
   }
 
   #getTaskQueue(source: TaskSource): Set<Task> {
@@ -547,15 +614,19 @@ export class EventLoop {
   #requestTurnIfNeeded(): void {
     if (
       this.#paused || this.#turnRequested ||
-      (!this.#microtaskCheckpointRequested && !this.hasRunnableTasks())
+      (!this.#microtaskCheckpointRequested && !this.#idlePeriodRequested && !this.hasRunnableTasks())
     ) return;
 
     this.#turnRequested = true;
     this.#init.requestTurn(() => {
       try {
         if (this.#paused) return;
-        if (this.#microtaskCheckpointRequested) this.performMicrotaskCheckpoint();
-        else this.runTaskTurn();
+        if (this.#microtaskCheckpointRequested) {
+          this.performMicrotaskCheckpoint();
+          this.#startIdlePeriod();
+        } else {
+          this.runTaskTurn();
+        }
       } finally {
         this.#turnRequested = false;
         this.#requestTurnIfNeeded();
@@ -571,6 +642,15 @@ export type EventLoopInit = {
   selectTaskQueue?: TaskQueueSelector;
   longTaskReporter?: LongTaskReporter;
   taskTiming?: TaskTimingHooks;
+  idleRendering?: WindowIdleRendering;
+};
+
+/** The rendering owner supplies predictions when frame production is connected. */
+export type WindowIdleRendering = {
+  /** True for queued animation-frame callbacks or the host's predicted rendering updates. */
+  hasPendingRenders(this: void, window: WindowImpl): boolean;
+  /** Current display refresh rate in hertz, used only when rendering is pending. */
+  getRefreshRate(this: void): number;
 };
 
 export type TaskTimingHooks = {

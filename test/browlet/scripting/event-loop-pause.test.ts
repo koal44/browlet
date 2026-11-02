@@ -53,6 +53,25 @@ describe('pausing an event loop', () => {
     expect(loop.currentlyRunningTask).toBeNull();
   }));
 
+  it('defers an already-requested checkpoint and idle period until the task returns', () => runInHostTask(() => {
+    const { loop, env, turns } = createFixture();
+    const order: string[] = [];
+    const idleStart = loop.lastIdlePeriodStartTime;
+    loop.queueMicrotask(() => { order.push('microtask'); });
+    loop.runScriptEvaluation(env, () => {
+      loop.pauseUntil(() => {
+        turns.shift()!();
+        expect(order).toEqual([]);
+        expect(loop.lastIdlePeriodStartTime).toBe(idleStart);
+        expect(turns).toEqual([]);
+      }, env);
+      order.push('resumed');
+    });
+    expect(order).toEqual(['resumed', 'microtask']);
+    while (turns.length > 0) turns.shift()!();
+    expect(loop.lastIdlePeriodStartTime).not.toBe(idleStart);
+  }));
+
   it('blocks until an independently running host operation meets the goal', async () => {
     const state = new Int32Array(new SharedArrayBuffer(2 * Int32Array.BYTES_PER_ELEMENT));
     const worker = new Worker(`

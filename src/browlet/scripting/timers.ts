@@ -1,6 +1,6 @@
 import type { TaskCreationOptions, TaskHandle, TimerHost } from '../../infra/index';
 
-import type { Duration } from '../timing/index';
+import { Duration } from '../timing/index';
 import type { DocumentImpl } from '../dom/nodes/index';
 
 import type { EventLoop, Task } from './event-loop';
@@ -25,6 +25,13 @@ export class GlobalTimers {
     this.#host = options.host;
     this.#queueTask = options.queueTask;
     this.#time = options.time;
+  }
+
+  /** Earliest active-timer estimate, relative to this global's time origin. */
+  getNextTimeoutDeadline(): Duration | null {
+    let deadline = Infinity;
+    for (const timer of this.#activeTimers.values()) deadline = Math.min(deadline, timer.expiryTime);
+    return deadline === Infinity ? null : new Duration(deadline);
   }
 
   setAssociatedDocument(document: DocumentImpl): void {

@@ -16,6 +16,7 @@ describe('HTML timers', () => {
     const activeEntry = fixture.traversable.activeSessionHistoryEntry;
 
     fixture.timers.runStepsAfterTimeout('example', 10, completion);
+    expect(fixture.timers.getNextTimeoutDeadline()?.milliseconds).toBe(10);
     fixture.host.advanceBy(4);
 
     const inactiveDocument = createTestDocument();
@@ -27,11 +28,13 @@ describe('HTML timers', () => {
     expect(completion).not.toHaveBeenCalled();
 
     fixture.traversable.activeSessionHistoryEntry = activeEntry;
+    expect(fixture.timers.getNextTimeoutDeadline()?.milliseconds).toBe(110);
     fixture.host.advanceBy(5);
     expect(completion).not.toHaveBeenCalled();
 
     fixture.host.advanceBy(1);
     expect(completion).toHaveBeenCalledOnce();
+    expect(fixture.timers.getNextTimeoutDeadline()).toBeNull();
   });
 
   it('preserves the required ordering among equal-delay timers', () => {

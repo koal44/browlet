@@ -74,10 +74,9 @@ now supplies module specifier resolution and import-map parsing, normalization,
 and merging. The approved merge conflicts follow Chromium/WebKit, with Firefox's
 differences recorded. Script-element callers and console warning output remain
 explicit dependencies. The §8.1.6 host-hook audit has connected static and dynamic
-evaluation-phase `HostLoadImportedModule`. Element tasks and event-loop pausing
-are implemented. Continue with idle-period processing and callbacks in §8.1.7;
-its [remaining dependencies](browlet/scripting/ROADMAP.md#outstanding-event-loop-work)
-retain their owner and engine boundaries.
+evaluation-phase `HostLoadImportedModule`. The available §8.1.7 scheduling
+operations are implemented; its [remaining dependencies](browlet/scripting/ROADMAP.md#outstanding-event-loop-work)
+retain their owner and engine boundaries. Continue with §8.1.8 Events.
 Source/deferred imports and the HTML Wasm parser remain explicit boundaries.
 Later host-hook algorithms must be connected before judging
 the complete model; the uncertain cross-realm observer test is skipped.
@@ -181,9 +180,10 @@ path. Implement the named portion of a roadmap, not every future feature in it.
 [browsing](browlet/browsing/ROADMAP.md) owners. Element task destinations retain
 their creation global; add checkpoint consumers at their owning algorithms.
 Worker suspension and timer strings retain their script/global dependencies.
-Continue HTML's idle-period steps with explicit rendering and idle-callback
-dependencies. Follow the
-bounded [microsyntax slices](browlet/html/microsyntaxes/ROADMAP.md); reflection
+HTML's idle-period steps supply Request Idle Callback delivery, cancellation,
+deadlines, and timeouts. Rendering predictions remain an explicit owner dependency.
+Follow the bounded
+[microsyntax slices](browlet/html/microsyntaxes/ROADMAP.md); reflection
 consumes their value algorithms, while media matching retains its style/host
 dependency gate.
 
