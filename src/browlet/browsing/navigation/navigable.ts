@@ -17,7 +17,7 @@ import {
   createSessionHistoryEntry, createDocumentState, type SessionHistoryEntry, type SourceSnapshotParams,
   type DocumentBackedState, type DocumentState, type PostResource,
 } from './state/index';
-import type { NavigationAPIMethodTracker } from '../navigation-api/index';
+import type { NavigationAPIMethodTracker } from './api/index';
 import type { WindowImpl, WindowProxyHandle } from '../window/index';
 import { BrowletEnvironmentBase } from '../../environment/index';
 import { HTMLDocumentParser, type ScriptHandler } from '../../html/parser/index';
@@ -849,6 +849,17 @@ export class TopLevelTraversable extends Traversable {
 
   override get isTopLevelTraversable(): true {
     return true;
+  }
+
+  /** Collect the active document tree's diagnostics and mask cross-origin descendants before exposure. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#build-not-restored-reasons-for-a-top-level-traversable-and-its-descendants
+  buildNotRestoredReasons(): void {
+    const document = this.activeDocument;
+    if (document === null) throw new InternalError('Restoration diagnostics require an active Document');
+    document.buildNotRestoredReasonsForDocumentState();
+    // TODO(HTML lifecycle): Compare descendant origins and hide foreign URL/reasons/children.
+    // SPEC_CLASH(not-restored-reasons-collection): HTML adds "masked" after copying the root's reasons. Resolve before publishing diagnostics.
+    throw new InternalError('Cross-origin restoration-diagnostic masking is not implemented');
   }
 }
 

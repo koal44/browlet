@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { createSessionHistoryEntry, createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
-import { NavigationHistoryEntryImpl } from '../../../src/browlet/browsing/navigation-api/navigation-history-entry';
+import { NavigationHistoryEntryImpl } from '../../../src/browlet/browsing/navigation/api/navigation-history-entry';
 import { createOpaqueOrigin, obtainURLOrigin, parseURL } from '../../../src/url/index';
 import { getRelevantRealm, unwrap } from '../../support/browlet-binding';
 

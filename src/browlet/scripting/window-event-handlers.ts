@@ -4,9 +4,8 @@ import { eventHandlerMapAttr } from './event-handlers';
 
 /** Window-owned handlers, also exposed by body and frameset through target resolution. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#windoweventhandlers
-// TODO(HTML §§8.1.8.1, 7.2.7): onbeforeunload needs its callback conversion and BeforeUnloadEvent return-value rules.
 export const windowEventHandlers = new Map<string, string>([
-  'afterprint', 'beforeprint', 'hashchange', 'languagechange', 'message', 'messageerror', 'offline', 'online',
+  'afterprint', 'beforeprint', 'beforeunload', 'hashchange', 'languagechange', 'message', 'messageerror', 'offline', 'online',
   'pagehide', 'pagereveal', 'pageshow', 'pageswap', 'popstate', 'rejectionhandled', 'storage',
   'unhandledrejection', 'unload',
 ].map((type) => [`on${type}`, type]));
@@ -35,5 +34,6 @@ export const windowEventHandlers = new Map<string, string>([
  */
 export const windowEventHandlersIDL = defineInterfaceMixin({
   name: 'WindowEventHandlers',
-  members: Array.from(windowEventHandlers, ([name]) => eventHandlerMapAttr(name)),
+  members: Array.from(windowEventHandlers, ([name]) =>
+    eventHandlerMapAttr(name, name === 'onbeforeunload' ? 'OnBeforeUnloadEventHandler' : 'EventHandler')),
 });

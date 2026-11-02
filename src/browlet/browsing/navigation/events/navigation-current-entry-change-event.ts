@@ -1,13 +1,11 @@
 import {
   arg, atArg, ctor, defineDictionary, defineInterface, dictMember, idlType, impl, nullable, reference, roAttr,
-} from '../../../web-idl/core/index';
+} from '../../../../web-idl/core/index';
 
-import type { DOMHighResTimeStamp } from '../../timing/index';
-import { EventImpl, type EventInit } from '../../dom/events/index';
-import type { DOMEnvironment } from '../../dom/environment';
-
-import type { NavigationType } from './navigation';
-import type { NavigationHistoryEntryImpl } from './navigation-history-entry';
+import type { DOMHighResTimeStamp } from '../../../timing/index';
+import { EventImpl, type EventInit } from '../../../dom/events/index';
+import type { DOMEnvironment } from '../../../dom/environment';
+import type { NavigationType, NavigationHistoryEntryImpl } from '../api/index';
 
 /** Reports the previous current entry, including state changes that keep the same entry. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#navigationcurrententrychangeevent
@@ -18,6 +16,7 @@ export class NavigationCurrentEntryChangeEventImpl extends EventImpl {
   from: NavigationHistoryEntryImpl;
 
   constructor(type: string, eventInitDict: NavigationCurrentEntryChangeEventInit, timeStamp?: DOMHighResTimeStamp) {
+    // SPEC_CLASH(currententrychange-constructor-event-flags): HTML/Chromium/Firefox preserve EventInit flags and construct untrusted events; WebKit ignores the flags and constructs trusted events.
     super(type, eventInitDict, timeStamp);
     // Internal event creation initially supplies {}, then initializes attributes before dispatch.
     this.navigationType = eventInitDict.navigationType ?? null;
@@ -31,6 +30,15 @@ export interface NavigationCurrentEntryChangeEventInit extends EventInit {
   from: NavigationHistoryEntryImpl;
 }
 
+/*
+ * [Exposed=Window]
+ * interface NavigationCurrentEntryChangeEvent : Event {
+ *   constructor(DOMString type, NavigationCurrentEntryChangeEventInit eventInitDict);
+ *
+ *   readonly attribute NavigationType? navigationType;
+ *   readonly attribute NavigationHistoryEntry from;
+ * };
+ */
 export const navigationCurrentEntryChangeEventIDL = defineInterface<DOMEnvironment>({
   name: 'NavigationCurrentEntryChangeEvent',
   inherits: 'Event',
@@ -48,6 +56,12 @@ export const navigationCurrentEntryChangeEventIDL = defineInterface<DOMEnvironme
   ],
 });
 
+/*
+ * dictionary NavigationCurrentEntryChangeEventInit : EventInit {
+ *   NavigationType? navigationType = null;
+ *   required NavigationHistoryEntry from;
+ * };
+ */
 export const navigationCurrentEntryChangeEventInitIDL = defineDictionary({
   name: 'NavigationCurrentEntryChangeEventInit',
   inherits: 'EventInit',

@@ -5,7 +5,8 @@ Stylelet owns CSS computation; the planned [layout engine](../../layout/ROADMAP.
 owns boxes and fragments, with [graphics](../../graphics/ROADMAP.md) and
 [fonts](../../fonts/ROADMAP.md) supplying shared resource facilities. This domain
 coordinates those owners with HTML document state, measured APIs, and output.
-It has no rendering implementation yet.
+Its current code supplies ViewTransition identity for navigation events; the
+rendering lifecycle itself is not implemented.
 
 | Planned area or owner | Contract | Specification |
 | --- | --- | --- |
@@ -91,6 +92,34 @@ MediaQueryList, which needs device/matching state but not every layout facility.
 These contracts were sampled, not audited operation by operation. Their APIs
 and providers remain missing. Keep tests of explicit fixture geometry distinct
 from regressions that exercise the actual layout and delivery path.
+
+## ViewTransition dependency identity
+
+HTML §§7.2.7.4–5 PageSwapEvent and PageRevealEvent require nullable ViewTransition references.
+`view-transition.ts` retains the owning Document/environment and supplies the
+nonconstructible Window-exposed interface identity. Binding can validate and
+preserve it across realms. This is an explicit incomplete dependency: the exposed
+interface object alone does not establish a usable View Transition API.
+
+The [CSS View Transitions 2 interface](https://drafts.csswg.org/css-view-transitions-2/#the-domtransition-interface)
+was checked at CSSWG `fc3afa7b2`, refreshed on 1 November 2026. The remaining
+members are `updateCallbackDone`, `ready`, `finished`, `skipTransition()`, `types`,
+`transitionRoot`, and `waitUntil()`. Their promise allocation/handledness,
+phase changes, callback execution, active-type set, root association, and
+settlement/control algorithms require the CSS audit; no pending or fulfilled
+promises are fabricated to stand in for them.
+
+Document/Element start/active-transition APIs, named-element capture, rendering
+suppression, pseudo-element construction, animation, cleanup, cross-document
+opt-in, and outbound/inbound transfer remain explicit lifecycle dependencies.
+There is no production ViewTransition creator yet. The PageSwapEvent and
+PageRevealEvent tests supply internal identities only to exercise actual
+interface conversion and projection. PageRevealEvent's [producer inventory](../browsing/navigation/events/ROADMAP.md#pagerevealevent-7275)
+records the unconnected rendering `reveal` hook, Document revelation state,
+inbound transition resolution, and activation after event dispatch. That
+activation needs HTML's prepare/cleanup-script boundary; an event object alone
+does not provide the required promise checkpoint before subsequent rendering.
+Keep these browser/document responsibilities here; Stylelet remains host-neutral.
 
 ## Title advisory presentation
 

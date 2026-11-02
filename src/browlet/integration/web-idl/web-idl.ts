@@ -15,12 +15,14 @@ import {
 } from '../../dom/events/index';
 import {
   eventHandlerIDL, eventHandlerNonNullIDL, onErrorEventHandlerIDL, onErrorEventHandlerNonNullIDL,
+  onBeforeUnloadEventHandlerIDL, onBeforeUnloadEventHandlerNonNullIDL,
   globalEventHandlersIDL, windowEventHandlersIDL,
 } from '../../scripting/index';
 import {
   reportIDL, reportBodyIDL, testReportBodyIDL, reportingObserverIDL, reportingObserverCallbackIDL,
   reportingObserverOptionsIDL, reportListIDL,
 } from '../../reporting/index';
+import { navigationEventIDLDefinitions } from '../../browsing/navigation/events/index';
 import {
   integrityViolationReportBodyIDL, coepViolationReportBodyIDL, coepInheritanceViolationReportBodyIDL,
   permissionsPolicyIDL, documentPermissionsPolicyIDL, iframePermissionsPolicyIDL,
@@ -48,7 +50,7 @@ import {
   broadcastChannelIDL,
 } from '../../communication/index';
 import { webStorageIDLDefinitions } from '../../storage/index';
-import { navigationIDLDefinitions } from '../../browsing/navigation-api/index';
+import { navigationIDLDefinitions } from '../../browsing/navigation/api/index';
 import {
   locationIDL, barPropIDL, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
   windowIncludesGlobalEventHandlersIDL, windowIncludesWindowEventHandlersIDL, windowProxyDefinition,
@@ -61,6 +63,8 @@ import {
 } from '../../environment/index';
 import { structuredSerializeOptionsIDL } from '../../scripting/structured-data/index';
 import { serviceWorkerIDL } from '../../workers/index';
+import { notRestoredReasonDetailsIDL, notRestoredReasonsIDL } from '../../browsing/navigation/index';
+import { renderingIDLDefinitions } from '../../rendering/index';
 import { progressEventIDL, progressEventInitIDL } from '../xhr/index';
 import { permissionStatusIDL } from '../permissions/index';
 import { fileReaderIDL, objectURLIDL } from '../file/index';
@@ -81,6 +85,9 @@ export const browletDefinitions = [
   locationIDL,
   historyIDL, scrollRestorationIDL,
   ...navigationIDLDefinitions,
+  ...navigationEventIDLDefinitions,
+  notRestoredReasonDetailsIDL, notRestoredReasonsIDL,
+  ...renderingIDLDefinitions,
   barPropIDL,
   reportIDL, reportBodyIDL, integrityViolationReportBodyIDL, testReportBodyIDL,
   coepViolationReportBodyIDL, coepInheritanceViolationReportBodyIDL,
@@ -97,6 +104,8 @@ export const browletDefinitions = [
   eventHandlerIDL,
   onErrorEventHandlerNonNullIDL,
   onErrorEventHandlerIDL,
+  onBeforeUnloadEventHandlerNonNullIDL,
+  onBeforeUnloadEventHandlerIDL,
   globalEventHandlersIDL,
   windowEventHandlersIDL,
   errorEventIDL,

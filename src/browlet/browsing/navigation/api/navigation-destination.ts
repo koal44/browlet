@@ -1,8 +1,8 @@
-import { atArg, defineInterface, idlType, impl, invokeWith, op, roAttr } from '../../../web-idl/core/index';
-import { serializeURL, type URLRecord } from '../../../url/index';
+import { atArg, defineInterface, idlType, impl, invokeWith, op, roAttr } from '../../../../web-idl/core/index';
+import { serializeURL, type URLRecord } from '../../../../url/index';
 
-import type { BrowletEnvironment } from '../../environment/index';
-import type { SerializedRecord } from '../../scripting/structured-data/index';
+import type { BrowletEnvironment } from '../../../environment/index';
+import type { SerializedRecord } from '../../../scripting/structured-data/index';
 
 import type { NavigationHistoryEntryImpl } from './navigation-history-entry';
 
@@ -50,6 +50,18 @@ export class NavigationDestinationImpl {
   }
 }
 
+/*
+ * [Exposed=Window]
+ * interface NavigationDestination {
+ *   readonly attribute USVString url;
+ *   readonly attribute DOMString key;
+ *   readonly attribute DOMString id;
+ *   readonly attribute long long index;
+ *   readonly attribute boolean sameDocument;
+ *
+ *   any getState();
+ * };
+ */
 export const navigationDestinationIDL = defineInterface<BrowletEnvironment>({
   name: 'NavigationDestination', exposed: 'Window', implementation: impl(NavigationDestinationImpl),
   members: [

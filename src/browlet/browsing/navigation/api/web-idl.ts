@@ -11,9 +11,6 @@ import {
   navigationFocusResetIDL, navigationScrollBehaviorIDL, navigationInterceptHandlerIDL,
 } from './navigate-event';
 import { navigationPrecommitControllerIDL, navigationPrecommitHandlerIDL } from './navigation-precommit-controller';
-import {
-  navigationCurrentEntryChangeEventIDL, navigationCurrentEntryChangeEventInitIDL,
-} from './navigation-current-entry-change-event';
 
 /** Navigation API declarations assembled by Browlet's binding world. */
 export const navigationIDLDefinitions = [
@@ -24,5 +21,4 @@ export const navigationIDLDefinitions = [
   navigateEventIDL, navigateEventInitIDL,
   navigationInterceptOptionsIDL, navigationFocusResetIDL, navigationScrollBehaviorIDL, navigationInterceptHandlerIDL,
   navigationPrecommitControllerIDL, navigationPrecommitHandlerIDL,
-  navigationCurrentEntryChangeEventIDL, navigationCurrentEntryChangeEventInitIDL,
 ];

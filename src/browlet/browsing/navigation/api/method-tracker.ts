@@ -1,7 +1,7 @@
-import { InternalError, type InternalPromise, type InternalPromiseWithResolvers } from '../../../infra/index';
-import { reference } from '../../../web-idl/core/index';
+import { InternalError, type InternalPromise, type InternalPromiseWithResolvers } from '../../../../infra/index';
+import { reference } from '../../../../web-idl/core/index';
 
-import type { SerializedRecord } from '../../scripting/structured-data/index';
+import type { SerializedRecord } from '../../../scripting/structured-data/index';
 
 import type { NavigationImpl } from './navigation';
 import { NavigationHistoryEntryImpl } from './navigation-history-entry';

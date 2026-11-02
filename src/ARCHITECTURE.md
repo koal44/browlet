@@ -1001,7 +1001,7 @@ Document or the inputs needed to restore it. Scroll restoration takes an existin
 entry and acts through its Document and shared scrolling facilities. The complete
 navigation index remains the higher-level coordinator entry point.
 
-`history` owns Document-retained History objects; `navigation-api` owns the
+`history` owns Document-retained History objects; `navigation/api/` owns the
 Window-retained Navigation EventTarget and its NavigationHistoryEntry objects.
 Navigation owns its realm's entry list; each entry refers to a shared session-history
 record owned by the navigation coordinator. That coordinator selects the contiguous
@@ -1012,6 +1012,14 @@ while Document lazily creates History. History uses its existing environment's
 storage serializer, composed at the Binding boundary, then calls Navigation's
 event operation and Document's URL/history update operation. Those effect owners
 remain explicit dependencies; the API objects do not manipulate history arrays.
+
+`navigation/events/` owns the history and document-lifecycle event payloads,
+including NavigationCurrentEntryChangeEvent. It sits below DOM nodes so the
+legacy Document event factory can construct its supported events without loading
+navigation. API-specific event fields retain implementation types only.
+NavigateEvent remains in `navigation/api/` because it also coordinates
+interception, commit, and completion. These nested folders retain their distinct
+dependency levels beneath the containing navigation coordinator.
 
 Navigable coordinates response preparation, destination context and Window
 selection, document loading, and history commit. NavigationParams carries the

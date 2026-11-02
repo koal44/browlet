@@ -56,19 +56,7 @@ describe('EventImpl', () => {
     fixed.preventDefault();
 
     expect(cancelable.defaultPrevented).toBe(true);
-    expect(cancelable.returnValue).toBe(false);
     expect(fixed.defaultPrevented).toBe(false);
-    expect(fixed.returnValue).toBe(true);
-  });
-
-  it('uses returnValue as the legacy cancellation API', () => {
-    const event = new EventImpl('cancelable', { cancelable: true });
-
-    event.returnValue = false;
-    expect(event.defaultPrevented).toBe(true);
-
-    event.returnValue = true;
-    expect(event.defaultPrevented).toBe(true);
   });
 
   it('reinitializes legacy mutable state without changing composed or timeStamp', () => {

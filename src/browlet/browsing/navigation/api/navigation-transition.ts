@@ -1,7 +1,7 @@
-import type { InternalPromise, InternalPromiseWithResolvers } from '../../../infra/index';
-import { defineInterface, idlType, impl, promise, reference, roAttr } from '../../../web-idl/core/index';
+import type { InternalPromise, InternalPromiseWithResolvers } from '../../../../infra/index';
+import { defineInterface, idlType, impl, promise, reference, roAttr } from '../../../../web-idl/core/index';
 
-import type { BrowletEnvironment } from '../../environment/index';
+import type { BrowletEnvironment } from '../../../environment/index';
 
 import type { NavigationType } from './navigation';
 import type { NavigationHistoryEntryImpl } from './navigation-history-entry';
@@ -64,6 +64,16 @@ export class NavigationTransitionImpl {
   }
 }
 
+/*
+ * [Exposed=Window]
+ * interface NavigationTransition {
+ *   readonly attribute NavigationType navigationType;
+ *   readonly attribute NavigationHistoryEntry from;
+ *   readonly attribute NavigationDestination to;
+ *   readonly attribute Promise<undefined> committed;
+ *   readonly attribute Promise<undefined> finished;
+ * };
+ */
 export const navigationTransitionIDL = defineInterface({
   name: 'NavigationTransition', exposed: 'Window', implementation: impl(NavigationTransitionImpl),
   members: [

@@ -47,7 +47,7 @@ export const layers = [
   // Policy consumes event/report primitives; documents construct and retain policy state.
   ['browlet/reporting/'],
   // Feature event payloads can serve Document's legacy factory without loading their producers.
-  ['browlet/storage/events/'],
+  ['browlet/storage/events/', 'browlet/browsing/navigation/events/'],
   // Policy owns the source-expression algorithms shared with its CSP implementation.
   ['browlet/browsing/policy/'],
   ['browlet/browsing/policy/csp/'],
@@ -64,7 +64,7 @@ export const layers = [
   // Shared snapshots and history-record operations do not load the navigation coordinator.
   ['browlet/browsing/navigation/state/'],
   // Window owns its Navigation object; the API retains navigation and Document types without loading the loader.
-  ['browlet/browsing/navigation-api/'],
+  ['browlet/browsing/navigation/api/'],
   // Window forwards messaging to communication; communication retains Window types only.
   ['browlet/browsing/window/'],
   // Origin declarations name the platform implementations; environments dispatch their extraction.
@@ -77,6 +77,8 @@ export const layers = [
   ['browlet/loader/'],
   ['browlet/browsing/navigation/'],
   ['browlet/interaction/'],
+  // Rendering owns document-bound transitions and their eventual presentation lifecycle.
+  ['browlet/rendering/'],
   // Host and feature adapters do not discover Web IDL composition.
   ['browlet/integration/host/', 'browlet/integration/xhr/', 'browlet/integration/permissions/'],
   ['browlet/integration/file/'],

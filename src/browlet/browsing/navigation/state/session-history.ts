@@ -55,9 +55,3 @@ export type NestedHistory = {
   /** Child history entries, ordered by history step. */
   entries: SessionHistoryEntry[];
 };
-
-/** One reason that a document cannot be restored from the back/forward cache. */
-// https://html.spec.whatwg.org/multipage/nav-history-apis.html#nrr-details-struct
-export type NotRestoredReasonDetails = {
-  reason: string;
-};

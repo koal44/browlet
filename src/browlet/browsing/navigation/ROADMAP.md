@@ -13,17 +13,26 @@ outside consumers use its index, while its modules import each other directly.
   `loadHTMLDocument()` starts HTML parsing and coordinates completion or abortion.
   Its bounded cross-document commit activates the entry; `Traversable` applies
   the history step and clears forward entries.
-- `session-history.ts` models entries and nested histories for the active
-  top-level traversable; `document-state.ts` retains their document/reload state.
+- `state/session-history.ts` models entries and nested histories for the active
+  top-level traversable; `state/document-state.ts` retains their document/reload state.
+- `not-restored-reasons.ts` owns the §7.2.8 diagnostic implementations and their
+  backing records. Document and TopLevelTraversable have explicit throwing
+  collection/filtering entry points; cache decisions and Navigation Timing
+  exposure remain separate.
+- `events/` supplies PopStateEvent and HashChangeEvent and their declaration
+  collection. Document's legacy event factory also creates HashChangeEvent.
+  Automatic delivery remains history-application work; the
+  [§§7.2.7.1–3 audit](events/ROADMAP.md) records the exact inputs, ordering, and
+  browser differences.
 - [History](../history/history.ts) supplies the Document-owned object, its
   attributes, and request preparation for its methods. This component owns the
   entry scroll mode and updates stored length/index through its existing
-  top-level commit path. The lower [Navigation API](../navigation-api/navigation.ts)
+  top-level commit path. The lower [Navigation API](./api/navigation.ts)
   component supplies Window-owned identity, entry initialization and read access,
   and NavigationActivation. The top-level commit retains its previous active
   entry and initializes activation after the destination entry list, before
   parser scripts. Full history/reload/reactivation and pageswap producers remain
-  unfinished; its [audit](../navigation-api/ROADMAP.md) records the remaining dependencies.
+  unfinished; its [audit](./api/ROADMAP.md) records the remaining dependencies.
 - `Traversable` owns its session-storage shed across Document replacements.
   Top-level creation clones the opener's top-level shed through the
   [Storage substrate](../../../storage/ROADMAP.md#storage-sheds); auxiliary
@@ -103,7 +112,7 @@ The remaining passages were considered and retain these owners:
 | Passage | Next implementation or dependency |
 | --- | --- |
 | `go`, `back`, `forward`, delta traverse | Request preparation is implemented below; actual traversal and reload remain explicit dependencies. |
-| Shared push/replace steps | Preparation and the public methods are implemented below. Navigate-event firing and `DocumentImpl.updateURLAndHistory()` remain explicit dependencies. |
+| Shared push/replace steps | Preparation, the public methods, and navigate-event firing are implemented below. `DocumentImpl.updateURLAndHistory()` remains an explicit dependency. |
 | Can have its URL rewritten; URL table | Implemented on Document and covered by the complete example table: compare URL components, not security origins; HTTP(S), file, and other schemes have distinct path/query rules. |
 | Optional state-entry limit | No quota is selected in this slice. If introduced, eviction must remove the entry after the Document's first entry, as specified. |
 | Game and scroll-restoration examples | Require same-document updates, traversal/PopStateEvent, and scroll restoration. Exposing the foundation attributes does not make these examples functional. |
@@ -163,7 +172,7 @@ Window-owned `NavigationImpl`, exposed by the replaceable `Window.navigation` ge
 and a nonconstructible EventTarget-derived IDL interface. Replacing the author
 property does not change the internal owner. Initial Window reuse retains it;
 new Windows receive new objects. Entry read access has since been added in the
-[Navigation API slice](../navigation-api/ROADMAP.md). `firePushReplaceReloadNavigateEvent()` now
+[Navigation API slice](./api/ROADMAP.md). `firePushReplaceReloadNavigateEvent()` now
 aborts previous navigation, handles disabled entries/events, and dispatches
 the trusted event with its destination and tracker. Canceled History requests
 return without updating URL/state. Precommit handlers run and can reject the
@@ -271,13 +280,13 @@ existing concrete types. `NavigationHistoryBehavior` includes `auto`, while
 resolved commit/history-update inputs use `HistoryHandlingBehavior` (`push` or
 `replace`). All three operations still throw until their effects are implemented.
 
-`NavigationAPIMethodTracker` is now owned by `../navigation-api/method-tracker.ts`;
+`NavigationAPIMethodTracker` is now owned by `../navigation/api/method-tracker.ts`;
 the former opaque `navigation-api.ts` stub in this coordinator has been removed.
 The class owns creation, commit notification, completion/rejection, and cleanup,
 but navigation/event producers must still call those operations. The lower
-`../navigation-api/` component now supplies Navigation's
+`../navigation/api/` component now supplies Navigation's
 Window-owned entry lists, NavigationHistoryEntry read access, and the unfinished
-navigate-event entry point. Its [entry work](../navigation-api/ROADMAP.md) connects new-Document
+navigate-event entry point. Its [entry work](./api/ROADMAP.md) connects new-Document
 initialization to the existing top-level commit, with shared session-history
 keys/IDs/state and the contiguous same-origin selector. State updates now fire
 current-entry-change events, and reactivation reconciliation queues disposal;
@@ -339,23 +348,23 @@ It repeatedly cancels reentrant NavigateEvents. Child-destruction notification
 also rejects a snapshot of pending traversal trackers. These helpers do not
 implement `stopLoading()`, ongoing-navigation ID/traversal state, or child teardown.
 Their exact caller obligations and pending signature review are in the
-[Navigation API audit](../navigation-api/ROADMAP.md#seventh-slice-navigable-abortion-and-child-destruction-notifications).
+[Navigation API audit](./api/ROADMAP.md#seventh-slice-navigable-abortion-and-child-destruction-notifications).
 Revisit the provisional caller-loop parameter when wiring production callers;
-the [deferred decision](../navigation-api/ROADMAP.md#deferred-decision-caller-loop-parameter)
+the [deferred decision](./api/ROADMAP.md#deferred-decision-caller-loop-parameter)
 requires comparing a parameter-free handoff through their existing Documents/environments.
 
 | Planned source | Contract | Specification |
 | --- | --- | --- |
 | existing `../history/history.ts` and navigation owners | state restoration and URL/history, traversal, and reload effects; attributes and all method preparation are implemented above | HTML §7.2.5 and §2.7 |
-| existing `../navigation-api/navigation.ts` | Navigation state, results/options, entries, ongoing navigation, activation, and focus/scroll behavior; transition getter is implemented, with event production still missing | HTML §7.2.6 |
-| existing `../navigation-api/navigation-transition.ts` and `navigation-destination.ts` | Transition/destination state, interfaces, and promise settlement are implemented; event and precommit producers remain | HTML §§7.2.6.8 and 7.2.6.10.3 |
-| existing `../navigation-api/navigation-history-entry.ts` | Read interface, state, reactivation and same-document disposal implemented; full reload/session restoration remains | HTML §7.2.6 |
-| existing `../navigation-api/navigation-current-entry-change-event.ts` | Implemented for state and same-document entry updates; full history-application caller remains | HTML §7.2.7.1 |
-| `../navigation-api/navigation-events.ts` | `NavigateEvent`, navigate success/error, and intercept/precommit callback surfaces; consume the implemented destination object | HTML §7.2.6 |
-| `lifecycle-events.ts` | `PopStateEvent`, `HashChangeEvent`, `PageSwapEvent`, `PageRevealEvent`, `PageTransitionEvent`, and `BeforeUnloadEvent` | HTML §7.2.7 |
-| `not-restored-reasons.ts` | `NotRestoredReasonDetails`, recursive `NotRestoredReasons`, and history-entry association | HTML §7.2.8 |
+| existing `api/navigation.ts` | Navigation state, results/options, entries, ongoing navigation, activation, and focus/scroll policy are implemented; history effects, rendering, and lifecycle callers remain | HTML §7.2.6 |
+| existing `api/navigation-transition.ts` and `api/navigation-destination.ts` | Transition/destination state, interfaces, and commit/completion promise settlement are implemented; owner effects remain explicit | HTML §§7.2.6.8 and 7.2.6.10.3 |
+| existing `api/navigation-history-entry.ts` | Read interface, state, reactivation and same-document disposal implemented; full reload/session restoration remains | HTML §7.2.6 |
+| existing `events/navigation-current-entry-change-event.ts` | Implemented for state and same-document entry updates; full history-application caller remains | HTML §7.2.7.1 |
+| existing `api/navigate-event.ts` | Event dispatch, interception, precommit/commit/postcommit execution, success/error, and finish policy are implemented; URL/history, focus/scroll effects, and lifecycle producers remain | HTML §7.2.6 |
+| `events/` | Interfaces through BeforeUnloadEvent, the legacy factory entries, and Window's page-transition firing method are implemented. Lifecycle callers and handler processing remain separate. | HTML §7.2.7 |
+| existing `not-restored-reasons.ts` | Diagnostic interfaces, recursive creation, and the Document/history-record accessor are implemented; collection, masking, and Navigation Timing remain | HTML §7.2.8 |
 | `traversal.ts` | Traversal queue, apply history step, back/forward/reload | HTML §§7.4.1, 7.4.3, and 7.4.6 |
-| `document-state.ts` / `session-history.ts` | Complete document/session-history state and persisted user state | HTML §§7.4.1–7.4.2 |
+| `state/` | Complete document/session-history state and persisted user state | HTML §§7.4.1–7.4.2 |
 
 Existing modules still need fragment navigation, `javascript:` URLs,
 download/POST handling, nested navigables, reload, traversal, unloading,
@@ -451,6 +460,136 @@ directly, even while only a single top-level traversable is supported.
 Blink spreads this path across `core/frame` and `core/loader`; Browlet keeps
 the state machine here while response acquisition and resource loading belong
 in `loader/`.
+
+## HTML §7.2.8: NotRestoredReasons
+
+The [entire section](https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-notrestoredreasons-interface)
+was read, including both creation algorithms, every getter, backing-record
+defaults, the reason catalogue, and Document's history-entry accessor. The local
+HTML source at `404b3eb` agrees with the live standard dated 2026-10-30.
+
+`NotRestoredReasonDetailsImpl` retains one detail record; `NotRestoredReasonsImpl`
+retains its scalar backing record and recursively creates detail/child objects
+from the supplied lists. These internal constructors perform HTML's creation
+operations, with the owning environment supplying the realm. There is no author
+constructor. Required nullable record fields express the initially-null slots;
+creation takes an initialized backing record rather than exposing a temporary
+object with a null backing slot.
+
+The shared `NotRestoredReasonDetails` and `NotRestoredReasons` interfaces live
+beside their implementations, and each implementation satisfies its interface.
+Document/history data and implementation instances can therefore use the same
+shape. The implementation retains a parsed URL; the declared Web IDL getter
+serializes it. Recursive creation still allocates fresh detail/child identities
+in the chosen realm, including when its input is another implementation.
+`DocumentState` imports only the shared type; there is no separate state module.
+
+`src`, `id`, `name`, and each detail's `reason` read their retained data. The
+platform `url` getter returns null or serializes the implementation's URL.
+Null lists remain null, empty lists
+remain empty, and list membership is captured at creation. Binding projects and
+caches the resulting frozen arrays in the receiver's realm on first access,
+using the automatic FrozenArray attribute binding shared with MessageEvent's
+retained ports array. Thus deferred
+platform allocation cannot incorporate later backing-list additions or move
+arrays into a borrowed getter's realm. This keeps platform allocation outside
+the implementation and needs no new engine facility.
+
+Both `[Default] toJSON()` operations use Web IDL's existing machinery. Each call
+creates an ordinary object in the called method's realm, reads the declared
+attributes rather than author-shadowed properties, and preserves nested platform
+objects and frozen-array identities. `JSON.stringify()` subsequently invokes the
+nested objects' JSON operations. It is distinct from recursively copying all
+diagnostics into plain objects during `toJSON()` itself.
+
+`Document.notRestoredReasons` is an internal accessor, not a new Document IDL
+attribute. It selects the active top-level traversable's session-history record;
+child, detached, and inactive Documents return null. It does not collect records
+or populate a new entry. `DocumentState.notRestoredReasons` now has the recursive
+record type instead of an opaque object and still starts at null.
+
+### Browser evidence and approved choices
+
+The browser-only probe is `node-compat/experimental/not-restored-reasons.mjs` in
+the independent Experimental repository. It performs a real navigation/back
+sequence with an unload blocker. On 2026-11-01, Chromium 156.0.8078.4 exposed both
+nonconstructible interfaces and the Navigation Timing attribute. Firefox 157 and
+WebKit 27.2 exposed neither interface nor the timing attribute in the tested builds.
+The Chromium sample contained a `masked` detail and an empty children list; it
+does not establish behavior for an observed nonempty child tree.
+
+- `SPEC_CLASH(not-restored-reasons-array-identity)`: HTML creates each frozen
+  array once and returns it. Chromium returns a different frozen array for each
+  getter access. Browlet follows HTML, as approved.
+- `SPEC_CLASH(not-restored-reasons-json)`: HTML's default operation retains those
+  arrays and their nested platform values, with keys in IDL order
+  (`src`, `id`, `name`, `url`, `reasons`, `children`). Chromium's custom operation
+  produces mutable arrays and plain reason objects, and places `url` before
+  `name`. Its source recursively converts children as well. Browlet follows
+  HTML and the existing Web IDL default operation, as approved.
+
+Blink's [implementation](https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/core/timing/not_restored_reasons.cc)
+and [IDL](https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/core/timing/not_restored_reasons.idl)
+explain those differences: vector-returning getters and a custom `toJSON` method.
+Its IDL also uses DOMString for `src`/`url`, where HTML uses USVString. Browlet
+keeps HTML's declarations; the backing contract already requires a scalar source
+string and a URL record. Producer conversion of invalid raw iframe source text
+must be checked when collection is implemented, not invented at this read boundary.
+
+### Remaining producers and consumers
+
+| Dependency | Current boundary and later work |
+| --- | --- |
+| Document blocking details | `makeUnsalvageable()` already records individual details and clears salvageability. Existing abort/destroy paths supply `fetch`, `parser-aborted`, and `websocket`; this slice does not change their triggers. |
+| Mandatory reason producers | `navigation-failure` needs the failed-navigation path; `lock` needs Web Locks lifecycle integration; `masked` needs privacy filtering and cache-policy producers. Having a string field does not implement those features. |
+| Tree collection | `Document.buildNotRestoredReasonsForDocumentState()` is an explicit throwing stub for HTML's [document-state builder](https://html.spec.whatwg.org/multipage/document-lifecycle.html#build-not-restored-reasons-for-document-state). It must capture the URL, iframe source/ID/name (including absent attributes and URL-parse failure), clone blocking details, recurse through child navigables, and assign each active history state. |
+| Cross-origin filtering | `TopLevelTraversable.buildNotRestoredReasons()` calls Document collection, then throws at the unfinished masking step. This [top-level builder](https://html.spec.whatwg.org/multipage/document-lifecycle.html#build-not-restored-reasons-for-a-top-level-traversable-and-its-descendants) must compare descendant origins, hide foreign URL/reasons/children, and report a masked blockage before platform creation. |
+| Cache lifecycle | Admission, eviction, unloading, restoration, and failed-history navigation must retain or replace diagnostic records at their specified steps. Interface creation does not provide a back/forward cache. |
+| Navigation Timing | `PerformanceNavigationTiming` and its PerformanceEntry/ResourceTiming foundation are absent. The existing provisional `Document.createNavigationTimingEntry()` and `NavigationTimingRecord` mark the exact missing step: create and retain the diagnostic object when constructing the real entry, then return it from the getter. The [Performance roadmap](../../performance/ROADMAP.md#restoration-diagnostics-dependency) records the consumer contract and null/realm gap. This slice exposes no public diagnostic-producing accessor. |
+
+`SPEC_CLASH(not-restored-reasons-collection)` records three unresolved producer
+problems in the later HTML algorithms: the document-state builder appends to
+`children` without replacing its initial null with a list; it appends a child
+Document's accessor even though §7.2.8 defines that accessor as null outside a
+top-level traversable; and the top-level builder records `masked` only after
+cloning the root's blocking-detail list. Resolve these against browser behavior
+with Eric when implementing collection. The current interfaces consume supplied
+records and do not choose a workaround for those later algorithms.
+
+The section's user-agent-specific reasons are optional cache-policy choices,
+not additional conditions that this slice may silently impose. The entire
+catalogue remains a dependency on the listed owners:
+
+| Owner/policy area | Listed optional reason strings |
+| --- | --- |
+| Media, device, and user interaction | `audio-capture`, `idledetector`, `keyboardlock`, `mediastream`, `midi`, `modals`, `otpcredential`, `paymentrequest`, `pictureinpicturewindow`, `plugins`, `rtc`, `sensors`, `smartcardconnection`, `speechrecognition`, `storageaccess`, `video-capture`, `webhid`, `webshare`, `webxrdevice` |
+| Network and cache policy | `outstanding-network-request`, `request-method-not-get`, `response-auth-required`, `response-cache-control-no-store`, `response-cache-control-no-cache`, `response-keep-alive`, `response-scheme-not-http-or-https`, `response-status-not-ok`, `rtc-used-with-cache-control-no-store`, `websocket-used-with-cache-control-no-store`, `webtransport`, `webtransport-used-with-cache-control-no-store` |
+| Worker, messaging, database, and background lifecycle | `background-work`, `broadcastchannel-message`, `idbversionchangeevent`, `serviceworker-added`, `serviceworker-claimed`, `serviceworker-postmessage`, `serviceworker-version-activated`, `serviceworker-unregistered`, `sharedworker`, `sharedworker-message`, `sharedworker-with-no-active-client` |
+| Navigation and browsing-context lifecycle | `navigating`, `navigation-canceled`, `non-trivial-browsing-context-group`, `unload-listener` |
+
+The record keeps a string, matching DOMString, rather than a new closed enum.
+The cache-policy audit must choose applicable optional conditions and supply the
+listed reasons; implementing an interface does not enable those policies.
+
+### Validation
+
+The 17 focused tests cover nonconstructibility, null/empty distinctions, recursive
+creation, URL serialization, captured list membership, retained backing scalars,
+array freezing/identity, default JSON behavior, borrowed getters/methods, retired
+realms, active top-level history selection, and the explicit collection/masking
+dependency. The original 15 interface tests passed on Node 24.19.0, Node 26.8.1,
+and custom Node 27.0.0-pre, with and without the addon. The shared-interface
+revision also verifies creation from another implementation while preserving
+fresh child/detail identities in the destination realm. Its Node 26/compat run
+passes all 44 tests across the diagnostic, Document-destruction, Web IDL realm,
+and sequence-conversion suites.
+Generated declarations, typechecking, type contracts, touched-file lint, import
+checks, and whitespace checks pass. No expected failures, skips, addon builds,
+or engine changes were needed.
+
+The next area in document order is §7.3, beginning with navigables. Its audit
+should compare the existing state/initialization with the complete written
+algorithms before moving into larger lifecycle and history-application work.
 
 ## Removal condition
 

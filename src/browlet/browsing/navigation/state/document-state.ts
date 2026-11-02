@@ -3,6 +3,7 @@ import type { ReferrerPolicy } from '../../../../fetch/index';
 
 import type { PolicyContainer } from '../../policy/index';
 import type { DocumentImpl } from '../../../dom/nodes/index';
+import type { NotRestoredReasons } from '../not-restored-reasons';
 
 import type { NestedHistory } from './session-history';
 
@@ -34,7 +35,7 @@ export type DocumentState = {
   /** Target name to restore with the navigable. */
   navigableTargetName: string;
   /** Back/forward-cache restoration diagnostics, when available. */
-  notRestoredReasons: object | null;
+  notRestoredReasons: NotRestoredReasons | null;
 };
 
 /** Session-history state while its Document is present. */

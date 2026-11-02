@@ -1,9 +1,9 @@
-import { InternalError, type InternalPromise } from '../../../infra/index';
+import { InternalError, type InternalPromise } from '../../../../infra/index';
 import {
   arg, defineCallbackFunction, defineInterface, DOMExceptionImpl, emptyDictionary, idlType, impl, op, promise, reference,
-} from '../../../web-idl/core/index';
+} from '../../../../web-idl/core/index';
 
-import type { BrowletEnvironment } from '../../environment/index';
+import type { BrowletEnvironment } from '../../../environment/index';
 
 import type { NavigationImpl, NavigationNavigateOptions } from './navigation';
 import type { NavigateEventImpl, NavigationInterceptHandler } from './navigate-event';
@@ -73,6 +73,13 @@ export class NavigationPrecommitControllerImpl {
 /** Converted precommit callback; bindings project the controller and adapt its promise result. */
 export type NavigationPrecommitHandler = (controller: NavigationPrecommitControllerImpl) => InternalPromise<void>;
 
+/*
+ * [Exposed=Window]
+ * interface NavigationPrecommitController {
+ *   undefined redirect(USVString url, optional NavigationNavigateOptions options = {});
+ *   undefined addHandler(NavigationInterceptHandler handler);
+ * };
+ */
 export const navigationPrecommitControllerIDL = defineInterface({
   name: 'NavigationPrecommitController', exposed: 'Window', implementation: impl(NavigationPrecommitControllerImpl),
   members: [
@@ -83,6 +90,9 @@ export const navigationPrecommitControllerIDL = defineInterface({
   ],
 });
 
+/*
+ * callback NavigationPrecommitHandler = Promise<undefined> (NavigationPrecommitController controller);
+ */
 export const navigationPrecommitHandlerIDL = defineCallbackFunction({
   name: 'NavigationPrecommitHandler', returns: promise(idlType.undefined),
   arguments: [arg('controller', reference('NavigationPrecommitController'))],

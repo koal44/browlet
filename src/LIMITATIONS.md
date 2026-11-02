@@ -701,8 +701,14 @@ See the [Web Storage roadmap](browlet/storage/ROADMAP.md).
   `onerror`, with lazy Document/element scopes and body/frameset forwarding.
   Form-associated elements stop at the explicit `getFormOwner()` stub until
   §4.10.18.3 supplies association; assigned function handlers remain usable.
-  Remaining names, SVG/MathML/Document mixin inclusions, and exact diagnostic
-  source locations remain unfinished. See the [handler inventory](browlet/scripting/ROADMAP.md#html-8181-event-handler-idl-invocation).
+  Exact diagnostic source locations remain unfinished. Handler contributions
+  from other specifications and native input/media/layout event producers retain
+  their respective owners; exposing a handler does not implement its producer.
+  `onbeforeunload` is connected on Window/body/frameset, including inline source
+  and nullable-string returns. Navigation still needs the beforeunload dispatch
+  counters, prompt admission/UI, and navigation decision; synthetic dispatch
+  alone does not show a prompt.
+  See the [handler inventory](browlet/scripting/ROADMAP.md#html-8181-event-handler-idl-invocation).
 
 - **Temporal's HTML clock requires custom Node with the addon.** Windows in every
   isolation mode install their environment's live, precision-limited wall clock. Stock mode and
@@ -985,13 +991,45 @@ destruction lifecycle callers remain unfinished. Precommit
 completion has idle-progress coverage through the supported host bridge after
 integrating the scheduling repairs. Node-injected callbacks between independent
 Browlet Agents retain a separate failing Experimental probe; same-Agent
-cross-Window callbacks pass. See the [Navigation API inventory](browlet/browsing/navigation-api/ROADMAP.md).
+cross-Window callbacks pass. See the [Navigation API inventory](./browlet/browsing/navigation/api/ROADMAP.md).
 Traversal queue/application,
 state restoration, navigation lifecycle cancellation, and
 actual scrolling remain explicit dependencies. Inactive access follows HTML's SecurityError rule,
 including the recorded browser disagreement for retained `state`. See the
 [History audit](browlet/browsing/navigation/ROADMAP.md#html-725-history-foundations)
 and [method preparation](browlet/browsing/navigation/ROADMAP.md#html-725-pushreplace-state-preparation).
+`PopStateEvent` and `HashChangeEvent` now expose their constructors and payloads;
+DOM's legacy event factory also creates HashChangeEvent. Automatic popstate and
+queued hashchange delivery still require §7.4.6.2 state restoration/history
+application. Native visual-transition reporting and the corresponding Window
+handler attributes remain unimplemented. See the
+[event-interface audit](browlet/browsing/navigation/events/ROADMAP.md).
+`PageSwapEvent` exposes its nullable activation/transition payloads, but outgoing
+history application does not yet produce it. `PageRevealEvent` exposes its nullable
+transition payload; the rendering `reveal` hook, once-per-activation Document state,
+inbound transition resolution, and activation after dispatch remain unconnected.
+ViewTransition currently supplies
+interface identity only: its promises, methods, and rendering lifecycle remain
+unfinished. See the [rendering dependency](browlet/rendering/ROADMAP.md#viewtransition-dependency-identity).
+`PageTransitionEvent` and Window's trusted pageshow/pagehide firing method are
+implemented, including the legacy Document target. Initial loading, reactivation,
+and unloading still need their production calls, Document `page showing` state,
+and cache-retention decisions; constructing or firing the event does not provide
+those lifecycle effects.
+`BeforeUnloadEvent` has its legacy factory and independent string `returnValue`.
+Its special handler processing, automatic dispatch, activation/sandbox admission,
+BiDi/UI confirmation, and navigation cancellation remain unfinished. Generated
+typings use `any` for this one inherited property to preserve Event assignability;
+the runtime still converts and stores a string.
+`NotRestoredReasons` and `NotRestoredReasonDetails` expose their nonconstructible
+interfaces and support recursive creation from retained records, including
+realm-owned frozen arrays and default JSON behavior. No public accessor produces
+these diagnostics yet: Navigation Timing, history-lifecycle collection,
+cross-origin masking, and back/forward-cache decisions remain unfinished.
+Document and TopLevelTraversable expose throwing collection/masking stubs; the
+provisional navigation-timing factory marks its missing entry-creation step.
+HTML's later collection algorithm also has unresolved conflicts recorded in the
+[diagnostic audit](browlet/browsing/navigation/ROADMAP.md#html-728-notrestoredreasons).
 `Window.length` now counts current document-tree child navigables, using retained
 iframe/object/frame associations. Those associations still require internal
 creation/destruction producers; appending a container alone creates no child.

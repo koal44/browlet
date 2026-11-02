@@ -2,9 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
-import { NavigateEventImpl } from '../../../src/browlet/browsing/navigation-api/navigate-event';
-import { NavigationDestinationImpl } from '../../../src/browlet/browsing/navigation-api/navigation-destination';
-import { NavigationTransitionImpl } from '../../../src/browlet/browsing/navigation-api/navigation-transition';
+import { NavigateEventImpl } from '../../../src/browlet/browsing/navigation/api/navigate-event';
+import { NavigationDestinationImpl } from '../../../src/browlet/browsing/navigation/api/navigation-destination';
+import { NavigationTransitionImpl } from '../../../src/browlet/browsing/navigation/api/navigation-transition';
 import { navigationAndTraversalTaskSource } from '../../../src/browlet/scripting/tasks';
 import type { NavigateEvent as BrowletNavigateEvent, NavigationTransition as BrowletNavigationTransition } from '../../../src/browlet/platform';
 import { getRelevantRealm, project, unwrap } from '../../support/browlet-binding';

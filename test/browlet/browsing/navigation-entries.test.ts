@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
-import type { NavigationHistoryEntryImpl } from '../../../src/browlet/browsing/navigation-api/navigation-history-entry';
+import type { NavigationHistoryEntryImpl } from '../../../src/browlet/browsing/navigation/api/navigation-history-entry';
 import { createDocumentState, createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/state/index';
 import { Navigable } from '../../../src/browlet/browsing/navigation/navigable';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';

@@ -16,7 +16,7 @@ const globalTypes = [
   'webkitAnimationStart', 'webkitTransitionEnd', 'wheel',
 ];
 const windowTypes = [
-  'afterprint', 'beforeprint', 'hashchange', 'languagechange', 'message', 'messageerror', 'offline',
+  'afterprint', 'beforeprint', 'beforeunload', 'hashchange', 'languagechange', 'message', 'messageerror', 'offline',
   'online', 'pagehide', 'pagereveal', 'pageshow', 'pageswap', 'popstate', 'rejectionhandled', 'storage',
   'unhandledrejection', 'unload',
 ];

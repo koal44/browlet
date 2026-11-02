@@ -1,6 +1,6 @@
-import { defineInterface, impl, nullable, reference, roAttr } from '../../../web-idl/core/index';
+import { defineInterface, impl, nullable, reference, roAttr } from '../../../../web-idl/core/index';
 
-import type { BrowletEnvironment } from '../../environment/index';
+import type { BrowletEnvironment } from '../../../environment/index';
 
 import type { NavigationType } from './navigation';
 import type { NavigationHistoryEntryImpl } from './navigation-history-entry';
@@ -29,6 +29,14 @@ export class NavigationActivationImpl {
   }
 }
 
+/*
+ * [Exposed=Window]
+ * interface NavigationActivation {
+ *   readonly attribute NavigationHistoryEntry? from;
+ *   readonly attribute NavigationHistoryEntry entry;
+ *   readonly attribute NavigationType navigationType;
+ * };
+ */
 export const navigationActivationIDL = defineInterface({
   name: 'NavigationActivation', exposed: 'Window', implementation: impl(NavigationActivationImpl),
   members: [

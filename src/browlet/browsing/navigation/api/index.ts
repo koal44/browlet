@@ -19,8 +19,4 @@ export {
   type NavigationPrecommitHandler,
 } from './navigation-precommit-controller';
 export { NavigationHistoryEntryImpl, navigationHistoryEntryIDL } from './navigation-history-entry';
-export {
-  NavigationCurrentEntryChangeEventImpl, navigationCurrentEntryChangeEventIDL, navigationCurrentEntryChangeEventInitIDL,
-  type NavigationCurrentEntryChangeEventInit,
-} from './navigation-current-entry-change-event';
 export { navigationIDLDefinitions } from './web-idl';

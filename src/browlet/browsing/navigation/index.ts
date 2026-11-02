@@ -6,5 +6,9 @@ export {
 export { NavigationParams, type OpenerPolicyEnforcementResult } from './params';
 export {
   createDocumentState, type DocumentState, type DocumentBackedState, type PostResource,
-  createSessionHistoryEntry, restoreScrollPositionData, type SessionHistoryEntry, type NestedHistory, type NotRestoredReasonDetails,
+  createSessionHistoryEntry, restoreScrollPositionData, type SessionHistoryEntry, type NestedHistory,
 } from './state/index';
+export {
+  NotRestoredReasonDetailsImpl, NotRestoredReasonsImpl, notRestoredReasonDetailsIDL, notRestoredReasonsIDL,
+  type NotRestoredReasonDetails, type NotRestoredReasons,
+} from './not-restored-reasons';

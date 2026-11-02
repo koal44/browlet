@@ -79,7 +79,7 @@ tester.run('dependency-direction', direction, {
     { filename: sourceFile('browlet/integration/web-idl/composition'), code: "import { getWindowProxyAccess } from './bindings/index';" },
     { filename: sourceFile('browlet/integration/web-idl/composition'), code: "import { queueNodeTask } from '../host/index';" },
     { filename: sourceFile('browlet/integration/web-idl/composition'), code: "import { WindowOrWorkerGlobalScopeMixin } from '../../environment/index';" },
-    { filename: sourceFile('browlet/browsing/navigation-api/navigate-event'), code: "import { restoreScrollPositionData } from '../navigation/state/index';" },
+    { filename: sourceFile('browlet/browsing/navigation/api/navigate-event'), code: "import { restoreScrollPositionData } from '../state/index';" },
     { filename: sourceFile('web-idl/converters/interface'), code: "import { getPlatformRecord } from '../values/index';" },
     { filename: sourceFile('web-idl/converters/dictionary'), code: "import { compileHostSteps } from '../../js-engine/index';" },
     { filename: sourceFile('browlet/browsing/policy/csp/directives'), code: "import { urlMatchesSourceExpression } from '../source-expressions';" },

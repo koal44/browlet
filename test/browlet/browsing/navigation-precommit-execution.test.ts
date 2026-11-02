@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { PageEvaluation } from '../../../src/browlet/automation/evaluation';
 import { BrowsingContext, createDocumentState, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
-import { NavigateEventImpl } from '../../../src/browlet/browsing/navigation-api/navigate-event';
+import { NavigateEventImpl } from '../../../src/browlet/browsing/navigation/api/navigate-event';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { getRelevantRealm, unwrap } from '../../support/browlet-binding';
 import { createSiblingWindow } from '../../support/windows';

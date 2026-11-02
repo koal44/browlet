@@ -20,6 +20,14 @@
 integration and is also used by FileReader. It imports DOM's shared event
 machinery; DOM does not collect its declarations.
 
+[Navigation event interfaces](../../browsing/navigation/events/ROADMAP.md)
+likewise retain their navigation owner. The payload foundation is below DOM
+nodes so Document's legacy factory can construct HashChangeEvent and
+BeforeUnloadEvent without loading navigation. PopStateEvent is not in that table.
+Event's boolean `returnValue` binding adapts its cancellation state independently
+of BeforeUnloadEvent's string attribute. The base implementation's
+`isBeforeUnloadEvent()` predicate supports HTML's future special handler processing.
+
 [`DOMEnvironment`](../environment.ts) requires a `DOMRealm` and `createEvent()` for
 the whole DOM subsystem. The realm supplies timestamps and the associated-document
 query; `WindowDOMRealm` adds current-event operations and the shared Window Agent.

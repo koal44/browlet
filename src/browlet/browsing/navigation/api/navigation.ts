@@ -1,22 +1,22 @@
-import { InternalError, type InternalPromise } from '../../../infra/index';
+import { InternalError, type InternalPromise } from '../../../../infra/index';
 import {
   arg, atArg, defineDictionary, defineEnumeration, defineInterface, dictMember, DOMExceptionImpl, emptyDictionary,
   idlType, impl, invokeWith, nullable, op, promise, reference, roAttr, sequence, type DOMException,
-} from '../../../web-idl/core/index';
-import { areSameOrigin, urlsEqual, type URLRecord } from '../../../url/index';
-import { FormDataImpl, type FormDataEntry } from '../../../xhr/index';
+} from '../../../../web-idl/core/index';
+import { areSameOrigin, urlsEqual, type URLRecord } from '../../../../url/index';
+import { FormDataImpl, type FormDataEntry } from '../../../../xhr/index';
 
-import { EventTargetImpl } from '../../dom/events/index';
-import { eventHandlerAttr, EventHandlerMap, type EventHandlerCallback } from '../../scripting/index';
-import type { ElementImpl } from '../../dom/nodes/index';
-import { SourceSnapshotParams } from '../navigation/state/index';
-import type { BrowletEnvironment } from '../../environment/index';
-import type { SerializedRecord } from '../../scripting/structured-data/index';
-import type { NavigationHistoryBehavior, SessionHistoryEntry, UserNavigationInvolvement } from '../navigation/index';
+import { EventTargetImpl } from '../../../dom/events/index';
+import { eventHandlerAttr, EventHandlerMap, type EventHandlerCallback } from '../../../scripting/index';
+import { NavigationCurrentEntryChangeEventImpl } from '../events/index';
+import type { ElementImpl } from '../../../dom/nodes/index';
+import { SourceSnapshotParams, type SessionHistoryEntry } from '../state/index';
+import type { BrowletEnvironment } from '../../../environment/index';
+import type { SerializedRecord } from '../../../scripting/structured-data/index';
+import type { NavigationHistoryBehavior, UserNavigationInvolvement } from '../navigable';
 
 import { NavigationHistoryEntryImpl } from './navigation-history-entry';
 import { NavigationActivationImpl } from './navigation-activation';
-import { NavigationCurrentEntryChangeEventImpl } from './navigation-current-entry-change-event';
 import { NavigationAPIMethodTracker } from './method-tracker';
 import { NavigationTransitionImpl } from './navigation-transition';
 import { NavigateEventImpl } from './navigate-event';
@@ -621,6 +621,14 @@ export type PushReplaceReloadNavigateEventOptions = {
   apiMethodTracker?: NavigationAPIMethodTracker | null;
 };
 
+/*
+ * enum NavigationType {
+ *   "push",
+ *   "replace",
+ *   "reload",
+ *   "traverse"
+ * };
+ */
 export const navigationTypeIDL = defineEnumeration({
   name: 'NavigationType',
   values: ['push', 'replace', 'reload', 'traverse'] satisfies NavigationType[],
@@ -628,6 +636,31 @@ export const navigationTypeIDL = defineEnumeration({
 
 // TODO(HTML §§6.6, 7.4; CSSOM View): Automatic focus/scroll effects and the complete history/navigation producers.
 // Navigation and traversal effects remain in Navigable/Traversable.
+/*
+ * [Exposed=Window]
+ * interface Navigation : EventTarget {
+ *   sequence<NavigationHistoryEntry> entries();
+ *   readonly attribute NavigationHistoryEntry? currentEntry;
+ *   undefined updateCurrentEntry(NavigationUpdateCurrentEntryOptions options);
+ *   readonly attribute NavigationTransition? transition;
+ *   readonly attribute NavigationActivation? activation;
+ *
+ *   readonly attribute boolean canGoBack;
+ *   readonly attribute boolean canGoForward;
+ *
+ *   NavigationResult navigate(USVString url, optional NavigationNavigateOptions options = {});
+ *   NavigationResult reload(optional NavigationReloadOptions options = {});
+ *
+ *   NavigationResult traverseTo(DOMString key, optional NavigationOptions options = {});
+ *   NavigationResult back(optional NavigationOptions options = {});
+ *   NavigationResult forward(optional NavigationOptions options = {});
+ *
+ *   attribute EventHandler onnavigate;
+ *   attribute EventHandler onnavigatesuccess;
+ *   attribute EventHandler onnavigateerror;
+ *   attribute EventHandler oncurrententrychange;
+ * };
+ */
 export const navigationIDL = defineInterface<BrowletEnvironment>({
   name: 'Navigation',
   inherits: 'EventTarget',
@@ -665,21 +698,51 @@ export const navigationIDL = defineInterface<BrowletEnvironment>({
   ],
 });
 
+/*
+ * dictionary NavigationUpdateCurrentEntryOptions {
+ *   required any state;
+ * };
+ */
 export const navigationUpdateCurrentEntryOptionsIDL = defineDictionary({
   name: 'NavigationUpdateCurrentEntryOptions',
   members: [dictMember('state', idlType.any, { required: true })],
 });
 
+/*
+ * dictionary NavigationOptions {
+ *   any info;
+ * };
+ */
 export const navigationOptionsIDL = defineDictionary({
   name: 'NavigationOptions', members: [dictMember('info', idlType.any)],
 });
+
+/*
+ * dictionary NavigationNavigateOptions : NavigationOptions {
+ *   any state;
+ *   NavigationHistoryBehavior history = "auto";
+ * };
+ */
 export const navigationNavigateOptionsIDL = defineDictionary({
   name: 'NavigationNavigateOptions', inherits: 'NavigationOptions',
   members: [dictMember('state', idlType.any), dictMember('history', reference('NavigationHistoryBehavior'), { default: 'auto' })],
 });
+
+/*
+ * dictionary NavigationReloadOptions : NavigationOptions {
+ *   any state;
+ * };
+ */
 export const navigationReloadOptionsIDL = defineDictionary({
   name: 'NavigationReloadOptions', inherits: 'NavigationOptions', members: [dictMember('state', idlType.any)],
 });
+
+/*
+ * dictionary NavigationResult {
+ *   Promise<NavigationHistoryEntry> committed;
+ *   Promise<NavigationHistoryEntry> finished;
+ * };
+ */
 export const navigationResultIDL = defineDictionary({
   name: 'NavigationResult',
   members: [
@@ -687,6 +750,14 @@ export const navigationResultIDL = defineDictionary({
     dictMember('finished', promise(reference('NavigationHistoryEntry'))),
   ],
 });
+
+/*
+ * enum NavigationHistoryBehavior {
+ *   "auto",
+ *   "push",
+ *   "replace"
+ * };
+ */
 export const navigationHistoryBehaviorIDL = defineEnumeration({
   name: 'NavigationHistoryBehavior', values: ['auto', 'push', 'replace'] satisfies NavigationHistoryBehavior[],
 });

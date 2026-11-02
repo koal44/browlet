@@ -23,10 +23,11 @@ describe('Navigation entry reactivation', () => {
         });
       };
     }
-    browser.window.addEventListener('pageshow', () => {
+    browser.window.addEventListener('pageshow', (event) => {
       order.push({
         pageshow: browser.window.navigation.entries().length,
         current: browser.window.navigation.currentEntry === previous[1],
+        persisted: (event as PageTransitionEvent).persisted,
       });
     });
     navigation.updateEntriesForReactivation([entries[1]!, added], entries[1]!);
@@ -40,10 +41,10 @@ describe('Navigation entry reactivation', () => {
     expect(order).toEqual([]);
     expect(document.env.responsibleEventLoop.getTaskQueue(navigationAndTraversalTaskSource).size).toBe(1);
     // The §7.4 reactivation/pageshow producer is unfinished; deliver its event before the queued task.
-    document.getRelevantGlobalObject()!.fireEvent('pageshow');
+    document.getRelevantGlobalObject()!.firePageTransitionEvent('pageshow', true);
     await runInHostTask(() => { document.env.responsibleEventLoop.runTaskTurn(); });
     expect(order).toEqual([
-      { pageshow: 2, current: true },
+      { pageshow: 2, current: true, persisted: true },
       { dispose: 0, index: -1, current: true, trusted: true, target: true, type: 'dispose', flags: [false, false, false] },
       { dispose: 2, index: -1, current: true, trusted: true, target: true, type: 'dispose', flags: [false, false, false] },
     ]);

@@ -15,6 +15,7 @@ import {
   type ImportMapParseResult, type BrowletGlobalObject, type SpecifierResolutionRecord,
   type SpeculationRulesParseResult, type TimerAction,
 } from '../../scripting/index';
+import { PageTransitionEventImpl } from '../navigation/events/index';
 import type { TrustedTypePolicyFactoryImpl } from '../policy/trusted-types/index';
 import type { HistoryImpl } from '../history/index';
 import { HTMLCollectionImpl, type DocumentImpl, type ElementImpl } from '../../dom/nodes/index';
@@ -24,7 +25,7 @@ import type { PerformanceImpl } from '../../performance/index';
 import { NavigatorImpl } from '../../navigator/index';
 import { windowPostMessage, type WindowPostMessageOptions } from '../../communication/index';
 import { WindowSessionStorageMixin, WindowLocalStorageMixin, type StorageImpl } from '../../storage/index';
-import { NavigationImpl } from '../navigation-api/index';
+import { NavigationImpl } from '../navigation/api/index';
 import type {
   BrowletEnvironment, WindowEnvironment, WindowOrWorkerGlobalScopeMixin, TimerHandler,
 } from '../../environment/index';
@@ -553,6 +554,17 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
     if (this.#globalScopeMixin !== null) {
       this.#globalScopeMixin.setAssociatedDocument(document);
     }
+  }
+
+  /** Fire a trusted page transition notification; cancellation has no lifecycle effect. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#fire-a-page-transition-event
+  // TODO(HTML lifecycle): Connect initial loading, history reactivation, and unloading with their persisted values.
+  firePageTransitionEvent(eventName: string, persisted: boolean): void {
+    this.fireEvent(eventName, PageTransitionEventImpl, (event) => {
+      (event as PageTransitionEventImpl).persisted = persisted;
+      event.cancelable = true;
+      event.bubbles = true;
+    }, true);
   }
 
   /** Identify this event target as a Window for event-dispatch rules. */

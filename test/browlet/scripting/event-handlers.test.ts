@@ -209,6 +209,37 @@ describe('HTML event-handler processing', () => {
     })).toEqual([true, true, ['before', 'after', 'before', 'handler', 'after', 'before', 'after', 'readded']]);
   });
 
+  it('converts a borrowed beforeunload handler result and reports failures in the callback realm', async () => {
+    const target = await createBrowser();
+    const source = createSibling(target);
+    await source.evaluation.evaluate(() => {
+      Reflect.set(globalThis, 'handler', function(this: Window, event: Event) {
+        Reflect.set(globalThis, 'received', [this === event.currentTarget, window.event === event]);
+        return Symbol('invalid DOMString');
+      });
+    });
+    const failures: boolean[] = [];
+    const sourceRealm = getRelevantRealm(source.window);
+    source.window.addEventListener('error', (event) => {
+      failures.push(Reflect.get(event, 'error') instanceof sourceRealm.TypeError);
+      event.preventDefault();
+    });
+    const targetError = vi.fn();
+    target.window.addEventListener('error', targetError);
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Borrow the setter with an explicit target receiver.
+    const setter = Object.getOwnPropertyDescriptor(source.window, 'onbeforeunload')!.set!;
+    Reflect.apply(setter, target.window, [Reflect.get(source.window, 'handler')]);
+    const event = target.window.document.createEvent('BeforeUnloadEvent');
+    event.initEvent('beforeunload', false, true);
+    expect(target.window.dispatchEvent(event)).toBe(true);
+    expect(event.returnValue).toBe('');
+    expect(Reflect.get(source.window, 'received')).toEqual([true, true]);
+    expect(failures).toEqual([true]);
+    expect(targetError).not.toHaveBeenCalled();
+    expect(target.window.onbeforeunload).toBe(Reflect.get(source.window, 'handler'));
+    expect(source.window.onbeforeunload).toBeNull();
+  });
+
   it('delivers reportError through onerror and exposes its cancellation to later listeners', async () => {
     const browser = await createBrowser();
     expect(await browser.evaluate(() => {

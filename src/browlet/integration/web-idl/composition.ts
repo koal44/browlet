@@ -91,8 +91,9 @@ export function createWindowEnvironment(
             if (form !== null) contextExtensions.push(binding.project(ElementImpl, form)!);
             if (element !== null) contextExtensions.push(binding.project(ElementImpl, element)!);
             const callback = this.realm.compileFunction(body, parameters, { name, filename, contextExtensions });
-            return binding.createCallbackFunction(callback,
-              reference(specialErrorHandler ? 'OnErrorEventHandlerNonNull' : 'EventHandlerNonNull'), this);
+            const callbackType = specialErrorHandler ? 'OnErrorEventHandlerNonNull'
+              : name === 'onbeforeunload' ? 'OnBeforeUnloadEventHandlerNonNull' : 'EventHandlerNonNull';
+            return binding.createCallbackFunction(callback, reference(callbackType), this);
           },
         });
         env.creationURL = creationURL;

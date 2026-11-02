@@ -1,7 +1,7 @@
 # Navigation API roadmap
 
 This component owns Window's Navigation and its realm-owned entry objects.
-The higher [navigation coordinator](../navigation/ROADMAP.md) owns the underlying
+The higher [navigation coordinator](../ROADMAP.md) owns the underlying
 session-history records, navigation, and traversal. Window owns Navigation's
 lifetime; replacing the author-facing `window.navigation` property does not
 replace that implementation.
@@ -655,7 +655,7 @@ updates leave activation unchanged. The current entry must be initialized first.
 | Full history-step application (§7.4.6.2) | Supply the previous active entry and resolved NavigationType. Audit HTML's ordering of activation before the later reactivation entry-list reconciliation: a newly visible predecessor might not yet be in the retained list. Preserve the old Document's initial-about:blank flag until replacement selection; an evicted unlisted predecessor currently throws explicitly rather than guessing that flag. The synchronous top-level new-Document commit is only one producer. |
 | Reload and traversal | Navigable's explicit unfinished operations must deliver their own `reload`/`traverse` types and restored entry state. A host same-URL load currently resolves to `replace`; it is not evidence of reload support. |
 | Same-document entry updates (§7.2.6.4) | Entry updates preserve the activation and its retained endpoints even if they leave the list. State updates to a retained session-history record remain visible through that entry. Full §7.4 history application remains unconnected. |
-| `pageswap` (§7.2.7.4, §7.4.6.2) | Its event, outgoing-document lifecycle, redirect-chain same-origin check, and View Transition integration are unfinished. It creates a **separate** activation in the outgoing Document's realm, with `from` equal to its current entry and a destination selected by navigation type; it must not mutate `navigation.activation`. |
+| `pageswap` (§7.2.7.4, §7.4.6.2) | The event interface is implemented; outgoing-document lifecycle, redirect-chain same-origin checks, and View Transition integration remain unfinished. Its producer creates a **separate** activation in the outgoing Document's realm, with `from` equal to its current entry and a destination selected by navigation type; it must not mutate `navigation.activation`. |
 | Request referrer policy and history eviction | The existing entry getters consume retained policy; source-snapshot policy capture and complete Document eviction/restoration remain navigation-coordinator dependencies. |
 
 The browser-only reproduction is
@@ -695,7 +695,7 @@ Blink's
 WebKit's
 [`setActivation()` and reactivation update](https://github.com/WebKit/WebKit/blob/713192fabebfdd2955aa596c262c33bfbf3d50be/Source/WebCore/page/Navigation.cpp#L281),
 and the
-[retained-from WPT regression](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622782fe62529bb3a4809780da01d6c/testing/web-platform/tests/navigation-api/navigation-activation/activation-after-bfcache-cross-origin-clears-from.html).
+[retained-from WPT regression](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622782fe62529bb3a4809780da01d6c/testing/web-platform/tests/navigation/api/navigation-activation/activation-after-bfcache-cross-origin-clears-from.html).
 These browser source snapshots are older than the tested binaries; live results
 above establish only the cases the probe actually reached. The probe's optional
 `--read-opaque-entry` flag retains the Firefox crash reproduction separately from
@@ -836,7 +836,7 @@ the older source. Sources:
 [Blink Redirect](https://chromium.googlesource.com/chromium/src/+/1136757f47c7e2b6cc593f871a5d79fc0e9834b4/third_party/blink/renderer/core/navigation_api/navigate_event.cc#274),
 [Gecko controller](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622782fe62529bb3a4809780da01d6c/dom/navigation/NavigationPrecommitController.cpp#L42),
 [WebKit controller](https://github.com/WebKit/WebKit/blob/713192fabebfdd2955aa596c262c33bfbf3d50be/Source/WebCore/page/NavigationPrecommitController.cpp#L53),
-and [WPT redirect options](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622782fe62529bb3a4809780da01d6c/testing/web-platform/tests/navigation-api/precommit-handler/precommitHandler-redirect-options.html).
+and [WPT redirect options](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622782fe62529bb3a4809780da01d6c/testing/web-platform/tests/navigation/api/precommit-handler/precommitHandler-redirect-options.html).
 
 The later §7.2.6.10.4 execution slice now creates and delivers the controller
 through Binding, waits for precommit handlers, and processes their failure.
@@ -938,7 +938,7 @@ shadow-inclusive descendant-navigable helper supplies consumption across nested
 and cross-origin active Windows. This differs from the light-tree child list used
 for Window indexed access. Input notification, automation, close-watcher
 notification, transient/sticky activation, and the UserActivation interface
-remain in the [interaction inventory](../../interaction/ROADMAP.md).
+remain in the [interaction inventory](../../../interaction/ROADMAP.md).
 
 Eric approved these two choices, recorded alongside their source branches:
 
@@ -1269,6 +1269,16 @@ Navigation IDL are accounted for below.
 | `navigate` firing, cancellation and exceptions to firing | Preparation, shared dispatch, tracker acceptance, and cancellation are implemented, including restricted traversal cancellation and history-action consumption. History is the connected producer. Caller exclusions, other lifecycle producers, input activation, and completion dependencies remain above. |
 | Interception and asynchronous completion | Destination/event interfaces, interception registration, hash/download discrimination, transition creation, scroll validation, precommit controller/execution, commit coordination, postcommit handlers/settlement, and finishing policy are implemented. Full URL/history effects, loading UI, and automatic focus/scroll effects remain unfinished. |
 
-Next area in document order: §7.2.7 event interfaces. Automatic focus remains
+The [§§7.2.7.1–3 event audit](../events/ROADMAP.md) confirms the existing
+NavigationCurrentEntryChangeEvent and adds PopStateEvent and HashChangeEvent.
+PageSwapEvent, PageRevealEvent, and PageTransitionEvent interfaces are also
+implemented, with their View Transition, history-application, and rendering
+dependencies explicit in that audit. Window's page-transition firing method is
+ready for the reactivation caller; the test supplies that call explicitly.
+BeforeUnloadEvent's interface and legacy factory are also implemented; §8.1.8
+handler processing and the unload-prompt producer remain separate dependencies.
+The [§7.2.8 NotRestoredReasons interfaces](../ROADMAP.md#html-728-notrestoredreasons)
+are implemented, with lifecycle collection and Navigation Timing still explicit.
+Next area in document order: §7.3 navigables. Automatic focus remains
 HTML §6.6 work; full URL/history, scrolling, traversal, and lifecycle producers
 remain in §7.3/§7.4 and CSSOM View, with the boundaries above kept explicit.

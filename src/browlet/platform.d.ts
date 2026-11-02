@@ -69,6 +69,8 @@ export type EventHandler = EventHandlerNonNull | null;
 
 export type OnErrorEventHandler = OnErrorEventHandlerNonNull | null;
 
+export type OnBeforeUnloadEventHandler = OnBeforeUnloadEventHandlerNonNull | null;
+
 export type MessageEventSource = WindowProxy | MessagePort | ServiceWorker;
 
 export type TimerHandler = string | Function;
@@ -169,6 +171,44 @@ export interface NavigationCurrentEntryChangeEventInit {
   composed?: boolean;
   from: NavigationHistoryEntry;
   navigationType?: NavigationType | null;
+}
+
+export interface PopStateEventInit {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+  hasUAVisualTransition?: boolean;
+  state?: any;
+}
+
+export interface HashChangeEventInit {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+  newURL?: string;
+  oldURL?: string;
+}
+
+export interface PageSwapEventInit {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+  activation?: NavigationActivation | null;
+  viewTransition?: ViewTransition | null;
+}
+
+export interface PageRevealEventInit {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+  viewTransition?: ViewTransition | null;
+}
+
+export interface PageTransitionEventInit {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+  persisted?: boolean;
 }
 
 export interface SecurityPolicyViolationEventInit {
@@ -481,6 +521,8 @@ export type ReportingObserverCallback = (reports: Array<Report>, observer: Repor
 export type EventHandlerNonNull = (event: Event) => any;
 
 export type OnErrorEventHandlerNonNull = (event: Event | string, source?: string, lineno?: number, colno?: number, error?: any) => any;
+
+export type OnBeforeUnloadEventHandlerNonNull = (event: Event) => string | null;
 
 export type IdleRequestCallback = (deadline: IdleDeadline) => void;
 
@@ -882,6 +924,7 @@ export interface HTMLLinkElementConstructor extends Ctor<HTMLElementConstructor>
 export interface HTMLBodyElement extends HTMLElement {
   onafterprint: EventHandlerNonNull | null;
   onbeforeprint: EventHandlerNonNull | null;
+  onbeforeunload: OnBeforeUnloadEventHandlerNonNull | null;
   onhashchange: EventHandlerNonNull | null;
   onlanguagechange: EventHandlerNonNull | null;
   onmessage: EventHandlerNonNull | null;
@@ -1475,6 +1518,7 @@ export interface HTMLDialogElementConstructor extends Ctor<HTMLElementConstructo
 export interface HTMLFrameSetElement extends HTMLElement {
   onafterprint: EventHandlerNonNull | null;
   onbeforeprint: EventHandlerNonNull | null;
+  onbeforeunload: OnBeforeUnloadEventHandlerNonNull | null;
   onhashchange: EventHandlerNonNull | null;
   onlanguagechange: EventHandlerNonNull | null;
   onmessage: EventHandlerNonNull | null;
@@ -1940,6 +1984,102 @@ export interface NavigationCurrentEntryChangeEventConstructor extends Ctor<Event
   new (type: string, eventInitDict: NavigationCurrentEntryChangeEventInit): NavigationCurrentEntryChangeEvent;
 }
 
+export interface PopStateEvent extends Event {
+  readonly state: any;
+  readonly hasUAVisualTransition: boolean;
+}
+
+export interface PopStateEventConstructor extends Ctor<EventConstructor> {
+  readonly prototype: PopStateEvent;
+  [Symbol.hasInstance](value: unknown): value is PopStateEvent;
+  new (type: string, eventInitDict?: PopStateEventInit): PopStateEvent;
+}
+
+export interface HashChangeEvent extends Event {
+  readonly oldURL: string;
+  readonly newURL: string;
+}
+
+export interface HashChangeEventConstructor extends Ctor<EventConstructor> {
+  readonly prototype: HashChangeEvent;
+  [Symbol.hasInstance](value: unknown): value is HashChangeEvent;
+  new (type: string, eventInitDict?: HashChangeEventInit): HashChangeEvent;
+}
+
+export interface PageSwapEvent extends Event {
+  readonly activation: NavigationActivation | null;
+  readonly viewTransition: ViewTransition | null;
+}
+
+export interface PageSwapEventConstructor extends Ctor<EventConstructor> {
+  readonly prototype: PageSwapEvent;
+  [Symbol.hasInstance](value: unknown): value is PageSwapEvent;
+  new (type: string, eventInitDict?: PageSwapEventInit): PageSwapEvent;
+}
+
+export interface PageRevealEvent extends Event {
+  readonly viewTransition: ViewTransition | null;
+}
+
+export interface PageRevealEventConstructor extends Ctor<EventConstructor> {
+  readonly prototype: PageRevealEvent;
+  [Symbol.hasInstance](value: unknown): value is PageRevealEvent;
+  new (type: string, eventInitDict?: PageRevealEventInit): PageRevealEvent;
+}
+
+export interface PageTransitionEvent extends Event {
+  readonly persisted: boolean;
+}
+
+export interface PageTransitionEventConstructor extends Ctor<EventConstructor> {
+  readonly prototype: PageTransitionEvent;
+  [Symbol.hasInstance](value: unknown): value is PageTransitionEvent;
+  new (type: string, eventInitDict?: PageTransitionEventInit): PageTransitionEvent;
+}
+
+export interface BeforeUnloadEvent extends Omit<Event, "returnValue"> {
+  returnValue: any;
+}
+
+export interface BeforeUnloadEventConstructor extends Ctor<EventConstructor> {
+  readonly prototype: BeforeUnloadEvent;
+  [Symbol.hasInstance](value: unknown): value is BeforeUnloadEvent;
+}
+
+export interface NotRestoredReasonDetails {
+  readonly reason: string;
+  toJSON(): object;
+}
+
+export interface NotRestoredReasonDetailsConstructor {
+  readonly prototype: NotRestoredReasonDetails;
+  [Symbol.hasInstance](value: unknown): value is NotRestoredReasonDetails;
+}
+
+export interface NotRestoredReasons {
+  readonly src: string | null;
+  readonly id: string | null;
+  readonly name: string | null;
+  readonly url: string | null;
+  readonly reasons: ReadonlyArray<NotRestoredReasonDetails> | null;
+  readonly children: ReadonlyArray<NotRestoredReasons> | null;
+  toJSON(): object;
+}
+
+export interface NotRestoredReasonsConstructor {
+  readonly prototype: NotRestoredReasons;
+  [Symbol.hasInstance](value: unknown): value is NotRestoredReasons;
+}
+
+export interface ViewTransition {
+
+}
+
+export interface ViewTransitionConstructor {
+  readonly prototype: ViewTransition;
+  [Symbol.hasInstance](value: unknown): value is ViewTransition;
+}
+
 export interface BarProp {
   readonly visible: boolean;
 }
@@ -2349,6 +2489,7 @@ export interface Window extends EventTarget {
   onwheel: EventHandlerNonNull | null;
   onafterprint: EventHandlerNonNull | null;
   onbeforeprint: EventHandlerNonNull | null;
+  onbeforeunload: OnBeforeUnloadEventHandlerNonNull | null;
   onhashchange: EventHandlerNonNull | null;
   onlanguagechange: EventHandlerNonNull | null;
   onmessage: EventHandlerNonNull | null;
@@ -2464,6 +2605,15 @@ export interface Window extends EventTarget {
   NavigateEvent: NavigateEventConstructor;
   NavigationPrecommitController: NavigationPrecommitControllerConstructor;
   NavigationCurrentEntryChangeEvent: NavigationCurrentEntryChangeEventConstructor;
+  PopStateEvent: PopStateEventConstructor;
+  HashChangeEvent: HashChangeEventConstructor;
+  PageSwapEvent: PageSwapEventConstructor;
+  PageRevealEvent: PageRevealEventConstructor;
+  PageTransitionEvent: PageTransitionEventConstructor;
+  BeforeUnloadEvent: BeforeUnloadEventConstructor;
+  NotRestoredReasonDetails: NotRestoredReasonDetailsConstructor;
+  NotRestoredReasons: NotRestoredReasonsConstructor;
+  ViewTransition: ViewTransitionConstructor;
   BarProp: BarPropConstructor;
   ReportBody: ReportBodyConstructor;
   IntegrityViolationReportBody: IntegrityViolationReportBodyConstructor;

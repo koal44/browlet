@@ -2,10 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
-import type { NavigationType } from '../../../src/browlet/browsing/navigation-api/navigation';
-import { NavigationTransitionImpl } from '../../../src/browlet/browsing/navigation-api/navigation-transition';
-import { NavigationDestinationImpl } from '../../../src/browlet/browsing/navigation-api/navigation-destination';
-import { NavigationHistoryEntryImpl } from '../../../src/browlet/browsing/navigation-api/navigation-history-entry';
+import type { NavigationType } from '../../../src/browlet/browsing/navigation/api/navigation';
+import { NavigationTransitionImpl } from '../../../src/browlet/browsing/navigation/api/navigation-transition';
+import { NavigationDestinationImpl } from '../../../src/browlet/browsing/navigation/api/navigation-destination';
+import { NavigationHistoryEntryImpl } from '../../../src/browlet/browsing/navigation/api/navigation-history-entry';
 import { createSessionHistoryEntry, createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import type { NavigationTransition as BrowletNavigationTransition } from '../../../src/browlet/platform';
 import { getRelevantRealm, unwrap } from '../../support/browlet-binding';

@@ -5,6 +5,7 @@ import {
 } from '../../../web-idl/core/index';
 
 import { unsafeSharedCurrentTime, type DOMHighResTimeStamp } from '../../timing/index';
+import type { BeforeUnloadEventImpl } from '../../browsing/navigation/events/index';
 import type { DOMEnvironment } from '../environment';
 
 import type { EventTargetImpl } from './event-target';
@@ -89,18 +90,13 @@ export class EventImpl {
     if (value) this.propagationStopped = true;
   }
 
-  /** @deprecated False when canceled; assigning false requests cancellation. */
-  // https://dom.spec.whatwg.org/#dom-event-returnvalue
-  get returnValue(): boolean {
-    return !this.defaultPrevented;
-  }
-
-  set returnValue(value: boolean) {
-    if (!value) this.#setCanceled();
-  }
-
   /** Whether this event implements ErrorEvent, independently of its event type. */
   isErrorEvent(): this is ErrorEventImpl {
+    return false;
+  }
+
+  /** Whether this event implements BeforeUnloadEvent, independently of its event type. */
+  isBeforeUnloadEvent(): this is BeforeUnloadEventImpl {
     return false;
   }
 
@@ -354,7 +350,12 @@ export const eventIDL = defineInterface<DOMEnvironment>({
     op('stopImmediatePropagation', idlType.undefined),
     roAttr('bubbles', idlType.boolean),
     roAttr('cancelable', idlType.boolean),
-    attr('returnValue', idlType.boolean),
+    // Keep this legacy cancellation adapter independent of BeforeUnloadEvent's string storage.
+    // https://dom.spec.whatwg.org/#dom-event-returnvalue
+    attr('returnValue', idlType.boolean, {
+      overrideGet() { return !(this as EventImpl).defaultPrevented; },
+      overrideSet(_env, value) { if (value === false) (this as EventImpl).preventDefault(); },
+    }),
     op('preventDefault', idlType.undefined),
     roAttr('defaultPrevented', idlType.boolean),
     roAttr('composed', idlType.boolean),

@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
-import { NavigateEventImpl } from '../../../src/browlet/browsing/navigation-api/navigate-event';
-import { NavigationDestinationImpl } from '../../../src/browlet/browsing/navigation-api/navigation-destination';
-import { NavigationPrecommitControllerImpl } from '../../../src/browlet/browsing/navigation-api/navigation-precommit-controller';
+import { NavigateEventImpl } from '../../../src/browlet/browsing/navigation/api/navigate-event';
+import { NavigationDestinationImpl } from '../../../src/browlet/browsing/navigation/api/navigation-destination';
+import { NavigationPrecommitControllerImpl } from '../../../src/browlet/browsing/navigation/api/navigation-precommit-controller';
 import type { NavigateEvent as BrowletNavigateEvent, NavigationPrecommitController } from '../../../src/browlet/platform';
 import { getBindingContext, project, unwrap } from '../../support/browlet-binding';
 

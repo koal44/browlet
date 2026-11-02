@@ -36,6 +36,7 @@ import {
   type EventHandlerCallback, type SpeculationRuleSet,
 } from '../../scripting/index';
 import { StorageEventImpl } from '../../storage/events/index';
+import { BeforeUnloadEventImpl, HashChangeEventImpl } from '../../browsing/navigation/events/index';
 import {
   InsecureRequestsPolicy, PolicyContainer, OpenerPolicy, PermissionsPolicy, PermissionsPolicyImpl, SandboxingFlagSet,
   type SandboxingFlag, type PolicyControlledFeature, type PolicyFeatureValue,
@@ -55,7 +56,7 @@ import type { BrowletEnvironment } from '../../environment/index';
 import type { DocumentParser } from '../../html/parser/index';
 import type { SerializedRecord } from '../../scripting/structured-data/index';
 import type {
-  BrowsingContext, Navigable, NotRestoredReasonDetails, NavigationParams, HistoryHandlingBehavior,
+  BrowsingContext, Navigable, NotRestoredReasonDetails, NotRestoredReasons, NavigationParams, HistoryHandlingBehavior,
 } from '../../browsing/navigation/index';
 import type { FocusableArea } from '../../interaction/index';
 
@@ -306,6 +307,13 @@ export class DocumentImpl extends NodeImpl {
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#doc-history
   get history(): HistoryImpl {
     return this.#history ??= new HistoryImpl(this.env);
+  }
+
+  /** Retained restoration diagnostics for the active top-level history entry, or null elsewhere. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#concept-document-nrr
+  get notRestoredReasons(): NotRestoredReasons | null {
+    const navigable = this.getNodeNavigable();
+    return navigable?.isTopLevelTraversable ? navigable.activeSessionHistoryEntry.documentState.notRestoredReasons : null;
   }
 
   /** Inspection object retained for this Document, independent of policy record replacement. */
@@ -1337,6 +1345,8 @@ export class DocumentImpl extends NodeImpl {
     if (controller === null) return;
     // PROVISIONAL(Navigation Timing): retain live inputs without exposing a
     // PerformanceNavigationTiming object before its Timeline foundation exists.
+    // TODO(Navigation Timing): Entry creation must capture this.notRestoredReasons as a realm-owned
+    // NotRestoredReasonsImpl; its public getter retains that value. PerformanceEntry/ResourceTiming and buffering are missing.
     this.navigationTimingEntry = {
       type: navigationParams.navigationTimingType,
       fetchTimingInfo: controller.extractFullTimingInfo(),
@@ -1711,6 +1721,15 @@ export class DocumentImpl extends NodeImpl {
     this.salvageable = false;
   }
 
+  /** Collect this Document's restoration diagnostics into its active history state. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#build-not-restored-reasons-for-document-state
+  buildNotRestoredReasonsForDocumentState(): void {
+    // TODO(HTML lifecycle): Capture URL/container metadata and blocking details, recurse through child navigables,
+    // and store the resulting record. Unloading and cache eviction must call the top-level builder before destruction.
+    // SPEC_CLASH(not-restored-reasons-collection): HTML appends to initially null children and reads a child accessor that returns null outside top-level traversables. Resolve before implementing collection.
+    throw new InternalError('Document restoration-diagnostic collection is not implemented');
+  }
+
   /** Copy the selected restrictions into the document's existing flag set. */
   setActiveSandboxingFlagSet(sandboxingFlagSet: ReadonlySet<SandboxingFlag>): void {
     this.activeSandboxingFlagSet.clear();
@@ -2072,7 +2091,8 @@ export class DocumentImpl extends NodeImpl {
 const legacyEventConstructors = new Map([
   ['event', EventImpl], ['events', EventImpl], ['htmlevents', EventImpl],
   ['customevent', CustomEventImpl], ['messageevent', MessageEventImpl],
-  ['storageevent', StorageEventImpl],
+  ['storageevent', StorageEventImpl], ['hashchangeevent', HashChangeEventImpl],
+  ['beforeunloadevent', BeforeUnloadEventImpl],
 ]);
 
 /*

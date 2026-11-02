@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { NavigateEventImpl } from '../../../src/browlet/browsing/navigation-api/navigate-event';
-import { NavigationHistoryEntryImpl } from '../../../src/browlet/browsing/navigation-api/navigation-history-entry';
-import { NavigationDestinationImpl } from '../../../src/browlet/browsing/navigation-api/navigation-destination';
+import { NavigateEventImpl } from '../../../src/browlet/browsing/navigation/api/navigate-event';
+import { NavigationHistoryEntryImpl } from '../../../src/browlet/browsing/navigation/api/navigation-history-entry';
+import { NavigationDestinationImpl } from '../../../src/browlet/browsing/navigation/api/navigation-destination';
 import { createDocumentState, createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import type { ElementImpl } from '../../../src/browlet/dom/nodes/element';

@@ -10,7 +10,6 @@ import type { BrowletEnvironment } from '../environment/index';
 
 import type { BrowletRealm } from './realm';
 
-// TODO(HTML §8.1.8.1): Add OnBeforeUnloadEventHandler processing using §7.2.7's BeforeUnloadEvent.
 /** Retains event-handler attributes and activates their corresponding listeners. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#event-handlers
 export class EventHandlerMap {
@@ -128,7 +127,15 @@ export class EventHandlerMap {
       // before entering the author function.
       const specialErrorHandling = isSpecialErrorEvent(event);
       const result: unknown = Reflect.apply(callback, currentTarget, [event]);
-      if (specialErrorHandling ? result === true : result === false) event.preventDefault();
+      if (event.isBeforeUnloadEvent() && event.type === 'beforeunload') {
+        // Binding supplies a nullable DOMString; a skipped or failed invocation has no result.
+        if (typeof result === 'string') {
+          event.preventDefault();
+          if (event.returnValue === '') event.returnValue = result;
+        }
+      } else if (specialErrorHandling ? result === true : result === false) {
+        event.preventDefault();
+      }
     };
     const realm = typeof handler.value === 'function' ? handler.value.realm : this.#uncompiledRealm;
     handler.listener = new EventListenerCallback(listener, realm, listener);
@@ -206,6 +213,25 @@ export const onErrorEventHandlerIDL = defineTypedef({
   type: nullable(reference(onErrorEventHandlerNonNullIDL.name)),
 });
 
+/*
+ * [LegacyTreatNonObjectAsNull]
+ * callback OnBeforeUnloadEventHandlerNonNull = DOMString? (Event event);
+ * typedef OnBeforeUnloadEventHandlerNonNull? OnBeforeUnloadEventHandler;
+ */
+export const onBeforeUnloadEventHandlerNonNullIDL = defineCallbackFunction<BrowletEnvironment>({
+  name: 'OnBeforeUnloadEventHandlerNonNull',
+  ...xattr('LegacyTreatNonObjectAsNull'),
+  // SPEC_CLASH(beforeunload-plain-event-conversion): follow HTML/Chromium/Firefox; WebKit skips result conversion for a plain Event.
+  returns: nullable(idlType.DOMString),
+  arguments: [arg('event', reference('Event'))],
+  overrideCbConversion: createEventHandlerCallback,
+});
+
+export const onBeforeUnloadEventHandlerIDL = defineTypedef({
+  name: 'OnBeforeUnloadEventHandler',
+  type: nullable(reference(onBeforeUnloadEventHandlerNonNullIDL.name)),
+});
+
 type EventHandlerRecord = {
   /** Converted callback, internal raw uncompiled handler, or inactive value. */
   // TODO(HTML parser source locations): Retain attribute line/column when supplied
@@ -240,8 +266,13 @@ function createEventHandlerCallback(
       ? [event.message, event.filename, event.lineno, event.colno, event.error]
       : [event];
     // Report in the callback realm, as DOM dispatch does for EventListener.
-    // The adapter contains the exception before the map applies return-value rules.
-    return callback.invoke(argumentsList, 'report', this);
+    // Web IDL requires rethrow for the nullable-string callback. The adapter
+    // contains invocation/conversion failures before the map applies return-value rules.
+    try {
+      return callback.invoke(argumentsList, 'rethrow', this);
+    } catch (exception) {
+      realm.reportException(exception);
+    }
   }, { realm: callback.realm });
 }
 

@@ -4,7 +4,7 @@ import { Browlet } from '../../../src/browlet/browlet';
 import { PageEvaluation } from '../../../src/browlet/automation/evaluation';
 import { BrowsingContext, createDocumentState, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
 import { createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/state/index';
-import { NavigateEventImpl } from '../../../src/browlet/browsing/navigation-api/navigate-event';
+import { NavigateEventImpl } from '../../../src/browlet/browsing/navigation/api/navigate-event';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { idlType } from '../../../src/web-idl/core/index';
 import { getRelevantRealm, unwrap } from '../../support/browlet-binding';

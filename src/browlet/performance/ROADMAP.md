@@ -50,6 +50,34 @@ Worker exposure is already declared. It becomes observable when Browlet gains
 `WorkerGlobalScope`; no second clock or Worker-specific `Performance`
 implementation should be introduced then.
 
+## Restoration diagnostics dependency
+
+HTML §7.2.8 now supplies `NotRestoredReasonsImpl` and its recursive creation from
+history records. The missing consumer is Navigation Timing's
+[entry-creation algorithm](https://w3c.github.io/navigation-timing/#dfn-create-the-navigation-timing-entry):
+create the diagnostic object while creating the entry and retain that object;
+`PerformanceNavigationTiming.notRestoredReasons` returns the retained value.
+It must not re-read the current Document/history entry on every getter call.
+
+The existing `Document.createNavigationTimingEntry()` is still a provisional
+input recorder. Its source and `NavigationTimingRecord` explicitly mark this
+missing creation step. There is no projected PerformanceNavigationTiming entry
+on which to install a getter stub until PerformanceEntry, ResourceTiming, and
+the Timeline entry foundation exist. HTML's callable collection/masking stubs
+are `Document.buildNotRestoredReasonsForDocumentState()` and
+`TopLevelTraversable.buildNotRestoredReasons()`. Unloading/cache eviction must
+invoke the latter before destroying the documents whose diagnostics are needed.
+
+`SPEC_GAP(navigation-timing-null-reasons)`: the refreshed Navigation Timing source
+at `245fee2` invokes HTML's creation operation with nullable Document diagnostics,
+although that operation requires a non-null backing record and a realm. It
+does not describe the null case or pass that realm. Resolve the null case with
+browser evidence when implementing this consumer; allocation belongs to the
+new entry's realm. No behavior choice or placeholder public entry is introduced
+by the diagnostic-interface slice. The
+[HTML audit](../browsing/navigation/ROADMAP.md#html-728-notrestoredreasons) records
+the separate collection conflicts and remaining reason producers.
+
 ## Missing timing families
 
 Classic-script creation now retains the Long Animation Frames `originalSourceURL`

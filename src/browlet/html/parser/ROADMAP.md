@@ -91,6 +91,9 @@ DOM-manipulation tasks, deferred/async script waits, load-event delays, Service
 Worker client-message enablement, BiDi notifications, pageshow, printing, and
 navigation-timing delivery. The synchronous tree-only `parseHTMLDocument()`
 convenience does not claim those navigation milestones.
+`WindowImpl.firePageTransitionEvent('pageshow', false)` is now available for the
+stop-parsing caller; Document's `page showing` state and its ordering after load
+remain part of that unfinished algorithm.
 
 The shared `extractMetaEncoding()` string algorithm is implemented in
 [`microsyntaxes/meta-encoding.ts`](../microsyntaxes/meta-encoding.ts), below both

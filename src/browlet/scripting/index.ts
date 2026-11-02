@@ -6,6 +6,7 @@ export {
 export {
   eventHandlerAttr, eventHandlerMapAttr, EventHandlerMap, eventHandlerNonNullIDL, eventHandlerIDL,
   onErrorEventHandlerNonNullIDL, onErrorEventHandlerIDL, type EventHandlerCallback,
+  onBeforeUnloadEventHandlerNonNullIDL, onBeforeUnloadEventHandlerIDL,
 } from './event-handlers';
 export { globalEventHandlers, globalEventHandlersIDL } from './global-event-handlers';
 export { windowEventHandlers, windowEventHandlersIDL } from './window-event-handlers';

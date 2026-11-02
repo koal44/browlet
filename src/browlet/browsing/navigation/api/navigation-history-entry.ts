@@ -1,10 +1,10 @@
-import { atArg, defineInterface, idlType, impl, invokeWith, nullable, op, roAttr } from '../../../web-idl/core/index';
-import { serializeURL } from '../../../url/index';
+import { atArg, defineInterface, idlType, impl, invokeWith, nullable, op, roAttr } from '../../../../web-idl/core/index';
+import { serializeURL } from '../../../../url/index';
 
-import { EventTargetImpl } from '../../dom/events/index';
-import { eventHandlerAttr, EventHandlerMap, type EventHandlerCallback } from '../../scripting/index';
-import type { BrowletEnvironment } from '../../environment/index';
-import type { SessionHistoryEntry } from '../navigation/index';
+import { EventTargetImpl } from '../../../dom/events/index';
+import { eventHandlerAttr, EventHandlerMap, type EventHandlerCallback } from '../../../scripting/index';
+import type { SessionHistoryEntry } from '../state/index';
+import type { BrowletEnvironment } from '../../../environment/index';
 
 /** A realm-owned view of one session-history record. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#navigationhistoryentry
@@ -70,6 +70,20 @@ export class NavigationHistoryEntryImpl extends EventTargetImpl {
   }
 }
 
+/*
+ * [Exposed=Window]
+ * interface NavigationHistoryEntry : EventTarget {
+ *   readonly attribute USVString? url;
+ *   readonly attribute DOMString key;
+ *   readonly attribute DOMString id;
+ *   readonly attribute long long index;
+ *   readonly attribute boolean sameDocument;
+ *
+ *   any getState();
+ *
+ *   attribute EventHandler ondispose;
+ * };
+ */
 export const navigationHistoryEntryIDL = defineInterface({
   name: 'NavigationHistoryEntry',
   inherits: 'EventTarget',

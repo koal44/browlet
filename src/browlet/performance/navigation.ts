@@ -6,6 +6,8 @@ import type { DocumentLoadTimingInfo } from '../dom/nodes/index';
 // https://w3c.github.io/navigation-timing/#dfn-create-the-navigation-timing-entry
 // PROVISIONAL(Navigation Timing): this record is not a Performance entry.
 // Time-origin conversion, exposure checks, and Timeline delivery remain in ROADMAP.md.
+// TODO(Navigation Timing): The real entry must retain its created NotRestoredReasonsImpl, not expose the mutable history record.
+// SPEC_GAP(navigation-timing-null-reasons): Entry creation passes nullable Document diagnostics to HTML's non-null creation operation and omits its realm. Resolve at that consumer before exposing the entry.
 export type NavigationTimingRecord = {
   /** Kind of navigation that produced this document. */
   type: NavigationTimingType;

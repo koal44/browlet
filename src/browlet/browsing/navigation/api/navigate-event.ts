@@ -1,16 +1,16 @@
-import { assertNever, InternalError, type InternalPromise } from '../../../infra/index';
+import { assertNever, InternalError, type InternalPromise } from '../../../../infra/index';
 import {
   arg, atArg, ctor, defineCallbackFunction, defineDictionary, defineEnumeration, defineInterface, dictMember,
   DOMExceptionImpl, emptyDictionary, idlType, impl, nullable, op, promise, reference, roAttr,
-} from '../../../web-idl/core/index';
-import type { FormDataImpl } from '../../../xhr/index';
+} from '../../../../web-idl/core/index';
+import type { FormDataImpl } from '../../../../xhr/index';
 
-import { ErrorEventImpl, EventImpl, type EventInit } from '../../dom/events/index';
-import type { AbortControllerImpl, AbortSignalImpl } from '../../dom/abort/index';
-import type { ElementImpl } from '../../dom/nodes/index';
-import { restoreScrollPositionData } from '../navigation/state/index';
-import type { BrowletEnvironment } from '../../environment/index';
-import type { SerializedRecord } from '../../scripting/structured-data/index';
+import { ErrorEventImpl, EventImpl, type EventInit } from '../../../dom/events/index';
+import type { AbortControllerImpl, AbortSignalImpl } from '../../../dom/abort/index';
+import type { ElementImpl } from '../../../dom/nodes/index';
+import { restoreScrollPositionData } from '../state/index';
+import type { BrowletEnvironment } from '../../../environment/index';
+import type { SerializedRecord } from '../../../scripting/structured-data/index';
 
 import type { NavigationType } from './navigation';
 import type { NavigationDestinationImpl } from './navigation-destination';
@@ -287,6 +287,27 @@ export type NavigationInterceptHandler = () => InternalPromise<void>;
 export type NavigationFocusReset = 'after-transition' | 'manual';
 export type NavigationScrollBehavior = 'after-transition' | 'manual';
 
+/*
+ * [Exposed=Window]
+ * interface NavigateEvent : Event {
+ *   constructor(DOMString type, NavigateEventInit eventInitDict);
+ *
+ *   readonly attribute NavigationType navigationType;
+ *   readonly attribute NavigationDestination destination;
+ *   readonly attribute boolean canIntercept;
+ *   readonly attribute boolean userInitiated;
+ *   readonly attribute boolean hashChange;
+ *   readonly attribute AbortSignal signal;
+ *   readonly attribute FormData? formData;
+ *   readonly attribute DOMString? downloadRequest;
+ *   readonly attribute any info;
+ *   readonly attribute boolean hasUAVisualTransition;
+ *   readonly attribute Element? sourceElement;
+ *
+ *   undefined intercept(optional NavigationInterceptOptions options = {});
+ *   undefined scroll();
+ * };
+ */
 export const navigateEventIDL = defineInterface<BrowletEnvironment>({
   name: 'NavigateEvent', inherits: 'Event', exposed: 'Window',
   implementation: impl(NavigateEventImpl, { constructWith: [atArg(2, (env) => env)] }),
@@ -305,6 +326,21 @@ export const navigateEventIDL = defineInterface<BrowletEnvironment>({
   ],
 });
 
+/*
+ * dictionary NavigateEventInit : EventInit {
+ *   NavigationType navigationType = "push";
+ *   required NavigationDestination destination;
+ *   boolean canIntercept = false;
+ *   boolean userInitiated = false;
+ *   boolean hashChange = false;
+ *   required AbortSignal signal;
+ *   FormData? formData = null;
+ *   DOMString? downloadRequest = null;
+ *   any info;
+ *   boolean hasUAVisualTransition = false;
+ *   Element? sourceElement = null;
+ * };
+ */
 export const navigateEventInitIDL = defineDictionary({
   name: 'NavigateEventInit', inherits: 'EventInit',
   members: [
@@ -322,6 +358,14 @@ export const navigateEventInitIDL = defineDictionary({
   ],
 });
 
+/*
+ * dictionary NavigationInterceptOptions {
+ *   NavigationPrecommitHandler precommitHandler;
+ *   NavigationInterceptHandler handler;
+ *   NavigationFocusReset focusReset;
+ *   NavigationScrollBehavior scroll;
+ * };
+ */
 export const navigationInterceptOptionsIDL = defineDictionary({
   name: 'NavigationInterceptOptions',
   members: [
@@ -332,14 +376,29 @@ export const navigationInterceptOptionsIDL = defineDictionary({
   ],
 });
 
+/*
+ * enum NavigationFocusReset {
+ *   "after-transition",
+ *   "manual"
+ * };
+ */
 export const navigationFocusResetIDL = defineEnumeration({
   name: 'NavigationFocusReset', values: ['after-transition', 'manual'],
 });
 
+/*
+ * enum NavigationScrollBehavior {
+ *   "after-transition",
+ *   "manual"
+ * };
+ */
 export const navigationScrollBehaviorIDL = defineEnumeration({
   name: 'NavigationScrollBehavior', values: ['after-transition', 'manual'],
 });
 
+/*
+ * callback NavigationInterceptHandler = Promise<undefined> ();
+ */
 export const navigationInterceptHandlerIDL = defineCallbackFunction({
   name: 'NavigationInterceptHandler', returns: promise(idlType.undefined), arguments: [],
 });
