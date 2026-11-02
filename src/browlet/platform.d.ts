@@ -11,6 +11,14 @@ export type DocumentVisibilityState = "visible" | "hidden";
 
 export type ScrollRestoration = "auto" | "manual";
 
+export type NavigationType = "push" | "replace" | "reload" | "traverse";
+
+export type NavigationHistoryBehavior = "auto" | "push" | "replace";
+
+export type NavigationFocusReset = "after-transition" | "manual";
+
+export type NavigationScrollBehavior = "after-transition" | "manual";
+
 export type SecurityPolicyViolationEventDisposition = "enforce" | "report";
 
 export type ShadowRootMode = "open" | "closed";
@@ -105,6 +113,62 @@ export interface TogglePopoverOptions {
 
 export interface AssignedNodesOptions {
   flatten?: boolean;
+}
+
+export interface NavigationUpdateCurrentEntryOptions {
+  state: any;
+}
+
+export interface NavigationOptions {
+  info?: any;
+}
+
+export interface NavigationNavigateOptions {
+  info?: any;
+  history?: NavigationHistoryBehavior;
+  state?: any;
+}
+
+export interface NavigationReloadOptions {
+  info?: any;
+  state?: any;
+}
+
+export interface NavigationResult {
+  committed?: NavigationHistoryEntry | PromiseLike<NavigationHistoryEntry>;
+  finished?: NavigationHistoryEntry | PromiseLike<NavigationHistoryEntry>;
+}
+
+export interface NavigateEventInit {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+  canIntercept?: boolean;
+  destination: NavigationDestination;
+  downloadRequest?: string | null;
+  formData?: FormData | null;
+  hasUAVisualTransition?: boolean;
+  hashChange?: boolean;
+  info?: any;
+  navigationType?: NavigationType;
+  signal: AbortSignal;
+  sourceElement?: Element | null;
+  userInitiated?: boolean;
+}
+
+export interface NavigationInterceptOptions {
+  focusReset?: NavigationFocusReset;
+  handler?: NavigationInterceptHandler;
+  precommitHandler?: NavigationPrecommitHandler;
+  scroll?: NavigationScrollBehavior;
+}
+
+export interface NavigationCurrentEntryChangeEventInit {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+  from: NavigationHistoryEntry;
+  navigationType?: NavigationType | null;
 }
 
 export interface SecurityPolicyViolationEventInit {
@@ -397,6 +461,10 @@ export interface TrustedTypePolicyOptions {
 export type Function = (...arguments_: Array<any>) => any;
 
 export type VoidFunction = () => void;
+
+export type NavigationInterceptHandler = () => void | PromiseLike<void>;
+
+export type NavigationPrecommitHandler = (controller: NavigationPrecommitController) => void | PromiseLike<void>;
 
 export type ReportingObserverCallback = (reports: Array<Report>, observer: ReportingObserver) => void;
 
@@ -1483,12 +1551,123 @@ export interface HistoryConstructor {
 }
 
 export interface Navigation extends EventTarget {
-
+  entries(): Array<NavigationHistoryEntry>;
+  readonly currentEntry: NavigationHistoryEntry | null;
+  updateCurrentEntry(options: NavigationUpdateCurrentEntryOptions): void;
+  readonly transition: NavigationTransition | null;
+  readonly activation: NavigationActivation | null;
+  readonly canGoBack: boolean;
+  readonly canGoForward: boolean;
+  navigate(url: string, options?: NavigationNavigateOptions): NavigationResultResult;
+  reload(options?: NavigationReloadOptions): NavigationResultResult;
+  traverseTo(key: string, options?: NavigationOptions): NavigationResultResult;
+  back(options?: NavigationOptions): NavigationResultResult;
+  forward(options?: NavigationOptions): NavigationResultResult;
+  onnavigate: EventHandlerNonNull | null;
+  onnavigatesuccess: EventHandlerNonNull | null;
+  onnavigateerror: EventHandlerNonNull | null;
+  oncurrententrychange: EventHandlerNonNull | null;
 }
 
 export interface NavigationConstructor extends Ctor<EventTargetConstructor> {
   readonly prototype: Navigation;
   [Symbol.hasInstance](value: unknown): value is Navigation;
+}
+
+export interface NavigationHistoryEntry extends EventTarget {
+  readonly url: string | null;
+  readonly key: string;
+  readonly id: string;
+  readonly index: number;
+  readonly sameDocument: boolean;
+  getState(): any;
+  ondispose: EventHandlerNonNull | null;
+}
+
+export interface NavigationHistoryEntryConstructor extends Ctor<EventTargetConstructor> {
+  readonly prototype: NavigationHistoryEntry;
+  [Symbol.hasInstance](value: unknown): value is NavigationHistoryEntry;
+}
+
+export interface NavigationTransition {
+  readonly navigationType: NavigationType;
+  readonly from: NavigationHistoryEntry;
+  readonly to: NavigationDestination;
+  readonly committed: Promise<void>;
+  readonly finished: Promise<void>;
+}
+
+export interface NavigationTransitionConstructor {
+  readonly prototype: NavigationTransition;
+  [Symbol.hasInstance](value: unknown): value is NavigationTransition;
+}
+
+export interface NavigationDestination {
+  readonly url: string;
+  readonly key: string;
+  readonly id: string;
+  readonly index: number;
+  readonly sameDocument: boolean;
+  getState(): any;
+}
+
+export interface NavigationDestinationConstructor {
+  readonly prototype: NavigationDestination;
+  [Symbol.hasInstance](value: unknown): value is NavigationDestination;
+}
+
+export interface NavigationActivation {
+  readonly from: NavigationHistoryEntry | null;
+  readonly entry: NavigationHistoryEntry;
+  readonly navigationType: NavigationType;
+}
+
+export interface NavigationActivationConstructor {
+  readonly prototype: NavigationActivation;
+  [Symbol.hasInstance](value: unknown): value is NavigationActivation;
+}
+
+export interface NavigateEvent extends Event {
+  readonly navigationType: NavigationType;
+  readonly destination: NavigationDestination;
+  readonly canIntercept: boolean;
+  readonly userInitiated: boolean;
+  readonly hashChange: boolean;
+  readonly signal: AbortSignal;
+  readonly formData: FormData | null;
+  readonly downloadRequest: string | null;
+  readonly info: any;
+  readonly hasUAVisualTransition: boolean;
+  readonly sourceElement: Element | null;
+  intercept(options?: NavigationInterceptOptions): void;
+  scroll(): void;
+}
+
+export interface NavigateEventConstructor extends Ctor<EventConstructor> {
+  readonly prototype: NavigateEvent;
+  [Symbol.hasInstance](value: unknown): value is NavigateEvent;
+  new (type: string, eventInitDict: NavigateEventInit): NavigateEvent;
+}
+
+export interface NavigationPrecommitController {
+  redirect(url: string, options?: NavigationNavigateOptions): void;
+  addHandler(handler: NavigationInterceptHandler): void;
+}
+
+export interface NavigationPrecommitControllerConstructor {
+  readonly prototype: NavigationPrecommitController;
+  [Symbol.hasInstance](value: unknown): value is NavigationPrecommitController;
+}
+
+export interface NavigationCurrentEntryChangeEvent extends Event {
+  readonly navigationType: NavigationType | null;
+  readonly from: NavigationHistoryEntry;
+}
+
+export interface NavigationCurrentEntryChangeEventConstructor extends Ctor<EventConstructor> {
+  readonly prototype: NavigationCurrentEntryChangeEvent;
+  [Symbol.hasInstance](value: unknown): value is NavigationCurrentEntryChangeEvent;
+  new (type: string, eventInitDict: NavigationCurrentEntryChangeEventInit): NavigationCurrentEntryChangeEvent;
 }
 
 export interface BarProp {
@@ -1917,6 +2096,13 @@ export interface Window extends EventTarget {
   Location: LocationConstructor;
   History: HistoryConstructor;
   Navigation: NavigationConstructor;
+  NavigationHistoryEntry: NavigationHistoryEntryConstructor;
+  NavigationTransition: NavigationTransitionConstructor;
+  NavigationDestination: NavigationDestinationConstructor;
+  NavigationActivation: NavigationActivationConstructor;
+  NavigateEvent: NavigateEventConstructor;
+  NavigationPrecommitController: NavigationPrecommitControllerConstructor;
+  NavigationCurrentEntryChangeEvent: NavigationCurrentEntryChangeEventConstructor;
   BarProp: BarPropConstructor;
   ReportBody: ReportBodyConstructor;
   IntegrityViolationReportBody: IntegrityViolationReportBodyConstructor;
@@ -3555,6 +3741,11 @@ export interface TrustedTypePolicyFactory {
 export interface TrustedTypePolicyFactoryConstructor {
   readonly prototype: TrustedTypePolicyFactory;
   [Symbol.hasInstance](value: unknown): value is TrustedTypePolicyFactory;
+}
+
+export interface NavigationResultResult {
+  committed?: Promise<NavigationHistoryEntry>;
+  finished?: Promise<NavigationHistoryEntry>;
 }
 
 export interface ReadableStreamReadResultResult {

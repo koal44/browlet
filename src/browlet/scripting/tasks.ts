@@ -41,6 +41,7 @@ export const automationTaskSource = createTaskSource('automation');
 /** Shared source identities selected by an owner's execution facilities. */
 export const taskSources: Record<TaskSourceKey, TaskSource> = {
   'dom-manipulation': domManipulationTaskSource,
+  'navigation-and-traversal': navigationAndTraversalTaskSource,
   network: networkingTaskSource,
   timer: timerTaskSource,
   file: fileTaskSource,

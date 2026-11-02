@@ -982,8 +982,16 @@ WindowProxy, and Location. Their consumers use the corresponding component's
 index; cooperating modules within navigation import each other directly.
 There is no umbrella browsing barrel.
 
+`navigation/source-snapshot` is a narrow entry point for capturing source inputs.
+Both the Navigation API and navigation coordinator use it without loading each
+other; the snapshot reads the source Document and retains its navigation inputs.
+
 `history` owns Document-retained History objects; `navigation-api` owns the
-Window-retained Navigation EventTarget. Both sit below Window and retain type-only
+Window-retained Navigation EventTarget and its NavigationHistoryEntry objects.
+Navigation owns its realm's entry list; each entry refers to a shared session-history
+record owned by the navigation coordinator. That coordinator selects the contiguous
+same-origin records and initializes the new Document's list after activation.
+Both API components sit below Window and retain type-only
 references to the higher navigation coordinator. Window constructs Navigation,
 while Document lazily creates History. History uses its existing environment's
 storage serializer, composed at the Binding boundary, then calls Navigation's

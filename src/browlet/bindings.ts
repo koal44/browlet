@@ -58,7 +58,7 @@ import {
   windowPostMessageOptionsIDL, broadcastChannelIDL,
 } from './communication/index';
 import { webStorageIDLDefinitions } from './storage/index';
-import { navigationIDL } from './browsing/navigation-api/index';
+import { navigationIDLDefinitions } from './browsing/navigation-api/index';
 import {
   locationIDL, barPropIDL, WindowImpl, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
   windowIncludesGlobalEventHandlersIDL, windowIncludesWindowEventHandlersIDL, WindowProxyHandle, windowProxyDefinition,
@@ -289,7 +289,7 @@ export const browletDefinitions = [
   originIDL,
   locationIDL,
   historyIDL, scrollRestorationIDL,
-  navigationIDL,
+  ...navigationIDLDefinitions,
   barPropIDL,
   reportIDL, reportBodyIDL, integrityViolationReportBodyIDL, testReportBodyIDL,
   coepViolationReportBodyIDL, coepInheritanceViolationReportBodyIDL,

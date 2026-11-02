@@ -1,6 +1,8 @@
+import { randomUUID } from '../../../js-engine/index';
 import type { URLRecord } from '../../../url/index';
 
 import type { ScrollRestoration } from '../history/index';
+import type { SerializedRecord } from '../../scripting/structured-data/index';
 
 import type { DocumentBackedState, DocumentState } from './document-state';
 
@@ -13,6 +15,12 @@ export type SessionHistoryEntry = {
   url: URLRecord;
   /** Live document and retained reload inputs. */
   documentState: DocumentState;
+  /** Persisted Navigation API state, independent of classic History state. */
+  navigationAPIState: SerializedRecord;
+  /** UUID identifying this history position; replacement retains it. */
+  navigationAPIKey: string;
+  /** UUID identifying this specific entry; replacement creates a new ID. */
+  navigationAPIID: string;
   /** Whether traversal restores this entry's saved scroll position automatically. */
   scrollRestorationMode: ScrollRestoration;
 };
@@ -23,9 +31,13 @@ export function createSessionHistoryEntry(
 ): SessionHistoryEntry {
   const url = documentState.document.url;
 
-  // The History and Navigation APIs will add their serialized-state,
-  // navigation-key, and persisted-user-state slots.
-  return { step: 'pending', url, documentState, scrollRestorationMode: 'auto' };
+  // TODO(HTML 7.4): Classic History serialized state, scroll position, and persisted user state.
+  return {
+    step: 'pending', url, documentState,
+    navigationAPIState: documentState.document.env.serializeForStorage(undefined),
+    navigationAPIKey: randomUUID(), navigationAPIID: randomUUID(),
+    scrollRestorationMode: 'auto',
+  };
 }
 
 export type NestedHistory = {

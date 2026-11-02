@@ -47,5 +47,5 @@ export interface WindowDOMAgent {
   queueMutationObserverMicrotask(): void;
 }
 
-/** Event implementation class accepted by the realm's event allocator. */
-export type EventImplConstructor = typeof EventImpl;
+/** Event class whose constructor dependencies are supplied by its registered Binding. */
+export type EventImplConstructor = abstract new (...argumentsList: never[]) => EventImpl;

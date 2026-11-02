@@ -19,7 +19,11 @@ outside consumers use its index, while its modules import each other directly.
   attributes, and request preparation for its methods. This component owns the
   entry scroll mode and updates stored length/index through its existing
   top-level commit path. The lower [Navigation API](../navigation-api/navigation.ts)
-  component supplies Window-owned identity; its events and entry state remain unfinished.
+  component supplies Window-owned identity, entry initialization and read access,
+  and NavigationActivation. The top-level commit retains its previous active
+  entry and initializes activation after the destination entry list, before
+  parser scripts. Full history/reload/reactivation and pageswap producers remain
+  unfinished; its [audit](../navigation-api/ROADMAP.md) records the remaining dependencies.
 - `Traversable` owns its session-storage shed across Document replacements.
   Top-level creation clones the opener's top-level shed through the
   [Storage substrate](../../../storage/ROADMAP.md#storage-sheds); auxiliary
@@ -154,13 +158,14 @@ The implementation-defined blocking policy runs only after serialization and
 URL validation. History passes the same serialized record into the Navigation
 event operation and, if that permits continuation, the URL/history update owner.
 
-This does **not** implement a successful state change yet. The Window now owns a
-minimal `NavigationImpl`, exposed by the replaceable `Window.navigation` getter
+This does **not** implement a successful state change yet. This slice introduced
+Window-owned `NavigationImpl`, exposed by the replaceable `Window.navigation` getter
 and a nonconstructible EventTarget-derived IDL interface. Replacing the author
 property does not change the internal owner. Initial Window reuse retains it;
-new Windows receive new objects. `firePushReplaceReloadNavigateEvent()` explicitly
+new Windows receive new objects. Entry read access has since been added in the
+[Navigation API slice](../navigation-api/ROADMAP.md). `firePushReplaceReloadNavigateEvent()` explicitly
 throws until §7.2.6 supplies navigation abortion, disabled-entry/event handling,
-method trackers, NavigateEvent/NavigationDestination, and inner event firing.
+method-tracker integration, NavigateEvent/NavigationDestination, and inner event firing.
 `DocumentImpl.updateURLAndHistory()` independently remains unfinished: it must
 update History and Navigation state and queue the same-document history steps.
 The tests observe these two owner operations without simulating their effects.
@@ -258,14 +263,32 @@ existing concrete types. `NavigationHistoryBehavior` includes `auto`, while
 resolved commit/history-update inputs use `HistoryHandlingBehavior` (`push` or
 `replace`). All three operations still throw until their effects are implemented.
 
-`navigation-api.ts` in this component still declares only the opaque
-`NavigationAPIMethodTracker` dependency. It has no factory or usable record
-implementation. The lower `../navigation-api/` component now supplies Navigation's
-Window-owned identity and unfinished event entry point. §7.2.6 must supply
-its state and NavigationHistoryEntry owners, tracker fields, realm-owned
-committed/finished promises, and their creation/settlement lifecycle. An arbitrary
-object does not satisfy that type. The full `navigate()` input contract does not
-make document-initiated navigation functional.
+`NavigationAPIMethodTracker` is now owned by `../navigation-api/method-tracker.ts`;
+the former opaque `navigation-api.ts` stub in this coordinator has been removed.
+The class owns creation, commit notification, completion/rejection, and cleanup,
+but navigation/event producers must still call those operations. The lower
+`../navigation-api/` component now supplies Navigation's
+Window-owned entry lists, NavigationHistoryEntry read access, and the unfinished
+navigate-event entry point. Its [entry work](../navigation-api/ROADMAP.md) connects new-Document
+initialization to the existing top-level commit, with shared session-history
+keys/IDs/state and the contiguous same-origin selector. State updates now fire
+current-entry-change events, and reactivation reconciliation queues disposal;
+the §7.4.6 reactivation caller must still supply inputs before `pageshow`.
+`Navigation.navigate()`/`reload()` now prepare requests with serialized state and
+real trackers. Its traversal methods also select/deduplicate destinations and
+prepare queued history work and failure delivery; §7.2.6 must still supply
+same-document entry commits and event-driven acceptance/settlement. The full `navigate()` input
+contract and tracker lifecycle do not make document-initiated navigation functional.
+
+`SourceSnapshotParams`, in the shared `navigation/source-snapshot.ts` foundation,
+captures all five source fields, including policy cloning and the null browser-UI
+case. The non-null source still requires Window's unfinished transient activation.
+Navigation API traversal uses it; navigation, closing, and delta traversal have
+not yet been connected. `Traversable.appendSessionHistoryTraversalSteps()` and
+`applyTraverseHistoryStep()` expose the §7.3.2 queue and §7.4.6 application contracts,
+including all four history-step outcomes. Both throw until implemented; no parallel
+queue or provisional movement is substituted. The Navigation API roadmap records
+its prepared callback, queued rejection rules, and approved obsolete-tracker guard.
 
 Location's [href/assign/replace handoff](../window/ROADMAP.md#html-724-third-slice-href-assign-replace-and-navigation-handoff)
 now calls that same `navigate()` entry with an entry-parsed URL, the incumbent
@@ -291,20 +314,35 @@ Window's Navigation object and history-entry Navigation API state, then fires a
 cancelable reload navigate event (except for browser-UI involvement). Only after
 that event permits continuation may it set `reloadPending` and append traversal
 steps that apply the reload history step. Navigation event/state behavior,
-traversal queue, reload history application, and method-tracker lifecycle are
-missing. `SessionHistoryTraversalQueue` is still an empty identity class and
-`SessionHistoryEntry` does not yet have Navigation API state. The coordinator
+traversal queue, reload history application, and method-tracker integration are
+missing. `SessionHistoryTraversalQueue` is still an empty identity class.
+`SessionHistoryEntry` now retains Navigation API state, but reload must select,
+carry, and restore it through those unfinished algorithms. The coordinator
 therefore throws `Navigable reload coordination is not implemented` without
 setting `reloadPending`. It does not substitute ordinary URL navigation for a
 reload. Fetch/revalidation, unloading, document replacement, and restoration stay
 with the later history and navigation algorithms.
 
+HTML §7.2.6.8's Navigable notification operations are now implemented: callers
+supply their executing event loop, or null for parallel work; abortion runs on
+the active Window's loop or queues a global navigation-and-traversal task there.
+It repeatedly cancels reentrant NavigateEvents. Child-destruction notification
+also rejects a snapshot of pending traversal trackers. These helpers do not
+implement `stopLoading()`, ongoing-navigation ID/traversal state, or child teardown.
+Their exact caller obligations and pending signature review are in the
+[Navigation API audit](../navigation-api/ROADMAP.md#seventh-slice-navigable-abortion-and-child-destruction-notifications).
+Revisit the provisional caller-loop parameter when wiring production callers;
+the [deferred decision](../navigation-api/ROADMAP.md#deferred-decision-caller-loop-parameter)
+requires comparing a parameter-free handoff through their existing Documents/environments.
+
 | Planned source | Contract | Specification |
 | --- | --- | --- |
 | existing `../history/history.ts` and navigation owners | state restoration and URL/history, traversal, and reload effects; attributes and all method preparation are implemented above | HTML §7.2.5 and §2.7 |
-| existing `../navigation-api/navigation.ts` | Navigation state, results/options, destination, entries, ongoing navigation, intercept/precommit controllers, transition, activation, and focus/scroll behavior | HTML §7.2.6 |
-| `../navigation-api/navigation-history-entry.ts` | `NavigationHistoryEntry`, keys/IDs/state, disposal, and same-document identity | HTML §7.2.6 |
-| `../navigation-api/navigation-events.ts` | `NavigateEvent`, current-entry-change, navigate success/error, destination and intercept/precommit callback surfaces | HTML §7.2.6 |
+| existing `../navigation-api/navigation.ts` | Navigation state, results/options, entries, ongoing navigation, activation, and focus/scroll behavior; transition getter is implemented, with event production still missing | HTML §7.2.6 |
+| existing `../navigation-api/navigation-transition.ts` and `navigation-destination.ts` | Transition/destination state, interfaces, and promise settlement are implemented; event and precommit producers remain | HTML §§7.2.6.8 and 7.2.6.10.3 |
+| existing `../navigation-api/navigation-history-entry.ts` | Read interface, state, and reactivation disposal are implemented; same-document disposal and reload/session restoration remain | HTML §7.2.6 |
+| existing `../navigation-api/navigation-current-entry-change-event.ts` | Implemented for state updates; same-document commit producer remains | HTML §7.2.7.1 |
+| `../navigation-api/navigation-events.ts` | `NavigateEvent`, navigate success/error, and intercept/precommit callback surfaces; consume the implemented destination object | HTML §7.2.6 |
 | `lifecycle-events.ts` | `PopStateEvent`, `HashChangeEvent`, `PageSwapEvent`, `PageRevealEvent`, `PageTransitionEvent`, and `BeforeUnloadEvent` | HTML §7.2.7 |
 | `not-restored-reasons.ts` | `NotRestoredReasonDetails`, recursive `NotRestoredReasons`, and history-entry association | HTML §7.2.8 |
 | `traversal.ts` | Traversal queue, apply history step, back/forward/reload | HTML §§7.4.1, 7.4.3, and 7.4.6 |

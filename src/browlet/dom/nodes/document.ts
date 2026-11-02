@@ -190,6 +190,10 @@ export class DocumentImpl extends NodeImpl {
   isIframeSrcdocDocument = false;
   /** Whether this is the initial about:blank document of a browsing context. */
   isInitialAboutBlank = false;
+  /** Number of active unload operations that prohibit starting another navigation. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#unload-counter
+  // TODO: The unloading algorithms must increment and decrement this counter around their callbacks.
+  unloadCounter = 0;
   /** Whether cross-origin redirects occurred while creating this document. */
   wasCreatedViaCrossOriginRedirects = false;
   /** Navigation identifier while loading, or null outside that phase. */
@@ -1051,6 +1055,12 @@ export class DocumentImpl extends NodeImpl {
     this.appendChild(html);
     html.appendChild(head);
     html.appendChild(body);
+  }
+
+  /** Whether navigating to this URL must replace the current history entry. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#the-navigation-must-be-a-replace
+  navigationMustBeReplace(url: URLRecord): boolean {
+    return url.scheme === 'javascript' || this.isInitialAboutBlank;
   }
 
   /** Whether classic history may replace this Document's URL without navigating. */
