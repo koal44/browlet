@@ -8,6 +8,7 @@ import { unsafeSharedCurrentTime, type DOMHighResTimeStamp } from '../../timing/
 import type { DOMEnvironment } from '../environment';
 
 import type { EventTargetImpl } from './event-target';
+import type { ErrorEventImpl } from './error-event';
 
 /** Carries event data and the state used by dispatch and cancellation. */
 // https://dom.spec.whatwg.org/#interface-event
@@ -96,6 +97,11 @@ export class EventImpl {
 
   set returnValue(value: boolean) {
     if (!value) this.#setCanceled();
+  }
+
+  /** Whether this event implements ErrorEvent, independently of its event type. */
+  isErrorEvent(): this is ErrorEventImpl {
+    return false;
   }
 
   /** Return dispatch targets visible from the current listener's shadow-tree position. */

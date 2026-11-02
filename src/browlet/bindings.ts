@@ -19,7 +19,8 @@ import { CSSStyleSheetImpl, styleletIDLDefinitions } from '../stylelet/index';
 import type { CSSStyleSheet, QuotaExceededError } from './platform';
 import { domHighResTimeStampIDL, epochTimeStampIDL } from './timing/index';
 import {
-  EventLoop, SandboxAgent, eventHandlerIDL, eventHandlerNonNullIDL, windowEventHandlersIDL,
+  EventLoop, SandboxAgent, eventHandlerIDL, eventHandlerNonNullIDL,
+  onErrorEventHandlerIDL, onErrorEventHandlerNonNullIDL, globalEventHandlersIDL, windowEventHandlersIDL,
   BrowletRealm, WindowRealm, installRealmHostHooks,
 } from './scripting/index';
 import {
@@ -58,7 +59,7 @@ import {
 import { webStorageIDLDefinitions } from './storage/index';
 import {
   locationIDL, barPropIDL, WindowImpl, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
-  windowIncludesWindowEventHandlersIDL, WindowProxyHandle, windowProxyDefinition,
+  windowIncludesGlobalEventHandlersIDL, windowIncludesWindowEventHandlersIDL, WindowProxyHandle, windowProxyDefinition,
   windowIdleCallbackIDL, idleDeadlineIDL, idleRequestCallbackIDL, idleRequestOptionsIDL,
 } from './browsing/window/index';
 import { originIDL } from './browsing/index';
@@ -298,6 +299,9 @@ export const browletDefinitions = [
   ...navigatorIDLDefinitions,
   eventHandlerNonNullIDL,
   eventHandlerIDL,
+  onErrorEventHandlerNonNullIDL,
+  onErrorEventHandlerIDL,
+  globalEventHandlersIDL,
   windowEventHandlersIDL,
   errorEventIDL,
   errorEventInitIDL,
@@ -325,6 +329,7 @@ export const browletDefinitions = [
   windowEventIDL,
   windowIdleCallbackIDL, idleDeadlineIDL, idleRequestCallbackIDL, idleRequestOptionsIDL,
   windowIncludesWindowOrWorkerGlobalScopeIDL,
+  windowIncludesGlobalEventHandlersIDL,
   windowIncludesWindowEventHandlersIDL,
   ...domIDLDefinitions,
   ...styleletIDLDefinitions,

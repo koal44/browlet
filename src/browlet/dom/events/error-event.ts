@@ -36,6 +36,10 @@ export class ErrorEventImpl extends EventImpl {
     return { message, filename: '', lineno: 0, colno: 0, error: exception };
   }
 
+  override isErrorEvent(): this is ErrorEventImpl {
+    return true;
+  }
+
   /** Initialize constructor data or trusted-event attributes before dispatch. */
   initialize(init: ErrorEventInit): void {
     this.setFlags(init);

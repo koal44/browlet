@@ -57,6 +57,8 @@ export type EpochTimeStamp = number;
 
 export type EventHandler = EventHandlerNonNull | null;
 
+export type OnErrorEventHandler = OnErrorEventHandlerNonNull | null;
+
 export type MessageEventSource = WindowProxy | MessagePort | ServiceWorker;
 
 export type TimerHandler = string | Function;
@@ -397,6 +399,8 @@ export type VoidFunction = () => void;
 export type ReportingObserverCallback = (reports: Array<Report>, observer: ReportingObserver) => void;
 
 export type EventHandlerNonNull = (event: Event) => any;
+
+export type OnErrorEventHandlerNonNull = (event: Event | string, source?: string, lineno?: number, colno?: number, error?: any) => any;
 
 export type IdleRequestCallback = (deadline: IdleDeadline) => void;
 
@@ -1788,6 +1792,7 @@ export interface Window extends EventTarget {
   set performance(value: unknown);
   readonly trustedTypes: TrustedTypePolicyFactory;
   fetch(input: Request | string, init?: RequestInit): Promise<Response>;
+  onerror: OnErrorEventHandlerNonNull | null;
   onstorage: EventHandlerNonNull | null;
   readonly sessionStorage: Storage;
   readonly localStorage: Storage;

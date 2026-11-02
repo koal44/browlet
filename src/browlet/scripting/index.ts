@@ -4,8 +4,10 @@ export {
   type CrossOriginIsolationMode,
 } from './agents';
 export {
-  eventHandlerAttr, EventHandlerMap, eventHandlerNonNullIDL, eventHandlerIDL, type EventHandlerCallback,
+  eventHandlerAttr, EventHandlerMap, eventHandlerNonNullIDL, eventHandlerIDL,
+  onErrorEventHandlerNonNullIDL, onErrorEventHandlerIDL, type EventHandlerCallback,
 } from './event-handlers';
+export { GlobalEventHandlersMixin, globalEventHandlersIDL } from './global-event-handlers';
 export { WindowEventHandlersMixin, windowEventHandlersIDL } from './window-event-handlers';
 export {
   createTaskSource, EventLoop, type EventLoopInit, type TaskTimingHooks, type LongTaskReporter,

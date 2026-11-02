@@ -9,7 +9,8 @@ import type { CSSStylePropertiesImpl } from '../../../stylelet/index';
 
 import { ElementTag } from '../../dom/nodes/element-definitions/index';
 import {
-  ImportMap, mergeExistingAndNewImportMaps, domManipulationTaskSource, WindowEventHandlersMixin, type EventHandlerCallback,
+  ImportMap, mergeExistingAndNewImportMaps, domManipulationTaskSource,
+  GlobalEventHandlersMixin, WindowEventHandlersMixin, type EventHandlerCallback,
   type ImportMapParseResult, type BrowletGlobalObject, type SpecifierResolutionRecord,
   type SpeculationRulesParseResult, type TimerAction,
 } from '../../scripting/index';
@@ -72,7 +73,9 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   #namedCollections = new Map<string, HTMLCollectionImpl>();
   /** Shared global facilities installed during environment composition. */
   #globalScopeMixin: WindowOrWorkerGlobalScopeMixin | null = null;
-  /** HTML event-handler attributes backed by this Window's listener registrations. */
+  /** Shared element/document/global handler attributes owned by this Window. */
+  #globalEventHandlersMixin: GlobalEventHandlersMixin;
+  /** Window-specific event-handler attributes backed by this Window's listener registrations. */
   #windowEventHandlersMixin: WindowEventHandlersMixin;
   /** Session-storage access for this Window's current Document. */
   #windowSessionStorageMixin: WindowSessionStorageMixin;
@@ -91,6 +94,7 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
     this.toolbar = new BarPropImpl(env);
     this.navigator = new NavigatorImpl(env);
     this.idleCallbacks = new WindowIdleCallbacks(env);
+    this.#globalEventHandlersMixin = new GlobalEventHandlersMixin(this);
     this.#windowEventHandlersMixin = new WindowEventHandlersMixin(this);
     this.#windowSessionStorageMixin = new WindowSessionStorageMixin(this);
     this.#windowLocalStorageMixin = new WindowLocalStorageMixin(this);
@@ -211,6 +215,10 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   get localStorage(): StorageImpl {
     return this.#windowLocalStorageMixin.localStorage;
   }
+
+  /** Handler for runtime errors and explicitly dispatched error events. */
+  get onerror(): EventHandlerCallback | null { return this.#globalEventHandlersMixin.onerror; }
+  set onerror(callback: EventHandlerCallback | null) { this.#globalEventHandlersMixin.onerror = callback; }
 
   /** Handler for changes made through other matching Storage objects. */
   get onstorage(): EventHandlerCallback | null { return this.#windowEventHandlersMixin.onstorage; }
@@ -735,6 +743,11 @@ export const windowEventIDL = definePartialInterface({
 export const windowIncludesWindowOrWorkerGlobalScopeIDL = defineIncludes({
   interface: windowIDL.name,
   mixin: 'WindowOrWorkerGlobalScope',
+});
+
+export const windowIncludesGlobalEventHandlersIDL = defineIncludes({
+  interface: windowIDL.name,
+  mixin: 'GlobalEventHandlers',
 });
 
 export const windowIncludesWindowEventHandlersIDL = defineIncludes({

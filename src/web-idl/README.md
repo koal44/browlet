@@ -358,7 +358,8 @@ reuses it so projecting a handler attribute still returns the original author
 object. The adapter selects its invocation's exception policy and receives the
 declared IDL result. HTML's event-handler adapter uses this seam to check the
 target's automation policy and the callback Document's activity before entering
-author code. Ordinary callbacks retain the default invocation/result adapter.
+author code. It also selects the five error details for Window's special
+`onerror` invocation. Ordinary callbacks retain the default invocation/result adapter.
 The value captures its own callback context; sharing a plan never shares that
 context or the original author object.
 

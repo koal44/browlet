@@ -149,10 +149,19 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   dispatch, and applies classic-script muting. Filename, line, and column remain
   empty/zero until runtime diagnostics are available. The modeled running-script
   lookup cannot identify every uncontrolled JavaScript transition; classic run
-  explicitly retains its script for reporting. Special five-argument `onerror`
-  handlers and dedicated-worker propagation are not implemented. `reportError`
+  explicitly retains its script for reporting. Window's five-argument `onerror`
+  handlers work; dedicated-worker propagation is not implemented. `reportError`
   follows HTML's muting algorithm despite its noted Firefox disagreement. See
   the [runtime-error audit](browlet/scripting/ROADMAP.md#html-8146-runtime-script-errors).
+
+- **HTML event handlers are partially implemented.** Existing IDL handlers retain
+  callback identity and listener order, check the target's BiDi scripting policy,
+  and skip callbacks whose own Window Document is not fully active. Window's
+  `onerror` uses five arguments and cancels only on boolean `true`. Content
+  attributes, body/frameset forwarding, beforeunload processing,
+  and most GlobalEventHandlers/WindowEventHandlers members remain unfinished.
+  BiDi has no session overrides yet. See the
+  [event-handler audit](browlet/scripting/ROADMAP.md#html-8181-event-handler-idl-invocation).
 
 - **HTML promise-rejection reporting requires the addon.** All addon bases deliver
   native reject/handle notifications, non-observing slot reads, and HTML checkpoint
