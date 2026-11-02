@@ -1,4 +1,4 @@
-import { asciiLower, InternalError } from '../../../infra/index';
+import { asciiLower, assertNever, InternalError } from '../../../infra/index';
 import { areSameOrigin, areSameOriginDomain, copyURL, createOpaqueOrigin, urlsEqual, type Origin, type URLRecord } from '../../../url/index';
 import { StorageShed } from '../../../storage/index';
 import type { FormDataEntry } from '../../../xhr/index';
@@ -16,7 +16,7 @@ import {
 import type { HTMLFrameElementImpl } from '../../dom/nodes/html/legacy/index';
 import { CustomElementRegistryImpl } from '../../dom/nodes/html/custom-elements/index';
 import {
-  createSessionHistoryEntry, createDocumentState, type SessionHistoryEntry, type SourceSnapshotParams,
+  createSessionHistoryEntry, createDocumentState, SourceSnapshotParams, type SessionHistoryEntry,
   type DocumentBackedState, type DocumentState, type PostResource,
 } from './state/index';
 import type { NavigationAPIMethodTracker } from './api/index';
@@ -144,6 +144,22 @@ export class Navigable {
     // TODO(HTML §7.4.2.5): Snapshot active Documents, queue beforeunload/navigate checks on their Windows,
     // coordinate the shared prompt state, and wait for all results. The optional traversal needs all three inputs.
     throw new InternalError('Unload cancellation checks are not implemented');
+  }
+
+  /** Check a target name's authoring syntax; this does not restrict runtime name assignment or lookup. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#valid-navigable-target-name
+  static isValidTargetName(name: string): boolean {
+    return name !== '' && !name.startsWith('_') && !(name.includes('<') && /[\t\n\r]/.test(name));
+  }
+
+  /** Accept a conforming target name or one of HTML's four case-insensitive target keywords. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#valid-navigable-target-name-or-keyword
+  static isValidTargetNameOrKeyword(name: string): boolean {
+    if (Navigable.isValidTargetName(name)) return true;
+    switch (asciiLower(name)) {
+      case '_blank': case '_self': case '_parent': case '_top': return true;
+      default: return false;
+    }
   }
 
   get isTopLevelTraversable(): boolean {
@@ -299,15 +315,107 @@ export class Navigable {
     return entries.slice(first, end);
   }
 
+  /** Find an existing named target within this traversable, then among familiar contexts in its group. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#find-a-navigable-by-target-name
+  findNavigableByTargetName(name: string): Navigable | null {
+    const currentDocument = this.activeDocument;
+    if (currentDocument === null) throw new InternalError('Named-target lookup requires an active Document');
+    const sourceSnapshotParams = new SourceSnapshotParams(currentDocument);
+    // SPEC_CLASH(named-target-subtree-order): Search self's subtree then the traversable, as Chromium/WebKit do; Firefox searches each ancestor.
+    for (const subtree of [this, this.traversable]) {
+      const document = subtree.activeDocument;
+      if (document === null) throw new InternalError('Named-target lookup requires active subtree Documents');
+      for (const navigable of document.getInclusiveDescendantNavigables()) {
+        // SPEC_CLASH(named-target-sandbox-filter): Apply HTML's optional sandbox filter; browsers disagree on blocked-name handling.
+        if (!this.isAllowedBySandboxingToNavigate(navigable, sourceSnapshotParams)) continue;
+        if (navigable.targetName === name) return navigable;
+      }
+    }
+
+    const currentBrowsingContext = this.activeBrowsingContext;
+    const currentTopLevelBrowsingContext = currentBrowsingContext?.topLevelBrowsingContext ?? null;
+    const group = currentTopLevelBrowsingContext?.group ?? null;
+    if (currentBrowsingContext === null || group === null) {
+      throw new InternalError('Named-target lookup requires an active browsing-context group');
+    }
+    // SPEC_CLASH(named-target-group-order): Use oldest registration first; Chromium prefers newer contexts, unlike tested Firefox/WebKit.
+    for (const topLevelBrowsingContext of group.browsingContextSet) {
+      if (topLevelBrowsingContext === currentTopLevelBrowsingContext) continue;
+      for (const navigable of topLevelBrowsingContext.activeDocument.getInclusiveDescendantNavigables()) {
+        const browsingContext = navigable.activeBrowsingContext;
+        if (browsingContext === null) throw new InternalError('Named targets require an active browsing context');
+        if (!currentBrowsingContext.isFamiliarWith(browsingContext)) continue;
+        if (!this.isAllowedBySandboxingToNavigate(navigable, sourceSnapshotParams)) continue;
+        if (navigable.targetName === name) return navigable;
+      }
+    }
+    return null;
+  }
+
+  /** Select an existing target or apply browser policy and create a new top-level destination. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#the-rules-for-choosing-a-navigable
-  chooseNavigable(name: string, _noopener: boolean): [navigable: Navigable | null, windowType: WindowType] {
+  chooseNavigable(name: string, noopener: boolean): [navigable: Navigable | null, windowType: WindowType] {
+    const document = this.activeDocument;
+    if (document === null) throw new InternalError('Target selection requires an active Document');
+    const sandboxingFlagSet = document.activeSandboxingFlagSet;
     const keyword = asciiLower(name);
     if (name === '' || keyword === '_self') return [this, 'existing-or-none'];
     if (keyword === '_parent') return [this.parent ?? this, 'existing-or-none'];
-    if (keyword === '_top') return [this.topLevelTraversable, 'existing-or-none'];
-    // TODO: Named lookup and new targets require familiarity, popup/activation policy,
-    // sandbox restrictions, COOP/noopener, creator inheritance, and storage cloning.
-    throw new InternalError('Named-target lookup and new navigable selection are not implemented');
+    if (keyword === '_top') return [this.traversable, 'existing-or-none'];
+    if (keyword !== '_blank') {
+      const chosen = this.findNavigableByTargetName(name);
+      if (chosen !== null) return [chosen, 'existing-or-none'];
+    }
+    const userAgent = document.env.userAgent;
+    const window = this.activeWindow;
+    if (window === null) throw new InternalError('New-target selection requires an active Window');
+    // Optional blocked-popup UI and console reporting are not enabled.
+    if (userAgent.popupBlockerEnabled && !window.hasTransientActivation()) return [null, 'existing-or-none'];
+    // SPEC_CLASH(new-target-sandbox-rejection): Return null as HTML/Chromium/WebKit do; Firefox throws InvalidAccessError.
+    if (sandboxingFlagSet.has('sandboxed-auxiliary-navigation')) return [null, 'existing-or-none'];
+    switch (userAgent.newNavigablePolicy) {
+      case 'current': return [this, 'existing-or-none'];
+      case 'none': return [null, 'existing-or-none'];
+      case 'new': break;
+      default: assertNever(userAgent.newNavigablePolicy);
+    }
+
+    window.consumeUserActivation();
+    let windowType: WindowType = 'new-and-unrestricted';
+    // SPEC_CLASH(noopener-new-target-name): Preserve non-blank names as HTML/Chromium/Firefox do; WebKit clears them for noopener.
+    let targetName = keyword === '_blank' ? '' : name;
+    if (document.openerPolicy.value === 'same-origin' || document.openerPolicy.value === 'same-origin-plus-COEP') {
+      const topLevelOrigin = document.env.topLevelOrigin;
+      if (topLevelOrigin === null) throw new InternalError('Window target selection requires a top-level origin');
+      if (!areSameOrigin(document.origin, topLevelOrigin)) {
+        noopener = true;
+        targetName = '';
+        windowType = 'new-with-no-opener';
+      }
+    }
+
+    const opener = noopener ? null : this.activeBrowsingContext;
+    if (!noopener && opener === null) throw new InternalError('A new auxiliary target requires an opener context');
+    // Non-null openers still reach the explicit §7.3.2.1 auxiliary-creation dependency.
+    const chosen = TopLevelTraversable.create(userAgent, opener, targetName, this);
+    const browsingContext = chosen.activeBrowsingContext;
+    if (browsingContext === null) throw new InternalError('A new target requires an active browsing context');
+    if (!noopener && sandboxingFlagSet.has('sandboxed-navigation')) {
+      browsingContext.onePermittedSandboxedNavigator = opener;
+    }
+    if (sandboxingFlagSet.has('sandbox-propagates-to-auxiliary-browsing-contexts')) {
+      for (const flag of sandboxingFlagSet) browsingContext.popupSandboxingFlagSet.add(flag);
+    }
+    chosen.isCreatedByWebContent = true;
+    return [chosen, windowType];
+  }
+
+  /** Check navigation permission against the initiating Document's captured sandbox state. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#allowed-to-navigate
+  isAllowedBySandboxingToNavigate(_target: Navigable, _sourceSnapshotParams: SourceSnapshotParams): boolean {
+    // TODO(HTML §7.4.2.5): Apply self/ancestor relationships, activation-dependent top navigation,
+    // and the target browsing context's one permitted sandboxed navigator.
+    throw new InternalError('Sandbox navigation permission is not implemented');
   }
 
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigate

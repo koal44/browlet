@@ -9,6 +9,52 @@ import type { HTMLFrameElementImpl } from '../../../src/browlet/dom/nodes/html/l
 import { createOpaqueOrigin } from '../../../src/url/index';
 import { unwrap } from '../../support/browlet-binding';
 
+describe('Transient activation consumption', () => {
+  it('consumes every active Window in the top-level tree while preserving never-activated and history timestamps', async () => {
+    const { document, window } = await fixture();
+    const child = createChild(document, 'iframe');
+    document.body!.appendChild(child.container);
+    const neverActivated = createChild(child.document, 'object');
+    child.document.body!.appendChild(neverActivated.container);
+    const host = document.createElement('div');
+    document.body!.appendChild(host);
+    const shadow = host.attachShadow({ mode: 'closed', delegatesFocus: false, slotAssignment: 'named', clonable: false, serializable: false });
+    const shadowChild = createChild(document, 'frame');
+    shadow.appendChild(shadowChild.container);
+    const detached = createChild(document, 'iframe');
+    const other = await fixture();
+    window.lastActivationTimestamp = 12;
+    window.lastHistoryActionActivationTimestamp = 7;
+    child.window.lastActivationTimestamp = 5;
+    child.document.origin = createOpaqueOrigin();
+    shadowChild.window.lastActivationTimestamp = -Infinity;
+    detached.window.lastActivationTimestamp = 20;
+    other.window.lastActivationTimestamp = 30;
+
+    child.window.consumeUserActivation();
+
+    expect(window.lastActivationTimestamp).toBe(-Infinity);
+    expect(child.window.lastActivationTimestamp).toBe(-Infinity);
+    expect(shadowChild.window.lastActivationTimestamp).toBe(-Infinity);
+    expect(neverActivated.window.lastActivationTimestamp).toBe(Infinity);
+    expect(window.lastHistoryActionActivationTimestamp).toBe(7);
+    expect(child.window.lastHistoryActionActivationTimestamp).toBe(Infinity);
+    expect(detached.window.lastActivationTimestamp).toBe(20);
+    expect(other.window.lastActivationTimestamp).toBe(30);
+  });
+
+  it('does not consume a retained Window after replacement removes its navigable', async () => {
+    const { browser, window } = await fixture();
+    window.lastActivationTimestamp = 12;
+    await browser.navigate('https://example.test/replacement');
+
+    window.consumeUserActivation();
+
+    expect(window.lastActivationTimestamp).toBe(12);
+    expect(unwrap<DocumentImpl>(browser.document).getRelevantGlobalObject()!.lastActivationTimestamp).toBe(Infinity);
+  });
+});
+
 describe('History-action activation', () => {
   it('starts unavailable, compares retained timestamps, and consumes independently of transient activation', async () => {
     const { window } = await fixture();

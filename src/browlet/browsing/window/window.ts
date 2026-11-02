@@ -236,8 +236,23 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   /** Whether this Window currently has unconsumed transient user activation. */
   // https://html.spec.whatwg.org/multipage/interaction.html#transient-activation
   hasTransientActivation(): boolean {
-    // TODO(HTML 6.4): Supply duration/expiry, activation notification, and transient consumption.
+    // TODO(HTML §6.4): Supply duration/expiry and activation notification.
     throw new InternalError('Window transient activation is not implemented');
+  }
+
+  /** Consume transient activation across this Window's top-level traversable, preserving never-activated timestamps. */
+  // https://html.spec.whatwg.org/multipage/interaction.html#consume-user-activation
+  consumeUserActivation(): void {
+    const navigable = this.navigable;
+    if (navigable === null) return;
+    const document = navigable.topLevelTraversable.activeDocument;
+    if (document === null) throw new InternalError('Activation consumption requires an active top-level Document');
+    const navigables = document.getInclusiveDescendantNavigables();
+    for (const descendant of navigables) {
+      const window = descendant.activeWindow;
+      if (window === null) throw new InternalError('Activation consumption requires each active Window');
+      if (window.lastActivationTimestamp !== Infinity) window.lastActivationTimestamp = -Infinity;
+    }
   }
 
   /** Whether a user activation remains available for a history action, independently of transient expiry. */

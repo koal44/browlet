@@ -64,6 +64,12 @@ export class UserAgent implements
   browsingContextGroupSet = new Set<BrowsingContextGroup>();
   /** Top-level windows or tabs owned by this browser. */
   topLevelTraversableSet = new Set<TopLevelTraversable>();
+  /** Reject new-window requests without transient activation, independently of sandbox restrictions. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#popup-blocker
+  popupBlockerEnabled = true;
+  /** Destination policy after popup and sandbox checks; existing named targets are unaffected. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#the-rules-for-choosing-a-navigable
+  newNavigablePolicy: 'new' | 'current' | 'none' = 'new';
   /** Discover live broadcast channels in creation order without retaining their globals. */
   broadcastChannels = new WeakOrderedSet<BroadcastChannelImpl>();
   /** Execution created with this user agent for work that can outlive pages. */

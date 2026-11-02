@@ -910,8 +910,15 @@ child lifecycle operations. Ancestor-origin calculation and referrer-policy mask
 the known parent document before activation; they do not complete those
 [child-navigation dependencies](browlet/html/ROADMAP.md#section-313-ancestor-origins).
 `Window.open()` supports empty-URL calls to existing `_self`, `_parent`, and `_top`
-targets. Named lookup, new-window creation, and nonempty-URL navigation still
-throw at explicit unfinished operations. Feature processing and the new/existing
+targets. The [existing named-target lookup](browlet/browsing/navigation/ROADMAP.md#html-7317-target-names-and-existing-target-lookup)
+now coordinates subtree/group searches, but still throws at its source-activation,
+sandbox-permission, and familiarity dependencies. New-target selection now applies
+browser policy, consumes activation, handles COOP/noopener, and retains sandbox
+state. The default popup blocker still needs activation notification/expiry;
+opener-linked creation still needs auxiliary-context inheritance. A null-opener
+target can use the existing factory when those earlier checks are supplied or
+popup blocking is disabled. Nonempty-URL navigation remains unfinished.
+Feature processing and the new/existing
 opening branches are connected, but CSSOM View geometry and URL/history effects
 remain unfinished. `close()` and `stop()` also require their lifecycle operations;
 see the [Window audit](browlet/browsing/window/ROADMAP.md#html-7221-opening-and-closing-windows).
@@ -989,9 +996,9 @@ Traversal, push/replace/reload, and download event preparation now create their
 destinations; History reaches the preparation operation and aborts ongoing
 navigation before rechecking activity. Disabled Navigation entries skip dispatch;
 enabled entries initialize data, dispatch, cancel, or create an intercepted transition.
-History-action activation state and consumption now cover the top-level traversable,
-including shadow trees and other origins; input/automation notification and
-transient/sticky activation remain missing. `hasUAVisualTransition` is false because
+History-action and transient activation consumption now cover the top-level traversable,
+including shadow trees and other origins; input/automation notification,
+transient expiry, and sticky activation remain missing. `hasUAVisualTransition` is false because
 Browlet does not display cached history renderings; adding that UI must supply its
 presentation state. Commit selects URL/history update, same-document reload
 entry update, or queued traversal resumption. Navigation's same-document entry

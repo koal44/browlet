@@ -76,9 +76,18 @@ Window methods keep this foundation below the full interaction subsystem.
 The timestamps still have no input-event or automation producer. Activation
 notification must select ancestors and same-origin descendants, record current
 high-resolution time, and notify close watchers before dispatch. Transient
-duration/expiry/consumption, sticky activation, `UserActivation`/Navigator, and
+duration/expiry, sticky activation, `UserActivation`/Navigator, and
 the WebDriver notification hook remain §6.4 work. Tests supply activation times
 directly; this does not claim that a click or an automation request activates a Window.
+
+New-target selection now calls `Window.consumeUserActivation()`. It uses the same
+top-level inclusive descendants, preserves +Infinity for never-activated Windows,
+and changes other last-activation timestamps to -Infinity without modifying the
+history-action timestamp. Detached/other-tab Windows are excluded, and a retained
+Window without a navigable is unchanged. This does not implement the missing
+activation producer or expiry predicate; the
+[target-selection audit](../browsing/navigation/ROADMAP.md#html-7317-new-target-selection)
+records its caller and remaining dependencies.
 
 ## Focused-area dependency
 

@@ -32,6 +32,11 @@ outside consumers use its index, while its modules import each other directly.
 - Document owns the ancestor, inclusive-ancestor, descendant, inclusive-descendant,
   and document-tree child collections. History-action activation consumption and
   COOP access-reporting ancestry use these shared algorithms.
+- `Navigable.findNavigableByTargetName()` searches the source subtree, its
+  traversable, and then familiar contexts in the same group. `chooseNavigable()`
+  uses it for existing named targets and coordinates new-target policy, activation
+  consumption, COOP/noopener, creation, and sandbox bookkeeping. Activation lookup,
+  sandbox permission, familiarity, and auxiliary creation remain explicit dependencies.
 - `Navigable` prepares response policy inputs, selects the browsing context and
   Window/realm, and creates the destination document and history entry.
   `loadHTMLDocument()` starts HTML parsing and coordinates completion or abortion.
@@ -286,8 +291,11 @@ predicate, but source snapshots, familiarity, sandbox navigation permission,
 and definite closing remain prerequisites for a successful `Window.close()`.
 Opening now coordinates feature processing, target selection, new/existing
 branches, and return rules. `Navigable.chooseNavigable()` handles empty, `_self`,
-`_parent`, and `_top` names; named lookup and new targets still need familiarity,
-popup/activation policy, sandbox restrictions, COOP/noopener, and creator inheritance.
+`_parent`, and `_top` names and calls the existing-target lookup coordinator.
+Named lookup still needs source activation, sandbox permission, and familiarity.
+New-target selection now supplies popup policy, activation consumption,
+COOP/noopener, and sandbox propagation. Auxiliary creator inheritance remains
+unfinished; null-opener creation already uses the existing top-level factory.
 The empty-name branch applies to direct algorithm
 callers; `Window.open()` normalizes its empty target to `_blank` first.
 
@@ -997,10 +1005,11 @@ instead of maintaining a separate parent walk. The existing child and Window
 lookup consumers retain their respective tree boundaries.
 
 Remaining consumers are explicit dependencies: page-visibility updates,
-activation notification/transient consumption, autofocus, iframe attribute
-processing, named-target selection, unload/close/navigation cancellation, and
+activation notification, autofocus, iframe attribute
+processing, unload/close/navigation cancellation, and
 NotRestoredReasons collection. Their owning stubs and roadmaps remain open;
 these collection methods do not implement those operations or child startup.
+Named-target selection and transient activation consumption now use these collections.
 `SPEC_CLASH(iframe-ancestor-collection-input)` records a pending caller issue:
 [shared iframe attribute processing](https://html.spec.whatwg.org/multipage/iframe-embed-object.html#shared-attribute-processing-steps-for-iframe-and-frame-elements)
 passes the element's node navigable to inclusive ancestors, but §7.3.1.5 defines
@@ -1151,9 +1160,199 @@ pass on Node 24.19.0, Node 26.8.1, and custom Node 27.0.0-pre, each with and wit
 the addon. Typechecking, touched-file ESLint, import
 checks, and whitespace checks pass. No new expected failures or runtime rebuilds.
 
-Next in document order: §7.3.1.7, navigable target names. Recursive teardown,
-unload/cancellation, traversal execution, and UI/BiDi integration remain explicit
-dependencies.
+Recursive teardown, unload/cancellation, traversal execution, and UI/BiDi
+integration remain explicit dependencies.
+
+## HTML §7.3.1.7: Target names and existing-target lookup
+
+Audited [navigable target names](https://html.spec.whatwg.org/multipage/document-sequences.html#navigable-target-names)
+against HTML `404b3eb` (30 October 2026), checked against the live specification on
+2 November. This slice covers the name definitions, the non-normative sandbox
+summary, finding an existing target, and the existing-target branches of choosing
+a navigable. It stops at the new-top-level request branch.
+
+`Navigable.isValidTargetName()` and `isValidTargetNameOrKeyword()` express the
+authoring definitions: nonempty names cannot start with `_` or contain both `<`
+and an ASCII tab/newline; the latter also permits the four case-insensitive
+keywords. These are authoring predicates, not runtime lookup restrictions or a
+new document-conformance checker. `Window.name` assignment and named lookup do
+not reject nonconforming names. Runtime names compare exactly, including case.
+Blink's `_current` and fenced-frame `_unfencedTop` extensions are not HTML's four
+keywords and are not introduced by this slice.
+
+The sandbox summary's self, parent, top-level, named, and new-context outcomes
+span target selection and navigation. Special target selection is not itself a
+navigation permission check. The later `navigate()` permission check must enforce
+the table's restrictions even after `_parent` or `_top` has selected a target.
+
+`findNavigableByTargetName()` takes one source snapshot, searches self's inclusive
+descendants and then the traversable's, filtering sandbox-blocked candidates
+before comparing names. It then obtains the active top-level context's group,
+skips that context, and searches the other contexts' inclusive descendants.
+Each such candidate must pass familiarity first, then sandbox permission, then
+exact name comparison. A miss returns null. The shared Document collections
+supply active Documents, tree order, and shadow descendants; target names come
+from each candidate's active history entry.
+
+`chooseNavigable()` preserves empty/`_self` and parent-or-self selection; `_top`
+selects the traversable, as specified. A non-`_blank` name uses the new lookup
+and returns the existing target/window-type pair. `noopener` does not disable
+this lookup in HTML's algorithm. `_blank` and lookup misses reach the new-target
+branch, implemented in the follow-up below. `Window.open()` calls this operation
+and applies its separate noopener return rule; its empty target is normalized to
+`_blank`, unlike a direct empty-name algorithm call.
+
+### Approved browser choices
+
+All three choices were discussed and approved on 2 November 2026. HTML currently
+permits them; the markers track browser disagreement, not a departure from a
+single mandatory ordering.
+
+| Marker | Browlet choice and evidence |
+| --- | --- |
+| `SPEC_CLASH(named-target-subtree-order)` | Search the caller subtree, then the whole traversable. The duplicate-frame probe selects the outer-tab match in Chromium/WebKit and the nearer-ancestor match in Firefox. [HTML #10848](https://github.com/whatwg/html/issues/10848) tracks choosing one order. |
+| `SPEC_CLASH(named-target-sandbox-filter)` | Take HTML's optional rejection of sandbox-blocked candidates in both search loops. [HTML #10849](https://github.com/whatwg/html/issues/10849) proposes making it required. The live sandboxed-sibling probe opens a new window in Chromium/WebKit and throws `InvalidAccessError` in Firefox. That observable result does not establish which internal step rejects the candidate. |
+| `SPEC_CLASH(named-target-group-order)` | Preserve the group's Set registration order, oldest first. The duplicate-popup probe selects oldest in Firefox/WebKit and newest in Chromium. [HTML #10850](https://github.com/whatwg/html/issues/10850) leaves the tie-break open; no focus history or sorting is added. |
+
+The retained browser-only probe is `node-compat/experimental/navigable-target-names.mjs`.
+Run it with `node node-compat/experimental/navigable-target-names.mjs`. It executes
+`open()` in the requesting frame's realm. Tested builds: Chromium 156.0.8078.4,
+Firefox 157.0, and WebKit 27.2. The issue pages were read through Extractlet
+without capture warnings; their older browser observations are not substituted
+for these live results.
+
+Local source snapshots support the tree-search distinction:
+[Blink `1136757f47`, FrameTree](https://github.com/chromium/chromium/blob/1136757f47/third_party/blink/renderer/core/page/frame_tree.cc#L249),
+[Gecko `d92a7ec0e622`, WindowGlobalChild](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622/dom/ipc/WindowGlobalChild.cpp#L884),
+and [WebKit `713192fa`, FrameTree](https://github.com/WebKit/WebKit/blob/713192fa/Source/WebCore/page/FrameTree.cpp#L291).
+These July/August sources are older than the tested builds. Blink and Gecko check
+navigation permission during lookup; that WebKit search does not, and its other
+pages come from a hash set. Do not infer permanent WebKit insertion ordering or
+an identical early sandbox check from one current probe.
+
+### Explicit dependencies and stopping point
+
+- `SourceSnapshotParams` calls the existing `Window.hasTransientActivation()`
+  boundary. HTML §6.4 activation duration and notification remain unfinished;
+  lookup does not substitute false. The new-target follow-up implements consumption.
+- `Navigable.isAllowedBySandboxingToNavigate(target, sourceSnapshotParams)` is
+  now the explicit throwing owner for HTML §7.4.2.5. Its later audit must cover
+  self/ancestor relationships, activation-dependent top navigation, sandbox flags,
+  and the target's one permitted sandboxed navigator. The snapshot is passed
+  intact instead of consulting potentially changed source state per candidate.
+- `BrowsingContext.isFamiliarWith(other)` is the explicit throwing owner for
+  HTML §7.3.2.2: active origins, the source's top-level context, the target's
+  auxiliary opener chain, and its ancestor contexts. Other-group contexts are
+  not searched, even if this future predicate would consider them familiar.
+- The [new-target follow-up](#html-7317-new-target-selection) now supplies the
+  choosing branch, its UserAgent settings, and activation consumption. Its
+  missing creation/navigation dependencies remain separate from named lookup.
+- `TopLevelTraversable.create()` already supplies null-opener creation,
+  registration, and opener session-storage cloning. Non-null openers still reach
+  `BrowsingContext.createAuxiliary()` and creator-state inheritance. Immediate
+  replacement navigation, CSSOM View feature effects, and `Window.open()`'s
+  URL/history updates remain their existing explicit dependencies.
+
+Production named opening is therefore still incomplete. Tests supply only
+activation, sandbox permission, familiarity, and pre-existing child/group
+associations; they do not claim these owners are implemented. The new lookup
+requires no native changes. The follow-up below completes the subsection's
+coordinator while preserving these prerequisites.
+
+### Validation
+
+The 31 target-name tests cover authoring syntax versus runtime names, special
+keywords, duplicate-name ordering, live/shadow-tree lookup, one source snapshot,
+sandbox and familiarity filtering, other-group exclusion, registration order,
+explicit unfinished boundaries, and projected `Window.open()` returning the
+selected child's WindowProxy. Together with the existing collection and opening
+suites, all 95 tests pass on Node 24.19.0, Node 26.8.1, and custom Node 27.0.0-pre,
+each with and without the addon. Typechecking, touched-file ESLint, import
+hierarchy, and whitespace checks pass. No new expected failures or runtime rebuilds.
+
+## HTML §7.3.1.7: New-target selection
+
+The follow-up completes the [choosing algorithm](https://html.spec.whatwg.org/multipage/document-sequences.html#the-rules-for-choosing-a-navigable)
+through its final return. The live HTML source still reports 30 October 2026,
+matching local `404b3eb`. The algorithm's callable shape is unchanged.
+
+`UserAgent.popupBlockerEnabled` defaults to true. `newNavigablePolicy` defaults
+to `new` and can instead select `current` or `none`. These are browser-owned
+settings, not a new callback or Host Port; they do not affect an already-found
+target. No additional `BrowletConfig` API is introduced. With popup blocking
+disabled, the new-target branch does not need the unfinished activation query;
+named lookup still needs that query for its separate source snapshot.
+
+| Stage | Implemented behavior |
+| --- | --- |
+| Block or redirect the request | First reject an unactivated request when popup blocking is enabled, then reject sandboxed auxiliary navigation. Only then apply the configured new/current/none choice. The current and none choices preserve `existing-or-none` and do not consume activation. Optional blocked-popup UI and console messages are deliberately omitted. |
+| Consume activation | Before creating a target, call `Window.consumeUserActivation()`. It consumes across the source's top-level tree, including other origins and shadow descendants; preserves +Infinity for never-activated Windows; sets other last-activation timestamps to -Infinity; and leaves history-action timestamps untouched. A retained Window without a navigable returns without changing state. |
+| Apply COOP | Enforced `same-origin` or `same-origin-plus-COEP`, with a source origin different from its environment's top-level origin, forces noopener, an empty name, and `new-with-no-opener`. Other values and report-only policy do not enter this branch. |
+| Create the destination | `_blank` creates an unnamed target; preserve other names unless COOP forced separation. Pass null as opener for noopener, otherwise the source's active browsing context. Always pass the source navigable separately for BiDi provenance. The top-level factory owns registration and opener session-storage cloning. Explicit noopener alone retains `new-and-unrestricted`; `Window.open()` applies its separate null-return rule. |
+| Retain sandbox and lifecycle state | With an opener and `sandboxed-navigation`, set the new context's one permitted sandboxed navigator to the opener. If propagation is requested, copy all source flags into the popup sandboxing set without sharing it. Mark the traversable created by web content, then return it and its window type. |
+
+Consumption is a bounded dependency from HTML §6.4, using existing state and
+collections. Input/automation notification, transient duration and expiry,
+sticky activation, and UserActivation exposure remain unfinished in the
+[interaction owner](../../interaction/ROADMAP.md#history-action-activation-dependency).
+This does not infer activation from a click or introduce a global activation bit.
+
+### Browser evidence and approved choices
+
+The browser-only probe `node-compat/experimental/navigable-new-targets.mjs` was
+run on Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2. It calls `open()`
+inside the sandboxed frame's own realm and inspects new noopener windows both
+at initial about:blank and after same-origin navigation. Playwright's launch
+defaults allow popups; these probes do not measure browser popup-blocker defaults.
+
+- `SPEC_CLASH(new-target-sandbox-rejection)`: HTML, Chromium, and WebKit return
+  null when the source is sandboxed without `allow-popups`; Firefox throws
+  `InvalidAccessError`. Browlet returns null, as approved on 2 November.
+  [Gecko's WindowWatcher](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622/toolkit/components/windowwatcher/nsWindowWatcher.cpp#L988)
+  explicitly returns `NS_ERROR_DOM_INVALID_ACCESS_ERR` for that flag.
+  [Blink's creation path](https://github.com/chromium/chromium/blob/1136757f47/third_party/blink/renderer/core/page/create_window.cc#L346)
+  reports to the console and returns null. This is a return-path difference,
+  not a cross-origin access failure in the probe.
+- `SPEC_CLASH(noopener-new-target-name)`: HTML, Chromium, and Firefox preserve
+  a supplied name on a newly created noopener window; WebKit exposes an empty
+  name even before navigation. Browlet preserves it, as approved on 2 November.
+  The local [WebKit FrameLoader](https://github.com/WebKit/WebKit/blob/713192fa/Source/WebCore/loader/FrameLoader.cpp#L5114)
+  passes the requested name and opener-suppression policy to its Chrome client;
+  that excerpt alone does not explain where the tested port clears the name.
+
+### Remaining dependencies and stopping point
+
+Selection still reaches `Window.hasTransientActivation()` when popup blocking
+is enabled and `BrowsingContext.createAuxiliary()` for a non-null opener. The
+latter needs creator/opener/group inheritance in §7.3.2.1. Named lookup still
+needs sandbox permission and familiarity. The one-permitted-navigator field is
+now populated, but §7.4.2.5 must consume it.
+
+`Window.open()` still needs CSSOM View feature setup and about:blank URL/history
+application or document-initiated navigation. Immediate navigation of a new
+initial-about:blank target must eventually use replacement history, as the
+section's note requires; selection does not navigate or simulate that effect.
+BiDi delivery remains provisional. Full document sandbox inheritance belongs
+to creation/navigation, beyond copying the popup flag set here.
+
+This completes the §7.3.1.7 audit and selection coordinator, not functional popup
+loading. The next section is §7.3.2, browsing contexts.
+
+### Validation
+
+Twenty-eight new selection tests and two consumption tests cover policy and
+sandbox rejection, current/none choices, successful null-opener creation,
+COOP-forced separation, naming, sandbox copying, BiDi provenance, storage-clone
+coordination, and activation scope/ordering. The tests supply the unfinished
+activation predicate, local sandbox permission when named lookup needs it, and
+auxiliary creation only where that branch is being exercised. The top-level
+factory and consumption algorithm run normally. Separate cases retain the real
+auxiliary error and exercise sandbox rejection through projected `Window.open()`.
+
+Together with target lookup, top-level creation, existing activation, and opening
+suites, all 129 tests pass on Node 24.19.0, Node 26.8.1, and custom Node 27.0.0-pre,
+each with and without the addon. Typechecking, touched-file ESLint, import
+hierarchy, and whitespace checks pass. No new expected failures or runtime rebuilds.
 
 ## Removal condition
 

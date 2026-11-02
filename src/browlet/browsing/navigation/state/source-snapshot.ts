@@ -26,7 +26,7 @@ export class SourceSnapshotParams {
       this.sourcePolicyContainer = new PolicyContainer();
       return;
     }
-    // HTML §6.4 activation timestamps/consumption remain explicit in Window.hasTransientActivation().
+    // HTML §6.4 activation notification/expiry remain explicit in Window.hasTransientActivation().
     this.hasTransientActivation = sourceDocument.getRelevantGlobalObject()!.hasTransientActivation();
     this.sandboxingFlags = sourceDocument.activeSandboxingFlagSet;
     this.allowsDownloading = !this.sandboxingFlags.has('sandboxed-downloads');

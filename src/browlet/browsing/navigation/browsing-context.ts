@@ -31,7 +31,7 @@ export class BrowsingContext {
   openerOriginAtCreation: Origin | null = null;
   /** Creator allowed to navigate an auxiliary context despite its sandboxed-navigation restriction. */
   // https://html.spec.whatwg.org/multipage/browsers.html#one-permitted-sandboxed-navigator
-  // TODO(HTML target selection): Populate and consult this when auxiliary navigation is implemented.
+  // Target selection populates this; the sandbox-navigation permission algorithm must consult it.
   onePermittedSandboxedNavigator: BrowsingContext | null = null;
   /** Whether this context was created as a popup. */
   isPopup = false;
@@ -192,6 +192,14 @@ export class BrowsingContext {
     const document = this.activeDocument;
     if (!document.isFullyActive()) return null;
     return document.getNodeNavigable()!.topLevelTraversable.activeBrowsingContext;
+  }
+
+  /** Whether this context can address another through their origins, ancestry, or opener relationship. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#familiar-with
+  isFamiliarWith(_other: BrowsingContext): boolean {
+    // TODO(HTML §7.3.2.2): Compare active origins, the source's top-level context,
+    // the target's auxiliary opener chain, and its ancestor contexts.
+    throw new InternalError('Browsing-context familiarity is not implemented');
   }
 
   /** Attach the stable proxy exactly once during context construction. */
