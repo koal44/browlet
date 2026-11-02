@@ -80,6 +80,50 @@ test('stock launcher does not substitute the running Node for a missing selected
   assert.doesNotMatch(child.stderr, /build:node/);
 });
 
+for (const options of ['', '--trace-warnings', '--max-old-space-size=1536', '--max_old_space_size=1536']) {
+  test(`Vitest preserves caller heap options in the runner and workers (NODE_OPTIONS: ${options || 'unset'})`, t => {
+    const { resolveBase } = require('../node-base.cjs');
+    const launcher = isolatedScript(t, 'with-node.mjs');
+    const source = resolveBase(selectedBase);
+    const directory = resolve(dirname(launcher), selectedBase === 'custom'
+      ? '../node-source' : `../node-compat/.cache/node-v${selectedBase}`);
+    const executable = join(directory, relative(source.directory, source.executable));
+    mkdirSync(dirname(executable), { recursive: true });
+    copyFileSync(source.executable, executable);
+    const fixture = resolve(dirname(launcher), '../node_modules/vitest');
+    mkdirSync(fixture, { recursive: true });
+    writeFileSync(join(fixture, 'package.json'), JSON.stringify({ bin: { vitest: 'cli.cjs' } }));
+    writeFileSync(join(fixture, 'cli.cjs'), `
+      const { spawnSync } = require('node:child_process');
+      const { getHeapStatistics } = require('node:v8');
+      // Vitest supplies its own worker execArgv instead of inheriting the runner's.
+      const worker = spawnSync(process.execPath, ['--experimental-vm-modules', '-e',
+        'console.log(require("node:v8").getHeapStatistics().heap_size_limit)',
+      ], { encoding: 'utf8' });
+      if (worker.status !== 0) throw new Error(worker.stderr);
+      console.log(JSON.stringify({
+        options: process.env.NODE_OPTIONS,
+        runner: getHeapStatistics().heap_size_limit,
+        worker: Number(worker.stdout.trim()),
+      }));
+    `);
+    const child = spawnSync(process.execPath, [launcher, '--base', selectedBase, '--runtime', 'stock', 'vitest'], {
+      env: { ...process.env, CUSTOM_NODE_SOURCE: directory, NODE_OPTIONS: options }, encoding: 'utf8',
+    });
+    assert.equal(child.status, 0, child.stderr);
+    const result = JSON.parse(child.stdout.trim().split('\n').at(-1));
+    assert.equal(result.options, options);
+    // V8 adds young-generation space to this limit; compare with the same
+    // executable and caller options instead of assuming a fixed overhead.
+    const expected = spawnSync(executable, ['-p',
+      'require("node:v8").getHeapStatistics().heap_size_limit',
+    ], { env: { ...process.env, NODE_OPTIONS: options }, encoding: 'utf8' });
+    assert.equal(expected.status, 0, expected.stderr);
+    assert.equal(result.runner, Number(expected.stdout.trim()));
+    assert.equal(result.worker, result.runner);
+  });
+}
+
 test('Node installer reuses verified official inputs without building an addon', {
   skip: selectedBase === 'custom' && 'Custom builds do not use the official runtime installer',
 }, t => {

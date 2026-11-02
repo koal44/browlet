@@ -37,6 +37,12 @@ The installer downloads the selected Node version into `node-compat/.cache`
 on Windows and Linux x64.
 Node 24.19.0 is also supported; set `NODE_BASE=24.19.0` to select it.
 
+The unit suite uses Node's ordinary heap limit. Vitest 5 fixes the
+[mock registry retention](https://github.com/vitest-dev/vitest/pull/11092)
+that kept discarded Window realms alive in reused workers; increasing
+the heap ceiling is unnecessary. The launcher preserves caller-supplied
+`NODE_OPTIONS` unchanged.
+
 ## Browser tests
 
 The Selectlet and Stylelet browser suites use Playwright's Chromium, Firefox, and

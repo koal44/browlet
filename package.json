@@ -63,6 +63,6 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.60.0",
     "undici": "file:vendor/undici-8.11.2.tgz",
-    "vitest": "^4.1.7"
+    "vitest": "^5.0.5"
   }
 }

@@ -1,30 +1,20 @@
+import { execFileSync } from 'node:child_process';
+import { join } from 'node:path';
 import { runInNewContext } from 'node:vm';
-import { expect, it, vi } from 'vitest';
+import { expect, it } from 'vitest';
 
-it('avoids export enumeration natively and reuses successful fallback checks', async () => {
-  vi.resetModules();
-  // Instrument the intrinsic before JS Engine captures it; leave the selected backend real.
-  const exports = vi.spyOn(WebAssembly.Module, 'exports');
-  try {
-    const { isWebAssemblyModule } = await import('../../src/js-engine/built-in-primitives.js');
-    const bytes = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]);
-    const foreign = runInNewContext('new WebAssembly.Module(bytes)', { bytes }) as object;
-    for (const module of [new WebAssembly.Module(bytes), foreign]) {
-      expect(isWebAssemblyModule(module)).toBe(true);
-      Object.setPrototypeOf(module, null);
-      Object.freeze(module);
-      expect(isWebAssemblyModule(module)).toBe(true);
-      expect(isWebAssemblyModule(module)).toBe(true);
-    }
-    expect(exports).toHaveBeenCalledTimes(process.env.BROWLET_NODE_ADDON ? 0 : 2);
-  } finally {
-    exports.mockRestore();
-  }
+import { isWebAssemblyModule } from '../../src/js-engine/built-in-primitives';
+
+it('avoids export enumeration natively and reuses successful fallback checks', () => {
+  // This probe must instrument an intrinsic before JS Engine captures it.
+  // Resetting the shared worker's modules would lose HTML's installation guard
+  // while its native host hooks remain installed, breaking subsequent imports.
+  execFileSync(process.execPath, [
+    '--require', 'tsx/cjs', join(__dirname, 'fixtures/wasm-module-brand.cjs'),
+  ], { encoding: 'utf8' });
 });
 
-it('recognizes Module brands across realms and rejects impostors without author code', async () => {
-  vi.resetModules();
-  const { isWebAssemblyModule } = await import('../../src/js-engine/built-in-primitives.js');
+it('recognizes Module brands across realms and rejects impostors without author code', () => {
   const bytes = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]);
   const module = new WebAssembly.Module(bytes);
   const foreign = runInNewContext('new WebAssembly.Module(bytes)', { bytes }) as object;
