@@ -551,9 +551,9 @@ describe('Document named properties', () => {
       const host = doc.createElement('div');
       doc.body.appendChild(host);
       const form = doc.createElement('form');
-      form.setAttribute('name', 'hidden');
+      form.setAttribute('name', 'shadowForm');
       host.attachShadow({ mode: 'open' }).appendChild(form);
-      return 'hidden' in doc;
+      return 'shadowForm' in doc;
     })).toBe(false);
   });
 

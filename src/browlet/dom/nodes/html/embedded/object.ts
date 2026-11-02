@@ -1,9 +1,12 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/core/index';
+import { ctor, defineInterface, impl, nullable, reference, roAttr, xattr } from '../../../../../web-idl/core/index';
+import { areSameOriginDomain } from '../../../../../url/index';
 
 import { ElementTag, ContentCategory, transparentContent } from '../../element-definitions/index';
+import type { WindowProxyHandle } from '../../../../browsing/window/index';
 import type { Navigable } from '../../../../browsing/navigation/index';
 
+import type { DocumentImpl } from '../../document';
 import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
 import type { HTMLEmbedElementImpl } from './embed';
 
@@ -27,7 +30,8 @@ export class HTMLObjectElementImpl extends HTMLElementImpl {
 
   /** Child navigation destination, or null when the object is not displaying a Document. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#content-navigable
-  // TODO(HTML object loading): create/destroy the child as resource selection changes.
+  // TODO(HTML object loading): Use the node Document's user agent to create/destroy the child as resource selection changes.
+  // Child startup, recursive Document teardown, and traversal queuing remain unfinished.
   get contentNavigable(): Navigable | null {
     return this.#contentNavigable;
   }
@@ -38,6 +42,19 @@ export class HTMLObjectElementImpl extends HTMLElementImpl {
     this.#contentNavigable = value;
     previous?.setContainer(null);
     value?.setContainer(this);
+  }
+
+  /** Active child Document when it shares this container's node Document origin-domain. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#concept-bcc-content-document
+  get contentDocument(): DocumentImpl | null {
+    const document = this.#contentNavigable?.activeDocument ?? null;
+    return document !== null && areSameOriginDomain(document.origin, this.nodeDocument.origin) ? document : null;
+  }
+
+  /** Active child's WindowProxy, including for a cross-origin child. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#content-window
+  get contentWindow(): WindowProxyHandle | null {
+    return this.#contentNavigable?.activeWindowProxy ?? null;
   }
 
   /** Whether resource selection has chosen the element's fallback content. */
@@ -106,6 +123,8 @@ export const htmlObjectElementIDL = defineInterface({
   localNames: ['object'],
   members: [
     ctor([], xattr('HTMLConstructor')),
+    roAttr('contentDocument', nullable(reference('Document'))),
+    roAttr('contentWindow', nullable(reference('WindowProxy'))),
   ],
 });
 

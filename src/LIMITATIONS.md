@@ -848,8 +848,8 @@ include title/body mutation, live collections, name lookup, and named properties
 `currentScript` has retained state and readonly projection, but the provisional
 script handler does not set/restore it yet. Minimal object/embed implementations
 supply exposure; object loading must select fallback state. Iframe retains a
-content navigable only when supplied internally; automatic child navigation and
-public contentWindow/contentDocument remain absent. Named-property regressions
+content navigable only when supplied internally; public child accessors are
+present, but automatic child navigation remains unfinished. Named-property regressions
 use those explicit state inputs, not simulated successful resource loads.
 
 Document's [render-blocking mechanism](browlet/html/ROADMAP.md#section-316-render-blocking)
@@ -925,6 +925,21 @@ the URL/state unchanged. Precommit handlers run and can reject the change.
 Commit coordinates script execution, interception state, owner operations, and
 transition settlement, but accepted History changes still reach the explicit
 unfinished URL/history application boundary.
+`UserAgent.createFreshTopLevelTraversable()` prepares an unnamed initial
+about:blank context and requests navigation with its own active Document as
+source. It still reaches the unfinished `Navigable.navigate()` operation.
+Top-level registration now calls a provisional BiDi creation hook; original-opener
+state, automation cache overrides, and subscribed context-created events remain
+unimplemented. HTML and BiDi also disagree on the hook's required inputs; the
+[top-level audit](browlet/browsing/navigation/ROADMAP.md#html-7312-top-level-traversables)
+keeps that conflict explicit.
+Iframe, object, and legacy frame `contentDocument`/`contentWindow` accessors now
+project a retained child, including same-origin-domain filtering for Documents
+and stable WindowProxy identity. Creating that child automatically remains
+unfinished: the new creation operation reaches explicit creator-inheritance,
+history-queue, and joint-history application dependencies. Object/frame context
+creation, element lifecycle callers, and BiDi delivery are also still missing;
+see the [child audit](browlet/browsing/navigation/ROADMAP.md#html-7313-child-navigables).
 `Window.navigation` exposes its
 replaceable, nonconstructible EventTarget identity, entry-list reads, and
 NavigationHistoryEntry metadata/state. New top-level Document commits initialize
@@ -1030,9 +1045,34 @@ Document and TopLevelTraversable expose throwing collection/masking stubs; the
 provisional navigation-timing factory marks its missing entry-creation step.
 HTML's later collection algorithm also has unresolved conflicts recorded in the
 [diagnostic audit](browlet/browsing/navigation/ROADMAP.md#html-728-notrestoredreasons).
+Document `hidden` and `visibilityState` expose retained state, initially hidden
+for newly constructed Documents. Navigable initialization and the existing
+cross-document history commit select the traversable's system visibility.
+This implements the state-assignment part of initial visibility setup only:
+the timestamp-zero `VisibilityStateEntry`, Performance Timeline buffering and
+observation, host-driven visibility updates, their cross-specification hooks,
+and `visibilitychange` delivery remain unfinished. The existing traversable
+default is visible; assigning its internal system state does not update current
+Documents. See the [navigable audit](browlet/browsing/navigation/ROADMAP.md#html-73-and-731-navigable-foundations).
 `Window.length` now counts current document-tree child navigables, using retained
-iframe/object/frame associations. Those associations still require internal
+iframe/object/embed/frame associations. Those associations still require internal
 creation/destruction producers; appending a container alone creates no child.
+`UserAgent.createChildNavigable()` provides the element-to-navigation entry,
+but creator inheritance, non-iframe contexts, traversal queuing, and history
+application still throw. Embed's `setup()` also throws explicitly for its missing
+Fetch/content-selection/navigation lifecycle; its retained child state and
+collection integration do not imply automatic loading. See the
+[child-navigable dependencies](browlet/browsing/navigation/ROADMAP.md#html-7313-child-navigables).
+`UserAgent.destroyChildNavigable()` supplies the removal coordinator, but currently
+throws at recursive Document teardown after clearing the container and notifying
+Navigation. Automatic removal is not connected. Teardown scheduling for inactive
+Documents, queued abortion, traversal execution, and BiDi delivery remain explicit
+[destruction dependencies](browlet/browsing/navigation/ROADMAP.md#html-7316-child-navigable-destruction).
+Top-level destruction and closing now have coordinators, but recursive teardown,
+unload cancellation, descendant unloading, and traversal execution still throw.
+Window's script-closing authorization remains unfinished. UI removal and BiDi
+delivery are provisional hooks. See the
+[top-level audit](browlet/browsing/navigation/ROADMAP.md#html-7316-top-level-destruction-and-closing).
 Valid numeric `window[index]` lookup uses container insertion order on the stock
 proxy, and enumeration includes the current index prefix. Caller-bound own-descriptor
 lookup now implements missing-index security, declared cross-origin members, named

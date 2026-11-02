@@ -549,7 +549,7 @@ are all its members and contributions, with the current implementation boundary:
 | `defaultView` | Implemented through the associated browsing context's stable WindowProxy. |
 | `hasFocus`, `designMode` | Missing §6 focus management and editing behavior. |
 | `execCommand`, `queryCommandEnabled`, `queryCommandIndeterm`, `queryCommandState`, `queryCommandSupported`, `queryCommandValue` | Missing editing-command subsystem referenced by HTML; no substitute return values are exposed. |
-| `hidden`, `visibilityState` | Missing Document accessors and visibility-change integration; the enum alone supplies no visibility behavior. |
+| `hidden`, `visibilityState` | Retained state and getters are implemented. Navigable initialization and the existing history-activation path set the initial state. Performance Timeline entries and subsequent visibility-change integration remain missing; see the [navigable audit](../browsing/navigation/ROADMAP.md#html-73-and-731-navigable-foundations). |
 | `onreadystatechange` | Implemented with shared EventHandler conversion/storage and `LegacyLenientThis`. |
 | `onvisibilitychange`, `GlobalEventHandlers` | Missing Document handler members/mixin integration; dispatch and ownership need the relevant visibility/event-handler algorithms. |
 | Obsolete members | `all` is implemented with the recorded native capability gate. The remaining obsolete surface belongs to §16.2. |
@@ -891,7 +891,7 @@ using the existing mutation and live-collection machinery:
 | `currentScript` | Initially null, retains HTMLScriptElementImpl or SVGScriptElementImpl, and projects the most recently assigned value. §4.12 execution must set/restore it for nested classic scripts and supply null for modules/shadow-tree execution. The provisional parser callback does not yet do this. |
 | Document names | Ordered, duplicate-free supported names; name/ID eligibility and object/embed exposure; single element or iframe WindowProxy; stable live HTMLCollection for multiple matches; LegacyOverrideBuiltIns applied by existing Web IDL machinery. The implementation returns concrete implementations/handles; its IDL object binding performs projection. |
 | Object/embed exposure | Minimal concrete element classes implement the §3.1.7 exposure predicate. Object resource selection must update `showsFallbackContent`; changing it invalidates live collections. Initial false represents no selected fallback, not a completed resource load. Other §4.8 object/embed APIs, loading, and rendering remain absent. |
-| Iframe WindowProxy | Initially-null `contentNavigable` is the explicit child-navigation dependency. Named access consumes its active WindowProxy once supplied. Automatic child creation/destruction, container association, and iframe contentWindow/contentDocument remain unimplemented. |
+| Iframe WindowProxy | Initially-null `contentNavigable` retains the child and its reverse container link. Named access and the public `contentWindow`/`contentDocument` getters consume that association. [Child creation preparation](../browsing/navigation/ROADMAP.md#html-7313-child-navigables) has explicit context/history dependencies; automatic creation/destruction and loading remain unfinished. |
 | `dir` | The section refers to §3.2.6.4, which now supplies reflection, HTML-root forwarding, and the directionality queries. |
 
 The title/body declarations retain `[CEReactions]`; custom-element reaction

@@ -1156,6 +1156,8 @@ export interface HTMLIFrameElement extends HTMLElement {
   allowFullscreen: boolean;
   referrerPolicy: string;
   loading: string;
+  readonly contentDocument: Document | null;
+  readonly contentWindow: WindowProxy | null;
   readonly permissionsPolicy: PermissionsPolicy;
 }
 
@@ -1176,7 +1178,8 @@ export interface HTMLEmbedElementConstructor extends Ctor<HTMLElementConstructor
 }
 
 export interface HTMLObjectElement extends HTMLElement {
-
+  readonly contentDocument: Document | null;
+  readonly contentWindow: WindowProxy | null;
 }
 
 export interface HTMLObjectElementConstructor extends Ctor<HTMLElementConstructor> {
@@ -1543,7 +1546,8 @@ export interface HTMLFrameSetElementConstructor extends Ctor<HTMLElementConstruc
 }
 
 export interface HTMLFrameElement extends HTMLElement {
-
+  readonly contentDocument: Document | null;
+  readonly contentWindow: WindowProxy | null;
 }
 
 export interface HTMLFrameElementConstructor extends Ctor<HTMLElementConstructor> {
@@ -3298,6 +3302,8 @@ export interface Document extends Node {
   readonly currentScript: HTMLScriptElement | SVGScriptElement | null;
   write(...text: Array<string>): void;
   readonly defaultView: WindowProxy | null;
+  readonly hidden: boolean;
+  readonly visibilityState: DocumentVisibilityState;
   onreadystatechange: EventHandlerNonNull | null;
   onvisibilitychange: EventHandlerNonNull | null;
   readonly all: HTMLAllCollection;

@@ -19,8 +19,6 @@ import { PageTransitionEventImpl } from '../navigation/events/index';
 import type { TrustedTypePolicyFactoryImpl } from '../policy/trusted-types/index';
 import type { HistoryImpl } from '../history/index';
 import { HTMLCollectionImpl, type DocumentImpl, type ElementImpl } from '../../dom/nodes/index';
-import { HTMLIFrameElementImpl, HTMLObjectElementImpl } from '../../dom/nodes/html/embedded/index';
-import { HTMLFrameElementImpl } from '../../dom/nodes/html/legacy/index';
 import type { PerformanceImpl } from '../../performance/index';
 import { NavigatorImpl } from '../../navigator/index';
 import { windowPostMessage, type WindowPostMessageOptions } from '../../communication/index';
@@ -256,8 +254,7 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
     const top = navigable.topLevelTraversable;
     const document = top.activeDocument;
     if (document === null) throw new InternalError('History activation consumption requires an active top-level Document');
-    const navigables = document.getDescendantNavigables();
-    navigables.push(top);
+    const navigables = document.getInclusiveDescendantNavigables();
     for (const descendant of navigables) {
       const window = descendant.activeWindow;
       if (window === null) throw new InternalError('History activation consumption requires each active Window');
@@ -271,7 +268,7 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
     if (traversable === null || !traversable.isTopLevelTraversable || traversable.isClosing) return;
     // TODO: Snapshot source params, then require script-closability, incumbent
     // browsing-context familiarity, and sandbox navigation permission before
-    // setting isClosing and queueing definite closing on the DOM manipulation source.
+    // setting isClosing and queueing TopLevelTraversable.definitelyClose() on the DOM manipulation source.
     throw new InternalError('Window closing authorization and lifecycle are not implemented');
   }
 
@@ -509,10 +506,7 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
     const names = new Set<string>();
     for (let node = document.firstChild; node !== null; node = node.nextDescendant(document)) {
       if (!node.isElement()) continue;
-      if (
-        (node instanceof HTMLIFrameElementImpl || node instanceof HTMLObjectElementImpl ||
-          node instanceof HTMLFrameElementImpl) && node.contentNavigable !== null
-      ) {
+      if (node.isNavigableContainer() && node.contentNavigable !== null) {
         const targetName = node.contentNavigable.targetName;
         if (childNames.has(targetName)) names.add(targetName);
       }

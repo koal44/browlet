@@ -10,7 +10,9 @@ import {
   EmbedderPolicy, OpenerPolicy, PermissionsPolicy, PolicyContainer, queueCOEPInheritanceViolation, SandboxingFlagSet,
 } from '../policy/index';
 import type { DocumentImpl, DocumentVisibilityState, ElementImpl } from '../../dom/nodes/index';
-import { HTMLIFrameElementImpl, type HTMLObjectElementImpl } from '../../dom/nodes/html/embedded/index';
+import {
+  HTMLIFrameElementImpl, type HTMLEmbedElementImpl, type HTMLObjectElementImpl,
+} from '../../dom/nodes/html/embedded/index';
 import type { HTMLFrameElementImpl } from '../../dom/nodes/html/legacy/index';
 import { CustomElementRegistryImpl } from '../../dom/nodes/html/custom-elements/index';
 import {
@@ -36,6 +38,7 @@ export class Navigable {
   /** Containing navigable, or null at the top level. */
   parent: Navigable | null;
   /** History entry selected by the latest navigation or traversal. */
+  // TODO(HTML §7.4.1): Restrict mutation to the traversable's session history traversal queue.
   currentSessionHistoryEntry: SessionHistoryEntry;
   /** Whether closing this navigable has begun. */
   isClosing = false;
@@ -43,9 +46,10 @@ export class Navigable {
   isDelayingLoadEvents = false;
 
   /** History entry supplying the active Document, independently of the current traversal entry. */
+  // HTML permits mutation only on that Document's event loop; history application must preserve this ownership.
   #activeSessionHistoryEntry: SessionHistoryEntry;
   /** Element whose content navigable is this destination, or null while unassociated. */
-  #container: HTMLIFrameElementImpl | HTMLObjectElementImpl | HTMLFrameElementImpl | null = null;
+  #container: NavigableContainer | null = null;
 
   /** Create the initial history entry and associate its Document with this navigable. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#initialize-the-navigable
@@ -61,10 +65,85 @@ export class Navigable {
     this.currentSessionHistoryEntry = createSessionHistoryEntry(documentState);
     this.#activeSessionHistoryEntry = this.currentSessionHistoryEntry;
     browsingContext.setNavigable(this);
-    document.notifyFullyActiveStateChanged();
+    // Traversables finish this after their own system visibility state is initialized.
+    if (!(this instanceof Traversable)) {
+      document.setInitialVisibilityState(this.traversable.systemVisibilityState);
+      document.notifyFullyActiveStateChanged();
+    }
+  }
 
-    // TODO(HTML page visibility): Set initial Document visibility, after
-    // traversable subclasses have initialized their system visibility state.
+  /** Initialize a container's child and queue its insertion into the parent's retained history. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#creating-a-new-nested-browsing-context
+  static createChild(element: ElementImpl): void {
+    // TODO(HTML §7.3.2.1): BrowsingContext.create() still models only iframe embedders.
+    // Object/embed/legacy-frame loading must supply their context and policy inheritance too.
+    if (!(element instanceof HTMLIFrameElementImpl)) {
+      throw new InternalError('Object, embed, and frame child-context creation is not implemented');
+    }
+    const parentNavigable = element.getNodeNavigable();
+    const creator = element.nodeDocument;
+    const group = creator.browsingContext?.topLevelBrowsingContext?.group;
+    if (parentNavigable === null || group === undefined || group === null) {
+      throw new InternalError('Child creation needs an active parent browsing-context group');
+    }
+    // TODO(HTML §7.3.2.1): Creator/embedding inheritance currently throws in this factory.
+    const [, document] = BrowsingContext.create(creator, element, group);
+    const documentState = createDocumentState(document);
+    documentState.initiatorOrigin = document.origin;
+    documentState.origin = document.origin;
+    // SPEC_CLASH(child-navigable-absent-name): HTML's creation steps use null; retain the string state's empty default, as browsers do.
+    documentState.navigableTargetName = element.getAttributeNS(null, 'name') ?? '';
+    documentState.aboutBaseURL = document.aboutBaseURL;
+    const navigable = new Navigable(documentState, parentNavigable);
+    element.contentNavigable = navigable;
+    const historyEntry = navigable.activeSessionHistoryEntry;
+    const traversable = parentNavigable.traversable;
+    traversable.appendSessionHistoryTraversalSteps(() => {
+      const parentDocState = parentNavigable.activeSessionHistoryEntry.documentState;
+      const targetStepEntry = parentNavigable.getSessionHistoryEntries().find((entry) => entry.documentState === parentDocState);
+      if (targetStepEntry === undefined || targetStepEntry.step === 'pending') {
+        throw new InternalError('Child history creation needs the parent Document\'s first committed history step');
+      }
+      historyEntry.step = targetStepEntry.step;
+      parentDocState.nestedHistories.push({ id: navigable.id, entries: [historyEntry] });
+      traversable.updateForNavigableCreationOrDestruction();
+    });
+    // SPEC_CLASH(bidi-child-created-target): HTML names traversable; notify for the new child, as BiDi's event and iframe tests require.
+    creator.env.userAgent.webDriverBiDiNavigableCreated(navigable);
+  }
+
+  /** Detach a container's child, start its teardown, and remove its nested history. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#destroy-a-child-navigable
+  static destroyChild(container: NavigableContainer): void {
+    const navigable = container.contentNavigable;
+    if (navigable === null) return;
+    const env = container.nodeDocument.env;
+    container.contentNavigable = null;
+    // TODO(HTML §7.5.10): Off-loop abortion is queued against this now-inactive Document; resolve delivery with teardown.
+    navigable.informNavigationAPIAboutChildNavigableDestruction(env.responsibleEventLoop);
+    const document = navigable.activeDocument;
+    if (document === null) throw new InternalError('Child destruction requires an active Document');
+    // TODO(HTML §7.5.10): Recursive teardown currently stops at its explicit dependency.
+    document.destroyAndDescendants();
+    const parentNavigable = container.getNodeNavigable();
+    if (parentNavigable === null) throw new InternalError('Child destruction requires the container\'s node navigable');
+    const histories = parentNavigable.activeSessionHistoryEntry.documentState.nestedHistories;
+    const index = histories.findIndex((history) => history.id === navigable.id);
+    if (index !== -1) histories.splice(index, 1);
+    const traversable = parentNavigable.traversable;
+    traversable.appendSessionHistoryTraversalSteps(() => { traversable.updateForNavigableCreationOrDestruction(); });
+    env.userAgent.webDriverBiDiNavigableDestroyed(navigable);
+  }
+
+  /** Check beforeunload cancellation, optionally including the top-level traversal's navigate event. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#checking-if-unloading-is-canceled
+  static checkIfUnloadingIsCanceled(
+    _navigablesThatNeedBeforeUnload: Navigable[], _traversable?: Traversable,
+    _targetStep?: number, _userInvolvementForNavigateEvent?: UserNavigationInvolvement,
+  ): 'canceled-by-beforeunload' | 'canceled-by-navigate' | 'continue' {
+    // TODO(HTML §7.4.2.5): Snapshot active Documents, queue beforeunload/navigate checks on their Windows,
+    // coordinate the shared prompt state, and wait for all results. The optional traversal needs all three inputs.
+    throw new InternalError('Unload cancellation checks are not implemented');
   }
 
   get isTopLevelTraversable(): boolean {
@@ -152,7 +231,7 @@ export class Navigable {
 
   /** The element embedding this navigable, or null when it has no container. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#nav-container
-  get container(): HTMLIFrameElementImpl | HTMLObjectElementImpl | HTMLFrameElementImpl | null {
+  get container(): NavigableContainer | null {
     return this.#container;
   }
 
@@ -163,7 +242,7 @@ export class Navigable {
   }
 
   /** Update the reverse link and Document activity after a container sets its content navigable. */
-  setContainer(container: HTMLIFrameElementImpl | HTMLObjectElementImpl | HTMLFrameElementImpl | null): void {
+  setContainer(container: NavigableContainer | null): void {
     if (this.#container === container) return;
     if (this.#container?.contentNavigable === this) this.#container.contentNavigable = null;
     this.#container = container;
@@ -276,7 +355,7 @@ export class Navigable {
   /** Notify abortion, then reject the pending traversal requests for the selected child Window. */
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#inform-the-navigation-api-about-child-navigable-destruction
   // SPEC_MISMATCH: inform the navigation API about child navigable destruction(navigable)
-  // TODO(navigation-abort-caller-loop): Revisit with the container's Document when child destruction is connected.
+  // TODO(navigation-abort-caller-loop): destroyChild supplies the container's Document loop; revisit when removal and teardown run end to end.
   informNavigationAPIAboutChildNavigableDestruction(callerEventLoop: EventLoop | null): void {
     this.informNavigationAPIAboutAbortingNavigation(callerEventLoop);
     const navigation = this.activeWindow?.navigation;
@@ -315,7 +394,7 @@ export class Navigable {
     if (context === null) throw new InternalError('Navigation requires an active browsing context');
     const env = context.activeWindow.env;
     const container = this.container;
-    // TODO(HTML child navigation): Audit object/frame inheritance; iframe sandbox flags are not defined on them.
+    // TODO(HTML child navigation): Audit object/embed/frame inheritance; iframe sandbox flags are not defined on them.
     if (container !== null && !(container instanceof HTMLIFrameElementImpl)) {
       throw new InternalError('Object and frame navigation sandboxing is not implemented');
     }
@@ -640,6 +719,10 @@ export class Navigable {
   }
 }
 
+/** Elements that retain a nullable child navigation destination. */
+// https://html.spec.whatwg.org/multipage/document-sequences.html#navigable-container
+export type NavigableContainer = HTMLIFrameElementImpl | HTMLObjectElementImpl | HTMLEmbedElementImpl | HTMLFrameElementImpl;
+
 /**
  * Optional inputs to HTML's navigate algorithm. Nullable inputs default to null and booleans to false;
  * historyHandling defaults to 'auto', referrerPolicy to '', and userInvolvement to 'none'.
@@ -689,8 +772,10 @@ export class Traversable extends Navigable implements FetchPromptTarget {
   /** Top-level history entries retained for traversal. */
   sessionHistoryEntries: SessionHistoryEntry[] = [];
   /** Queue reserved for serialized history traversal work. */
+  // TODO(HTML §7.4.1.3): Start parallel draining once history application supplies its wait/queue-jump coordination.
   sessionHistoryTraversalQueue = new SessionHistoryTraversalQueue();
   /** Whether apply-history-step is already running a nested operation. */
+  // TODO(HTML §7.4.6.2): Set and clear this around synchronous-navigation steps that jump the queue.
   runningNestedApplyHistoryStep = false;
   /** Visibility reported by the host for this traversable. */
   systemVisibilityState: DocumentVisibilityState = 'visible';
@@ -702,11 +787,26 @@ export class Traversable extends Navigable implements FetchPromptTarget {
   /** Type-only identification as an eligible Fetch prompt destination. */
   declare [fetchPromptTargetBrand]: true;
 
+  constructor(documentState: DocumentBackedState, parent: Navigable | null = null) {
+    super(documentState, parent);
+    documentState.document.setInitialVisibilityState(this.systemVisibilityState);
+    documentState.document.notifyFullyActiveStateChanged();
+  }
+
   /** Append traversal work to this traversable's session-history parallel queue. */
-  // https://html.spec.whatwg.org/multipage/document-sequences.html#tn-append-session-history-traversal-steps
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#tn-append-session-history-traversal-steps
   appendSessionHistoryTraversalSteps(_steps: () => void): void {
-    // TODO(HTML 7.3.2): Supply the algorithm set, parallel draining, and synchronous-navigation queue jumping.
+    // TODO(HTML §7.4.1.3): Append to the algorithm set and request its serial drain.
+    // Until draining exists, fail explicitly rather than accepting work that will never execute.
     throw new InternalError('Session history traversal queue is not implemented');
+  }
+
+  /** Reapply the current joint-history step after adding or removing a child. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#update-for-navigable-creation/destruction
+  updateForNavigableCreationOrDestruction(): HistoryStepResult {
+    // TODO(HTML §7.4.6.1): Apply currentSessionHistoryStep with checkForCancelation false,
+    // null source/initiator, user involvement 'none', and null navigation type.
+    throw new InternalError('History update for navigable creation/destruction is not implemented');
   }
 
   /** Traverse joint history; an omitted source Document denotes a browser-UI request. */
@@ -774,6 +874,8 @@ export class Traversable extends Navigable implements FetchPromptTarget {
     navigable.activeSessionHistoryEntry = historyEntry;
     this.currentSessionHistoryStep = targetStep;
     document.makeActive();
+    // https://html.spec.whatwg.org/multipage/browsing-the-web.html#activate-history-entry
+    document.setInitialVisibilityState(navigable.traversable.systemVisibilityState);
     // This provisional caller only commits newly-created Documents. Reactivation and same-document
     // updates need their separate §7.2.6.4 algorithms, events, and tracker settlement.
     document.getRelevantGlobalObject()!.navigation.initializeEntriesForNewDocument(
@@ -840,15 +942,54 @@ export class TopLevelTraversable extends Traversable {
     }
 
     userAgent.appendTopLevelTraversable(traversable);
-
-    // TODO(WebDriver BiDi): Invoke "navigable created" with the traversable and
-    // openerNavigableForWebDriver once Browlet exposes the BiDi integration.
-    void openerNavigableForWebDriver;
+    userAgent.webDriverBiDiNavigableCreated(traversable, openerNavigableForWebDriver ?? null);
     return traversable;
   }
 
   override get isTopLevelTraversable(): true {
     return true;
+  }
+
+  /**
+   * Request teardown of retained Documents, then remove this destination from browser ownership.
+   * Closing supplies the browsing context captured before unloading.
+   */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#destroy-a-top-level-traversable
+  destroy(browsingContext: BrowsingContext | null = this.activeBrowsingContext): void {
+    if (browsingContext === null) throw new InternalError('Top-level destruction requires its browsing context');
+    const group = browsingContext.group;
+    if (group === null) throw new InternalError('Top-level destruction requires a browsing context group');
+    const userAgent = group.userAgent;
+    // SPEC_GAP(top-level-destruction-order): HTML leaves entry order open; request teardown in retained-list order.
+    for (const entry of this.sessionHistoryEntries) entry.documentState.document?.destroyAndDescendants();
+    group.remove(browsingContext);
+    userAgent.removeTopLevelTraversableFromUI(this);
+    userAgent.removeTopLevelTraversable(this);
+    userAgent.webDriverBiDiNavigableDestroyed(this);
+  }
+
+  /** Close unless a script has already queued definite closing. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#close-a-top-level-traversable
+  close(): void {
+    if (this.isClosing) return;
+    this.definitelyClose();
+  }
+
+  /** Check cancellation, then queue unloading and destroy this destination after unloading completes. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#definitely-close-a-top-level-traversable
+  definitelyClose(): void {
+    const document = this.activeDocument;
+    if (document === null) throw new InternalError('Closing requires an active Document');
+    const toUnload = document.getInclusiveDescendantNavigables();
+    if (Navigable.checkIfUnloadingIsCanceled(toUnload) !== 'continue') return;
+    this.appendSessionHistoryTraversalSteps(() => {
+      const activeDocument = this.activeDocument;
+      if (activeDocument === null) throw new InternalError('Closing requires an active Document when unloading begins');
+      // SPEC_GAP(top-level-close-destroyed-document): HTML retrieves the context after unloading can clear it; retain it before unloading.
+      const browsingContext = activeDocument.browsingContext;
+      if (browsingContext === null) throw new InternalError('Closing requires a browsing context when unloading begins');
+      activeDocument.unloadAndDescendants(null, () => { this.destroy(browsingContext); });
+    });
   }
 
   /** Collect the active document tree's diagnostics and mask cross-origin descendants before exposure. */
@@ -863,10 +1004,18 @@ export class TopLevelTraversable extends Traversable {
   }
 }
 
-/** Placeholder identity for a traversable's session-history work queue. */
-// https://html.spec.whatwg.org/multipage/document-sequences.html#session-history-traversal-parallel-queue
-// Queueing and synchronization await the history traversal algorithms.
-export class SessionHistoryTraversalQueue {}
+/** Retained work for one traversable; draining and history synchronization remain unfinished. */
+// https://html.spec.whatwg.org/multipage/browsing-the-web.html#session-history-traversal-parallel-queue
+export class SessionHistoryTraversalQueue {
+  /** Ordered pending algorithms, including synchronous navigation steps tagged with their target. */
+  algorithmSet = new Set<SessionHistoryTraversalSteps>();
+}
+
+/** A target tag distinguishes synchronous navigation steps from ordinary traversal work. */
+type SessionHistoryTraversalSteps = (() => void) & {
+  /** Present only for synchronous navigation steps that history application may run ahead of other work. */
+  targetNavigable?: Navigable;
+};
 
 /** Outcome of applying a history step, including cancellation before or during navigate-event firing. */
 export type HistoryStepResult = 'initiator-disallowed' | 'canceled-by-beforeunload' | 'canceled-by-navigate' | 'applied';

@@ -54,6 +54,24 @@ describe('History-action activation', () => {
     expect(other.window.hasHistoryActionActivation()).toBe(true);
   });
 
+  it('consumes parents before their descendants', async () => {
+    const { document, window } = await fixture();
+    const child = createChild(document, 'iframe');
+    document.body!.appendChild(child.container);
+    const grandchild = createChild(child.document, 'object');
+    child.document.body!.appendChild(grandchild.container);
+    const visited: string[] = [];
+    for (const [name, owner] of [['top', window], ['child', child.window], ['grandchild', grandchild.window]] as const) {
+      Object.defineProperty(owner, 'lastActivationTimestamp', {
+        get() { visited.push(name); return 1; },
+      });
+    }
+
+    window.consumeHistoryActionUserActivation();
+
+    expect(visited).toEqual(['top', 'child', 'grandchild']);
+  });
+
   it('retains activation when an old Window no longer has a navigable', async () => {
     const { browser, window } = await fixture();
     window.lastActivationTimestamp = 10;

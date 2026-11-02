@@ -69,7 +69,8 @@ Navigation event cancellation now uses Window's two retained activation
 timestamps, `hasHistoryActionActivation()`, and
 `consumeHistoryActionUserActivation()`. Consumption covers the active Windows
 of the top-level traversable, including nested and shadow-tree navigables of
-other origins. Document's `getDescendantNavigables()` supplies that tree; the
+other origins. Document's `getInclusiveDescendantNavigables()` supplies that tree
+with parents before children, including the top-level Window first; the
 Window methods keep this foundation below the full interaction subsystem.
 
 The timestamps still have no input-event or automation producer. Activation

@@ -1,6 +1,8 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { attr, ctor, defineInterface, idlType, impl, reflect, reflectEnumerated, xattr } from '../../../../../web-idl/core/index';
-import { createOpaqueOrigin, obtainURLOrigin, type Origin } from '../../../../../url/index';
+import {
+  attr, ctor, defineInterface, idlType, impl, nullable, reference, reflect, reflectEnumerated, roAttr, xattr,
+} from '../../../../../web-idl/core/index';
+import { areSameOriginDomain, createOpaqueOrigin, obtainURLOrigin, type Origin } from '../../../../../url/index';
 import type { ReferrerPolicy } from '../../../../../fetch/index';
 
 import { ElementTag, ContentCategory } from '../../element-definitions/index';
@@ -8,8 +10,10 @@ import { loadingAttribute, referrerPolicyAttribute } from '../attributes/index';
 import {
   SandboxingFlagSet, PermissionsPolicy, PermissionsPolicyAllowlist, PermissionsPolicyImpl, type PermissionsPolicyDirective,
 } from '../../../../browsing/policy/index';
+import type { WindowProxyHandle } from '../../../../browsing/window/index';
 import type { Navigable } from '../../../../browsing/navigation/index';
 
+import type { DocumentImpl } from '../../document';
 import type { ElementImpl } from '../../element';
 import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
 
@@ -59,7 +63,9 @@ export class HTMLIFrameElementImpl extends HTMLElementImpl {
 
   /** Child navigation destination, or null before creation and after destruction. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#content-navigable
-  // TODO(HTML child navigation): create/destroy the child and maintain this association.
+  // TODO(HTML §4.8.5): Insertion/removal must call the node Document's user agent to create/destroy its child.
+  // Context inheritance, recursive Document teardown, and history queuing must work before connecting those calls.
+  // SPEC_CLASH(iframe-ancestor-collection-input): Attribute processing supplies a Navigable to a Document collection; resolve there.
   get contentNavigable(): Navigable | null {
     return this.#contentNavigable;
   }
@@ -70,6 +76,19 @@ export class HTMLIFrameElementImpl extends HTMLElementImpl {
     this.#contentNavigable = value;
     previous?.setContainer(null);
     value?.setContainer(this);
+  }
+
+  /** Active child Document when it shares this container's node Document origin-domain. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#concept-bcc-content-document
+  get contentDocument(): DocumentImpl | null {
+    const document = this.#contentNavigable?.activeDocument ?? null;
+    return document !== null && areSameOriginDomain(document.origin, this.nodeDocument.origin) ? document : null;
+  }
+
+  /** Active child's WindowProxy, including for a cross-origin child. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#content-window
+  get contentWindow(): WindowProxyHandle | null {
+    return this.#contentNavigable?.activeWindowProxy ?? null;
   }
 
   /** Origin selected by this iframe's current attributes for Permissions Policy. */
@@ -202,5 +221,7 @@ export const htmlIFrameElementIDL = defineInterface({
     attr('allowFullscreen', idlType.boolean, xattr('CEReactions', reflect())),
     attr('referrerPolicy', idlType.DOMString, xattr('CEReactions', reflectEnumerated(referrerPolicyAttribute))),
     attr('loading', idlType.DOMString, xattr('CEReactions', reflectEnumerated(loadingAttribute))),
+    roAttr('contentDocument', nullable(reference('Document'))),
+    roAttr('contentWindow', nullable(reference('WindowProxy'))),
   ],
 });

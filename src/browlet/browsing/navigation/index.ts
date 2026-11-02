@@ -1,7 +1,8 @@
 export { BrowsingContext, BrowsingContextGroup } from './browsing-context';
 export {
-  Navigable, type NavigateOptions, type ReloadOptions, type NavigationHistoryBehavior, type HistoryHandlingBehavior,
-  type UserNavigationInvolvement, type HistoryStepResult, Traversable, TopLevelTraversable, SessionHistoryTraversalQueue,
+  Navigable, Traversable, TopLevelTraversable, SessionHistoryTraversalQueue,
+  type NavigableContainer, type NavigateOptions, type ReloadOptions, type NavigationHistoryBehavior,
+  type HistoryHandlingBehavior, type UserNavigationInvolvement, type HistoryStepResult,
 } from './navigable';
 export { NavigationParams, type OpenerPolicyEnforcementResult } from './params';
 export {

@@ -78,6 +78,21 @@ by the diagnostic-interface slice. The
 [HTML audit](../browsing/navigation/ROADMAP.md#html-728-notrestoredreasons) records
 the separate collection conflicts and remaining reason producers.
 
+## Initial visibility dependency
+
+`Document.setInitialVisibilityState()` now retains the state supplied by
+navigable initialization or history activation. HTML §6.2 also requires it to
+queue a `VisibilityStateEntry` with that state and timestamp **0**, even if the
+state did not change. Its source explicitly marks this missing step. Initial
+assignment does not fire `visibilitychange`.
+
+`VisibilityStateEntry`, `PerformanceEntry`, the Timeline buffer, and observer
+delivery are still absent. Do not replace the required timestamp with the
+current clock or treat the Document's stored state as a delivered entry.
+Subsequent visibility changes need a separate entry with the Document's current
+high-resolution time. The [navigable audit](../browsing/navigation/ROADMAP.md#html-73-and-731-navigable-foundations)
+records the remaining visibility producers.
+
 ## Missing timing families
 
 Classic-script creation now retains the Long Animation Frames `originalSourceURL`

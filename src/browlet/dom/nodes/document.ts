@@ -56,7 +56,8 @@ import type { BrowletEnvironment } from '../../environment/index';
 import type { DocumentParser } from '../../html/parser/index';
 import type { SerializedRecord } from '../../scripting/structured-data/index';
 import type {
-  BrowsingContext, Navigable, NotRestoredReasonDetails, NotRestoredReasons, NavigationParams, HistoryHandlingBehavior,
+  BrowsingContext, Navigable, NavigableContainer, NavigationParams, HistoryHandlingBehavior,
+  NotRestoredReasonDetails, NotRestoredReasons,
 } from '../../browsing/navigation/index';
 import type { FocusableArea } from '../../interaction/index';
 
@@ -87,9 +88,9 @@ import { HTMLBaseElementImpl, HTMLHeadElementImpl, HTMLTitleElementImpl } from '
 import { HTMLElementImpl, HTMLScriptElementImpl } from './html/index';
 import { HTMLHtmlElementImpl } from './html/document/index';
 import { HTMLBodyElementImpl } from './html/sections/index';
-import { HTMLFrameElementImpl, HTMLFrameSetElementImpl } from './html/legacy/index';
+import { HTMLFrameSetElementImpl } from './html/legacy/index';
 import {
-  HTMLEmbedElementImpl, HTMLIFrameElementImpl, HTMLImageElementImpl, HTMLObjectElementImpl,
+  HTMLEmbedElementImpl, HTMLIFrameElementImpl, HTMLImageElementImpl,
   HTMLVideoElementImpl, type HTMLMediaElementImpl,
 } from './html/embedded/index';
 import { HTMLFormElementImpl } from './html/forms/index';
@@ -241,6 +242,9 @@ export class DocumentImpl extends NodeImpl {
 
   /** Associated browsing context, or null for a detached document. */
   #browsingContext: BrowsingContext | null = null;
+  /** Page visibility, initially hidden until navigable initialization or history activation. */
+  // https://html.spec.whatwg.org/multipage/interaction.html#visibility-state
+  #visibilityState: DocumentVisibilityState = 'hidden';
   /** Most recent connected insertion of each navigable container, independent of child creation. */
   #navigableContainerInsertionOrder = new WeakMap<ElementImpl, number>();
   /** Next ordinal for connected container insertion in this document. */
@@ -380,6 +384,18 @@ export class DocumentImpl extends NodeImpl {
   // https://html.spec.whatwg.org/#dom-document-defaultview
   get defaultView(): WindowProxyHandle | null {
     return this.browsingContext?.windowProxy ?? null;
+  }
+
+  /** Visibility retained for this Document, independent of its current activity. */
+  // https://html.spec.whatwg.org/multipage/interaction.html#dom-document-visibilitystate
+  get visibilityState(): DocumentVisibilityState {
+    return this.#visibilityState;
+  }
+
+  /** Whether this Document's retained visibility state is hidden. */
+  // https://html.spec.whatwg.org/multipage/interaction.html#dom-document-hidden
+  get hidden(): boolean {
+    return this.#visibilityState === 'hidden';
   }
 
   /** Relevant Window's Location while fully active, otherwise null. */
@@ -1133,6 +1149,14 @@ export class DocumentImpl extends NodeImpl {
     throw new InternalError('Document fragment scrolling is not implemented');
   }
 
+  /** Initialize page visibility without dispatching a visibilitychange event. */
+  // https://html.spec.whatwg.org/multipage/interaction.html#set-the-initial-visibility-state
+  setInitialVisibilityState(visibilityState: DocumentVisibilityState): void {
+    this.#visibilityState = visibilityState;
+    // TODO(HTML §6.2 / Performance Timeline): Queue a VisibilityStateEntry with this state and timestamp 0.
+    // PerformanceEntry, the timeline buffer, and observer delivery are not implemented yet.
+  }
+
   /** Retarget this document's browsing context to its Window and enable execution. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#make-active
   makeActive(): void {
@@ -1218,6 +1242,26 @@ export class DocumentImpl extends NodeImpl {
   isRenderBlocked(): boolean {
     if (this.renderBlockingElements.size === 0 && !this.allowsAddingRenderBlockingElements()) return false;
     return this.env.timing.currentHighResolutionTime().milliseconds <= this.env.userAgent.renderBlockingTimeout;
+  }
+
+  /** Start unloading from the traversal queue; complete after the descendants and this Document unload. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#unload-a-document-and-its-descendants
+  unloadAndDescendants(
+    _newDocument: DocumentImpl | null = null, _afterAllUnloads?: () => void, _firePageSwapSteps?: () => void,
+  ): void {
+    // TODO(HTML §7.5.9): Require traversal-queue ownership, queue recursive child unloading, wait for completion,
+    // then queue page-swap steps, single-document unloading, and the continuation on this Document's Window.
+    // Single-document unloading still needs pagehide/unload/visibility events, timing, and bfcache decisions.
+    throw new InternalError('Document and descendant unloading is not implemented');
+  }
+
+  /** Start recursive teardown, running the optional continuation after every Document is destroyed. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#destroy-a-document-and-its-descendants
+  destroyAndDescendants(_afterAllDestruction?: () => void): void {
+    // TODO(HTML §7.5.10): Run in parallel, mark inactive documents unsalvageable and collect diagnostics,
+    // select child navigables, then wait for recursive child teardown before queuing destroy() and the continuation.
+    // Inactive-document ownership, repeated requests for shared Documents, and runnable teardown tasks need their lifecycle audit.
+    throw new InternalError('Recursive Document destruction is not implemented');
   }
 
   /** Destroy an active document from a task on its owning event loop. */
@@ -1567,27 +1611,47 @@ export class DocumentImpl extends NodeImpl {
     first?.setFrozenBaseURL();
   }
 
-  /** Navigable whose active document is this one; null for inactive history entries. */
-  // https://html.spec.whatwg.org/#node-navigable
-  getNodeNavigable(): Navigable | null {
-    const navigable = this.browsingContext?.navigable;
-    return navigable?.activeDocument === this ? navigable : null;
+  /** Collect ancestors from outermost to innermost; requires this Document to have a node navigable. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#ancestor-navigables
+  getAncestorNavigables(): Navigable[] {
+    const navigable = this.getNodeNavigable();
+    if (navigable === null) throw new InternalError('Ancestor collection requires a node navigable');
+    const ancestors: Navigable[] = [];
+    for (let parent = navigable.parent; parent !== null; parent = parent.parent) ancestors.push(parent);
+    return ancestors.reverse();
   }
 
-  /** Collect descendant navigables through shadow trees and their active Documents, in tree order. */
+  /** Collect outermost ancestors first, followed by this Document's node navigable. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#inclusive-ancestor-navigables
+  getInclusiveAncestorNavigables(): Navigable[] {
+    const navigables = this.getAncestorNavigables();
+    navigables.push(this.getNodeNavigable()!);
+    return navigables;
+  }
+
+  /** Collect descendants through shadow trees and active child Documents, even when this Document is inactive. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#descendant-navigables
   getDescendantNavigables(): Navigable[] {
     const navigables: Navigable[] = [];
     for (let node = this.firstChild; node !== null; node = node.nextShadowIncludingDescendant(this)) {
-      if (!node.isElement()) continue;
-      const tag = node.tag;
-      if (tag !== ElementTag.HTMLIframe && tag !== ElementTag.HTMLObject && tag !== ElementTag.HTMLFrame) continue;
-      const child = (node as HTMLIFrameElementImpl | HTMLObjectElementImpl | HTMLFrameElementImpl).contentNavigable;
+      if (!node.isNavigableContainer()) continue;
+      const child = node.contentNavigable;
       if (child === null) continue;
       const document = child.activeDocument;
       if (document === null) throw new InternalError('Descendant navigation requires an active Document');
-      navigables.push(child, ...document.getDescendantNavigables());
+      navigables.push(...document.getInclusiveDescendantNavigables());
     }
+    return navigables;
+  }
+
+  /** Collect this Document's node navigable before its descendants; full activity is not required. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#inclusive-descendant-navigables
+  getInclusiveDescendantNavigables(): Navigable[] {
+    const navigable = this.getNodeNavigable();
+    // Specified callers supply an active Document; reject invalid internal calls rather than emitting null.
+    if (navigable === null) throw new InternalError('Inclusive descendant collection requires a node navigable');
+    const navigables = this.getDescendantNavigables();
+    navigables.unshift(navigable);
     return navigables;
   }
 
@@ -1597,10 +1661,7 @@ export class DocumentImpl extends NodeImpl {
     if (this.getNodeNavigable() === null) return [];
     const navigables: Navigable[] = [];
     for (let node = this.firstChild; node !== null; node = node.nextDescendant(this)) {
-      if (
-        (node instanceof HTMLIFrameElementImpl || node instanceof HTMLObjectElementImpl ||
-          node instanceof HTMLFrameElementImpl) && node.contentNavigable !== null
-      ) navigables.push(node.contentNavigable);
+      if (node.isNavigableContainer() && node.contentNavigable !== null) navigables.push(node.contentNavigable);
     }
     return navigables;
   }
@@ -1620,7 +1681,7 @@ export class DocumentImpl extends NodeImpl {
   }
 
   /** Record a container's connection even when its child navigable has not been created yet. */
-  recordNavigableContainerInsertion(container: HTMLIFrameElementImpl | HTMLObjectElementImpl | HTMLFrameElementImpl): void {
+  recordNavigableContainerInsertion(container: NavigableContainer): void {
     if (container.isConnected) {
       this.#navigableContainerInsertionOrder.set(container, this.#nextNavigableContainerInsertionOrder++);
     }
@@ -1707,10 +1768,7 @@ export class DocumentImpl extends NodeImpl {
       node !== null;
       node = node.nextShadowIncludingDescendant(this)
     ) {
-      if (
-        node instanceof HTMLIFrameElementImpl || node instanceof HTMLObjectElementImpl ||
-        node instanceof HTMLFrameElementImpl
-      ) node.contentNavigable?.activeDocument?.notifyFullyActiveStateChanged();
+      if (node.isNavigableContainer()) node.contentNavigable?.activeDocument?.notifyFullyActiveStateChanged();
     }
   }
 
@@ -2358,7 +2416,9 @@ export const htmlDocumentIDL = definePartialInterface({
       arg('text', idlType.DOMString, { variadic: true }),
     ]),
     roAttr('defaultView', nullable(reference('WindowProxy'))),
-    // TODO(HTML §6): hasFocus, designMode, editing commands, hidden, and visibilityState.
+    // TODO(HTML §6): hasFocus, designMode, and editing commands.
+    roAttr('hidden', idlType.boolean),
+    roAttr('visibilityState', reference('DocumentVisibilityState')),
     attr('onreadystatechange', reference('EventHandler'), {
       ...xattr('LegacyLenientThis'), ...onError('report'),
     }),

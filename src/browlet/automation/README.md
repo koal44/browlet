@@ -24,6 +24,15 @@ Protocol input validation, command IDs/envelopes, session establishment, and
 WebSocket transport are not implemented. `WebDriverSession` currently supplies
 identity only; constructing it does not establish a live session.
 
+HTML's top-level creation now calls `UserAgent.webDriverBiDiNavigableCreated()`
+after registering the initialized traversable. This provisional hook still needs
+original-opener state, cache overrides, context registration, subscriptions, and
+`browsingContext.contextCreated` delivery. `SPEC_CLASH(bidi-navigable-created-inputs)`
+records HTML's omitted planned-navigation input required by current BiDi; the
+hook currently follows HTML's call shape. The
+[top-level audit](../browsing/navigation/ROADMAP.md#html-7312-top-level-traversables)
+records the unresolved contract. No event is emitted by the current hook.
+
 The commands are **not yet executable end to end**. These dependencies throw
 explicitly:
 

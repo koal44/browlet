@@ -8,10 +8,12 @@ import {
   constant, integer, op, reference, roAttr, xattr, DOMExceptionImpl, DOMExceptionNames,
 } from '../../../web-idl/core/index';
 
+import { ElementTag } from './element-definitions/index';
 import { EventTargetImpl, type EventImpl } from '../events/index';
 import { RangeImpl } from '../ranges/index';
 import { NodeIteratorImpl } from '../traversal/index';
 import type { DOMEnvironment } from '../environment';
+import type { Navigable, NavigableContainer } from '../../browsing/navigation/index';
 
 import type { CharacterDataImpl } from './character-data';
 import { NodeListImpl } from './collections';
@@ -407,6 +409,14 @@ export abstract class NodeImpl extends EventTargetImpl {
       if (parent.isSlot() && parent.assignedNodesList.length > 0) return null;
     }
     return parent?.isShadowRoot() ? parent.host : parent;
+  }
+
+  /** Navigable presenting this node's Document, even when the node itself is disconnected. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#node-navigable
+  getNodeNavigable(): Navigable | null {
+    const document = this.nodeDocument;
+    const navigable = document.browsingContext?.navigable;
+    return navigable?.activeDocument === document ? navigable : null;
   }
 
   // https://dom.spec.whatwg.org/#concept-tree-root
@@ -1024,6 +1034,21 @@ export abstract class NodeImpl extends EventTargetImpl {
   // Tag checks keep the base node module independent of its subclasses.
   isElement(): this is ElementImpl {
     return this.nodeType === NodeType.Element;
+  }
+
+  /** Whether this node can contain a child navigable, including before one is created. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#navigable-container
+  isNavigableContainer(): this is NavigableContainer {
+    if (!this.isElement()) return false;
+    switch (this.tag) {
+      case ElementTag.HTMLIframe:
+      case ElementTag.HTMLObject:
+      case ElementTag.HTMLEmbed:
+      case ElementTag.HTMLFrame:
+        return true;
+      default:
+        return false;
+    }
   }
 
   isAttribute(): this is AttrImpl {

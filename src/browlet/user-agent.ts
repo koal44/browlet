@@ -33,13 +33,15 @@ import { type ReportingEndpoint, ReportImpl } from './reporting/index';
 import { PolicyContainer, HSTSStore, EmbedderPolicy } from './browsing/policy/index';
 import { CSPList } from './browsing/policy/csp/index';
 import type { IntersectionObserverMargin } from './dom/intersection-observer/index';
-import type { DocumentImpl } from './dom/nodes/index';
+import type { DocumentImpl, ElementImpl } from './dom/nodes/index';
 import type { BroadcastChannelImpl } from './communication/index';
 import type { StorageImpl } from './storage/index';
 import type { BrowletEnvironment, BrowletEnvironmentBase } from './environment/index';
 import { WebDriver, type PageEvaluation } from './automation/index';
 import { HTTPAuthenticationStore } from './loader/index';
-import { BrowsingContextGroup, type Navigable, type TopLevelTraversable } from './browsing/navigation/index';
+import {
+  BrowsingContextGroup, Navigable, TopLevelTraversable, type NavigableContainer, type PostResource,
+} from './browsing/navigation/index';
 import { NodeHTTPTransport, createContentDecoder, supportedContentCodings } from './integration/host/network/index';
 import { NodePromise, queueNodeTask, nodeTimerHost } from './integration/host/index';
 import type { PermissionStatusImpl } from './integration/permissions/index';
@@ -239,11 +241,48 @@ export class UserAgent implements
     return group;
   }
 
+  /** Create a new tab/window and request its initial navigation from its own about:blank Document. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#create-a-fresh-top-level-traversable
+  createFreshTopLevelTraversable(
+    initialNavigationURL: URLRecord, initialNavigationPostResource: PostResource | null = null,
+  ): TopLevelTraversable {
+    const traversable = TopLevelTraversable.create(this, null, '');
+    const document = traversable.activeDocument;
+    if (document === null) throw new InternalError('A fresh traversable needs an active Document');
+    // TODO(HTML §7.4): navigate() still stops at its explicit navigation-coordination dependency.
+    traversable.navigate(initialNavigationURL, document, { documentResource: initialNavigationPostResource });
+    return traversable;
+  }
+
+  /** Create an element's child through the navigation layer. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#creating-a-new-nested-browsing-context
+  createChildNavigable(element: ElementImpl): void {
+    Navigable.createChild(element);
+  }
+
+  /** Destroy a container's child through the navigation layer. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#destroy-a-child-navigable
+  destroyChildNavigable(container: NavigableContainer): void {
+    Navigable.destroyChild(container);
+  }
+
+  /** Request top-level destruction without applying script-closing authorization. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#destroy-a-top-level-traversable
+  destroyTopLevelTraversable(traversable: TopLevelTraversable): void {
+    traversable.destroy();
+  }
+
   appendTopLevelTraversable(traversable: TopLevelTraversable): void {
     this.topLevelTraversableSet.add(traversable);
   }
 
-  /** Unregister a destroyed traversable and clear its session storage; document teardown must already be complete. */
+  /** Remove a tab/window presentation when a UI host is attached. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#destroy-a-top-level-traversable
+  removeTopLevelTraversableFromUI(_traversable: TopLevelTraversable): void {
+    // PROVISIONAL: Browlet has no tab/window UI host; connect its removal notification when one exists.
+  }
+
+  /** Unregister a traversable and clear its session storage after document teardown has been requested. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#destroy-a-top-level-traversable
   // https://storage.spec.whatwg.org/#storage-pressure
   removeTopLevelTraversable(traversable: TopLevelTraversable): void {
@@ -511,6 +550,21 @@ export class UserAgent implements
   // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-response-completed
   webDriverBiDiResponseCompleted(_request: FetchRequest, _response: FetchResponse): void {
     // PROVISIONAL: no BiDi sessions receive network events.
+  }
+
+  /** Notify automation after a new navigable has been initialized and registered. */
+  // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-navigable-created
+  // SPEC_CLASH(bidi-navigable-created-inputs): HTML omits BiDi's required has-planned-navigation input; resolve before delivery.
+  webDriverBiDiNavigableCreated(_navigable: Navigable, _openerNavigable: Navigable | null = null): void {
+    // TODO(WebDriver BiDi): Retain original opener, apply cache overrides, and emit subscribed contextCreated events.
+    // PROVISIONAL: live BiDi sessions, context registration, and notification delivery are not implemented.
+  }
+
+  /** Notify automation after a navigable's destruction has been requested. */
+  // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-navigable-destroyed
+  webDriverBiDiNavigableDestroyed(_navigable: Navigable): void {
+    // TODO(WebDriver BiDi): Serialize navigable info, emit contextDestroyed to parent-related subscriptions, and prune subscriptions.
+    // PROVISIONAL: live BiDi sessions, context registration, and notification delivery are not implemented.
   }
 
   /** Notify automation that an identified navigation was canceled. */

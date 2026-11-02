@@ -8,6 +8,30 @@ outside consumers use its index, while its modules import each other directly.
 
 - `browsing-context.ts` retains context/group relationships and creates the
   initial Window and about:blank document through the UserAgent's factory.
+- `TopLevelTraversable.create()` registers the initialized entry and calls the
+  UserAgent's provisional BiDi creation hook. `UserAgent.createFreshTopLevelTraversable()`
+  adds the initial navigation request; that request still reaches `navigate()`'s
+  explicit unfinished boundary.
+- `UserAgent.createChildNavigable()` forwards to `Navigable.createChild()`,
+  which prepares iframe child state and nested-history work;
+  context inheritance, traversal-queue execution, and the final history update
+  remain explicit dependencies. Iframe/object/frame `contentDocument` and
+  `contentWindow` project the retained child through their existing bindings.
+  Embed retains the same internal child association; its resource setup throws
+  explicitly until Fetch, content selection, and navigation are connected.
+- `UserAgent.destroyChildNavigable()` forwards to `Navigable.destroyChild()`.
+  The coordinator detaches the child, notifies Navigation, requests recursive
+  teardown, removes nested history, queues its update, and calls the provisional
+  BiDi hook. `Document.destroyAndDescendants()` explicitly throws; automatic
+  element removal remains unconnected until teardown and history queuing work.
+- `TopLevelTraversable.destroy()`, `close()`, and `definitelyClose()` express
+  top-level teardown and cancellation/unload coordination. Existing group removal
+  and session-storage cleanup are connected, while cancellation, recursive
+  unloading/destruction, and traversal execution remain throwing dependencies.
+  UI removal and BiDi delivery retain explicit provisional UserAgent hooks.
+- Document owns the ancestor, inclusive-ancestor, descendant, inclusive-descendant,
+  and document-tree child collections. History-action activation consumption and
+  COOP access-reporting ancestry use these shared algorithms.
 - `Navigable` prepares response policy inputs, selects the browsing context and
   Window/realm, and creates the destination document and history entry.
   `loadHTMLDocument()` starts HTML parsing and coordinates completion or abortion.
@@ -303,7 +327,7 @@ captures all five source fields, including policy cloning and the null browser-U
 case. The non-null source still requires Window's unfinished transient activation.
 Navigation API traversal uses it; navigation, closing, and delta traversal have
 not yet been connected. `Traversable.appendSessionHistoryTraversalSteps()` and
-`applyTraverseHistoryStep()` expose the §7.3.2 queue and §7.4.6 application contracts,
+`applyTraverseHistoryStep()` expose the §7.4.1.3 queue and §7.4.6 application contracts,
 including all four history-step outcomes. Both throw until implemented; no parallel
 queue or provisional movement is substituted. The Navigation API roadmap records
 its prepared callback, queued rejection rules, and approved obsolete-tracker guard.
@@ -409,11 +433,11 @@ ancestry initialization before activation, or uses the embedder's node document
 before an initial navigable exists. Do not substitute the parent navigable's
 active document for the embedding element's node document.
 
-Iframe, object, and legacy frame implementations retain an initially-null
+Iframe, object, embed, and legacy frame implementations retain an initially-null
 `contentNavigable`. Document's `getDocumentTreeChildNavigables()` collects these
 associations in tree order for Window's §7.2.2.2 length getter, excluding shadow
 trees and returning an empty list when the Document has no node navigable.
-The setters maintain the reverse `Navigable.container` link for all three types,
+The setters maintain the reverse `Navigable.container` link for all four types,
 including clearing, replacement, and reassociation. Document full activity follows
 the actual container Document recursively; a child without a container is not
 fully active. Container reassociation and ancestor activity changes now notify
@@ -422,10 +446,10 @@ queued tasks can resume. Child creation/destruction must still populate and clea
 these associations. `Navigable.activeWindowProxy`
 provides the active document's stable proxy once that relationship exists;
 the field and accessor alone do not create nested browsing contexts.
-Browsing-context creation still accepts an iframe embedder; object/frame creation
+Browsing-context creation still accepts an iframe embedder; object/embed/frame creation
 must extend those inputs when their lifecycles are introduced. Sandboxing and
 iframe referrer-policy rules remain restricted to iframe containers. Response
-preparation explicitly rejects object/frame containers pending their sandbox
+preparation explicitly rejects object/embed/frame containers pending their sandbox
 inheritance audit, rather than treating them as absent embedders. WindowProxy
 numeric access additionally needs container insertion
 order, which differs from the Document list's tree order; see the
@@ -587,9 +611,549 @@ Generated declarations, typechecking, type contracts, touched-file lint, import
 checks, and whitespace checks pass. No expected failures, skips, addon builds,
 or engine changes were needed.
 
-The next area in document order is §7.3, beginning with navigables. Its audit
-should compare the existing state/initialization with the complete written
-algorithms before moving into larger lifecycle and history-application work.
+## HTML §7.3 and §7.3.1: Navigable foundations
+
+Audited the [introduction and navigable definition/initialization](https://html.spec.whatwg.org/multipage/document-sequences.html#navigables)
+against refreshed HTML `404b3eb` on 1 November 2026. This slice stops before
+§7.3.1.1 (traversable navigables); it does not complete the traversal queue or
+the child/top-level lifecycle algorithms.
+
+The existing graph matches the introduction: a Navigable retains its identity
+across Documents and browsing-context switches, each BrowsingContext retains
+one WindowProxy, and Traversable owns joint history. The COOP switching path
+already uses this distinction. Initial browsing-context creation precedes
+Navigable construction, so the constructor also records their association.
+
+| Requirement | Implementation and remaining dependency |
+| --- | --- |
+| Unique internal ID; nullable parent | Each Navigable gets a distinct Symbol and retains its parent. Nested histories use that identity. |
+| Current and active entries | Separate storage is retained. Either entry can advance independently; active Document/context/WindowProxy/Window and target name derive from the active entry. |
+| Mutation ownership | Current-entry changes belong to the traversable's history traversal queue; active-entry changes belong to the active Document's event loop. Existing provisional synchronous commits do not establish that queue/dispatch machinery. The field comments and existing throwing queue operation keep this requirement explicit. |
+| Closing/load-delay flags | Both start false. Closing is for top-level traversables; load delay is for children. Definite closing and child loading remain later lifecycle producers. |
+| Navigation/history admission | The implementation-defined boolean query continues to permit all requests. It is not a substitute for sandbox/activation checks in their specified algorithms. |
+| Active views and target name | Existing getters select the active entry and its browsing context/WindowProxy. `Document.makeActive()` retargets that proxy; the provisional commit already invokes it. |
+| Node navigable | The operation now lives on Node, including Document by inheritance. It selects the current node Document's active navigable, independently of the node's connection to a tree; adoption and history replacement change the result. |
+| Initial history entry | The constructor retains the supplied Document state and Document URL, sets current and active to the same entry, and leaves the step pending. The caller still assigns the history step. The non-null Document assertion is represented by `DocumentBackedState`. |
+| Initial visibility | Document now stores the initially-hidden state and exposes `hidden`/`visibilityState`. Initialization selects the nearest traversable's system state before notifying activity observers. Traversable finishes this after its own fields are initialized. |
+
+The two examples of current/active divergence are accounted for: the tests
+advance the active entry independently and advance the current entry while
+leaving all active views unchanged. Actual synchronous-navigation queue
+handling and non-displayable, non-error responses are still §7.4 work. Likewise,
+safe reads of the active Document from the traversal queue depend on that queue
+and its same-Document synchronous-update rule; this slice adds no ambient loop
+guess or substitute queue.
+
+### Visibility dependency
+
+The existing provisional history commit also calls
+`Document.setInitialVisibilityState()` after `makeActive()`, as required by
+[activate history entry](https://html.spec.whatwg.org/multipage/browsing-the-web.html#activate-history-entry).
+Thus replacement Documents receive the state before parser scripts run.
+Full history activation/restoration remains unfinished.
+
+This is only the state-assignment part of HTML §6.2 initial visibility setup.
+The method's TODO names the required `VisibilityStateEntry` with timestamp 0;
+PerformanceEntry, Timeline buffering, and observer delivery do not exist yet.
+The [Performance roadmap](../../performance/ROADMAP.md#initial-visibility-dependency)
+owns that dependency. Initialization deliberately emits no visibilitychange event.
+
+The traversable's existing host default is visible. A later §6.2 pass must
+connect host visibility changes to tasks for inclusive descendant Documents,
+the ordinary visibility-update algorithm, current-time performance entries,
+Screen Orientation, View Transitions, Device Posture/Web NFC hooks, and bubbling
+visibilitychange dispatch. Directly changing the internal system state does
+not implement those effects. Document's `onvisibilitychange` remains an explicit
+handler dependency; no duplicate event-handler machinery is introduced here.
+
+### Validation
+
+`navigation/navigable.test.ts` covers initial hidden state, visible top-level
+initialization before activity callbacks, both inherited child visibility
+states through two levels, replacement-document activation, disconnected and
+adopted Node lookup, and independent current/active views. The existing
+document-lifecycle suite covers pending entries, activity, context/proxy reuse,
+and null-Document states. No browser disagreement or new runtime accommodation
+was needed for this slice.
+
+All seven new tests pass on Node 24.19.0, Node 26.8.1, and custom Node
+27.0.0-pre, with and without the addon. Together with document-lifecycle, each
+addon run passes 41 tests; each stock run passes 38 and retains the three
+existing native-global expected failures. Generated declarations, typechecking,
+type contracts, touched-file lint, import checks, and whitespace checks pass.
+No addon or engine rebuild was needed.
+
+## HTML §7.3.1.1: Traversable navigables
+
+Audited the complete [traversable definition and lookup](https://html.spec.whatwg.org/multipage/document-sequences.html#traversable-navigables)
+against HTML `404b3eb` on 1 November 2026. This is a state/lookup slice, stopping
+before §7.3.1.2 (top-level traversables).
+
+All six fields are accounted for. `currentSessionHistoryStep` starts at 0;
+each traversable has its own initially-empty `sessionHistoryEntries` list and
+`SessionHistoryTraversalQueue`; `runningNestedApplyHistoryStep` and
+`isCreatedByWebContent` start false. The system visibility state retains
+Browlet's visible default, with the initial Document assignment and missing
+host-change integration described in the preceding audit. The existing
+`Navigable.traversable` lookup starts at the input itself and walks parents
+until it finds a Traversable. No replacement ancestor registry is needed.
+
+The queue now holds the specified ordered `algorithmSet`. Items are callable
+steps; synchronous navigation steps additionally carry `targetNavigable`.
+This preserves their distinct role for history application's queue selection
+without adding a second queue or changing the existing append signature.
+
+The field's required initialization is the result of **starting** a queue,
+not merely allocating its state. That execution part remains unfinished:
+
+- [§7.4.1.3](https://html.spec.whatwg.org/multipage/browsing-the-web.html#starting-a-new-session-history-traversal-parallel-queue)
+  must supply serial in-parallel draining and both ordinary and tagged
+  synchronous-navigation append operations. `appendSessionHistoryTraversalSteps()`
+  deliberately retains its existing explicit failure until work can be executed.
+- [Apply the history step](https://html.spec.whatwg.org/multipage/browsing-the-web.html#sync-navigations-jump-queue)
+  must coordinate document-population/continuation waits and select eligible
+  synchronous navigation steps from that same set, using the per-navigable wait
+  set and `runningNestedApplyHistoryStep` guard. That flag's source comment now
+  identifies its missing producer.
+- Infra's `ParallelQueue` supplies ordinary private FIFO draining; it does not
+  expose this selective removal or history-application coordination. Do not
+  substitute it wholesale or bind a traversable's lifetime to its initial
+  Document's event loop: the traversable spans Documents and descendant Agents.
+- The broader responsibility to control its own and descendants' current and
+  active entries still depends on §7.4 history application. Existing top-level
+  commits remain provisional. Auxiliary creation must later mark web-created
+  traversables; the existing flag alone does not implement window opening.
+
+Focused coverage checks all six defaults, separate mutable entry/algorithm
+collections across traversables, and inclusive lookup through child and
+grandchild navigables. This adds no native integration or scheduling behavior.
+Node 26.8.1/compat passes all 58 tests across the navigable, Navigation traversal,
+and Navigation commit suites; stock Node 26 passes all nine navigable tests.
+Typechecking, touched-file lint, import checks, and whitespace checks pass.
+No new failure classifications or addon builds were needed.
+
+## HTML §7.3.1.2: Top-level traversables
+
+Audited the complete [top-level traversable subsection](https://html.spec.whatwg.org/multipage/document-sequences.html#top-level-traversables)
+against HTML `404b3eb` on 1 November 2026, stopping before child navigables.
+The definition, owner set, ancestor lookup, creation, and fresh-creation
+algorithms are all accounted for.
+
+`TopLevelTraversable` initializes with a null parent. `UserAgent` already owns
+its own top-level set, and `Navigable.topLevelTraversable` walks to the outermost
+ancestor. HTML currently permits only top-level traversables; the separate
+Traversable base does not implement a new kind of embedded traversable.
+
+### Creation and registration
+
+The existing `TopLevelTraversable.create()` follows both context-selection
+branches: a null opener creates a top-level context/group; a supplied opener
+reaches the explicit auxiliary-context dependency. It captures the resulting
+Document, initiator origin, origin, target name, and about base URL in document
+state; initializes the navigable; assigns step 0; and appends the initial entry.
+The existing provisional History length/index initialization remains in place.
+Queue startup and initial visibility's performance entry retain the preceding
+audits' explicit dependencies.
+
+For an opener, session storage is cloned from its **top-level** traversable,
+including when the opener is a child. The existing Storage implementation and
+focused clone test cover separate destination maps. Auxiliary context creation
+still throws: creator origin/base URL, policy/referrer inheritance, opener/group
+relationships, and the new Window environment need the §7.3.2.1 audit. The test
+supplies only that unfinished context factory; it does not establish working
+`window.open()` or auxiliary browsing contexts.
+
+After registration, creation now calls
+`UserAgent.webDriverBiDiNavigableCreated(traversable, openerNavigableForWebDriver)`.
+The optional automation opener is kept separate from the actual browsing-context
+opener, and omission becomes null. A failed context factory causes neither
+traversable registration nor a creation notification. This uses the existing
+UserAgent automation-hook arrangement; notification delivery remains provisional.
+
+### Fresh creation
+
+`UserAgent.createFreshTopLevelTraversable(url, postResource = null)` creates an
+unnamed top-level traversable without an opener, then invokes its navigation
+operation with the new traversable's own active Document as source and the
+unchanged POST resource as `documentResource`. This preserves HTML's
+self-initiated security checks. It does not mark the traversable as web-created.
+
+The preparation algorithm is connected, but `Navigable.navigate()` still throws
+at its explicit §7.4 dependency. Full source snapshot/security/Fetch/history
+coordination must precede end-to-end use; this method does not call the
+route-based convenience loader as a substitute. Tests replace only the
+navigation operation to inspect the initialized owner, exact request inputs,
+and creation-before-navigation ordering.
+
+### BiDi contract conflict and missing consumer
+
+Refreshed WebDriver BiDi to `f922e6a` (8 October 2026).
+`SPEC_CLASH(bidi-navigable-created-inputs)` records that HTML passes a navigable
+and optional opener, while [BiDi's current operation](https://w3c.github.io/webdriver-bidi/#webdriver-bidi-navigable-created)
+requires `(navigable, has planned navigation, opener navigable = null)`.
+HTML supplies no planned-navigation boolean. The reviewed hook follows HTML's
+call shape. No boolean or event timing is
+chosen in this slice.
+
+Before enabling that consumer, automation must reconcile the input contract,
+retain original-opener state, apply scoped cache overrides, register context
+identifiers, select subscribed sessions, and emit `browsingContext.contextCreated`
+with the specified planned-navigation behavior. Merely accepting the hook call
+does not provide those effects. The [automation notes](../../automation/README.md)
+record this connection alongside the missing live-session machinery.
+
+### Validation
+
+The new six-test suite covers initialized registration before notification,
+the distinct automation opener, user-agent ownership, context-factory failure,
+and fresh navigation with omitted/null/POST resources. Existing lifecycle and
+Storage tests cover the complete initial graph and opener storage cloning;
+navigable coverage now checks top-level lookup through child/grandchild chains.
+The four focused suites pass on Node 24.19.0, Node 26.8.1, and custom Node:
+52 passing tests with the addon on each runtime; 49 passing tests and the three
+existing native-global expected failures without it. Typechecking, type-contract
+tests, touched-file lint, import checks, and whitespace checks pass. No new
+failure classifications or addon builds were needed.
+
+## HTML §7.3.1.3: Child navigables
+
+Audited the complete [child navigables subsection](https://html.spec.whatwg.org/multipage/document-sequences.html#child-navigables)
+against HTML `404b3eb`, also checked against the live 30 October 2026 edition.
+This covers the container definitions, both content accessors, and child
+creation. It stops before §7.3.1.4's Jake diagrams and §7.3.1.5's collections;
+destruction belongs to §7.3.1.6.
+
+### Containers and public access
+
+Iframe, object, embed, and legacy frame retain a nullable `contentNavigable`.
+Their setters maintain the reverse `Navigable.container` association and notify
+Document activity. `Navigable.containerDocument` reads the container's current
+node Document; `Document.containerDocument` first requires that Document to be
+the active Document of its node navigable. A child's non-null `parent` identifies
+its navigation ancestry independently of that DOM association.
+
+`NodeImpl.isNavigableContainer()` checks the registered `ElementTag` and narrows
+to those four implementation types. Document's child/descendant/activity walks
+and Window's named lookup share that guard. It identifies the container kind,
+independently of whether its `contentNavigable` is currently null.
+
+Iframe, object, and frame expose `contentDocument` and `contentWindow` in their
+implementations and Web IDL declarations. The Document getter uses the current
+same-origin-domain relationship between the child and container Documents,
+including domain relaxation and opaque-origin identity. It returns null without
+a child or an accessible Document. The Window getter returns the active
+WindowProxy handle without that origin filter; ordinary Binding projection
+provides the public proxy and preserves its identity. No binding override or
+new registry is needed. Borrowing another realm's getter does not substitute
+that realm for the receiver's container.
+
+Embed's child association is internal; its IDL has neither public getter. The
+association participates in Document's child/descendant collections, Window's
+indexed/named lookup, insertion ordering, and descendant-activity notification.
+Its `setup()` method is an explicit throwing dependency for the element's
+resource-processing algorithm.
+
+Initial-null, retained identity, foreign access, origin-domain changes, Document
+replacement, browsing-context replacement, association clearing, adoption, and
+borrowed/invalid receivers are covered through real projected objects. The
+fixtures explicitly attach children while creation is unfinished. Adoption and
+association-clearing tests inspect these relationships, not completed DOM
+removal/destruction algorithms. Live Chromium 156.0.8078.4, Firefox 157.0, and
+WebKit 27.2 agree on null before creation/after removal, initial Window/Document
+identity, and the same-origin borrowed getter.
+
+### Creation preparation and explicit dependencies
+
+`UserAgent.createChildNavigable(element)` is the entry point for element
+algorithms, reached through their node Document's environment. It forwards to
+the static factory without adding a runtime navigation import to Element or its
+subclasses. Future callers are iframe/frame post-connection steps and
+object/embed resource processing; ordinary insertion does not call it yet.
+
+`Navigable.createChild(element)` selects the element's parent navigable and its
+top-level browsing-context group, then calls `BrowsingContext.create(creator,
+element, group)`. It captures the returned Document's origin as both initiator
+and resulting origin, its about base URL, and the element's current target name;
+initializes a child with that parent; and attaches it to the container.
+
+The entry remains pending until the queued steps run. Those steps read the
+parent's then-active Document state, find its **first** matching history entry,
+copy that step, append a nested history with the child's identity and initial
+entry, and call `Traversable.updateForNavigableCreationOrDestruction()`.
+The BiDi creation hook follows queue submission and receives the child.
+Tests exercise delayed parent-state selection, same-Document history entries,
+grandchild group/queue ownership, and factory failure without attachment or
+notification. Only unfinished factories, queue draining, and final history
+application are substituted by the creation tests.
+
+The complete path is **not executable yet**:
+
+- `BrowsingContext.create()` throws for creator inheritance; §7.3.2.1 must supply
+  creator/group state, inherited origin/base/cookie/referrer/policy state,
+  embedder environment ancestry, sandbox/Permissions Policy, and Window setup.
+  Its current embedder type is iframe-only. `createChild()` explicitly rejects
+  object, embed, and legacy frame until their context/policy inputs are supported.
+- `appendSessionHistoryTraversalSteps()` still throws at §7.4.1.3's missing queue
+  drain. Accepting work without running it would leave child entries pending.
+- The new `updateForNavigableCreationOrDestruction()` is a throwing §7.4.6.1
+  dependency. It must apply the current joint-history step without cancellation,
+  with null source/initiator/navigation type and user involvement `none`;
+  history lengths, Navigation API entries, and affected Documents must all be
+  updated by that application.
+- Element insertion, removal, `src`/`srcdoc` processing, object/embed resource
+  selection, frame loading, and load-event propagation remain their element
+  algorithms' consumers. No automatic call is installed while these lower
+  dependencies fail. Destruction's Navigation API notification and caller-loop
+  decision remain for §7.3.1.6, with real callers needed before removing its
+  explicit loop input.
+- Embed setup additionally needs its task source and stale-task cancellation,
+  Fetch and MIME/content-handler selection, load-event delay/delivery, and the
+  response-based replace navigation. Removal and display-no-plugin processing
+  must destroy and clear its child. These are recorded beside `setup()` in
+  `embedded/embed.ts`; retaining a child does not implement those producers.
+- BiDi's original-opener state, cache overrides, live sessions, and event delivery
+  remain unfinished. `bidi-navigable-created-inputs` still records HTML's missing
+  planned-navigation flag; this pass does not choose its value or timing.
+
+### Approved specification conflicts
+
+`SPEC_CLASH(child-navigable-absent-name)` uses the empty string when `name` is
+absent. Child creation says null, but HTML's [document state](https://html.spec.whatwg.org/multipage/browsing-the-web.html#she-bc-name)
+requires a string initially empty, and all three tested browsers return an empty
+`window.name`. Explicit empty and nonempty names retain their values.
+
+`SPEC_CLASH(bidi-child-created-target)` sends the new child to the notification
+hook. HTML's last creation step instead names the traversable, which would
+announce the parent again. [BiDi's event trigger](https://w3c.github.io/webdriver-bidi/#webdriver-bidi-navigable-created)
+emits information about the supplied navigable, and
+[WPT's child-creation tests](https://github.com/web-platform-tests/wpt/blob/master/webdriver/tests/bidi/browsing_context/context_created/context_created.py)
+expect the newly created iframe. Eric approved both corrections on 1 November
+2026. Browser observations are reproducible with
+`node node-compat/experimental/child-navigables.mjs`; the probe remains in the
+independent Experimental repository.
+
+### Validation
+
+The child suite has 32 passing tests on Node 24.19.0, Node 26.8.1, and custom
+Node, each with and without the addon. Creation tests use the UserAgent entry.
+Embed regressions cover association transfer/clearing, child lookup, and
+shadow-tree descendant activity; they failed before the retained state and
+collection integration were added. Together with navigable, top-level creation,
+Document lifecycle, and related-Window coverage, 101 tests pass on Node 26 with
+the addon. Typechecking, touched-file lint, import checks, and whitespace checks
+pass. No addon/engine rebuild or new failure classification was needed.
+
+This audit does not mark child creation/loading complete.
+
+## HTML §7.3.1.4: Jake diagrams
+
+[Jake diagrams](https://html.spec.whatwg.org/multipage/document-sequences.html#jake-diagrams)
+introduce explanatory notation, with no new runtime algorithm or state. Columns
+are joint history steps; rows are navigables; URLs identify entries; colors
+distinguish Document identity, including multiple URLs for the same Document.
+The highlighted column and cells denote the traversable's current step and each
+navigable's current entry, not necessarily its independently active entry.
+Absent cells show that a child does not belong to the Document at that step.
+
+Our retained `SessionHistoryEntry`, `DocumentState`, and nested histories provide
+those relationships. The example combines two child navigations, a same-document
+fragment navigation, parent replacement, and traversal back to an earlier joint
+step. Its complete execution still needs §7.4 history application and child
+lifecycle work. The diagram's one-level nesting limit is only a presentation
+limit; our navigable ancestry and collections are recursive.
+
+## HTML §7.3.1.5: Related navigable collections
+
+Audited the [complete subsection](https://html.spec.whatwg.org/multipage/document-sequences.html#related-navigable-collections)
+against HTML `404b3eb`, matching the live 30 October 2026 edition.
+
+| Document operation | Behavior |
+| --- | --- |
+| `getAncestorNavigables()` | Outermost ancestor first, ending with the immediate parent. |
+| `getInclusiveAncestorNavigables()` | The same ancestors followed by the Document's node navigable. |
+| `getDescendantNavigables()` | Shadow-including container order, recursively including each child's active Document; parents precede children. |
+| `getInclusiveDescendantNavigables()` | The Document's node navigable followed by those descendants. |
+| `getDocumentTreeChildNavigables()` | Ordinary DOM descendants only, without shadow trees or child Documents; empty when the Document has no node navigable. |
+
+Each call returns a fresh list. None filters by origin or full activity.
+A retained child Document can still have a node navigable and ancestry when an
+ancestor is inactive. A replaced Document loses its node navigable, but its
+descendant-only walk still inspects retained containers. Collection always uses
+the active child Document, not an independently selected current history entry.
+The spec's multi-process note needs no mirrored tree in Browlet's current shared
+runtime; a future process boundary would need to preserve these relationships
+and ordering explicitly.
+
+Ancestor lookup requires a node navigable because HTML immediately dereferences
+its parent. Eric also approved that precondition for inclusive descendants on
+1 November 2026: all specified callers supply an active Document, and invalid
+internal calls throw rather than emit HTML's mechanically possible leading null.
+The result therefore remains `Navigable[]`; this is not a full-activity check.
+
+History-action activation consumption now uses inclusive descendants and visits
+the top-level Window first. Its new regression first observed the previous
+child/grandchild/top ordering. COOP access reporting uses inclusive ancestors
+instead of maintaining a separate parent walk. The existing child and Window
+lookup consumers retain their respective tree boundaries.
+
+Remaining consumers are explicit dependencies: page-visibility updates,
+activation notification/transient consumption, autofocus, iframe attribute
+processing, named-target selection, unload/close/navigation cancellation, and
+NotRestoredReasons collection. Their owning stubs and roadmaps remain open;
+these collection methods do not implement those operations or child startup.
+`SPEC_CLASH(iframe-ancestor-collection-input)` records a pending caller issue:
+[shared iframe attribute processing](https://html.spec.whatwg.org/multipage/iframe-embed-object.html#shared-attribute-processing-steps-for-iframe-and-frame-elements)
+passes the element's node navigable to inclusive ancestors, but §7.3.1.5 defines
+the collection on Document. Resolve the caller's input during that element audit;
+the marker is also beside the unfinished iframe lifecycle in `iframe.ts`.
+
+The collection tests cover multiple levels, all four container kinds, shadow
+trees, list freshness, reordering, disconnection, inactive ancestry, replaced
+Documents, and the approved preconditions. With activation, child navigation,
+indexed/named Window access, and COOP reporting, Node 26/addon validation has
+134 passes and the two existing indexed-mutation expected failures. The
+collections, activation, child-navigation, and COOP suites also have 77 passes on
+Node 26 without the addon. Typechecking, touched-file lint, import checks, and
+whitespace checks pass. Next: §7.3.1.6, navigable destruction.
+
+## HTML §7.3.1.6: Child navigable destruction
+
+Read the [complete navigable-destruction subsection](https://html.spec.whatwg.org/multipage/document-sequences.html#garbage-collection-and-browsing-contexts)
+against HTML `404b3eb`, matching the live 30 October 2026 edition. This bounded
+slice implements the child coordinator; the top-level pass is recorded below.
+
+`Navigable.destroyChild(container)` retains the specified container input, with
+`UserAgent.destroyChildNavigable()` providing the same element-to-navigation
+route as creation. It accepts all four container implementations. With no child,
+it returns immediately. Otherwise it clears content navigable and its reverse
+association before notifying Navigation. It requests recursive destruction of
+the then-active child Document, removes the matching nested history from the
+container's then-active parent Document state, queues a creation/destruction
+history update, and notifies BiDi. The parent's current entry can differ from
+its active entry; retained unrelated histories and list identity are preserved.
+No matching nested history is a no-op for removal. Repeated destruction of the
+now-empty container does nothing. Retained parent and WindowProxy identities
+are not cleared by this coordinator.
+
+### Explicit dependencies and stopping point
+
+| Dependency | Current boundary |
+| --- | --- |
+| [Recursive Document destruction](https://html.spec.whatwg.org/multipage/document-lifecycle.html#destroy-a-document-and-its-descendants), §7.5.10 | New `Document.destroyAndDescendants(afterAllDestruction?)` throws. Its full contract requires parallel execution, inactive-document unsalvageability/NotRestoredReasons, child selection and recursive completion, then a task invoking `destroy()` and the optional continuation. Existing `destroy()` requires an owning task and handles only an active Document; retained inactive history ownership is still missing. |
+| Teardown scheduling | Clearing the container makes its child Document not fully active. Existing global-task activity gating therefore blocks queued off-loop abortion and ordinary teardown tasks. Resolve the destruction-task lifecycle and notification ordering during §7.5.10; do not silently bypass activity checks here. |
+| Session-history traversal | `appendSessionHistoryTraversalSteps()` and `updateForNavigableCreationOrDestruction()` still throw at their §7.4 queue/application boundaries. The latter must reapply the current joint history step without cancellation checks. |
+| [BiDi destruction](https://w3c.github.io/webdriver-bidi/#webdriver-bidi-navigable-destroyed) | New `UserAgent.webDriverBiDiNavigableDestroyed()` is an explicit provisional hook. Live sessions, navigable-info serialization, parent-related event subscriptions, event delivery, and subscription pruning remain unfinished. |
+| Element lifecycle | Iframe/legacy-frame removal, object fallback/resource changes, and embed removal/display-no-plugin must call their node Document's UserAgent. Source TODOs name the route and the missing startup/teardown/queue work. DOM removal does not automatically invoke this unfinished coordinator. |
+
+An unmocked call currently stops at recursive teardown after detachment and
+Navigation notification. It does not remove history, enqueue an update, or
+announce completed destruction. This is a dependency boundary, not an atomic
+operation or a finished iframe-removal implementation.
+
+### Caller-loop decision remains open
+
+The coordinator obtains the caller loop from `container.nodeDocument.env`; its
+own signature adds no loop parameter. The existing Navigation helper compares
+that loop with the child's active Window loop. Shared-Agent notification aborts
+synchronously, whereas another Agent queues abortion on the child's loop. Both
+reject pending traversal trackers immediately, before document teardown.
+Tests exercise those existing paths with real Navigation state and separate
+Window owners. They do not settle the off-loop delivery problem after detachment.
+Keep `TODO(navigation-abort-caller-loop)` and its pending signature markers until
+automatic removal and recursive teardown establish an end-to-end handoff. A
+parameter-free notification arrangement still needs comparison against that path.
+
+### Validation
+
+The 13 new coordinator tests and 24 existing Navigation-abort tests pass on all
+six runtime configurations: Node 24.19.0, Node 26.8.1, and custom Node 27.0.0-pre,
+each with and without the addon. Node 26/addon also passes all 85 tests across
+the coordinator, child creation/access, related collections, and document
+lifecycle suites. The coordinator tests supply only the unfinished recursive
+teardown and traversal queue, with targeted notification spies for ordering.
+Separate tests use real notification state on shared and distinct Agents.
+No new failure classifications or addon/engine rebuilds were needed.
+Typechecking, touched-file ESLint, import-hierarchy checks, and whitespace checks pass.
+
+## HTML §7.3.1.6: Top-level destruction and closing
+
+The second pass covers the [remaining destruction and closing algorithms](https://html.spec.whatwg.org/multipage/document-sequences.html#destroy-a-top-level-traversable),
+including the permission to destroy a top-level traversable at any time and the
+note distinguishing guarded close from definite closing. This completes the
+subsection's audit and coordinators, not functional window closing.
+
+| Operation | Implemented sequence and boundary |
+| --- | --- |
+| `TopLevelTraversable.destroy()` | Capture the active browsing context, request recursive destruction for each non-null history Document, remove the captured context from its group, notify UI removal, unregister the traversable/clear its session storage, then notify BiDi. `UserAgent.destroyTopLevelTraversable()` is the browser-owned entry; it does not apply script-closing permission checks. Recursive Document destruction still throws before removal can proceed. |
+| `TopLevelTraversable.close()` | Return if `isClosing`; otherwise invoke definite closing. It does not itself set `isClosing`. |
+| `TopLevelTraversable.definitelyClose()` | Check unloading cancellation for inclusive descendants, return on either cancellation result, then append traversal steps. Those steps select the then-active Document and browsing context, then unload with null replacement and destruction as the completion callback. The callback retains that context even if unloading destroys the Document. It deliberately does not repeat the `isClosing` guard. |
+| `Navigable.checkIfUnloadingIsCanceled()` | Explicit §7.4.2.5 dependency with the full list/optional traversable/target step/user-involvement inputs and all three result values. Beforeunload prompting, optional top-level navigate-event cancellation, per-Window tasks, shared prompt state, and completion waits remain unfinished. |
+| `Document.unloadAndDescendants()` | Explicit §7.5.9 dependency with replacement Document, completion steps, and page-swap steps. Traversal-queue ownership, recursive child tasks/waits, page-swap delivery, and single-document unloading must be implemented together. |
+
+`BrowsingContextGroup.remove()` already removes the UserAgent's empty group while
+preserving groups that still have another context. `removeTopLevelTraversable()`
+already clears retained session-storage maps, including views, without touching
+another tab or local storage. Its contract now says teardown has been requested:
+HTML starts recursive destruction in parallel and does not wait for all of it
+before unregistering the traversable. Repeated Documents in history remain
+per-entry requests; coordinating their destruction belongs to the recursive
+teardown audit rather than an ad hoc deduplication here.
+
+`UserAgent.removeTopLevelTraversableFromUI()` is an explicit no-op while Browlet
+has no UI host. A future host must connect this removal effect. The existing
+provisional BiDi hook remains unfinished. Window's public `close()` still stops
+before its source snapshot, script-closability, familiarity, sandbox permission,
+and DOM-manipulation-task handoff; its source now names `definitelyClose()` as
+that task's destination. These checks are not replaced with unconditional close.
+
+### Specification gaps and lifecycle choices
+
+- `SPEC_GAP(top-level-destruction-order)`: HTML explicitly asks in what order to
+  visit retained history entries. This coordinator requests destruction in list
+  order without introducing another sort, snapshot, or completion-order promise.
+  No browser oracle for internal history-Document destruction order was run;
+  revisit observable ordering with the recursive teardown implementation.
+- `SPEC_GAP(top-level-close-destroyed-document)`: §7.5.9's single-document unload
+  can destroy an unsalvageable Document, clearing both its browsing context and
+  the active entry's Document. Its completion then invokes top-level destruction,
+  whose first step needs that active browsing context. The specification does
+  not supply a retained-context handoff. Browlet captures the context when queued
+  closing begins, before unloading, and retains it in the completion callback.
+  The callback passes that context directly to `destroy()`. Its additional
+  optional context argument defaults to the active browsing context for direct
+  destruction; no separate helper or additional Navigable state is needed.
+  Capturing inside the queued steps also uses the correct context if it changed
+  after closing was requested. The regression runs real Document destruction
+  before completion and verifies context/group removal, session-storage cleanup,
+  and the UI/BiDi notifications.
+
+Source inspection on 2 November 2026 used the existing local Blink
+`1136757f47` (3 July), Gecko `d92a7ec0e622` (2 July), and WebKit `713192fa`
+(26 August) snapshots. [Blink's ChromeClient](https://github.com/chromium/chromium/blob/1136757f47/third_party/blink/renderer/core/page/chrome_client_impl.cc#L531)
+forwards closure through WebView, [Gecko's outer Window](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622/dom/base/nsGlobalWindowOuter.cpp#L6112)
+retains its browsing context and closes through the tree owner, and
+[WebKit's queued close](https://github.com/WebKit/WebKit/blob/713192fa/Source/WebCore/page/LocalDOMWindow.cpp#L1167)
+retains the Window and asks its Page's Chrome to close. These are evidence for
+browser/page ownership beyond the Document; they do not establish a browser
+disagreement or require the same ownership representation in Browlet. No native
+runtime changes are part of this slice.
+
+### Validation
+
+Eleven tests cover retained/null/repeated history Documents, capture before
+teardown, context/group and storage isolation, cancellation, the closing guard,
+shadow-tree descendants, queued Document/context selection, and completion after
+real Document destruction.
+The unfinished recursive teardown, cancellation, traversal queue, and unloading
+are supplied only at those boundaries; their unmocked failures stay explicit.
+Together with creation, storage lifetime, and Document destruction, all 28 tests
+pass on Node 24.19.0, Node 26.8.1, and custom Node 27.0.0-pre, each with and without
+the addon. Typechecking, touched-file ESLint, import
+checks, and whitespace checks pass. No new expected failures or runtime rebuilds.
+
+Next in document order: §7.3.1.7, navigable target names. Recursive teardown,
+unload/cancellation, traversal execution, and UI/BiDi integration remain explicit
+dependencies.
 
 ## Removal condition
 

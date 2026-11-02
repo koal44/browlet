@@ -441,7 +441,7 @@ const fallbackKeys: (string | symbol)[] = ['then', Symbol.toStringTag, Symbol.ha
 /** Collect the live inclusive ancestry, rejecting a cross-origin participant before reporting. */
 function getSameOriginAncestorContexts(context: BrowsingContext, topOrigin: Origin): BrowsingContext[] | null {
   const ancestors: BrowsingContext[] = [];
-  for (let navigable = context.activeDocument.getNodeNavigable(); navigable !== null; navigable = navigable.parent) {
+  for (const navigable of context.activeDocument.getInclusiveAncestorNavigables()) {
     if (!areSameOrigin(navigable.activeDocument!.origin, topOrigin)) return null;
     ancestors.push(navigable.activeBrowsingContext!);
   }
