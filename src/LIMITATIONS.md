@@ -73,6 +73,12 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   function prototypes and callable Proxy traps can defeat exact constructor
   realm selection. Replace that fallback when exact lookup is available on all
   supported paths, preserving cross-realm construction and callback tests.
+  Native interface records require exact ownership: constructor adapters supply
+  it directly, while other native values use `getCreationRealm()` through the addon.
+  Without the addon, native Wasm objects created outside the constructor adapters
+  remain usable but unassociated, even with an ordinary prototype. Binding does not
+  permanently stamp a prototype/evaluation guess. See the
+  [Module tracking tests](../test/browlet/webassembly/module-tracking.test.ts).
   Sources: [runtime](js-engine/runtime.ts), [constructor tests](../test/web-idl/binding/constructor-realm.test.ts),
   [callback tests](../test/web-idl/binding/realm/callback.test.ts).
 - **`node-vm-global-proxy`:** Plain Node cannot reuse Browlet's modeled
@@ -263,6 +269,15 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   retain the required ordering and the standards discussion; acceptance does not
   establish a specification exception or a documented V8 compatibility rationale.
 
+- **`SPEC_CLASH(wasm-js-tag-realms)`:** V8 creates a separate JavaScript-exception
+  tag per context; the draft requires one cached tag per Agent. A Wasm instance
+  using another realm's `JSTag` cannot catch ordinary JavaScript throws, and V8
+  allows `new Exception(foreign.JSTag, ...)` instead of rejecting it. Binding the
+  namespace getter does not repair those engine comparisons. The three
+  [cross-realm regressions](../test/browlet/webassembly/js-tag.test.ts) retain the
+  draft assertions as approved expected failures. Browser comparisons and the
+  engine boundary are recorded in the [JSTag audit](browlet/webassembly/ROADMAP.md#5-audit-javascript-exception-tag).
+
 - **Wasm ESM has three retained binding gaps.** The addon runs supplied mixed
   JavaScript/Wasm graphs, but mutable globals exported to JavaScript are snapshots,
   `v128` exports read as undefined instead of remaining uninitialized, and mutable
@@ -382,6 +397,12 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
 
 ## Buffers and engine internal slots
 
+- **WebAssembly Memory buffer conversion on Node 24:** Its engine lacks
+  `toFixedLengthBuffer()` and `toResizableBuffer()`, with or without the addon.
+  Node 26 and the custom build provide both. The two approved Node-24-only
+  expected failures retain the required behavior and detect an unexpected pass;
+  copying buffers cannot preserve live Wasm storage. See the
+  [Memory review](browlet/webassembly/ROADMAP.md#53-reviewed-memories).
 - **Shared view length mode:** Native length-tracking inspection distinguishes
   auto-length from fixed views. Without it, a reversible resize probe works for
   resizable ArrayBuffers, but a growable SharedArrayBuffer cannot shrink back.
@@ -421,6 +442,20 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
 
 ## Web IDL boundaries
 
+- **WebAssembly Global bindings:** Construction uses Web IDL conversion and
+  `PlatformRecord`; value access and typed storage remain native. Recognition uses
+  V8's private type helpers with the addon, or an allocating import/re-export
+  probe without it. Both avoid reading values. The implementation comments record
+  these hacks and their tradeoffs. As with other native interfaces, stock Node
+  cannot establish exact ownership for externally created objects, and generated
+  types for native instance members remain pending. See the
+  [Global review](browlet/webassembly/ROADMAP.md#55-reviewed-globals).
+- **WebAssembly Table bindings:** The constructor exposes the draft's `externref`
+  and `anyfunc` kinds; engine extensions such as `anyref` are not accepted there.
+  Native `grow`/`set` preserve the agreed browser behavior for explicit undefined
+  and error precedence. Their runtime members remain native, while generated
+  native-instance member types are still pending, as for Instance and Memory.
+  See the [Table audit and spec clashes](browlet/webassembly/ROADMAP.md#54-reviewed-tables).
 - **`document.all`:** Available with the addon on each supported base, including
   callable lookup and native falsiness. Without it, `Document.prototype.all` is
   omitted. `SPEC_CLASH(htmlallcollection-property-order)`: native V8/Chromium

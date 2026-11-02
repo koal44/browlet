@@ -47,8 +47,8 @@ semantics to consult as needed, rather than another browser implementation plan.
 | Owner | Existing support | Missing work here |
 | --- | --- | --- |
 | V8 and the selected Node runtime | Native Wasm compiler, instances, memories, tables, globals, functions, and related JavaScript APIs | Audit the selected runtime's draft coverage, realm behavior, and observable host obligations. |
-| [JS Engine](../../js-engine/ROADMAP.md) | Realm identity, captured Wasm namespace/operations and CompileError constructor, promises, and source-text/synthetic module adapters | Capture further Wasm facilities as host algorithms need them and expose the addon's Wasm module adapter. Keep browser policy above this layer. |
-| This directory and [Binding](../../web-idl/README.md) | `validate()`, `compile()`, and both `instantiate()` overloads use Web IDL conversion on the existing native namespace; value-only Module/Instance declarations preserve native identity | Review the remaining APIs and native interface members. Native Wasm objects have no Browlet implementation/platform pairing. |
+| [JS Engine](../../js-engine/ROADMAP.md) | Realm identity, captured Wasm namespace/operations and constructors, promises, and source-text/synthetic module adapters | Capture further Wasm facilities as host algorithms need them and expose the addon's Wasm module adapter. Keep browser policy above this layer. |
+| This directory and [Binding](../../web-idl/README.md) | Namespace operations and `JSTag` use Web IDL on the native namespace; Module/Instance/Memory/Table/Global construction and `Module.customSections()` are bound; native objects can fill both roles in a shared `PlatformRecord` | Review the remaining APIs and native interface members. Without the addon, objects created outside the constructor adapters retain the ownership limitation below. Cross-realm JSTag behavior remains an engine limitation below. |
 | [HTML scripting](../scripting/ROADMAP.md) | Module resolution, import maps, fetching, caching, and supplied-graph execution | Connect `BrowletRealm.parseWebAssemblyModule()` and `JSWebAssemblyModuleRecord`, which still throw. Source/deferred phases also remain explicit boundaries. |
 | [Node compatibility addon](../../../node-compat/README.md#webassembly-modules) | Wasm records compile and execute supplied mixed graphs; direct Wasm dependencies preserve native export identities | Consume the maintained bridge through JS Engine. Node's public VM API has no equivalent Wasm record class; the stock-without-addon path needs a deliberate solution or an explicit unsupported boundary. |
 
@@ -115,9 +115,9 @@ an isolate migration is outside this audit.
 native validator. The [namespace tests](../../../test/browlet/webassembly/namespace.test.ts)
 cover input conversion, validation, namespace/constructor identity, operation
 realms and descriptors, and author replacement of the public validator.
-Asynchronous compilation and both instantiation overloads are covered below;
-`JSTag` remains next. Generated platform declarations describe these three
-operations and their result types; the remaining native members are preserved
+Asynchronous compilation, both instantiation overloads, and `JSTag` are covered
+below. Generated platform declarations describe these three operations, their
+result types, and the getter; the remaining native members are preserved
 but not adapted.
 
 **SPEC_CLASH(wasm-validate-bindings):** The draft's `AllowSharedBufferSource`,
@@ -319,10 +319,10 @@ resolves its typed result dictionary. Module and Instance `then` lookups occur o
 each, and a thenable that replaces the compiled Module with bytes is rejected
 instead of accidentally triggering another compilation.
 
-**Native interface boundary:** Module and Instance use Binding's `isInstance(value)`
+**Native interface boundary:** Module and Instance supply `interfaceOverride.isInstance(platformObject)`
 recognition for arguments, result dictionaries, unions, and overload selection.
-The declarations add no implementation/platform pair and install no constructors
-or interface members. JS Engine selects the Module check once at initialization,
+The declarations retain the same native object for implementation and platform;
+constructor/static member coverage is tracked in §5.1 below. JS Engine selects the Module check once at initialization,
 using the addon's `isWebAssemblyModule()` predicate when available on any supported
 base. It calls V8's existing `IsWasmModuleObject()` directly,
 without enumerating exports. Without the addon, the captured Module `exports()`
@@ -335,9 +335,570 @@ the public methods does not change its brand.
 
 The implementation retains asynchronous native compilation and the existing
 completion handoff. The addon exports an existing V8 predicate; no Node/V8 patch
-is needed. Native interface member/constructor coverage remains a §§5.1–5.2
-dependency; these value declarations are deliberately incomplete API descriptions.
-`JSTag` is the next namespace member.
+is needed. Remaining native interface member coverage is reviewed in document
+order; value recognition alone is deliberately not a complete API description.
+
+### §5 audit: JavaScript exception tag
+
+The [`JSTag` getter](webassembly.ts) returns the realm's captured native Tag.
+The engine owns the exception-tag address, its `externref` signature, and Wasm
+catching; Browlet supplies the namespace binding. The getter retains the original
+tag after author replacement of the public property. Capturing it on `JSRealm`
+also prevents the installed getter from recursively reading itself. This records
+V8's current context-local value, not a new Browlet rule about tag ownership.
+Tag uses the same `interfaceOverride.isInstance` predicate, with no constructor adapter yet.
+Node/V8 has no public Tag
+predicate, so JS Engine uses a captured `Exception.prototype.is()` with a private
+empty exception: a non-Tag throws, while a different valid Tag returns false.
+This checks native state without reading author properties or enumerating data.
+The full Tag and Exception interfaces remain §§5.7 and 5.9 dependencies.
+
+**SPEC_CLASH(wasm-js-tag-descriptor):** The draft declares a readonly namespace
+attribute, hence an enumerable getter with no setter. V8 supplies a nonenumerable
+readonly data property. The binding installs the draft getter, preserving the
+native namespace, constructor, and tag. Firefox supplies an enumerable data
+property; WebKit supplies the specified getter.
+
+**SPEC_CLASH(wasm-js-tag-realms):** The draft's
+[JavaScript exception tag](https://webassembly.github.io/spec/js-api/#js-exceptions)
+is shared by the surrounding Agent, and its
+[Tag object cache](https://webassembly.github.io/spec/js-api/#object-caches)
+returns the same JavaScript object for that address. Browlet tests use sibling
+Window realms in the same modeled Agent; the browser probes use a same-origin
+iframe. The native engines disagree:
+
+| Requirement | Chromium 156.0.8078.4 | Firefox 157.0 | WebKit 27.2 |
+| --- | --- | --- | --- |
+| Same `JSTag` object in same-Agent realms | Different objects | Different objects | Different objects |
+| `new Exception(foreign.JSTag, [value])` throws TypeError | Does not throw | Throws | Throws |
+| Wasm catches a JavaScript throw using an imported foreign `JSTag` | Does not catch | Does not catch | Catches |
+
+These local Playwright probes ran on Windows on 1 November 2026. The same module
+catches the original JavaScript value with its own realm's tag in every engine.
+The [Browlet regressions](../../../test/browlet/webassembly/js-tag.test.ts)
+also verify same-realm primitive/platform-object identity and rejection of
+`new Exception(JSTag, ...)`.
+
+V8's `wasm-js.cc` allocates `WasmExceptionTag` in each native context and stores it
+in `wasm_js_tag`; its Exception constructor compares against that context's tag.
+The Wasm compilers likewise load the instance's native-context tag for catching
+JavaScript exceptions. Merely returning one Agent-wide public object would leave
+those native comparisons unchanged and break other realms' native use of the tag.
+The getter therefore retains each realm's engine-provided tag. Browlet accepts
+these V8/Chromium limitations for now. The three cross-realm regressions retain
+the draft assertions as approved expected failures, including unexpected-pass
+detection. The getter adapter does not repair them.
+
+An Exception-constructor adapter could reject the other Browlet realms' reserved
+tags, but that alone would not repair native Wasm catching. The public addon API
+cannot replace V8's internal context tag or its compiled exception comparisons.
+A complete repair needs V8 work; aliasing the public property is insufficient.
+No Node/V8 patch or second Wasm tag cache is introduced in this slice.
+
+### §5.1 audit: Module import and export metadata
+
+The opening IDL introduces import/export kinds and descriptors, followed by the
+Module interface. The `AddressType` and `AddressValue` declarations support the
+later memory/table APIs. This slice reviews the extern-kind mapping and the
+`exports()` and `imports()` algorithms; it does not complete the Module interface.
+
+The [reflection regressions](../../../test/browlet/webassembly/module-reflection.test.ts)
+verify all five kinds, declaration order, repeated imports, Unicode and empty
+names, empty lists, fresh results, and retention of metadata after source-buffer
+mutation. Cross-realm calls allocate arrays, ordinary descriptor objects, and
+errors in the invoked function's realm. Genuine Modules remain recognizable
+after prototype replacement; lookalikes and proxies fail without author property
+access. Compiled builtin/string-constant options filter imports independently
+and leave exports intact, even if the original options object changes.
+
+V8's `GetImports()` and `GetExports()` read the compiled module's tables and stored
+compile-time imports, constructing fresh results in the current native context.
+Those algorithmic behaviors need no second parser, descriptor cache, or Browlet
+implementation.
+
+**SPEC_CLASH(wasm-module-descriptor-order):** The JS API declares these results as
+sequences of dictionaries. [Web IDL dictionary output conversion](https://webidl.spec.whatwg.org/#dictionary-to-es)
+creates member properties in lexicographical order: `kind, name` for exports and
+`kind, module, name` for imports. Native V8 instead creates `name, kind` and
+`module, name, kind`, matching the JS API algorithms' written map order. Local
+browser probes on 1 November 2026 found the same order in Chromium 156.0.8078.4,
+Firefox 157.0, and WebKit 27.2. Values and module declaration order are unaffected;
+the difference is visible through `Object.keys()` and JSON serialization.
+Browlet deliberately keeps the browser behavior. Two normal regression tests
+assert that chosen order; a change in the native results will fail those tests
+and prompt review. The alphabetical specification requirement remains documented
+here as a continuing clash. No binding or engine repair has been added for it.
+
+`customSections()` and the constructor follow in textual algorithm order; the
+former is covered below. Constructor conversion/options and the unadapted static
+members' complete declarations/descriptors remain explicit review work. Native
+value recognition and one adapted method do not constitute a complete interface binding.
+
+### §5.1: Module custom sections
+
+[`customSections()`](webassembly.ts) delegates section decoding, name matching,
+and copying to the captured native reader. Binding converts the Module argument
+and DOMString section name first. Its `sequence<ArrayBuffer>` result supplies an
+array in the invoked realm while preserving the native buffers allocated there.
+The retained module bytes remain engine-owned; no parser or byte cache is added.
+
+**SPEC_CLASH(wasm-custom-section-name):** V8's `WebAssemblyModuleCustomSectionsImpl`
+rejects an undefined second value, treating an explicit argument like an omitted
+one. Web IDL instead converts explicit `undefined` to `"undefined"`; an omitted
+required argument still throws. Local probes on 1 November 2026 reproduced V8's
+behavior in Chromium 156.0.8078.4; Firefox 157.0 and WebKit 27.2 follow Web IDL.
+The ordinary Browlet regression initially failed with `Argument 1 is required`.
+The adapter now follows Web IDL and the latter two browsers without changing V8.
+
+The [custom-section tests](../../../test/browlet/webassembly/custom-sections.test.ts)
+cover repeated/empty/absent names, section ordering, payload-only copies, names
+with supplementary characters, BOMs, NULs and unpaired-surrogate queries, fresh
+fixed-length buffers, source/result mutation, cross-realm allocations and errors,
+conversion ordering and exceptions, saved methods after public replacement, and
+the adapted function's descriptors. Unadapted import/export reflection retains
+the previously chosen browser property order.
+
+**Binding dependency implemented:** `interfaceOverride.getInterfaceObject(env)` supplies the captured
+native Module constructor. Binding installs the declared static operation on that
+object and retains its prototype; the namespace exposes the original constructor,
+without a separate global `Module`. The override also supplies its `isInstance` predicate;
+constructor support follows below. Value-only interfaces remain untouched, including
+inside a supplied namespace. Tests cover native constructor/prototype preservation
+and generated static-operation types. No addon, Node, or V8 changes are involved.
+
+### §5.1 Module constructor
+
+The [Module constructor](https://webassembly.github.io/spec/js-api/#dom-module-module)
+now applies the declared buffer-source and compile-options conversions, then
+delegates synchronous compilation and native object creation to the captured
+engine constructor. `WebAssemblyImpl.createModule()` borrows the source's current
+byte range after conversion and rejects duplicate builtins. V8 copies that range
+and owns validation, native slots, and the retained module bytes. The constructor
+signature is included in the generated platform types.
+
+**SPEC_CLASH(wasm-validate-bindings):** The first constructor run had eight ordinary
+failures: raw shared-buffer acceptance, primitive dictionaries, iterable/string
+conversion and iterator exceptions, duplicate known/unknown builtins, and source
+mutation/detachment during option conversion. These repeat the namespace gaps
+described above. The adapter follows Web IDL and the written Module algorithm;
+the failures now have passing regression coverage.
+
+Local browser controls on 1 November 2026 used Chromium 156.0.8078.4, Firefox 157.0,
+and WebKit 27.2. Chromium accepted primitive options, skipped iterable/string
+conversion, accepted duplicate builtins, and copied bytes before option getters.
+Firefox rejected primitive dictionaries, converted iterables/strings, and copied
+after option getters, but read `importedStringConstants` before `builtins` and
+accepted duplicate unknown builtins. WebKit rejected primitive dictionaries and
+duplicate unknown builtins, required a primitive imported-string option, and
+copied bytes before the builtin getter. Its first probe rejected the object-valued
+imported-string option before reaching the builtin getter. These are observations
+of the selected browsers, not claims that their complete option handling agrees.
+
+**SPEC_CLASH(wasm-module-constructor-order):** Web IDL resolves and converts the
+constructor arguments before reading `newTarget.prototype`. Chromium reads the
+prototype first. Firefox and WebKit read it after options, while reversing the
+dictionary-member order as noted above. Browlet follows Web IDL; a regression
+also changes the source bytes in the prototype getter to establish that the copy
+occurs after both conversion and prototype selection.
+
+**Binding dependency implemented:** A native interface may declare a constructor
+with the existing `overrideConstruct` hook. Binding wraps the supplied constructor
+in a Proxy, keeping its native prototype and static members. It converts arguments,
+selects the `newTarget` prototype, and records the native result as both identities
+of one `PlatformRecord` before applying that prototype. The public constructor becomes that Proxy and
+the native prototype's `constructor` points to it. The captured engine constructor
+remains the internal compilation entry. Static-only interfaces still retain their
+original constructor identity. No new declaration hook, addon, Node, or V8 patch
+is needed.
+
+**Native tracking:** Constructed Modules are associated immediately on every
+backend. Compiled Modules and other native values are associated on their first
+Binding conversion or record lookup when the existing addon can recover their
+registered creation realm. The record keeps the native identity and owner across
+realms, prototype changes, and freezing. No additional Promise reaction or
+resolution is inserted into `compile()`. Without the addon, exact ownership of
+untracked native objects is unavailable; these values remain usable without a
+record rather than acquiring a guessed owner. This also leaves values from
+unregistered realms unassociated and preserves records belonging to another world.
+The [tracking tests](../../../test/browlet/webassembly/module-tracking.test.ts)
+cover construction, compiled results, input/output conversion, generic lookups,
+foreign realms, frozen objects, and the stock ownership limitation.
+
+The [constructor tests](../../../test/browlet/webassembly/module-construction.test.ts)
+cover native usability, retained bytes, DataView/shared inputs, `new` enforcement,
+errors and objects in the invoked realm, subclassing, cross-realm prototype fallback,
+lookup/copy ordering, saved constructors, reflection, and the conversion regressions.
+CSP compilation policy remains the explicit cross-entry-point dependency below.
+
+### §5.2 reviewed: Instance constructor and exports
+
+The [Instance constructor](https://webassembly.github.io/spec/js-api/#dom-instance-instance)
+now uses the same `interfaceOverride` and `overrideConstruct` facilities as Module.
+Binding converts the required Module and optional imports object, selects
+`newTarget.prototype`, and delegates to `WebAssemblyImpl.createInstance()`.
+The realm retains its original native Instance constructor before installation.
+V8 reads the imports, uses the Module's retained builtin/string-import choices,
+links, runs the start function synchronously, and creates the native instance and
+exports object. Browlet does not duplicate those algorithms or store their state.
+
+Binding records the resulting Instance's owner immediately, including on stock
+Node without the addon, before applying the selected prototype. The object keeps
+its native slots and prototype behavior. Async instantiation still returns native
+Instances through its existing path; the stock ownership limitation for objects
+created outside a constructor adapter remains unchanged. Capturing the constructor
+also keeps saved constructors and subclasses usable after public replacement.
+Generated platform types now expose the constructor on `WebAssembly`.
+
+**SPEC_CLASH(wasm-instance-constructor-order):** The first regression run showed
+V8 reading `newTarget.prototype` before rejecting missing/invalid Modules or
+primitive import objects. Web IDL converts the arguments first. On 1 November
+2026, local Chromium 156.0.8078.4 reproduced V8's order; Firefox 157.0 and WebKit
+27.2 rejected all five invalid argument cases without reading the prototype.
+All three read it once for valid input. Browlet follows Web IDL and the latter
+two browsers, consistently with the preceding Module constructor decision.
+With valid input, prototype selection still precedes import-property reads.
+
+The [constructor tests](../../../test/browlet/webassembly/instance-construction.test.ts)
+cover argument/prototype ordering, foreign Modules and prototype lookalikes,
+optional and extra arguments, repeated imports, retained builtin/string choices,
+synchronous start execution, linking/runtime error realms, original author
+exceptions, subclassing, saved constructors, and immediate ownership. No new
+Binding hooks or addon/Node/V8 changes are required.
+
+The [exports getter](https://webassembly.github.io/spec/js-api/#dom-instance-exports)
+and [create an exports object](https://webassembly.github.io/spec/js-api/#create-an-exports-object)
+algorithm remain engine-owned. The getter returns the receiver's retained object;
+it does not rebuild the mapping or consult the receiver's visible properties.
+The [exports tests](../../../test/browlet/webassembly/instance-exports.test.ts)
+cover:
+
+- Getter descriptors, function realm, nonconstructibility, and receiver checks,
+  including foreign getters, prototype lookalikes, and Proxies.
+- Retained identity after prototype changes, property shadowing, and public
+  getter replacement; exported functions keep their originating realm.
+- Separate, stable exports objects through synchronous construction and both
+  asynchronous instantiation overloads, including empty modules.
+- Null prototypes, frozen data properties, function aliases, ordinary integer-key
+  ordering, and literal empty, Unicode, NUL-containing, `__proto__`, and `constructor`
+  names. Freezing the mapping does not freeze a mutable exported Global's state.
+- Genuine engine Instances created outside Browlet's registered realms.
+
+All seven checks pass on Node 24.19.0, 26.8.1, and the custom build, each with
+and without the addon. There are no expected failures in this exports suite.
+
+No runtime adapter is needed for these checks. The earlier store tests cover
+memory, table, global, and exported-function object reuse across imports/exports.
+Their complete APIs, along with tags and their cache, retain their later
+type-specific reviews; this slice does not claim to implement those sections.
+
+**Binding/type dependency:** The native getter works on Instances that have no
+Browlet `PlatformRecord`, including externally created Instances and asynchronous
+results on stock Node. Ordinary Binding receiver dispatch requires a record;
+replacing the getter with that dispatch would reject currently valid receivers.
+Its declaration and generated `Platform.Instance.exports` member therefore remain
+pending explicit support for retained native instance members. This is a generated
+type gap, not a missing author-visible getter. Do not fabricate an owner or install
+a redundant getter solely to fill the declaration. No Node/V8 patch is required
+for the working native getter.
+
+### §5.3 reviewed: Memories
+
+The [Memory constructor](https://webassembly.github.io/spec/js-api/#dom-memory-memory)
+now uses the existing native-interface constructor adapter. Binding converts
+`MemoryDescriptor`, including the `AddressType` enum, before prototype selection.
+Its `AddressValue` members deliberately remain ordinary JavaScript values until
+V8 performs the constructor's `AddressValueToU64` steps. `WebAssemblyImpl.createMemory()`
+calls the captured native constructor; V8 owns allocation, limits, the Memory
+cache, and all backing storage. The resulting native object gets its immediate
+`PlatformRecord` before applying the selected prototype, including in stock mode.
+Native Memory recognition borrows the captured `grow` method with a private
+coercion sentinel. V8 checks the receiver before converting the delta; the
+sentinel stops that conversion before any growth or buffer mutation. A buffer
+getter is unsuitable for recognition because it can allocate a previously lazy
+buffer in the inspecting realm. No author properties are read, and no new Binding
+hooks or addon/Node/V8 changes are required.
+
+**Memory recognition hack:** This deliberately uses `grow` for its receiver check,
+not for growth. The supported-runtime regressions found no correctness problems
+or observable buffer side effects. The throw/catch may cost more than a direct
+predicate; performance has not been measured. V8 already exposes
+`IsWasmMemoryObject()` on all supported bases, so the addon could provide that
+predicate without an engine patch. We chose the simple JavaScript alternative
+instead of adding another addon export and rebuild requirement. Reconsider if
+profiling or a failing regression supplies a concrete reason.
+
+**SPEC_CLASH(wasm-memory-constructor-order):** The draft's Web IDL first reads
+`address`, `initial`, and `maximum` (plus `shared` below), then selects
+`newTarget.prototype`, then numerically converts the size values. The initial
+regressions found Node reading the prototype first and converting each size before
+reading the next descriptor member. Local browsers on 1 November 2026 produced:
+
+| Runtime | Descriptor/prototype trace with object-valued sizes |
+| --- | --- |
+| Chromium 156.0.8078.4 / Node 24.19.0, 26.8.1, custom | prototype, address, initial, initial conversion, maximum, maximum conversion, shared |
+| Firefox 157.0 | address, initial, initial conversion, maximum, maximum conversion, shared, prototype |
+| WebKit 27.2 | prototype, address, initial, initial conversion, maximum, maximum conversion, shared |
+| Browlet, following the current draft | address, initial, maximum, shared, prototype, initial conversion, maximum conversion |
+
+This also rejects missing required members and invalid address enums before
+author prototype access. Allocation failures and valid numeric inputs remain
+the engine's responsibility; no buffer or store is duplicated in TypeScript.
+
+**SPEC_CLASH(wasm-memory-initial-buffer-realm):** The draft's
+[initialize a memory object](https://webassembly.github.io/spec/js-api/#initialize-a-memory-object)
+creates its fixed buffer during construction. V8 instead creates that buffer
+lazily, using the realm of the first getter that requests it. Borrowing another
+realm's getter can therefore give a newly constructed Memory a foreign buffer.
+The same browser builds above produced these results:
+
+| Runtime | First buffer's realm when a foreign getter requests it |
+| --- | --- |
+| Chromium / WebKit | Getter's realm |
+| Firefox | Constructor's realm |
+| Browlet | Constructor's realm |
+
+The adapter calls the captured constructor-realm getter immediately after native
+construction, following the draft and Firefox without replacing any native
+instance members. Regressions cover this first-buffer behavior and ensure that
+recognizing an external native Memory does not materialize its buffer. Memories
+created through other engine paths and later buffer refresh remain engine-owned;
+this change does not claim to repair all native cross-realm buffer allocation.
+
+**Shared-memory contribution:** The base draft does not include `shared`.
+The [threads proposal](https://github.com/WebAssembly/threads/blob/main/document/js-api/index.bs)
+adds `boolean shared = false`; the reader captured that source at
+[`8deee832`](https://github.com/WebAssembly/threads/commit/8deee83209c24b20d977722ab6016d53ba303b98).
+Keep this already-supported native option by composing its field as a partial
+dictionary with the current address-aware base definition. The proposal's older
+numeric descriptor spelling does not replace the base draft's `AddressValue`
+members. Actual shared data, nondetachment of older shared buffers, and their
+visibility remain native. Worker transport, Agent isolation, and browser policy
+are separate integration dependencies; this change does not claim to finish them.
+
+The [Memory tests](../../../test/browlet/webassembly/memory.test.ts) cover
+descriptor/prototype ordering, conversion errors and author exceptions,
+subclassing and exact construction ownership, nonmutating native recognition
+after prototype changes, initial buffer realm, zero-initialization, byte
+preservation, fixed-buffer detachment on growth
+including zero, failure atomicity, i64/BigInt sizes, Wasm-instruction growth,
+shared-buffer visibility, foreign receivers, buffer-mode switching, prohibited
+author transfer, and page-aligned `ArrayBuffer.resize()` integration.
+
+**Node 24 availability:** Its native prototype has neither `toFixedLengthBuffer()`
+nor `toResizableBuffer()`. The two approved Node-24-only expected failures keep
+the specification assertions and unexpected-pass detection. Node 26 and custom
+Node provide both methods; all three tested browsers also expose them. A copied
+ArrayBuffer cannot substitute for a live Wasm backing store. This slice adds no
+polyfill or engine patch.
+
+**Binding/type dependency:** The generated types now expose Memory construction,
+its descriptor, and address types. The native `grow`, `buffer`, and conversion
+members remain installed by V8; their generated members retain the same explicit
+native-instance-declaration dependency as `Instance.exports`. Those working native
+members must continue accepting genuine objects outside registered Browlet realms.
+
+Validation on 1 November 2026 ran all 182 WebAssembly, native-interface Binding,
+and realm tests in each supported configuration, with no unexpected failures:
+
+| Node base | Stock: pass / expected failure | Compat: pass / expected failure |
+| --- | --- | --- |
+| 24.19.0 | 170 / 12 | 172 / 10 |
+| 26.8.1 | 174 / 8 | 178 / 4 |
+| Custom 27.0.0-pre | 174 / 8 | 178 / 4 |
+
+Of the 14 new Memory tests, 12 pass and the two unavailable methods are expected
+failures on Node 24; all 14 pass on Node 26 and custom, with or without the addon.
+The remaining expected failures predate this slice. Typechecking, generated
+platform declarations, type contracts, focused ESLint, and import boundaries pass.
+
+### §5.4 reviewed: Tables
+
+The [Table constructor](https://webassembly.github.io/spec/js-api/#dom-table-table)
+uses the existing native constructor adapter. Binding converts `TableDescriptor`
+and its enums, selects `newTarget.prototype`, and stamps the engine object with
+its constructor realm before applying the selected prototype. `AddressValue`
+sizes and the optional initializer pass to V8 for numeric/reference conversion.
+V8 owns the table's entries, growth, function identities, and Table object cache;
+importing and re-exporting a table retains that same native object across realms.
+
+The captured native `length` getter recognizes Tables without consulting author
+properties, allocating a buffer, or changing any entries. This does not need
+Memory's coercion hack, a new Binding hook, or an addon/engine patch.
+
+**SPEC_CLASH(wasm-table-constructor-order):** The draft's Web IDL reads `address`,
+then reads and string-converts `element`, then reads `initial` and `maximum`.
+Only after that does it select `newTarget.prototype` and numerically convert the
+sizes. In the same 1 November 2026 browser builds used above:
+
+| Runtime | Descriptor/prototype trace |
+| --- | --- |
+| Chromium 156.0.8078.4 | prototype, element, element conversion, address, initial, initial conversion, maximum, maximum conversion |
+| Firefox 157.0 | element, element conversion, address, initial, initial conversion, maximum, maximum conversion, prototype |
+| WebKit 27.2 | prototype, address, element, element conversion, initial, initial conversion, maximum, maximum conversion |
+| Browlet, following the draft | address, element, element conversion, initial, maximum, prototype, initial conversion, maximum conversion |
+
+**SPEC_CLASH(wasm-empty-table-initializer):** The draft converts the supplied
+initializer even when `initial` is zero. V8 skips that conversion and accepts
+invalid function references such as `42`; Firefox and WebKit throw `TypeError`.
+After native construction of an empty table with a supplied initializer, Browlet
+calls the captured native `grow` with a zero delta and that initializer. This
+validates the reference without adding entries or exposing the intermediate
+table. Unlike Memory growth, Table zero growth has no buffer-detachment effect.
+Tests cover i32/i64 tables, maximum zero, valid Wasm functions, and replacement
+of the public length getter and grow method. V8 still performs type validation;
+Browlet does not infer Wasm function identity from JavaScript function properties.
+
+**SPEC_CLASH(wasm-table-undefined-value):** Web IDL treats explicit `undefined`
+for an optional argument without a default as missing. Combined with the draft's
+`DefaultValue`, `Table.grow(1, undefined)` and `Table.set(0, undefined)` on an
+`anyfunc` table would use null. All three browsers instead treat the argument as
+supplied and throw `TypeError`; omitting it still uses null. Keep that shared
+native member behavior, as approved by Eric. Constructor handling already treats
+explicit undefined like omission and requires no additional accommodation.
+
+**SPEC_CLASH(wasm-table-set-error-order):** The draft converts the supplied
+reference before `table_write` reports an invalid index. With both invalid,
+`new WebAssembly.Table({ element: 'anyfunc', initial: 0 }).set(0, 42)` would throw
+`TypeError`. All three browsers check the index first and throw `RangeError`.
+Keep that shared native behavior, as approved by Eric. These two clashes have
+three ordinary compatibility tests, not expected failures; changes to the
+accepted behavior will therefore fail the suite.
+
+**SPEC_CLASH(wasm-table-kind-values):** Bind the current draft's `TableKind`
+values, `externref` and `anyfunc`. Chromium and Firefox also accept GC reference
+names such as `anyref`; WebKit rejected `anyref` in the comparison. Proposal-only
+constructor spellings are not exposed by this declaration. Native tables created
+by Wasm can still carry other reference types; those types' engine-specific JS
+conversion rules have not received independent coverage in this slice.
+
+The [Table tests](../../../test/browlet/webassembly/table.test.ts) cover descriptor
+conversion and exceptions, realm-owned errors and construction, subclassing,
+captured methods, nonmutating recognition, function and externref identity,
+default entries, failure atomicity, BigInt tables, foreign receivers, native
+object-cache reuse, and growth initiated from both JavaScript and Wasm.
+
+**Remaining dependencies:** The native `grow`, `get`, `set`, and `length` remain
+installed by V8; generated native-instance member declarations are still the
+same unfinished Binding/type integration identified for Instance and Memory.
+The generated Table constructor and descriptor are checked by type contracts.
+Objects created outside constructor adapters still require the addon for exact
+ownership association. Cross-Agent storage and advanced reference-type exposure
+remain outside these same-Agent tests.
+
+Validation on 1 November 2026: all 15 Table tests pass in each configuration.
+The 197-test WebAssembly, native-interface Binding, and realm runs have no
+unexpected failures and retain only the pre-existing expected failures:
+
+| Node base | Stock: pass / expected failure | Compat: pass / expected failure |
+| --- | --- | --- |
+| 24.19.0 | 185 / 12 | 187 / 10 |
+| 26.8.1 | 189 / 8 | 193 / 4 |
+| Custom 27.0.0-pre | 189 / 8 | 193 / 4 |
+
+Typechecking, generated declarations, type contracts, focused ESLint, and import
+boundary checks pass. No addon rebuild or Node/V8 patch was needed.
+
+### §5.5 reviewed: Globals
+
+The [Global tests](../../../test/browlet/webassembly/global.test.ts) review the
+native constructor, `value` accessors, `valueOf()`, and the Agent's Global object
+cache through Browlet author realms. Binding now converts the constructor's
+descriptor, selects `newTarget.prototype`, and calls the captured native
+constructor with the converted initializer. V8 retains typed storage, value
+accessors, `valueOf()`, and the Global object cache; there is no second store.
+
+The passing coverage includes numeric defaults/conversion, immutable writes,
+conversion-failure atomicity, externref and function identity, subclassing,
+foreign native receivers and errors, and shared mutable storage across
+JavaScript, Wasm, and import/re-export aliases. Exported vector Globals exist
+and can be imported by Wasm, even though JavaScript cannot read their values;
+the tests cover their existence and rejected reads/writes, not vector imports.
+This is separate from the recorded ES-module live-binding limitations below.
+
+**SPEC_CLASH(wasm-global-construction-order):** Web IDL converts the descriptor
+before reading `newTarget.prototype`; the constructor then converts the initial
+value. V8 instead reads the prototype first. Missing/invalid descriptor values
+therefore also trigger a prototype getter that should not run. A local comparison
+on 1 November 2026 found Chromium 156.0.8078.4 and WebKit 27.2 doing this;
+Firefox 157.0 converted both the descriptor and the initializer before reading
+the prototype. None gave the complete draft order. The constructor adapter
+follows Web IDL; the original regression now passes as an ordinary test.
+
+**SPEC_CLASH(wasm-global-undefined-initializer):** For the optional `any v`
+argument, Web IDL treats explicit `undefined` as missing. Thus
+`new WebAssembly.Global({ value: 'anyfunc' }, undefined)` should use the default
+`null`. Chromium and Firefox throw `TypeError`; WebKit returns a Global holding
+`null`. The adapter omits the native second argument when the converted optional
+argument is undefined, preserving that default. Numeric defaults and externref
+`undefined` continue to work. The original regression now passes.
+
+**SPEC_CLASH(wasm-global-value-types):** Chromium and Firefox accept `anyref`,
+an engine extension outside the current seven-entry `ValueType` enum; WebKit
+rejects it. The Global descriptor now enforces the draft's enum, consistently
+with Table. Recognition still accepts real engine-created Globals with extended
+types; rejecting a constructor spelling does not invalidate those objects.
+
+**Native recognition:** Unlike Modules and Memories, the current public V8
+`Value` API offers no Global predicate. There is no portable, harmless getter
+probe to substitute:
+
+- Valid exported `v128` Globals throw when their value is read. The native getter
+  and `valueOf()` therefore cannot distinguish all real Globals from invalid
+  receivers. Chromium and Firefox throw `TypeError`; WebKit throws `RuntimeError`
+  in the same browser probe. V8's exception type matches the draft.
+- Reading a function-valued Global can create its first JavaScript function
+  wrapper. The regression creates a Global in another realm whose function has
+  no separate export: the first getter chooses the function wrapper's realm,
+  and later reads retain that identity. A recognition probe would perform that
+  observable work before author code does. This is a reason not to use the
+  getter as a predicate, not a claim that an ordinary author read is erroneous.
+- The experimental type-reflection `Global.prototype.type()` method is absent
+  by default on the checked runtimes and all three browser installations.
+
+The relevant native paths are `WebAssemblyGlobalImpl`,
+`WebAssemblyGlobalGetValueCommon`, and `WebAssemblyGlobalSetValue` in V8's
+`src/wasm/wasm-js.cc`. Existing native methods continue to enforce their own
+receiver checks. Binding recognizes native Globals through `interfaceOverride`
+and reuses the existing `PlatformRecord` association, including vector exports.
+Adapted construction records the constructor's realm before applying a foreign
+prototype. Other native results acquire a record only when the addon identifies
+their registered creation realm; stock mode leaves that owner unknown.
+
+The investigation is retained in the shared experimental repository's
+`wasm-global-recognition` directory. The maintained addon exports
+`isWebAssemblyGlobal()` using V8's private instance-type helpers and
+a genuine Global's sampled tag. The implementation comment records the hack,
+its Node/V8 version dependency, and the two alternatives: a public V8 predicate
+patch, or an allocating public Wasm import/re-export probe.
+
+JS Engine selects the addon predicate once, falling back to that public probe
+only without the addon. An immutable externref import re-exports a matching
+Global by identity; other real Globals produce a native type/mutability
+`LinkError`. Ordinary objects become externref values in different Globals.
+The module has no start function or imported callbacks. Captured constructors,
+exports getter, and error prototype avoid author replacements. Its inline hack
+note records the per-check Instance/error allocation cost. No engine patch,
+persistent context, value getter, or second object registry was added.
+
+The native regressions cover all three Node bases, including vector/function
+Globals, VM/addon realms, hostile properties and proxies, collection, and worker
+initialization. The full native suite passes: 338 tests on each official base,
+337 passes and one existing skip on custom. These results validate the addon
+before connecting the Global binding.
+
+The audit initially reproduced three ordinary constructor failures. The binding
+fixes them without reclassifying or weakening their assertions. Additional
+checks cover captured intrinsics, construction ownership, external/foreign
+Globals, frozen vector exports, and function materialization after recognition.
+All 20 Global binding/recognition tests pass in each of the six configurations.
+The broader 221-test Wasm/native-interface/realm selection has no unexpected
+failures: Node 24 stock/compat report 209/211 passes and 12/10 existing expected
+failures; Node 26 and custom stock/compat report 213/217 passes and 8/4 existing
+expected failures. No expectation was reclassified.
+
+Generated constructor/dictionary types are connected. As for the preceding
+native interfaces, generated types for the retained native instance members
+remain a Binding dependency. The next section is §5.6, Exported Functions.
 
 ## 2. Web API
 
@@ -403,18 +964,46 @@ Preserve the required assertions and unexpected-pass detection.
 
 ## Validation and next review
 
-The focused Module-recognition, native-interface, and WebAssembly suites pass in
-all six runtime configurations: 70 passed and the one approved startup-timing
-expected failure. The recognition test verifies zero export enumeration with the
-addon and one enumeration per distinct Module in the fallback. All three rebuilt
-addons pass their full native suites with existing expected failures; the custom
-base retains its official-installer test skip. The earlier binding review also
-passed all Web IDL tests and the WebAssembly completion handoff (750 passed, one
-expected failure). Typechecking, declaration contracts, and focused lint pass.
-Native constructors and interface members remain explicitly outside this slice.
+The Module-constructor slice has **15 passing constructor tests** across all six
+runtime configurations. The WebAssembly/native-interface selection reports
+**114 passed and 4 existing expected failures**; the broader custom/addon run of
+all Web IDL and WebAssembly suites reports **792 passed and 4 expected failures**.
+Typechecking, declaration contracts, focused lint, and whitespace checks pass.
+No expected-failure classification changed. Earlier slice results follow for context.
 
-The current integration stops immediately before §5's `JSTag` getter, as requested
-for consolidation. Its review and the following §5.1 Module interface are pending.
+The preceding JSTag review's WebAssembly, Module/Tag-recognition, native-interface,
+and namespace suites produced the same result in all six runtime configurations: **78 passed
+and 4 approved expected failures** (three JSTag cases and startup timing).
+The JSTag getter and same-realm behavior pass. Its three cross-realm limitations
+are listed above. Typechecking, declaration contracts, focused lint, and the
+diff whitespace check pass. That slice changed no addon or engine source.
+
+The Module reflection slice reports **13 passed** in each of the six runtime
+configurations, including the chosen browser property order. Typechecking, focused
+lint, and whitespace checks pass. This slice changes tests and notes only; the
+metadata operations remain native.
+
+The custom-section slice passes its ten new checks on all six runtime
+configurations. The focused WebAssembly, native recognition, native-interface,
+and namespace checks have **104 passing cases and the same 4 expected failures**.
+The broader custom/addon run, including all Web IDL tests, reports **780 passed
+and 4 expected failures**. Typechecking, declaration contracts, focused lint, and
+whitespace checks pass. No new expected failure was introduced.
+
+The earlier Module-recognition review verified zero export enumeration with the
+addon and one enumeration per distinct Module in the fallback. All three rebuilt
+addons passed their full native suites with existing expected failures; the custom
+base retained its official-installer test skip. The preceding binding review also
+passed all Web IDL tests and the WebAssembly completion handoff (750 passed, one
+expected failure). Those native suite results predate this JSTag slice.
+The remaining native constructors and interface members remain separate review work.
+
+The `JSTag` getter and Module/Instance/Memory/Table/Global constructors are now bound;
+the cross-realm JSTag limitations above are accepted engine limitations for now.
+§5.5's Global binding fixes its three constructor regressions. The next
+document-order section is §5.6, Exported Functions. The native imports()/exports() reflection methods retain
+their reviewed behavior; their generated static-method types remain to be connected
+without replacing the accepted native descriptor property order.
 Retain the accepted compiled-module startup timing limitation.
 Future slices should distinguish engine-provided behavior, connected browser
 behavior, and open dependencies.

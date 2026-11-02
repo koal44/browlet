@@ -33,6 +33,12 @@ export type EndingType = "transparent" | "native";
 
 export type PermissionState = "granted" | "denied" | "prompt";
 
+export type AddressType = "i32" | "i64";
+
+export type TableKind = "externref" | "anyfunc";
+
+export type ValueType = "i32" | "i64" | "f32" | "f64" | "v128" | "externref" | "anyfunc";
+
 export type RequestDestination = "" | "audio" | "audioworklet" | "document" | "embed" | "font" | "frame" | "iframe" | "image" | "json" | "manifest" | "object" | "paintworklet" | "report" | "script" | "sharedworker" | "style" | "text" | "track" | "video" | "worker" | "xslt";
 
 export type RequestMode = "navigate" | "same-origin" | "no-cors" | "cors";
@@ -82,6 +88,8 @@ export type ReadableStreamController = ReadableStreamDefaultController | Readabl
 export type ReadableStreamReader = ReadableStreamDefaultReader | ReadableStreamBYOBReader;
 
 export type BlobPart = Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer> | ArrayBuffer | Blob | string;
+
+export type AddressValue = any;
 
 export type FormDataEntryValue = File | string;
 
@@ -457,6 +465,25 @@ export interface StorageEventInit {
   oldValue?: string | null;
   storageArea?: Storage | null;
   url?: string;
+}
+
+export interface MemoryDescriptor {
+  address?: AddressType;
+  initial: any;
+  maximum?: any;
+  shared?: boolean;
+}
+
+export interface TableDescriptor {
+  address?: AddressType;
+  element: TableKind;
+  initial: any;
+  maximum?: any;
+}
+
+export interface GlobalDescriptor {
+  mutable?: boolean;
+  value: ValueType;
 }
 
 export interface WebAssemblyCompileOptions {
@@ -4086,7 +4113,54 @@ export interface Module {
 
 }
 
+export interface ModuleConstructor {
+  readonly prototype: Module;
+  [Symbol.hasInstance](value: unknown): value is Module;
+  new (bytes: ArrayBuffer | SharedArrayBuffer | Int8Array<ArrayBufferLike> | Int16Array<ArrayBufferLike> | Int32Array<ArrayBufferLike> | Uint8Array<ArrayBufferLike> | Uint16Array<ArrayBufferLike> | Uint32Array<ArrayBufferLike> | Uint8ClampedArray<ArrayBufferLike> | BigInt64Array<ArrayBufferLike> | BigUint64Array<ArrayBufferLike> | Float16Array<ArrayBufferLike> | Float32Array<ArrayBufferLike> | Float64Array<ArrayBufferLike> | DataView<ArrayBufferLike>, options?: WebAssemblyCompileOptions): Module;
+  customSections(moduleObject: Module, sectionName: string): Array<ArrayBuffer>;
+}
+
 export interface Instance {
+
+}
+
+export interface InstanceConstructor {
+  readonly prototype: Instance;
+  [Symbol.hasInstance](value: unknown): value is Instance;
+  new (module: Module, importObject?: object): Instance;
+}
+
+export interface Memory {
+
+}
+
+export interface MemoryConstructor {
+  readonly prototype: Memory;
+  [Symbol.hasInstance](value: unknown): value is Memory;
+  new (descriptor: MemoryDescriptor): Memory;
+}
+
+export interface Table {
+
+}
+
+export interface TableConstructor {
+  readonly prototype: Table;
+  [Symbol.hasInstance](value: unknown): value is Table;
+  new (descriptor: TableDescriptor, value?: any): Table;
+}
+
+export interface Global {
+
+}
+
+export interface GlobalConstructor {
+  readonly prototype: Global;
+  [Symbol.hasInstance](value: unknown): value is Global;
+  new (descriptor: GlobalDescriptor, v?: any): Global;
+}
+
+export interface Tag {
 
 }
 
@@ -4351,6 +4425,12 @@ export interface WebAssembly {
   compile(bytes: ArrayBuffer | SharedArrayBuffer | Int8Array<ArrayBufferLike> | Int16Array<ArrayBufferLike> | Int32Array<ArrayBufferLike> | Uint8Array<ArrayBufferLike> | Uint16Array<ArrayBufferLike> | Uint32Array<ArrayBufferLike> | Uint8ClampedArray<ArrayBufferLike> | BigInt64Array<ArrayBufferLike> | BigUint64Array<ArrayBufferLike> | Float16Array<ArrayBufferLike> | Float32Array<ArrayBufferLike> | Float64Array<ArrayBufferLike> | DataView<ArrayBufferLike>, options?: WebAssemblyCompileOptions): Promise<Module>;
   instantiate(bytes: ArrayBuffer | SharedArrayBuffer | Int8Array<ArrayBufferLike> | Int16Array<ArrayBufferLike> | Int32Array<ArrayBufferLike> | Uint8Array<ArrayBufferLike> | Uint16Array<ArrayBufferLike> | Uint32Array<ArrayBufferLike> | Uint8ClampedArray<ArrayBufferLike> | BigInt64Array<ArrayBufferLike> | BigUint64Array<ArrayBufferLike> | Float16Array<ArrayBufferLike> | Float32Array<ArrayBufferLike> | Float64Array<ArrayBufferLike> | DataView<ArrayBufferLike>, importObject?: object, options?: WebAssemblyCompileOptions): Promise<WebAssemblyInstantiatedSourceResult>;
   instantiate(moduleObject: Module, importObject?: object): Promise<Instance>;
+  readonly JSTag: Tag;
+  Module: ModuleConstructor;
+  Instance: InstanceConstructor;
+  Memory: MemoryConstructor;
+  Table: TableConstructor;
+  Global: GlobalConstructor;
 }
 
 export interface NavigationResultResult {

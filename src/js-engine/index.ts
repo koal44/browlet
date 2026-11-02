@@ -12,8 +12,8 @@ export * from './buffers';
 export { codeUnitsToString, isomorphicDecode, isomorphicEncode } from './byte-string';
 export { computeHash, randomUUID } from './crypto';
 export type {
-  ExoticObjectHandlers, GlobalAccessHandlers, GlobalAllocation, GlobalIndexedProperties, GlobalObject, GlobalProxy, GlobalThis, JSFunction, JSFunctionWithPrototype, JSIteratorResult,
-  JSMethod, RealmFunctionOptions, RealmFunctionSteps,
+  ExoticObjectHandlers, GlobalAccessHandlers, GlobalAllocation, GlobalIndexedProperties, GlobalObject, GlobalProxy, GlobalThis,
+  JSFunction, JSFunctionWithPrototype, JSIteratorResult, JSMethod, RealmFunctionOptions, RealmFunctionSteps,
 } from './realm';
 export type {
   JSHostHooks, JSJobCallback, JSJobRegistration,

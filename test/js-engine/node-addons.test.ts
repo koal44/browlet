@@ -15,8 +15,22 @@ describe('Node add-on API', () => {
     expect(api.createHTMLDDA).toBeUndefined();
     expect(api.setPropertyHandlers).toBeUndefined();
     expect(api.isWeakRef).toBeUndefined();
+    expect(api.isWebAssemblyGlobal).toBeUndefined();
     expect(api.isFinalizationRegistry).toBeUndefined();
     expect(api.supportsHTMLDDA).toBe(false);
+  });
+
+  it('exposes Global recognition only when the native backend is enabled', () => {
+    if (!addon.createContextHandle) {
+      expect(addon.isWebAssemblyGlobal).toBeUndefined();
+      return;
+    }
+    assert(addon.isWebAssemblyGlobal);
+    const global = new WebAssembly.Global({ value: 'externref' }, {});
+    Object.setPrototypeOf(global, null);
+    expect(addon.isWebAssemblyGlobal(global)).toBe(true);
+    expect(addon.isWebAssemblyGlobal({})).toBe(false);
+    expect(addon.isWebAssemblyGlobal(new Proxy(global, {}))).toBe(false);
   });
 
   itPassesWith('htmlDDA')('allocates an undetectable callable through the native backend', () => {

@@ -32,7 +32,7 @@ the observable constraints of each runtime.
 | Native property interception | [property-delegate.cc](addon/property-delegate.cc), [JavaScript adapters](addon/property-delegate.cjs); [property tests](test/html-dda.test.cjs) |
 | Realm-selected exotic objects | [exotic-object.cc](addon/exotic-object.cc); [caller, descriptors, receiver, and lifetime tests](test/exotic-object.test.cjs), [Location integration](../test/browlet/browsing/window/location-exotic.test.ts) |
 | Native value inspection and iteration | [iterators.cc](addon/iterators.cc), [array-buffer.cc](addon/array-buffer.cc); [iterator predicates](test/iterator-predicates.test.cjs), [buffer views](test/array-buffer.test.cjs), [collection iterators](test/collection-iterator.test.cjs) |
-| Object-brand predicates | [object-types.cc](addon/object-types.cc); [brand tests](test/object-types.test.cjs) |
+| Object-brand predicates | [object-types.cc](addon/object-types.cc); [brand tests](test/object-types.test.cjs), [Wasm Global tests](test/wasm-global-type.test.cjs) |
 | Callable, undetectable objects | [html-all-collection.cc](addon/html-all-collection.cc); [native object tests](test/html-dda.test.cjs) |
 
 [addon.cc](addon/addon.cc) registers the native modules;
@@ -98,6 +98,13 @@ event dispatch, and console reporting.
 
 `isWebAssemblyModule()` uses V8's existing type predicate on all three bases,
 without enumerating exports or running author code. It requires no engine patch.
+
+`isWebAssemblyGlobal()` also works on all three addon bases, without reading the
+Global's value or invoking author code. It uses V8's private instance-type
+helpers and a type tag sampled in a fresh context. The hack, version dependency,
+and alternatives are documented beside the implementation in `object-types.cc`.
+Without the addon, JS Engine uses the public Wasm import/re-export probe described
+in `built-in-primitives.ts`. Both paths support the Global Binding adapter.
 
 `createMicrotaskQueue(requestCheckpoint?)` supplies enqueue/checkpoint operations.
 The optional internal callback requests a deferred checkpoint after an outer

@@ -37,7 +37,7 @@ void Initialize(v8::Local<v8::Object> exports, v8::Local<v8::Value>,
   InitializeFunctionEntry(exports, context, vm_data);
   InitializeHostHooks(exports, context);
   InitializePromise(exports, context, vm_data);
-  InitializeObjectTypes(exports);
+  if (!InitializeObjectTypes(exports, context)) return;
   InitializeIterators(exports, context, vm_data);
   InitializeHTMLAllCollection(exports, context, vm_data);
 }

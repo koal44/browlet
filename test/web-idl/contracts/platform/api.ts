@@ -139,3 +139,52 @@ new window.TrustedHTML();
 trustedPolicy.createParserOptions({});
 // @ts-expect-error factory identity is read-only on the global
 window.trustedTypes = {} as Platform.TrustedTypePolicyFactory;
+
+const wasmModule: Platform.Module = new window.WebAssembly.Module(new Uint8Array(), {
+  builtins: ['js-string'], importedStringConstants: 'strings',
+});
+const wasmSections: ArrayBuffer[] = window.WebAssembly.Module.customSections(wasmModule, 'meta');
+// @ts-expect-error Module construction requires a buffer source
+new window.WebAssembly.Module();
+// @ts-expect-error a constructor cannot be called without new
+window.WebAssembly.Module(new Uint8Array());
+// @ts-expect-error Module lives on the WebAssembly namespace
+new window.Module(new Uint8Array());
+
+const wasmInstance: Platform.Instance = new window.WebAssembly.Instance(wasmModule);
+new window.WebAssembly.Instance(wasmModule, { env: { run: () => 42 } });
+// @ts-expect-error Instance construction requires a Module
+new window.WebAssembly.Instance();
+// @ts-expect-error importObject must be an object when supplied
+new window.WebAssembly.Instance(wasmModule, 42);
+// @ts-expect-error Instance lives on the WebAssembly namespace
+new window.Instance(wasmModule);
+
+const wasmMemory: Platform.Memory = new window.WebAssembly.Memory({ initial: 1, maximum: 2 });
+new window.WebAssembly.Memory({ address: 'i64', initial: 0n, maximum: 1n, shared: true });
+// @ts-expect-error Memory construction requires an initial size
+new window.WebAssembly.Memory({ maximum: 2 });
+// @ts-expect-error AddressType is an enum, not an arbitrary string
+new window.WebAssembly.Memory({ initial: 0, address: 'bad' });
+// @ts-expect-error Memory lives on the WebAssembly namespace
+new window.Memory({ initial: 0 });
+
+const wasmTable: Platform.Table = new window.WebAssembly.Table({ element: 'externref', initial: 1 }, window.document);
+new window.WebAssembly.Table({ address: 'i64', element: 'anyfunc', initial: 0n, maximum: 1n });
+// @ts-expect-error Table construction requires its element type
+new window.WebAssembly.Table({ initial: 0 });
+// @ts-expect-error Table construction requires its initial size
+new window.WebAssembly.Table({ element: 'externref' });
+// @ts-expect-error TableKind follows the current draft's two reference kinds
+new window.WebAssembly.Table({ element: 'funcref', initial: 0 });
+// @ts-expect-error Table lives on the WebAssembly namespace
+new window.Table({ element: 'externref', initial: 0 });
+
+const wasmGlobal: Platform.Global = new window.WebAssembly.Global({ value: 'externref', mutable: true }, window.document);
+new window.WebAssembly.Global({ value: 'i64' }, 1n);
+// @ts-expect-error Global construction requires its value type
+new window.WebAssembly.Global({ mutable: true });
+// @ts-expect-error ValueType follows the current draft, not V8's extended reference kinds
+new window.WebAssembly.Global({ value: 'anyref' });
+// @ts-expect-error Global lives on the WebAssembly namespace
+new window.Global({ value: 'i32' });

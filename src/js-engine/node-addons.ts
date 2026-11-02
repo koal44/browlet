@@ -62,6 +62,8 @@ export class NodeAPI {
   isLengthTrackingArrayBufferView?: (view: ArrayBufferView) => boolean;
   /** Recognize a native WebAssembly.Module without enumerating its exports. */
   isWebAssemblyModule?: (value: unknown) => boolean;
+  /** Recognize a native Global by its internal type without reading or converting its value. */
+  isWebAssemblyGlobal?: (value: unknown) => boolean;
   /** Recognize a genuine WeakRef without dereferencing its target. */
   isWeakRef?: (value: unknown) => boolean;
   // Requires the V8 FinalizationRegistry predicate patch.
@@ -125,6 +127,7 @@ export class NodeAPI {
     this.cloneSharedArrayBuffer = this.#loadMethod(backend, 'cloneSharedArrayBuffer');
     this.isLengthTrackingArrayBufferView = this.#loadMethod(backend, 'isLengthTrackingArrayBufferView');
     this.isWebAssemblyModule = this.#loadMethod(backend, 'isWebAssemblyModule');
+    this.isWebAssemblyGlobal = this.#loadMethod(backend, 'isWebAssemblyGlobal');
     this.isWeakRef = this.#loadMethod(backend, 'isWeakRef');
     this.isFinalizationRegistry = this.#loadMethod(backend, 'isFinalizationRegistry');
     this.makePrototypeImmutable = this.#loadMethod(backend, 'makePrototypeImmutable');

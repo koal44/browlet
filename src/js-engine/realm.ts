@@ -9,6 +9,7 @@ import {
   type ByteSequence, type JSBufferView, type JSBufferViewName,
 } from './buffers';
 import { isObject } from './abstract-operations';
+import type { JSWebAssemblyTag } from './built-in-primitives';
 import { addon, isAddonContextHandle } from './node-addons';
 import {
   compileModule, createDefaultExportModule, moduleRequests, linkModule, evaluateModule, moduleNamespace,
@@ -104,6 +105,18 @@ export class JSRealm {
   WebAssembly;
   /** Original WebAssembly.CompileError constructor in this realm. */
   WebAssemblyCompileError;
+  /** Original WebAssembly.Global constructor, retained when Binding adapts its descriptor. */
+  WebAssemblyGlobal;
+  /** Original WebAssembly.Instance constructor, retained when Binding adapts construction. */
+  WebAssemblyInstance;
+  /** Original WebAssembly.Memory constructor, retained when Binding adapts its descriptor. */
+  WebAssemblyMemory;
+  /** Original WebAssembly.Module constructor, retained when Binding adapts its static operations. */
+  WebAssemblyModule;
+  /** Original WebAssembly.Table constructor, retained when Binding adapts its descriptor. */
+  WebAssemblyTable;
+  /** Retained native JSTag. V8 supplies one per context, although the draft makes it Agent-wide. */
+  webAssemblyJSTag;
 
   // -- Captured methods --------------------------------------------------
 
@@ -113,6 +126,14 @@ export class JSRealm {
   webAssemblyCompile;
   /** Original WebAssembly.instantiate, captured before its browser binding is installed. */
   webAssemblyInstantiate;
+  /** Original WebAssembly.Module.customSections, receiving a converted Module and section name. */
+  webAssemblyModuleCustomSections;
+  /** Native Memory buffer getter, captured before author replacement, for constructor-time initialization. */
+  webAssemblyMemoryBuffer;
+  /** Native Table length getter, captured before author replacement. */
+  webAssemblyTableLength;
+  /** Native Table growth method; zero growth can validate an empty table's initial value. */
+  webAssemblyTableGrow;
   /** Captured ArrayBuffer.prototype.transfer method. */
   arrayBufferTransfer;
   /** Captured Array.prototype.entries method. */
@@ -253,9 +274,19 @@ export class JSRealm {
     this.URIError = Reflect.get(this.#globalProxy, 'URIError') as URIErrorConstructor;
     this.WebAssembly = Reflect.get(this.#globalProxy, 'WebAssembly') as object;
     this.WebAssemblyCompileError = Reflect.get(this.WebAssembly, 'CompileError') as ErrorConstructor;
+    this.WebAssemblyGlobal = Reflect.get(this.WebAssembly, 'Global') as JSFunctionWithPrototype;
+    this.WebAssemblyInstance = Reflect.get(this.WebAssembly, 'Instance') as JSFunctionWithPrototype;
+    this.WebAssemblyMemory = Reflect.get(this.WebAssembly, 'Memory') as JSFunctionWithPrototype;
+    this.WebAssemblyModule = Reflect.get(this.WebAssembly, 'Module') as JSFunctionWithPrototype;
+    this.WebAssemblyTable = Reflect.get(this.WebAssembly, 'Table') as JSFunctionWithPrototype;
+    this.webAssemblyJSTag = Reflect.get(this.WebAssembly, 'JSTag') as JSWebAssemblyTag;
     this.webAssemblyValidate = Reflect.get(this.WebAssembly, 'validate') as JSMethod;
     this.webAssemblyCompile = Reflect.get(this.WebAssembly, 'compile') as JSMethod;
     this.webAssemblyInstantiate = Reflect.get(this.WebAssembly, 'instantiate') as JSMethod;
+    this.webAssemblyModuleCustomSections = Reflect.get(this.WebAssemblyModule, 'customSections') as JSMethod;
+    this.webAssemblyMemoryBuffer = Reflect.getOwnPropertyDescriptor(this.WebAssemblyMemory.prototype, 'buffer')!.get as JSMethod;
+    this.webAssemblyTableLength = Reflect.getOwnPropertyDescriptor(this.WebAssemblyTable.prototype, 'length')!.get as JSMethod;
+    this.webAssemblyTableGrow = Reflect.get(this.WebAssemblyTable.prototype, 'grow') as JSMethod;
     this.arrayBufferTransfer = Reflect.get(this.ArrayBuffer.prototype, 'transfer');
     this.arrayEntries = Reflect.get(this.Array.prototype, 'entries') as JSMethod;
     this.arrayForEach = Reflect.get(this.Array.prototype, 'forEach') as JSMethod;

@@ -41,6 +41,7 @@ exports.isArrayIterator = native.isArrayIterator;
 exports.isStringIterator = native.isStringIterator;
 exports.isRegExpStringIterator = native.isRegExpStringIterator;
 exports.isWebAssemblyModule = native.isWebAssemblyModule;
+exports.isWebAssemblyGlobal = native.isWebAssemblyGlobal;
 exports.isWeakRef = native.isWeakRef;
 exports.isFinalizationRegistry = native.isFinalizationRegistry;
 exports.isLengthTrackingArrayBufferView = native.isLengthTrackingArrayBufferView;

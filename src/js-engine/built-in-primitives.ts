@@ -25,8 +25,7 @@ export const isExternalObject: (value: unknown) => boolean = nodeTypes.isExterna
 export const isGeneratorObject: (value: unknown) => value is Generator<unknown, unknown, unknown> = nodeTypes.isGeneratorObject;
 export const isKeyObject: (value: unknown) => boolean = nodeTypes.isKeyObject;
 export const hasMapData: (value: unknown) => value is Map<unknown, unknown> = nodeTypes.isMap;
-export const isModuleNamespaceObject: (value: unknown) => boolean =
-  nodeTypes.isModuleNamespaceObject;
+export const isModuleNamespaceObject: (value: unknown) => boolean = nodeTypes.isModuleNamespaceObject;
 export const hasErrorData: (value: unknown) => value is Error = nodeTypes.isNativeError;
 export const hasNumberData: (value: unknown) => value is Number = nodeTypes.isNumberObject;
 export const isPromiseObject: (value: unknown) => value is Promise<unknown> = nodeTypes.isPromise;
@@ -50,11 +49,52 @@ export function isWebAssemblyInstance(value: unknown): value is JSWebAssemblyIns
   catch (error) { if (error instanceof nativeTypeError) return false; throw error; }
 }
 
+/** Recognize a native Memory without reading author properties or allocating, growing, or detaching its buffer. */
+export function isWebAssemblyMemory(value: unknown): value is JSWebAssemblyMemory {
+  // HACK: grow checks the receiver before converting its delta. Our private delta
+  // throws a recognizable marker during conversion, before any memory mutation.
+  // Supported-runtime tests found no correctness problems. Throw/catch overhead is
+  // unmeasured; the addon could expose V8's IsWasmMemoryObject() if it matters.
+  // We keep this simple JS alternative for now. The buffer getter cannot serve as
+  // a harmless check: it can create a lazy buffer in the inspecting realm.
+  try { Reflect.apply(wasmMemoryGrow, value as object, [wasmMemoryProbe]); }
+  catch (error) {
+    if (error === wasmMemoryProbe) return true;
+    if (error instanceof nativeTypeError) return false;
+    throw error;
+  }
+  return false;
+}
+
+/** Recognize a native Table through its length getter without reading author properties or changing entries. */
+export function isWebAssemblyTable(value: unknown): value is JSWebAssemblyTable {
+  try { Reflect.apply(wasmTableLength, value as object, []); return true; }
+  catch (error) { if (error instanceof nativeTypeError) return false; throw error; }
+}
+
+/** Recognize Globals without reading their values; select the native or stock-Node check once. */
+export const isWebAssemblyGlobal = (addon.isWebAssemblyGlobal ?? isWebAssemblyGlobalFallback) as
+  (value: unknown) => value is JSWebAssemblyGlobal;
+
+/** Recognize a native Tag through Exception.is(), which checks its argument without reading author properties. */
+export function isWebAssemblyTag(value: unknown): value is JSWebAssemblyTag {
+  try { Reflect.apply(wasmExceptionIs, wasmTagProbeException, [value]); return true; }
+  catch (error) { if (error instanceof nativeTypeError) return false; throw error; }
+}
+
 /** Opaque native identities; these type-only brands add no properties to engine objects. */
 export type JSWebAssemblyModule = { [wasmModuleBrand]: true; };
 export type JSWebAssemblyInstance = { [wasmInstanceBrand]: true; };
+export type JSWebAssemblyMemory = { [wasmMemoryBrand]: true; };
+export type JSWebAssemblyTable = { [wasmTableBrand]: true; };
+export type JSWebAssemblyGlobal = { [wasmGlobalBrand]: true; };
+export type JSWebAssemblyTag = { [wasmTagBrand]: true; };
 declare const wasmModuleBrand: unique symbol;
 declare const wasmInstanceBrand: unique symbol;
+declare const wasmMemoryBrand: unique symbol;
+declare const wasmTableBrand: unique symbol;
+declare const wasmGlobalBrand: unique symbol;
+declare const wasmTagBrand: unique symbol;
 
 export function isMapIteratorObject(value: unknown): value is MapIterator<unknown> {
   return nodeTypes.isMapIterator(value);
@@ -236,6 +276,28 @@ function isWebAssemblyModuleFallback(value: unknown): value is JSWebAssemblyModu
   } catch (error) { if (error instanceof nativeTypeError) return false; throw error; }
 }
 
+function isWebAssemblyGlobalFallback(value: unknown): value is JSWebAssemblyGlobal {
+  if (typeof value !== 'object' || value === null) return false;
+  // HACK: an immutable externref import accepts every ordinary object as a value,
+  // but recognizes real Globals by their internal type. A matching Global is
+  // re-exported by identity; a type/mutability mismatch throws native LinkError.
+  // This allocates an Instance or error per check. The addon avoids that cost.
+  // Do not substitute a value getter: v128 reads throw, and function reads can
+  // create the first JS wrapper in the inspecting realm. Neither happens here.
+  try {
+    const imported = Object.create(null) as { g: unknown; };
+    imported.g = value;
+    const imports = Object.create(null) as { env: object; };
+    imports.env = imported;
+    const instance = new wasmInstanceConstructor(wasmGlobalProbeModule!, imports);
+    const exports = Reflect.apply(wasmInstanceExports, instance, []) as { g: unknown; };
+    return exports.g === value;
+  } catch (error) {
+    if (Reflect.getPrototypeOf(error as object) === wasmGlobalLinkErrorPrototype) return true;
+    throw error;
+  }
+}
+
 function isNativeDataCloneError(value: unknown): boolean {
   return typeof value === 'object' && value !== null &&
     Reflect.get(value, 'name') === 'DataCloneError';
@@ -323,10 +385,33 @@ const finalizationRegistryUnregister = typeof FinalizationRegistry === 'undefine
 const brandProbe = {};
 const nativeStructuredClone = globalThis.structuredClone;
 const nativeWebAssembly = Reflect.get(globalThis, 'WebAssembly') as {
-  Module: { exports: (value: unknown) => unknown; };
-  Instance: { prototype: object; };
+  Module: { new (bytes: Uint8Array): JSWebAssemblyModule; exports: (value: unknown) => unknown; };
+  Instance: { new (module: JSWebAssemblyModule, imports: object): object; prototype: object; };
+  Memory: { prototype: object; };
+  Table: { prototype: object; };
+  LinkError: { prototype: object; };
+  Tag: new (descriptor: { parameters: string[]; }) => object;
+  Exception: { new (tag: object, payload: unknown[]): object; prototype: object; };
 };
 const wasmModuleExports = nativeWebAssembly.Module.exports;
 const wasmInstanceExports = getAccessor<unknown>(nativeWebAssembly.Instance.prototype, 'exports');
+const wasmMemoryGrow = Reflect.get(nativeWebAssembly.Memory.prototype, 'grow') as (this: object, delta: unknown) => unknown;
+const wasmMemoryProbe = {
+  // eslint-disable-next-line @typescript-eslint/only-throw-error -- Private identity sentinel stops conversion before mutation.
+  [Symbol.toPrimitive](): never { throw wasmMemoryProbe; },
+};
+const wasmTableLength = getAccessor<unknown>(nativeWebAssembly.Table.prototype, 'length');
+const wasmInstanceConstructor = nativeWebAssembly.Instance;
+const wasmGlobalLinkErrorPrototype = nativeWebAssembly.LinkError.prototype;
+// Compiled once, only without the addon. No start function or imported callbacks.
+// (module (import "env" "g" (global externref)) (export "g" (global 0)))
+const wasmGlobalProbeModule = addon.isWebAssemblyGlobal ? undefined : new nativeWebAssembly.Module(new Uint8Array([
+  0, 97, 115, 109, 1, 0, 0, 0, 2, 10, 1, 3, 101, 110, 118, 1, 103, 3, 111, 0,
+  7, 5, 1, 1, 103, 3, 0,
+]));
+// Node/V8 exposes no Tag predicate. A private empty exception supplies the receiver
+// for the intrinsic's Tag check; false is still a successful check of a different Tag.
+const wasmTagProbeException = new nativeWebAssembly.Exception(new nativeWebAssembly.Tag({ parameters: [] }), []);
+const wasmExceptionIs = Reflect.get(nativeWebAssembly.Exception.prototype, 'is') as (this: object, tag: unknown) => boolean;
 // eslint-disable-next-line no-restricted-properties -- Identify the captured intrinsic's brand-check failure, not an author-visible error.
 const nativeTypeError = globalThis.TypeError;

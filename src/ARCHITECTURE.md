@@ -20,10 +20,25 @@ platform object to its implementation. Internal relationships use implementation
 and other post-conversion values; they do not project and immediately unwrap
 objects to call an internal operation.
 
-An engine-owned interface can instead declare `isInstance(value)` for value conversion
-and overload selection. Binding preserves the native object in both directions,
-without an implementation/platform pair or constructor installation. These
+An engine-owned interface can instead declare `interfaceOverride` with an
+`isInstance(platformObject)` predicate for value conversion and overload selection.
+Binding preserves the native object in both directions,
+using that same object for both identities in its `PlatformRecord`. These
 value-only declarations do not claim to implement the engine's interface members.
+With the override's optional `getInterfaceObject(env)`, Binding retains the supplied
+native constructor and prototype and installs declared static operations on it.
+An explicit constructor `overrideConstruct` can additionally create native instances:
+Binding adapts constructor calls through a Proxy, applies argument conversion and
+`newTarget` prototype selection, and stamps the native instance with its constructor's
+realm before applying that prototype. The native prototype and undeclared static members remain intact.
+Instance members, inheritance, and partial interfaces remain outside that integration.
+
+Binding associates other native values on first conversion or record lookup when
+JS Engine can identify their registered creation realm exactly. Existing records
+retain their owner. Stock Node's prototype/evaluation guesses are insufficient for
+permanent native ownership, so untracked native values remain usable without a
+record there. Native Promise results, including `WebAssembly.compile()`, need no
+extra observation or Promise conversion just to acquire a record later.
 
 Declared proxy values such as WindowProxy use an implementation handle internally.
 Their binding declaration supplies `getHandle()` and `getProxy()` to convert
@@ -77,20 +92,37 @@ arguments and implementation receivers. Binding selects the environment and owns
 conversion and projection. Reflection and HTML construction use composition-time
 binding adapters selected by declarative annotations; declarations themselves
 do not receive BindingContext.
-Lazy Window and HTML element handlers use a composition-supplied
+Lazy Window and HTML/SVG/MathML element handlers use a composition-supplied
 `WindowEnvironment.createEventHandler` factory. HTML selects the current node
 Document and form owner, and owns raw source, policy, and caching. Binding
 projects the Document/form/element scopes; JSRealm compiles in that Document's
 realm. The factory supplies its own environment when creating the declared callback.
 Implementations do not receive a Binding Context or perform author conversion.
-Explicit accessors receive both the receiver's environment and the invoked
-accessor's environment, keeping receiver state distinct from current-realm checks.
-Setters receive the converted value before the method environment. Injected argument
-resolvers and getters request the incumbent by declaring a third positional parameter;
-setters declare a fourth. Browlet supplies the lookup when composing BindingWorld.
-Binding derives entry capture from these parameters, callback conversions, and
-forwarding targets; declarations do not repeat a capture flag. Location's bindings
-select entry and incumbent inputs separately before calling its implementation.
+Callback values retain a `WebIDLEnvironment | null`: the captured incumbent
+environment, or null for an unbound host. Internal sandboxes skip HTML callback
+bookkeeping without using their realm as an absence marker. Browser callbacks
+still require an attached environment and the correct owning event loop.
+
+FrozenArray attribute types automatically select list projection. Binding retains
+each projected snapshot in the receiver's realm; arrays already created by Web
+IDL preserve their identity and original realm.
+
+Member overrides receive `{ relevant, callee, incumbent }` first, followed by
+converted values. `relevant` owns the receiver; `callee` owns the invoked callable.
+Constructors, static members and namespace members use the callee for both.
+`overrideCapturesIncumbent: true` requests caller capture before conversion and
+the host lookup afterward. Without it, `incumbent` is `undefined`; a direct host
+call can also lack an incumbent. Browlet supplies the lookup when composing BindingWorld.
+Capture adds native entry machinery and lookup work, so ordinary overrides such
+as Fetch's constructors leave it disabled. Accessor overrides share one flag per
+attribute. Binding does not inspect an override's parameter count or source text.
+Injected argument resolvers still request the incumbent with a third positional
+parameter. Binding also derives capture from callback conversions and forwarding
+targets. An override that processes callbacks inside an opaque argument, such as
+Wasm's import object, uses the explicit flag because the IDL `object` type cannot
+express that requirement.
+Location's bindings select entry and incumbent inputs separately before calling
+its implementation.
 Direct incumbent lookup stays in the lint-allowlisted composition, Binding, and
 callback-lifecycle modules. Injected argument resolver parameters through the incumbent
 cannot have defaults or rest syntax, because those inputs still use declared arity.
@@ -1093,10 +1125,14 @@ ProgressEvent lives in browser integration and reuses that event machinery.
 
 HTML's `eraseAllEventListenersAndHandlers()` is an EventTarget operation.
 Each target retains one nullable `eventHandlers` association. Concrete targets
-construct their map with optional initial handler definitions. Handler mixins add
-supported names through `define()`. GlobalEventHandlers retains its includer so
-IDL access can resolve body/frameset forwarding; other mixins retain the map
-directly. Each includer's handler mixins share one map. The inherited erasure
+construct their map with one complete name-to-event-type table, composed once
+per target type and shared without mutation. Handler records are allocated
+only on assignment or content-attribute input. GlobalEventHandlers and WindowEventHandlers
+are declaration-only mixins: their member bindings call the existing target
+resolver and handler map directly. They need no separate implementation objects
+or per-name forwarding accessors. Other interfaces retain their implementation
+setters when those own additional behavior, such as starting a MessagePort.
+Each includer's handlers share one map. The inherited erasure
 method deactivates the associated map before removing listeners. DOM retains only
 a type reference to HTML's map, with no runtime import or handler registry. Targets without
 handlers allocate no map. DOM's separate `removeAllEventListeners()` operation
@@ -1108,9 +1144,9 @@ for body/frameset forwarding. It resolves the current node Document on access,
 so adoption changes the alias without moving or erasing the old Window's handler.
 Forwarded handler values and listeners stay on the Window's map. Their callback adapter checks
 the actual invocation target's environment, independently of the element's binding
-realm and the callback's realm. Currently `onstorage` and `onerror` use this path;
-ordinary HTML element `onclick` stays local. Broader declarations remain in the
-scripting roadmap.
+realm and the callback's realm. The Window handlers and six Window-reflecting body
+handlers use this path; ordinary HTML element `onclick` stays local. Beforeunload's
+special invocation rules remain in the scripting roadmap.
 
 Web Storage's `storage/events` is a separate component below DOM nodes and
 `storage`. Document's legacy event factory imports that narrow entry point;
