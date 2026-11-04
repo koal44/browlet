@@ -9,9 +9,12 @@ import type {
   GlobalAccessHandlers, GlobalIndexedProperties, GlobalObject, GlobalPrototypeKind, GlobalProxy,
   JSFunction, JSFunctionWithPrototype, JSIteratorResult,
 } from './realm';
-import type { JSWebAssemblyModule } from './built-in-primitives';
+import type { JSWasmInstance, JSWasmModule } from './built-in-primitives';
 import type { JSJobCallback, VMContext } from './runtime';
-import type { ImportModuleDynamically, ModuleOptions, SourceTextModule, SourceTextModuleOptions, SyntheticModule } from './modules';
+import type {
+  ImportModuleDynamically, ModuleOptions, SourceTextModule, SourceTextModuleOptions, SyntheticModule,
+  WebAssemblyModule, WasmModuleOptions,
+} from './modules';
 
 /** Typed calls to the selected backend's optional engine extensions. */
 export class NodeAPI {
@@ -51,6 +54,8 @@ export class NodeAPI {
   SyntheticModule?: new (
     exports: string[], evaluate: (this: SyntheticModule) => void, options: ModuleOptions,
   ) => SyntheticModule;
+  /** Retained Wasm source and VM graph record; stock Node has no public counterpart. */
+  WebAssemblyModule?: new (bytes: Uint8Array, options: WasmModuleOptions) => WebAssemblyModule;
   getFunctionRealm?: (value: JSFunction) => object;
   getRealm?: (value: object) => object;
   // Require the V8 iterator-brand predicates.
@@ -59,6 +64,10 @@ export class NodeAPI {
   isRegExpStringIterator?: (value: unknown) => boolean;
   /** Allocate in the destination context while retaining the source's shared backing store. */
   cloneSharedArrayBuffer?: (buffer: SharedArrayBuffer, context: VMContext) => SharedArrayBuffer;
+  /** Allocate a new Module in the destination context, reusing its compiled code and options. */
+  cloneWebAssemblyModule?: (module: JSWasmModule, context: VMContext) => JSWasmModule;
+  /** null for an unrecognized namespace; undefined for a Wasm record without an Instance yet. */
+  getWebAssemblyNamespaceInstance?: (namespace: object) => JSWasmInstance | null | undefined;
   // Requires the V8 length-tracking patch.
   isLengthTrackingArrayBufferView?: (view: ArrayBufferView) => boolean;
   /** Recognize a native WebAssembly.Module without enumerating its exports. */
@@ -67,7 +76,7 @@ export class NodeAPI {
   isWebAssemblyGlobal?: (value: unknown) => boolean;
   /** Invoke an imported callback with its native result conversion inside the call. */
   createWebAssemblyImportCall?: (
-    module: JSWebAssemblyModule, importIndex: number, callback: JSFunction, instanceConstructor: JSFunctionWithPrototype,
+    module: JSWasmModule, importIndex: number, callback: JSFunction, instanceConstructor: JSFunctionWithPrototype,
   ) => JSFunction;
   /** Recognize a genuine WeakRef without dereferencing its target. */
   isWeakRef?: (value: unknown) => boolean;
@@ -90,7 +99,9 @@ export class NodeAPI {
   /** Route uncaught engine errors to the owning context, including native registry cleanup failures. */
   setExceptionReporter?: (context: VMContext, reporter: ((exception: unknown) => void) | undefined) => void;
   /** Hand native Wasm resolution to the owning host as a one-shot completion. */
-  setWasmAsyncCompletionCallback?: (context: VMContext, callback: ((complete: () => void) => void) | undefined) => void;
+  setWasmAsyncCompletionCallback?: (
+    context: VMContext, callback: ((complete: () => void, promise: Promise<unknown>) => void) | undefined,
+  ) => void;
   /** Intercept native eval/Function compilation; an object created in the target context identifies its realm. */
   setModifyCodeGenerationFromStringsCallback?: (
     realmReference: object,
@@ -124,12 +135,15 @@ export class NodeAPI {
     this.compileFunction = this.#loadMethod(backend, 'compileFunction');
     this.SourceTextModule = this.#loadMethod(backend, 'SourceTextModule');
     this.SyntheticModule = this.#loadMethod(backend, 'SyntheticModule');
+    this.WebAssemblyModule = this.#loadMethod(backend, 'WebAssemblyModule');
     this.getFunctionRealm = this.#loadMethod(backend, 'getFunctionRealm');
     this.getRealm = this.#loadMethod(backend, 'getRealm');
     this.isArrayIterator = this.#loadMethod(backend, 'isArrayIterator');
     this.isStringIterator = this.#loadMethod(backend, 'isStringIterator');
     this.isRegExpStringIterator = this.#loadMethod(backend, 'isRegExpStringIterator');
     this.cloneSharedArrayBuffer = this.#loadMethod(backend, 'cloneSharedArrayBuffer');
+    this.cloneWebAssemblyModule = this.#loadMethod(backend, 'cloneWebAssemblyModule');
+    this.getWebAssemblyNamespaceInstance = this.#loadMethod(backend, 'getWebAssemblyNamespaceInstance');
     this.isLengthTrackingArrayBufferView = this.#loadMethod(backend, 'isLengthTrackingArrayBufferView');
     this.isWebAssemblyModule = this.#loadMethod(backend, 'isWebAssemblyModule');
     this.isWebAssemblyGlobal = this.#loadMethod(backend, 'isWebAssemblyGlobal');
@@ -206,10 +220,10 @@ export type AddonMicrotaskQueueHandle = {
 };
 
 export type AddonContextHandle = {
-  readonly realm: object;
-  readonly globalProxy: GlobalProxy;
-  readonly globalObject?: GlobalObject;
-  readonly prototypeChain?: object[];
+  realm: object;
+  globalProxy: GlobalProxy;
+  globalObject?: GlobalObject;
+  prototypeChain?: object[];
   detachGlobal(): GlobalProxy;
 };
 

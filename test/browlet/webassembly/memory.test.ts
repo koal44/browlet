@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 
+import { WasmMemoryImpl } from '../../../src/browlet/webassembly/index';
 import { Browlet } from '../../../src/browlet/browlet';
 import { isWebAssemblyMemory } from '../../../src/js-engine/index';
 import { getPlatformRecord, PlatformRecordSource } from '../../../src/web-idl/values/platform';
@@ -90,7 +91,8 @@ describe('WebAssembly Memory', () => {
     const record = getPlatformRecord(memory, PlatformRecordSource.Platform);
     expect(record).toBeDefined();
     expect(record!.realm).toBe(foreignRealm);
-    expect(record!.implInst).toBe(memory);
+    expect(record!.implInst).toBeInstanceOf(WasmMemoryImpl);
+    expect(record!.implInst).not.toBe(memory);
     expect(record!.platformObject).toBe(memory);
     expect(Reflect.ownKeys(memory)).toEqual([]);
   });
@@ -104,7 +106,8 @@ describe('WebAssembly Memory', () => {
       Reflect.set(globalThis, 'nativeMemory', Object.freeze(memory));
     });
     const memory = Reflect.get(browser.window, 'nativeMemory') as object;
-    expect(isWebAssemblyMemory(memory)).toBe(true);
+    expect(isWebAssemblyMemory(memory)).toBe(false);
+    expect(isWebAssemblyMemory((getPlatformRecord(memory, PlatformRecordSource.Platform)!.implInst as unknown as WasmMemoryImpl).getBacking())).toBe(true);
     expect(isWebAssemblyMemory(new WebAssembly.Memory({ initial: 0 }))).toBe(true);
     for (const value of [undefined, null, 42, {}, Object.create(memory), new Proxy(memory, {})]) {
       expect(isWebAssemblyMemory(value)).toBe(false);
@@ -253,10 +256,15 @@ describe('WebAssembly Memory', () => {
       try { new WebAssembly.Memory({ initial: 0 }).toResizableBuffer(); }
       catch (error) { needsMaximum = error instanceof TypeError; }
       const final = memory.toFixedLengthBuffer();
-      return { first, retained, resized, invalid, needsMaximum, detached: buffer.byteLength, final: [final.byteLength, final.resizable] };
+      const foreign = Reflect.get(globalThis, 'foreign') as typeof globalThis;
+      const other = new foreign.WebAssembly.Memory({ initial: 0, maximum: 1 });
+      const resizable = Reflect.apply(WebAssembly.Memory.prototype.toResizableBuffer, other, []);
+      const fixedAgain = Reflect.apply(WebAssembly.Memory.prototype.toFixedLengthBuffer, other, []);
+      const borrowed = [resizable, fixedAgain].every((value) => Object.getPrototypeOf(value) === ArrayBuffer.prototype);
+      return { first, retained, resized, invalid, needsMaximum, borrowed, detached: buffer.byteLength, final: [final.byteLength, final.resizable] };
     })).toEqual({
       first: [0, 65536, 196608, true], retained: true, resized: [3, 196608, true, 42],
-      invalid: [true, true], needsMaximum: true, detached: 0, final: [196608, false],
+      invalid: [true, true], needsMaximum: true, borrowed: true, detached: 0, final: [196608, false],
     });
   });
 });

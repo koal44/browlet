@@ -16,6 +16,8 @@ import type { WebIDLRealm } from './environment';
 export interface PlatformTypeOptions {
   /** Interface surface forwarded by each declared proxy; recognition hooks cannot describe that shape. */
   proxyInterfaces?: Record<string, string | ProxyTypeOptions>;
+  /** Writable data properties defined outside Web IDL, keyed by namespace and property name. Values are TypeScript types. */
+  namespaceProperties?: Record<string, Record<string, string>>;
   /** Select one exposure profile; omission describes all declared members and conditional facilities. */
   exposure?: Pick<WebIDLRealm, 'globalNames' | 'secureContext' | 'crossOriginIsolated'>;
 }
@@ -45,8 +47,9 @@ class PlatformTypeGenerator {
   #assembly: DefinitionAssembly;
   /** Explicit proxy surfaces and optional realm exposure selection. */
   #options: PlatformTypeOptions;
-  /** Emitted names, including generated companions, share one TypeScript module scope. */
+  /** Qualified type references by IDL name; LegacyNamespace interfaces live in their namespace. */
   #names = new Map<string, string>();
+  /** Reserve short names together so nested companions cannot shadow referenced outer types. */
   #usedNames = new Set<string>();
   /** Constructor and namespace objects are types, not fabricated exported runtime values. */
   #objects = new Map<object, string>();
@@ -68,8 +71,11 @@ class PlatformTypeGenerator {
       for (const name of collection.keys()) this.#names.set(name, this.#reserve(name));
     }
     for (const assembled of assembly.interfaces.values()) {
+      const namespace = assembled.getLegacyNamespace();
+      const prefix = namespace ? `${this.#name(namespace)}.` : '';
+      this.#names.set(assembled.name, prefix + this.#name(assembled.name));
       if (assembled.hasInterfaceObject()) {
-        this.#objects.set(assembled, this.#reserve(`${assembled.name}Constructor`));
+        this.#objects.set(assembled, prefix + this.#reserve(`${assembled.name}Constructor`));
       }
     }
     for (const assembled of assembly.callbackInterfaces.withInterfaceObjects()) {
@@ -139,10 +145,10 @@ class PlatformTypeGenerator {
       }
     }
     for (const assembled of this.#assembly.interfaces.values()) {
-      blocks.push(...this.#platformInterface(assembled));
+      if (!assembled.getLegacyNamespace()) blocks.push(...this.#platformInterface(assembled));
     }
     for (const assembled of this.#assembly.namespaces.values()) {
-      blocks.push(this.#namespace(assembled));
+      blocks.push(...this.#namespace(assembled));
     }
     // Rendering a dictionary can discover another output dictionary, including recursive ones.
     for (const [assembled, name] of this.#dictionaryOutputs) {
@@ -209,7 +215,7 @@ class PlatformTypeGenerator {
     if (inheritedInstance && shadowed.length) {
       inheritedInstance = `Omit<${inheritedInstance}, ${shadowed.map(quote).join(' | ')}>`;
     }
-    const blocks = [this.#interface(name + this.#typeParameters(parameters), members, inheritedInstance)];
+    const blocks = [this.#interface(localName(name) + this.#typeParameters(parameters), members, inheritedInstance)];
     const objectName = this.#objects.get(assembled);
     if (objectName) {
       // The constructor object is shared by every instantiation; only construction infers type arguments.
@@ -250,7 +256,7 @@ class PlatformTypeGenerator {
         const overridden = [...staticMembers.keys()].filter((name) => inheritedNames.has(name));
         if (overridden.length) inherited = `Omit<${inherited}, ${overridden.map(quote).join(' | ')}>`;
       }
-      blocks.push(this.#interface(objectName, objectMembers, inherited));
+      blocks.push(this.#interface(localName(objectName), objectMembers, inherited));
     }
     return blocks;
   }
@@ -350,19 +356,27 @@ class PlatformTypeGenerator {
     return members;
   }
 
-  #namespace(assembled: AssembledNamespace): string {
+  #namespace(assembled: AssembledNamespace): string[] {
     const members: string[] = [];
+    const types: string[] = [];
     for (const entry of assembled.members) {
       if (this.#exposed(assembled.primary) && this.#exposed(entry.source) && this.#exposed(entry.member)) {
         members.push(...this.#member(entry.member));
       }
     }
     for (const child of this.#assembly.interfaces.inNamespace(assembled.primary.name)) {
+      types.push(...this.#platformInterface(child));
       if (this.#exposed(child.primary) && this.#objects.has(child)) {
         members.push(`${propertyName(child.name)}: ${this.#objects.get(child)!};`);
       }
     }
-    return this.#interface(this.#name(assembled.primary.name), members);
+    const name = this.#name(assembled.primary.name);
+    for (const [property, type] of Object.entries(this.#options.namespaceProperties?.[assembled.primary.name] ?? {})) {
+      members.push(`${propertyName(property)}: ${type};`);
+    }
+    const blocks = [this.#interface(name, members)];
+    if (types.length) blocks.push(`export namespace ${name} {\n${indent(types.join('\n\n').split('\n'))}\n}`);
+    return blocks;
   }
 
   #globals(global: AssembledInterface): string[] {
@@ -521,7 +535,7 @@ class PlatformTypeGenerator {
   }
 
   #interface(name: string, members: string[], parent?: string): string {
-    return `export interface ${name}${parent ? ` extends ${parent}` : ''} {\n${indent(members)}\n}`;
+    return `export interface ${name}${parent ? ` extends ${parent}` : ''} {\n${indent(combineOptionalOverloads(members))}\n}`;
   }
 
   #name(name: string): string {
@@ -541,6 +555,47 @@ class PlatformTypeGenerator {
 }
 
 type Direction = 'input' | 'output';
+
+/** Combine signatures differing only by one trailing argument that already accepts undefined. */
+function combineOptionalOverloads(members: string[]): string[] {
+  const prefix = 'interface Generated {\n';
+  const source = ts.createSourceFile('members.ts', prefix + members.join('\n') + '\n}', ts.ScriptTarget.Latest, true);
+  const declaration = source.statements[0] as ts.InterfaceDeclaration;
+  const removed = new Set<ts.TypeElement>();
+  const replacements = new Map<ts.TypeElement, string>();
+  const methods = declaration.members.filter(ts.isMethodSignature);
+  for (const longer of methods) {
+    const last = longer.parameters.at(-1);
+    if (!last?.type || last.questionToken || last.dotDotDotToken || !acceptsUndefined(last.type)) continue;
+    const shorter = methods.find((candidate) => candidate !== longer && !removed.has(candidate) &&
+      !replacements.has(candidate) && candidate.parameters.length === longer.parameters.length - 1 &&
+      candidate.name.getText(source) === longer.name.getText(source) &&
+      candidate.questionToken?.kind === longer.questionToken?.kind &&
+      candidate.type?.getText(source) === longer.type?.getText(source) &&
+      candidate.typeParameters?.map((parameter) => parameter.getText(source)).join(',') ===
+      longer.typeParameters?.map((parameter) => parameter.getText(source)).join(',') &&
+      candidate.parameters.every((parameter, index) => parameter.getText(source) === longer.parameters[index]!.getText(source)));
+    if (!shorter) continue;
+    removed.add(shorter);
+    // Preserve existing formatting; the only spelling change is the optional marker.
+    const start = longer.getStart(source);
+    replacements.set(longer, source.text.slice(start, last.name.end) + '?' + source.text.slice(last.name.end, longer.end));
+  }
+  return declaration.members.flatMap((member) => removed.has(member) ? [] :
+    [replacements.get(member) ?? member.getText(source)]);
+}
+
+/** Avoid widening a required trailing string, number, or interface argument to include undefined. */
+function acceptsUndefined(type: ts.TypeNode): boolean {
+  return type.kind === ts.SyntaxKind.AnyKeyword || type.kind === ts.SyntaxKind.UnknownKeyword ||
+    type.kind === ts.SyntaxKind.UndefinedKeyword ||
+    (ts.isUnionTypeNode(type) && type.types.some(acceptsUndefined));
+}
+
+/** Declaration names omit the namespace qualifier used by references. */
+function localName(name: string): string {
+  return name.slice(name.lastIndexOf('.') + 1);
+}
 
 function typeArguments(parameters: TypeParameter[] | undefined, erase = false): string {
   return parameters?.length ? `<${parameters.map((parameter) => erase ? 'any' : parameter.name).join(', ')}>` : '';
@@ -606,5 +661,5 @@ function quote(value: string): string {
 }
 
 function indent(lines: string[]): string {
-  return lines.map((line) => `  ${line}`).join('\n');
+  return lines.map((line) => line ? `  ${line}` : line).join('\n');
 }

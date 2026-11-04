@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/unbound-method -- These tests borrow native accessors and methods with explicit receivers. */
 import { describe, expect, it } from 'vitest';
 
+import { WasmGlobalImpl } from '../../../src/browlet/webassembly/index';
 import { Browlet } from '../../../src/browlet/browlet';
-import { addon } from '../../../src/js-engine/index';
 import { reference } from '../../../src/web-idl/core/index';
 import { getPlatformRecord, PlatformRecordSource } from '../../../src/web-idl/values/platform';
 import { getBindingContext, getRelevantRealm } from '../../support/browlet-binding';
@@ -186,7 +186,8 @@ describe('WebAssembly Global', () => {
     const record = getPlatformRecord(global, PlatformRecordSource.Platform);
     expect(record).toBeDefined();
     expect(record!.realm).toBe(foreignRealm);
-    expect(record!.implInst).toBe(global);
+    expect(record!.implInst).toBeInstanceOf(WasmGlobalImpl);
+    expect(record!.implInst).not.toBe(global);
     expect(record!.platformObject).toBe(global);
     expect(Reflect.ownKeys(global)).toEqual([]);
   });
@@ -204,29 +205,23 @@ describe('WebAssembly Global', () => {
       Reflect.set(globalThis, 'nativeGlobal', Object.freeze(global));
     }, { bytes: vectorBytes, mutable });
     const global = Reflect.get(browser.window, 'nativeGlobal') as object;
-    expect(getPlatformRecord(global, PlatformRecordSource.Platform)).toBeUndefined();
-    expect(context.jsToImpl(global, reference('Global'))).toBe(global);
-    expect(context.implToJS(global, reference('Global'))).toBe(global);
+    const implementation = getPlatformRecord(global, PlatformRecordSource.Platform)!.implInst;
+    expect(implementation).toBeInstanceOf(WasmGlobalImpl);
+    expect(context.jsToImpl(global, reference('Global'))).toBe(implementation);
+    expect(context.implToJS(implementation, reference('Global'))).toBe(global);
     const record = context.getPlatformRecord(global, PlatformRecordSource.Platform);
-    // Exact ownership still requires the addon for native objects created outside Binding.
-    if (addon.getRealm) {
-      expect(record).toBeDefined();
-      expect(record!.realm).toBe(foreignRealm);
-      expect(record!.implInst).toBe(global);
-      expect(record!.platformObject).toBe(global);
-    } else {
-      expect(record).toBeUndefined();
-    }
+    expect(record!.realm).toBe(foreignRealm);
+    expect(record!.platformObject).toBe(global);
     expect(Object.getPrototypeOf(global)).toBeNull();
     expect(Reflect.ownKeys(global)).toEqual([]);
   });
 
-  it('converts external Globals without inventing an owner and rejects forged values without traps', () => {
+  it('rejects raw Node Globals and forged values without running traps', () => {
     const browser = fixture();
     const context = getBindingContext(getRelevantRealm(browser.window));
     const global = Object.freeze(new WebAssembly.Global({ value: 'externref' }, {}));
-    expect(context.jsToImpl(global, reference('Global'))).toBe(global);
-    expect(context.implToJS(global, reference('Global'))).toBe(global);
+    expect(() => context.jsToImpl(global, reference('Global'))).toThrow('Global');
+    expect(() => context.implToJS(global, reference('Global'))).toThrow();
     expect(context.getPlatformRecord(global, PlatformRecordSource.Platform)).toBeUndefined();
     const fail = (): never => { throw new Error('Author code ran'); };
     const proxy = new Proxy(global, { get: fail, getPrototypeOf: fail });
@@ -291,8 +286,9 @@ describe('WebAssembly Global', () => {
     const browser = fixture();
     const context = getBindingContext(getRelevantRealm(browser.window));
     Reflect.set(browser.window, 'inspectGlobal', (global: object) => {
-      expect(context.jsToImpl(global, reference('Global'))).toBe(global);
-      expect(context.implToJS(global, reference('Global'))).toBe(global);
+      const implementation = getPlatformRecord(global, PlatformRecordSource.Platform)!.implInst;
+      expect(context.jsToImpl(global, reference('Global'))).toBe(implementation);
+      expect(context.implToJS(implementation, reference('Global'))).toBe(global);
       context.getPlatformRecord(global, PlatformRecordSource.Platform);
     });
     expect(await browser.evaluate((bytes) => {

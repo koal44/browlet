@@ -1,190 +1,145 @@
-import type { InternalPromise } from '../../infra/index';
+import { type InternalPromise, type InternalPromiseWithResolvers, type TaskSourceKey } from '../../infra/index';
 import {
-  getBufferSourceView, getWebAssemblyModuleImports, isCallable, isObject,
-  isWebAssemblyModule, isWebAssemblyInstance, isWebAssemblyMemory, isWebAssemblyTable,
-  isWebAssemblyGlobal, isWebAssemblyTag, isWebAssemblyFunction,
-  type JSBufferSource, type JSEnvironment, type JSFunction, type JSWebAssemblyModule, type JSWebAssemblyInstance,
-  type JSWebAssemblyMemory, type JSWebAssemblyTable, type JSWebAssemblyGlobal, type JSWebAssemblyTag,
+  getBufferSourceView,
+  type JSBufferSource, type JSEnvironment, type JSWasmModule, type JSWasmInstance,
 } from '../../js-engine/index';
 import {
-  annotated, arg, ctor, defineDictionary, defineEnumeration, defineInterface, defineNamespace, definePartialDictionary,
+  annotated, arg, atArg, attr, ctor, impl, invokeWith, defineDictionary, defineEnumeration, defineInterface, defineNamespace, definePartialDictionary,
   defineTypedef, dictMember, emptyDictionary, emptySequence,
-  idlType, implementationType, nullable, op, promise, reference, roAttr, sequence, staticOp, xattr,
+  idlType, implementationType, nullable, op, promise, reference, roAttr, sequence, union, xattr,
   type WebIDLRealm,
 } from '../../web-idl/index';
 
+import { WasmModuleImpl } from './module';
+import { WasmExceptionImpl } from './exception';
+import { WasmInstanceImpl, wrapWasmInstance } from './instance';
+import { WasmMemoryImpl, WasmTableImpl, WasmGlobalImpl, WasmTagImpl, wrapWasmObject } from './objects';
+import type { MemoryDescriptor, TableDescriptor, GlobalDescriptor, TagType, ExceptionOptions } from './types';
+export type { MemoryDescriptor, TableDescriptor, GlobalDescriptor, TagType, ValueType, ExceptionOptions } from './types';
+
 /** WebAssembly operations backed by the owning realm's native engine. */
-export class WebAssemblyImpl {
+// §6 builtin lookup, signature validation, allocation, and calls remain native.
+// Browlet supplies option conversion and duplicate-set rejection.
+// SPEC_CLASH(wasm-nonfunction-builtin-import): V8 treats builtin-named non-function imports
+// as ordinary imports. Keep Chromium's behavior; the draft, Firefox, and WebKit reject them.
+export class WasmImpl {
+  /** Environment owning the namespace and its engine operations. */
+  #env: WasmEnvironment;
+
+  constructor(env: WasmEnvironment) { this.#env = env; }
+
+  get JSTag(): WasmTagImpl { return wrapWasmObject(this.#env.realm.webAssemblyJSTag, this.#env) as WasmTagImpl; }
+
   /** Validate already-converted bytes and options using the owner's native engine. */
   // SPEC_CLASH(wasm-validate-bindings): Apply Web IDL conversion before native byte access; see ROADMAP.md.
-  static validate(bytes: JSBufferSource, options: WebAssemblyCompileOptions, env: JSEnvironment): boolean {
+  validate(bytes: JSBufferSource, options: WebAssemblyCompileOptions, env: JSEnvironment): boolean {
     // Options may mutate or detach the source. Only inspect it after their conversion.
     const view = getBufferSourceView(bytes);
     if (new Set(options.builtins).size !== options.builtins.length) return false;
     return Reflect.apply(env.realm.webAssemblyValidate, undefined, [view, options]) as boolean;
   }
 
-  /** Compile already-converted input, retaining the native Promise and Module identities. */
+  /** Compile already-converted input, projecting a Module through ordinary Binding. */
   // SPEC_CLASH(wasm-validate-bindings): The same native input-conversion gaps affect compile().
-  static compile(bytes: JSBufferSource, options: WebAssemblyCompileOptions, env: JSEnvironment): InternalPromise<JSWebAssemblyModule> {
-    // Converted options contain no author accessors; native compilation copies this view now.
-    const view = getBufferSourceView(bytes);
-    if (new Set(options.builtins).size !== options.builtins.length) {
-      const result = env.InternalPromise.withResolvers(moduleType);
-      env.queueTask('engine', () => {
-        result.reject(new env.realm.WebAssemblyCompileError('Duplicate WebAssembly builtin names'));
-      });
-      return result.promise;
-    }
-    const result = Reflect.apply(env.realm.webAssemblyCompile, undefined, [view, options]) as Promise<unknown>;
-    // Keep the native Promise without observing or resolving its Module a second time.
-    return env.InternalPromise.fromNative(result, (value) => {
-      // Author thenables can replace the compilation result; internal instantiation still requires a Module.
-      if (!isWebAssemblyModule(value)) throw new env.realm.TypeError('Compilation did not resolve to a WebAssembly.Module');
-      return value;
-    }, moduleType);
-  }
-
-  /** Instantiate converted bytes through the native compiler and its Module Promise. */
-  static instantiateBytes(
-    bytes: JSBufferSource, imports: object | undefined, options: WebAssemblyCompileOptions, env: WebAssemblyEnvironment,
-  ): InternalPromise<WebAssemblyInstantiatedSource> {
-    const result = env.InternalPromise.withResolvers(instantiatedSourceType);
-    const { callbacks } = env.realm;
-    const incumbent = callbacks.captureEnvironment();
-    this.compile(bytes, options, env).observe((module) => {
-      // ACCOMMODATION(node-v8-internal-promise-incumbent): This internal observer is
-      // a Node host function, so native Promise hooks do not save its HTML incumbent.
-      // Carry the reaction's registration settings into the later import reads.
-      callbacks.prepareToRunCallback(incumbent);
-      try {
-        this.instantiateModule(module, imports, env).observe((instance) => {
-          result.resolve({ module, instance });
-        }, result.reject);
-      } finally {
-        callbacks.cleanUpAfterRunningCallback(incumbent);
-      }
-    }, result.reject);
+  compile(bytes: JSBufferSource, options: WebAssemblyCompileOptions, env: JSEnvironment): InternalPromise<WasmModuleImpl> {
+    const result = env.InternalPromise.withResolvers(moduleType);
+    this.#compile(bytes, options, 'engine', result, env);
     return result.promise;
   }
 
-  /** Instantiate a converted native Module, retaining the invoked realm's Promise and Instance. */
+  /** Instantiate converted bytes through the native compiler and its Module Promise. */
+  instantiateBytes(
+    bytes: JSBufferSource, imports: object | undefined, options: WebAssemblyCompileOptions, call: WasmInvocation,
+  ): InternalPromise<WebAssemblyInstantiatedSource> {
+    return this.#instantiatePromiseOfModule(this.compile(bytes, options, call.env), imports, call);
+  }
+
+  /** Instantiate a converted Module implementation in the invoked realm. */
   // SPEC_CLASH(wasm-module-start-timing): V8 still runs start synchronously while capturing imports.
-  static instantiateModule(
-    module: JSWebAssemblyModule, imports: object | undefined, env: WebAssemblyEnvironment,
-  ): InternalPromise<JSWebAssemblyInstance> {
-    const adapted = this.#adaptImports(module, imports, env);
-    const result = Reflect.apply(env.realm.webAssemblyInstantiate, undefined, [module, adapted]) as Promise<unknown>;
-    return env.InternalPromise.fromNative(result, (value) => value as JSWebAssemblyInstance, instanceType);
+  instantiateModule(
+    module: WasmModuleImpl, imports: object | undefined, call: WasmInvocation,
+  ): InternalPromise<WasmInstanceImpl> {
+    const { env } = call;
+    const incumbent = call.incumbent ?? env;
+    env.realm.callbacks.prepareToRunCallback(incumbent);
+    try {
+      const native = module.instantiate(imports, env);
+      const result = env.InternalPromise.withResolvers(instanceType);
+      env.realm.observePromise(native, (value) => {
+        result.resolve(wrapWasmInstance(value as JSWasmInstance, env));
+      }, result.reject);
+      return result.promise;
+    } finally {
+      env.realm.callbacks.cleanUpAfterRunningCallback(incumbent);
+    }
   }
 
-  /** Return the engine's JavaScript exception tag without consulting the replaceable namespace property. */
-  // SPEC_CLASH(wasm-js-tag-realms): V8 owns a tag per context instead of per Agent; see ROADMAP.md.
-  static getJSTag(env: JSEnvironment): JSWebAssemblyTag {
-    return env.realm.webAssemblyJSTag;
-  }
-
-  /** Compile converted bytes synchronously, returning the owning realm's native Module. */
-  // SPEC_CLASH(wasm-validate-bindings): Native constructors share the namespace operations' conversion gaps.
-  static createModule(bytes: JSBufferSource, options: WebAssemblyCompileOptions, env: JSEnvironment): JSWebAssemblyModule {
+  /** Start native compilation with the task source required by the calling API. */
+  // TODO(CSP): Enforce the browser's Wasm compilation policy at native entry points;
+  // response eligibility and Fetch policy checks do not supply that compilation check.
+  #compile(
+    bytes: JSBufferSource, options: WebAssemblyCompileOptions, source: TaskSourceKey,
+    compiled: InternalPromiseWithResolvers<WasmModuleImpl>, env: JSEnvironment, responseURL?: string,
+  ): void {
+    // Converted options contain no author accessors; native compilation copies this view now.
     const view = getBufferSourceView(bytes);
     if (new Set(options.builtins).size !== options.builtins.length) {
-      throw new env.realm.WebAssemblyCompileError('Duplicate WebAssembly builtin names');
+      env.queueTask(source, () => {
+        compiled.reject(new env.realm.WebAssemblyCompileError('Duplicate WebAssembly builtin names'));
+      });
+      return;
     }
-    return Reflect.construct(env.realm.WebAssemblyModule, [view, options]) as JSWebAssemblyModule;
-  }
-
-  /** Instantiate a converted Module synchronously; the engine reads imports, links, and runs start. */
-  static createInstance(module: JSWebAssemblyModule, imports: object | undefined, env: WebAssemblyEnvironment): JSWebAssemblyInstance {
-    return Reflect.construct(env.realm.WebAssemblyInstance, [module, this.#adaptImports(module, imports, env)]) as JSWebAssemblyInstance;
-  }
-
-  /** Adapt function imports lazily, leaving lookup, validation, and all other import kinds with the engine. */
-  static #adaptImports(module: JSWebAssemblyModule, imports: object | undefined, env: WebAssemblyEnvironment): object | undefined {
-    if (imports === undefined) return imports;
-    const declarations = getWebAssemblyModuleImports(module);
-    if (!declarations.some((entry) => entry.kind === 'function')) return imports;
-    let index = 0;
-    // Web IDL's object argument deliberately leaves Wasm to distinguish functions
-    // from other imports, including externref globals that happen to contain functions.
-    // V8 reads each declaration's namespace and field in this order, including duplicates.
-    // Module.imports omits compile-time builtins and string constants just as that lookup does.
-    // Use fresh proxy targets: wrapping the author's frozen objects would violate Proxy invariants.
-    return new Proxy(Object.create(null) as object, {
-      get: (_target, name) => {
-        const importIndex = index;
-        const declaration = declarations[index++]!;
-        const namespace: unknown = Reflect.get(imports, name);
-        if (declaration.kind !== 'function' || !isObject(namespace)) return namespace;
-        return new Proxy(Object.create(null) as object, {
-          get: (_target, field) => {
-            const callback: unknown = Reflect.get(namespace, field);
-            if (!isCallable(callback) || isWebAssemblyFunction(callback)) return callback;
-            const invokeWithResultConversion = env.realm.createWebAssemblyImportCall(module, importIndex, callback);
-            return this.#createHostFunction(callback, invokeWithResultConversion, env);
-          },
+    const result = env.realm.compileWebAssembly(view, options, source, responseURL);
+    // The native compiler resolves its private engine object. Resolve a typed
+    // implementation Promise so Binding projects the author-facing Module once.
+    env.realm.observePromise(result,
+      (value) => {
+        // Promise observation runs a microtask. The public resolution, including
+        // author Module.prototype.then access, belongs to the API's task source.
+        env.queueTask(source, () => { compiled.resolve(new WasmModuleImpl(value as JSWasmModule)); });
+      },
+      (reason) => {
+        env.queueTask(source, () => {
+          // Correct only private native compilation failures. Public then getters
+          // run during compiled.resolve(), after this boundary, and keep their errors.
+          compiled.reject(responseURL === undefined ? reason : env.realm.realizeWebAssemblyCompilationError(reason));
         });
       },
-    });
+    );
   }
 
-  /** Keep the author's callback for realm lookup; invoke it through the engine's result-conversion adapter. */
-  // https://webassembly.github.io/spec/js-api/#create-a-host-function
-  static #createHostFunction(
-    callback: JSFunction, invokeWithResultConversion: JSFunction, env: WebAssemblyEnvironment,
-  ): JSFunction {
-    const callbackEnv = env.realm.callbacks.captureEnvironment();
-    return (...args) => {
-      // Resolve the original callable at invocation, including bound functions and callable Proxies.
-      // A Proxy revoked after registration must not introduce an earlier import-time exception.
-      const callbacks = env.realm.callbacks.getAssociatedRealm(callback).callbacks;
-      callbacks.prepareToRunScript();
+  /** Preserve the initiating incumbent while waiting for compilation before reading imports. */
+  // https://webassembly.github.io/spec/js-api/#instantiate-a-promise-of-a-module
+  #instantiatePromiseOfModule(
+    promise: InternalPromise<WasmModuleImpl>, imports: object | undefined, call: WasmInvocation,
+  ): InternalPromise<WebAssemblyInstantiatedSource> {
+    const { env } = call;
+    const result = env.InternalPromise.withResolvers(instantiatedSourceType);
+    promise.observe((module) => {
+      // The initiating settings survive compilation and are restored while imports are read.
       try {
-        callbacks.prepareToRunCallback(callbackEnv);
-        try {
-          // The engine bridge finishes scalar coercion and multi-value iteration
-          // here, while the original callback's script/settings scope is active.
-          return Reflect.apply(invokeWithResultConversion, undefined, args);
-        } finally {
-          callbacks.cleanUpAfterRunningCallback(callbackEnv);
-        }
-      } finally {
-        callbacks.cleanUpAfterRunningScript();
-      }
-    };
-  }
-
-  /** Allocate native memory from a converted descriptor; V8 owns address conversion, limits, and backing storage. */
-  static createMemory(descriptor: MemoryDescriptor, env: JSEnvironment): JSWebAssemblyMemory {
-    const memory = Reflect.construct(env.realm.WebAssemblyMemory, [descriptor]) as JSWebAssemblyMemory;
-    // SPEC_CLASH(wasm-memory-initial-buffer-realm): Initialize the buffer now; V8 otherwise uses the first getter's realm.
-    Reflect.apply(env.realm.webAssemblyMemoryBuffer, memory, []);
-    return memory;
-  }
-
-  /** Allocate a native table from converted arguments; the engine owns reference validation and its object cache. */
-  static createTable(descriptor: TableDescriptor, value: unknown, env: JSEnvironment): JSWebAssemblyTable {
-    const table = Reflect.construct(env.realm.WebAssemblyTable, [descriptor, value]) as JSWebAssemblyTable;
-    // SPEC_CLASH(wasm-empty-table-initializer): V8 skips value validation at size zero; Firefox, WebKit, and the draft require it.
-    const zero = descriptor.address === 'i64' ? 0n : 0;
-    if (value !== undefined && Reflect.apply(env.realm.webAssemblyTableLength, table, []) === zero) {
-      // Native zero growth validates the value without adding entries or exposing an intermediate table.
-      Reflect.apply(env.realm.webAssemblyTableGrow, table, [zero, value]);
-    }
-    return table;
-  }
-
-  /** Allocate a native Global from converted arguments; the engine owns typed storage and the Global object cache. */
-  static createGlobal(descriptor: GlobalDescriptor, value: unknown, env: JSEnvironment): JSWebAssemblyGlobal {
-    // SPEC_CLASH(wasm-global-undefined-initializer): Web IDL treats undefined as missing; V8 distinguishes argument count.
-    const args = value === undefined ? [descriptor] : [descriptor, value];
-    return Reflect.construct(env.realm.WebAssemblyGlobal, args) as JSWebAssemblyGlobal;
+        this.instantiateModule(module, imports, call).observe((instance) => {
+          result.resolve({ module, instance });
+        }, result.reject);
+      } catch (reason) { result.reject(reason); }
+    }, result.reject);
+    return result.promise;
   }
 }
 
+/** Incumbent saved by the ordinary argument-injection path before conversion. */
+export interface WasmInvocation {
+  env: WasmEnvironment;
+  incumbent?: WasmEnvironment;
+}
+
 /** The existing engine environment with the host callback lifecycle used by Wasm imports. */
-export interface WebAssemblyEnvironment extends JSEnvironment {
+export interface WasmEnvironment extends JSEnvironment {
   realm: WebIDLRealm;
+  /** Project an implementation nested in an opaque export object. */
+  project(implInst: object): object | null;
+  /** Resolve a platform value inside an opaque import object without coercion. */
+  unwrap(platformObject: object): object | undefined;
 }
 
 /** Converted compile options; native validation owns the supported builtin/import types. */
@@ -195,95 +150,25 @@ export interface WebAssemblyCompileOptions {
   importedStringConstants: string | null;
 }
 
-/** The retained native objects produced by byte-input instantiation. */
+/** The implementations produced by byte-input instantiation. */
 export interface WebAssemblyInstantiatedSource {
-  module: JSWebAssemblyModule;
-  instance: JSWebAssemblyInstance;
+  module: WasmModuleImpl;
+  instance: WasmInstanceImpl;
 }
 
-/** Converted Memory descriptor, including the threads proposal's existing shared-memory option. */
-export interface MemoryDescriptor {
-  /** Initial page count; the engine applies AddressValueToU64 after prototype selection. */
-  initial: unknown;
-  /** Optional maximum page count. */
-  maximum?: unknown;
-  /** Address representation, defaulting to i32 in the constructor algorithm. */
-  address?: 'i32' | 'i64';
-  /** Whether the engine allocates shared backing storage. */
-  shared: boolean;
-}
-
-/** Converted Table descriptor; the engine converts AddressValue sizes and validates stored references. */
-export interface TableDescriptor {
-  /** Reference type stored in each entry. */
-  element: 'externref' | 'anyfunc';
-  /** Initial entry count, converted numerically by the engine after prototype selection. */
-  initial: unknown;
-  /** Optional maximum entry count. */
-  maximum?: unknown;
-  /** Address representation, defaulting to i32 in the constructor algorithm. */
-  address?: 'i32' | 'i64';
-}
-
-/** Converted Global descriptor; native construction converts the initializer to this Wasm value type. */
-export interface GlobalDescriptor {
-  value: 'i32' | 'i64' | 'f32' | 'f64' | 'v128' | 'externref' | 'anyfunc';
-  mutable: boolean;
-}
-
-const moduleType = implementationType<JSWebAssemblyModule>(reference('Module'));
-const instanceType = implementationType<JSWebAssemblyInstance>(reference('Instance'));
-const tagType = implementationType<JSWebAssemblyTag>(reference('Tag'));
+const moduleType = reference(WasmModuleImpl);
+const instanceType = reference(WasmInstanceImpl);
+const tagType = reference(WasmTagImpl);
 const instantiatedSourceType = implementationType<WebAssemblyInstantiatedSource>(reference('WebAssemblyInstantiatedSource'));
 
 /*
 enum AddressType { "i32", "i64" };
 typedef any AddressValue;
 */
-export const webAssemblyAddressTypeIDL = defineEnumeration({ name: 'AddressType', values: ['i32', 'i64'] });
-export const webAssemblyAddressValueIDL = defineTypedef({ name: 'AddressValue', type: idlType.any });
+export const wasmAddressTypeIDL = defineEnumeration({ name: 'AddressType', values: ['i32', 'i64'] });
+export const wasmAddressValueIDL = defineTypedef({ name: 'AddressValue', type: idlType.any });
 
-// Construction and customSections() use Binding; the reviewed imports()/exports() remain native.
-// https://webassembly.github.io/spec/js-api/#modules
-/*
-[LegacyNamespace=WebAssembly, Exposed=*]
-interface Module {
-  constructor([AllowResizable] AllowSharedBufferSource bytes, optional WebAssemblyCompileOptions options = {});
-  static sequence<ModuleExportDescriptor> exports(Module moduleObject);
-  static sequence<ModuleImportDescriptor> imports(Module moduleObject);
-  static sequence<ArrayBuffer> customSections(Module moduleObject, DOMString sectionName);
-};
-*/
-export const webAssemblyModuleIDL = defineInterface<JSEnvironment>({
-  name: 'Module', exposed: '*',
-  ...xattr(['LegacyNamespace', 'WebAssembly']),
-  interfaceOverride: {
-    isInstance: isWebAssemblyModule,
-    getInterfaceObject: (env) => env.realm.WebAssemblyModule,
-  },
-  members: [
-    // SPEC_CLASH(wasm-module-constructor-order): Binding converts arguments before reading newTarget.prototype, unlike V8.
-    ctor(
-      [
-        arg('bytes', implementationType<JSBufferSource>(annotated(reference('AllowSharedBufferSource'), xattr('AllowResizable')))),
-        arg('options', implementationType<WebAssemblyCompileOptions>(reference('WebAssemblyCompileOptions')), {
-          optional: true, default: emptyDictionary,
-        }),
-      ],
-      { overrideConstruct: ({ relevant: env }, bytes, options) => WebAssemblyImpl.createModule(bytes, options, env) },
-    ),
-    // SPEC_CLASH(wasm-custom-section-name): V8 rejects explicit undefined instead of converting it to "undefined".
-    staticOp('customSections', sequence(idlType.ArrayBuffer),
-      [arg('moduleObject', moduleType), arg('sectionName', idlType.DOMString)],
-      {
-        overrideInvoke: ({ relevant: env }, module, sectionName) => Reflect.apply(
-          env.realm.webAssemblyModuleCustomSections, undefined, [module, sectionName],
-        ) as ArrayBuffer[],
-      },
-    ),
-  ],
-});
-// Construction uses Binding; the reviewed exports getter remains native (see ROADMAP.md).
+// Construction and the exports getter use ordinary implementation/platform binding.
 // https://webassembly.github.io/spec/js-api/#instances
 /*
 [LegacyNamespace=WebAssembly, Exposed=*]
@@ -292,23 +177,14 @@ interface Instance {
   readonly attribute object exports;
 };
 */
-export const webAssemblyInstanceIDL = defineInterface<WebAssemblyEnvironment>({
+export const wasmInstanceIDL = defineInterface<WasmEnvironment>({
   name: 'Instance', exposed: '*',
   ...xattr(['LegacyNamespace', 'WebAssembly']),
-  interfaceOverride: {
-    isInstance: isWebAssemblyInstance,
-    getInterfaceObject: (env) => env.realm.WebAssemblyInstance,
-  },
+  implementation: impl(WasmInstanceImpl, { constructWith: [atArg<WasmEnvironment>(2, (env, _callee, incumbent) => ({ env, incumbent }))] }),
   members: [
     // SPEC_CLASH(wasm-instance-constructor-order): Web IDL converts arguments before newTarget.prototype; V8 reads it first.
-    ctor(
-      [arg('module', moduleType), arg('importObject', idlType.object, { optional: true })],
-      {
-        // Wasm, not Web IDL, identifies the callbacks inside the opaque import object.
-        overrideCapturesIncumbent: true,
-        overrideConstruct: ({ relevant: env }, module, imports) => WebAssemblyImpl.createInstance(module, imports, env),
-      },
-    ),
+    ctor([arg('module', moduleType), arg('importObject', idlType.object, { optional: true })]),
+    roAttr('exports', idlType.object),
   ],
 });
 
@@ -320,7 +196,7 @@ dictionary MemoryDescriptor {
   AddressType address;
 };
 */
-export const webAssemblyMemoryDescriptorIDL = defineDictionary({
+export const wasmMemoryDescriptorIDL = defineDictionary({
   name: 'MemoryDescriptor',
   members: [
     dictMember('initial', reference('AddressValue'), { required: true }),
@@ -336,7 +212,7 @@ partial dictionary MemoryDescriptor {
   boolean shared = false;
 };
 */
-export const webAssemblySharedMemoryDescriptorIDL = definePartialDictionary({
+export const wasmSharedMemoryDescriptorIDL = definePartialDictionary({
   name: 'MemoryDescriptor', members: [dictMember('shared', idlType.boolean, { default: false })],
 });
 
@@ -351,19 +227,27 @@ interface Memory {
   readonly attribute ArrayBuffer buffer;
 };
 */
-export const webAssemblyMemoryIDL = defineInterface<JSEnvironment>({
+export const wasmMemoryIDL = defineInterface<WasmEnvironment>({
   name: 'Memory', exposed: '*',
   ...xattr(['LegacyNamespace', 'WebAssembly']),
-  interfaceOverride: {
-    isInstance: isWebAssemblyMemory,
-    getInterfaceObject: (env) => env.realm.WebAssemblyMemory,
-  },
+  implementation: impl(WasmMemoryImpl, { constructWith: [atArg<WasmEnvironment>(1, (env) => env)] }),
   members: [
     // SPEC_CLASH(wasm-memory-constructor-order): Web IDL reads the descriptor before prototype/size conversion; V8 interleaves them.
     ctor(
       [arg('descriptor', implementationType<MemoryDescriptor>(reference('MemoryDescriptor')))],
-      { overrideConstruct: ({ relevant: env }, descriptor) => WebAssemblyImpl.createMemory(descriptor, env) },
+
     ),
+    op('grow', reference('AddressValue'), [arg('delta', reference('AddressValue'))],
+      invokeWith(atArg<WasmEnvironment>(1, (_env, callee) => callee)),
+    ),
+    // The threads proposal also returns SharedArrayBuffer; retain the native methods and capability gaps.
+    op('toFixedLengthBuffer', union(idlType.ArrayBuffer, idlType.SharedArrayBuffer), [],
+      invokeWith(atArg<WasmEnvironment>(0, (_env, callee) => callee)),
+    ),
+    op('toResizableBuffer', union(idlType.ArrayBuffer, idlType.SharedArrayBuffer), [],
+      invokeWith(atArg<WasmEnvironment>(0, (_env, callee) => callee)),
+    ),
+    roAttr('buffer', union(idlType.ArrayBuffer, idlType.SharedArrayBuffer)),
   ],
 });
 
@@ -372,7 +256,7 @@ export const webAssemblyMemoryIDL = defineInterface<JSEnvironment>({
 /*
 enum TableKind { "externref", "anyfunc" };
 */
-export const webAssemblyTableKindIDL = defineEnumeration({ name: 'TableKind', values: ['externref', 'anyfunc'] });
+export const wasmTableKindIDL = defineEnumeration({ name: 'TableKind', values: ['externref', 'anyfunc'] });
 
 /*
 dictionary TableDescriptor {
@@ -382,7 +266,7 @@ dictionary TableDescriptor {
   AddressType address;
 };
 */
-export const webAssemblyTableDescriptorIDL = defineDictionary({
+export const wasmTableDescriptorIDL = defineDictionary({
   name: 'TableDescriptor',
   members: [
     dictMember('element', reference('TableKind'), { required: true }),
@@ -405,19 +289,32 @@ interface Table {
   readonly attribute AddressValue length;
 };
 */
-export const webAssemblyTableIDL = defineInterface<JSEnvironment>({
+export const wasmTableIDL = defineInterface<WasmEnvironment>({
   name: 'Table', exposed: '*',
   ...xattr(['LegacyNamespace', 'WebAssembly']),
-  interfaceOverride: {
-    isInstance: isWebAssemblyTable,
-    getInterfaceObject: (env) => env.realm.WebAssemblyTable,
-  },
+  implementation: impl(WasmTableImpl, { constructWith: [atArg<WasmEnvironment>(2, (env) => env)] }),
   members: [
     // SPEC_CLASH(wasm-table-constructor-order): Web IDL finishes descriptor conversion before prototype lookup and numeric sizes.
     ctor(
       [arg('descriptor', implementationType<TableDescriptor>(reference('TableDescriptor'))), arg('value', idlType.any, { optional: true })],
-      { overrideConstruct: ({ relevant: env }, descriptor, value) => WebAssemblyImpl.createTable(descriptor, value, env) },
+
     ),
+    // Arity overloads retain the accepted native difference between omitted and explicit undefined.
+    // An optional `any` argument normalizes both to undefined before the implementation runs.
+    op('grow', reference('AddressValue'), [arg('delta', reference('AddressValue'))], { method: 'growDefault', ...invokeWith(atArg<WasmEnvironment>(1, (_env, callee) => callee)) }),
+    op('grow', reference('AddressValue'),
+      [arg('delta', reference('AddressValue')), arg('value', idlType.any)],
+      invokeWith(atArg<WasmEnvironment>(2, (_env, callee) => callee)),
+    ),
+    op('get', idlType.any, [arg('index', reference('AddressValue'))],
+      invokeWith(atArg<WasmEnvironment>(1, (_env, callee) => callee)),
+    ),
+    op('set', idlType.undefined, [arg('index', reference('AddressValue'))], { method: 'setDefault', ...invokeWith(atArg<WasmEnvironment>(1, (_env, callee) => callee)) }),
+    op('set', idlType.undefined,
+      [arg('index', reference('AddressValue')), arg('value', idlType.any)],
+      invokeWith(atArg<WasmEnvironment>(2, (_env, callee) => callee)),
+    ),
+    roAttr('length', reference('AddressValue')),
   ],
 });
 
@@ -426,7 +323,7 @@ export const webAssemblyTableIDL = defineInterface<JSEnvironment>({
 /*
 enum ValueType { "i32", "i64", "f32", "f64", "v128", "externref", "anyfunc" };
 */
-export const webAssemblyValueTypeIDL = defineEnumeration({
+export const wasmValueTypeIDL = defineEnumeration({
   name: 'ValueType', values: ['i32', 'i64', 'f32', 'f64', 'v128', 'externref', 'anyfunc'],
 });
 
@@ -436,7 +333,7 @@ dictionary GlobalDescriptor {
   boolean mutable = false;
 };
 */
-export const webAssemblyGlobalDescriptorIDL = defineDictionary({
+export const wasmGlobalDescriptorIDL = defineDictionary({
   name: 'GlobalDescriptor',
   members: [
     dictMember('value', reference('ValueType'), { required: true }),
@@ -453,32 +350,104 @@ interface Global {
   attribute any value;
 };
 */
-export const webAssemblyGlobalIDL = defineInterface<JSEnvironment>({
+export const wasmGlobalIDL = defineInterface<WasmEnvironment>({
   name: 'Global', exposed: '*',
   ...xattr(['LegacyNamespace', 'WebAssembly']),
-  interfaceOverride: {
-    isInstance: isWebAssemblyGlobal,
-    getInterfaceObject: (env) => env.realm.WebAssemblyGlobal,
-  },
+  implementation: impl(WasmGlobalImpl, { constructWith: [atArg<WasmEnvironment>(2, (env) => env)] }),
   members: [
     // SPEC_CLASH(wasm-global-construction-order): Convert the descriptor before prototype lookup and native initializer conversion.
     ctor(
       [arg('descriptor', implementationType<GlobalDescriptor>(reference('GlobalDescriptor'))), arg('v', idlType.any, { optional: true })],
-      { overrideConstruct: ({ relevant: env }, descriptor, value) => WebAssemblyImpl.createGlobal(descriptor, value, env) },
+
     ),
+    op('valueOf', idlType.any, [], invokeWith(atArg<WasmEnvironment>(0, (_env, callee) => callee))),
+    // Native value access may materialize a funcref or throw in the borrowed accessor's realm.
+    attr('value', idlType.any, {
+      overrideGet({ callee }) { return (this as WasmGlobalImpl).getValue(callee); },
+      overrideSet({ callee }, value) { (this as WasmGlobalImpl).setValue(value, callee); },
+    }),
   ],
 });
 
-// JSTag needs native value recognition now; the full Tag interface is reviewed in §5.7.
 // https://webassembly.github.io/spec/js-api/#tags
+/*
+dictionary TagType {
+  required sequence<ValueType> parameters;
+};
+*/
+export const wasmTagTypeIDL = defineDictionary({
+  name: 'TagType',
+  members: [dictMember('parameters', sequence(reference('ValueType')), { required: true })],
+});
+
 /*
 [LegacyNamespace=WebAssembly, Exposed=*]
 interface Tag {
   constructor(TagType type);
 };
 */
-export const webAssemblyTagIDL = defineInterface({
-  name: 'Tag', members: [], interfaceOverride: { isInstance: isWebAssemblyTag },
+// SPEC_CLASH(wasm-esm-exposure): Keep the main JS API's Exposed=*; the ESM fork restricts Tag/Exception to Window, Worker, Worklet.
+export const wasmTagIDL = defineInterface<WasmEnvironment>({
+  name: 'Tag', exposed: '*',
+  ...xattr(['LegacyNamespace', 'WebAssembly']),
+  implementation: impl(WasmTagImpl, { constructWith: [atArg<WasmEnvironment>(1, (env) => env)] }),
+  members: [
+    // SPEC_CLASH(wasm-tag-constructor): Follow Web IDL iterable conversion and newTarget; V8 reads array-like input and discards derived prototypes.
+    // ValueType also excludes engine reference-kind extensions, as for Global construction.
+    ctor(
+      [arg('type', implementationType<TagType>(reference('TagType')))],
+
+    ),
+  ],
+});
+
+// https://webassembly.github.io/spec/js-api/#exceptions
+/*
+dictionary ExceptionOptions {
+  boolean traceStack = false;
+};
+*/
+export const wasmExceptionOptionsIDL = defineDictionary({
+  name: 'ExceptionOptions',
+  members: [dictMember('traceStack', idlType.boolean, { default: false })],
+});
+
+// Exception's binding uses the native object as the platform object, with a
+// separate implementation, so engine-created exceptions and tagged rethrows work.
+// SPEC_CLASH(wasm-exception-index-range): Web IDL truncates before checking the range; Chromium checks the fraction first.
+// SPEC_CLASH(wasm-exception-stack): Target V8/Chromium's own traced stack; the prototype getter returns undefined.
+/*
+[LegacyNamespace=WebAssembly, Exposed=*]
+interface Exception {
+  constructor(Tag exceptionTag, sequence<any> payload, optional ExceptionOptions options = {});
+  any getArg(Tag exceptionTag, [EnforceRange] unsigned long index);
+  boolean is(Tag exceptionTag);
+  readonly attribute (DOMString or undefined) stack;
+};
+*/
+// SPEC_CLASH(wasm-esm-exposure): Keep the main JS API's Exposed=* rather than the ESM fork's narrower global list.
+export const wasmExceptionIDL = defineInterface<JSEnvironment>({
+  name: 'Exception', exposed: '*',
+  ...xattr(['LegacyNamespace', 'WebAssembly']),
+  implementation: impl(WasmExceptionImpl, { constructWith: [atArg<JSEnvironment>(3, (env) => env)] }),
+  members: [
+    // SPEC_CLASH(wasm-exception-constructor): Follow Web IDL iterable/options conversion and newTarget; V8 reads array-like input and discards derived prototypes.
+    ctor(
+      [
+        arg('exceptionTag', tagType), arg('payload', sequence(idlType.any)),
+        arg('options', implementationType<ExceptionOptions>(reference('ExceptionOptions')), { optional: true, default: emptyDictionary }),
+      ],
+    ),
+    op('getArg', idlType.any,
+      [arg('exceptionTag', tagType), arg('index', annotated(idlType.unsignedLong, xattr('EnforceRange')))],
+      invokeWith(atArg<JSEnvironment>(2, (_env, methodEnv) => methodEnv)),
+    ),
+    op('is', idlType.boolean,
+      [arg('exceptionTag', tagType)],
+      invokeWith(atArg<JSEnvironment>(1, (_env, methodEnv) => methodEnv)),
+    ),
+    roAttr('stack', union(idlType.DOMString, idlType.undefined)),
+  ],
 });
 
 /*
@@ -487,7 +456,7 @@ dictionary WebAssemblyInstantiatedSource {
   required Instance instance;
 };
 */
-export const webAssemblyInstantiatedSourceIDL = defineDictionary({
+export const wasmInstantiatedSourceIDL = defineDictionary({
   name: 'WebAssemblyInstantiatedSource',
   members: [
     dictMember('module', moduleType, { required: true }),
@@ -496,13 +465,15 @@ export const webAssemblyInstantiatedSourceIDL = defineDictionary({
 });
 
 // https://webassembly.github.io/spec/js-api/#webassemblycompileoptions
+// SPEC_CLASH(wasm-esm-option-defaults): The ESM fork omits these defaults while
+// still reading both members unconditionally. Keep the main JS API's null/[] defaults.
 /*
 dictionary WebAssemblyCompileOptions {
   USVString? importedStringConstants = null;
   sequence<USVString> builtins = [];
 };
 */
-export const webAssemblyCompileOptionsIDL = defineDictionary({
+export const wasmCompileOptionsIDL = defineDictionary({
   name: 'WebAssemblyCompileOptions',
   members: [
     dictMember('importedStringConstants', nullable(idlType.USVString), { default: null }),
@@ -512,6 +483,7 @@ export const webAssemblyCompileOptionsIDL = defineDictionary({
 
 // WebAssembly JavaScript API §5. The remaining native namespace members are reviewed separately.
 // https://webassembly.github.io/spec/js-api/#webassembly-namespace
+// https://webassembly.github.io/esm-integration/js-api/#webassembly-namespace
 /*
 [Exposed=*]
 namespace WebAssembly {
@@ -523,13 +495,14 @@ namespace WebAssembly {
 
   Promise<Instance> instantiate(Module moduleObject, optional object importObject);
 
+
   readonly attribute Tag JSTag;
 };
 */
-export const webAssemblyIDL = defineNamespace<WebAssemblyEnvironment>({
+export const wasmIDL = defineNamespace<WasmEnvironment>({
   name: 'WebAssembly',
   exposed: '*',
-  overrideNamespace: (env) => env.realm.WebAssembly,
+  implementation: impl(WasmImpl, { constructWith: [atArg<WasmEnvironment>(0, (env) => env)] }),
   members: [
     op('validate', idlType.boolean,
       [
@@ -538,7 +511,7 @@ export const webAssemblyIDL = defineNamespace<WebAssemblyEnvironment>({
           optional: true, default: emptyDictionary,
         }),
       ],
-      { overrideInvoke: ({ relevant: env }, bytes, options) => WebAssemblyImpl.validate(bytes, options, env) },
+      invokeWith(atArg<WasmEnvironment>(2, (env) => env)),
     ),
     op('compile', promise(moduleType),
       [
@@ -547,7 +520,7 @@ export const webAssemblyIDL = defineNamespace<WebAssemblyEnvironment>({
           optional: true, default: emptyDictionary,
         }),
       ],
-      { overrideInvoke: ({ relevant: env }, bytes, options) => WebAssemblyImpl.compile(bytes, options, env) },
+      invokeWith(atArg<WasmEnvironment>(2, (env) => env)),
     ),
     op('instantiate', promise(instantiatedSourceType),
       [
@@ -557,20 +530,13 @@ export const webAssemblyIDL = defineNamespace<WebAssemblyEnvironment>({
           optional: true, default: emptyDictionary,
         }),
       ],
-      {
-        // Save the initiating caller before compilation moves import reads to a later task.
-        overrideCapturesIncumbent: true,
-        overrideInvoke: ({ relevant: env }, bytes, imports, options) => WebAssemblyImpl.instantiateBytes(bytes, imports, options, env),
-      },
+      { method: 'instantiateBytes', ...invokeWith(atArg<WasmEnvironment>(3, (env, _callee, incumbent) => ({ env, incumbent }))) },
     ),
     op('instantiate', promise(instanceType),
       [arg('moduleObject', moduleType), arg('importObject', idlType.object, { optional: true })],
-      {
-        overrideCapturesIncumbent: true,
-        overrideInvoke: ({ relevant: env }, module, imports) => WebAssemblyImpl.instantiateModule(module, imports, env),
-      },
+      { method: 'instantiateModule', ...invokeWith(atArg<WasmEnvironment>(2, (env, _callee, incumbent) => ({ env, incumbent }))) },
     ),
     // SPEC_CLASH(wasm-js-tag-descriptor): Install the draft's enumerable getter over V8's readonly data property.
-    roAttr('JSTag', tagType, { overrideGet: ({ relevant: env }) => WebAssemblyImpl.getJSTag(env) }),
+    roAttr('JSTag', tagType),
   ],
 });

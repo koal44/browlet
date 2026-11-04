@@ -115,6 +115,11 @@ describe('Web IDL binding worlds and realm registration', () => {
 
     expect(interfaces.register(firstRealm, (ctx) => ({ realm: ctx.realm }))).toBe(first);
     expect(interfaces.unwrap(object)).toBe(implementation);
+    expect(second.unwrap(object)).toBe(implementation);
+    expect(second.unwrap(implementation)).toBeUndefined();
+    expect(second.unwrap({})).toBeUndefined();
+    expect(second.unwrap(undefined)).toBeUndefined();
+    expect(second.unwrap(null)).toBeUndefined();
     expect(interfaces.getRealm(object)).toBe(firstRealm);
     expect(second.unwrap(object, ExampleImpl))
       .toBe(implementation);
@@ -535,6 +540,7 @@ describe('Web IDL binding worlds and realm registration', () => {
       expect(second.unwrap(object)).toBeUndefined();
       expect(second.getRealm(object)).toBeUndefined();
       expect(secondContext.unwrap(object, ExampleImpl)).toBeUndefined();
+      expect(secondContext.unwrap(object)).toBeUndefined();
       expect(secondContext.getPlatformRecord(object, PlatformRecordSource.Platform)).toBeUndefined();
     }
     expect(() => secondContext.project(ExampleImpl, implementation))

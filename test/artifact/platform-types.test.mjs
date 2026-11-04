@@ -5,11 +5,19 @@ import ts from 'typescript';
 // Resolve both package entries without ambient browser types. Only the Node API needs Node types.
 const consumers = [{
   name: 'platform', types: [], source: `
-  import type { Window, Document, Blob } from 'browlet/platform';
+  import type { Window, Document, Blob, WebAssembly } from 'browlet/platform';
+  import * as Platform from 'browlet/platform';
   declare const window: Window;
   const document: Document = window.document;
   const blob: Blob = new window.Blob(['hello']);
   const text: Promise<string> = blob.text();
+  const tag: WebAssembly.Tag = new window.WebAssembly.Tag({ parameters: [] });
+  const exception: WebAssembly.Exception = new window.WebAssembly.Exception(tag, []);
+  const exceptionConstructor: WebAssembly.ExceptionConstructor = window.WebAssembly.Exception;
+  // @ts-expect-error LegacyNamespace types do not become flat exports
+  type FlatException = Platform.Exception;
+  // @ts-expect-error the type-only namespace does not invent a runtime export
+  Platform.WebAssembly;
   const clone = window.structuredClone({ count: 1 });
   const event = new window.CustomEvent('data', { detail: 'text' });
   const count: number = clone.count;
@@ -37,7 +45,8 @@ const consumers = [{
 }];
 
 for (const { name, source, types } of consumers) {
-  const file = fileURLToPath(new URL(`./${name}-consumer.mts`, import.meta.url));
+  // Package self-reference checks this checkout's exports, even when node_modules is shared with another worktree.
+  const file = fileURLToPath(new URL(`../../packages/browlet/${name}-consumer.mts`, import.meta.url));
   const options = {
     strict: true, noEmit: true, skipLibCheck: false,
     target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.NodeNext,

@@ -12,11 +12,11 @@ import {
   isLengthTrackingArrayBufferView, isMapIteratorObject, isModuleNamespaceObject,
   isPromiseObject, isProxyObject, isRegExpStringIteratorObject,
   isSetIteratorObject, isSharedArrayBuffer, isStringIteratorObject, isWeakMapObject,
-  isWeakRefObject, isWeakSetObject, nativeCloneRejectsPropertylessObject,
+  isWeakRefObject, isWeakSetObject, isWebAssemblyException, nativeCloneRejectsPropertylessObject,
   readErrorStack, toString,
 } from '../../../js-engine/index';
 import {
-  DOMExceptionImpl, DOMExceptionNames, StructuredData,
+  DOMExceptionImpl, DOMExceptionNames, StructuredData, PlatformRecordSource,
   type BindingContext, type ImplementationClass, type PlatformRecord,
 } from '../../../web-idl/index';
 
@@ -76,7 +76,7 @@ class StructuredSerializer {
   }
 
   serialize(value: unknown): SerializedRecord {
-    const record = this.#ctx.getOrCreatePlatformRecord(value);
+    const record = this.#ctx.getPlatformRecord(value, PlatformRecordSource.Stamped);
     const remembered = this.#memory.get(record?.implInst ?? value);
     if (remembered !== undefined) return remembered;
 
@@ -365,7 +365,10 @@ function hasUnsupportedInternalSlots(value: object): boolean {
     isWeakMapObject(value) ||
     isWeakSetObject(value) ||
     isWeakRefObject(value) ||
-    isFinalizationRegistryObject(value);
+    isFinalizationRegistryObject(value) ||
+    // An engine throw can reach cloning before any Exception method associates
+    // its platform record. Reject its native payload without reading properties.
+    isWebAssemblyException(value);
 }
 
 function isBufferSerializedRecord(

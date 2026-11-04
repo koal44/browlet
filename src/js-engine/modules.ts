@@ -3,10 +3,11 @@ import * as vm from 'node:vm';
 import { InternalError } from '../infra/internal-error';
 
 import { addon, isAddonContextHandle } from './node-addons';
+import type { JSWasmInstance, JSWasmModule } from './built-in-primitives';
 import type { VMContext } from './runtime';
 
 /** The shared Node VM surface used by HTML, supplied by Node or the addon. */
-export type CompiledModule = SourceTextModule | SyntheticModule;
+export type CompiledModule = SourceTextModule | SyntheticModule | WebAssemblyModule;
 
 interface Module {
   /** Context selected when the module was constructed. */
@@ -26,13 +27,25 @@ interface Module {
 // API is newer than the workspace's @types/node declarations.
 export interface SourceTextModule extends Module {
   /** Unresolved imports and re-exports, in engine request order. */
-  moduleRequests: readonly ModuleRequest[];
+  moduleRequests: ModuleRequest[];
   linkRequests(modules: CompiledModule[]): void;
   instantiate(): void;
 }
 
 export interface SyntheticModule extends Module {
   setExport(name: string, value: unknown): void;
+}
+
+/** The addon's retained Wasm record, distinct from its native Module source object. */
+export interface WebAssemblyModule extends Module {
+  /** Realm-owned compiled source, available before linking or evaluation. */
+  source: JSWasmModule;
+  /** The single evaluated Instance, absent until instantiation succeeds. */
+  instance: JSWasmInstance | undefined;
+  /** External dependencies only, with the bridge's private helper omitted. */
+  moduleRequests: ModuleRequest[];
+  linkRequests(modules: CompiledModule[]): void;
+  instantiate(): void;
 }
 
 export interface ModuleOptions {
@@ -51,9 +64,21 @@ export interface SourceTextModuleOptions extends ModuleOptions {
   importModuleDynamically?: ImportModuleDynamically<SourceTextModule>;
 }
 
+/** Host instantiation supplies callback lifecycle while the bridge retains the graph and bindings. */
+export interface WasmModuleOptions extends ModuleOptions {
+  createInstance?: WasmInstanceFactory;
+  /** Public exports of the created instance; native dependencies retain their engine objects. */
+  getExports?: () => object;
+  /** Public source object for static/dynamic source imports; defaults to the native Module. */
+  getSource?: () => object;
+}
+
+/** Host instantiation of a retained Wasm source with its resolved imports. */
+export type WasmInstanceFactory = (module: JSWasmModule, imports: object) => JSWasmInstance;
+
 /** Node's import callback; returning a Module leaves namespace conversion to the backend. */
 export type ImportModuleDynamically<Referrer extends object> = (
-  specifier: string, referrer: Referrer, attributes: Record<string, string>, phase: ModuleRequest['phase'],
+  specifier: string, referrer: Referrer, attributes: Record<string, string>, phase: ModuleRequestPhase,
 ) => CompiledModule | Promise<CompiledModule>;
 
 /** Node module options other than the context and source identifier already supplied by the realm. */
@@ -64,10 +89,13 @@ export interface ModuleRequest {
   /** Original import or re-export specifier. */
   specifier: string;
   /** Parsed import attributes; the host validates their meaning. */
-  attributes: Readonly<Record<string, string>>;
+  attributes: Record<string, string>;
   /** Source, ordinary evaluation, or deferred evaluation request. */
-  phase: 'source' | 'evaluation' | 'defer';
+  phase: ModuleRequestPhase;
 }
+
+/** The requested stage of module loading: source, ordinary evaluation, or deferred evaluation. */
+export type ModuleRequestPhase = 'source' | 'evaluation' | 'defer';
 
 export function compileModule(
   source: string, context: VMContext, filename: string, options: ModuleCompilationOptions = {},
@@ -97,7 +125,20 @@ export function createDefaultExportModule(value: unknown, context: VMContext): C
   }, { context }) as unknown as SyntheticModule;
 }
 
-export function moduleRequests(module: CompiledModule): readonly ModuleRequest[] {
+/** Parse Wasm with the ESM builtin options and reserved-name checks, without instantiating it. */
+export function compileWebAssemblyModule(
+  bytes: Uint8Array, context: VMContext, filename: string,
+  createInstance?: WasmInstanceFactory, getExports?: () => object, getSource?: () => object,
+): WebAssemblyModule {
+  // Stock Node has no corresponding public VM class. Do not silently substitute
+  // a standalone Instance or a synthetic namespace for a cyclic Wasm record.
+  if (!isAddonContextHandle(context) || !addon.WebAssemblyModule) {
+    throw new InternalError('WebAssembly ESM parsing requires the compatibility addon');
+  }
+  return new addon.WebAssemblyModule(bytes, { context, identifier: filename, createInstance, getExports, getSource });
+}
+
+export function moduleRequests(module: CompiledModule): ModuleRequest[] {
   return 'moduleRequests' in module ? module.moduleRequests : [];
 }
 
@@ -129,7 +170,7 @@ export function moduleNamespace(module: CompiledModule): object {
   return module.namespace;
 }
 
-const suppliedRequests = new WeakSet<SourceTextModule>();
+const suppliedRequests = new WeakSet<SourceTextModule | WebAssemblyModule>();
 
 function requireVMModules(): void {
   if (typeof vm.SourceTextModule !== 'function' || typeof vm.SyntheticModule !== 'function') {

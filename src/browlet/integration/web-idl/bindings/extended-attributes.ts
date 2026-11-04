@@ -15,7 +15,6 @@ export const htmlExtendedAttributeHooks: ExtendedAttributeHooks<BrowletEnvironme
   // HTML constructor declarations are exposed only in Window environments.
   prepareHTMLConstructor: prepareCustomElementConstructor as ExtendedAttributeHooks<BrowletEnvironment>['prepareHTMLConstructor'],
   prepareSecurityCheck: prepareCrossOriginSecurityCheck,
-  // Location is the only interface currently handled by this platform-creation hook.
   preparePlatformObject: prepareLocationObject,
   prepareProjectionOverride: prepareWindowProjectionOverride as ExtendedAttributeHooks<BrowletEnvironment>['prepareProjectionOverride'],
 };

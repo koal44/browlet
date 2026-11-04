@@ -45,9 +45,9 @@ fetching with shared module-map callbacks, plus document/worker/worklet graph
 orchestration and shared worklet responses. §8.1.4.3 now creates compiled classic
 scripts and real source-text/CSS/JSON/text engine modules. Supplied graphs link
 and evaluate, with CSS exports projected through Binding. §8.1.6.7.3 now connects
-static and dynamic graph loading to the resolver and fetchers. Wasm ESM
-parsing, module-specific context restoration, and creation timing retain
-explicit unfinished boundaries. Worker-imported scripts
+static and dynamic graph loading to the resolver and fetchers. Wasm ESM parsing
+now uses the addon's retained records; source/deferred loading, module-specific
+context restoration, and creation timing retain explicit unfinished boundaries. Worker-imported scripts
 still need a synchronous Fetch host wait; the event loop's pause guard alone
 cannot supply it. §8.1.3.4 now has settings/object scripting predicates;
 §8.1.4.4 has classic/module runners and the running-script lookup. Child Document

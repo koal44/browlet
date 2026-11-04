@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { WasmInstanceImpl } from '../../../src/browlet/webassembly/index';
 import { Browlet } from '../../../src/browlet/browlet';
 import { getPlatformRecord, PlatformRecordSource } from '../../../src/web-idl/values/platform';
 import { getRelevantRealm } from '../../support/browlet-binding';
@@ -195,8 +196,10 @@ describe('WebAssembly Instance construction', () => {
     const instance = Reflect.get(browser.window, 'nativeInstance') as object;
     const record = getPlatformRecord(instance, PlatformRecordSource.Platform);
     expect(record).toBeDefined();
-    expect(record).toBe(getPlatformRecord(instance, PlatformRecordSource.Implementation));
-    expect(record!.implInst).toBe(instance);
+    expect(record).toBe(getPlatformRecord(record!.implInst, PlatformRecordSource.Implementation));
+    expect(getPlatformRecord(instance, PlatformRecordSource.Implementation)).toBeUndefined();
+    expect(record!.implInst).toBeInstanceOf(WasmInstanceImpl);
+    expect(record!.implInst).not.toBe(instance);
     expect(record!.platformObject).toBe(instance);
     expect(record!.realm).toBe(foreignRealm);
     expect(record!.project()).toBe(instance);

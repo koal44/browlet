@@ -20,27 +20,34 @@ platform object to its implementation. Internal relationships use implementation
 and other post-conversion values; they do not project and immediately unwrap
 objects to call an internal operation.
 
-An engine-owned interface can instead declare `interfaceOverride` with an
-`isInstance(platformObject)` predicate for value conversion and overload selection.
-Binding preserves the native object in both directions,
-using that same object for both identities in its `PlatformRecord`. These
-value-only declarations do not claim to implement the engine's interface members.
-With the override's optional `getInterfaceObject(env)`, Binding retains the supplied
-native constructor and prototype and installs declared static operations on it.
-An explicit constructor `overrideConstruct` can additionally create native instances:
-Binding adapts constructor calls through a Proxy, applies argument conversion and
-`newTarget` prototype selection, and stamps the native instance with its constructor's
-realm before applying that prototype. The native prototype and undeclared static members remain intact.
-Instance members, inheritance, and partial interfaces remain outside that integration.
+WebAssembly Module follows this ordinary split: `WasmModuleImpl` holds a private
+native Module; its platform Module has the generated constructor and static
+methods. Those methods unwrap their Module argument and invoke instance methods
+on the implementation. Compilation and cloning wrap native results before
+ordinary projection, so every exposed Module has a known owner on all backends.
+The native engine object and prototype stay private. ESM's intrinsic inheritance
+and source-kind getter are composed separately in Browlet's binding integration.
 
-Binding explicitly associates other native values at conversion, projection,
-unwrapping, and serialization boundaries when JS Engine can identify their
-registered creation realm exactly. Record and realm getters only read existing
-associations. Existing records
-retain their owner. Stock Node's prototype/evaluation guesses are insufficient for
-permanent native ownership, so untracked native values remain usable without a
-record there. Native Promise results, including `WebAssembly.compile()`, need no
-extra observation or Promise conversion just to acquire a record later.
+All WebAssembly interfaces have separate implementations with private native
+backing objects. Ordinary Binding installs their constructors, accessors, and
+operations. Exception's dedicated binding uses the native exception as its platform
+object and installs generated members on V8's original prototype, preserving
+native throws, tagged catches, and traced stacks. Only Exception member entries
+associate engine-created receivers; generic record lookup does not adopt them.
+Stock Node uses a temporary receiver when exact creation-realm ownership is
+unavailable. See the
+[WebAssembly migration notes](browlet/webassembly/ROADMAP.md#implementationplatform-migration).
+
+`getPlatformRecord(value, source)` only reads an existing association, with the source
+selecting implementation, platform, declared proxy, or either direct stamp.
+Normal construction and projection establish records; lookup does not adopt
+unrecognized native objects or guess their creation realms.
+
+Module deserialization wraps a fresh engine allocation in WasmModuleImpl and
+projects it in the destination binding. HTML's Module graph record still owns
+storage and AgentCluster restrictions and keeps compiled-code reuse private.
+Compilation observes the private native result and resolves its typed public
+Promise on the required task source.
 
 Declared proxy values such as WindowProxy use an implementation handle internally.
 Their binding declaration supplies `getHandle()` and `getProxy()` to convert
@@ -112,17 +119,16 @@ IDL preserve their identity and original realm.
 Member overrides receive `{ relevant, callee, incumbent }` first, followed by
 converted values. `relevant` owns the receiver; `callee` owns the invoked callable.
 Constructors, static members and namespace members use the callee for both.
-`overrideCapturesIncumbent: true` requests caller capture before conversion and
-the host lookup afterward. Without it, `incumbent` is `undefined`; a direct host
-call can also lack an incumbent. Browlet supplies the lookup when composing BindingWorld.
-Capture adds native entry machinery and lookup work, so ordinary overrides such
-as Fetch's constructors leave it disabled. Accessor overrides share one flag per
-attribute. Binding does not inspect an override's parameter count or source text.
-Injected argument resolvers still request the incumbent with a third positional
-parameter. Binding also derives capture from callback conversions and forwarding
-targets. An override that processes callbacks inside an opaque argument, such as
-Wasm's import object, uses the explicit flag because the IDL `object` type cannot
-express that requirement.
+Overrides request capture with `overrideCapturesIncumbent: true`. Binding captures
+before conversion and performs the host lookup afterward; a standalone host can
+supply no incumbent. Without that flag, the override's `incumbent` is undefined
+and Binding avoids the native-entry and lookup cost. Both accessors share the flag.
+Ordinary implementation methods request only their necessary
+dependencies through injected arguments. A resolver with a third positional
+parameter requests the incumbent; callback conversions (including constructors)
+and forwarding targets
+also derive that requirement. Wasm retains the injected incumbent while its
+opaque import object is processed, including after asynchronous compilation.
 Location's bindings select entry and incumbent inputs separately before calling
 its implementation.
 Direct incumbent lookup stays in the lint-allowlisted composition, Binding, and
@@ -396,12 +402,13 @@ separate per-global record. `env.globalImplementation` selects that internal
 global state; `env.global` remains the platform global used for author execution
 and task routing. Neither lookup copies state or moves it onto the environment.
 
-HTML's source-text and synthetic module records retain Node-shaped module objects,
-supplied by Node or the addon; the addon's native handles remain private.
+HTML's source-text, synthetic, and Wasm module records retain Node-shaped module
+objects, supplied by Node or the addon; Wasm requires the addon extension and
+the addon's native handles remain private.
 JSRealm compiles, inspects requests, links supplied dependencies, evaluates, and
 reads namespaces; V8 owns bindings, cycles, and top-level await. HTML converts
 the native completion Promise through `env.InternalPromise`. CSS module creation
-uses the environment's binding-supplied `projectCSSStyleSheet()` before retaining
+uses the environment's binding-supplied `project()` before retaining
 the author-visible export. This does not change Stylelet's host-neutral state.
 Import metadata uses Node's lazy `initializeImportMeta` callback, installed during
 HTML source-text compilation. The initializer retains the exact HTML module
@@ -422,6 +429,22 @@ internal promises. Only the Node callback boundary returns a native Promise for
 the evaluated engine Module; Node converts it to a namespace and resolves the
 author's import Promise. This avoids adopting a namespace's exported `then` twice.
 Module-specific context/async restoration remains a separate dependency.
+
+Wasm parsing retains the addon's source object, external requests, and HTML script
+association. The bridge's optional `createInstance` callback enters that exact
+Wasm record while applying the existing `WasmModuleImpl.createInstance()` import
+adapter. This scopes callback capture, start, and result conversion at the known
+instantiation entry, including after awaited dependencies. It does not supply
+general native module-entry or asynchronous provenance hooks. Source-phase URL
+loading is connected; deferred loading and source-object-to-record lookup remain
+separate dependencies.
+
+The addon retains supplied dependency records after linking so a Wasm consumer
+can find the original native Global through JavaScript re-exports, including
+previously linked barrels. It compares V8 binding identities using an isolated,
+version-guarded private-layout hack; unknown engines retain the prior limitation.
+This uses the existing GC-traced graph, with no context-wide registry or new HTML
+binding path. Live JavaScript global bindings and v128 TDZ remain unsupported.
 
 `BrowletEnvironment.reportException()` combines that global's reporting flag with
 DOM ErrorEvent dispatch. The realm's existing reporting callback and Window's
@@ -1129,6 +1152,157 @@ owns current-event bookkeeping for handlers and ordinary listeners alike. The
 event component retains only type references to HTML/node owners. XHR's
 ProgressEvent lives in browser integration and reuses that event machinery.
 
+Document lazily owns `LegacyMousePointer` in `interaction/mouse/`, a foundation
+that uses event machinery and type-only node references without loading higher
+input producers. All primary pointer types share its effective mouse position.
+It snapshots flat-tree ancestor chains for compatibility boundary transitions;
+DOM still owns dispatch, realm allocation, and target/relatedTarget retargeting.
+Removal notifies existing state immediately after unlinking, with the former
+parent, so recovery uses ancestry at removal time and survives reinsertion.
+It allocates no state during removal, and state-preserving moves bypass the hook.
+Document destruction clears retained targets and per-pointer-type suppression.
+The §§10.2–10.3 mapper now brackets primary pointer dispatch: it updates mouse
+boundaries before down/move/up and maps ordinary mouse events afterward.
+A temporary selected target is retained before pointer boundary callbacks so
+the same removal hook can repair the later mouse target. Canceled primary downs
+suppress ordinary mouse events until up/cancel, independently of boundary and
+activation events. The stream requires separate hover capability and mouse
+click-count inputs; neither is inferred from pointerType or pointer detail.
+Non-hover input uses the draft's immediate interleaving without gesture buffering.
+Synthetic dispatch does not enter this machinery. The mouse producer queues button
+actions as HTML user-interaction tasks and supplies a focusing continuation only
+for an uncanceled mapped mousedown. Native input adapters, hit testing, click
+counting, and focus/editing/drag default actions retain their explicit owners.
+
+UserAgent lazily owns `MouseInputProcessor` in `interaction/mouse-input.ts`, above
+the event and legacy-mouse foundations. One aggregate mouse source supplies button
+state across Windows; each input action snapshots that state at receipt, before
+independent event loops can run their tasks in a different order. The processor
+reserves mouse ID 1, explicitly permitted by Pointer Events, in each existing
+top-level stream map. It adds no reverse registry. It allocates actual events at
+the selected target, preserving creation realm separately from the current view.
+The entries accept normalized button and position actions, not projected DOM
+events or OS-specific records. A shared-clock reading is retained at receipt;
+the existing realm timestamp facility maps it to each event's creation realm.
+Unbatched movement delivers secure raw input before pointermove and mapped
+mousemove, updating Window's coordinate history once. Raw listeners can change
+capture or layout before the following move selects its target.
+The adapter's context-menu flag selects press or release timing. The processor
+dispatches a trusted contextmenu using private input and the triggering pointer
+target, then requests native UI only if uncanceled. The menu precedes any click
+from that transition and does not process capture again. Layout targeting,
+Pointer Lock state, HTML activation/focusing, and native menu UI are named
+throwing dependencies on this owner until their implementations can be connected.
+Tests control only those
+dependencies and drive the real queue/stream/Binding/listener path. A native GUI
+adapter and WebDriver Actions connection remain separate integration work.
+
+UserAgent owns `ActivePointers` in `interaction/pointer.ts`. These retained input
+sources own button state and primary-pointer selection independently of event
+snapshots and Window lifetimes. They carry no author-visible pointerId: the
+producer must separately map sources to IDs within each top-level context.
+Activation/retirement and button transitions are implemented. `PointerCapture`
+in `interaction/pointer-capture.ts` separately owns one pointer stream's pending
+and effective targets. `PointerEventStream` composes that capture state with its
+context-local ID, current buttons, and active Document. `TopLevelTraversable`
+retains the active streams in `pointerEventStreams`, shared with its descendant
+documents and cleared by top-level teardown. The mouse producer registers ID 1;
+other device registration and retirement remain with their future producers.
+Author construction/dispatch cannot create these streams.
+UserAgent's source collection retains no DOM targets. Element's public capture
+methods resolve the receiver's current top-level context, reject unknown IDs,
+and delegate to the stream. Their Pointer Events partial declaration remains
+with the interaction owner; Binding performs the ordinary long conversion and
+receiver-realm exception handling. Pending capture is visible immediately.
+DOM removal notifies the top-level stream owner once after unlinking, before
+removal steps. It releases disconnected pending targets through the existing
+stream method; it dispatches no events and retains no reverse target registry.
+Effective capture remains until processing, with loss at the reconnected element
+or, if still disconnected, its Document. State-preserving moves bypass this hook.
+Capture processing uses the target's existing DOM event creation and dispatch,
+copying the triggering input attributes into a fresh notification in the target's
+realm. Target preparation records current input buttons before capture callbacks,
+so capture requests during pointerup see the released state. It processes capture
+before selecting the effective target or invoking a required hit-test callable;
+only down/move/up update the
+stream's active Document. Direct-manipulation down events then request implicit
+capture before listeners. The input owner supplies that device capability and
+a required Pointer Lock query; requests check connectivity, lock state, pressed
+buttons, and the active Document before changing pending capture. Geometry remains
+the layout owner's dependency. `dispatchToTarget()` consumes the prepared,
+realm-owned event and selected target, sends boundary notifications, dispatches
+the input, and records its previous target. Raw delivery first checks the selected
+target document's secure-context classification and retains no rejected input.
+Native up attribute preparation zeros pressure before capture processing.
+DOM dispatch has an optional internal path-capture callback before listeners;
+pointer delivery retains that actual path
+for removal recovery after DOM clears the event's transient state. One private,
+reusable event implementation holds input fields without being projected or
+dispatched, protecting later cancellation from author reinitialization. Suppression
+creates a fresh trusted cancel event, releases capture, and exits. After up, the
+producer's required hover-target query returns the current hit target or null for
+non-hover input/outside the context; the stream restores boundaries after loss
+notifications and retains the over event's path for removal recovery.
+The stream separately retains the press target and a reusable, unprojected down/up
+snapshot with its actual target and capture state. `dispatchActivation()` consumes
+those facts after release without processing capture again or changing boundary
+state. It selects the live common ancestor for uncaptured click/auxclick, crossing
+slots and shadow hosts, and preserves the interaction target for captured releases
+and contextmenu. `PointerEventImpl.createActivation()` allocates at the selected
+target, copies only mouse/UI input, and leaves pointer-specific defaults; the
+stream supplies the retained pointer ID/type, while non-pointer producers keep
+the reserved -1/empty identity. Gesture qualification, click count, and current
+keyboard state remain explicit producer responsibilities.
+`updateAfterLayout()` performs one stationary-pointer boundary pass with a required
+hit-test callable and caller-realm timestamp. It generates no move event; the
+layout/input owners must arrange invalidation, coalescing, and subsequent passes.
+Device-to-context ID assignment, stream registration/retirement, individual
+Document teardown, previous-boundary-target removal notifications, task delivery,
+and the remaining firing steps still need their producer integration.
+
+Native stream delivery accepts an optional `PointerEventSamples` input containing
+coalesced and predicted snapshots. `PointerEventImpl.initializeSampleLists()` creates
+independent events through the selected target's event factory, preserving measured
+input while assigning the parent's pointer identity. Unbatched move/raw delivery
+has one coalesced sample; predictions are optional and limited to pointermove.
+The producer supplies chronological timestamps in the parent's time coordinate.
+DOM's Event target setter invokes an overridable target-change hook; PointerEvent
+uses it to maintain both sample lists across retargeting and shadow cleanup.
+DOM does not import the pointer implementation. Author redispatch clears only the
+parent's trust, so its sample targets and trust remain unchanged by that dispatch.
+Device batching, raw/move correspondence, prediction, and queue order remain
+explicit input-producer dependencies.
+
+`DirectManipulation` captures one contact's touch-action permissions before author
+delivery. It reads Stylelet's computed values through the owning documents and
+requires layout facts for applicability, scroll containers, and local pan directions.
+It retains permission bits, not DOM targets, style values, or live layout callbacks.
+Pan restrictions stop at the nearest inclusive scroll container or child-document
+boundary; zoom restrictions continue through embedding elements. The first recognized
+pan direction fixes acceptance for the contact, with reversal subject to the frozen
+axis restrictions. The producer separately elects to consume input and calls
+`PointerEventStream.suppressForDirectManipulation()` before viewport takeover. That
+guard requires a delivered down with no later up/cancel; author cancellation does not
+alter it. Native gesture recognition, actual layout/viewport operations, and multi-touch
+grouping remain unfinished, and Stylelet's existing shadow-scope query stub still throws.
+
+MouseEvent and PointerEvent initialization consume a required `MouseEventInput` snapshot:
+screen/viewport coordinates already mapped to CSS pixels, held buttons, and
+modifier state. It does not discover an adapter or device state. The static
+creation algorithms use the target's existing event-allocation facility; inherited
+UIEvent initialization selects the current view and clears trust through DOM's
+reset operation. The producer establishes trust and supplies event-specific data
+before dispatch. These facilities do not change author constructors or register
+input sources. `MouseEventImpl.create()` supplies both cancelable and
+non-cancelable creation through explicit bubbles/cancelable arguments, matching
+the PointerEvent factory's callable shape.
+
+MouseEvent-to-PointerEvent creation likewise uses the source's selected target
+for allocation. It copies inherited mouse/UI fields through the base copier,
+retaining fresh pointer/dispatch state and the new realm's creation timestamp.
+The caller supplies bubbles/cancelable explicitly; input conversion does not
+infer firing policy or create an active pointer.
+
 HTML's `eraseAllEventListenersAndHandlers()` is an EventTarget operation.
 Each target retains one nullable `eventHandlers` association. Concrete targets
 construct their map with one complete name-to-event-type table, composed once
@@ -1138,6 +1312,12 @@ are declaration-only mixins: their member bindings call the existing target
 resolver and handler map directly. They need no separate implementation objects
 or per-name forwarding accessors. Other interfaces retain their implementation
 setters when those own additional behavior, such as starting a MessagePort.
+Pointer Events contributes its handler names and a partial GlobalEventHandlers
+declaration from `interaction/events/pointer-event-handlers.ts`. Each includer
+composes the names into its shared table once, without per-instance merging or
+mutating HTML's original table. SecureContext controls raw-update IDL exposure;
+its content attribute still uses HTML's ordinary handler pipeline in insecure
+contexts. Native raw delivery retains its separate secure-context gate.
 Each includer's handlers share one map. The inherited erasure
 method deactivates the associated map before removing listeners. DOM retains only
 a type reference to HTML's map, with no runtime import or handler registry. Targets without

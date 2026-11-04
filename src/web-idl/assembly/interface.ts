@@ -340,7 +340,6 @@ export class AssembledInterface {
 
   /** Whether this interface has a JavaScript interface object. */
   hasInterfaceObject(): boolean {
-    if (this.primary.interfaceOverride && !this.primary.interfaceOverride.getInterfaceObject) return false;
     return !hasExtendedAttribute(this.primary.extendedAttributes, 'LegacyNoInterfaceObject');
   }
 
@@ -399,8 +398,6 @@ export class AssembledInterfaces {
   byName = new Map<string, AssembledInterface>();
   /** The same interfaces indexed by the implementation classes declared for them. */
   byImplClass = new Map<ImplementationClass, AssembledInterface>();
-  /** Native declarations whose predicates can recognize objects without implementation classes. */
-  #nativeInterfaces: AssembledInterface[] = [];
 
   constructor(definitions: Definition[], finish: AssemblySteps[]) {
     const mixinsByName = new Map<string, InterfaceMixinDefinition>();
@@ -465,7 +462,6 @@ export class AssembledInterfaces {
       }
     });
     for (const assembled of this.values()) {
-      if (assembled.primary.interfaceOverride) this.#nativeInterfaces.push(assembled);
       for (const implementation of assembled.implementations) {
         this.byImplClass.set(implementation.implClass, assembled);
       }
@@ -504,11 +500,6 @@ export class AssembledInterfaces {
       const assembled = this.byImplClass.get(candidate);
       if (assembled) return assembled;
     }
-  }
-
-  /** Identify a native interface without consulting author properties or prototypes. */
-  findForNativeObject(platformObject: object): AssembledInterface | undefined {
-    return this.#nativeInterfaces.find((assembled) => assembled.primary.interfaceOverride!.isInstance(platformObject));
   }
 
   /** Resolve a class or shared implementation array to its declared IDL interface. */

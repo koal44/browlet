@@ -5,7 +5,7 @@ import { getRelevantRealm } from '../../support/browlet-binding';
 import { createSiblingWindow } from '../../support/windows';
 
 // WebAssembly JavaScript API §5 JSTag, with the tag cache and exception-tag
-// algorithms it references. Full Tag/Exception constructor reviews come later.
+// algorithms it references. Tag and Exception construction have separate suites.
 describe('WebAssembly JavaScript exception tag', () => {
   it('returns a stable native Tag without allowing assignment', async () => {
     const browser = fixture();

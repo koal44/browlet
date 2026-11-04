@@ -140,7 +140,7 @@ trustedPolicy.createParserOptions({});
 // @ts-expect-error factory identity is read-only on the global
 window.trustedTypes = {} as Platform.TrustedTypePolicyFactory;
 
-const wasmModule: Platform.Module = new window.WebAssembly.Module(new Uint8Array(), {
+const wasmModule: Platform.WebAssembly.Module = new window.WebAssembly.Module(new Uint8Array(), {
   builtins: ['js-string'], importedStringConstants: 'strings',
 });
 const wasmSections: ArrayBuffer[] = window.WebAssembly.Module.customSections(wasmModule, 'meta');
@@ -151,7 +151,7 @@ window.WebAssembly.Module(new Uint8Array());
 // @ts-expect-error Module lives on the WebAssembly namespace
 new window.Module(new Uint8Array());
 
-const wasmInstance: Platform.Instance = new window.WebAssembly.Instance(wasmModule);
+const wasmInstance: Platform.WebAssembly.Instance = new window.WebAssembly.Instance(wasmModule);
 new window.WebAssembly.Instance(wasmModule, { env: { run: () => 42 } });
 // @ts-expect-error Instance construction requires a Module
 new window.WebAssembly.Instance();
@@ -160,7 +160,7 @@ new window.WebAssembly.Instance(wasmModule, 42);
 // @ts-expect-error Instance lives on the WebAssembly namespace
 new window.Instance(wasmModule);
 
-const wasmMemory: Platform.Memory = new window.WebAssembly.Memory({ initial: 1, maximum: 2 });
+const wasmMemory: Platform.WebAssembly.Memory = new window.WebAssembly.Memory({ initial: 1, maximum: 2 });
 new window.WebAssembly.Memory({ address: 'i64', initial: 0n, maximum: 1n, shared: true });
 // @ts-expect-error Memory construction requires an initial size
 new window.WebAssembly.Memory({ maximum: 2 });
@@ -169,7 +169,7 @@ new window.WebAssembly.Memory({ initial: 0, address: 'bad' });
 // @ts-expect-error Memory lives on the WebAssembly namespace
 new window.Memory({ initial: 0 });
 
-const wasmTable: Platform.Table = new window.WebAssembly.Table({ element: 'externref', initial: 1 }, window.document);
+const wasmTable: Platform.WebAssembly.Table = new window.WebAssembly.Table({ element: 'externref', initial: 1 }, window.document);
 new window.WebAssembly.Table({ address: 'i64', element: 'anyfunc', initial: 0n, maximum: 1n });
 // @ts-expect-error Table construction requires its element type
 new window.WebAssembly.Table({ initial: 0 });
@@ -180,7 +180,7 @@ new window.WebAssembly.Table({ element: 'funcref', initial: 0 });
 // @ts-expect-error Table lives on the WebAssembly namespace
 new window.Table({ element: 'externref', initial: 0 });
 
-const wasmGlobal: Platform.Global = new window.WebAssembly.Global({ value: 'externref', mutable: true }, window.document);
+const wasmGlobal: Platform.WebAssembly.Global = new window.WebAssembly.Global({ value: 'externref', mutable: true }, window.document);
 new window.WebAssembly.Global({ value: 'i64' }, 1n);
 // @ts-expect-error Global construction requires its value type
 new window.WebAssembly.Global({ mutable: true });
@@ -188,3 +188,28 @@ new window.WebAssembly.Global({ mutable: true });
 new window.WebAssembly.Global({ value: 'anyref' });
 // @ts-expect-error Global lives on the WebAssembly namespace
 new window.Global({ value: 'i32' });
+
+const wasmTag: Platform.WebAssembly.Tag = new window.WebAssembly.Tag({ parameters: ['i32', 'externref'] });
+new window.WebAssembly.Tag({ parameters: [] });
+// @ts-expect-error Tag construction requires the parameters sequence
+new window.WebAssembly.Tag({});
+// @ts-expect-error Tag parameters follow the draft's ValueType enum
+new window.WebAssembly.Tag({ parameters: ['anyref'] });
+// @ts-expect-error Tag lives on the WebAssembly namespace
+new window.Tag({ parameters: [] });
+void wasmTag;
+
+const wasmException: Platform.WebAssembly.Exception = new window.WebAssembly.Exception(wasmTag, [7, window.document], { traceStack: true });
+const wasmExceptionConstructor: Platform.WebAssembly.ExceptionConstructor = window.WebAssembly.Exception;
+// @ts-expect-error LegacyNamespace instance types are not exported at module scope
+type FlatException = Platform.Exception;
+// @ts-expect-error LegacyNamespace constructor types are not exported at module scope
+type FlatExceptionConstructor = Platform.ExceptionConstructor;
+new window.WebAssembly.Exception(wasmTag, []);
+// @ts-expect-error Exception construction requires its payload
+new window.WebAssembly.Exception(wasmTag);
+// @ts-expect-error Exception options are a dictionary
+new window.WebAssembly.Exception(wasmTag, [], 42);
+// @ts-expect-error Exception lives on the WebAssembly namespace
+new window.Exception(wasmTag, []);
+void [wasmException, wasmExceptionConstructor];

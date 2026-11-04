@@ -240,11 +240,6 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     return this.world.getPlatformRecord(platformObjectOrImplInst, source);
   }
 
-  /** Read either direct stamp, or record an engine-owned object with its exact registered creation realm. */
-  getOrCreatePlatformRecord(platformObjectOrImplInst: unknown): PlatformRecord | undefined {
-    return this.world.getOrCreatePlatformRecord(platformObjectOrImplInst);
-  }
-
   /** Find the accessing realm's existing binding in this world without registering it. */
   getBindingContext(realm: JSRealm): BindingContext<Env> | undefined {
     // Registration enforces one environment contract throughout this binding world.
@@ -292,17 +287,13 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     return result;
   }
 
-  /** Return the stamped instance if the platform object implements the requested interface in this world. */
-  unwrap<T extends object>(
-    platformObject: unknown,
-    implClass: ImplementationClass<T>,
-  ): StampedImplInstance<T> | undefined {
-    const assembled = this.resolveInterface(implClass);
-    const record = getPlatformRecord(platformObject, PlatformRecordSource.Platform);
-    return record?.binding.world === this.world &&
-      record.implements(assembled)
-      ? record.implInst as StampedImplInstance<T>
-      : undefined;
+  /** Unwrap within this world, optionally requiring a particular interface. */
+  unwrap(platformObject: unknown): StampedImplInstance | undefined;
+  unwrap<T extends object>(platformObject: unknown, implClass: ImplementationClass<T>): StampedImplInstance<T> | undefined;
+  unwrap(platformObject: unknown, implClass?: ImplementationClass): StampedImplInstance | undefined {
+    const record = this.getPlatformRecord(platformObject, PlatformRecordSource.Platform);
+    const assembled = implClass && this.resolveInterface(implClass);
+    return record && (!assembled || record.implements(assembled)) ? record.implInst : undefined;
   }
 
   /** Project an implementation through its registered interface, preserving an existing owner. */
@@ -410,7 +401,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   ): Map<string, object> {
     const installed = new Map<string, object>();
     const interfaces = this.assembly.interfaces.inInheritanceOrder((assembled) =>
-      (!assembled.primary.interfaceOverride || assembled.hasInterfaceObject()) && assembled.isExposed(this.realm));
+      assembled.isExposed(this.realm));
 
     for (const assembled of interfaces) {
       const definition = assembled.primary;
@@ -458,12 +449,6 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     implInst: object,
     expectedAssembled: AssembledInterface,
   ): object | null | undefined {
-    const isInstance = expectedAssembled.primary.interfaceOverride?.isInstance;
-    if (isInstance) {
-      if (!isInstance(implInst)) return;
-      this.getOrCreatePlatformRecord(implInst);
-      return implInst;
-    }
     return this.associateImplementationObject(implInst, expectedAssembled)?.project();
   }
 
@@ -547,13 +532,6 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
 
     const prototype = this.getPlatformObjectPrototype(assembled, newTarget);
     const implInst = behavior.steps(values);
-    if (assembled.primary.interfaceOverride) {
-      // Construction supplies the owner even when stock Node cannot recover it later.
-      const record = new PlatformRecord(implInst, assembled, this, implInst);
-      // The engine supplies the instance and its slots. Binding owns newTarget's prototype.
-      Object.setPrototypeOf(implInst, prototype);
-      return record.platformObject!;
-    }
     const platformObject = this.allocatePlatformObject(implInst, assembled, prototype);
     return this.initializePlatformObject(platformObject, assembled, implInst).platformObject!;
   }
@@ -738,8 +716,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   /** Recognize this world's platform objects and values accepted by its proxy declarations. */
   // https://webidl.spec.whatwg.org/#idl-objects
   isPlatformObject(value: unknown): boolean {
-    const record = this.getOrCreatePlatformRecord(value);
-    if (record && record.platformObject === value) return true;
+    if (this.getPlatformRecord(value, PlatformRecordSource.Platform)) return true;
     return this.assembly.proxyObjects.is(value);
   }
 
@@ -748,8 +725,8 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     platformObject: unknown,
     assembled: AssembledInterface,
   ): boolean {
-    const record = this.getOrCreatePlatformRecord(platformObject);
-    return !!record && record.platformObject === platformObject && record.implements(assembled);
+    const record = this.getPlatformRecord(platformObject, PlatformRecordSource.PlatformOrProxy);
+    return !!record && record.implements(assembled);
   }
 
   /** Invoke the actual receiver's prepared security policy in this member's binding. */
@@ -759,7 +736,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     identifier: string,
     type: SecurityCheckType,
   ): void {
-    const record = this.getOrCreatePlatformRecord(platformObject);
+    const record = this.getPlatformRecord(platformObject, PlatformRecordSource.Platform);
     if (record?.platformObject !== platformObject) return;
     this.world.getSecurityCheckBinding(record.assembled)?.(this, record, identifier, type);
   }
@@ -812,6 +789,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   throwTypeError(message: string): never {
     throw new this.realm.TypeError(message);
   }
+
 }
 
 /** Add this binding's result conversion to the realm's implementation Promise constructor. */

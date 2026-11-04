@@ -34,6 +34,7 @@ exports.setPromiseRejectionTracker = (context, tracker) => native.setPromiseReje
 exports.setExceptionReporter = require('./exception-reporting.cjs')(native);
 exports.setWasmAsyncCompletionCallback = native.setWasmAsyncCompletionCallback;
 exports.createWebAssemblyImportCall = require('./wasm-functions.cjs')(native);
+exports.cloneWebAssemblyModule = native.cloneWebAssemblyModule;
 exports.setModifyCodeGenerationFromStringsCallback = native.setModifyCodeGenerationFromStringsCallback;
 exports.setTemporalHostSystemUTCEpochNanosecondsCallback = native.setTemporalHostSystemUTCEpochNanosecondsCallback;
 exports.isPromiseHandled = native.isPromiseHandled;

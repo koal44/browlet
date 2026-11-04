@@ -1,10 +1,10 @@
 import { InternalError } from '../../infra/index';
-import { getCreationRealm, isObject, type JSRealm } from '../../js-engine/index';
+import type { JSRealm } from '../../js-engine/index';
 import { webIDLCommonDefinitions, type Definition } from '../core/index';
 
 import { DefinitionAssembly, type AssembledInterface, type IDLAttribute } from '../assembly/index';
 import {
-  getPlatformRecord, PlatformRecordSource, PlatformRecord, type StampedImplInstance,
+  getPlatformRecord, PlatformRecordSource, type StampedImplInstance, type PlatformRecord,
 } from '../values/index';
 import type { WebIDLEnvironment, WebIDLRealm } from '../environment';
 
@@ -156,7 +156,7 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
   }
 
   /** Find a realm's binding context in this world without registering it. */
-  getBindingContext(realm: Env['realm']): BindingContext<Env> | undefined {
+  getBindingContext(realm: JSRealm): BindingContext<Env> | undefined {
     // Registration checked the environment retained by this realm's binding.
     return this.#realmBindings.get(realm) as BindingContext<Env> | undefined;
   }
@@ -183,34 +183,14 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
     }
   }
 
-  /**
-   * Read either direct stamp, or create a record for a declared engine-owned object with a known owner.
-   * Creation reuses that object as both implementation and platform; it does not allocate a platform object.
-   */
-  getOrCreatePlatformRecord(platformObjectOrImplInst: unknown): PlatformRecord | undefined {
-    const existing = getPlatformRecord(platformObjectOrImplInst, PlatformRecordSource.Stamped);
-    if (existing) return existing.binding.world === (this as unknown as BindingWorld) ? existing : undefined;
-    if (!isObject(platformObjectOrImplInst)) return;
-    const platformObject = platformObjectOrImplInst;
-    const assembled = this.#assembly.interfaces.findForNativeObject(platformObject);
-    if (!assembled) return;
-    // ACCOMMODATION(node-v8-object-realms): Never turn stock Node's prototype or
-    // active-realm guesses into permanent ownership. Native values remain usable.
-    const realm = getCreationRealm(platformObject);
-    const binding = realm && this.getRealmBinding(realm);
-    return binding ? new PlatformRecord(platformObject, assembled, binding, platformObject) : undefined;
-  }
-
   /** Retrieve the implementation paired with a platform object in this world. */
-  unwrap(platformObject: object): StampedImplInstance | undefined {
-    const record = this.getOrCreatePlatformRecord(platformObject);
-    return record?.platformObject === platformObject ? record.implInst : undefined;
+  unwrap(platformObject: unknown): StampedImplInstance | undefined {
+    return this.getPlatformRecord(platformObject, PlatformRecordSource.Platform)?.implInst;
   }
 
-  /** Project an implementation, associating native objects when their creation realm belongs to this world. */
+  /** Project an already-associated implementation in this world. */
   project(implInst: object): object | null | undefined {
-    const record = this.getOrCreatePlatformRecord(implInst);
-    return record?.implInst === implInst ? record.project() : undefined;
+    return this.getPlatformRecord(implInst, PlatformRecordSource.Implementation)?.project();
   }
 
   /** Find the owning realm from an implementation or platform object associated with this world. */
@@ -231,6 +211,6 @@ export type BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> = 
   | 'realm' | 'InternalPromise' | 'DOMException' | 'getEnvironment' | 'getBindingContext'
   | 'install' | 'projectGlobalObject' | 'createPlatformRecord' | 'isInterfaceExposed'
   | 'jsToImpl' | 'implToJS' | 'createCallbackFunction' | 'createFrozenArray' | 'realizeException'
-  | 'construct' | 'resolveArguments' | 'getPlatformRecord' | 'getOrCreatePlatformRecord' | 'associate' | 'project' | 'unwrap'
+  | 'construct' | 'resolveArguments' | 'getPlatformRecord' | 'associate' | 'project' | 'unwrap'
   | 'getPlatformObjectPrototype' | 'createMemberFunction' | 'resolveInterface' | 'performSecurityCheck'
 >;

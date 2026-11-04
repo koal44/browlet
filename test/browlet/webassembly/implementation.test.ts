@@ -1,21 +1,21 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TaskSourceKey } from '../../../src/infra/index';
-import type { JSEnvironment } from '../../../src/js-engine/index';
+
 import { BindingWorld } from '../../../src/web-idl/index';
 import type { WebAssembly as WebAssemblyAPI } from '../../../src/browlet/platform';
-import { WebAssemblyImpl, webAssemblyIDLDefinitions, type WebAssemblyCompileOptions } from '../../../src/browlet/webassembly/index';
+import { WasmImpl, wasmIDLDefinitions, type WasmEnvironment, type WebAssemblyCompileOptions } from '../../../src/browlet/webassembly/index';
 import { TestRealm } from '../../support/web-idl-realm';
 
 // Exercise Web IDL conversion with a standalone realm and controlled host task delivery.
 describe('WebAssembly with a standalone binding', () => {
-  it('converts byte input and reuses native results without Browlet', async () => {
-    const { api, realm } = fixture();
+  it('converts byte input and projects Module results without Browlet', async () => {
+    const { api } = fixture();
     const bytes = new Uint8Array(emptyModule);
     const result = await api.instantiate(new DataView(bytes.buffer), undefined, { builtins: ['unknown'] });
-    expect(result.module).toBeInstanceOf(Reflect.get(realm.WebAssembly, 'Module'));
-    expect(result.instance).toBeInstanceOf(Reflect.get(realm.WebAssembly, 'Instance'));
-    expect(await api.instantiate(result.module)).toBeInstanceOf(Reflect.get(realm.WebAssembly, 'Instance'));
+    expect(result.module).toBeInstanceOf(Reflect.get(api, 'Module'));
+    expect(result.instance).toBeInstanceOf(Reflect.get(api, 'Instance'));
+    expect(await api.instantiate(result.module)).toBeInstanceOf(Reflect.get(api, 'Instance'));
   });
 
   it('converts DataView and iterable options before native compilation', async () => {
@@ -33,7 +33,7 @@ describe('WebAssembly with a standalone binding', () => {
     expect(api.validate(view)).toBe(true);
     const promise = Reflect.apply(Reflect.get(api, 'compile'), null, [view, options]);
     expect(promise).toBeInstanceOf(realm.NativePromise);
-    expect(await promise).toBeInstanceOf(Reflect.get(realm.WebAssembly, 'Module'));
+    expect(await promise).toBeInstanceOf(Reflect.get(api, 'Module'));
     expect(trace).toEqual(['builtins', 'iterator', 'strings']);
   });
 
@@ -74,29 +74,42 @@ describe('WebAssembly with a standalone binding', () => {
 
 describe('WebAssembly implementation', () => {
   it('can validate and compile converted values without invoking Web IDL', async () => {
-    const { env, realm } = fixture();
+    const { env, realm, api } = fixture();
+    const implementation = new WasmImpl(env);
     const bytes = new Uint8Array(emptyModule);
     const options: WebAssemblyCompileOptions = { builtins: [], importedStringConstants: null };
-    expect(WebAssemblyImpl.validate(bytes, options, env)).toBe(true);
-    const result = WebAssemblyImpl.compile(bytes, options, env);
+    expect(implementation.validate(bytes, options, env)).toBe(true);
+    const result = implementation.compile(bytes, options, env);
     expect(result.backing).toBeInstanceOf(realm.NativePromise);
-    expect(await result.backing).toBeInstanceOf(Reflect.get(realm.WebAssembly, 'Module'));
+    expect(await result.backing).toBeInstanceOf(Reflect.get(api, 'Module'));
   });
 });
 
 function fixture() {
   const realm = new TestRealm();
   const tasks: { source: TaskSourceKey; steps: () => void; }[] = [];
-  const world = new BindingWorld<JSEnvironment & { realm: TestRealm; }>(webAssemblyIDLDefinitions, {
+  // This host tests the JS namespace without browser Fetch/Response integration.
+  const definitions = wasmIDLDefinitions;
+  const world = new BindingWorld<WasmEnvironment & { realm: TestRealm; }>(definitions, {
     // This standalone host has no HTML caller environment to capture.
     getIncumbentEnvironment: () => undefined,
   });
   const binding = world.register(realm, (ctx) => ({
     realm, InternalPromise: ctx.InternalPromise,
+    project: (implInst) => ctx.project(implInst.constructor, implInst),
+    unwrap: (platformObject) => ctx.unwrap(platformObject),
     runInParallel: (steps) => { queueMicrotask(steps); },
     queueTask(source, steps) {
       const task = { source, steps };
       tasks.push(task);
+      // This standalone host must deliver the public compilation-resolution task,
+      // as well as allowing the rejection test to deliver its queued task manually.
+      queueMicrotask(() => {
+        const index = tasks.indexOf(task);
+        if (index === -1) return;
+        tasks.splice(index, 1);
+        steps();
+      });
       return { remove() { const index = tasks.indexOf(task); if (index !== -1) tasks.splice(index, 1); } };
     },
   }));

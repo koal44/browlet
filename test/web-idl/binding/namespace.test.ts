@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  arg, defineInterface, defineNamespace, definePartialNamespace, idlType, integer, op, roAttr,
+  arg, atArg, impl, defineInterface, defineNamespace, definePartialNamespace, idlType, integer, op, roAttr,
 } from '../../../src/web-idl/core/index';
 import { DefinitionAssembly } from '../../../src/web-idl/assembly/index';
 import { BindingWorld } from '../../../src/web-idl/binding/world';
@@ -11,44 +11,40 @@ import { getMemberBinding } from '../../support/web-idl-binding';
 import { TestRealm as Realm } from '../../support/web-idl-realm';
 
 describe('Web IDL namespace objects', () => {
-  it('registers declared steps on each realm\'s supplied namespace without replacing native members', () => {
-    type Environment = { realm: Realm; namespace: object; version: string; };
+  it('shares one ordinary implementation between primary and partial members in each realm', () => {
+    type Environment = { realm: Realm; version: string; };
+    let created = 0;
+    class ToolsImpl {
+      version: string;
+      calls = 0;
+      constructor(env: Environment) { this.version = env.version; created++; }
+      double(value: number) { this.calls++; return value * 2; }
+    }
     const namespace = defineNamespace<Environment>({
-      name: 'Tools',
-      exposed: ['Window'],
-      overrideNamespace: (env) => env.namespace,
-      members: [roAttr('version', idlType.DOMString, { overrideGet: ({ relevant: env }) => env.version })],
+      name: 'Tools', exposed: ['Window'],
+      implementation: impl(ToolsImpl, { constructWith: [atArg<Environment>(0, (env) => env)] }),
+      members: [roAttr('version', idlType.DOMString), roAttr('calls', idlType.long)],
     });
     const partial = definePartialNamespace<Environment>({
-      name: 'Tools',
-      exposed: ['Window'],
-      members: [op('double', idlType.long,
-        [arg('value', idlType.long)],
-        {
-          overrideInvoke(_environments, value) {
-            expect(this).toBe(null);
-            return value * 2;
-          },
-        },
-      )],
+      name: 'Tools', exposed: ['Window'],
+      members: [op('twice', idlType.long, [arg('value', idlType.long)], { method: 'double' })],
     });
     const world = new BindingWorld<Environment>([namespace, partial]);
     const namespaces = ['one', 'two'].map((version) => {
       const realm = new Realm();
-      const object = realm.createOrdinaryObject(realm.objectPrototype);
-      const native = realm.evaluate('(function native() {})', 'namespace-native.js');
-      Reflect.set(object, 'native', native);
-      world.register(realm, () => ({ realm, namespace: object, version }));
+      world.register(realm, () => ({ realm, version }));
       const binding = world.getRealmBinding(realm)!;
       const tools = binding.installDefinitions().get('Tools')!;
-      expect(tools).toBe(object);
-      expect(binding.installDefinitions().get('Tools')).toBe(object);
-      expect(Reflect.get(tools, 'native')).toBe(native);
+      expect(binding.installDefinitions().get('Tools')).toBe(tools);
+      expect(Reflect.getPrototypeOf(tools)).toBe(realm.objectPrototype);
       expect(Reflect.get(tools, 'version')).toBe(version);
-      expect(Reflect.apply(Reflect.get(tools, 'double') as CallableFunction, {}, [4.8])).toBe(8);
-      expect(Reflect.getPrototypeOf(requireObject(Reflect.get(tools, 'double')))).toBe(realm.functionPrototype);
+      expect(Reflect.get(tools, 'calls')).toBe(0);
+      expect(Reflect.apply(Reflect.get(tools, 'twice') as CallableFunction, {}, [4.8])).toBe(8);
+      expect(Reflect.get(tools, 'calls')).toBe(1);
+      expect(Reflect.getPrototypeOf(requireObject(Reflect.get(tools, 'twice')))).toBe(realm.functionPrototype);
       return tools;
     });
+    expect(created).toBe(2);
     expect(namespaces[0]).not.toBe(namespaces[1]);
   });
 

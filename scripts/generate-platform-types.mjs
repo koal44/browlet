@@ -16,6 +16,11 @@ const assembly = new DefinitionAssembly([...webIDLCommonDefinitions, ...browletD
 const source = generatePlatformTypes(assembly, {
   // HTML's indexed child properties belong to WindowProxy, not to a Window IDL getter.
   proxyInterfaces: { WindowProxy: { interface: 'Window', indexedGetter: reference('WindowProxy') } },
+  // Wasm §5.10 defines NativeError data properties through ECMAScript, not IDL.
+  // ErrorConstructor retains their call/new signatures without declaring replacement interfaces.
+  namespaceProperties: { WebAssembly: {
+    CompileError: 'ErrorConstructor', LinkError: 'ErrorConstructor', RuntimeError: 'ErrorConstructor',
+  } },
 });
 let previous;
 try {

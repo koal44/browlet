@@ -1,9 +1,29 @@
 #include <node.h>
 #include <node_buffer.h>
 #include "wasm-functions.h"
+#include "vm.h"
 
 namespace node_compat {
 namespace {
+
+void CloneWasmModule(const v8::FunctionCallbackInfo<v8::Value>& args) {
+  auto* isolate = args.GetIsolate();
+  v8::Local<v8::Context> context;
+  if (!GetContext(args, args[1]).ToLocal(&context)) return;
+  if (!args[0]->IsWasmModuleObject()) {
+    isolate->ThrowException(v8::Exception::TypeError(
+        v8::String::NewFromUtf8Literal(isolate, "Expected a WebAssembly.Module")));
+    return;
+  }
+  v8::Context::Scope scope(context);
+  auto compiled = args[0].As<v8::WasmModuleObject>()->GetCompiledModule();
+  v8::Local<v8::WasmModuleObject> clone;
+  // Reuse compiled code and compile options, without consulting author properties
+  // or reapplying compilation policy to an already compiled Module.
+  if (v8::WasmModuleObject::FromCompiledModule(isolate, compiled).ToLocal(&clone)) {
+    args.GetReturnValue().Set(clone);
+  }
+}
 
 void GetWasmModuleBytes(const v8::FunctionCallbackInfo<v8::Value>& args) {
   auto* isolate = args.GetIsolate();
@@ -41,7 +61,13 @@ void CompileWasmImportBridge(const v8::FunctionCallbackInfo<v8::Value>& args) {
 
 }  // namespace
 
-void InitializeWasmFunctions(v8::Local<v8::Object> exports) {
+void InitializeWasmFunctions(v8::Local<v8::Object> exports,
+                             v8::Local<v8::Context> context,
+                             v8::Local<v8::External> vm_data) {
+  v8::Local<v8::Function> clone;
+  if (!v8::Function::New(context, CloneWasmModule, vm_data).ToLocal(&clone) ||
+      exports->Set(context, v8::String::NewFromUtf8Literal(
+          v8::Isolate::GetCurrent(), "cloneWebAssemblyModule"), clone).IsNothing()) return;
   NODE_SET_METHOD(exports, "getWasmModuleBytes", GetWasmModuleBytes);
   NODE_SET_METHOD(exports, "compileWasmImportBridge", CompileWasmImportBridge);
 }

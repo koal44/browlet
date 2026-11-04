@@ -5,7 +5,7 @@ import {
 
 import type { IDLUnionType, UnionInterfaceCandidate } from '../assembly/index';
 import {
-  PlatformRecordSource, IDLAsyncSequence, IDLCallbackFunction, IDLCallbackInterface, IDLDictionary,
+  IDLAsyncSequence, IDLCallbackFunction, IDLCallbackInterface, IDLDictionary,
   CallbackFunctionStamper,
 } from '../values/index';
 
@@ -21,12 +21,10 @@ export class UnionConverter<Type extends IDLUnionType = IDLUnionType> extends Co
     const convertCbInterface = candidates.callbackInterface && this.forType(candidates.callbackInterface).getInputSteps();
     const convertNumber = candidates.numeric && this.forType(candidates.numeric).getInputSteps();
     const convertString = candidates.string && this.forType(candidates.string).getInputSteps();
-    const nativeInterfaces = candidates.interfaces.filter((candidate) =>
-      candidate.kind === 'interface' && candidate.assembled.primary.interfaceOverride);
 
     return (value) => {
       if (isObject(value)) {
-        if (this.binding.isPlatformObject(value) || nativeInterfaces.some((candidate) => this.#implements(candidate, value))) {
+        if (this.binding.isPlatformObject(value)) {
           const interfaceType = candidates.interfaces.find((candidate) =>
             this.#implements(candidate, value));
           if (interfaceType) {
@@ -167,9 +165,7 @@ export class UnionConverter<Type extends IDLUnionType = IDLUnionType> extends Co
 
   #implements(candidate: UnionInterfaceCandidate, value: unknown): boolean {
     if (candidate.kind === 'interface') {
-      const isInstance = candidate.assembled.primary.interfaceOverride?.isInstance;
-      if (isInstance) return isInstance(value);
-      return this.binding.getPlatformRecord(value, PlatformRecordSource.PlatformOrProxy)?.implements(candidate.assembled) ?? false;
+      return this.binding.implements(value, candidate.assembled);
     }
     return candidate.assembled.is(value);
   }

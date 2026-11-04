@@ -94,25 +94,13 @@ The four member overrides (`overrideGet`, `overrideSet`, `overrideConstruct`,
 `overrideInvoke`) receive an `OverrideEnvironments` object first, followed by
 converted arguments. `relevant` belongs to the receiver and `callee` to the invoked
 callable. For constructors, static members and namespace members they are the same.
-`incumbent` is supplied only when the declaration sets `overrideCapturesIncumbent: true`;
-otherwise it is `undefined`, even if argument conversion independently needs capture.
-The flag alone requests entry capture; Binding does not require a corresponding
-override callback. An attribute's flag covers both accessors. For example:
-
-```ts
-{
-  overrideCapturesIncumbent: true,
-  overrideSet({ relevant, callee, incumbent }, value) { /* use converted value */ },
-}
-```
-
-The composition root supplies `BindingWorld`'s `getIncumbentEnvironment(methodEnv)`
-callback. The lookup runs after successful argument conversion and only when
-requested. A missing provider is a composition error; a provider can return
-`undefined` for a direct host call without an incumbent. Location's binding uses
-its existing callee-environment accommodation in that case; postMessage requires
-an incumbent. Capture adds native entry machinery and a host lookup, so leave it
-disabled when the override only needs its relevant or callee environment.
+Overrides request incumbent capture with `overrideCapturesIncumbent: true`.
+Binding captures before conversion and looks it up afterward through the
+composition root's `BindingWorld.getIncumbentEnvironment(methodEnv)` provider.
+The provider may return `undefined` for an unbound host caller. Without the flag,
+the override receives `incumbent: undefined` and avoids the native entry and lookup
+cost. The flag applies to both accessors and is honored independently of whether
+the member has an override. Binding does not inspect override signatures or bodies.
 
 Injected argument resolvers retain their positional contract. For example,
 `atArg(index, (_env, _methodEnv, incumbentEnv) => incumbentEnv)` forwards the caller
@@ -124,7 +112,7 @@ the incumbent position on contextually typed injected argument resolvers. Keep t
 callbacks typed by the declaration contract so the rule can check them.
 
 Binding selects native capture when preparing a callable function. It examines
-the override flag, injected inputs and synchronous callback conversions, including nested dictionaries
+explicit capture flags, injected inputs and synchronous callback conversions, including nested dictionaries
 and containers. `[PutForwards]` carries the requirement through its getter and
 target setter, including aliases, nullable interfaces, inheritance, and forwarding
 chains. Forwarding uses the setter realm's captured ordinary Reflect Get/Set so
@@ -132,10 +120,8 @@ nested exotic access preserves the caller and navigation source.
 Overloads share one entry, so any applicable declaration requiring capture selects
 that factory for the group. Ordinary functions keep the cheaper callable factory.
 An implementation that discovers callbacks inside an opaque `object` argument,
-such as Wasm imports, declares `overrideCapturesIncumbent: true` on its operation or
-constructor. This requests entry capture without inventing a Web IDL callback
-dictionary or an unused injected argument. The implementation still performs
-its own type-directed callback processing.
+such as Wasm imports, declares an injected incumbent and retains it for its own
+type-directed callback processing.
 
 On addon backends, capture precedes conversion and lasts for the complete invocation.
 Native apply traps preserve the original receiver, including null and primitives;
@@ -162,87 +148,48 @@ Member queries also apply the contributing
 fragment's requirements and, for interfaces and namespaces, the including owner's.
 The unrestricted `*` remains independent of the globals declared in the assembly.
 
-Namespace declarations can supply operation `overrideInvoke` and attribute `overrideGet` steps
-without an implementation class. The optional `overrideNamespace(env)` callback
-replaces ordinary namespace allocation. Binding installs the declared members
-on the returned object. WebAssembly supplies its existing realm-owned namespace
-to adapt individual operations while preserving native constructors and objects.
+Namespace declarations can bind an ordinary implementation instance using
+`implementation: impl(...)`. Each realm constructs one instance; primary and
+partial namespace members share it. Binding owns namespace allocation and the
+`[LegacyNamespace]` constructors. Operation `method` metadata names the
+implementation method when overloads select distinct algorithms. Overrides
+remain available for declarations that need them.
 
-Engine-owned interfaces group their binding hooks under `interfaceOverride`:
+WebAssembly uses ordinary Binding: `WasmModuleImpl` retains a private V8
+object, and a distinct platform object receives the generated interface.
+Public static methods unwrap their Module argument and call implementation
+instance methods. Constructor, compilation, and cloning results all go through
+normal projection. Its descriptors undergo ordinary dictionary output conversion.
+The ESM-specific intrinsic parent links are composed by Browlet separately.
 
-```ts
-interfaceOverride: {
-  isInstance: isWebAssemblyModule,
-  getInterfaceObject: (env) => env.realm.WebAssemblyModule,
-}
-```
+Wasm Exception has a separate implementation, but its native backing is also its
+platform object: engine throws can reach author code without a Binding call. The
+[Exception binding](../browlet/integration/web-idl/bindings/wasm-exception.ts) installs
+the generated methods on the native prototype during realm setup. It reuses
+`createOverloadResolver` and the registered implementation steps for construction,
+then attaches the native object to its record. Member entries recognize native
+receivers before calling the generated Web IDL function. There are no general
+native-interface flags, prototype/adoption registries, or record-lookup fallbacks.
+The [WebAssembly migration](../browlet/webassembly/ROADMAP.md#implementationplatform-migration)
+records the stock-Node creation-realm limitation.
 
-`getInterfaceObject` runs during binding installation. Incumbent capture belongs
-to the constructor or operation member because it applies when author code calls
-that member, not when Binding obtains the interface object.
-
-`isInstance(platformObject)` checks whether a supplied value, such as an argument, is
-a genuine WebAssembly.Module, without running author code. It does not select a
-runtime backend; JS Engine supplies the already-selected check. Input/output
-conversion, unions, and overload selection preserve the same object.
-
-Omitting `getInterfaceObject` provides only value conversion; Binding and generated
-types do not manufacture a constructor, including inside a supplied namespace.
-Supplying it returns the engine's existing constructor for declared static operations.
-Binding installs those operations with ordinary argument and return conversion
-and exposes their generated types. Without a
-declared constructor, the supplied constructor and prototype keep their identities.
-
-A declared constructor must supply `overrideConstruct`, returning a genuine native
-instance. Binding puts a Proxy around the supplied constructor to apply ordinary
-argument conversion before selecting `newTarget.prototype` and invoking those
-construction steps. Binding stamps the result with a `PlatformRecord` whose
-implementation and platform identities are both that native object, recording the
-constructor's realm before applying the selected prototype. The original prototype remains
-shared; its `constructor` property points to the adapted constructor. Undeclared
-static members remain native, and constructor name/length follow the declaration.
-The engine constructor captured on the realm remains available to implementation
-steps without recursively invoking the adapter.
-
-WebAssembly uses these facilities for `new Module()`, `new Instance()`, `new Memory()`,
-`new Table()`, `new Global()`, and `Module.customSections()`.
-Instance members, inheritance, partials, and mixins are still unsupported for native
-interfaces. `validateDefinitions()` checks these declaration constraints during
-development; ordinary assembly and construction trust the declared hooks.
-The reviewed native `Instance.exports` getter remains intact. It accepts genuine
-Instances even without a binding record; its generated member type is still a
-[documented dependency](../browlet/webassembly/ROADMAP.md#52-reviewed-instance-constructor-and-exports).
-Memory, Table, and Global likewise retain their native instance members while Binding adapts their constructors.
-Conversion and overload checks use their declared types. Native association
-checks the world's assembled native declarations without an ambient object registry.
-
-Native records bypass ordinary implementation initialization and platform-object
-allocation. Conversion, projection, unwrapping, and serialization explicitly call
-`getOrCreatePlatformRecord()`: an existing stamp keeps its owner; an untracked
-native object gets both stamps when JS Engine can recover its registered creation
-realm exactly. Frozen objects remain usable and acquire no observable properties.
-The native Promise from `compile()` stays untouched; its Module is associated only
-when Binding encounters it. With no addon, stock Node cannot establish that owner
-reliably, so native values created outside our constructor adapter remain usable
-but unassociated. Values from unregistered realms or another world likewise never
-acquire a fabricated or replacement owner in the receiving world.
+The type generator's `namespaceProperties` option describes writable data
+properties defined outside Web IDL. Browlet uses it for the ECMAScript Wasm error
+constructors with `ErrorConstructor` call/new signatures. Compatible method
+overloads differing only by a trailing argument already accepting undefined are
+printed as one optional parameter. Runtime overload resolution and conversion
+remain unchanged; distinct return types or stricter added arguments stay separate.
 
 There is one record type, `PlatformRecord`, and one lookup name:
 `getPlatformRecord(input, PlatformRecordSource)`. The required source selects
 `Implementation`, `Platform`, `PlatformOrProxy`, or `Stamped` (either direct stamp).
-Known-side callers read only that stamp. `getOrCreatePlatformRecord(input)` reads
-either direct stamp before attempting the creation described above. Structured
-serialization uses it because its graph includes author platform objects,
-implementation values supplied by interface serialization steps, and untracked
-engine-owned objects; it does not need a second traversal contract.
-
-The world/context method checks world ownership. `PlatformOrProxy` also follows
-declared proxy receivers, selecting their current target on every call. It does
-not accept implementation-only objects or cache a WindowProxy's changing target.
-The free function in `values/` reads direct stamps without checking a world; its
-type excludes `PlatformOrProxy`, which needs the world's declarations. Neither
-lookup nor `getRealm()` creates a record. Native association remains the explicit
-operation described above; ordinary allocation remains deferred until projection.
+Known-side callers read only that stamp. The world/context method checks world
+ownership; `PlatformOrProxy` also follows a declared proxy's current target on each
+call. The free function in `values/` reads direct stamps without checking a world;
+its type excludes `PlatformOrProxy`, which needs the world's declarations.
+Neither lookup nor `getRealm()` creates an association. Normal construction and
+`associate()` establish implementation records; platform allocation remains deferred
+until projection.
 
 Consumers use the `assembly/`, `converters/`, `values/`, and `binding/realm/` indexes;
 modules within those folders import their siblings directly. Infra also offers
@@ -970,6 +917,9 @@ primary interface; inherited state must be included explicitly. Both directions
 are required by each step type. Opt-in declaration validation checks the matching
 no-argument `Serializable` or `Transferable` marker. A marker without steps can still describe
 unfinished support, such as stream transfer; it does not enable the operation.
+Native WebAssembly Modules are handled explicitly by HTML's structured-data
+traversal: immutable engine slots cannot use the ordinary allocate-then-restore
+hooks. Their `[Serializable]` marker documents that Web API integration.
 `SameAgentCluster` is also declaration metadata, checked only on the exact primary
 interface. Validation requires a single no-argument marker alongside `Serializable`
 or `Transferable`; HTML enforces the restriction during serialization and transfer.
@@ -1018,7 +968,12 @@ the interface is unknown or unexposed in that realm. The implementation keeps it
 class prototype and private state; public subclassing changes the platform prototype, not the
 implementation constructor's `newTarget`.
 
-Creating the record runs inherited implementation initializers before stamping.
+Module deserialization constructs `WasmModuleImpl` around a fresh native allocation
+and calls ordinary `ctx.project(WasmModuleImpl, implementation)`. It does not need a
+native-object overload of `createPlatformRecord()`; that former overload has
+been removed.
+
+Ordinary implementation allocation runs inherited initializers before stamping.
 Failed initialization leaves the implementation unstamped and can be retried.
 Implementation dependencies such as EventTarget's environment are constructor
 arguments, supplied by construction declarations or direct callers.
@@ -1244,6 +1199,15 @@ it does not add an IDL getter, iterator, or constructor to the forwarded interfa
 An optional `exposure` selects global names,
 secure-context status, and isolation. By default the output includes conditional
 facilities; types do not guarantee their availability in every realm.
+
+`[LegacyNamespace]` groups interface and constructor types in an exported TypeScript
+namespace, for example `Platform.WebAssembly.Exception` and
+`Platform.WebAssembly.ExceptionConstructor`. That namespace merges with the
+interface describing the runtime namespace object; it exports no runtime value.
+References use qualified names, including across inheritance and dictionary
+members. Flat aliases are not retained. Dictionaries, enums, and typedefs keep
+their declared module-level names because they have no `[LegacyNamespace]`
+ownership; generation does not infer ownership from who references a type.
 
 Run `npm run generate:types` after declaration changes. The checked-in
 [`platform.d.ts`](../browlet/platform.d.ts) is shipped through `browlet/platform`;

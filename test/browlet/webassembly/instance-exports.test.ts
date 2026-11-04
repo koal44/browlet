@@ -116,15 +116,53 @@ describe('WebAssembly Instance exports', () => {
     }, globalModule)).toEqual({ frozen: true, same: true, value: 42 });
   });
 
-  it('accepts an engine Instance from outside Browlet\'s registered realms', async () => {
+  it('rejects a raw Node Instance at the browser getter boundary', async () => {
     const browser = fixture();
     const instance = new WebAssembly.Instance(new WebAssembly.Module(new Uint8Array(emptyModule)));
     Reflect.set(browser.window, 'externalInstance', instance);
     Reflect.set(browser.window, 'externalExports', instance.exports);
     expect(await browser.evaluate(() => {
       const getter = Object.getOwnPropertyDescriptor(WebAssembly.Instance.prototype, 'exports')!.get!;
-      return Reflect.apply(getter, Reflect.get(globalThis, 'externalInstance'), []) === Reflect.get(globalThis, 'externalExports');
+      try { Reflect.apply(getter, Reflect.get(globalThis, 'externalInstance'), []); }
+      catch (error) { return error instanceof TypeError; }
+      return false;
     })).toBe(true);
+  });
+
+  // §10's multiple-table/multiple-memory features must also survive Browlet's
+  // function-import adapter: interleave non-function imports with a callback.
+  it.each(['constructor', 'module', 'bytes'] as const)('retains distinct memories and tables around a host callback (%s)', async (path) => {
+    const browser = fixture();
+    expect(await browser.evaluate(async ({ source, path }) => {
+      const memoryA = new WebAssembly.Memory({ initial: 1, maximum: 3 });
+      const memoryB = new WebAssembly.Memory({ initial: 2, maximum: 3 });
+      const tableA = new WebAssembly.Table({ element: 'externref', initial: 1 });
+      const tableB = new WebAssembly.Table({ element: 'externref', initial: 1 });
+      const first = {}, second = {}, replacement = {};
+      tableA.set(0, first);
+      tableB.set(0, second);
+      let calls = 0;
+      const imports = { env: { memoryA, tableA, callback() { calls++; return 7; }, memoryB, tableB } };
+      const bytes = new Uint8Array(source);
+      const instance = path === 'bytes' ? (await WebAssembly.instantiate(bytes, imports)).instance :
+        path === 'module' ? await WebAssembly.instantiate(new WebAssembly.Module(bytes), imports) :
+          new WebAssembly.Instance(new WebAssembly.Module(bytes), imports);
+      const exports = instance.exports;
+      const probeA = exports.probeA as () => [number, unknown, number];
+      const probeB = exports.probeB as () => [number, unknown, number];
+      const beforeA = probeA(), beforeB = probeB();
+      memoryB.grow(1);
+      tableB.set(0, replacement);
+      const afterA = probeA(), afterB = probeB();
+      return {
+        identities: exports.memoryA === memoryA && exports.memoryB === memoryB && exports.tableA === tableA && exports.tableB === tableB,
+        pages: [beforeA[0], beforeB[0], afterA[0], afterB[0]],
+        references: [beforeA[1] === first, beforeB[1] === second, afterA[1] === first, afterB[1] === replacement],
+        callbacks: [beforeA[2], beforeB[2], afterA[2], afterB[2]], calls,
+      };
+    }, { source: multipleStorageModule, path })).toEqual({
+      identities: true, pages: [1, 2, 1, 3], references: [true, true, true, true], callbacks: [7, 7, 7, 7], calls: 4,
+    });
   });
 });
 
@@ -154,3 +192,33 @@ const globalModule = [
   ...emptyModule, 6, 6, 1, 127, 1, 65, 1, 11,
   7, 11, 1, 7, 99, 111, 117, 110, 116, 101, 114, 3, 0,
 ];
+
+// Two (memory 1 3) and two (table 1 externref) imports, with a () -> i32
+// callback between them. probeA/B return memory.size, table.get(0), and callback().
+// Every section and function body in this closed fixture fits a one-byte length.
+const multipleStorageImports = [5,
+  ...field('env'), ...field('memoryA'), 2, 1, 1, 3,
+  ...field('env'), ...field('tableA'), 1, 0x6f, 0, 1,
+  ...field('env'), ...field('callback'), 0, 0,
+  ...field('env'), ...field('memoryB'), 2, 1, 1, 3,
+  ...field('env'), ...field('tableB'), 1, 0x6f, 0, 1,
+];
+const multipleStorageExports = [6,
+  ...field('memoryA'), 2, 0, ...field('memoryB'), 2, 1,
+  ...field('tableA'), 1, 0, ...field('tableB'), 1, 1,
+  ...field('probeA'), 0, 1, ...field('probeB'), 0, 2,
+];
+const multipleStorageCode = [2, ...[0, 1].flatMap((index) => {
+  const body = [0, 0x3f, index, 0x41, 0, 0x25, index, 0x10, 0, 0x0b];
+  return [body.length, ...body];
+})];
+const multipleStorageModule = [
+  ...emptyModule,
+  1, 11, 2, 0x60, 0, 1, 0x7f, 0x60, 0, 3, 0x7f, 0x6f, 0x7f,
+  2, multipleStorageImports.length, ...multipleStorageImports,
+  3, 3, 2, 1, 1,
+  7, multipleStorageExports.length, ...multipleStorageExports,
+  10, multipleStorageCode.length, ...multipleStorageCode,
+];
+
+function field(value: string): number[] { return [value.length, ...Buffer.from(value)]; }

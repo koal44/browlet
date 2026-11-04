@@ -113,7 +113,7 @@ if (isStampedPlatformObject(plain)) {
 }
 // @ts-expect-error HTML callbacks cannot be installed on the minimal host.
 world.register(minimalRealm, () => ({ ...env, realm: minimalRealm }));
-// @ts-expect-error This world's realm lookup requires the same host type as registration.
+// Lookup accepts any realm; only registration establishes this world's host contract.
 world.getBindingContext(minimalRealm);
 // @ts-expect-error A world of arbitrary Web IDL realms cannot run HTML callbacks.
 new BindingWorld<WebIDLEnvironment>([definition]);

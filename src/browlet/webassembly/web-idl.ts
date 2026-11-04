@@ -1,18 +1,24 @@
 import {
-  webAssemblyCompileOptionsIDL, webAssemblyIDL, webAssemblyModuleIDL,
-  webAssemblyInstanceIDL, webAssemblyTagIDL, webAssemblyInstantiatedSourceIDL,
-  webAssemblyAddressTypeIDL, webAssemblyAddressValueIDL,
-  webAssemblyMemoryIDL, webAssemblyMemoryDescriptorIDL, webAssemblySharedMemoryDescriptorIDL,
-  webAssemblyTableIDL, webAssemblyTableKindIDL, webAssemblyTableDescriptorIDL,
-  webAssemblyGlobalIDL, webAssemblyValueTypeIDL, webAssemblyGlobalDescriptorIDL,
+  wasmCompileOptionsIDL, wasmIDL,
+  wasmInstanceIDL, wasmTagIDL, wasmInstantiatedSourceIDL,
+  wasmAddressTypeIDL, wasmAddressValueIDL,
+  wasmMemoryIDL, wasmMemoryDescriptorIDL, wasmSharedMemoryDescriptorIDL,
+  wasmTableIDL, wasmTableKindIDL, wasmTableDescriptorIDL,
+  wasmGlobalIDL, wasmValueTypeIDL, wasmGlobalDescriptorIDL, wasmTagTypeIDL,
+  wasmExceptionIDL, wasmExceptionOptionsIDL,
 } from './webassembly';
+import {
+  wasmModuleIDL, wasmImportExportKindIDL, wasmModuleExportDescriptorIDL, wasmModuleImportDescriptorIDL,
+} from './module';
 
 /** WebAssembly namespace and its browser-boundary argument declarations. */
-export const webAssemblyIDLDefinitions = [
-  webAssemblyModuleIDL, webAssemblyInstanceIDL, webAssemblyMemoryIDL, webAssemblyTableIDL, webAssemblyGlobalIDL, webAssemblyTagIDL,
-  webAssemblyAddressTypeIDL, webAssemblyAddressValueIDL,
-  webAssemblyMemoryDescriptorIDL, webAssemblySharedMemoryDescriptorIDL,
-  webAssemblyTableKindIDL, webAssemblyTableDescriptorIDL,
-  webAssemblyValueTypeIDL, webAssemblyGlobalDescriptorIDL,
-  webAssemblyCompileOptionsIDL, webAssemblyInstantiatedSourceIDL, webAssemblyIDL,
+export const wasmIDLDefinitions = [
+  wasmModuleIDL, wasmInstanceIDL, wasmMemoryIDL, wasmTableIDL, wasmGlobalIDL, wasmTagIDL,
+  wasmExceptionIDL, wasmExceptionOptionsIDL,
+  wasmImportExportKindIDL, wasmModuleExportDescriptorIDL, wasmModuleImportDescriptorIDL,
+  wasmAddressTypeIDL, wasmAddressValueIDL,
+  wasmMemoryDescriptorIDL, wasmSharedMemoryDescriptorIDL,
+  wasmTableKindIDL, wasmTableDescriptorIDL,
+  wasmValueTypeIDL, wasmGlobalDescriptorIDL, wasmTagTypeIDL,
+  wasmCompileOptionsIDL, wasmInstantiatedSourceIDL, wasmIDL,
 ];

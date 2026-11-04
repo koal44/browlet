@@ -33,6 +33,8 @@ export type EndingType = "transparent" | "native";
 
 export type PermissionState = "granted" | "denied" | "prompt";
 
+export type ImportExportKind = "function" | "table" | "memory" | "global" | "tag";
+
 export type AddressType = "i32" | "i64";
 
 export type TableKind = "externref" | "anyfunc";
@@ -586,6 +588,21 @@ export interface StorageEventInit {
   url?: string;
 }
 
+export interface ExceptionOptions {
+  traceStack?: boolean;
+}
+
+export interface ModuleExportDescriptor {
+  kind: ImportExportKind;
+  name: string;
+}
+
+export interface ModuleImportDescriptor {
+  kind: ImportExportKind;
+  module: string;
+  name: string;
+}
+
 export interface MemoryDescriptor {
   address?: AddressType;
   initial: any;
@@ -605,14 +622,18 @@ export interface GlobalDescriptor {
   value: ValueType;
 }
 
+export interface TagType {
+  parameters: Iterable<ValueType>;
+}
+
 export interface WebAssemblyCompileOptions {
   builtins?: Iterable<string>;
   importedStringConstants?: string | null;
 }
 
 export interface WebAssemblyInstantiatedSource {
-  instance: Instance;
-  module: Module;
+  instance: WebAssembly.Instance;
+  module: WebAssembly.Module;
 }
 
 export interface ProgressEventInit {
@@ -4347,61 +4368,6 @@ export interface StorageEventConstructor extends Ctor<EventConstructor> {
   new (type: string, eventInitDict?: StorageEventInit): StorageEvent;
 }
 
-export interface Module {
-
-}
-
-export interface ModuleConstructor {
-  readonly prototype: Module;
-  [Symbol.hasInstance](value: unknown): value is Module;
-  new (bytes: ArrayBuffer | SharedArrayBuffer | Int8Array<ArrayBufferLike> | Int16Array<ArrayBufferLike> | Int32Array<ArrayBufferLike> | Uint8Array<ArrayBufferLike> | Uint16Array<ArrayBufferLike> | Uint32Array<ArrayBufferLike> | Uint8ClampedArray<ArrayBufferLike> | BigInt64Array<ArrayBufferLike> | BigUint64Array<ArrayBufferLike> | Float16Array<ArrayBufferLike> | Float32Array<ArrayBufferLike> | Float64Array<ArrayBufferLike> | DataView<ArrayBufferLike>, options?: WebAssemblyCompileOptions): Module;
-  customSections(moduleObject: Module, sectionName: string): Array<ArrayBuffer>;
-}
-
-export interface Instance {
-
-}
-
-export interface InstanceConstructor {
-  readonly prototype: Instance;
-  [Symbol.hasInstance](value: unknown): value is Instance;
-  new (module: Module, importObject?: object): Instance;
-}
-
-export interface Memory {
-
-}
-
-export interface MemoryConstructor {
-  readonly prototype: Memory;
-  [Symbol.hasInstance](value: unknown): value is Memory;
-  new (descriptor: MemoryDescriptor): Memory;
-}
-
-export interface Table {
-
-}
-
-export interface TableConstructor {
-  readonly prototype: Table;
-  [Symbol.hasInstance](value: unknown): value is Table;
-  new (descriptor: TableDescriptor, value?: any): Table;
-}
-
-export interface Global {
-
-}
-
-export interface GlobalConstructor {
-  readonly prototype: Global;
-  [Symbol.hasInstance](value: unknown): value is Global;
-  new (descriptor: GlobalDescriptor, v?: any): Global;
-}
-
-export interface Tag {
-
-}
-
 export interface FileReader extends EventTarget {
   readAsArrayBuffer(blob: Blob): void;
   readAsBinaryString(blob: Blob): void;
@@ -4660,15 +4626,104 @@ export interface TrustedTypePolicyFactoryConstructor {
 
 export interface WebAssembly {
   validate(bytes: ArrayBuffer | SharedArrayBuffer | Int8Array<ArrayBufferLike> | Int16Array<ArrayBufferLike> | Int32Array<ArrayBufferLike> | Uint8Array<ArrayBufferLike> | Uint16Array<ArrayBufferLike> | Uint32Array<ArrayBufferLike> | Uint8ClampedArray<ArrayBufferLike> | BigInt64Array<ArrayBufferLike> | BigUint64Array<ArrayBufferLike> | Float16Array<ArrayBufferLike> | Float32Array<ArrayBufferLike> | Float64Array<ArrayBufferLike> | DataView<ArrayBufferLike>, options?: WebAssemblyCompileOptions): boolean;
-  compile(bytes: ArrayBuffer | SharedArrayBuffer | Int8Array<ArrayBufferLike> | Int16Array<ArrayBufferLike> | Int32Array<ArrayBufferLike> | Uint8Array<ArrayBufferLike> | Uint16Array<ArrayBufferLike> | Uint32Array<ArrayBufferLike> | Uint8ClampedArray<ArrayBufferLike> | BigInt64Array<ArrayBufferLike> | BigUint64Array<ArrayBufferLike> | Float16Array<ArrayBufferLike> | Float32Array<ArrayBufferLike> | Float64Array<ArrayBufferLike> | DataView<ArrayBufferLike>, options?: WebAssemblyCompileOptions): Promise<Module>;
+  compile(bytes: ArrayBuffer | SharedArrayBuffer | Int8Array<ArrayBufferLike> | Int16Array<ArrayBufferLike> | Int32Array<ArrayBufferLike> | Uint8Array<ArrayBufferLike> | Uint16Array<ArrayBufferLike> | Uint32Array<ArrayBufferLike> | Uint8ClampedArray<ArrayBufferLike> | BigInt64Array<ArrayBufferLike> | BigUint64Array<ArrayBufferLike> | Float16Array<ArrayBufferLike> | Float32Array<ArrayBufferLike> | Float64Array<ArrayBufferLike> | DataView<ArrayBufferLike>, options?: WebAssemblyCompileOptions): Promise<WebAssembly.Module>;
   instantiate(bytes: ArrayBuffer | SharedArrayBuffer | Int8Array<ArrayBufferLike> | Int16Array<ArrayBufferLike> | Int32Array<ArrayBufferLike> | Uint8Array<ArrayBufferLike> | Uint16Array<ArrayBufferLike> | Uint32Array<ArrayBufferLike> | Uint8ClampedArray<ArrayBufferLike> | BigInt64Array<ArrayBufferLike> | BigUint64Array<ArrayBufferLike> | Float16Array<ArrayBufferLike> | Float32Array<ArrayBufferLike> | Float64Array<ArrayBufferLike> | DataView<ArrayBufferLike>, importObject?: object, options?: WebAssemblyCompileOptions): Promise<WebAssemblyInstantiatedSourceResult>;
-  instantiate(moduleObject: Module, importObject?: object): Promise<Instance>;
-  readonly JSTag: Tag;
-  Module: ModuleConstructor;
-  Instance: InstanceConstructor;
-  Memory: MemoryConstructor;
-  Table: TableConstructor;
-  Global: GlobalConstructor;
+  instantiate(moduleObject: WebAssembly.Module, importObject?: object): Promise<WebAssembly.Instance>;
+  readonly JSTag: WebAssembly.Tag;
+  Module: WebAssembly.ModuleConstructor;
+  Instance: WebAssembly.InstanceConstructor;
+  Memory: WebAssembly.MemoryConstructor;
+  Table: WebAssembly.TableConstructor;
+  Global: WebAssembly.GlobalConstructor;
+  Tag: WebAssembly.TagConstructor;
+  Exception: WebAssembly.ExceptionConstructor;
+  CompileError: ErrorConstructor;
+  LinkError: ErrorConstructor;
+  RuntimeError: ErrorConstructor;
+}
+
+export namespace WebAssembly {
+  export interface Module {
+
+  }
+
+  export interface ModuleConstructor {
+    readonly prototype: WebAssembly.Module;
+    [Symbol.hasInstance](value: unknown): value is WebAssembly.Module;
+    new (bytes: ArrayBuffer | SharedArrayBuffer | Int8Array<ArrayBufferLike> | Int16Array<ArrayBufferLike> | Int32Array<ArrayBufferLike> | Uint8Array<ArrayBufferLike> | Uint16Array<ArrayBufferLike> | Uint32Array<ArrayBufferLike> | Uint8ClampedArray<ArrayBufferLike> | BigInt64Array<ArrayBufferLike> | BigUint64Array<ArrayBufferLike> | Float16Array<ArrayBufferLike> | Float32Array<ArrayBufferLike> | Float64Array<ArrayBufferLike> | DataView<ArrayBufferLike>, options?: WebAssemblyCompileOptions): WebAssembly.Module;
+    exports(moduleObject: WebAssembly.Module): Array<ModuleExportDescriptorResult>;
+    imports(moduleObject: WebAssembly.Module): Array<ModuleImportDescriptorResult>;
+    customSections(moduleObject: WebAssembly.Module, sectionName: string): Array<ArrayBuffer>;
+  }
+
+  export interface Instance {
+    readonly exports: object;
+  }
+
+  export interface InstanceConstructor {
+    readonly prototype: WebAssembly.Instance;
+    [Symbol.hasInstance](value: unknown): value is WebAssembly.Instance;
+    new (module: WebAssembly.Module, importObject?: object): WebAssembly.Instance;
+  }
+
+  export interface Memory {
+    grow(delta: any): any;
+    toFixedLengthBuffer(): ArrayBuffer | SharedArrayBuffer;
+    toResizableBuffer(): ArrayBuffer | SharedArrayBuffer;
+    readonly buffer: ArrayBuffer | SharedArrayBuffer;
+  }
+
+  export interface MemoryConstructor {
+    readonly prototype: WebAssembly.Memory;
+    [Symbol.hasInstance](value: unknown): value is WebAssembly.Memory;
+    new (descriptor: MemoryDescriptor): WebAssembly.Memory;
+  }
+
+  export interface Table {
+    grow(delta: any, value?: any): any;
+    get(index: any): any;
+    set(index: any, value?: any): void;
+    readonly length: any;
+  }
+
+  export interface TableConstructor {
+    readonly prototype: WebAssembly.Table;
+    [Symbol.hasInstance](value: unknown): value is WebAssembly.Table;
+    new (descriptor: TableDescriptor, value?: any): WebAssembly.Table;
+  }
+
+  export interface Global {
+    valueOf(): any;
+    value: any;
+  }
+
+  export interface GlobalConstructor {
+    readonly prototype: WebAssembly.Global;
+    [Symbol.hasInstance](value: unknown): value is WebAssembly.Global;
+    new (descriptor: GlobalDescriptor, v?: any): WebAssembly.Global;
+  }
+
+  export interface Tag {
+
+  }
+
+  export interface TagConstructor {
+    readonly prototype: WebAssembly.Tag;
+    [Symbol.hasInstance](value: unknown): value is WebAssembly.Tag;
+    new (type: TagType): WebAssembly.Tag;
+  }
+
+  export interface Exception {
+    getArg(exceptionTag: WebAssembly.Tag, index: number): any;
+    is(exceptionTag: WebAssembly.Tag): boolean;
+    readonly stack: string | undefined;
+  }
+
+  export interface ExceptionConstructor {
+    readonly prototype: WebAssembly.Exception;
+    [Symbol.hasInstance](value: unknown): value is WebAssembly.Exception;
+    new (exceptionTag: WebAssembly.Tag, payload: Iterable<any>, options?: ExceptionOptions): WebAssembly.Exception;
+  }
 }
 
 export interface NavigationResultResult {
@@ -4692,6 +4747,17 @@ export interface StorageEstimateResult {
 }
 
 export interface WebAssemblyInstantiatedSourceResult {
-  instance: Instance;
-  module: Module;
+  instance: WebAssembly.Instance;
+  module: WebAssembly.Module;
+}
+
+export interface ModuleExportDescriptorResult {
+  kind: ImportExportKind;
+  name: string;
+}
+
+export interface ModuleImportDescriptorResult {
+  kind: ImportExportKind;
+  module: string;
+  name: string;
 }

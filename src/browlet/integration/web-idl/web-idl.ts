@@ -9,7 +9,7 @@ import { fetchIDLDefinitions } from '../../../fetch/index';
 import { styleletIDLDefinitions } from '../../../stylelet/index';
 
 import { domHighResTimeStampIDL, epochTimeStampIDL } from '../../timing/index';
-import { webAssemblyIDLDefinitions } from '../../webassembly/index';
+import { wasmIDLDefinitions } from '../../webassembly/index';
 import {
   errorEventIDL, errorEventInitIDL, promiseRejectionEventIDL, promiseRejectionEventInitIDL,
 } from '../../dom/events/index';
@@ -147,7 +147,7 @@ export const browletDefinitions = [
   permissionStatusIDL,
   ...storageIDLDefinitions,
   ...webStorageIDLDefinitions,
-  ...webAssemblyIDLDefinitions,
+  ...wasmIDLDefinitions,
   fileReaderIDL,
   objectURLIDL,
   ...xhrIDLDefinitions,

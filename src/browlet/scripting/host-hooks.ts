@@ -3,7 +3,7 @@ import { setHostHooks, type JSJobCallback, type JSJobRegistration, type JSFuncti
 
 import type { BrowletEnvironment } from '../environment/index';
 
-import { jsEngineTaskSource } from './tasks';
+import { jsEngineTaskSource, taskSources } from './tasks';
 import { JSExecutionContext } from './execution-context';
 import { BrowletRealm } from './realm';
 import { JSScriptOrModule } from './script';
@@ -69,12 +69,12 @@ export function installRealmHostHooks(
   // WebAssembly JS API §5 returns asynchronous compilation/instantiation through
   // a task. Resolve there: even looking up a Module's then can run author code.
   // Official addon queues need this handoff independently of custom job hooks.
-  env.realm.setWasmAsyncCompletionCallback((complete) => {
+  env.realm.setWasmAsyncCompletionCallback((complete, source) => {
     // Destruction already removed the Document's tasks; do not retain a late
     // completion in a queue whose Document can never become active again.
     const document = env.realm.getAssociatedDocument();
     if (document !== null && document.browsingContext === null) return;
-    env.realm.queueGlobalTask(jsEngineTaskSource, () => {
+    env.realm.queueGlobalTask(taskSources[source], () => {
       if (!env.canRunScript()) return;
       const loop = env.responsibleEventLoop;
       loop.prepareToRunScript(env);

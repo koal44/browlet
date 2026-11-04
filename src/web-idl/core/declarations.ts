@@ -33,8 +33,6 @@ export type PrimaryInterfaceDefinition<Env = unknown, Impl extends object = obje
   // Project metadata: implementation identity, construction dependencies, and projection hooks.
   /** One or more implementation classes, with their construction and projection hooks. */
   implementation?: InterfaceImplementation<Env, Impl> | InterfaceImplementation<Env, Impl>[];
-  /** Use engine-provided instances and, optionally, its interface object instead of ordinary implementation binding. */
-  interfaceOverride?: InterfaceOverride<Env>;
   /** Select HTMLAllCollection's native identity and call behavior, using its declared `item` operation. */
   documentAll?: true;
 
@@ -44,18 +42,6 @@ export type PrimaryInterfaceDefinition<Env = unknown, Impl extends object = obje
   namespaceURI?: string;
   /** Element local names exposing this interface; the host may construct more specific implementations. */
   localNames?: string[];
-};
-
-/** Binding overrides for an interface whose instances are supplied by the engine. */
-export type InterfaceOverride<Env = unknown> = {
-  /** Recognize a supplied platform object without inspecting author properties or running author code. */
-  isInstance: (platformObject: unknown) => boolean;
-  /**
-   * Supply the existing constructor and its prototype at binding installation;
-   * omit to provide only instance conversion. Invocation and incumbent capture
-   * belong to the constructor member's overrideConstruct and overrideCapturesIncumbent.
-   */
-  getInterfaceObject?: (env: Env) => object;
 };
 
 /** One concrete implementation of an interface, with its construction dependencies and hooks. */
@@ -231,12 +217,8 @@ export type NamespaceDefinition<Env = unknown> = {
   exposed?: Exposed;
   /** Extended attributes applying to this namespace. */
   extendedAttributes?: ExtendedAttribute[];
-
-  /**
-   * Supply the namespace object during binding installation; Binding installs its declared members.
-   * Later calls capture an incumbent only when their member declaration or argument types require it.
-   */
-  overrideNamespace?: (env: Env) => object;
+  /** One implementation instance per realm, shared by the primary and partial namespaces. */
+  implementation?: InterfaceImplementation<Env>;
 };
 
 /** Declare a namespace object and its members. */

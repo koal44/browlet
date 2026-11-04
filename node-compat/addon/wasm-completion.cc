@@ -70,11 +70,12 @@ void Dispatch(Isolate* isolate, Local<Context> context,
   auto data = Array::New(isolate, values, 3);
   auto complete = Function::New(context, Complete, data, 0,
       ConstructorBehavior::kThrow).ToLocalChecked();
-  Local<Value> arguments[] = {complete};
+  // Identify the operation before resolving it; resolution can run author then getters.
+  Local<Value> arguments[] = {complete, resolver->GetPromise()};
   auto callback = scheduler.As<Function>();
   TryCatch caught(isolate);
   if (callback->Call(callback->GetCreationContext().ToLocalChecked(),
-                     Undefined(isolate), 1, arguments).IsEmpty()) {
+                     Undefined(isolate), 2, arguments).IsEmpty()) {
     if (caught.HasTerminated()) caught.ReThrow();
     else node::FatalException(isolate, caught);
   }

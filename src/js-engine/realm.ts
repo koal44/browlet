@@ -1,5 +1,6 @@
 import { Stamper } from '../infra/stamper';
 import { InternalPromise } from '../infra/promises';
+import type { TaskSourceKey } from '../infra/tasks';
 import { InternalError } from '../infra/internal-error';
 import { convertJSONDerivedValueToInfra, type JSONValue, type InfraValue } from '../infra/json';
 
@@ -9,16 +10,17 @@ import {
   type ByteSequence, type JSBufferView, type JSBufferViewName,
 } from './buffers';
 import { isObject } from './abstract-operations';
-import type { JSWebAssemblyModule, JSWebAssemblyTag } from './built-in-primitives';
+import type { JSWasmInstance, JSWasmModule, JSWasmTag } from './built-in-primitives';
 import { addon, isAddonContextHandle } from './node-addons';
 import {
-  compileModule, createDefaultExportModule, moduleRequests, linkModule, evaluateModule, moduleNamespace,
+  compileModule, compileWebAssemblyModule, createDefaultExportModule, moduleRequests, linkModule, evaluateModule, moduleNamespace,
   type CompiledModule, type ImportModuleDynamically, type ModuleCompilationOptions, type ModuleRequest,
+  type WebAssemblyModule, type WasmInstanceFactory,
 } from './modules';
 import {
-  associateContext, associateGlobalRealm, associateObjectRealm, cloneSharedArrayBuffer, compileFunction, compileScript,
+  associateContext, associateGlobalRealm, associateObjectRealm, cloneSharedArrayBuffer, cloneWebAssemblyModule, compileFunction, compileScript,
   createCollectionIterator, createContext, createExoticObject, createFunctionWithIncumbent, createMicrotaskQueue,
-  getContextGlobalAllocation, getContextGlobalProxy,
+  createWebAssemblyResponse, getContextGlobalAllocation, getContextGlobalProxy, isNodeWebAssemblyCompileError,
   makePrototypeImmutable, observePromise, runInContext, runScript, runWithActiveRealm,
   setGlobalAccess, setGlobalObject, setPropertyDelegate, type JSMicrotaskQueue, type VMContext,
 } from './runtime';
@@ -105,6 +107,8 @@ export class JSRealm {
   WebAssembly;
   /** Original WebAssembly.CompileError constructor in this realm. */
   WebAssemblyCompileError;
+  /** Original WebAssembly.Exception constructor, retained when Binding converts its payload and options. */
+  WebAssemblyException;
   /** Original WebAssembly.Global constructor, retained when Binding adapts its descriptor. */
   WebAssemblyGlobal;
   /** Original WebAssembly.Instance constructor, retained when Binding adapts construction. */
@@ -115,6 +119,8 @@ export class JSRealm {
   WebAssemblyModule;
   /** Original WebAssembly.Table constructor, retained when Binding adapts its descriptor. */
   WebAssemblyTable;
+  /** Original WebAssembly.Tag constructor, retained when Binding converts its parameter sequence. */
+  WebAssemblyTag;
   /** Retained native JSTag. V8 supplies one per context, although the draft makes it Agent-wide. */
   webAssemblyJSTag;
 
@@ -124,16 +130,42 @@ export class JSRealm {
   webAssemblyValidate;
   /** Original WebAssembly.compile, captured before its browser binding is installed. */
   webAssemblyCompile;
+  /** Original WebAssembly.compileStreaming, retained for Node's source-URL-aware compiler. */
+  webAssemblyCompileStreaming;
   /** Original WebAssembly.instantiate, captured before its browser binding is installed. */
   webAssemblyInstantiate;
   /** Original WebAssembly.Module.customSections, receiving a converted Module and section name. */
   webAssemblyModuleCustomSections;
+  /** Original Module.exports, used by the private Module implementation. */
+  webAssemblyModuleExports;
   /** Native Memory buffer getter, captured before author replacement, for constructor-time initialization. */
   webAssemblyMemoryBuffer;
   /** Native Table length getter, captured before author replacement. */
   webAssemblyTableLength;
   /** Native Table growth method; zero growth can validate an empty table's initial value. */
   webAssemblyTableGrow;
+  /** Captured native Wasm operation, retained independently of the public binding. */
+  webAssemblyInstanceExports;
+  /** Captured native Wasm operation, retained independently of the public binding. */
+  webAssemblyMemoryGrow;
+  /** Captured native Wasm operation, retained independently of the public binding. */
+  webAssemblyMemoryToFixedLengthBuffer;
+  /** Captured native Wasm operation, retained independently of the public binding. */
+  webAssemblyMemoryToResizableBuffer;
+  /** Captured native Wasm operation, retained independently of the public binding. */
+  webAssemblyTableGet;
+  /** Captured native Wasm operation, retained independently of the public binding. */
+  webAssemblyTableSet;
+  /** Captured native Wasm operation, retained independently of the public binding. */
+  webAssemblyGlobalValue;
+  /** Captured native Wasm operation, retained independently of the public binding. */
+  webAssemblyGlobalSetValue;
+  /** Native Exception.getArg; Binding unwraps the public Tag before invocation. */
+  webAssemblyExceptionGetArg;
+  /** Native Exception.is; compares the exception with an unwrapped native Tag. */
+  webAssemblyExceptionIs;
+  /** Captured native Exception stack getter, independent of the public IDL surface. */
+  webAssemblyExceptionStack;
   /** Captured ArrayBuffer.prototype.transfer method. */
   arrayBufferTransfer;
   /** Captured Array.prototype.entries method. */
@@ -205,6 +237,10 @@ export class JSRealm {
   /** Recent evaluation code, scoped to this realm's fixed import loader. */
   #evaluations = new Map<string, { filename: string; lineOffset: number; code: CompiledScript; }>();
   #fallbackIteratorNext: Partial<Record<CollectionIteratorKind, JSFunction>> = {};
+  /** Task source selected for each outstanding native compilation. */
+  #wasmCompletionSources = new WeakMap<Promise<unknown>, TaskSourceKey>();
+  /** V8 can report a compilation failure before returning its Promise. */
+  #wasmCompilationSource: TaskSourceKey = 'engine';
 
   /**
    * Create a context on the supplied microtask queue and capture its built-ins.
@@ -274,19 +310,38 @@ export class JSRealm {
     this.URIError = Reflect.get(this.#globalProxy, 'URIError') as URIErrorConstructor;
     this.WebAssembly = Reflect.get(this.#globalProxy, 'WebAssembly') as object;
     this.WebAssemblyCompileError = Reflect.get(this.WebAssembly, 'CompileError') as ErrorConstructor;
+    this.WebAssemblyException = Reflect.get(this.WebAssembly, 'Exception') as JSFunctionWithPrototype;
+    this.webAssemblyExceptionGetArg = Reflect.get(this.WebAssemblyException.prototype, 'getArg') as JSMethod;
+    this.webAssemblyExceptionIs = Reflect.get(this.WebAssemblyException.prototype, 'is') as JSMethod;
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Captured intrinsic is invoked with its native Exception receiver.
+    this.webAssemblyExceptionStack = Object.getOwnPropertyDescriptor(this.WebAssemblyException.prototype, 'stack')!.get as JSMethod;
     this.WebAssemblyGlobal = Reflect.get(this.WebAssembly, 'Global') as JSFunctionWithPrototype;
     this.WebAssemblyInstance = Reflect.get(this.WebAssembly, 'Instance') as JSFunctionWithPrototype;
     this.WebAssemblyMemory = Reflect.get(this.WebAssembly, 'Memory') as JSFunctionWithPrototype;
     this.WebAssemblyModule = Reflect.get(this.WebAssembly, 'Module') as JSFunctionWithPrototype;
     this.WebAssemblyTable = Reflect.get(this.WebAssembly, 'Table') as JSFunctionWithPrototype;
-    this.webAssemblyJSTag = Reflect.get(this.WebAssembly, 'JSTag') as JSWebAssemblyTag;
+    this.WebAssemblyTag = Reflect.get(this.WebAssembly, 'Tag') as JSFunctionWithPrototype;
+    this.webAssemblyJSTag = Reflect.get(this.WebAssembly, 'JSTag') as JSWasmTag;
     this.webAssemblyValidate = Reflect.get(this.WebAssembly, 'validate') as JSMethod;
     this.webAssemblyCompile = Reflect.get(this.WebAssembly, 'compile') as JSMethod;
+    this.webAssemblyCompileStreaming = Reflect.get(this.WebAssembly, 'compileStreaming') as JSMethod;
     this.webAssemblyInstantiate = Reflect.get(this.WebAssembly, 'instantiate') as JSMethod;
     this.webAssemblyModuleCustomSections = Reflect.get(this.WebAssemblyModule, 'customSections') as JSMethod;
+    this.webAssemblyModuleExports = Reflect.get(this.WebAssemblyModule, 'exports') as JSMethod;
     this.webAssemblyMemoryBuffer = Reflect.getOwnPropertyDescriptor(this.WebAssemblyMemory.prototype, 'buffer')!.get as JSMethod;
     this.webAssemblyTableLength = Reflect.getOwnPropertyDescriptor(this.WebAssemblyTable.prototype, 'length')!.get as JSMethod;
     this.webAssemblyTableGrow = Reflect.get(this.WebAssemblyTable.prototype, 'grow') as JSMethod;
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Captured intrinsic called with an explicit receiver.
+    this.webAssemblyInstanceExports = Object.getOwnPropertyDescriptor(this.WebAssemblyInstance.prototype, 'exports')!.get as JSMethod;
+    this.webAssemblyMemoryGrow = Reflect.get(this.WebAssemblyMemory.prototype, 'grow') as JSMethod;
+    this.webAssemblyMemoryToFixedLengthBuffer = Reflect.get(this.WebAssemblyMemory.prototype, 'toFixedLengthBuffer') as JSMethod;
+    this.webAssemblyMemoryToResizableBuffer = Reflect.get(this.WebAssemblyMemory.prototype, 'toResizableBuffer') as JSMethod;
+    this.webAssemblyTableGet = Reflect.get(this.WebAssemblyTable.prototype, 'get') as JSMethod;
+    this.webAssemblyTableSet = Reflect.get(this.WebAssemblyTable.prototype, 'set') as JSMethod;
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Captured intrinsic called with an explicit receiver.
+    this.webAssemblyGlobalValue = Object.getOwnPropertyDescriptor(this.WebAssemblyGlobal.prototype, 'value')!.get as JSMethod;
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Captured intrinsic called with an explicit receiver.
+    this.webAssemblyGlobalSetValue = Object.getOwnPropertyDescriptor(this.WebAssemblyGlobal.prototype, 'value')!.set as JSMethod;
     this.arrayBufferTransfer = Reflect.get(this.ArrayBuffer.prototype, 'transfer');
     this.arrayEntries = Reflect.get(this.Array.prototype, 'entries') as JSMethod;
     this.arrayForEach = Reflect.get(this.Array.prototype, 'forEach') as JSMethod;
@@ -586,7 +641,7 @@ export class JSRealm {
    * This realm owns conversion exceptions; HTML supplies the callback scope.
    * Without the addon, returns the original callback without enclosing conversion.
    */
-  createWebAssemblyImportCall(module: JSWebAssemblyModule, importIndex: number, callback: JSFunction): JSFunction {
+  createWebAssemblyImportCall(module: JSWasmModule, importIndex: number, callback: JSFunction): JSFunction {
     // Stock fallback limitation: arbitrary Modules expose no signatures without
     // the addon. Returning the original callback leaves V8's result conversion
     // outside the host scope. The addon path above this fallback supplies the fix.
@@ -617,6 +672,11 @@ export class JSRealm {
   /** Allocate a new buffer object in this realm while sharing the source's storage and growth. */
   cloneSharedArrayBuffer(buffer: SharedArrayBuffer): SharedArrayBuffer {
     return cloneSharedArrayBuffer(buffer, this.#vmContext);
+  }
+
+  /** Allocate a new Module in this realm, sharing the original compiled code and options. */
+  cloneWebAssemblyModule(module: JSWasmModule): JSWasmModule {
+    return cloneWebAssemblyModule(module, this.#vmContext);
   }
 
   /** Copy bytes into a new realm-owned view and non-shared backing buffer. */
@@ -701,9 +761,44 @@ export class JSRealm {
    * Schedule native Wasm Promise resolution on the owning host. The callback
    * must not throw; call its completion once from the destination task. Stock
    * Node retains its native scheduling. Detached native contexts discard it.
+   * Compilation supplies its selected source; other native operations use engine.
    */
-  setWasmAsyncCompletionCallback(callback: ((complete: () => void) => void) | undefined): void {
-    addon.setWasmAsyncCompletionCallback?.(this.#vmContext, callback);
+  setWasmAsyncCompletionCallback(callback: ((complete: () => void, source: TaskSourceKey) => void) | undefined): void {
+    addon.setWasmAsyncCompletionCallback?.(this.#vmContext, callback === undefined ? undefined : (complete, promise) => {
+      const source = this.#wasmCompletionSources.get(promise) ?? this.#wasmCompilationSource;
+      this.#wasmCompletionSources.delete(promise);
+      callback(complete, source);
+    });
+  }
+
+  /** Compile converted bytes/options natively, selecting completion delivery before any author then lookup. */
+  compileWebAssembly(bytes: ArrayBufferView, options: object, source: TaskSourceKey, responseURL?: string): Promise<unknown> {
+    const previous = this.#wasmCompilationSource;
+    this.#wasmCompilationSource = source;
+    try {
+      // A URL is supplied only for privately consumed Response bytes, whose
+      // buffer is an ordinary ArrayBuffer. Direct byte compilation still accepts shared views.
+      const argument = responseURL === undefined ? bytes :
+        createWebAssemblyResponse(bytes as ArrayBufferView<ArrayBuffer>, responseURL);
+      // SPEC_CLASH(wasm-cached-source-url): V8 and Chromium retain the first
+      // diagnostic URL for identical bytes. Firefox keeps each load's URL.
+      // Preserve native code caching, including its first source attribution.
+      const compile = responseURL === undefined ? this.webAssemblyCompile : this.webAssemblyCompileStreaming;
+      const promise = Reflect.apply(compile, undefined, [argument, options]) as Promise<unknown>;
+      this.#wasmCompletionSources.set(promise, source);
+      return promise;
+    } finally {
+      this.#wasmCompilationSource = previous;
+    }
+  }
+
+  /** Realize a private native streaming failure before public Module resolution can run author code. */
+  realizeWebAssemblyCompilationError(reason: unknown): unknown {
+    // Node finishes streaming in its own context, so its engine-created
+    // CompileError has the wrong owner. The caller separates that failure from
+    // rejections caused by the projected Module's author-defined then getter.
+    if (!isNodeWebAssemblyCompileError(reason)) return reason;
+    return new this.WebAssemblyCompileError(reason.message);
   }
 
   /**
@@ -780,13 +875,21 @@ export class JSRealm {
     return compileModule(source, this.#vmContext, filename, options);
   }
 
+  /** Compile a retained Wasm ESM record; the host may supply its callback-aware instance factory. */
+  compileWebAssemblyModule(
+    bytes: Uint8Array, filename: string, createInstance?: WasmInstanceFactory,
+    getExports?: () => object, getSource?: () => object,
+  ): WebAssemblyModule {
+    return compileWebAssemblyModule(bytes, this.#vmContext, filename, createInstance, getExports, getSource);
+  }
+
   /** Retain a prepared author value as a synthetic module's default export. */
   createDefaultExportModule(value: unknown): CompiledModule {
     return createDefaultExportModule(value, this.#vmContext);
   }
 
   /** Read the engine's import requests before host resolution and loading. */
-  getModuleRequests(module: CompiledModule): readonly ModuleRequest[] {
+  getModuleRequests(module: CompiledModule): ModuleRequest[] {
     return moduleRequests(module);
   }
 
@@ -798,6 +901,18 @@ export class JSRealm {
   /** Evaluate a linked graph, returning its native completion Promise. */
   evaluateModule(module: CompiledModule): Promise<unknown> {
     return runWithActiveRealm(this, () => evaluateModule(module));
+  }
+
+  /** Return the retained Instance for a namespace owned by the Wasm module bridge. */
+  getWebAssemblyNamespaceInstance(namespace: object): JSWasmInstance {
+    // TODO(Wasm ESM): Stock Node has no public Wasm VM module record or namespace
+    // association. Do not guess from exported values, which ordinary JS can re-export.
+    const instance = addon.getWebAssemblyNamespaceInstance ? addon.getWebAssemblyNamespaceInstance(namespace) : null;
+    if (instance === null) throw new this.TypeError('Expected a WebAssembly module namespace');
+    // SPEC_GAP(wasm-namespace-before-execution): The draft returns [[Instance]],
+    // but that slot is ~empty~ before ExecuteModule. Reject without starting it.
+    if (instance === undefined) throw new this.ReferenceError('WebAssembly module has not produced an Instance');
+    return instance;
   }
 
   /** Return the linked module's namespace with live exported bindings. */
@@ -912,12 +1027,19 @@ export class JSRealm {
     return this.createIteratorResultObject(undefined, true);
   }
 
+  /** Fill the host global with engine defaults, giving its installed bindings precedence. */
   #installDefaultGlobalBindings(): void {
     for (const property of Reflect.ownKeys(this.#globalProxy)) {
-      if (
-        property === 'globalThis' ||
-        Object.hasOwn(this.#globalObject, property)
-      ) continue;
+      if (property === 'globalThis') continue;
+      if (Object.hasOwn(this.#globalObject, property)) {
+        // On stock Node, an engine property must not shadow a host replacement
+        // (for example the Web IDL WebAssembly namespace) inherited through Window.
+        if (this.#globalAllocation === undefined && this.#globalObject !== this.#globalProxy &&
+          !Reflect.deleteProperty(this.#globalProxy, property)) {
+          throw new InternalError(`Could not replace global binding ${String(property)}`);
+        }
+        continue;
+      }
 
       // Lazy engine properties must be read through the owning realm's intrinsic.
       const descriptor = this.reflectGetOwnPropertyDescriptor(this.#globalProxy, property);
@@ -1013,7 +1135,7 @@ export type JSRealmOptions = {
   /** Requested prototype layers; globalAllocation is undefined when the backend cannot supply them. */
   globalPrototypeChain?: GlobalPrototypeKind[];
   /** Accessing-realm policy for preallocated globals; stock Node cannot enforce these checks. */
-  globalAccess?: (realm: JSRealm | undefined) => GlobalAccessHandlers;
+  globalAccess?: GlobalAccessSelector;
   /** Loader for code without script/module metadata and direct realm evaluation. */
   importModuleDynamically?: ImportModuleDynamically<VMContext>;
 };
@@ -1046,6 +1168,9 @@ export type GlobalIndexedProperties = {
   /** Enumerate supported indices before the ordinary global keys. */
   ownKeys(): number[];
 };
+
+/** Select the global-access policy for an accessing realm, or an unassociated host caller. */
+export type GlobalAccessSelector = (realm: JSRealm | undefined) => GlobalAccessHandlers;
 
 /** A host-selected view after native global access is denied; allowed access stays in V8. */
 export type GlobalAccessHandlers = {

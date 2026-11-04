@@ -11,14 +11,6 @@ export class InterfaceConverter<Type extends IDLInterfaceType = IDLInterfaceType
   // https://webidl.spec.whatwg.org/#es-interface
   protected createInputSteps(): ConversionSteps<object> {
     const assembled = this.type.assembled;
-    const isInstance = assembled.primary.interfaceOverride?.isInstance;
-    if (isInstance) {
-      return (value) => {
-        if (!isInstance(value)) this.throwTypeError(`Value does not implement ${assembled.name}`);
-        this.binding.getOrCreatePlatformRecord(value);
-        return value as object;
-      };
-    }
     return (value) => {
       const record = this.binding.getPlatformRecord(value, PlatformRecordSource.PlatformOrProxy);
       if (record?.implements(assembled)) return record.implInst;

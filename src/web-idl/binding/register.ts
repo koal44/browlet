@@ -22,15 +22,26 @@ export function registerImplementationBindings(binding: RealmBinding): void {
   }
 }
 
-// Connect namespace declarations to explicit implementation steps without an implementation class.
+// Primary and partial namespace members share one implementation in this realm.
 function registerNamespaceImplementation(binding: RealmBinding, assembled: AssembledNamespace): void {
   const implementationBinding = binding.getImplementationBinding(assembled);
+  const definition = assembled.primary.implementation;
+  const target = definition && binding.callImplementation(constructImplementationObject, undefined, [
+    definition.implClass, binding.resolveArguments([], definition.constructWith ?? []),
+  ]);
+  if (target && definition.initializeImplementation) {
+    binding.callImplementation(definition.initializeImplementation, undefined, [binding.getEnvironment(), target]);
+  }
   for (const { member } of assembled.members) {
     const memberBinding = implementationBinding.getOrCreateMemberBinding(member);
     if (member.kind === 'operation' && member.overrideInvoke) {
       memberBinding.operationSteps = createDefinedOperationSteps(member.overrideInvoke, member, binding);
     } else if (member.kind === 'attribute' && member.overrideGet) {
       registerDefinedAttribute(memberBinding, member, binding);
+    } else if (target && member.kind === 'operation') {
+      registerOperation(memberBinding, member, member.method ?? member.name!, binding, member.invokeWith, target);
+    } else if (target && member.kind === 'attribute') {
+      registerAttribute(memberBinding, member, binding, target);
     }
   }
 }
@@ -40,7 +51,7 @@ function registerInterfaceImplementation(
   binding: RealmBinding,
   assembled: AssembledInterface,
 ): void {
-  if (assembled.implementations.length === 0 && !assembled.primary.interfaceOverride?.getInterfaceObject) return;
+  if (assembled.implementations.length === 0) return;
   const definition = assembled.implementations.length === 1 ? assembled.implementations[0] : undefined;
 
   const implClass = definition?.implClass;
@@ -118,7 +129,7 @@ function registerInterfaceImplementation(
             member.overrideInvoke, member, binding,
           );
         } else {
-          const method = member.namedGetter ?? member.name;
+          const method = member.namedGetter ?? member.method ?? member.name;
           if (method === undefined) {
             throw missingMemberBinding(assembled, member);
           }

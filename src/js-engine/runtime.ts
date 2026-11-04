@@ -7,20 +7,40 @@ import { TypeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
 
 import { isObject } from './abstract-operations';
-import { isProxyObject } from './built-in-primitives';
+import { isProxyObject, type JSWasmModule } from './built-in-primitives';
 import {
   addon, isAddonContextHandle, isAddonMicrotaskQueueHandle,
   type AddonContextHandle, type AddonMicrotaskQueueHandle, type ContextEvaluationOptions,
 } from './node-addons';
 import type {
   CollectionIteratorKind, CompiledCode, CompiledScript, ExoticObjectHandlers, FunctionCompilationOptions,
-  GlobalAccessHandlers, GlobalAllocation, GlobalIndexedProperties,
+  GlobalAccessSelector, GlobalAllocation, GlobalIndexedProperties,
   GlobalPrototypeKind, GlobalProxy,
   JSFunction, JSIteratorResult, JSRealm,
 } from './realm';
 import type { ImportModuleDynamically } from './modules';
 
 const getNativeRealm = addon.getRealm;
+const NodeResponse = globalThis.Response;
+const nodeWebAssembly = Reflect.get(globalThis, 'WebAssembly') as object;
+const NodeWebAssemblyCompileError = Reflect.get(nodeWebAssembly, 'CompileError') as ErrorConstructor;
+
+/** Adapt privately consumed, non-shared bytes to Node's native Wasm streaming compiler. */
+export function createWebAssemblyResponse(bytes: ArrayBufferView<ArrayBuffer>, url: string): object {
+  // ACCOMMODATION(node-wasm-response-url): Node requires its own Response brand.
+  // The public constructor has no URL option, but Node's streaming callback reads
+  // response.url and forwards it to V8. This private object performs no fetch and
+  // never escapes to author code. Browlet has already checked the real Response.
+  const body = new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const response = new NodeResponse(body, { headers: { 'Content-Type': 'application/wasm' } });
+  Object.defineProperty(response, 'url', { value: url });
+  return response;
+}
+
+/** Recognize Node-owned compilation errors before realizing an engine failure in its caller's realm. */
+export function isNodeWebAssemblyCompileError(value: unknown): value is Error {
+  return value instanceof NodeWebAssemblyCompileError;
+}
 
 /** Compile trusted host code with explicit parameters, independently of the active author realm. */
 export function compileHostFunction(source: string, parameters: string[]): JSFunction {
@@ -49,7 +69,7 @@ export function createExoticObject(
 }
 
 /** Resolve the native accessing context through the same realm identity used by exotic objects. */
-export function setGlobalAccess(target: GlobalProxy, select: (realm: JSRealm | undefined) => GlobalAccessHandlers): void {
+export function setGlobalAccess(target: GlobalProxy, select: GlobalAccessSelector): void {
   if (!addon.setGlobalAccess) throw new InternalError('Node backend does not provide native global access checks');
   addon.setGlobalAccess(target, (reference) => select(RealmStamper.get(reference)));
 }
@@ -95,15 +115,28 @@ export function getNativeArrayBufferViewLengthTracking(value: ArrayBufferView): 
 export function cloneSharedArrayBuffer(buffer: SharedArrayBuffer, context: VMContext): SharedArrayBuffer {
   const clone = addon.cloneSharedArrayBuffer;
   if (clone) return clone(buffer, context);
+  return cloneIntoStockContext(buffer, context);
+}
 
-  // Stock Node receives a message in the port's creation context. Posting queues
-  // it synchronously, so no event listener, worker, or retained port is needed.
+/** Allocate a new Module in its destination context without recompilation. */
+export function cloneWebAssemblyModule(module: JSWasmModule, context: VMContext): JSWasmModule {
+  const clone = addon.cloneWebAssemblyModule;
+  if (clone) return clone(module, context);
+  return cloneIntoStockContext(module, context);
+}
+
+function cloneIntoStockContext<T extends SharedArrayBuffer | JSWasmModule>(value: T, context: VMContext): T {
+  // ACCOMMODATION(node-context-native-cloning): Stock Node has no direct API to
+  // clone these native objects into a VM context. Receiving through a port moved
+  // there creates them in that context; the addon allocates them directly instead.
+  // Posting queues the message synchronously, so no event listener, worker, or
+  // retained port is needed.
   const channel = new MessageChannel();
   let receiver = channel.port2;
   try {
     receiver = moveMessagePortToContext(receiver, context);
-    channel.port1.postMessage(buffer);
-    return receiveMessageOnPort(receiver)!.message as SharedArrayBuffer;
+    channel.port1.postMessage(value);
+    return receiveMessageOnPort(receiver)!.message as T;
   } finally {
     channel.port1.close();
     receiver.close();

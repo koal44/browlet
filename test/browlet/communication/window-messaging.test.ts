@@ -331,7 +331,7 @@ describe('Window.postMessage (§9.3)', () => {
   // Approved expected failures: constructor entry cannot yet capture B across the ordinary A-to-B call.
   // Keep A-only controls passing and execute the required B assertions on every backend.
   for (const caller of ['A', 'B']) {
-    const constructorTest = caller === 'B' ? it.fails : it;
+    const constructorTest = caller === 'B' ? itPassesWith('platformEntries') : it;
     constructorTest(`retains ${caller} as incumbent when its author function constructs a MutationObserver from C`, () => runInHostTask(() => {
       const a = createWindow('https://example.test/a');
       const b = createWindow('https://example.test/b', a.agent);

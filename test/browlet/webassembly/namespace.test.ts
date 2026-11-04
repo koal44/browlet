@@ -7,12 +7,13 @@ import { createSiblingWindow } from '../../support/windows';
 // WebAssembly JavaScript API §5, through validate(); async operations are a later slice.
 // SPEC_CLASH(wasm-validate-bindings): Native engines differ from the draft's input/conversion rules; see the owning roadmap.
 describe('WebAssembly namespace and validation', () => {
-  it('retains the engine namespace and delegates to its captured validator', async () => {
+  it('creates an ordinary namespace and delegates to the private engine validator', async () => {
     const browser = fixture();
     const realm = getRelevantRealm(browser.window);
     const nativeModule: unknown = Reflect.get(realm.WebAssembly, 'Module');
-    expect(Reflect.get(browser.window, 'WebAssembly')).toBe(realm.WebAssembly);
-    expect(Reflect.get(realm.WebAssembly, 'validate')).not.toBe(realm.webAssemblyValidate);
+    expect(Reflect.get(browser.window, 'WebAssembly')).not.toBe(realm.WebAssembly);
+    expect(await browser.evaluate(() => WebAssembly === globalThis.WebAssembly)).toBe(true);
+    expect(Reflect.get(realm.WebAssembly, 'validate')).toBe(realm.webAssemblyValidate);
     expect(await browser.evaluate((source) => {
       const validate = WebAssembly.validate;
       WebAssembly.validate = () => { throw new Error('replaced validator'); };
@@ -24,7 +25,7 @@ describe('WebAssembly namespace and validation', () => {
     expect(Reflect.get(realm.WebAssembly, 'Module')).toBe(nativeModule);
   });
 
-  it('retains the native namespace and realm-owned, nonconstructible operations', async () => {
+  it('installs a realm-owned namespace and, nonconstructible operations', async () => {
     const browser = fixture();
     expect(await browser.evaluate(() => {
       const foreign = Reflect.get(globalThis, 'foreign') as typeof globalThis;

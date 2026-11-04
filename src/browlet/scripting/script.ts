@@ -184,7 +184,7 @@ export class CSSModuleScript extends SyntheticModuleScript {
       this.parseError = error;
       return;
     }
-    this.record = new JSSyntheticModuleRecord(this, env.projectCSSStyleSheet(sheet));
+    this.record = new JSSyntheticModuleRecord(this, env.project(sheet));
   }
 }
 

@@ -37,7 +37,7 @@ export function isStampedPlatformObject(platformObject: unknown): platformObject
   return PlatformObjectStamper.get(platformObject) !== undefined;
 }
 
-/** The shared record for an implementation and its platform object; native interfaces use one object for both. */
+/** The shared record connecting an implementation to its distinct platform object. */
 export class PlatformRecord<T extends object = object> {
   /** Implementation paired with this record's platform object. */
   implInst: StampedImplInstance<T>;
@@ -47,28 +47,25 @@ export class PlatformRecord<T extends object = object> {
   binding: RealmBinding;
   /** Paired platform object retained for installation, receiver checks, and reflection. */
   platformObject?: StampedPlatformObject;
-  // Lazily allocated storage for maplike, setlike, and observable-array members.
+  /** Ordered entries retained by this object's maplike members. */
   mapEntries?: Map<unknown, unknown>;
+  /** Per-attribute observable-array handles, allocated when their values are first projected. */
   observableArrays?: Map<IDLAttribute, ObservableArrayHandle<unknown, unknown>>;
+  /** Ordered entries retained by this object's setlike members. */
   setEntries?: Set<unknown>;
-  /** Interface-owned projection selected once; its result can change with the implementation's lifetime. */
+  /** Interface-owned projection selected when this implementation is associated. */
   #overrideProjection: ProjectionOverride | undefined;
 
   constructor(
     implInst: T,
     assembled: AssembledInterface,
     binding: RealmBinding,
-    platformObject?: object,
   ) {
     this.assembled = assembled;
     this.binding = binding;
-    // A supplied platform object already has its implementation state and native properties.
-    if (!platformObject) {
-      this.#overrideProjection = binding.getImplementationBinding(assembled).overrideProjection;
-      binding.initializeImplementation(implInst, assembled);
-    }
+    this.#overrideProjection = binding.getImplementationBinding(assembled).overrideProjection;
+    binding.initializeImplementation(implInst, assembled);
     this.implInst = ImplementationStamper.stamp(implInst, this);
-    if (platformObject) this.platformObject = PlatformObjectStamper.stamp(platformObject, this);
   }
 
   get realm(): WebIDLRealm { return this.binding.realm; }

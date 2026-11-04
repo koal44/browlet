@@ -385,13 +385,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
       `function invokeOperation(thisArgument, argumentsList) {
         try {
           const receiver = interfaceAssembled && !source.static
-            ? realmBinding.getReceiverRecord(
-              thisArgument,
-              interfaceAssembled,
-              name,
-              'method',
-              false,
-            )
+            ? realmBinding.getReceiverRecord(thisArgument, interfaceAssembled, name, 'method', false)
             : null;
           // Default to receiver-realm allocation while Web IDL's broader realm rules are unresolved.
           // https://github.com/whatwg/webidl/issues/135
@@ -577,6 +571,7 @@ export type OperationSteps = (
   receiver: PlatformRecord | null,
   values: unknown[],
 ) => unknown;
+
 
 export type MemberOwner = AssembledInterface | AssembledNamespace;
 

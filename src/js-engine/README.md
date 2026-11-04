@@ -85,6 +85,13 @@ uses a temporary [MessagePort moved into the context](https://nodejs.org/api/wor
 receives synchronously, and closes both ports. Neither path changes prototypes
 after allocation or retains a channel on the realm.
 
+`copyWebAssemblyModule()` snapshots a compiled Module into a fresh host-owned
+native token without copying its author properties. `JSRealm.cloneWebAssemblyModule()`
+allocates another Module in the destination realm, reusing code and compile options.
+The addon uses V8's public compiled-module APIs; stock Node uses the same temporary
+MessagePort receipt path as shared buffers. HTML owns storage, interface-exposure,
+and AgentCluster restrictions; these engine primitives do not decide them.
+
 Engine predicates accept unknown inputs and preserve their native kind in the
 type system. `isObject` and `isCallable` include the native HTMLAllCollection
 despite its misleading `typeof`; recognition does not allocate or invoke author
@@ -145,6 +152,13 @@ this does not repair V8's general cache behavior for separately compiled scripts
 `getModuleRequests()` exposes their unresolved dependencies, `linkModule()` links
 an explicitly supplied graph, and `evaluateModule()` returns its native completion
 Promise without a checkpoint. `getModuleNamespace()` preserves live bindings.
+`getWebAssemblyNamespaceInstance()` retrieves the original Instance from the
+addon's Wasm namespace association, without executing or re-instantiating anything.
+It realizes invalid-namespace errors in the invoked realm. The draft leaves an
+unexecuted record's empty Instance slot unspecified; the provisional choice is
+ReferenceError, documented in the WebAssembly roadmap. Stock Node and foreign
+Node-loader Wasm namespaces lack this association. HTML's Wasm parser remains
+a separate integration dependency.
 Both backends expose `SourceTextModule` and `SyntheticModule` objects with
 `moduleRequests`, `linkRequests()`, `instantiate()`, `evaluate()`, and `namespace`
 as applicable. The addon keeps its native handles private; stock Node uses its VM
@@ -278,11 +292,24 @@ consulting author properties. Stock Node retains Node reporting and explicitly
 throws for those unavailable slot reads; it does not substitute process events.
 
 `JSRealm.setWasmAsyncCompletionCallback()` supplies native Wasm completion as a
-one-shot `complete()` operation for the owning host to schedule. This requires
+one-shot `complete()` operation and a task-source key for the owning host to schedule.
+`compileWebAssembly()` selects that source for each native Promise, including
+failures delivered before the native call returns. Ordinary native calls retain
+the engine source; response compilation selects networking. This requires
 only the addon on every base; stock Node retains native scheduling. HTML returns
 through a task before Promise resolution and possible author `then` lookup.
 The bridge does not allocate replacement results, poll, or drain microtasks.
 See the [native contract](../../node-compat/README.md#native-webassembly-completion).
+
+An optional Response URL selects the realm's captured native `compileStreaming()`.
+The runtime adapts privately consumed bytes to a Node Response and supplies its
+URL without another fetch. This keeps the existing completion hook and native
+Promise. Node-owned malformed-byte errors are realized in the caller's realm
+before the browser adapter resolves its public Module. That separation preserves
+author rejections without validating bytes a second time. Direct byte compilation
+is unchanged. The source comments document the Response accommodation and V8's
+accepted first-URL cache behavior; see the
+[Web API review](../browlet/webassembly/ROADMAP.md#4–7-and-closing-material-reviewed).
 
 Each realm supplies an `InternalPromise` constructor extending
 Infra's [`InternalPromise`](../infra/promises.ts) with realm-owned observation. Static creation

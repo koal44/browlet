@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/unbound-method -- These tests borrow native methods with explicit receivers. */
 import { describe, expect, it } from 'vitest';
 
+import { WasmTableImpl } from '../../../src/browlet/webassembly/index';
 import { Browlet } from '../../../src/browlet/browlet';
 import { isWebAssemblyTable } from '../../../src/js-engine/index';
 import { getPlatformRecord, PlatformRecordSource } from '../../../src/web-idl/values/platform';
@@ -87,7 +88,8 @@ describe('WebAssembly Table', () => {
     const record = getPlatformRecord(table, PlatformRecordSource.Platform);
     expect(record).toBeDefined();
     expect(record!.realm).toBe(foreignRealm);
-    expect(record!.implInst).toBe(table);
+    expect(record!.implInst).toBeInstanceOf(WasmTableImpl);
+    expect(record!.implInst).not.toBe(table);
     expect(record!.platformObject).toBe(table);
     expect(Reflect.ownKeys(table)).toEqual([]);
   });
@@ -132,7 +134,8 @@ describe('WebAssembly Table', () => {
       Reflect.set(globalThis, 'nativeTable', Object.freeze(table));
     });
     const table = Reflect.get(browser.window, 'nativeTable') as object;
-    expect(isWebAssemblyTable(table)).toBe(true);
+    expect(isWebAssemblyTable(table)).toBe(false);
+    expect(isWebAssemblyTable((getPlatformRecord(table, PlatformRecordSource.Platform)!.implInst as unknown as WasmTableImpl).getBacking())).toBe(true);
     expect(isWebAssemblyTable(new WebAssembly.Table({ element: 'externref', initial: 0 }))).toBe(true);
     for (const value of [null, undefined, 42, {}, Object.create(table), new Proxy(table, {})]) {
       expect(isWebAssemblyTable(value)).toBe(false);

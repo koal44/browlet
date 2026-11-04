@@ -113,22 +113,6 @@ export function validateDefinitions<Env>(definitions: Definition<Env>[]): void {
   // Reuse compilation for type checks after structural validation has ruled out cycles.
   const assembly = new DefinitionAssembly(declarations);
   for (const assembled of assembly.interfaces.values()) {
-    const { primary } = assembled;
-    const override = primary.interfaceOverride;
-    if (override) {
-      if (typeof override.isInstance !== 'function') {
-        throw new InternalError(`Interface override for ${primary.name} requires native instance recognition`);
-      }
-      const unsupportedMember = assembled.members.some(({ member }) => {
-        if (!override.getInterfaceObject) return true;
-        if (member.kind === 'constructor') return !member.overrideConstruct || !!member.initialize || !!member.constructWith;
-        return member.kind !== 'operation' || !member.static;
-      });
-      if (primary.implementation || primary.inherits || assembled.partials.length ||
-        includedMixins.has(primary.name) || unsupportedMember) {
-        throw new InternalError(`Native interface ${primary.name} requires explicit constructors or static operations`);
-      }
-    }
     if (!assembled.implementations.some(({ constructWith }) => constructWith !== undefined)) continue;
     if (assembled.members.some(({ member }) => member.kind === 'constructor' && member.constructWith !== undefined)) {
       throw new InternalError(`${assembled.name} declares constructWith on both its implementation and a constructor`);

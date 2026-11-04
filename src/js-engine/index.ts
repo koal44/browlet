@@ -1,5 +1,7 @@
 export { JSRealm, type JSRealmOptions, type CompiledCode, type CompiledScript, type FunctionCompilationOptions } from './realm';
-export type { CompiledModule, ImportModuleDynamically, ModuleCompilationOptions, ModuleRequest } from './modules';
+export type {
+  CompiledModule, ImportModuleDynamically, ModuleCompilationOptions, ModuleRequest, ModuleRequestPhase, WebAssemblyModule,
+} from './modules';
 export type { JSEnvironment } from './environment';
 export { addon } from './node-addons';
 export {
@@ -12,7 +14,8 @@ export * from './buffers';
 export { codeUnitsToString, isomorphicDecode, isomorphicEncode } from './byte-string';
 export { computeHash, randomUUID } from './crypto';
 export type {
-  ExoticObjectHandlers, GlobalAccessHandlers, GlobalAllocation, GlobalIndexedProperties, GlobalObject, GlobalProxy, GlobalThis,
+  ExoticObjectHandlers, GlobalAccessHandlers, GlobalAccessSelector, GlobalAllocation, GlobalIndexedProperties,
+  GlobalObject, GlobalPrototypeKind, GlobalProxy, GlobalThis,
   JSFunction, JSFunctionWithPrototype, JSIteratorResult, JSMethod, RealmFunctionOptions, RealmFunctionSteps,
 } from './realm';
 export type {

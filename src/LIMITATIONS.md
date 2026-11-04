@@ -74,11 +74,12 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   function prototypes and callable Proxy traps can defeat exact constructor
   realm selection. Replace that fallback when exact lookup is available on all
   supported paths, preserving cross-realm construction and callback tests.
-  Native interface records require exact ownership: constructor adapters supply
-  it directly, while other native values use `getCreationRealm()` through the addon.
-  Without the addon, native Wasm objects created outside the constructor adapters
-  remain usable but unassociated, even with an ordinary prototype. Binding does not
-  permanently stamp a prototype/evaluation guess. See the
+  Ordinary Wasm construction, compilation, cloning, and export projection establish
+  platform ownership on every backend. Native Exceptions can originate directly
+  in the engine, but their public-interface integration is currently unfinished
+  on every backend; see the Web IDL boundary below. Raw engine Wasm objects are
+  not accepted as platform arguments; host
+  integration wraps them in their implementation and projects them explicitly. See the
   [Module tracking tests](../test/browlet/webassembly/module-tracking.test.ts).
   Sources: [runtime](js-engine/runtime.ts), [constructor tests](../test/web-idl/binding/constructor-realm.test.ts),
   [callback tests](../test/web-idl/binding/realm/callback.test.ts).
@@ -231,12 +232,17 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   modules. Binding projects CSS exports before author use. Stock Node requires
   `--experimental-vm-modules` and its synchronous module linking API; the addon
   needs neither that flag nor an engine patch for static modules. The addon now
-  supplies Wasm ESM graphs, but HTML's WebAssembly parser and Long Animation Frames
-  creation timing remain unfinished. Module
+  supplies Wasm ESM graphs, now connected through HTML's parser and ordinary graph
+  loader with callback-aware instantiation. Stock mode lacks a public Wasm VM
+  class; Long Animation Frames creation timing remains unfinished. Module
   graph orchestration covers document, worker, and worklet entry points, including
   shared worklet responses. Static JavaScript/CSS/JSON/text dependencies now fetch,
-  link, and evaluate through the existing graph entry points. Source/deferred
-  imports remain unfinished. Dynamic evaluation-phase imports load, link, and
+  link, and evaluate through the existing graph entry points. Static Wasm source
+  imports work on all addon bases and return the public Module without loading
+  its dependencies. Dynamic `import.source(url)` also works on custom/compat;
+  official addon bases lack the existing dynamic-import forwarding export.
+  Object-valued `import(moduleObject)` and deferred imports remain unfinished.
+  Dynamic evaluation-phase imports load, link, and
   wait for evaluation through HTML, including top-level await. The addon accepts
   Node-shaped import and metadata callbacks with their respective forwarding
   exports in the combined Node patch; official addon bases retain expected
@@ -250,23 +256,43 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   separate, and HTML script/worker startup does not call these fetchers yet. See the
   [script-creation audit](browlet/scripting/ROADMAP.md#html-8143-creating-scripts).
 
+- **Wasm namespace lookup currently covers the addon bridge.**
+  `WebAssembly.namespaceInstance()` returns an existing bridge-owned Instance,
+  including from another context, without instantiating it again. HTML's Wasm
+  parser now produces these records with the addon. Stock Node/Node-loader Wasm
+  namespaces have no public record association. Ordinary JS/synthetic namespaces,
+  exports objects, and proxies are rejected. `SPEC_GAP(wasm-namespace-before-execution)`:
+  the draft returns an empty internal slot before execution; Browlet provisionally
+  throws ReferenceError without evaluating the module. See the
+  [ESM opening review](browlet/webassembly/ROADMAP.md#esm-opening-review-sections-1-through-5).
+
+- **Native Wasm CSP interception requires the addon.** CSP §4.5.1 now governs
+  Browlet's byte/response compilation APIs on every backend, with realm-correct
+  CompileError and violation reporting. All addon bases also enforce it at native
+  compilation entry points and HTML's Wasm module parser, preserving Node's checks.
+  Stock Node cannot intercept retained native constructors/functions used directly
+  by the host; its Wasm ESM parser remains unsupported. Worker policy setup and
+  global violation reporting remain dependencies. Fetch policy is separate. See
+  [CSP integration](browlet/browsing/policy/csp/ROADMAP.md#wasm-compilation-consumer-451).
+
 - **Native Wasm task ownership requires the addon.** All addon bases now deliver
   native compilation/instantiation Promise resolution through the owning HTML
-  task, including module thenable assimilation. Stock Node makes automatic
+  task, including module thenable assimilation; response compilation selects
+  networking while ordinary compilation/instantiation use the engine source. Stock Node makes automatic
   progress through its native queue but cannot install that task/lifecycle handoff.
   The addon assumes Node's default V8 Wasm resolver for unregistered contexts;
   chaining another embedder's replacement of the isolate-wide callback is unsupported.
   See the [completion contract](browlet/scripting/ROADMAP.md#native-webassembly-completion)
   and [regressions](../test/browlet/scripting/wasm-completion.test.ts).
 
-- **Wasm host-callback integration remains partial.** Constructor, Module, and
-  byte instantiation now adapt imported JavaScript functions using the existing
+- **Wasm host-callback integration remains partial.** Constructor, Module, byte,
+  and response instantiation adapt imported JavaScript functions using the existing
   realm callback hooks. Callback bodies run with script/callback preparation and
   cleanup, including nested calls and throws; native Wasm functions and other
   import values retain their identities. With the addon, a generated Wasm bridge
   finishes scalar coercion and multi-value iteration inside that scope, including
   throws. Stock mode still performs that conversion after cleanup; its four
-  ordinary regressions retain the gap. The addon's narrow metadata reader rejects
+  expected-failure regressions retain the gap. The addon's narrow metadata reader rejects
   unsupported experimental shared-everything/descriptor/continuation/string-view
   types, exact-function imports, and unknown binary encodings on first adapted
   invocation. Revisit this before enabling those proposals or upgrading to a
@@ -282,7 +308,7 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   import integration,
   not skipped Web IDL argument conversion: imports are intentionally an IDL
   `object`, not a callback dictionary. See the
-  [§5.6 review](browlet/webassembly/ROADMAP.md#56-first-slice-exported-functions-and-the-host-callback-boundary).
+  [§5.6 review](browlet/webassembly/ROADMAP.md#56-reviewed-exported-functions-and-the-host-callback-boundary).
 
 - **`SPEC_CLASH(wasm-module-start-timing)`:** Native `WebAssembly.instantiate(module)`
   reads imports and runs the start function before returning. The draft requires
@@ -304,14 +330,58 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   draft assertions as approved expected failures. Browser comparisons and the
   engine boundary are recorded in the [JSTag audit](browlet/webassembly/ROADMAP.md#5-audit-javascript-exception-tag).
 
-- **Wasm ESM has three retained binding gaps.** The addon runs supplied mixed
+- **`SPEC_CLASH(wasm-nonfunction-builtin-import)`:** With `js-string` enabled,
+  V8 treats a global named `wasm:js-string.test` as an ordinary import. The draft
+  selects the builtin by name and rejects the non-function type; Firefox and
+  WebKit agree with the draft. Browlet retains Chromium's behavior, covered by an
+  ordinary [compatibility test](../test/browlet/webassembly/builtins.test.ts).
+  The [builtin review](browlet/webassembly/ROADMAP.md#6-foundation-and-611613-reviewed-builtin-selection-cast-and-test)
+  records the browser comparison and engine boundary.
+
+- **`SPEC_CLASH(wasm-from-code-point-result)`:** The draft declares a nullable
+  `externref` result for `wasm:js-string.fromCodePoint`. Browlet retains the
+  non-nullable `(ref extern)` signature required by all three browsers and the
+  original proposal. Both accepted and rejected signatures have ordinary
+  [compatibility tests](../test/browlet/webassembly/strings.test.ts); the
+  [string review](browlet/webassembly/ROADMAP.md#6166114-reviewed-remaining-string-operations)
+  records browser evidence and WebKit's explicit signature correction.
+
+- **`SPEC_CLASH(wasm-substring-unsigned-offsets)`:** Browlet retains Chromium's
+  unsigned offsets for `wasm:js-string.substring`, matching Firefox and the
+  original proposal. The draft's signed `ToJSValue` conversion changes results
+  for large end offsets; WebKit has a third behavior. Ordinary
+  [compatibility tests](../test/browlet/webassembly/strings.test.ts) preserve the
+  chosen results, with the comparison recorded in the string review above.
+
+- **Native Wasm resource limits remain engine-owned.** Fatal out-of-memory
+  handling can terminate Browlet's shared Node process; successful recovery from
+  ordinary traps or stack overflow does not promise recovery from heap exhaustion.
+  The [error/limit review](browlet/webassembly/ROADMAP.md#78-reviewed-error-conditions-and-implementation-limits)
+  distinguishes tested boundaries from source-only resource-limit review.
+
+- **`SPEC_CLASH(wasm-module-memory-count)`:** Browlet retains Chromium's acceptance
+  of more than 100 memories per module (V8 caps the count at 100,000). The draft,
+  Firefox, and WebKit cap it at 100. The
+  [compatibility test](../test/browlet/webassembly/limits.test.ts) uses empty
+  memory declarations without instantiating them.
+
+- **`SPEC_CLASH(wasm-memory64-declaration-limit)`:** V8 rejects memory64 maximum
+  declarations above 262,144 pages (16 GiB), even with an initial size of zero.
+  The draft, Firefox, and WebKit permit declarations up to 2^37 − 1 pages while
+  separately limiting actual growth. Browlet retains Chromium's narrower range;
+  the same limit suite preserves the accepted and rejected declarations.
+
+- **Wasm ESM has two retained binding gaps and a guarded re-export hack.** The addon runs supplied mixed
   JavaScript/Wasm graphs, but mutable globals exported to JavaScript are snapshots,
-  `v128` exports read as undefined instead of remaining uninitialized, and mutable
-  globals re-exported through JavaScript cannot be imported as Wasm globals.
-  Direct Wasm-to-Wasm imports retain their globals and memory. The
+  and `v128` exports read as undefined instead of remaining uninitialized. On
+  reviewed Windows x64 V8 builds, private binding-identity reads recover native
+  globals through JavaScript re-exports. Unknown builds retain the original
+  re-export LinkError; same-version custom layout changes still require manual
+  review. Direct Wasm-to-Wasm imports retain their globals and memory. The
   [expected-failure tests](../node-compat/test/wasm-gaps.test.cjs) and independent
-  [Node controls](../node-compat/test/wasm-node-gaps.test.cjs) retain all three
-  requirements. See the [bridge contract](../node-compat/README.md#webassembly-modules).
+  [Node controls](../node-compat/test/wasm-node-gaps.test.cjs) retain the requirements,
+  with re-exports passing normally on the guarded addon builds. Node's own loader
+  still has all three gaps. See the [bridge contract](../node-compat/README.md#webassembly-modules).
 
 - **`node-v8-agent-policy`:** `Agent.canBlock` records HTML's policy without
   enforcing it in V8. Window author code can call Atomics.wait and receive
@@ -468,20 +538,58 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
 
 ## Web IDL boundaries
 
-- **WebAssembly Global bindings:** Construction uses Web IDL conversion and
-  `PlatformRecord`; value access and typed storage remain native. Recognition uses
-  V8's private type helpers with the addon, or an allocating import/re-export
-  probe without it. Both avoid reading values. The implementation comments record
-  these hacks and their tradeoffs. As with other native interfaces, stock Node
-  cannot establish exact ownership for externally created objects, and generated
-  types for native instance members remain pending. See the
-  [Global review](browlet/webassembly/ROADMAP.md#55-reviewed-globals).
-- **WebAssembly Table bindings:** The constructor exposes the draft's `externref`
-  and `anyfunc` kinds; engine extensions such as `anyref` are not accepted there.
-  Native `grow`/`set` preserve the agreed browser behavior for explicit undefined
-  and error precedence. Their runtime members remain native, while generated
-  native-instance member types are still pending, as for Instance and Memory.
-  See the [Table audit and spec clashes](browlet/webassembly/ROADMAP.md#54-reviewed-tables).
+- **`SPEC_CLASH(wasm-gc-reflection)`:** Native Wasm structs and arrays remain
+  opaque engine objects. Browlet follows Chromium's TypeError from
+  `Reflect.preventExtensions()` and `Reflect.defineProperty()` where the draft
+  requires `false`; ordinary Object
+  mutation operations throw either way. Ordinary compatibility tests assert this
+  accepted behavior. Node 24's older V8 also throws for
+  `Reflect.setPrototypeOf()`, which newer builds correctly reject with `false`.
+  Only that older-engine difference retains expected failures.
+  Native identities, typed references, same-Agent cross-realm round-trips and
+  callback results are preserved. A Proxy
+  cannot repair reflection without losing typed-reference recognition. See the
+  [GC-object review](browlet/webassembly/ROADMAP.md#58-reviewed-garbage-collected-objects).
+- **WebAssembly Tag bindings:** Ordinary construction converts the draft's iterable
+  `ValueType` sequence and preserves derived prototypes. `WasmTagImpl` keeps V8's
+  native signature and tag identity private. Engine-only reference kinds are
+  rejected, as for Global construction. Engine exports and `JSTag` are projected
+  into owned platform objects. The accepted cross-realm `JSTag` failures are unchanged. See the
+  [Tag review and browser comparison](browlet/webassembly/ROADMAP.md#57-reviewed-tags).
+- **WebAssembly Exception integration:** Exceptions use an ordinary implementation
+  with a private native backing. Binding converts tags, iterable payloads, options,
+  and indices and establishes construction ownership on every backend. The special
+  native adoption bridge has been removed for redesign. Wasm-thrown Exceptions do
+  not yet use our public prototype or accept public Tags through their native methods;
+  public Exceptions thrown back into Wasm are not recognized by native tagged catches.
+  Captured own stack data is also not projected. These desired behaviors remain
+  ordinary failing regressions on all backends. `SPEC_CLASH(wasm-exception-stack)`
+  still records the intended Chromium-compatible stack shape; fractional indices
+  use ordinary Web IDL truncation. The separate cross-realm JSTag limits remain.
+  See the [migration notes](browlet/webassembly/ROADMAP.md#implementationplatform-migration).
+
+
+- **`SPEC_CLASH(wasm-cached-source-url)`:** Streaming compilation now supplies the
+  fetched Response URL to Node/V8. V8 and Chromium retain the first diagnostic
+  URL for identical bytes: an earlier byte compilation can leave a generated
+  Wasm URL, or a later fetch can show the first fetched URL. Firefox preserves
+  each streaming URL. Browlet keeps the approved Chromium cache behavior with
+  ordinary compatibility tests. Native names, indices, and offsets are retained;
+  the private Node Response adapter preserves completion and error ownership. See the
+  [Web API closing review](browlet/webassembly/ROADMAP.md#4–7-and-closing-material-reviewed).
+- **WebAssembly Global bindings:** A separate implementation holds V8's typed
+  storage; ordinary Binding owns construction and value conversion. Native
+  recognition uses the addon's private type helpers or the public import/re-export
+  probe. Both avoid reading values; source comments document their tradeoffs.
+  Native exports are wrapped and projected in their instance's known realm.
+  See the [Global review](browlet/webassembly/ROADMAP.md#55-reviewed-globals).
+- **WebAssembly Table bindings:** The constructor exposes the draft's externref
+  and anyfunc kinds. Runtime overloads preserve omission versus explicit undefined
+  for grow/set and the accepted browser error precedence. The generated TypeScript
+  surface uses equivalent optional parameters. See the
+  [Table audit](browlet/webassembly/ROADMAP.md#54-reviewed-tables).
+
+
 - **`document.all`:** Available with the addon on each supported base, including
   callable lookup and native falsiness. Without it, `Document.prototype.all` is
   omitted. `SPEC_CLASH(htmlallcollection-property-order)`: native V8/Chromium
@@ -1257,8 +1365,10 @@ work and provisional consumer hooks stay in its [single roadmap](fetch/ROADMAP.m
 `document.domain` now validates and records relaxation, and origin-keyed clusters
 suppress valid assignments. This does not implement WindowProxy/Location's
 cross-origin access enforcement. The OAC header and `originAgentCluster` expose
-modeled cluster selection, without native execution isolation or WebAssembly.Module
-cloning/delivery. `Origin.from()` supports strings, URL, Origin, and Window
+modeled cluster selection, without native execution isolation. WebAssembly.Module
+cloning and MessagePort delivery now enforce those modeled clusters within the
+current runtime; worker transport across isolates remains unfinished.
+`Origin.from()` supports strings, URL, Origin, and Window
 objects, including WindowProxy and entry-origin access checks. Direct host calls
 without an HTML entry use the operation environment. Worker globals remain
 unfinished. Anchor and area have nullable URL slots and extraction, but their

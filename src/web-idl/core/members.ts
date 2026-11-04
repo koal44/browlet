@@ -151,6 +151,8 @@ export type OperationMember<Env = unknown, Values extends unknown[] = unknown[]>
   overrideCapturesIncumbent?: boolean;
   /** Injected arguments for an automatically bound implementation method. */
   invokeWith?: InjectedArgument<Env>[];
+  /** Implementation method name when overloads have different algorithms. */
+  method?: string;
   /** Supported indices and membership checks for a legacy indexed getter. */
   indexedGetter?: IndexedGetterDeclaration;
 

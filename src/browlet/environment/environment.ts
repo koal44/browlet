@@ -22,7 +22,7 @@ import {
   type CacheUsage, type Destination, type FetchMode, type FetchResponse, type FetchTimingInfo,
   type NetworkPartitionKey, type RequestCredentials, type ResponseBodyInfo,
 } from '../../fetch/index';
-import { cssStyleSheetIDL, type CSSStyleSheetImpl, type StyleletEnvironment } from '../../stylelet/index';
+import { cssStyleSheetIDL, type StyleletEnvironment } from '../../stylelet/index';
 
 import { Moment, UnsafeMoment, monotonicClock, EnvironmentTiming } from '../timing/index';
 import type { CORSSettingsState } from '../dom/nodes/html/attributes/index';
@@ -62,7 +62,7 @@ import type {
 } from '../scripting/structured-data/index';
 import type { BrowsingContext, Traversable } from '../browsing/navigation/index';
 import type { PermissionStatusImpl } from '../integration/permissions/index';
-import type { CSSStyleSheet, QuotaExceededError } from '../platform';
+import type { QuotaExceededError } from '../platform';
 import type { UserAgent } from '../user-agent';
 import type { ModuleResponsesMap } from '../worklets/index';
 
@@ -168,6 +168,10 @@ export class BrowletEnvironmentBase implements FetchEnvironmentBase {
 
 /** Construction inputs consumed once; binding closures stay at the composition root. */
 export interface BrowletEnvironmentInit {
+  /** Project a registered implementation, preserving an existing owner or assigning this environment. */
+  project: (implInst: object) => object | null;
+  /** Unwrap a platform object belonging to this environment's binding world. */
+  unwrap: (platformObject: object) => object | undefined;
   /** Binding-aware internal Promise constructor. */
   InternalPromise: typeof InternalPromise;
   /** Host line ending used for Blob string parts. */
@@ -195,8 +199,6 @@ export interface BrowletEnvironmentInit {
   createAbortSignal: () => AbortSignalImpl;
   /** Allocate a projected QuotaExceededError in this environment's realm. */
   createQuotaExceededError: () => QuotaExceededError;
-  /** Project a constructed sheet for an author-visible CSS module export. */
-  projectCSSStyleSheet: (sheet: CSSStyleSheetImpl) => CSSStyleSheet;
   /** Apply the selected permission dictionary's Web IDL conversion. */
   convertPermissionDescriptor: (value: object, type: string) => PermissionDescriptor;
   /** Allocate and initialize a feature's PermissionStatus in this environment's realm. */
@@ -259,8 +261,10 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   createDependentAbortSignal;
   /** Allocate a projected QuotaExceededError in this environment's realm. */
   createQuotaExceededError;
-  /** Project a constructed sheet for an author-visible CSS module export. */
-  projectCSSStyleSheet;
+  /** Project an implementation at an opaque boundary, such as an object-valued export. */
+  project;
+  /** Unwrap a platform object without traversing an opaque input's other properties. */
+  unwrap;
   /** Apply the selected permission dictionary's Web IDL conversion. */
   convertPermissionDescriptor;
   /** Allocate a feature's status with this environment's binding ownership. */
@@ -287,7 +291,8 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   constructor(realm: BrowletRealm, baseEnv: BrowletEnvironmentBase | null, initialization: BrowletEnvironmentInit) {
     super(baseEnv);
     this.InternalPromise = initialization.InternalPromise;
-    this.projectCSSStyleSheet = initialization.projectCSSStyleSheet;
+    this.project = initialization.project;
+    this.unwrap = initialization.unwrap;
     this.convertPermissionDescriptor = initialization.convertPermissionDescriptor;
     this.createPermissionStatus = initialization.createPermissionStatus;
     this.nativeLineEnding = initialization.nativeLineEnding;

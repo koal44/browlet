@@ -19,7 +19,7 @@ export {
   getCommonImplementationClass,
 } from './declarations';
 export type {
-  PrimaryInterfaceDefinition, PartialInterfaceDefinition, InterfaceImplementation, InterfaceOverride,
+  PrimaryInterfaceDefinition, PartialInterfaceDefinition, InterfaceImplementation,
   InterfaceMixinDefinition, PartialInterfaceMixinDefinition, IncludesDefinition,
   DictionaryDefinition, PartialDictionaryDefinition,
   NamespaceDefinition, PartialNamespaceDefinition,

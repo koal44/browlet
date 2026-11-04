@@ -9,7 +9,8 @@ export type {
 export type { AssembledInterface, IDLAttribute, IDLFrozenArrayType, IDLInterfaceType, IDLType } from './assembly/index';
 export { matchesExposure } from './assembly/index';
 export type { WebIDLEnvironment, WebIDLRealm, CallbackHooks } from './environment';
-export type { GlobalObjectAllocation, SecurityCheckType } from './binding/realm';
+export type { GlobalObjectAllocation, SecurityCheckType, RealmBinding } from './binding/realm';
+export { createOverloadResolver } from './binding/realm/overload';
 export { isArrayIndex } from './binding/realm/legacy';
 export {
   isStampedImplInstance, isStampedPlatformObject, getImplementationObject, PlatformRecordSource,

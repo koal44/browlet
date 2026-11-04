@@ -3,7 +3,7 @@ import type { JSFunction, JSFunctionWithPrototype } from '../../../js-engine/ind
 
 import type {
   IDLInterfaceMember, IDLConstant, IDLNamedArguments, AssembledInterface, AssembledCallbackInterface,
-  AssembledNamespace, DefaultToJSONAttribute, MemberPlacement,
+  AssembledNamespace, DefaultToJSONAttribute, MemberPlacement, AssembledOverloads, IDLConstructor,
 } from '../../assembly/index';
 import type { PlatformRecord } from '../../values/index';
 
@@ -69,22 +69,11 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     const { binding: realmBinding, assembled } = this;
     if (this.interfaceObject) return this.interfaceObject;
 
-    const override = assembled.primary.interfaceOverride;
-    if (override?.getInterfaceObject) {
-      return this.#getOverriddenInterfaceObject(
-        override.getInterfaceObject(realmBinding.getEnvironment()) as JSFunctionWithPrototype,
-      );
-    }
-
     const constructors = assembled.getConstructors(
       (entry) => assembled.isMemberExposed(entry, realmBinding.realm),
     );
     const overrideConstructor = this.overrideConstructor;
     const resolve = createOverloadResolver(constructors, realmBinding, `${assembled.primary.name}:constructor`);
-    // TODO: Infer entry capture for callback-typed constructors, beyond explicit overrideCapturesIncumbent.
-    // The MutationObserver regression in
-    // test/browlet/communication/window-messaging.test.ts saves outer A instead of constructor caller B.
-    // SPEC_CLASH(mutation-observer-callback-incumbent): expect caller B per Web IDL and Chromium/Firefox; WebKit saves outer A.
     const object: JSFunction = realmBinding.realm.createFunction(
       (_thisArgument, argumentsList, newTarget) => {
         if (overrideConstructor) {
@@ -113,7 +102,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
       },
       {
         constructible: true,
-        captureIncumbent: constructors.callables.some((constructor) => constructor.overrideCapturesIncumbent),
+        captureIncumbent: this.#constructorsNeedIncumbent(constructors),
         length: constructors.minimumArgumentCount,
         name: assembled.primary.name,
       },
@@ -179,8 +168,6 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
 
     const overloads = assembled.getLegacyFactoryOverloads(name);
     const resolve = createOverloadResolver(overloads, realmBinding, `${assembled.primary.name}.${name}:factory`);
-    // TODO: Capture the incumbent at constructible entry, as for interface objects. The callback-taking
-    // legacy factory fixture in test/browlet/communication/window-messaging.test.ts also saves A instead of B.
     const function_ = realmBinding.realm.createFunction(
       (_thisArgument, argumentsList, newTarget) => {
         if (!newTarget) {
@@ -204,6 +191,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
       },
       {
         constructible: true,
+        captureIncumbent: this.#constructorsNeedIncumbent(overloads),
         length: overloads.minimumArgumentCount,
         name,
       },
@@ -226,9 +214,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     const { binding: realmBinding, assembled } = this;
     if (this.namespaceObject) return this.namespaceObject;
 
-    const overrideNamespace = assembled.primary.overrideNamespace;
-    const object = overrideNamespace?.(realmBinding.getEnvironment()) ??
-      realmBinding.realm.createOrdinaryObject(realmBinding.realm.objectPrototype);
+    const object = realmBinding.realm.createOrdinaryObject(realmBinding.realm.objectPrototype);
     this.namespaceObject = object;
     this.defineAttributes(object, 'regular');
     this.defineOperations(object, 'regular');
@@ -262,7 +248,6 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     if (this.interfacePrototypeObject) {
       return this.interfacePrototypeObject;
     }
-    if (assembled.primary.interfaceOverride) return this.getInterfaceObject().prototype;
 
     this.assertOrdinaryProjection();
 
@@ -358,7 +343,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     const { binding: realmBinding, assembled } = this;
     const groups = assembled.getOperationGroups(
       kind,
-      (_operation, entry) => assembled.isMemberExposed(entry, realmBinding.realm),
+      (operation, entry) => assembled.isMemberExposed(entry, realmBinding.realm),
     );
 
     for (const operations of groups.values()) {
@@ -527,46 +512,16 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     return this.legacyPropertyMetadata;
   }
 
-  /** Retain the supplied constructor and prototype, adapting only the declared members. */
-  #getOverriddenInterfaceObject(
+  /** Derive entry capture from explicit requests, callback conversion, and injected constructor dependencies. */
+  #constructorsNeedIncumbent(
     this: ImplementationBinding<AssembledInterface>,
-    interfaceObject: JSFunctionWithPrototype,
-  ): JSFunctionWithPrototype {
-    const { binding: realmBinding, assembled } = this;
-    const prototype = interfaceObject.prototype;
-    const constructors = assembled.getConstructors(
-      (entry) => assembled.isMemberExposed(entry, realmBinding.realm),
-    );
-    if (constructors.callables.length) {
-      const resolve = createOverloadResolver(constructors, realmBinding, `${assembled.name}:constructor`);
-      const construct = (_target: JSFunction, argumentsList: unknown[], newTarget: JSFunction) => {
-        const overload = resolve(argumentsList);
-        const behavior = realmBinding.getMemberBinding(assembled, overload.callable)!.constructorBehavior!;
-        return realmBinding.constructPlatformObject(assembled, behavior, overload.values, newTarget);
-      };
-      const captureIncumbent = constructors.callables.some((constructor) => constructor.overrideCapturesIncumbent);
-      // Preserve the native prototype and undeclared static members while adapting construction.
-      interfaceObject = new Proxy<JSFunctionWithPrototype>(interfaceObject, {
-        apply: () => realmBinding.throwTypeError(`Failed to construct '${assembled.name}': use the 'new' operator.`),
-        // The trap can be a nonconstructible native function: capture must precede host JavaScript.
-        construct: captureIncumbent ? realmBinding.realm.createFunction((_receiver, args) =>
-          construct(args[0] as JSFunction, args[1] as unknown[], args[2] as JSFunction),
-        { name: 'construct', length: 3, captureIncumbent: true }) : construct,
-      });
-      defineProperty(prototype, 'constructor', {
-        value: interfaceObject, writable: true, enumerable: false, configurable: true,
-      });
-      defineProperty(interfaceObject, 'length', {
-        value: constructors.minimumArgumentCount, writable: false, enumerable: false, configurable: true,
-      });
-      defineProperty(interfaceObject, 'name', {
-        value: assembled.name, writable: false, enumerable: false, configurable: true,
-      });
-    }
-    this.interfaceObject = interfaceObject;
-    this.interfacePrototypeObject = prototype;
-    this.defineOperations(interfaceObject, 'static');
-    return interfaceObject;
+    constructors: AssembledOverloads<IDLConstructor | IDLNamedArguments>,
+  ): boolean {
+    return constructors.callables.some((constructor) =>
+      constructor.arguments.some((argument) => argument.type.capturesCallbackContext || argument.callbackDictionary?.capturesCallbackContext) ||
+      (constructor.kind === 'constructor' && (constructor.overrideCapturesIncumbent ||
+        constructor.constructWith?.some(({ resolve }) => resolve.length >= 3)))) ||
+        this.assembled.implementations.some(({ constructWith }) => constructWith?.some(({ resolve }) => resolve.length >= 3));
   }
 
   #defineConstant(

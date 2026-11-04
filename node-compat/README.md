@@ -175,10 +175,25 @@ after that callback. [Public API tests](test/vm-api.test.cjs) cover the matching
 Node call path, callback collection, and live exports. Remaining probes stay in
 `experimental/module-records/`.
 
+### WebAssembly Module cloning
+
+`cloneWebAssemblyModule(module, context)` creates a fresh Module in an attached
+destination context through public V8 `GetCompiledModule()` / `FromCompiledModule()`.
+It shares compiled code and preserves compile options, without consulting author
+properties, invoking a constructor, or reapplying compilation policy. It rejects
+non-Modules, proxies, and unusable contexts. HTML owns storage and agent-cluster
+restrictions; this primitive does not enforce browser policy.
+
+[The cloning tests](test/wasm-clone.test.cjs) verify native creation-realm identity,
+ignored author properties, and invalid inputs/contexts. They also use the addon
+as an ownership oracle for the public Node MessagePort path used in stock mode.
+
 ### Native WebAssembly completion
 
 `setWasmAsyncCompletionCallback(context, schedule)` hands asynchronous native
-Wasm Promise resolution to that context's host. `schedule(complete)` must not
+Wasm Promise resolution to that context's host. `schedule(complete, promise)`
+identifies the original native Promise so concurrent operations can select
+different task sources without resolving or observing their results. It must not
 throw; retain `complete` for the owning task, or discard it when delivery is no
 longer appropriate. It resolves/rejects once, including synchronous `then` lookup,
 without running a checkpoint. A detached context makes it inert. Passing
@@ -196,7 +211,7 @@ this callback: another embedder's replacement cannot be chained. Addon reloads
 share the dispatcher; final environment cleanup restores default behavior.
 Callbacks and pending results have traced JavaScript ownership, with no native
 registry retaining their contexts. [Tests](test/wasm-completion.test.cjs) cover
-deferred success/error delivery, thenables, context separation, native defaults,
+deferred success/error delivery, Promise identity, thenables, context separation, native defaults,
 detachment, collection, and worker teardown.
 
 ### WebAssembly imported function conversion
@@ -262,6 +277,34 @@ object but returns only its compiled source, without linking or executing its
 dependencies. `.moduleRequests` includes only the Wasm imports, with empty
 attributes and evaluation phase. The internal instantiation helper is hidden.
 
+The optional `getSource()` host callback supplies the object exposed by both
+static and dynamic source imports. Browlet uses ordinary Binding projection of
+its retained WasmModuleImpl, preserving platform identity and hiding the native
+backing. Without the callback, imports return `.source` as before. The private
+linker accepts source objects, while still rejecting evaluation handles; the
+public linker continues to require WebAssemblyModule dependencies.
+
+The optional `createInstance(module, imports)` host callback replaces only native
+instantiation during evaluation and must return the native Instance. Compilation
+and linking never invoke it; throws reject evaluation unchanged. Browlet uses it
+to enter the exact HTML Wasm record and apply its existing imported-callback/result
+conversion adapter. Without it, the bridge retains its captured native constructor.
+
+The optional `getExports()` callback runs after instantiation and supplies the
+public export object for JavaScript namespace bindings. Browlet uses it to project
+Memory, Table, and Tag implementations. Direct Wasm dependencies keep the native
+exports, and global bindings still follow the existing value-extraction rules and
+documented limitations. Without this callback the bridge exposes native exports.
+
+`getWebAssemblyNamespaceInstance(namespace)` retrieves that same native Instance
+from an actual bridge-owned namespace. It returns `null` for other objects or
+foreign namespaces, and `undefined` for a recognized record before an Instance
+exists. Linking registers the association even when a parent subsequently fails;
+no export inspection, Proxy traps, or additional instantiation occurs. A weak map
+keeps the record alive while its namespace remains reachable. The browser binding
+owns the corresponding TypeError and the provisional pre-execution ReferenceError.
+This does not recognize namespaces created by Node's separate filesystem loader.
+
 The implementation captures Wasm constructors and accessors at context creation,
 before author code can replace them. It generates a source-text module and a
 private synthetic leaf; V8 supplies ordering, cycles, top-level await, linking
@@ -272,23 +315,59 @@ there are no new native roots, isolate callbacks, or engine patches for static
 Wasm graphs. `vm-wasm.cjs` owns the translation, while `vm-modules.cjs` owns the
 public module identity and linking.
 
-Three requirements from the [ESM integration draft](https://webassembly.github.io/esm-integration/js-api/index.html#execute-module)
-remain approved expected failures:
+JavaScript re-exports now preserve the original Wasm Global on reviewed builds.
+`vm-modules.cjs` retains the supplied dependency records after linking and assigns
+one optional resolver from [vm-module-bindings.cjs](addon/vm-module-bindings.cjs).
+That companion owns the capability check and graph search for a Wasm export with
+the same resolved binding. Aliases, cycles, and star exports use V8's resolution;
+equal values or `export const copy = input` do
+not qualify. `vm-wasm.cjs` supplies the recovered native Global at instantiation,
+including through Browlet's existing HTML adapter. There is no context-wide
+registry, source parser, additional public API, or change to Node's own loader.
+Removing that resolver assignment and its import restores namespace-value imports;
+`vm-wasm.cjs` already handles an absent resolver. Replacing the private predicate
+with a public engine API would leave the rest of the linker unchanged.
+
+**HACK:** [vm-module-bindings.cc](addon/vm-module-bindings.cc) reads private
+JSModuleNamespace, Module, and ObjectHashTable layouts to compare binding Cells.
+It never reads or writes a Cell's value, retains a raw pointer, or runs author
+code. The predicate is compiled only for reviewed header versions on Windows x64
+without pointer compression, and additionally checks the actual V8 version when
+loaded. The reviewed engines are:
+
+| Node build | V8 version |
+| --- | --- |
+| 24.19.0 | 13.6.233.17-node.51 |
+| 26.8.1 | 14.6.202.34-node.28 |
+| Custom 27.0.0-pre | 14.6.202.34-node.29 |
+
+There is no startup self-test. Unknown versions/build configurations omit the
+predicate and keep the previous re-export limitation. These pins are not an ABI
+guarantee: a custom change to those layouts without a version change can still
+crash the process. Review the named V8 source layouts and rerun the regressions
+before extending the guard. A public binding-identity API could replace the
+private reads. Lookup currently scans candidate exports and their export tables;
+large-graph performance has not been established.
+
+Two requirements from the [ESM integration draft](https://webassembly.github.io/esm-integration/js-api/index.html#execute-module)
+remain approved expected failures on every addon base:
 
 | Requirement | Current limitation |
 | --- | --- |
 | Mutable globals stay live in JavaScript bindings | The JavaScript export keeps its initial value after Wasm changes the global. |
 | `v128` exports stay uninitialized | Reading the export returns undefined instead of throwing ReferenceError. Other exports work. |
-| Mutable globals re-exported through JavaScript retain their Wasm binding | A consuming Wasm module receives the JavaScript value and fails with LinkError. Direct Wasm imports work. |
 
-[Wasm regressions](test/wasm.test.cjs) exercise ordinary functionality and lifetime.
+[Wasm regressions](test/wasm.test.cjs) exercise ordinary functionality and lifetime;
+[re-export regressions](test/wasm-reexports.test.cjs) cover identity, prelinked
+graphs, garbage collection, invalid inputs, workers, and the disabled fallback.
 [Gap tests](test/wasm-gaps.test.cjs) preserve the required behavior and reject
-unexpected passes. The [Node-only controls](test/wasm-node-gaps.test.cjs) reproduce
-the same three failures without loading the addon. No binding emulation or
-additional V8 patch is proposed for these gaps. Deferred imports,
-`import(moduleObject)`, module-source reflection, and `WebAssembly.namespaceInstance()`
-remain outside this slice. JS Engine/HTML's Wasm parser and automatic loading
-are still explicit dependencies, ready to consume this bridge during integration.
+unexpected passes; the re-export assertion is an ordinary passing test on reviewed
+builds and remains an expected failure elsewhere. The [Node-only controls](test/wasm-node-gaps.test.cjs)
+still reproduce all three original failures in Node's independent loader.
+No Node/V8 patch is needed for this change. HTML parsing, URL loading, source
+imports, module-source reflection, and `WebAssembly.namespaceInstance()` are
+connected. Deferred imports and object-valued `import(moduleObject)` remain
+explicitly deferred in the [Wasm roadmap](../src/browlet/webassembly/ROADMAP.md).
 
 ### Dynamic imports
 
@@ -301,7 +380,7 @@ phases are `'evaluation'` and `'source'`.
 For evaluation, the callback returns a Module or module namespace, optionally
 through a Promise.
 For source imports it returns a WebAssemblyModule, optionally through a Promise;
-the bridge returns that module's retained `.source` without instantiating it.
+the bridge returns its `getSource()` result (or retained `.source`) without instantiating it.
 The host owns resolution, loading, linking, and waiting for evaluation, including
 top-level await. Returning a Module does not evaluate it automatically.
 
@@ -355,8 +434,12 @@ production retains caching and the regression is an approved expected failure.
 Direct and indirect eval routing pass. HTML now connects evaluation-phase imports
 to its resolver, Fetch, module map, and graph loader, including top-level await.
 Its callback returns an evaluated Module through a native Promise; graph operations
-use `env.InternalPromise`. HTML source/deferred imports and its Wasm parser remain
-unfinished, separately from the addon's existing Wasm source-import support.
+use `env.InternalPromise`. HTML also connects Wasm parsing and source-phase URL
+imports: source records skip dependency traversal, linking, and evaluation, and
+the bridge projects their public Module only at the import boundary. Static
+source imports work on all addon bases; dynamic source imports require the same
+forwarding export as ordinary dynamic imports. Stock Node has no public Wasm VM
+class. Deferred imports and object-valued `import(moduleObject)` remain separate.
 
 ### import.meta initialization
 
@@ -433,6 +516,36 @@ retains four approved expected failures even on custom Node:
 - Rejecting the implicit untrusted empty body of `Function()` despite its CodeLike flag.
 
 No native TrustedScript branding or additional engine patches are introduced.
+
+### Wasm compilation policy
+
+`setAllowWasmCodeGenerationCallback(realmReference, callback)` registers a
+synchronous, nonthrowing `() => boolean` policy decision for a context. Pass
+`context.realm` or an object created in a Node VM context. `true` permits native
+compilation; `false` lets V8 produce CompileError. Node's exported
+`AllowWasmCodeGenerationCallback` runs first, so registration cannot enable Wasm
+in a Node context created with `codeGeneration: { wasm: false }`.
+
+This uses public Node/V8 APIs on all three bases, with no engine patch. Unregistered
+contexts retain Node's behavior. Registration replaces the callback; `undefined`
+removes it. Private context state survives global-proxy reuse without retaining
+discarded context cycles. Environment cleanup restores Node's isolate callback;
+competing addons replacing that callback are unsupported.
+
+V8 calls the hook for Module construction, byte compilation/instantiation, and
+streaming compilation. It does not gate validation or instantiation of retained
+modules. Browlet's HTML Wasm parser uses the same native constructor. Module
+cloning and the addon's private imported-function conversion bridge do not compile
+new author bytes and remain usable under a restrictive policy.
+
+The callback has no source input: CSP §4.5.1 needs only the owning realm. It must
+return a boolean and must not throw; V8 has no exception-result channel here.
+A contract violation is an internal fatal error, never silent permission to
+compile. Browlet's callback queues violation reporting without invoking author
+handlers synchronously. [Tests](test/wasm-code-generation.test.cjs) cover policy
+changes, native APIs, Node isolation/permissions, collection, proxy reuse, and
+worker teardown. Stock mode checks Browlet's own entry points but cannot intercept
+direct calls to captured native functions.
 
 ### Temporal clock
 

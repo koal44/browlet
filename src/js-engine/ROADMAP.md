@@ -43,6 +43,19 @@ The native failure remains open; no optimization, metadata, or assertion was
 disabled. Experimental's `optimized-job-snapshot/README.md` retains the stack,
 engine revision, full-run command, and passing controls for a focused follow-up.
 
+The 3 November Wasm implementation/platform migration reproduced the same native
+stack in a full custom/addon run: 19,068 tests passed before reporting the worker
+failure, with eight `test/js-engine/runtime.test.ts` cases left pending. All eight
+pass in isolation. This remains an unresolved engine validation limit, not an
+expected-failure reclassification; no optimization or snapshot hook was disabled.
+
+Follow-up: the retained 2 November command specifies no shuffle seed, and the
+notes do not establish identical test order between the failing and passing runs.
+Record runner version, worker count and file assignment/order, shuffle settings
+(including seed when enabled), and the exact Node/V8 revision on reproduction.
+Compare runner changes and the patched stack-inspection boundary separately;
+neither the repeated stack nor the Vitest upgrade establishes the cause.
+
 ### Classic scripts and host entry
 
 Integrate HTML Script records with `ParseScript`/`ScriptEvaluation`, settings, source
@@ -178,10 +191,17 @@ realm fallback, then loads, links, and waits for evaluation through internal
 promises. A native Promise for the engine Module crosses the Node callback boundary;
 Node owns the final namespace conversion. Host-created Function/eval code with
 Node metadata continues to use Node's loader, even with a Window-owned constructor.
-Source/deferred imports and Wasm ESM parsing remain explicit dependencies in
-HTML/JS Engine. The addon now supplies WebAssemblyModule
-compilation, supplied-graph linking, execution, and source-phase access; connect
-that bridge to the existing record/parser when resuming the HTML audit.
+`JSRealm.compileWebAssemblyModule()` now connects the addon's retained Wasm record
+to HTML parsing and the existing supplied-graph linker. A host instance factory
+allows HTML to apply callback lifecycle without JS Engine knowing browser policy.
+Stock Node has no public Wasm VM class and still rejects this operation explicitly.
+HTML now connects static and dynamic source-phase URL imports. The optional
+`getSource` callback supplies its projected Module while `.source` retains the
+private native backing; default addon behavior stays unchanged. Source imports
+do not traverse dependencies or evaluate. Deferred imports and object-valued
+source-to-record lookup remain separate dependencies. Static source imports
+work on every addon base; dynamic source imports also require the existing
+Node dynamic-import forwarding export (currently custom/compat).
 Module-specific active-script entry and restoration after
 await need engine metadata/hooks: the current HTML runner supplies the retained
 realm context, not a fictitious root-script context for every dependency.
@@ -291,17 +311,18 @@ Instant range exceeds the callback's accepted signed-int64 result. See the
 Do not bypass the policy query or silently replace the specified clamp with int64.
 
 Eric approved retaining demonstrated gaps as expected failures during adoption,
-without expanding this work into further engine patches. Carry over the three
-[Wasm failures](../../node-compat/experimental/module-records/WASM.md): mutable
-global live bindings, v128 export initialization, and mutable globals re-exported
-through JavaScript. Keep their Node-only controls, which reproduce all three.
+without expanding this work into further engine patches. Mutable Wasm global
+live bindings and v128 export initialization remain expected failures. The addon
+now repairs native-global identity through JavaScript re-exports using a guarded
+private-layout hack on reviewed Windows x64 engines; unreviewed builds retain
+that third limitation. Keep the Node-only controls, which still reproduce all three.
 Likewise retain the four [string-compilation hook failures](../../node-compat/experimental/compile-strings/README.md):
 eval/Function distinction, original parameter boundaries, TrustedScript argument
 identity, and the implicit untrusted empty body. These now run as approved expected
 failures in the maintained [gap suite](../../node-compat/test/code-generation-gaps.test.cjs).
 Keep specification expectations, record the responsible boundary, and revisit
-them with the relevant consumer or upstream API change. Wasm's three assertions
-and their Node-only controls now run in the maintained
+them with the relevant consumer or upstream API change. Wasm's assertions
+and their Node-only controls run in the maintained
 [gap suites](../../node-compat/test/wasm-gaps.test.cjs). The
 [addon contract](../../node-compat/README.md#webassembly-modules) records the
 generated-module mechanism and its limits; ordinary imports, functions, immutable

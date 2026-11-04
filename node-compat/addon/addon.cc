@@ -28,7 +28,7 @@ void Initialize(v8::Local<v8::Object> exports, v8::Local<v8::Value>,
   InitializeVmImports(exports, context, vm_data);
   InitializeVmModules(exports, context, vm_data);
   InitializeWasmCompletion(exports, context, vm_data);
-  InitializeWasmFunctions(exports);
+  InitializeWasmFunctions(exports, context, vm_data);
   InitializeCodeGeneration(exports);
   InitializeExceptionReporting(exports, context, vm_data);
   InitializeTemporal(exports);

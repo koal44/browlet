@@ -14,11 +14,120 @@ import { DefinitionAssembly } from '../../src/web-idl/assembly/index';
 import { generatePlatformTypes } from '../../src/web-idl/generate';
 
 describe('platform declaration generation', () => {
-  it('retains native interface value types without inventing constructors', () => {
+  it('combines arity overloads only when optional parameters preserve the accepted calls', () => {
+    const assembly = new DefinitionAssembly([defineInterface({
+      name: 'Example', exposed: '*', members: [
+        op('grow', idlType.any, [arg('delta', idlType.any)]),
+        op('grow', idlType.any, [arg('delta', idlType.any), arg('value', idlType.any)]),
+        op('strict', idlType.undefined, [arg('index', idlType.unsignedLong)]),
+        op('strict', idlType.undefined, [arg('index', idlType.unsignedLong), arg('value', idlType.DOMString)]),
+        op('distinct', idlType.DOMString, [arg('index', idlType.unsignedLong)]),
+        op('distinct', idlType.boolean, [arg('index', idlType.unsignedLong), arg('value', idlType.any)]),
+      ],
+    })]);
+    const source = generatePlatformTypes(assembly);
+    expect(source).toContain('grow(delta: any, value?: any): any;');
+    expect(source).not.toContain('grow(delta: any): any;');
+    expect(source).toContain('strict(index: number): void;');
+    expect(source).toContain('strict(index: number, value: string): void;');
+    expect(compile(source, `
+      import type { Example } from './platform';
+      declare const value: Example;
+      value.grow(1); value.grow(1, undefined);
+      value.strict(0); value.strict(0, 'text');
+      // @ts-expect-error Combining these overloads would newly accept undefined.
+      value.strict(0, undefined);
+      const text: string = value.distinct(0);
+      const flag: boolean = value.distinct(0, undefined);
+    `)).toEqual([]);
+  });
+
+  it('types ordinary members and ECMAScript namespace properties without invoking implementations', () => {
+    const unavailable = (): never => { throw new Error('Generation must not run native hooks'); };
     const assembly = new DefinitionAssembly([
       defineInterface({
-        name: 'NativeValue', members: [], interfaceOverride: { isInstance: () => false }, exposed: '*',
-        ...xattr(['LegacyNamespace', 'Host']),
+        name: 'Native', exposed: '*', ...xattr(['LegacyNamespace', 'Engine']),
+        implementation: impl(class {}, { initializeImplementation: unavailable }),
+        members: [
+          roAttr('size', idlType.unsignedLong),
+          op('read', idlType.DOMString, [arg('index', idlType.unsignedLong)]),
+          staticOp('accepts', idlType.boolean, [arg('value', idlType.any)]),
+        ],
+      }),
+      defineNamespace({ name: 'Engine', exposed: '*', members: [] }),
+    ]);
+    const source = generatePlatformTypes(assembly, { namespaceProperties: { Engine: { Failure: 'ErrorConstructor' } } });
+    expect(compile(source, `
+      import type { Engine } from './platform';
+      declare const engine: Engine;
+      declare const value: Engine.Native;
+      const size: number = value.size;
+      const text: string = value.read(0);
+      const accepted: boolean = engine.Native.accepts(value);
+      const called: Error = engine.Failure('message');
+      const constructed: Error = new engine.Failure('message', { cause: called });
+      engine.Failure = Error;
+      // @ts-expect-error Declarations still express argument types.
+      value.read('0');
+      // @ts-expect-error Getters remain read-only.
+      value.size = 0;
+    `)).toEqual([]);
+  });
+
+  it('groups legacy namespace types and qualifies references across declaration scopes', () => {
+    const assembly = new DefinitionAssembly([
+      defineInterface({ name: 'Host', exposed: '*', ...xattr(['Global', 'Window']), members: [] }),
+      defineInterface({ name: 'Base', members: [roAttr('name', idlType.DOMString)] }),
+      defineInterface({
+        name: 'Entry', inherits: 'Base', exposed: '*', ...xattr(['LegacyNamespace', 'Tools']),
+        members: [ctor(), staticOp('create', reference('Entry'))],
+      }),
+      defineInterface({
+        name: 'Derived', inherits: 'Entry', exposed: '*', ...xattr(['LegacyNamespace', 'Other']),
+        members: [ctor(), roAttr('entry', reference('Entry'))],
+      }),
+      defineDictionary({ name: 'EntryOptions', members: [dictMember('entry', reference('Entry'), { required: true })] }),
+      defineNamespace({
+        name: 'Tools', exposed: '*', members: [
+          op('read', promise(reference('Entry')), [arg('options', reference('EntryOptions'))]),
+        ],
+      }),
+      defineNamespace({ name: 'Other', exposed: '*', members: [] }),
+      defineProxyObject({ name: 'EntryProxy', getHandle: () => undefined, getProxy: () => undefined }),
+    ]);
+    const source = generatePlatformTypes(assembly, { proxyInterfaces: { EntryProxy: 'Entry' } });
+    expect(compile(source, `
+      import type * as Platform from './platform';
+      import * as Exports from './platform';
+      declare const host: Platform.Host;
+      const tools: Platform.Tools = host.Tools;
+      const constructor: Platform.Tools.EntryConstructor = tools.Entry;
+      const entry: Platform.Tools.Entry = new constructor();
+      const created: Platform.Tools.Entry = tools.Entry.create();
+      const derived: Platform.Other.Derived = new host.Other.Derived();
+      const parent: Platform.Tools.Entry = derived;
+      const base: Platform.Base = entry;
+      const name: string = derived.name;
+      const options: Platform.EntryOptions = { entry };
+      const pending: Promise<Platform.Tools.Entry> = tools.read(options);
+      declare const proxy: Platform.EntryProxy;
+      const proxied: Platform.Tools.Entry = proxy;
+      // @ts-expect-error LegacyNamespace types are not flattened into the module.
+      type FlatEntry = Platform.Entry;
+      // @ts-expect-error Constructor types also belong to the namespace.
+      type FlatConstructor = Platform.EntryConstructor;
+      // @ts-expect-error A type namespace does not invent an exported runtime object.
+      const exportedObject = Exports.Tools;
+      // @ts-expect-error The constructor remains on the runtime namespace object.
+      host.Entry;
+    `)).toEqual([]);
+  });
+
+  it('types LegacyNoInterfaceObject values without inventing constructors', () => {
+    const assembly = new DefinitionAssembly([
+      defineInterface({
+        name: 'NativeValue', members: [], exposed: '*',
+        ...xattr('LegacyNoInterfaceObject', ['LegacyNamespace', 'Host']),
       }),
       defineNamespace({
         name: 'Host', exposed: '*', members: [
@@ -31,16 +140,16 @@ describe('platform declaration generation', () => {
     expect(source).not.toContain('NativeValueConstructor');
     expect(source).not.toContain('NativeValue:');
     expect(compile(source, `
-      import type { Host, NativeValue } from './platform';
+      import type { Host } from './platform';
       declare const host: Host;
-      const value: Promise<NativeValue> = host.read();
+      const value: Promise<Host.NativeValue> = host.read();
     `)).toEqual([]);
   });
 
-  it('exposes declared static operations on a supplied native constructor', () => {
+  it('exposes declared static operations on a namespace constructor', () => {
     const assembly = new DefinitionAssembly([
       defineInterface({
-        name: 'NativeValue', interfaceOverride: { isInstance: () => false, getInterfaceObject: () => Map },
+        name: 'NativeValue',
         exposed: '*', ...xattr(['LegacyNamespace', 'Host']),
         members: [staticOp('read', idlType.DOMString,
           [arg('value', reference('NativeValue')), arg('name', idlType.DOMString)],
@@ -49,9 +158,9 @@ describe('platform declaration generation', () => {
       defineNamespace({ name: 'Host', exposed: '*', members: [] }),
     ]);
     expect(compile(generatePlatformTypes(assembly), `
-      import type { Host, NativeValue } from './platform';
+      import type { Host } from './platform';
       declare const host: Host;
-      declare const value: NativeValue;
+      declare const value: Host.NativeValue;
       const result: string = host.NativeValue.read(value, 'name');
       // @ts-expect-error The second argument is required.
       host.NativeValue.read(value);

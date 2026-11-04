@@ -9,6 +9,7 @@ describe('Web IDL package surface', () => {
       ...Object.keys(core),
       'BindingWorld',
       'PlatformRecordSource',
+      'createOverloadResolver',
       'getImplementationObject',
       'isArrayIndex',
       'isStampedImplInstance',

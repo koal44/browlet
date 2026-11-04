@@ -71,19 +71,19 @@ describe('WebAssembly Module import and export metadata', () => {
 
   // SPEC_CLASH(wasm-module-descriptor-order): Web IDL emits dictionary members alphabetically;
   // Chromium, Firefox, and WebKit instead insert name/kind and module/name/kind.
-  // Browlet deliberately follows the browsers' order.
-  it.each(['exports', 'imports'] as const)('%s preserves browser dictionary property order', async (operation) => {
+  // Browlet's platform methods use ordinary Web IDL dictionary conversion.
+  it.each(['exports', 'imports'] as const)('%s uses Web IDL dictionary property order', async (operation) => {
     const browser = fixture();
     expect(await browser.evaluate(({ bytes, operation }) => {
       const module = new WebAssembly.Module(new Uint8Array(bytes));
       return WebAssembly.Module[operation](module).map((entry) => Object.keys(entry));
     }, { bytes: metadataBytes, operation })).toEqual(
       (operation === 'exports' ? expectedExports : expectedImports)
-        .map(() => operation === 'exports' ? ['name', 'kind'] : ['module', 'name', 'kind']),
+        .map(() => operation === 'exports' ? ['kind', 'name'] : ['kind', 'module', 'name']),
     );
   });
 
-  it.each(['exports', 'imports'] as const)('%s recognizes native Modules without author property access', async (operation) => {
+  it.each(['exports', 'imports'] as const)('%s recognizes platform Modules without author property access', async (operation) => {
     const browser = fixture();
     expect(await browser.evaluate(({ bytes, operation }) => {
       const foreign = Reflect.get(globalThis, 'foreign') as typeof globalThis;

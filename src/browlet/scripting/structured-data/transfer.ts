@@ -4,7 +4,7 @@ import {
   isArrayBufferView, isSharedArrayBuffer, isDetachedArrayBuffer, isObject,
 } from '../../../js-engine/index';
 import {
-  DOMExceptionImpl, DOMExceptionNames, StructuredData,
+  DOMExceptionImpl, DOMExceptionNames, StructuredData, PlatformRecordSource,
   type BindingContext, type StampedImplInstance, type TransferSteps,
 } from '../../../web-idl/index';
 
@@ -124,7 +124,7 @@ function prepareTransfer(
   }
   if (isSharedArrayBuffer(value) || isArrayBufferView(value)) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
 
-  const record = ctx.getOrCreatePlatformRecord(value);
+  const record = ctx.getPlatformRecord(value, PlatformRecordSource.Stamped);
   if (!record) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
   const steps = record.assembled.transferSteps;
   if (!steps) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);

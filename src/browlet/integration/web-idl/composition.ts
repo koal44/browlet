@@ -4,10 +4,9 @@ import { InternalError } from '../../../infra/index';
 import { isObject } from '../../../js-engine/index';
 import {
   PlatformRecordSource, BindingWorld, QuotaExceededErrorImpl, reference, type BindingContext, type ImplementationClass,
-  type StampedPlatformObject,
+  type StampedPlatformObject, type RealmBinding,
 } from '../../../web-idl/index';
 import { type PermissionDescriptor } from '../../../permissions/index';
-import { CSSStyleSheetImpl } from '../../../stylelet/index';
 
 import { EventImpl } from '../../dom/events/index';
 import { EventLoop, SandboxAgent, BrowletRealm, WindowRealm, installRealmHostHooks } from '../../scripting/index';
@@ -27,8 +26,8 @@ import {
 } from '../../scripting/structured-data/index';
 import { queueNodeTask } from '../host/index';
 import { PermissionStatusImpl } from '../permissions/index';
-import { htmlExtendedAttributeHooks, getWindowProxyAccess } from './bindings/index';
-import type { CSSStyleSheet, QuotaExceededError } from '../../platform';
+import { htmlExtendedAttributeHooks, getWindowProxyAccess, installWasmIntrinsics, installWasmExceptionBinding } from './bindings/index';
+import type { QuotaExceededError } from '../../platform';
 import type { UserAgent } from '../../user-agent';
 
 import { browletDefinitions } from './web-idl';
@@ -101,6 +100,8 @@ export function createWindowEnvironment(
         env.topLevelOrigin = topLevelOrigin;
         return env;
       });
+      // This world registers only Browlet environments; its internal lookup erases that type.
+      installWasmExceptionBinding(browletBindingWorld.getRealmBinding(realm)! as RealmBinding<BrowletEnvironment>);
       const window = new WindowImpl(env);
       realm.windowImplementation = window;
       const allocation = realm.globalAllocation;
@@ -150,6 +151,7 @@ export function createWindowEnvironment(
   if (reservedEnv !== null) reservedEnv.id = '';
   realm.windowImplementation.setWindowOrWorkerGlobalScopeMixin(new WindowOrWorkerGlobalScopeMixin(env));
   installRealmHostHooks(env, getCodeForEval);
+  installWasmIntrinsics(context);
   return env;
 }
 
@@ -179,6 +181,8 @@ function getCodeForEval(argument: unknown): string | undefined {
 /** Supply the binding-owned functions consumed during environment construction. */
 export function createBrowletEnvironmentInit(context: BindingContext<BrowletEnvironment>): BrowletEnvironmentInit {
   return {
+    project: (implInst) => context.project(implInst.constructor, implInst),
+    unwrap: (platformObject) => context.unwrap(platformObject),
     nativeLineEnding: EOL as '\n' | '\r\n',
     runInParallel: queueNodeTask,
     InternalPromise: context.InternalPromise,
@@ -197,7 +201,6 @@ export function createBrowletEnvironmentInit(context: BindingContext<BrowletEnvi
     createAbortSignal: () => context.construct(AbortSignalImpl),
     createQuotaExceededError: () =>
       context.project(QuotaExceededErrorImpl, new QuotaExceededErrorImpl()) as StampedPlatformObject<QuotaExceededError>,
-    projectCSSStyleSheet: (sheet) => context.project(CSSStyleSheetImpl, sheet) as StampedPlatformObject<CSSStyleSheet>,
     convertPermissionDescriptor: (value, type) => context.jsToImpl(value, reference(type)) as PermissionDescriptor,
     // https://w3c.github.io/permissions/#creating-instances
     createPermissionStatus: (descriptor) => {
