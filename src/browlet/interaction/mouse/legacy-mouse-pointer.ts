@@ -98,9 +98,12 @@ export class LegacyMousePointer {
   // https://w3c.github.io/pointerevents/#mapping-for-devices-that-do-not-support-hover
   // Dispatch preparation and completion straddle PointerEventStream's existing DOM
   // dispatch. The producer supplies mouse click count independently of pointer detail.
-  // TODO(Pointer Events §11 / HTML focus, editing, drag-and-drop): dispatch alone
-  // does not perform mouse default actions. Their owners must consume cancellation.
-  dispatchAfterPointer(input: PointerEventImpl, canceled: boolean, clickCount: number): void {
+  // The mouse producer supplies HTML's focusing continuation; do not use the
+  // pointer event's cancellation result to decide whether mousedown was canceled.
+  // TODO(HTML editing and drag-and-drop): connect their separate default actions.
+  dispatchAfterPointer(
+    input: PointerEventImpl, canceled: boolean, clickCount: number, focusOnMouseDown?: (target: NodeImpl) => void,
+  ): void {
     const { type, pointerType } = input;
     if (type === 'pointerdown' && canceled) this.#preventMouseEvent.add(pointerType);
     // §10 forbids suppressing hover; an outside release may have supplied no up.
@@ -121,7 +124,8 @@ export class LegacyMousePointer {
       // SPEC_CLASH(compatibility-mouse-removed-target): Use the repaired ancestor even after reinsertion, like Chromium/Firefox; WebKit drops or retargets the probed down.
       const target = type === 'pointercancel' ? this.#document.getRelevantGlobalObject() : this.#pointerTarget;
       if (mouseType !== null && target !== null) {
-        target.dispatch(MouseEventImpl.fromPointerEvent(mouseType, target, input, clickCount));
+        const uncanceled = target.dispatch(MouseEventImpl.fromPointerEvent(mouseType, target, input, clickCount));
+        if (mouseType === 'mousedown' && uncanceled && target.isNode()) focusOnMouseDown?.(target);
       }
     }
     if (type === 'pointerup' || type === 'pointercancel') this.#preventMouseEvent.delete(pointerType);

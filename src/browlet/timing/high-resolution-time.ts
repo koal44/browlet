@@ -56,10 +56,12 @@ export class EnvironmentTiming {
     ));
   }
 
+  // https://w3c.github.io/hr-time/#dfn-relative-high-resolution-coarse-time
   relativeHighResolutionCoarseTime(coarseTime: Moment): Duration {
     return this.#host.timeOrigin.durationUntil(coarseTime);
   }
 
+  // https://w3c.github.io/hr-time/#dfn-current-high-resolution-time
   currentHighResolutionTime(): Duration {
     return this.relativeHighResolutionTime(unsafeSharedCurrentTime());
   }
@@ -87,6 +89,7 @@ export function initializeEstimatedMonotonicTimeOfUnixEpoch(
 }
 
 /** Read monotonic time at the precision allowed by the isolation capability. */
+// https://w3c.github.io/hr-time/#dfn-coarsened-shared-current-time
 export function coarsenedSharedCurrentTime(
   crossOriginIsolatedCapability = false,
 ): Moment {

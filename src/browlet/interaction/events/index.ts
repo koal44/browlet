@@ -9,7 +9,7 @@ export {
   type MappedMouseType, type ScreenPosition,
 } from './mouse-event';
 export {
-  PointerEventImpl, type PointerEventInit, type PointerEventType, type PointerInputEventType,
+  PointerEventImpl, type PointerId, type PointerEventInit, type PointerEventType, type PointerInputEventType,
   type PointerActivationEventType, type PointerEventSamples,
 } from './pointer-event';
 export { TextEventImpl } from './text-event';

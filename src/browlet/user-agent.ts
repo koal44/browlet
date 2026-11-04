@@ -42,7 +42,7 @@ import { HTTPAuthenticationStore } from './loader/index';
 import {
   BrowsingContextGroup, Navigable, TopLevelTraversable, type NavigableContainer, type PostResource,
 } from './browsing/navigation/index';
-import { ActivePointers } from './interaction/index';
+import { ActivePointers, MouseInputProcessor } from './interaction/index';
 import { NodeHTTPTransport, createContentDecoder, supportedContentCodings } from './integration/host/network/index';
 import { NodePromise, queueNodeTask, nodeTimerHost } from './integration/host/index';
 import type { PermissionStatusImpl } from './integration/permissions/index';
@@ -166,8 +166,15 @@ export class UserAgent implements
   // https://w3c.github.io/webappsec-secure-contexts/#development-environments
   trustworthyOrigins: TupleOrigin[] = [];
 
+  /** Allocate the native/automation mouse owner only when input is used. */
+  #mouseInput: MouseInputProcessor | null = null;
+
   constructor() {
     this.sandbox = createSandboxEnvironment(this);
+  }
+
+  get mouseInput(): MouseInputProcessor {
+    return this.#mouseInput ??= new MouseInputProcessor(this);
   }
 
   /** Node host consent hook; a browser without a configured prompt declines new requests. */

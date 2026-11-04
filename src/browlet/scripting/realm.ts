@@ -7,7 +7,7 @@ import {
 import type { CallbackHooks, StampedPlatformObject, WebIDLEnvironment, WebIDLRealm } from '../../web-idl/index';
 import { serializeURL } from '../../url/index';
 
-import { coarsenedSharedCurrentTime, type DOMHighResTimeStamp } from '../timing/index';
+import { unsafeSharedCurrentTime, type DOMHighResTimeStamp, type UnsafeMoment } from '../timing/index';
 import type { EventImpl } from '../dom/events/index';
 import type { DocumentImpl } from '../dom/nodes/index';
 import type { DOMRealm, WindowDOMRealm } from '../dom/index';
@@ -253,12 +253,21 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
     );
   }
 
-  eventTimeStamp(): DOMHighResTimeStamp {
+  /** Convert a shared input reading, or the current time, to this realm's event timestamp. */
+  // https://dom.spec.whatwg.org/#concept-event-create
+  // https://dom.spec.whatwg.org/#inner-event-creation-steps
+  // https://w3c.github.io/hr-time/#dfn-relative-high-resolution-time
+  // DOM uses the time of the signaled occurrence. Keep input's raw reading until
+  // its owning realm coarsens it and subtracts its time origin. With no supplied
+  // reading, this is HRT's current high resolution time calculation.
+  eventTimeStamp(time: UnsafeMoment = unsafeSharedCurrentTime()): DOMHighResTimeStamp {
     const env = this.#env;
     if (env === undefined) {
-      return coarsenedSharedCurrentTime().milliseconds;
+      // An unbound realm has no environment time origin. Retain the shared,
+      // default-precision clock; without supplied input this is coarsenedSharedCurrentTime().
+      return time.coarsen().milliseconds;
     }
-    return env.timing.currentHighResolutionTime().toTimestamp();
+    return env.timing.relativeHighResolutionTime(time).toTimestamp();
   }
 
   /** Install this realm's globals while its retained creation context is running. */

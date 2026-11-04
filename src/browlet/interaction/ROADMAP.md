@@ -45,6 +45,30 @@ the specified Window, Document, or UserAgent owner.
 Synthetic construction and dispatch do not themselves supply native input,
 focus changes, editing, pointer capture, or scrolling.
 
+`MouseInputProcessor` now provides normalized button and movement entries through
+UserAgent, using real user-interaction tasks and existing pointer/mouse delivery.
+An explicit adapter flag delivers qualifying click/auxclick immediately after
+the release in the same task, retaining each button's press/release target.
+An independently supplied double-click flag follows the primary click with a
+MouseEvent at that same target; recognition remains with the adapter.
+Movement delivers secure raw input before pointermove and mapped mousemove,
+updating Window motion once. Button and movement actions retain receipt-time
+state/timestamps; events translate that shared time into their creation realms.
+An explicit context-menu flag selects press or release timing. Trusted dispatch
+and cancellation precede the native menu request and any qualifying click.
+It calls explicit throwing dependencies for layout targeting, Pointer Lock state,
+HTML activation/focus, and native menu UI. Its focused tests control these owners;
+physical mouse input, real focus, and a native menu are not claimed.
+See the [button-input slice](events/ROADMAP.md#pointer-events-1121011213-mouse-button-input)
+and [native-click slice](events/ROADMAP.md#pointer-events-1121411215-native-clicks)
+plus [native movement](events/ROADMAP.md#pointer-events-11217-native-movement)
+and [context menus](events/ROADMAP.md#pointer-events-11218-mouse-context-menus)
+for the boundary and next algorithms.
+
+The [§§11.3–11.4 audit](events/ROADMAP.md#pointer-events-113114-mouse-order-and-event-type-audit)
+closes the mouse-delivery pass at its explicit owner dependencies. Pause here for
+consolidation before §12's Wheel Events work.
+
 The first visible dependencies are HTML §6.6's focus model; HTML §6.8 editing,
 Selection API and Input Events; keyboard layout/modifier input and IME behavior;
 and HTML §6.5 element activation. FocusEvent and KeyboardEvent constructors can

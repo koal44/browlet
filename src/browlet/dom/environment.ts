@@ -1,4 +1,4 @@
-import type { DOMHighResTimeStamp } from '../timing/index';
+import type { DOMHighResTimeStamp, UnsafeMoment } from '../timing/index';
 import type { EventImpl } from './events/index';
 import type { DocumentImpl, MutationObserverImpl } from './nodes/index';
 import type { HTMLSlotElementImpl } from './nodes/html/index';
@@ -15,8 +15,8 @@ export interface DOMEnvironment {
 export interface DOMRealm {
   /** Narrow to the current-event and notification facilities of a Window realm. */
   isWindow(): this is WindowDOMRealm;
-  /** Timestamp in milliseconds supplied to events created in this realm. */
-  eventTimeStamp(): DOMHighResTimeStamp;
+  /** Realm-relative timestamp, using a shared input reading when supplied, otherwise the current time. */
+  eventTimeStamp(time?: UnsafeMoment): DOMHighResTimeStamp;
   /** The global's associated document; non-Window globals have none. */
   getAssociatedDocument(): DocumentImpl | null;
   /** Report an exception thrown by an event listener in the listener's own realm. */

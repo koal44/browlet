@@ -12,6 +12,7 @@ import type { LinkStyleMixin } from '../../style/index';
 import { DOMTokenListImpl, type TokenListAttribute } from '../lists/index';
 import type { EventImpl } from '../events/index';
 import type { TaskSource } from '../../scripting/index';
+import type { PointerId } from '../../interaction/events/index';
 import type { PermissionsPolicyDirective } from '../../browsing/policy/index';
 import { getTrustedTypeDataForAttribute, type TrustedTypeValue } from '../../browsing/policy/trusted-types/index';
 import type { IntersectionObserverRegistration } from '../intersection-observer/index';
@@ -217,7 +218,7 @@ export class ElementImpl extends NodeImpl {
 
   /** Request capture of an active context-local pointer, without delivering notifications yet. */
   // https://w3c.github.io/pointerevents/#setting-pointer-capture
-  setPointerCapture(pointerId: number): void {
+  setPointerCapture(pointerId: PointerId): void {
     const navigable = this.getNodeNavigable();
     // SPEC_CLASH(pointer-capture-no-context): Follow Chromium/WebKit's no-op without a browsing context; the draft has no exception and Firefox rejects an unknown ID.
     if (navigable === null) return;
@@ -228,7 +229,7 @@ export class ElementImpl extends NodeImpl {
 
   /** Release only this element's pending capture for an active context-local pointer. */
   // https://w3c.github.io/pointerevents/#releasing-pointer-capture
-  releasePointerCapture(pointerId: number): void {
+  releasePointerCapture(pointerId: PointerId): void {
     const navigable = this.getNodeNavigable();
     // Keep the same no-context behavior as setPointerCapture().
     if (navigable === null) return;
@@ -239,7 +240,7 @@ export class ElementImpl extends NodeImpl {
 
   /** Whether the pending capture target for this context-local ID is this element. */
   // https://w3c.github.io/pointerevents/#dom-element-haspointercapture
-  hasPointerCapture(pointerId: number): boolean {
+  hasPointerCapture(pointerId: PointerId): boolean {
     return this.getNodeNavigable()?.topLevelTraversable.pointerEventStreams.get(pointerId)?.capture.pendingTargetOverride === this;
   }
 

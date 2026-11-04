@@ -738,8 +738,11 @@ deltas are implemented. MouseEvent now exposes construction, modifiers, related
 targets, legacy initialization/factory names, and movement fields. Its layerX
 and layerY getters throw explicitly because CSS layout/painting geometry is
 missing; CSSOM View's page/offset coordinates and x/y aliases are not exposed.
-Native mouse production, input-gap notification, locked/raw deltas, and Pointer
-Lock APIs remain unfinished. The
+The native adapter, input-gap notification, locked/raw deltas, and Pointer
+Lock APIs remain unfinished. MouseEvent's internal creation now accepts normalized
+input and explicit flags through the target's realm allocation. As with existing
+PointerEvent creation, its producer must finalize event-specific fields and trust
+before dispatch; the factory does not supply native device input. The
 [MouseEvent prerequisite](browlet/interaction/events/ROADMAP.md#pointer-events-12-and-the-3-mouseevent-prerequisite)
 records the approved coordinate/legacy choices without claiming device input.
 
@@ -751,10 +754,11 @@ HTML's synthetic-pointer-event hookup, and inherited CSS geometry remain unfinis
 The [PointerEvent object slice](browlet/interaction/events/ROADMAP.md#pointer-events-31-pointerevent-objects-and-orientation)
 records the approved rounding, orientation, and returned-array realm choices.
 UserAgent now retains active input sources with per-type primary selection and
-chorded button transitions. This is an internal state foundation, not native event
-delivery: adapter/automation lifecycle calls, context-local pointer IDs, targeting,
-capture, and task delivery still need their producer. Author construction and
-dispatch do not mutate that state.
+chorded button transitions. A UserAgent-owned mouse producer now accepts normalized
+button actions, queues user-interaction tasks, and registers context-local mouse
+streams before pointer/capture/mapped mouse delivery. Other devices, source
+retirement, and native adapter/WebDriver Actions integration remain unfinished.
+Author construction and dispatch do not mutate input state.
 
 Pointer Events §6 exposes `Navigator.maxTouchPoints` and selects BiDi emulation
 before hardware capacity. The native digitizer query is an explicit throwing
@@ -838,17 +842,47 @@ mapped down/move/up, with per-pointer-type cancellation suppression and immediat
 non-hover interleaving. Chorded button changes retain their mouse down/up meaning.
 DOM removal repairs both the effective position and the pending mapped target
 before reinsertion; an unchanged position allocates no boundary notifications.
-This still requires a native input producer: hover capability and click count are
-required inputs, and device scheduling, real hit testing, gesture recognition,
-and mouse default actions remain explicit dependencies in source. Synthetic
-dispatch neither produces compatibility events nor changes suppression state.
+The mouse-button processor supplies hover capability and uses explicit click
+qualification/count inputs. Qualifying releases dispatch click/auxclick in the
+same task as mouseup, including chorded releases that produce pointermove.
+An explicit double-click flag sends a primary dblclick MouseEvent after click,
+retaining its selected target unless it remains disconnected. A click count alone
+does not recognize a double-click. Selection/editing default actions remain unconnected.
+Gesture recognition and native input acquisition remain adapter work.
+Click/auxclick delivery now stops if mouseup leaves its selected target disconnected,
+including captured targets. Immediate reinsertion allows delivery, as in Firefox;
+Chromium/WebKit also suppress that reinserted case. DOM activation remains specific
+to click. Auxiliary link actions and concrete form-control activation remain HTML
+work; dblclick does not repeat the generic click hook, and click does not repeat focus
+after a canceled mousedown. The native checkbox/focus probes support these choices.
+The same processor accepts normalized position updates. It delivers secure raw
+input before pointermove/mousemove, including raw updates for chorded button
+changes, with receipt-time buttons and realm-relative timestamps. Window motion
+updates once per position even when compatibility mousemove is suppressed.
+Each update is unbatched; prediction and display-aligned coalescing are not supplied.
+Locked movement throws until Pointer Lock supplies targeting and native deltas;
+adapter interruption/exit notifications must clear the Window's motion history.
+Adapter-selected context menus now dispatch on press or release, independently of
+down cancellation and before any qualifying auxclick. An uncanceled contextmenu
+reaches `showContextMenu()`, which throws until a native UI adapter supplies menu
+display, positioning, and modal input handling. A canceled menu needs no UI effect.
+The selected pointer target is retained across layout changes; a still-disconnected
+target suppresses delivery, whereas browsers can re-hit-test and retarget the menu.
+Its layout hit test, Pointer Lock query, HTML activation notification, and click-focus
+steps also throw until their owners are connected.
+The tests supply those missing capabilities; they do not demonstrate physical
+mouse input, real focus, menus, or cross-document coordinate translation.
+Synthetic dispatch neither produces compatibility events nor changes suppression state.
 
 §3.3.12 now supplies internal click/auxclick/contextmenu creation and pointer-based
-target selection. The stream retains down/up facts across capture release and
+target selection. The stream retains per-button press/release facts across capture release and
 author reinitialization; a producer explicitly requests activation and supplies
 its click count. Non-pointer creation keeps the supplied target and uses ID -1
-with an empty pointer type. This does not detect clicks, choose context-menu timing,
-or implement default actions. HTML's synthetic-pointer-event operation and
+with an empty pointer type. This does not detect clicks or implement default actions;
+the mouse adapter now supplies menu timing explicitly. Keyboard-triggered menus
+still need the keyboard/focus owners' current target, modifiers, and UI placement;
+the mouse entry requires actual input rather than substituting zero coordinates.
+HTML's synthetic-pointer-event operation and
 HTMLElement.click()/keyboard activation still need current modifier input and
 their calling algorithms; the factory's required input makes that dependency
 explicit. CSSOM View's unimplemented page/offset coordinates remain unexposed.

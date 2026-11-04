@@ -127,11 +127,21 @@ and non-pointer input remain producer responsibilities. §4's Element capture
 methods now resolve context-local IDs through the top-level traversable's stream
 map and expose pending capture through ordinary Binding. §5's GlobalEventHandlers
 contribution now connects all eleven pointer handlers, including secure-context
-raw-update property exposure and ordinary content-attribute handling. Continue
-with §6's Navigator.maxTouchPoints and its device/BiDi inputs.
-Device-to-context ID assignment, stream
-registration/retirement, actual hit testing, individual Document teardown, removal
-hookup, and input/default-action producers remain explicit dependencies.
+raw-update property exposure and ordinary content-attribute handling. §§6–10 now
+provide Navigator capacity selection, touch-action parsing and manipulation
+permissions, removal-aware capture release, trusted sample preparation, and
+compatibility mouse delivery, within their recorded input/layout dependencies.
+§11.1 through §11.4 now include normalized creation and a UserAgent-owned
+mouse-button processor. It queues user-interaction tasks, registers mouse ID 1,
+and drives pointer/capture/compatibility delivery plus adapter-qualified click/auxclick
+and primary double-clicks in the release task. Chorded clicks retain each button's
+press/release pair. Movement supplies secure raw/pointer/mouse delivery with shared
+receipt-time input; context menus honor adapter timing and cancellation. The order
+and event-type audit also prevents activation on a disconnected release target.
+Layout, Pointer Lock, HTML activation/focus, and native menu UI remain explicit
+callable dependencies. Pause here for consolidation before §12 Wheel Events.
+Other device-to-context ID assignment, retirement, individual Document teardown,
+removal hookup, and the remaining input/default-action producers remain explicit dependencies.
 HTML §8.1.8.3's synthetic
 pointer-event operation still needs its hookup. Input producers retain
 their HTML, editing, and layout owners.

@@ -16,7 +16,7 @@ import { MouseEventImpl, type MouseEventInit, type MouseEventInput } from './mou
 // TODO(Pointer Events §§3.1.3–3.1.4, 3.3): native production must consume the
 // UserAgent's activePointers, map context-local IDs, hit test, invoke PointerCapture processing, and order events.
 export class PointerEventImpl extends MouseEventImpl {
-  pointerId: number;
+  pointerId: PointerId;
   /** Contact geometry in CSS pixels. */
   width: number;
   height: number;
@@ -73,7 +73,7 @@ export class PointerEventImpl extends MouseEventImpl {
 
   /** Create an initialized event in the target's realm; the producer establishes trust before dispatch. */
   // https://w3c.github.io/pointerevents/#dfn-create-a-pointerevent
-  static create(
+  static override create(
     type: string, target: NodeImpl | WindowImpl, bubbles: boolean, cancelable: boolean, input: MouseEventInput,
   ): PointerEventImpl {
     const event = target.createTrustedEvent(PointerEventImpl) as PointerEventImpl;
@@ -102,8 +102,9 @@ export class PointerEventImpl extends MouseEventImpl {
   // supplies its retained ID/type; keyboard/voice activation keeps -1 and "".
   // The producer supplies MouseEvent input (including modifiers and click count),
   // rather than reading an ambient input device or inferring data from event names.
-  // TODO(HTML §8.1.8.3 / keyboard input): connect synthetic pointer-event firing
-  // with current modifier state and its optional not-trusted flag. HTMLElement.click()
+  // TODO(HTML §8.1.8.3 / keyboard input): connect §11.2.15's null-native callers
+  // through synthetic pointer-event firing with current modifiers and its optional
+  // not-trusted flag. HTMLElement.click()
   // and keyboard activation remain their owners' callers, not automatic dispatch here.
   static createActivation(type: PointerActivationEventType, target: NodeImpl, source: MouseEventImpl): PointerEventImpl {
     const event = target.createTrustedEvent(PointerEventImpl) as PointerEventImpl;
@@ -146,6 +147,7 @@ export class PointerEventImpl extends MouseEventImpl {
    */
   // https://w3c.github.io/pointerevents/#coalesced-and-predicted-events
   initializeSampleLists(samples: PointerEventSamples | undefined, target: NodeImpl): void {
+    // SPEC_CLASH(pointer-chord-samples): §9.1 and Firefox retain a sample for chorded pointermove/raw; Chromium/WebKit expose empty lists for these button changes.
     if (!this.isTrusted) return;
     const movement = this.type === 'pointermove' || this.type === 'pointerrawupdate';
     this.#coalescedEvents = movement
@@ -340,6 +342,9 @@ export class PointerEventImpl extends MouseEventImpl {
   }
 }
 
+/** PointerEvent identifier; native streams scope these to a top-level browsing context. */
+export type PointerId = number;
+
 /** Event types covered by §3.1.3.1's table; compatibility click types have separate firing rules. */
 export type PointerEventType = PointerInputEventType | 'gotpointercapture' | 'lostpointercapture';
 
@@ -358,7 +363,7 @@ export type PointerEventSamples = {
 
 /** Converted constructor data; missing orientation members remain absent until construction. */
 export interface PointerEventInit extends MouseEventInit {
-  pointerId?: number;
+  pointerId?: PointerId;
   width?: number;
   height?: number;
   pressure?: number;

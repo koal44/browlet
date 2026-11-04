@@ -3,7 +3,8 @@ import { DOMExceptionImpl, DOMExceptionNames } from '../../web-idl/core/index';
 import type { DOMHighResTimeStamp } from '../timing/index';
 import type { EventPathItem } from '../dom/events/index';
 import {
-  PointerEventImpl, type PointerInputEventType, type PointerActivationEventType, type PointerEventSamples,
+  MouseEventImpl, PointerEventImpl, type PointerId, type PointerInputEventType,
+  type PointerActivationEventType, type PointerEventSamples,
 } from './events/index';
 import type { DocumentImpl, ElementImpl, NodeImpl } from '../dom/nodes/index';
 
@@ -11,13 +12,14 @@ import { PointerCapture } from './pointer-capture';
 
 /** Targeting state for one pointer ID within one top-level context. */
 // https://w3c.github.io/pointerevents/#firing-events-using-the-pointerevent-interface
-// TODO(Pointer Events §3.1 / input producer): register each active context-local
-// ID in TopLevelTraversable.pointerEventStreams, independently of UserAgent's source
-// identity. Retirement and individual Document teardown must release capture and
-// Document references; top-level teardown clears the retained stream map.
+// MouseInputProcessor registers mouse ID 1 in TopLevelTraversable.pointerEventStreams.
+// TODO(Pointer Events §3.1 / other input producers): register their context-local
+// IDs independently of UserAgent's source identity. Retirement and individual
+// Document teardown must release capture and Document references; top-level
+// teardown clears the retained stream map.
 export class PointerEventStream {
   /** Context-local identifier assigned by the input owner, not the global source identity. */
-  pointerId: number;
+  pointerId: PointerId;
   /** Device capability supplied by the input owner, independent of its pointerType string. */
   isDirectManipulation: boolean;
   /** Whether the device can hover, supplied independently of direct-manipulation capability or pointerType. */
@@ -40,15 +42,15 @@ export class PointerEventStream {
   #previousPath: EventPathItem[] = [];
   /** Reused input snapshot, never projected or dispatched, so author reinitialization cannot change it. */
   #lastInput: PointerEventImpl | null = null;
-  /** Press target retained until cancellation, the next press, or stream retirement. */
-  #pointerDownTarget: NodeImpl | null = null;
+  /** Each held button retains its press target until its release or stream cancellation. */
+  #pressTargets = new Map<number, NodeImpl>();
   /** A delivered down awaiting up/cancel; activation history alone also survives pointerup. */
   #pointerDownSent = false;
-  /** Private down/up snapshot survives capture release, hover restoration, and author reinitialization. */
-  #activation: { input: PointerEventImpl; target: NodeImpl; captured: boolean; } | null = null;
+  /** Private button snapshot and completed pair survive capture release and author reinitialization. */
+  #activation: { input: PointerEventImpl; target: NodeImpl; captured: boolean; pressTarget: NodeImpl | null; } | null = null;
 
   constructor(
-    pointerId: number, isDirectManipulation: boolean, supportsHover: boolean, hasLockedElement: (document: DocumentImpl) => boolean,
+    pointerId: PointerId, isDirectManipulation: boolean, supportsHover: boolean, hasLockedElement: (document: DocumentImpl) => boolean,
   ) {
     this.pointerId = pointerId;
     this.isDirectManipulation = isDirectManipulation;
@@ -76,13 +78,12 @@ export class PointerEventStream {
   // input snapshot and the hit-test dependency instead of implicit device state.
   // The input owner must supply a prepared event in the selected target's realm
   // to dispatchToTarget(). This method does not dispatch.
-  // TODO(Pointer Events §§3.3.4–3.3.5 / input producer): changes to pressure,
-  // angles, contact geometry, or chorded buttons also require move/raw updates.
-  // Deliver raw before the corresponding move, using final coordinates for each
-  // hit test. Task scheduling/coalescing remain producer work: provide the same
-  // chronological inputs to raw and corresponding move delivery, flushing prior
-  // movement before a later down/up. These primitives process one supplied event.
-  // TODO(Pointer Events §§9.1–9.2 / input producer): accumulate those measured
+  // MouseInputProcessor supplies chronological unbatched mouse movement and chorded
+  // button changes, with raw-before-move delivery and realm-mapped receipt times.
+  // TODO(Pointer Events §§3.3.4–3.3.5 / other input producers): changes to pressure,
+  // angles and contact geometry also require raw/move updates. Hit test final
+  // coordinates after capture processing; flush prior movement before down/up.
+  // TODO(Pointer Events §§9.1–9.2 / batching producers): accumulate measured
   // snapshots, map timestamps to the delivery realm, and optionally predict future
   // samples. initializeSampleLists() enforces list invariants; it does not collect
   // device input, choose a prediction algorithm, or schedule delivery.
@@ -124,16 +125,19 @@ export class PointerEventStream {
    * Raw updates to insecure target documents are suppressed without retaining input.
    * Optional sample lists contain measured inputs and predictions, not dispatched events.
    * mouseClickCount comes from the input producer; pointer detail remains zero.
+   * An optional focusing continuation runs only after an uncanceled mapped mousedown.
    * Returns false when the ordinary event was canceled; boundary cancellation is independent.
    */
   // https://w3c.github.io/pointerevents/#firing-events-using-the-pointerevent-interface
   // This extracts the dispatch/previous-target steps for an already prepared event and target.
   // §9 sample lists are supplied explicitly by the input producer as a final argument.
-  // TODO(Pointer Events §11 / input producer): supply real click counting and mapped
-  // relative movement. Compatibility dispatch does not infer timing/distance thresholds.
+  // MouseInputProcessor supplies adapter-qualified click counts and unlocked mouse
+  // movement. Other producers must supply their own normalized input; compatibility
+  // dispatch does not infer timing/distance thresholds or native relative deltas.
   dispatchToTarget(
     event: PointerEventImpl, target: NodeImpl, getHoverTarget: () => NodeImpl | null, mouseClickCount: number,
     samples?: PointerEventSamples,
+    focusOnMouseDown?: (target: NodeImpl) => void,
   ): boolean {
     const type = event.type;
     // https://w3c.github.io/pointerevents/#the-pointerrawupdate-event
@@ -153,15 +157,24 @@ export class PointerEventStream {
     if (mouse !== null && (type === 'pointerdown' || type === 'pointermove' || type === 'pointerup')) {
       mouse.updatePosition(input, mouse.pointerTarget);
     }
-    if (type === 'pointerdown' || type === 'pointerup') {
-      if (type === 'pointerdown') this.#pointerDownTarget = target;
-      const activation = this.#activation ??= { input: new PointerEventImpl('', {}, 0), target, captured: false };
+    if (type === 'pointerdown' || type === 'pointerup' || (type === 'pointermove' && input.button >= 0)) {
+      // SPEC_CLASH(pointer-activation-chord-pairing): Pair each button's press/release per §11.3 and Firefox; Chromium/WebKit use the latest press target.
+      // §3.3.12 describes only pointerdown/up, but a chorded release is pointermove.
+      // Raw updates do not consume the pair before the corresponding move arrives.
+      const mask = input.button === 1 ? 4 : input.button === 2 ? 2 : 1 << input.button;
+      const pressed = type === 'pointerdown' || (type === 'pointermove' && (input.buttons & mask) !== 0);
+      if (pressed) this.#pressTargets.set(input.button, target);
+      const activation = this.#activation ??= {
+        input: new PointerEventImpl('', {}, 0), target, captured: false, pressTarget: null,
+      };
+      activation.pressTarget = pressed ? null : this.#pressTargets.get(input.button) ?? null;
+      if (!pressed) this.#pressTargets.delete(input.button);
       activation.input.copyInputFrom(input);
       activation.input.type = type;
       activation.target = target;
       activation.captured = this.capture.targetOverride !== null;
     } else if (type === 'pointercancel') {
-      this.#pointerDownTarget = null;
+      this.#pressTargets.clear();
       this.#activation = null;
     }
     let path: EventPathItem[] = [];
@@ -170,7 +183,7 @@ export class PointerEventStream {
     // SPEC_CLASH(pointer-target-after-boundary-mutation): Keep the selected target like the draft/Chromium/Firefox; WebKit can redirect after reparenting in a boundary listener.
     const result = target.dispatch(event, false, (dispatchPath) => { path = dispatchPath; });
     // The source snapshot survives author reinitialization and DOM retargeting.
-    mouse?.dispatchAfterPointer(input, !result, mouseClickCount);
+    mouse?.dispatchAfterPointer(input, !result, mouseClickCount, focusOnMouseDown);
     this.previousTarget = target;
     this.needsOverEvent = false;
     this.#previousPath = path;
@@ -195,45 +208,67 @@ export class PointerEventStream {
         this.#lastInput = null;
       }
     }
-    // TODO(Pointer Events §11 / UI Events and HTML): connect the mapped mouse
-    // events to their default-action owners; cancellation does not undo input state.
+    // TODO(UI Events / HTML editing and drag-and-drop): connect the remaining
+    // mouse default actions; cancellation does not undo input state.
     return result;
   }
 
   /**
-   * Dispatch a producer-selected activation from the last down/up, returning whether it was uncanceled.
+   * Dispatch a producer-selected activation from the last button transition.
    * The producer supplies UI Events' click count (or context-menu detail). A canceled
    * stream or a click without a completed press/release pair produces no event.
+   * A recognized double-click follows a primary click, independently of click cancellation.
+   * Returns false if either event was canceled.
    */
   // https://w3c.github.io/pointerevents/#event-dispatch
   // The stream retains userEvent's input/target/capture facts before author callbacks
   // and creates event in the selected target's realm instead of accepting a mutable event.
-  // TODO(UI Events click/auxclick/contextmenu / input producer): invoke when a gesture
-  // qualifies, including the platform's down-versus-up context-menu convention. This
-  // operation does not recognize gestures, count clicks, or run unfinished default actions.
+  // MouseInputProcessor invokes this for adapter-qualified releases in the same task.
+  // TODO(UI Events / other input producers): connect their gesture recognition and
+  // context-menu timing. DOM dispatch owns click activation; concrete HTML element
+  // actions remain HTML §6.5 work, not a separate continuation here.
+  // TODO(HTML §4.6 following hyperlinks / §6.5 activation): connect non-primary
+  // link actions at their HTML owner; auxclick must not run arbitrary click behavior.
   // Do not route keyboard/voice activation through a pointer stream: its producer uses
   // PointerEventImpl.createActivation() with its unchanged target and non-pointer identity.
-  dispatchActivation(type: PointerActivationEventType, detail: number): boolean {
+  dispatchActivation(type: PointerActivationEventType, detail: number, doubleClick = false): boolean {
     const activation = this.#activation;
     if (activation === null) return true;
-    const { input, captured } = activation;
-    if (type !== 'contextmenu' && (input.type !== 'pointerup' || this.#pointerDownTarget === null)) return true;
+    const { input, captured, pressTarget } = activation;
+    if (type !== 'contextmenu' && pressTarget === null) return true;
     let target: NodeImpl | null = activation.target;
     if (type !== 'contextmenu' && !captured) {
       // SPEC_CLASH(pointer-activation-live-ancestry): Use the current ancestry per the draft/Firefox; Chromium/WebKit suppress the probed reparented press.
       // SPEC_CLASH(pointer-activation-shadow-ancestry): Follow all three browsers through slots and shadow hosts; literal DOM ancestry cannot connect those targets.
       const ancestors = new Set<NodeImpl>();
-      for (let node = this.#pointerDownTarget; node !== null; node = node.getFlatTreeParent()) ancestors.add(node);
+      for (let node = pressTarget; node !== null; node = node.getFlatTreeParent()) ancestors.add(node);
       while (target !== null && !ancestors.has(target)) target = target.getFlatTreeParent();
     }
-    if (target === null) return true;
+    // §11.3: removal during mouseup must not send the remaining click/auxclick
+    // to the disconnected target, including when capture selected that target.
+    // SPEC_CLASH(mouse-click-reinsertion): Allow immediate reinsertion like Firefox; Chromium/WebKit suppress the click even after reconnection.
+    if (target === null || !target.isConnected) return true;
     const event = PointerEventImpl.createActivation(type, target, input);
     event.pointerId = input.pointerId;
     event.pointerType = input.pointerType;
     event.detail = detail;
     // Capture may already be released. Activation neither processes pending capture
     // nor changes the ordinary stream's last-input, previous-target, or boundary state.
-    return target.dispatch(event);
+    // SPEC_CLASH(mouse-default-activation): Keep DOM's click-only activation; §11.4's broader auxclick/dblclick wording would also activate controls. Chromium/Firefox do not toggle on auxclick; WebKit does.
+    const uncanceled = target.dispatch(event);
+    // https://w3c.github.io/pointerevents/#dfn-handle-native-mouse-double-click
+    // SPEC_CLASH(native-double-click-target): Keep the click's selected target like all browsers; §11.2.16 calls for another hit test.
+    // SPEC_CLASH(native-double-click-removal): Suppress while disconnected per §11.3/Firefox; Chromium/WebKit dispatch to the detached target.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Click listeners can disconnect the target after the earlier check.
+    if (doubleClick && type === 'click' && input.button === 0 && target.isConnected) {
+      // This uses the private input snapshot, never the click an author could reinitialize.
+      const event = MouseEventImpl.createDoubleClick(target, input, detail);
+      const doubleClickUncanceled = target.dispatch(event);
+      // TODO(Pointer Events §11.4 / HTML editing / Selection API): connect selection
+      // default actions at their owner. DOM's click activation hook does not run for dblclick.
+      return uncanceled && doubleClickUncanceled;
+    }
+    return uncanceled;
   }
 
   /**

@@ -6,6 +6,7 @@ import { FetchResponse, type FetchPromptTarget, type fetchPromptTargetBrand, typ
 
 import { coarsenedSharedCurrentTime } from '../../timing/index';
 import type { EventLoop } from '../../scripting/index';
+import type { PointerId } from '../../interaction/events/index';
 import {
   EmbedderPolicy, OpenerPolicy, PermissionsPolicy, PolicyContainer, queueCOEPInheritanceViolation, SandboxingFlagSet,
 } from '../policy/index';
@@ -1011,11 +1012,11 @@ export class Traversable extends Navigable implements FetchPromptTarget {
 export class TopLevelTraversable extends Traversable {
   /** Live input streams indexed by IDs local to this top-level context and its descendants. */
   // https://w3c.github.io/pointerevents/#dom-pointerevent-pointerid
-  // TODO(Pointer Events §3.1 / input producer): assign IDs and register streams
-  // before delivery; remove retired streams after final notifications. Author
-  // construction/dispatch must never populate this map. Device/source identity
-  // remains with UserAgent.activePointers, independently of these local IDs.
-  pointerEventStreams = new Map<number, PointerEventStream>();
+  // MouseInputProcessor reserves ID 1 and registers it before delivery.
+  // TODO(Pointer Events §3.1 / other input producers): assign other IDs and
+  // remove retired streams after final notifications. Author construction/dispatch
+  // never populates this map. UserAgent.activePointers retains source identity.
+  pointerEventStreams = new Map<PointerId, PointerEventStream>();
 
   constructor(documentState: DocumentBackedState) {
     super(documentState);

@@ -72,6 +72,51 @@ describe('Pointer Events §3.3.12: activation events', () => {
     expect(stream.previousTarget).toBe(unwrap(b));
   });
 
+  it('dispatches a click when a chorded release produces pointermove', () => {
+    const { stream, send, a, activations } = createFixture();
+    send('pointerdown', a, { button: 0, buttons: 1 });
+    send('pointermove', a, { button: 1, buttons: 5 });
+    send('pointermove', a, { button: 0, buttons: 4 });
+    stream.dispatchActivation('click', 1);
+    expect(activations).toHaveLength(1);
+    expect(activations[0]).toMatchObject({ type: 'click', target: a, button: 0, buttons: 4 });
+  });
+
+  it('pairs each chorded release with that button’s press target', () => {
+    const { stream, send, a, b, parent, activations } = createFixture();
+    send('pointerdown', a, { button: 0, buttons: 1 });
+    send('pointermove', b, { button: 1, buttons: 5 });
+    send('pointermove', b, { button: 0, buttons: 4 });
+    stream.dispatchActivation('click', 1);
+    send('pointerup', b, { button: 1, buttons: 0 });
+    stream.dispatchActivation('auxclick', 1);
+    expect(activations.map((event) => [event.type, event.target])).toEqual([['click', parent], ['auxclick', b]]);
+  });
+
+  it('does not let a raw button update consume the release pair before pointermove', () => {
+    const { stream, send, a, activations } = createFixture();
+    send('pointerdown', a, { button: 0, buttons: 1 });
+    send('pointermove', a, { button: 1, buttons: 5 });
+    send('pointerrawupdate', a, { button: 0, buttons: 4 });
+    stream.dispatchActivation('click', 1);
+    expect(activations).toEqual([]);
+    send('pointermove', a, { button: 0, buttons: 4 });
+    stream.dispatchActivation('click', 1);
+    expect(activations).toHaveLength(1);
+  });
+
+  it('clears every held-button press target on cancellation', () => {
+    const { stream, send, a, activations } = createFixture();
+    send('pointerdown', a, { button: 0, buttons: 1 });
+    send('pointermove', a, { button: 1, buttons: 5 });
+    stream.suppress(() => unwrap<ElementImpl>(a));
+    send('pointermove', a, { button: 0, buttons: 4 });
+    stream.dispatchActivation('click', 1);
+    send('pointerup', a, { button: 1, buttons: 0 });
+    stream.dispatchActivation('auxclick', 1);
+    expect(activations).toEqual([]);
+  });
+
   it('retains an implicit-capture release across non-hover exit', () => {
     const { stream, send, a, b, activations } = createFixture();
     stream.isDirectManipulation = true;
@@ -139,6 +184,21 @@ describe('Pointer Events §3.3.12: activation events', () => {
     send('pointerdown', a);
     send('pointerup', a);
     expect(stream.dispatchActivation('auxclick', 1)).toBe(true);
+  });
+
+  it.each(['click', 'dblclick'])('reports %s cancellation while still delivering both events', (type) => {
+    const { stream, send, a } = createFixture();
+    const events: string[] = [];
+    for (const name of ['click', 'dblclick']) {
+      a.addEventListener(name, (event) => {
+        events.push(event.type);
+        if (event.type === type) event.preventDefault();
+      });
+    }
+    send('pointerdown', a);
+    send('pointerup', a);
+    expect(stream.dispatchActivation('click', 2, true)).toBe(false);
+    expect(events).toEqual(['click', 'dblclick']);
   });
 
   it('crosses shadow hosts and slots to find the actual activation target', () => {
@@ -223,7 +283,10 @@ function createFixture() {
     }, true);
   }
   const send = (type: PointerInputEventType, hit: Element, init: PointerEventInit = {}, hover: Element | null = hit) => {
-    const input = new PointerEventImpl(type, { pointerType: 'mouse', button: 0, buttons: 1, ...init });
+    const input = new PointerEventImpl(type, {
+      pointerType: 'mouse', button: type === 'pointermove' || type === 'pointerrawupdate' ? -1 : 0,
+      buttons: type === 'pointerup' || type === 'pointercancel' ? 0 : 1, ...init,
+    });
     const target = stream.prepareTarget(type, input, () => unwrap<ElementImpl>(hit));
     const event = target.createTrustedEvent(PointerEventImpl) as PointerEventImpl;
     event.copyInputFrom(input);

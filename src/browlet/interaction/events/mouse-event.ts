@@ -16,10 +16,10 @@ import type { PointerEventImpl } from './pointer-event';
 
 /** Mouse-event data, independent of device state and native input delivery. */
 // https://w3c.github.io/pointerevents/#mouseevent-interface
-// TODO(Pointer Events, MouseEvent Algorithms): the native producer still needs
-// hit testing, held buttons/modifiers, and click counting. initializeMouseEvent()
-// consumes the producer's explicit input snapshot and clears movement before
-// Window.setPointerLockAttributesForMousemove().
+// MouseInputProcessor supplies received position/modifier snapshots, held buttons,
+// adapter-qualified click counts and unlocked movement. Hit testing and native
+// acquisition remain its explicit owner dependencies. initializeMouseEvent()
+// clears movement before Window.setPointerLockAttributesForMousemove().
 // Author construction and dispatch must not update the Window's movement history.
 export class MouseEventImpl extends UIEventImpl {
   /** Screen-relative coordinates after the MouseEvent compatibility rounding. */
@@ -54,6 +54,35 @@ export class MouseEventImpl extends UIEventImpl {
     this.movementY = eventInitDict.movementY ?? 0;
     this.#modifiers = new EventModifierState(eventInitDict);
     this.#altKey = eventInitDict.altKey ?? false;
+  }
+
+  /** Create an initialized event in the target's realm; the producer establishes trust before dispatch. */
+  // https://w3c.github.io/pointerevents/#dfn-create-a-cancelable-mouseevent
+  // https://w3c.github.io/pointerevents/#dfn-create-a-non-cancelable-mouseevent
+  // One factory takes the two algorithms' explicit flags: true/true for the
+  // cancelable variant, false/false for the non-cancelable variant. As for pointer
+  // creation, normalized input replaces implicit OS coordinates and device state.
+  static create(
+    type: string, target: NodeImpl | WindowImpl, bubbles: boolean, cancelable: boolean, input: MouseEventInput,
+  ): MouseEventImpl {
+    const event = target.createTrustedEvent(MouseEventImpl) as MouseEventImpl;
+    event.initializeMouseEvent(type, target, bubbles, cancelable, input);
+    return event;
+  }
+
+  /** Create a trusted double-click from private input at the preceding click's selected target. */
+  // https://w3c.github.io/pointerevents/#dfn-handle-native-mouse-double-click
+  // Creation portion of the native algorithm; input recognition and dispatch stay with the producer.
+  // SPEC_CLASH(native-double-click-interface): Use §11.4's MouseEvent like all browsers; §11.2.16 says PointerEvent.
+  static createDoubleClick(target: NodeImpl, source: MouseEventImpl, clickCount: number): MouseEventImpl {
+    const event = MouseEventImpl.create('dblclick', target, true, true, {
+      screenX: source.screenX, screenY: source.screenY, clientX: source.clientX, clientY: source.clientY,
+      buttons: source.buttons, modifiers: source.#modifiers,
+    });
+    event.detail = clickCount;
+    event.composed = true;
+    event.isTrusted = true;
+    return event;
   }
 
   /** Create a trusted mapped MouseEvent from pointer input and the producer's click count. */
@@ -190,6 +219,7 @@ export type MouseEventInput = {
   screenY: number;
   clientX: number;
   clientY: number;
+  /** Held-button mask for this input; a native mouse producer supplies §11.2.3's aggregate mouse state. */
   buttons: number;
   modifiers: EventModifierState;
 };

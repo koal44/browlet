@@ -239,23 +239,29 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
     return this.#windowLocalStorageMixin.localStorage;
   }
 
-  /** Set motion from this Window's previous mousemove before native-event dispatch. */
+  /** Set motion once per native position update, before raw/pointer/mouse dispatch. */
   // https://w3c.github.io/uievents/#set-pointerlock-attributes-for-mousemove-id
   // This recipe requires unlocked screen positions. Pointer Lock's locked/raw input
   // path must supply native deltas instead, because locked screen coordinates freeze.
-  // TODO(Pointer Events): Call from handle native mouse move, never generic DOM dispatch.
+  // MouseInputProcessor supplies its private pointermove snapshot so mapped mouse
+  // events share the same motion without an intermediate MouseEvent allocation.
+  // TODO(Pointer Lock §6 / input adapter): clear lastMouseMove when input is interrupted
+  // or leaves the user agent; ordinary DOM dispatch must never update this history.
   setPointerLockAttributesForMousemove(event: MouseEventImpl): void {
-    if (event.type !== 'mousemove') return;
+    if (event.type !== 'mousemove' && event.type !== 'pointermove') return;
 
+    // PointerEvent retains fractional coordinates; this recipe uses MouseEvent positions.
+    const screenX = Math.floor(event.screenX);
+    const screenY = Math.floor(event.screenY);
     const previous = this.lastMouseMove;
     if (previous === undefined) {
       event.initializePointerLockAttributes();
     } else {
-      event.movementX = event.screenX - previous.x;
+      event.movementX = screenX - previous.x;
       // SPEC_CLASH(pointer-lock-movement-y): UI Events §5 uses screenX here; follow Pointer Lock and Chromium/Firefox's Y-coordinate difference.
-      event.movementY = event.screenY - previous.y;
+      event.movementY = screenY - previous.y;
     }
-    this.lastMouseMove = { x: event.screenX, y: event.screenY };
+    this.lastMouseMove = { x: screenX, y: screenY };
   }
 
   /** Whether this Window currently has unconsumed transient user activation. */

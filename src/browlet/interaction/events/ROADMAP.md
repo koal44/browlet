@@ -566,11 +566,11 @@ retained probe compares actual screen coordinates and reports that evidence limi
 
 These are internal algorithms, not a complete MouseEvent or Pointer Lock API:
 
-- Pointer Events' "initialize a MouseEvent" must call the movement initializer;
-  "handle native mouse move" must run the Window operation before dispatch.
-  The MouseEvent constructor/dictionary and Pointer Lock movement partials are
-  now connected by the prerequisite slice below. Source TODOs identify the
-  still-missing native initializer and caller boundary.
+- Pointer Events' "initialize a MouseEvent" calls the movement initializer;
+  §11.2.17's native movement processor runs the Window operation once on its
+  private pointermove snapshot before raw/pointer/mouse dispatch. The approved
+  helper extension uses MouseEvent-rounded positions while PointerEvent retains
+  fractional coordinates; no intermediate MouseEvent is allocated.
 - Ordinary DOM dispatch and author constructors must not run the Window
   operation or replace explicitly supplied movement values. The generic
   EventTarget path remains independent of native input history.
@@ -579,8 +579,8 @@ These are internal algorithms, not a complete MouseEvent or Pointer Lock API:
   an OS/input-adapter hookup is still missing.
 - Locked screen coordinates are frozen, and clipped/raw motion can differ from
   coordinate subtraction. Those producers need native deltas and must not use
-  this unlocked-coordinate recipe. Lock acquisition/release, raw motion, and
-  pointermove production remain with Pointer Lock/Pointer Events.
+  this unlocked-coordinate recipe. Lock acquisition/release and native relative
+  motion remain Pointer Lock work; the movement processor throws on locked input.
 
 Twelve enabled [internal algorithm tests](../../../../test/browlet/interaction/events/mouse-movement.test.ts)
 cover initialization, first/subsequent moves, independent axes, copied history,
@@ -1998,6 +1998,363 @@ failures were added. Typecheck, type contracts, scoped lint, and import-boundary
 checks pass. Browser temporary profiles were removed; the probe remains in
 Experimental.
 
+## Pointer Events §11.1 and §§11.2.1–11.2.9: MouseEvent creation
+
+The MouseEvent interface and the first nine algorithm subsections are audited
+against the already implemented event foundation. The remaining addition is
+`MouseEventImpl.create(type, target, bubbles, cancelable, input)`, which reuses
+`initializeMouseEvent()` and the target's existing realm-owned event allocation.
+The draft's [cancelable creator](https://w3c.github.io/pointerevents/#dfn-create-a-cancelable-mouseevent)
+uses true/true flags; its [non-cancelable creator](https://w3c.github.io/pointerevents/#dfn-create-a-non-cancelable-mouseevent)
+uses false/false. One explicit-flag factory covers both, matching
+`PointerEventImpl.create()`; that derived factory is now an explicit override.
+The explicit-flag callable shape was reviewed and accepted.
+
+| Section | Implementation and boundary |
+| --- | --- |
+| §11.1 MouseEvent interface | Existing bindings supply the interface, dictionary, modifier query and legacy initialization. The approved coordinate and legacy conflicts remain. `layerX`/`layerY` still throw at their explicit CSS layout/painting dependencies. |
+| §11.2.1 Native OS requirements | The input producer must supply normalized coordinates, modifiers and button state. Click/double-click recognition and thresholds are still native-input work, not inferred by this factory. |
+| §11.2.2 Constructing Mouse Events | Existing constructor and EventModifierState retain the declared modifier snapshot through real Binding conversion. |
+| §11.2.3 Global state | UserAgent's active sources already retain source button state; the native mouse producer must provide the aggregate mouse mask in `MouseEventInput.buttons`. Window-native delivery and its target/path bookkeeping remain with the later native handlers. The existing Document-owned compatibility mouse state is unchanged. |
+| §11.2.4 Internal state | EventModifierState owns the key flags. Native altKey combines Alt/AltGraph while the queried states stay distinct. |
+| §11.2.5 Hit test | CSSOM View/layout geometry remains explicit through the stream's required hit-test callable, including inert/disabled filtering. Creation takes an already selected target. |
+| §§11.2.6–11.2.7 Initialization and modifiers | Existing initialization uses required MouseEventInput, UIEvent/DOM reset, coordinate rounding, held buttons, native modifiers, and zeroed movement. |
+| §§11.2.8–11.2.9 Creation | The new factory allocates the MouseEvent itself, initializes it, and returns it without dispatch. |
+
+The required final input parameter follows the reviewed PointerEvent initialization
+contract: coordinates and device state are supplied, not read from ambient globals.
+Node and Window targets retain the existing UIEvent contract. Target allocation
+realm and current Document view remain distinct after adoption. Creation gets a
+fresh timestamp and platform identity. The linked DOM initialization clears trust,
+as in the existing PointerEvent factory, so native producers must establish it
+and event-specific fields before dispatch. Author construction is unchanged.
+
+This slice stops before §11.2.10's native button mapping and the later native
+dispatch algorithms. It does not introduce another input adapter, add Window
+state speculatively, or replace the completed §10 compatibility-mapping path.
+The latter retains the triggering input's timestamp and uses its separate
+`fromPointerEvent()` factory. Layout getters and required normalized-input/hit-test
+arguments keep reached dependencies explicit in code.
+
+The focused `mouse-event-creation.test.ts` exercises both flag variants, native
+modifiers, input snapshot retention, target-realm allocation and timestamps,
+adoption, Window targets, and producer/author dispatch trust through real bindings.
+All seven new cases and the 89-test MouseEvent/PointerEvent creation and
+compatibility-mapping run pass on Node 24.19.0, Node 26.8.1, and custom Node 27,
+each with and without the addon. These runs have no expected failures or skips.
+Typecheck, type contracts, scoped lint, import boundaries, and diff checks pass.
+
+## Pointer Events §§11.2.10–11.2.13: mouse-button input
+
+`UserAgent.mouseInput` lazily owns one `MouseInputProcessor`. Its `queueButton()`
+entry receives normalized logical buttons, CSS-pixel coordinates, a modifier
+snapshot, and explicit click count. `PointerButton` already represents §11.2.10's
+logical button values; OS-specific codes remain the adapter's responsibility.
+The existing mouse mapper applies §11.2.11's changed-button field. There is no
+second pointer/mouse dispatch path, and chorded transitions retain the previously
+approved §3/§10 behavior rather than the draft's unconditional "maybe pointerdown/up".
+
+Eric approved UserAgent ownership, shared mouse button state, reserving ID 1 in
+each top-level context's existing stream map, and user-interaction task delivery.
+`queueButton()` is explicitly Browlet integration: ownership/lifetime checks,
+snapshots, duplicate filtering, task queueing, and stream registration. Its private
+`handleButton()` contains the adapted delivery portion of the native down/up
+algorithms. Eric reviewed and accepted this separation and combined callable shape.
+The button-state update runs at receipt, while delivery reuses §§3/10's pointer
+pipeline. Inline comments distinguish these choices and realm-allocation machinery
+from the steps supplied by Pointer Events and HTML. Actions
+copy their data and held-button result at receipt, so different Window loops
+cannot make a queued press observe a later release. The first delivery registers
+the stream before author capture requests. Top-level teardown still clears that
+map; a queued action cannot recreate it after the destination leaves browser
+ownership. No reverse source/stream registry is added.
+
+The processor lives directly in `interaction/`, above DOM nodes and navigation.
+The lower `interaction/mouse/` remains the Document-owned legacy position/mapping
+foundation. Target preparation uses a private input snapshot; the actual pointer
+event is allocated through the target's environment, retaining its creation realm
+and timestamp separately from its current Document view. The existing mapper
+allocates the mouse event and supplies its actual cancellation result to the
+focusing continuation. Canceling pointerdown suppresses the mouse event; canceling
+mousedown suppresses focus without undoing the physical button state.
+
+Reached dependencies are callable throwing methods, with owner references:
+
+- `hitTest`: §11.2.5/CSSOM View geometry, inert/disabled targeting, and the later
+  Pointer Lock/cross-document coordinate integration. There is no body fallback.
+- `hasLockedElement`: Pointer Lock's state used by capture requests.
+- `notifyUserActivation`: HTML §6.4 before activation-triggering press listeners.
+- `focusOnMouseDown`: HTML §6.6 click focusability and focusing after an uncanceled
+  mapped mousedown, using that event's actual target.
+- `maybeShowContextMenu` was the §11.2.18 continuation at this boundary; the later
+  context-menu slice below implements its mouse dispatch/cancellation. Only its
+  `showContextMenu` native UI effect remains throwing.
+
+`mouse-input.test.ts` feeds actions into this owner through real Window bindings
+and task turns. It controls only those missing owner dependencies. Coverage includes
+all five mouse buttons, chords, suppression and mouse cancellation, author capture,
+queued input snapshots across Windows, adopted-target realm/view ownership,
+synthetic-event isolation, removed destinations, and explicit missing dependencies.
+All 17 new tests and the 159-test mouse/stream/capture/activation selection pass on
+Node 24.19.0, Node 26.8.1, and custom Node 27, each with and without the addon.
+These runs have no expected failures or skips. Typecheck, type contracts, scoped
+lint, import boundaries, and diff checks pass; no addon or engine changes are used.
+This is an internal mouse-button producer; native adapters, WebDriver Actions,
+motion/sample collection, click recognition, and real default actions remain unfinished.
+
+## Pointer Events §§11.2.14–11.2.15: native clicks
+
+`MouseButtonInput.click` is a required adapter decision: false on presses, true
+only for releases that qualify as clicks. Eric approved this contract. The
+processor snapshots it with the input, then dispatches primary `click` or
+non-primary `auxclick` after mouseup in the same user-interaction task. It does
+not infer a click from cancellation, movement thresholds, or the click count.
+§3.3.12's retained press/release/capture target overrides §11.2.14's ordinary
+hit-test target; the existing activation factory supplies coordinates, pointer
+identity/defaults, trust, and target-realm allocation. Capture release and hover
+restoration do not replace the retained interaction target.
+
+DOM dispatch already calls the target's activation behavior after an uncanceled
+click. The producer adds no duplicate default-action continuation. Concrete HTML
+element actions remain HTML §6.5 work. §11.2.15's null-native HTMLElement.click()
+and keyboard callers remain explicit TODOs at `PointerEventImpl.createActivation`:
+they need HTML's synthetic firing/trust policy and current modifier input, not a
+fabricated mouse source. This slice completes the native-input path only.
+
+`SPEC_CLASH(pointer-activation-chord-pairing)` records the approved extension of
+§3.3.12's pointerdown/up-only description: a chorded release produces pointermove,
+but can still cause a click. Each held button retains its own press target and
+the release consumes that pair, as §11.3's mouse sequence and Firefox require.
+Cancellation clears all held pairs; raw updates do not consume them. A focused
+regression first failed with zero clicks for a chorded primary release.
+
+Experimental's `input-delivery/native-click.mjs` ran on Chromium 156.0.8078.4,
+Firefox 157.0, and WebKit 27.2. All three deliver a primary click while another
+button remains held, and keep clicks despite canceled pointerdown. In the
+A-primary/B-middle chord, Firefox targets the primary click at their common
+ancestor and the middle auxclick at B. Chromium/WebKit target the primary click
+at B and do not recognize the final middle release as a click. Gesture recognition
+stays with the adapter; Browlet follows the approved per-button targeting rule
+for each release the adapter qualifies. Previously approved pointer-field and
+capture-order differences continue to apply.
+
+Enabled regressions exercise all five mouse buttons, same-task ordering, input
+snapshots, cancellation/default-action dispatch, chord pairing, capture, listener
+reinitialization, and adopted-target realm/view ownership. No native engine or
+addon changes are needed.
+
+All 277 focused mouse/stream/capture/activation tests pass on custom Node 27,
+Node 24.19.0, and Node 26.8.1, each with and without the addon, with no expected
+failures or skips. Typecheck, type contracts, scoped lint, and import checks pass.
+
+## Pointer Events §11.2.16: native double-clicks
+
+The approved `MouseButtonInput.doubleClick` flag accompanies an adapter-qualified
+click release. The processor supplies it to the existing stream activation
+operation, which sends a primary-button `dblclick` immediately after click in the
+same task, independently of either pointer/mouse or click cancellation. A count
+of two alone does not invent another event, and non-primary buttons cannot send
+double-clicks. Synthetic DOM dispatch remains outside this input pipeline.
+
+`MouseEventImpl.createDoubleClick(target, source, clickCount)` extracts creation
+from `handle native mouse double click(native)`; the stream retains targeting and
+dispatch, while the adapter owns gesture recognition. Eric reviewed and accepted
+this callable split. Construction uses private input, a new timestamp,
+the selected target's realm, zeroed movement, and existing coordinate/modifier
+initialization. Author reinitialization of the preceding click cannot change it.
+
+Eric approved three recorded conflicts:
+
+- `native-double-click-interface`: §11.4 and all three browsers use MouseEvent;
+  §11.2.16 instead calls for PointerEvent. Follow the event definition/browsers.
+- `native-double-click-target`: retain the preceding click's selected target,
+  like all three browsers, including capture and common-ancestor targeting.
+  §11.2.16's fresh hit test could change it after a click listener moves the target.
+- `native-double-click-removal`: suppress while the target is disconnected,
+  following §11.3/Firefox. Chromium/WebKit dispatch to the detached target. All
+  three allow dispatch after immediate reinsertion, which Browlet also does.
+
+Experimental's `input-delivery/native-double-click.mjs` ran on Chromium
+156.0.8078.4, Firefox 157.0, and WebKit 27.2. It covers primary/auxiliary input,
+pointerdown/click cancellation, layout mutation, removal/reinsertion, capture,
+different down/up targets, and four successive clicks. All three emit dblclick
+only at count two in that sequence, but recognition remains explicit adapter input.
+Enabled regressions cover delivery order, event attributes/realm, snapshots,
+targeting, cancellation, and separation from author dispatch. DOM's click
+activation hook does not run twice. Selection default actions remain the explicit
+§11.4/HTML editing/Selection API dependency in the dispatch code; this slice
+implements event delivery without claiming text selection or native input acquisition.
+
+The 296 focused mouse/stream/capture/activation cases pass across custom Node 27,
+Node 24.19.0, and Node 26.8.1, with and without the addon. No expected failures or
+skips were added. Typecheck, type contracts, scoped lint, and import checks pass.
+
+## Pointer Events §11.2.17: native movement
+
+`MouseInputProcessor.queueMove(input, document)` receives normalized CSS-pixel
+coordinates and modifiers, snapshots the UserAgent's held buttons and shared
+clock, and schedules one HTML user-interaction task. `MouseInput` holds the
+shared position/modifier fields; `MouseButtonInput` adds button/click recognition.
+Receipt validation, task entry and lazy stream registration remain visibly
+Browlet integration, separate from the private adapted delivery algorithm.
+Eric reviewed and accepted this callable split: the draft's implicit native
+input becomes an explicit input snapshot, saved buttons/time, stream and Document.
+
+Delivery reuses §§3.1.3/10's capture-aware targeting, boundary notifications and
+compatibility mapping. Secure input emits pointerrawupdate before pointermove;
+the latter produces mousemove unless a canceled down suppresses it. Raw updates
+have no separate mouse counterpart. Each event prepares its target after pending
+capture notifications, so a raw listener can change the following move's capture
+or hit-test result. Motion uses button=-1, detail=0 and the received held-button
+state. There is no batching: queued movement precedes subsequent button input.
+
+Eric approved two existing-contract extensions:
+
+- Window's movement helper accepts the private pointermove snapshot as well as
+  mousemove, once per received position. It uses MouseEvent-rounded screen
+  coordinates and shares the delta across raw, pointer and mapped mouse events.
+  Canceled compatibility delivery still advances history; author dispatch does not.
+- `eventTimeStamp(time?)` optionally translates a shared-clock reading using the
+  event's creation realm and precision. Raw and move retain one reading even if a
+  listener changes their target realms. View follows the target's current Document.
+  Button actions use the same receipt-time facility, including their chorded pairs.
+
+The new chord regression first observed two pointermoves with no preceding raw
+updates. §3.3.5 requires raw delivery for these button changes too. The button
+producer now supplies it through the same event-allocation and stream machinery.
+Experimental's `input-delivery/native-mouse-move.mjs` confirms that ordering and
+matching raw/pointer/mouse timestamps/deltas in Chromium 156.0.8078.4 and Firefox
+157.0. WebKit 27.2 emitted no raw updates and again supplied zero screen positions
+and movement in Windows automation, so it supplies no nonzero-axis evidence.
+Blink's `PointerEventManager::SendMousePointerEvent` also explicitly synthesizes
+raw updates for chorded button moves. Eric approved `pointer-chord-samples`:
+retain §9.1/Firefox's nonempty coalesced list, including chords; Chromium/WebKit
+instead expose empty lists for the chorded pointermoves in this probe.
+
+Locked targeting and native relative/unadjusted motion remain a named throwing
+Pointer Lock path. Layout hit testing, input eligibility and cross-document
+coordinate translation retain their existing explicit dependency. The adapter
+must report input interruptions/exit by clearing Window's last position; GUI/OS
+acquisition is still absent. Selection extension and drag initiation remain with
+Selection API/HTML §6.11. This slice implements event production without claiming
+those default actions, prediction, or display-aligned coalescing.
+
+Enabled tests cover task entry, snapshot retention, secure gating, raw/move/mouse
+ordering, chorded input, capture changes, boundary order, cancellation, timestamps,
+adopted-target realm ownership, synthetic dispatch, lifetime and unavailable owners.
+All 325 focused mouse/stream/capture/activation tests pass on custom Node 27,
+Node 24.19.0 and Node 26.8.1, with and without the addon. No expected failures or
+skips were added. Typecheck, type contracts, scoped lint and import checks pass.
+The stock-runtime fixture must leave navigation's host turn before manually
+advancing its event loop; otherwise its await can resume within that same task's
+checkpoint. This is test scheduling, not a runtime delay or production repair.
+
+## Pointer Events §11.2.18: mouse context menus
+
+`MouseButtonInput.contextMenu` is a required adapter decision, independently of
+button identity and click recognition. Eric approved both press and release
+timing. The queued action retains this flag alongside coordinates, modifiers,
+held buttons, and click qualification. After pointer/mouse delivery and any
+mousedown focus continuation, the processor dispatches the requested contextmenu
+before a qualifying click/auxclick in the same task. Neither pointerdown nor
+mousedown cancellation cancels the menu request.
+
+`maybeShowContextMenu(input, target)` uses the existing activation-event factory,
+the private normalized pointer snapshot, and the triggering pointer target. The
+snapshot replaces the native OS event in the specification's callable shape,
+which Eric reviewed and accepted. It preserves pointer ID/type and
+mouse input, uses default pointer fields and detail zero, and allocates at the
+target's creation realm with its current Document view. Author reinitialization
+of the pointer event or contextmenu cannot alter the retained native input.
+
+If DOM dispatch succeeds, `showContextMenu(target, screenX, screenY)` requests
+the native menu at the adapter's original CSS-pixel screen position. This is a
+named throwing GUI dependency for display, placement, and modal input handling;
+it does not silently succeed. Cancellation prevents reaching it. Keyboard/null-
+native invocation remains the keyboard/HTML §6.6 caller's dependency: current
+focus, modifier input, and keyboard menu placement are not supplied by this
+mouse processor. Its required snapshot makes that unavailable input explicit.
+
+`node-compat/experimental/input-delivery/native-context-menu.mjs` probes Chromium
+156.0.8078.4, Firefox 157.0, and WebKit 27.2. Eric approved:
+
+- `native-context-menu-target`: retain §3.3.12's triggering pointer target instead
+  of repeating hit testing. Firefox/WebKit retargeted after mousedown moved the
+  target; Chromium's release path retargeted after mouseup removed it.
+- `native-context-menu-removal`: §11.3 suppresses further delivery while that
+  target is disconnected. Browsers instead targeted the newly exposed element.
+  Immediate reinsertion allows delivery in Browlet and all three browsers.
+- `native-context-menu-detail`: use §11.4/Chromium/WebKit's zero. Firefox supplied
+  one in this probe. Previously approved pointer-default choices still apply.
+- `native-context-menu-order`: contextmenu precedes auxclick as §11.4 states.
+  Chromium's release-timed menu followed auxclick; Firefox/WebKit's press-timed
+  menus preceded it. The adapter still chooses press versus release.
+
+All three delivered contextmenu after pointerdown/mousedown cancellation. Captured
+button transitions retained the capture target; chords retained held-button input.
+These observations do not demonstrate native UI because the probe cancels menus.
+The enabled Browlet regressions use real queues, bindings, capture, and listeners,
+controlling only the unfinished layout, Pointer Lock, HTML focus/activation, and
+native UI effects. Coverage includes timing, cancellation, chords, input mutation,
+layout changes, removal/reinsertion, capture release, adopted-target realm/view
+ownership, and synthetic dispatch isolation.
+
+All 105 focused mouse-input/movement/activation tests, including 20 context-menu
+cases, pass on custom Node 27, Node 24.19.0, and Node 26.8.1, each with and without
+the addon. There are no expected failures or skips in this selection. The final
+20-case rerun also verifies reinitialization after pointer dispatch has returned.
+Typecheck, type contracts, scoped lint, import boundaries, and diff checks pass.
+No addon or engine changes are involved.
+
+## Pointer Events §§11.3–11.4: mouse order and event-type audit
+
+The mouse-delivery pass is audited through §11.4. It does not complete the HTML,
+layout, editing, or native UI owners listed below. No new event class or general
+event-definition registry is needed for these sections.
+
+| Requirement | Implementation and evidence |
+| --- | --- |
+| Nested/overlapping target order | `LegacyMousePointer.updatePosition()` sends out/leave before over/enter, leaves inside-out, enters outside-in, and excludes common ancestors. A new queued-input regression covers entry into three nested elements, return to an ancestor, and exit. All three browser probes agree on this ordinary sequence. |
+| Stationary layout boundaries | `PointerEventStream.updateAfterLayout()` updates pointer and mouse boundaries without inventing a move. The new integration test verifies this after a producer-delivered position; layout still owns detecting/scheduling changes and hit testing. |
+| Button/click sequence and counts | The producer sends down/up before adapter-qualified click/auxclick, then any recognized primary dblclick. `clickCount` is explicitly the gesture's UI Events detail, including the upcoming click count on down/up. Recognition, tolerances, count reset, and OS timing remain adapter inputs. |
+| Removal during mouseup | Four new regressions first exposed click/auxclick on a detached target, with and without capture. `dispatchActivation()` now checks the selected target's connectivity before allocating or dispatching the activation. All three browsers suppress this detached case. Immediate reinsertion follows the approved Firefox choice below. |
+| §11.4 interfaces and flags | click/auxclick/contextmenu use PointerEvent; dblclick and down/up/move/boundaries use MouseEvent. All bubble and are cancelable/composed except enter/leave, whose three flags are false. Existing factory and producer tests cover these defaults. Author construction/dispatch retains author-supplied flags. |
+| Targets, related targets, and input | Hit testing is an explicit missing layout/input-eligibility operation, including normalization of text-run hits to Elements. Capture and activation targeting keep their approved rules. Boundary relatedTarget is the opposite target; mouse coordinates, button masks, modifiers, and realm/view ownership retain the earlier tested policies. |
+
+`node-compat/experimental/input-delivery/native-mouse-audit.mjs` exercised
+Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2. Eric approved:
+
+- `mouse-click-reinsertion`: allow click/auxclick when the removed release target
+  is immediately reinserted, as Firefox does. Chromium/WebKit suppress it after
+  reinsertion too. The connectivity check deliberately adds no removal registry.
+- `mouse-default-activation`: retain DOM's click-only activation hook. §11.4's
+  generic auxclick/dblclick default-action wording is broader; middle-click
+  toggled a checkbox in WebKit but not Chromium/Firefox. Auxiliary link actions
+  remain HTML §4.6/§6.5 work, not a reason to run every control's click behavior.
+- `mouse-click-focus`: keep §11.2.12's focus after an uncanceled mousedown.
+  §11.4 also lists focus as a click action, but all three browsers leave the
+  checkbox unfocused after mousedown is canceled even though click toggles it.
+
+The native probe listens directly on enter/leave targets. Its initial Window-only
+capture listeners did not observe those events in Chromium/WebKit. No change to
+Browlet's normal DOM propagation is inferred from that recording difference.
+
+Default actions remain with their actual owners. `focusOnMouseDown()` and
+`notifyUserActivation()` throw until HTML §§6.4/6.6 supplies eligibility and
+focus/activation state. `showContextMenu()` is the explicit native menu effect.
+DOM invokes the existing click activation contract; concrete link and form-control
+actions remain HTML §§4.6/4.10/6.5 dependencies. Selection, editing, drag initiation,
+and optional middle-button panning remain Selection API/HTML §§6.8/6.11 and native
+input work, with TODOs at the consuming dispatch algorithms. This audit neither
+implements those subsystems nor inserts a generic default-action dispatcher.
+
+All 165 focused input, movement, context-menu, activation, compatibility-mouse,
+and legacy-position tests pass on custom Node 27, Node 24.19.0, and Node 26.8.1,
+each with and without the addon. This selection includes ten new audit/regression
+cases and has no expected failures or skips. Typecheck, type contracts, scoped
+lint, import boundaries, and diff checks pass. The only runtime change is the
+activation target's connectivity guard; no addon or engine changes are needed.
+
 ## Next in document order
 
 §3.1.5's orientation conversion is already covered by PointerEvent construction.
@@ -2014,9 +2371,13 @@ input-owner dependencies above. §8's capture audit and DOM removal hookup are
 complete up to the owner dependencies above. §9's trusted sample preparation and
 target maintenance are implemented up to the producer dependencies above. §10's
 shared position, hover/non-hover mapping, and suppression are connected to the
-internal stream. Continue with §11's Mouse Events and Interfaces audit. Stream
-registration/retirement and per-pointer previous-boundary-target removal notification
-remain explicit integration work.
+internal stream. §11's audit has reached the end of §11.4, with mouse-button, qualifying
+click/double-click, unlocked movement, and mouse context-menu production
+implemented up to the dependencies above. Pause feature work here for consolidation;
+§12 still needs WheelEvent and wheel-event processing, followed by the closing
+examples/security/glossary/legacy audit. Other-device
+stream registration, retirement, and per-pointer previous-boundary-target removal
+notification remain explicit integration work.
 Those steps must consume active source
 state and expose any reached targeting/input dependencies explicitly in code;
 the MouseEvent geometry dependencies remain explicit. Editing and selection producers

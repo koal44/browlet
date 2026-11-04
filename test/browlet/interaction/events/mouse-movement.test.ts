@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../../src/browlet/browlet';
-import { MouseEventImpl } from '../../../../src/browlet/interaction/events/index';
+import { MouseEventImpl, PointerEventImpl } from '../../../../src/browlet/interaction/events/index';
 import { getRelevantRealm } from '../../../support/browlet-binding';
 
 // Internal algorithms use converted coordinates, independently of native input delivery.
@@ -50,7 +50,19 @@ describe('UI Events §5: mouse movement', () => {
     expect(results).toEqual([[30, 12], [0, 33], [24, 0], [-164, -465], [0, 0]]);
   });
 
-  it.each(['mousedown', 'mouseup', 'click', 'pointermove', 'MouseMove'])(
+  it('accepts a native pointer snapshot while using MouseEvent-rounded screen positions', () => {
+    const browser = new Browlet({ route: () => '' });
+    const window = getRelevantRealm(browser.window).env.window;
+    const first = new PointerEventImpl('pointermove', { screenX: 10.9, screenY: -10.9 });
+    const next = new PointerEventImpl('pointermove', { screenX: 14.1, screenY: -7.1 });
+    window.setPointerLockAttributesForMousemove(first);
+    window.setPointerLockAttributesForMousemove(next);
+    expect([first.movementX, first.movementY]).toEqual([0, 0]);
+    expect([next.movementX, next.movementY, next.screenX, next.screenY]).toEqual([4, 3, 14.1, -7.1]);
+    expect(window.lastMouseMove).toEqual({ x: 14, y: -8 });
+  });
+
+  it.each(['mousedown', 'mouseup', 'click', 'pointerrawupdate', 'MouseMove'])(
     'leaves %s and the previous mousemove position unchanged', (type) => {
       const browser = new Browlet({ route: () => '' });
       const window = getRelevantRealm(browser.window).env.window;
