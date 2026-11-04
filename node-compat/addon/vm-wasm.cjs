@@ -16,7 +16,7 @@ module.exports = native => {
     })`, context, 'node-compat:wasm-intrinsics', 0));
   }
 
-  function compile(bytes, context) {
+  function compile(bytes, context, createInstance, getExports) {
     const intrinsics = contexts.get(context);
     if (intrinsics === undefined) throw new TypeError('Expected a compatibility context');
     const source = new intrinsics.Module(bytes, {
@@ -57,13 +57,18 @@ module.exports = native => {
           importObject[specifiers[i]] = namespaces[i];
         }
       }
-      record.instance = new intrinsics.Instance(source, importObject);
+      // Browser hosts supply their existing import/callback adapter here. The
+      // default keeps standalone addon users on the captured native constructor.
+      record.instance = createInstance === undefined
+        ? new intrinsics.Instance(source, importObject)
+        : createInstance(source, importObject);
       record.exports = Reflect.apply(intrinsics.instanceExports, record.instance, []);
+      const publicExports = getExports === undefined ? record.exports : getExports();
       const values = Object.create(null);
       for (const entry of exports) {
         const value = record.exports[entry.name];
         if (entry.kind !== 'global') {
-          values[entry.name] = value;
+          values[entry.name] = publicExports[entry.name];
           continue;
         }
         // TODO(wasm-bindings): The draft requires live mutable globals and a

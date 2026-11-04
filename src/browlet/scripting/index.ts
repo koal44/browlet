@@ -23,8 +23,8 @@ export {
 } from './import-map';
 export {
   ClassicScript, ModuleScript, JavaScriptModuleScript, CSSModuleScript, JSONModuleScript,
-  TextModuleScript, WebAssemblyModuleScript, emptyCompletionValue, type Script, type ModuleType, type ScriptCompletion,
-  JSScriptOrModule, JSScriptRecord, JSModuleRecord, JSSourceTextModuleRecord, JSSyntheticModuleRecord, JSWebAssemblyModuleRecord,
+  TextModuleScript, WasmModuleScript, emptyCompletionValue, type Script, type ModuleType, type ScriptCompletion,
+  JSScriptOrModule, JSScriptRecord, JSModuleRecord, JSSourceTextModuleRecord, JSSyntheticModuleRecord, JSWasmModuleRecord,
   JSModuleRequest,
 } from './script';
 export { ModuleMap, type ModuleMapKey, type ModuleMapEntry, type ModuleFetchCallback } from './module-map';

@@ -30,7 +30,8 @@ module.exports = (native, initializeGlobalObject) => {
       return entry?.reference?.deref() ?? entry;
     },
   });
-  const { Module, SourceTextModule, SyntheticModule, WebAssemblyModule, resultForImport, captureWasmIntrinsics } =
+  const { Module, SourceTextModule, SyntheticModule, WebAssemblyModule,
+    resultForImport, getWebAssemblyNamespaceInstance, captureWasmIntrinsics } =
     require('./vm-modules.cjs')(native, registerCompilation);
   if (native.installDynamicImportRouter) require('./vm-imports.cjs')(native, registry);
 
@@ -77,7 +78,7 @@ module.exports = (native, initializeGlobalObject) => {
 
   const methods = {
     Script,
-    Module, SourceTextModule, SyntheticModule, WebAssemblyModule,
+    Module, SourceTextModule, SyntheticModule, WebAssemblyModule, getWebAssemblyNamespaceInstance,
     compileFunction: function compileFunction(source, parameters = [], options = {}) {
       for (const key of Object.keys(options)) {
         if (!['parsingContext', 'contextExtensions', 'filename', 'lineOffset', 'columnOffset',

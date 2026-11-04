@@ -6,6 +6,10 @@ const { isModuleNamespaceObject } = require('node:util').types;
 // the host's responsibility; these objects retain supplied dependencies only.
 module.exports = (native, registerCompilation) => {
   const records = new WeakMap();
+  // Associate the actual namespace, including namespaces obtained by an import
+  // before the host ever reads Module.namespace. The namespace keeps its Wasm
+  // record alive without retaining unrelated modules or wrapping engine objects.
+  const wasmNamespaces = new WeakMap();
   const wasm = require('./vm-wasm.cjs')(native);
   let nextIdentifier = 0;
 
@@ -78,12 +82,22 @@ module.exports = (native, registerCompilation) => {
   // SourceTextModule, while hiding the generated source and synthetic helper.
   class WebAssemblyModule extends Module {
     constructor(bytes, options = {}) {
-      checkOptions(options, ['context', 'identifier']);
-      const { context, identifier = `vm:wasm(${nextIdentifier++})` } = options;
-      const compiled = wasm.compile(bytes, context);
+      checkOptions(options, ['context', 'identifier', 'createInstance', 'getExports', 'getSource']);
+      const { context, identifier = `vm:wasm(${nextIdentifier++})`, createInstance, getExports, getSource } = options;
+      if (createInstance !== undefined && typeof createInstance !== 'function') {
+        throw new TypeError('Expected createInstance to be a function');
+      }
+      if (getExports !== undefined && typeof getExports !== 'function') {
+        throw new TypeError('Expected getExports to be a function');
+      }
+      if (getSource !== undefined && typeof getSource !== 'function') {
+        throw new TypeError('Expected getSource to be a function');
+      }
+      const compiled = wasm.compile(bytes, context, createInstance, getExports);
       super(context, identifier, () => native.compileModule(compiled.sourceText, context, identifier, 0));
       const record = recordFor(this);
       record.wasm = compiled;
+      record.getSource = getSource;
       record.requests = Object.freeze(compiled.specifiers.map(specifier => Object.freeze({
         __proto__: null, specifier, attributes: Object.freeze({ __proto__: null }), phase: 'evaluation',
       })));
@@ -151,7 +165,7 @@ module.exports = (native, registerCompilation) => {
         throw new Error('Supply module dependencies with linkRequests() before instantiation');
       }
       const supplied = dependencies.map((dependency, i) => record.requests[i].phase === 'source'
-        ? recordFor(dependency).wasm.source : recordFor(dependency).handle);
+        ? sourceForImport(recordFor(dependency)) : recordFor(dependency).handle);
       if (record.wasm !== undefined) {
         record.wasm.dependencies = dependencies.map(dependency => recordFor(dependency).wasm);
         supplied.push(recordFor(record.helper).handle);
@@ -163,7 +177,18 @@ module.exports = (native, registerCompilation) => {
       });
     };
     visit(module);
-    native.linkModule(recordFor(module).handle, graph);
+    try {
+      native.linkModule(recordFor(module).handle, graph);
+    } finally {
+      // V8 can finish linking a dependency before its parent fails. Retain that
+      // dependency's namespace association even when the root call throws.
+      for (const record of linkedRecords) {
+        if (record.wasm === undefined) continue;
+        if (native.moduleStatus(record.handle) === 'linked') {
+          wasmNamespaces.set(native.moduleNamespace(record.handle), record.wasm);
+        }
+      }
+    }
     // Namespaces exist after linking. Let V8 retain initializers and their
     // public referrers even when only an exported function remains reachable.
     for (const record of linkedRecords) {
@@ -181,6 +206,13 @@ module.exports = (native, registerCompilation) => {
     return record;
   }
 
+  // null means a foreign/non-Wasm namespace; undefined means the known Wasm
+  // record has not produced an Instance. No properties or Proxy traps are read.
+  function getWebAssemblyNamespaceInstance(namespace) {
+    const record = wasmNamespaces.get(namespace);
+    return record === undefined ? null : record.instance;
+  }
+
   function checkOptions(options, supported) {
     if (options === null || typeof options !== 'object') throw new TypeError('Expected module options');
     for (const key of Object.keys(options)) {
@@ -189,7 +221,7 @@ module.exports = (native, registerCompilation) => {
   }
 
   function resultForImport(value, phase) {
-    if (phase === 'source' && records.get(value)?.wasm !== undefined) return recordFor(value).wasm.source;
+    if (phase === 'source' && records.get(value)?.wasm !== undefined) return sourceForImport(recordFor(value));
     if (phase !== 'source' && isModuleNamespaceObject(value)) return value;
     if (phase === 'source') throw new TypeError('A source-phase result must be a WebAssemblyModule');
     if (!records.has(value)) {
@@ -201,6 +233,12 @@ module.exports = (native, registerCompilation) => {
     return value.namespace;
   }
 
+  // A browser binding can supply its platform Module without leaking the private
+  // native backing. Ordinary addon clients continue to receive wasm.source.
+  function sourceForImport(record) {
+    return record.getSource === undefined ? record.wasm.source : record.getSource();
+  }
+
   return { Module, SourceTextModule, SyntheticModule, WebAssemblyModule,
-    resultForImport, captureWasmIntrinsics: wasm.captureIntrinsics };
+    resultForImport, getWebAssemblyNamespaceInstance, captureWasmIntrinsics: wasm.captureIntrinsics };
 };

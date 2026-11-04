@@ -4,8 +4,8 @@ import { InternalError } from '../../../src/infra/index';
 import { Browlet } from '../../../src/browlet/browlet';
 import {
   ClassicScript, CSSModuleScript, JavaScriptModuleScript, JSONModuleScript, TextModuleScript,
-  WebAssemblyModuleScript, JSScriptRecord, JSSourceTextModuleRecord, JSSyntheticModuleRecord,
-  JSWebAssemblyModuleRecord,
+  WasmModuleScript, JSScriptRecord, JSSourceTextModuleRecord, JSSyntheticModuleRecord,
+  type JSWasmModuleRecord,
 } from '../../../src/browlet/scripting/script';
 import { ScriptFetchOptions } from '../../../src/browlet/scripting/script-fetch-options';
 import { CSSStyleSheetImpl } from '../../../src/stylelet/index';
@@ -204,9 +204,11 @@ describe('module parser handoffs', () => {
     const parse = vi.spyOn(env.realm, 'parseWebAssemblyModule').mockImplementation((_bytes, script) => {
       expect(script.baseURL).toBe(baseURL);
       expect(script.fetchOptions).toBe(options);
-      return new JSWebAssemblyModuleRecord(script);
+      // This test isolates HTML's disabled-scripting byte substitution from the
+      // backend capability; real Wasm records are covered by wasm-modules.test.ts.
+      return Object.assign(Object.create(null) as JSWasmModuleRecord, { script });
     });
-    const script = new WebAssemblyModuleScript(bytes, env, baseURL, options);
+    const script = new WasmModuleScript(bytes, env, baseURL, options);
     expect(parse).toHaveBeenCalledExactlyOnceWith(enabled ? bytes : new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]), script);
     if (enabled) expect(parse.mock.calls[0]![0]).toBe(bytes);
     expect(bytes).toEqual(new Uint8Array([10, 20, 30]));
@@ -218,13 +220,13 @@ describe('module parser handoffs', () => {
     const { env, baseURL, options } = fixture();
     const failure = new env.realm.Error('bad module');
     const parse = vi.spyOn(env.realm, 'parseWebAssemblyModule').mockImplementation(() => { throw failure; });
-    const script = new WebAssemblyModuleScript(new Uint8Array(), env, baseURL, options);
+    const script = new WasmModuleScript(new Uint8Array(), env, baseURL, options);
     expect(script.record).toBeNull();
     expect(script.parseError).toBe(failure);
     expect(script.errorToRethrow).toBeNull();
     const internal = new InternalError('parser unavailable');
     parse.mockImplementation(() => { throw internal; });
-    expect(() => new WebAssemblyModuleScript(new Uint8Array(), env, baseURL, options)).toThrow(internal);
+    expect(() => new WasmModuleScript(new Uint8Array(), env, baseURL, options)).toThrow(internal);
   });
 });
 

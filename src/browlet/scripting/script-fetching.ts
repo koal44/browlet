@@ -12,7 +12,7 @@ import type { BrowletEnvironment } from '../environment/index';
 import type { ModuleResponsesMap } from '../worklets/index';
 
 import {
-  ClassicScript, JavaScriptModuleScript, CSSModuleScript, JSONModuleScript, TextModuleScript, WebAssemblyModuleScript,
+  ClassicScript, JavaScriptModuleScript, CSSModuleScript, JSONModuleScript, TextModuleScript, WasmModuleScript,
   type JSModuleRequest, type ModuleScript, type ModuleType,
 } from './script';
 import { ScriptFetchOptions } from './script-fetch-options';
@@ -278,7 +278,7 @@ export function fetchSingleModuleScript(
     if (referrerPolicy !== '') options.referrerPolicy = referrerPolicy;
 
     if (essence === 'application/wasm' && moduleType === 'javascript-or-wasm') {
-      script = new WebAssemblyModuleScript(bodyBytes, env, response.url!, options);
+      script = new WasmModuleScript(bodyBytes, env, response.url!, options);
     } else {
       const source = utf8Decode(bodyBytes);
       if (moduleType === 'text') {

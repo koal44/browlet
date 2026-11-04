@@ -1,9 +1,12 @@
 import { InternalError, type InternalPromise } from '../../infra/index';
-import type { CompiledCode, CompiledScript, CompiledModule, ModuleRequest } from '../../js-engine/index';
+import type {
+  CompiledCode, CompiledScript, CompiledModule, ModuleRequestPhase, WebAssemblyModule, JSWasmInstance,
+} from '../../js-engine/index';
 import { idlType } from '../../web-idl/core/index';
 import { aboutBlankURL, copyURL, serializeURL, type URLRecord } from '../../url/index';
 import { CSSStyleSheetImpl } from '../../stylelet/index';
 
+import { WasmModuleImpl, wrapWasmInstance, type WasmInstanceImpl } from '../webassembly/index';
 import type { BrowletEnvironment } from '../environment/index';
 
 import type { BrowletRealm } from './realm';
@@ -105,7 +108,7 @@ export class ClassicScript extends ScriptBase {
 export type ModuleType = 'javascript-or-wasm' | 'css' | 'json' | 'text';
 
 export abstract class ModuleScript extends ScriptBase {
-  declare record: JSSourceTextModuleRecord | JSSyntheticModuleRecord | JSWebAssemblyModuleRecord | null;
+  declare record: JSSourceTextModuleRecord | JSSyntheticModuleRecord | JSWasmModuleRecord | null;
 
   /** Evaluate this module graph and report rejections unless the caller takes responsibility. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#run-a-module-script
@@ -213,8 +216,8 @@ export class TextModuleScript extends SyntheticModuleScript {
   }
 }
 
-export class WebAssemblyModuleScript extends ModuleScript {
-  declare record: JSWebAssemblyModuleRecord | null;
+export class WasmModuleScript extends ModuleScript {
+  declare record: JSWasmModuleRecord | null;
 
   /** Initialize a WebAssembly module and hand its bytes to the realm's ESM parser. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#creating-a-webassembly-module-script
@@ -239,10 +242,10 @@ export class JSModuleRequest {
   specifier: string;
   attributes: { key: string; value: string; }[];
   /** Whether the request needs source or evaluation; deferred loading remains unfinished. */
-  phase: ModuleRequest['phase'];
+  phase: ModuleRequestPhase;
 
   constructor(
-    specifier: string, attributes: { key: string; value: string; }[] = [], phase: ModuleRequest['phase'] = 'evaluation',
+    specifier: string, attributes: { key: string; value: string; }[] = [], phase: ModuleRequestPhase = 'evaluation',
   ) {
     this.specifier = specifier;
     this.attributes = attributes;
@@ -339,6 +342,8 @@ export abstract class JSModuleRecord extends JSScriptOrModule {
   declare script: ModuleScript;
   /** Retained module bound to this record's realm. */
   abstract code: CompiledModule;
+  /** [[ModuleSource]], retained as an implementation until the engine import boundary projects it. */
+  moduleSource: WasmModuleImpl | null = null;
   /** Engine-reported dependencies, in their linking order. */
   requestedModules: JSModuleRequest[] = [];
   /** Whether a successful traversal completed this record's dependency loading. */
@@ -374,13 +379,16 @@ export abstract class JSModuleRecord extends JSScriptOrModule {
       const dependencies: CompiledModule[] = [];
       graph.set(record.code, dependencies);
       for (const request of record.requestedModules) {
-        if (request.phase !== 'evaluation') {
-          throw new InternalError('Source and deferred module loading are not implemented');
+        if (request.phase === 'defer') {
+          throw new InternalError('Deferred module loading is not implemented');
         }
         const dependency = record.getLoadedModule(request);
         if (dependency === undefined) throw new InternalError('Module dependency loading is not implemented');
+        if (request.phase === 'source' && dependency.moduleSource === null) {
+          throw new record.realm.SyntaxError('The imported module has no source object');
+        }
         dependencies.push(dependency.code);
-        visit(dependency);
+        if (request.phase === 'evaluation') visit(dependency);
       }
     };
     visit(this);
@@ -439,14 +447,40 @@ export class JSSyntheticModuleRecord extends JSModuleRecord {
   }
 }
 
-export class JSWebAssemblyModuleRecord extends JSModuleRecord {
-  declare script: WebAssemblyModuleScript;
+export class JSWasmModuleRecord extends JSModuleRecord {
+  declare moduleSource: WasmModuleImpl;
+  declare script: WasmModuleScript;
+  code: WebAssemblyModule;
+  /** Implementation retained for the namespace and its public exports. */
+  instance!: WasmInstanceImpl;
 
-  constructor(script: WebAssemblyModuleScript) {
-    super(script.env.realm, script);
+  constructor(script: WasmModuleScript, code: WebAssemblyModule, requests: JSModuleRequest[] = []) {
+    super(script.env.realm, script, code);
+    this.code = code;
+    this.moduleSource = new WasmModuleImpl(code.source);
+    this.requestedModules = requests;
   }
 
-  get code(): CompiledModule {
-    throw new InternalError('WebAssembly ESM parsing is not implemented');
+  /** Instantiate at this record's execution entry, preserving HTML callback and result-conversion scopes. */
+  createInstance(imports: object): JSWasmInstance {
+    const loop = this.realm.agent.eventLoop;
+    // ACCOMMODATION(node-v8-execution-contexts): The bridge's private helper is a
+    // host function. This entry identifies the exact Wasm record, even when V8
+    // reaches it as a dependency or after top-level await. Do not substitute the
+    // root module's context or capture whichever host happened to parse the bytes.
+    const context = new JSExecutionContext({ realm: this.realm, scriptOrModule: this });
+    loop.executionContextStack.push(context);
+    try {
+      // SPEC_CLASH(wasm-esm-import-subtyping): Keep Core/JS API import matching; ESM §10.5 reverses the subtype operands.
+      const backing = this.moduleSource.createInstance(imports, this.script.env);
+      this.instance = wrapWasmInstance(backing, this.script.env);
+      return backing;
+    } finally {
+      if (loop.runningExecutionContext !== context) {
+        // eslint-disable-next-line no-unsafe-finally -- Stack corruption is an internal error even if the author callback threw.
+        throw new InternalError('WebAssembly execution contexts were cleaned up out of order');
+      }
+      loop.executionContextStack.pop();
+    }
   }
 }

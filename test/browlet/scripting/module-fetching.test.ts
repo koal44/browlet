@@ -402,7 +402,7 @@ async function createFixture() {
     css: vi.spyOn(scriptClasses, 'CSSModuleScript').mockImplementation(function() { return scripts.css; }),
     json: vi.spyOn(scriptClasses, 'JSONModuleScript').mockImplementation(function() { return scripts.json; }),
     text: vi.spyOn(scriptClasses, 'TextModuleScript').mockImplementation(function() { return scripts.text; }),
-    wasm: vi.spyOn(scriptClasses, 'WebAssemblyModuleScript').mockImplementation(function() { return scripts.wasm; }),
+    wasm: vi.spyOn(scriptClasses, 'WasmModuleScript').mockImplementation(function() { return scripts.wasm; }),
   };
   return { env, url: env.parseURL('https://modules.test/module.js')!, scripts, create };
 }

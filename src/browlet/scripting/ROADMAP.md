@@ -434,9 +434,10 @@ replaced; these are fetch orchestration tests, not worker/worklet startup tests.
   [synchronous host wait](#html-8173-pausing) is not supplied by today's asynchronous
   Fetch task delivery. Do not substitute a Promise return or launch
   a fetch that cannot finish before this method returns.
-- Descendant loading now connects static/dynamic JavaScript/CSS/JSON/text graphs through
-  HostLoadImportedModule. Source/deferred requests, Wasm parsing,
-  and actual script/worker/worklet startup callers remain unfinished.
+- Descendant loading connects static/dynamic JavaScript/CSS/JSON/text/Wasm graphs
+  through HostLoadImportedModule. Source-phase URL imports stop at the compiled
+  record; deferred requests, object-valued source lookup, and worker/worklet
+  startup retain their separate owners.
 
 Calling is tracked under §8.1.4.4 below.
 
@@ -450,7 +451,7 @@ remaining algorithms.
 | --- | --- |
 | Classic | Muted errors select `about:blank`; disabled scripting supplies empty source unless bypassed. Retains options, original source URL, realm, and HostDefined. The selected backend compiles without executing: `vm.Script` for stock contexts, a native UnboundScript handle for addon contexts. Syntax errors belong to the target realm and populate both error fields. |
 | JavaScript module | Applies scripting policy, compiles in the existing VM context, and retains engine requests including attributes and phase. Syntax failures belong to the target realm and select the first parse error without setting `errorToRethrow`. |
-| WebAssembly | Disabled scripting substitutes the eight-byte empty module. The addon now supplies a WebAssemblyModule bridge, but this parser still needs its JSRealm/HTML connection. Parse exceptions populate only `parseError`; implementation failures propagate. |
+| WebAssembly | Disabled scripting substitutes the eight-byte empty module. JSRealm and the addon now compile a retained Wasm record with its ordered external requests, source object, and HTML association. Parse exceptions populate only `parseError`; missing backend capabilities propagate. Instantiation uses HTML's existing callback adapter. |
 | CSS | Constructs a sheet with default options and calls `replaceSync`; replacement exceptions become `parseError`. Binding projects the sheet before the real synthetic module retains its default export. |
 | JSON | Uses the target realm's captured JSON parser, retaining the parsed value or realm-owned parse error. Does not blank source when scripting is disabled. |
 | Text | Retains the supplied string unchanged as the default-export input, also independently of scripting enablement. |
@@ -950,7 +951,7 @@ It does not treat reaching §8.1.7 as completion of the earlier dependencies.
 | Temporal clock (§8.1.6.5) | Window composition installs `BrowletEnvironment.getSystemUTCEpochNanoseconds()` through JS Engine and the existing addon in every isolation mode. Live policy checks, reporting, borrowing, and navigation are covered. | The native callback accepts only signed-int64 nanoseconds and requires custom/compat. Native AgentCluster isolation remains a separate engine boundary. See §8.1.6.5 below. |
 | String compilation (§8.1.6.2) | Binding-owned TrustedScript extraction and CSP source-list checks/reporting are connected; Node's own checks remain in force. | The preceding Trusted Types/default-policy validation still needs compilation kind and original Function inputs absent from the engine callback. Keep the four approved input-gap failures and unsupported-backend limits; further native work is parked. This is not a later event-loop algorithm. |
 | Execution attribution | Job registration and rejection notifications capture compilation identity and select the associated HTML script. The two ordinary-call rejection regressions now pass on every addon base; direct `reportError` selection retains its accepted compatibility limitation. | Rejection muting follows the approved Chromium/Firefox choice; WebKit and the literal built-in-context reading differ. Complete attribution across async resumptions and security-token boundaries remains unfinished. Constructor incumbent capture and borrowed-Function import-error realms retain their already approved expected failures. Do not turn these into an unbounded goal of mirroring every author frame. |
-| WebAssembly modules | The addon supplies module compilation and supplied-graph execution. | `BrowletRealm.parseWebAssemblyModule()` still throws; source/deferred graph phases are also rejected. Keep the JSRealm/HTML/Wasm ESM integration on hold for its separate standards slice. |
+| WebAssembly modules | HTML parsing, ordinary graph loading, and source-phase URL imports use the addon's retained record. Evaluation has callback-aware instantiation; source imports expose the projected Module without traversing its graph. | Stock mode lacks the Wasm VM class; dynamic source imports require the existing Node forwarding export. Deferred phases, object-valued source lookup, and ESM binding limitations stay explicit in the [Wasm roadmap](../webassembly/ROADMAP.md). |
 | Other adopted hooks | Promise rejection delivery, job routing, module imports, import metadata, cleanup-exception reporting, and idle cleanup wake-ups have their documented integrations. Generic/timeout hooks decline unrelated Node jobs. | Keep the existing private-element choice and unaudited whole-registry cleanup scheduling explicit. A missing task record alone does not justify another native handoff. |
 
 Temporal's Window connection is complete; its backend and range limits remain
@@ -1625,9 +1626,10 @@ mistaking the fetcher's assertion for an author exception.
 **Callable shapes:** LoadRequestedModules accepts optional HTML load state and
 returns `env.InternalPromise`. HostLoadImportedModule and FinishLoadingImportedModule
 accept Script/Module/Realm referrers and static or dynamic completion payloads.
-Source/deferred imports and the HTML Wasm parser remain explicit throwing
-boundaries. Script elements and worker/worklet startup must still invoke the
-graph entry points; these loader slices do not implement those owners.
+Wasm parsing and source-phase URL imports now use these same paths. Deferred
+imports and object-valued source lookup remain explicit boundaries. Script
+elements and worker/worklet startup must invoke the graph entry points; these
+loader slices do not implement those owners.
 
 [Static-loader tests](../../../test/browlet/scripting/module-loading.test.ts)
 exercise transitive graphs, cycles and diamonds, concurrent graphs sharing pending
@@ -1688,8 +1690,11 @@ boundary separately before expanding the addon API.
 Custom/compat and stock VM contexts support these callbacks. Official addon
 bases lack the previously recorded forwarding export; their integration cases
 retain the approved expected failures. No C++ or Node/V8 changes are needed.
-Module-specific active-script restoration, source/deferred phases, and HTML Wasm
-parsing remain separate dependencies. Continue the audit at §8.1.7 event loops.
+HTML Wasm parsing and source-phase URL imports are now connected; source imports
+retain their module-map entry without recursively loading, linking, or evaluating
+the Wasm record. A later evaluation request loads its dependencies normally.
+Deferred phases and object-valued source lookup remain separate dependencies.
+Module-specific active-script restoration retains its engine boundary.
 
 Validation: dynamic-import regressions have 22 ordinary passes and one approved
 expected failure on custom/compat and all three stock configurations. Each
@@ -1974,8 +1979,8 @@ The addon now uses public V8 `SetWasmAsyncResolvePromiseCallback` on every base.
 `JSRealm.setWasmAsyncCompletionCallback()` registers the owning host's scheduler
 per context. The native callback retains the resolver and result in a traced,
 one-shot completion; it neither changes the compiled object nor drains microtasks.
-HTML queues that completion on the JavaScript-engine task source, with its global's
-Document and paired script preparation/cleanup. Resolution and the synchronous
+HTML queues that completion on the selected task source (engine by default), with
+its global's Document and paired script preparation/cleanup. Resolution and the synchronous
 Module `then` lookup consequently happen inside that task. Its checkpoint drains
 the resulting reactions, independently of the custom Promise job hooks.
 
@@ -1988,9 +1993,11 @@ install this HTML handoff; its automatic progress remains covered separately.
 
 The WebAssembly JS API's [asynchronous compilation algorithm](https://webassembly.github.io/spec/js-api/#asynchronously-compile-a-webassembly-module)
 requires task delivery. Its optional task source is absent for ordinary compile;
-HTML uses the existing engine-task source here. Native V8 still owns compilation,
+HTML uses the existing engine-task source there. Web API response compilation
+selects the networking source for its native Promise through JS Engine; concurrent
+ordinary compilation and instantiation keep their engine source. Native V8 still owns compilation,
 result allocation, and instantiation; this hook transfers Promise resolution, not
-those algorithms. No Node/V8 source patch or Wasm API adaptation is needed.
+those algorithms. No Node/V8 source patch is needed.
 
 The isolate-wide native dispatcher forwards unregistered contexts with V8's
 default Resolve/Reject behavior. V8 provides no getter for chaining another

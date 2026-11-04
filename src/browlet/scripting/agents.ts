@@ -23,13 +23,13 @@ export abstract class Agent {
   eventLoop: EventLoop;
   /** Unique Browlet identifier, fixed for the agent's lifetime. */
   // PROVISIONAL: not V8's [[Signifier]] or the realm's native [[AgentSignifier]].
-  readonly signifier: symbol;
+  signifier: symbol;
   /** Observed runtime facts, not independently configurable engine settings. */
-  readonly isLockFree1 = isLockFree1;
-  readonly isLockFree2 = isLockFree2;
+  isLockFree1 = isLockFree1;
+  isLockFree2 = isLockFree2;
   // ECMAScript also defines [[IsLockFree8]], omitted by HTML's initialization list.
-  readonly isLockFree8 = isLockFree8;
-  readonly littleEndian = littleEndian;
+  isLockFree8 = isLockFree8;
+  littleEndian = littleEndian;
   #agentCluster: AgentCluster | null = null;
 
   protected constructor(canBlock: boolean, eventLoop: EventLoop) {

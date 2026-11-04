@@ -11,7 +11,7 @@ export class GlobalTimers {
   #eventLoop: EventLoop;
   #host: TimerHost;
   #idMap = new Map<number, TimerKey>();
-  #queueTask: GlobalTimersOptions['queueTask'];
+  #queueTask: TimerTaskQueuingSteps;
   #time: HighResolutionTimeSource;
   // TODO(HTML worker timers): Connect non-suspended worker time during worker
   // startup. Only Window Document activity currently drives these waits.
@@ -253,12 +253,15 @@ export type TimerAction = (argumentsList: unknown[]) => void;
 
 export type GlobalTimersOptions = {
   eventLoop: EventLoop;
-  queueTask: (steps: () => void, options: TaskCreationOptions) => void;
+  queueTask: TimerTaskQueuingSteps;
   time: HighResolutionTimeSource;
   host: TimerHost;
 };
 
 export type TimerKey = symbol;
+
+/** Queue a timer task in its owning global with the supplied task metadata. */
+type TimerTaskQueuingSteps = (steps: () => void, options: TaskCreationOptions) => void;
 
 type HighResolutionTimeSource = {
   currentHighResolutionTime(): Duration;
@@ -268,7 +271,7 @@ type ActiveTimer = {
   wakeUp: TaskHandle | null;
   completionSteps: () => void;
   expiryTime: number;
-  readonly key: TimerKey;
+  key: TimerKey;
   milliseconds: number;
   orderingIdentifier: string;
   sequence: number;

@@ -111,6 +111,12 @@ export class WasmImpl {
     }
   }
 
+  /** Return the existing Instance behind a Wasm module namespace, without instantiating again. */
+  // https://webassembly.github.io/esm-integration/js-api/#dom-webassembly-namespaceinstance
+  namespaceInstance(namespace: object, env: WasmEnvironment): WasmInstanceImpl {
+    return wrapWasmInstance(env.realm.getWebAssemblyNamespaceInstance(namespace), env);
+  }
+
   /** Start native compilation with the task source required by the calling API. */
   // TODO(CSP): Enforce the browser's Wasm compilation policy at native entry points;
   // response eligibility and Fetch policy checks do not supply that compilation check.
@@ -532,6 +538,7 @@ namespace WebAssembly {
 
   Promise<Instance> instantiate(Module moduleObject, optional object importObject);
 
+  Instance namespaceInstance(object moduleNamespace);
 
   readonly attribute Tag JSTag;
 };
@@ -572,6 +579,10 @@ export const wasmIDL = defineNamespace<WasmEnvironment>({
     op('instantiate', promise(instanceType),
       [arg('moduleObject', moduleType), arg('importObject', idlType.object, { optional: true })],
       { method: 'instantiateModule', ...invokeWith(atArg<WasmEnvironment>(2, (env, _callee, incumbent) => ({ env, incumbent }))) },
+    ),
+    op('namespaceInstance', instanceType,
+      [arg('moduleNamespace', idlType.object)],
+      invokeWith(atArg<WasmEnvironment>(1, (env) => env)),
     ),
     // SPEC_CLASH(wasm-js-tag-descriptor): Install the draft's enumerable getter over V8's readonly data property.
     roAttr('JSTag', tagType),

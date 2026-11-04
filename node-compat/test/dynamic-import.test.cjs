@@ -34,6 +34,27 @@ testImport('reload preserves old, pending, and new import loaders and module con
   assert.equal(child.status, 0, child.stderr);
 });
 
+testImport('a dynamic source import returns the host platform object without instantiating its backing', () => {
+  const f = fixture();
+  const { callImport } = require('./support/wasm-fixtures.cjs');
+  const source = compat.runInContext('({ publicSource: true })', f.context);
+  const module = new compat.WebAssemblyModule(callImport('unloaded'), { context: f.context, getSource: () => source });
+  const script = new compat.Script('import.source("value")', {
+    importModuleDynamically(specifier, referrer, attributes, phase) {
+      assert.equal(specifier, 'value');
+      assert.equal(referrer, script);
+      assert.equal(phase, 'source');
+      return module;
+    },
+  });
+  const result = observe(f, script.runInContext(f.context));
+  f.queue.runMicrotasks();
+  assert.equal(result.error, undefined);
+  assert.equal(result.value, source);
+  assert.equal(module.status, 'unlinked');
+  assert.equal(module.instance, undefined);
+});
+
 testImport('Script passes the Node callback arguments and uses the importing queue', () => {
   const f = fixture();
   const other = fixture();

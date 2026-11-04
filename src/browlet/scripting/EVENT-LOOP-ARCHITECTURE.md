@@ -76,7 +76,8 @@ requires progress without an unrelated task or evaluation.
 Native work enqueued directly into the engine queue needs its own completion
 notification. Native Wasm completion now hands a one-shot resolver to the owning
 HTML loop through `JSRealm.setWasmAsyncCompletionCallback()`. HTML queues an
-engine task before resolution can read an author-defined `then`, and the existing
+engine task, or a networking task for response compilation, before resolution can
+read an author-defined `then`, and the existing
 checkpoint handles reactions. This works independently of custom job hooks on
 all addon bases. Stock Node retains native scheduling. The
 [Wasm completion regressions](../../../test/browlet/scripting/wasm-completion.test.ts)

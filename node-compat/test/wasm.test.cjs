@@ -36,6 +36,62 @@ test('WebAssemblyModule exposes the shared VM lifecycle without its private help
   assert.throws(() => new compat.WebAssemblyModule(constant(), { context: f.realm, unexpected: true }), /Unsupported/u);
 });
 
+test('a host instance factory runs only at evaluation and retains the resulting native Instance', () => {
+  const f = fixture();
+  const makeInstance = f.run('(module, imports) => new WebAssembly.Instance(module, imports)');
+  const calls = [];
+  const wasm = new compat.WebAssemblyModule(constant(), { context: f.realm,
+    createInstance(module, imports) {
+      calls.push({ module, imports });
+      return makeInstance(module, imports);
+    },
+  });
+  assert.deepEqual(calls, []);
+  f.link(wasm);
+  assert.deepEqual(calls, []);
+  assert.equal(f.evaluate(wasm).state, 'fulfilled');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].module, wasm.source);
+  assert.equal(Object.getPrototypeOf(calls[0].imports), null);
+  assert.equal(wasm.namespace.answer, wasm.instance.exports.answer);
+  assert.equal(compat.getWebAssemblyNamespaceInstance(wasm.namespace), wasm.instance);
+  f.evaluate(wasm);
+  assert.equal(calls.length, 1);
+});
+
+test('a host instance-factory failure is the retained evaluation error', () => {
+  const f = fixture();
+  const reason = {};
+  const wasm = new compat.WebAssemblyModule(constant(), { context: f.realm,
+    createInstance() { throw reason; },
+  });
+  f.link(wasm);
+  assert.equal(f.evaluate(wasm).value, reason);
+  assert.equal(wasm.error, reason);
+  assert.equal(wasm.instance, undefined);
+  assert.throws(() => new compat.WebAssemblyModule(constant(), { context: f.realm, createInstance: 1 }), TypeError);
+});
+
+test('public exports do not replace native exports used by Wasm dependencies', () => {
+  const f = fixture();
+  const publicAnswer = () => 99;
+  let calls = 0;
+  const dependency = new compat.WebAssemblyModule(constant(), { context: f.realm,
+    getExports() {
+      calls++;
+      assert.ok(dependency.instance);
+      return { answer: publicAnswer };
+    },
+  });
+  const root = f.compileWasm(callImport());
+  f.link(root, new Map([[root, [dependency]]]));
+  assert.equal(calls, 0);
+  assert.equal(f.evaluate(root).state, 'fulfilled');
+  assert.equal(calls, 1);
+  assert.equal(dependency.namespace.answer, publicAnswer);
+  assert.equal(root.namespace.answer(), 42);
+});
+
 test('Wasm compilation and linking do not instantiate or run its start function', () => {
   const f = fixture();
   f.realm.globalProxy.starts = 0;
@@ -100,6 +156,23 @@ test('source and evaluation requests for the same specifier are resolved separat
   assert.equal(ns.code, wasm.source);
   assert.equal(ns.answer, wasm.instance.exports.answer);
   assert.equal(ns.answer(), 42);
+});
+
+test('source imports can expose a host platform object while retaining private native backing', () => {
+  const f = fixture();
+  const source = f.run('({ publicSource: true })');
+  const wasm = new compat.WebAssemblyModule(callImport('./unloaded'), {
+    context: f.realm, getSource: () => source,
+  });
+  const root = f.compile('import source code from "./wasm"; export { code };');
+  f.link(root, new Map([[root, [wasm]]]));
+  assert.equal(f.evaluate(root).state, 'fulfilled');
+  assert.equal(root.namespace.code, source);
+  assert.notEqual(wasm.source, source);
+  assert.equal(compat.isWebAssemblyModule(wasm.source), true);
+  assert.equal(wasm.status, 'unlinked');
+  assert.equal(wasm.instance, undefined);
+  assert.throws(() => new compat.WebAssemblyModule(constant(), { context: f.realm, getSource: 42 }), /getSource/u);
 });
 
 test('static source imports reject JavaScript modules and foreign-context dependencies', () => {

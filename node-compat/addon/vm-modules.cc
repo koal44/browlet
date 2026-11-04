@@ -336,8 +336,16 @@ void LinkModule(const FunctionCallbackInfo<Value>& args) {
       auto phase = ModuleItem(requests, host, j).As<ModuleRequest>()->GetPhase();
       if (!dependencies.As<Array>()->Get(host, j).ToLocal(&value)) return;
       if (phase == ModuleImportPhase::kSource) {
-        if (!value->IsWasmModuleObject()) {
-          Fail(isolate, "ERR_INVALID_ARG_TYPE", "A source-phase dependency must be a WebAssembly.Module");
+        // ResolveModuleSourceCallback accepts a host source object. The JS layer
+        // verifies the Wasm record; its binding may project a public Module here.
+        if (!value->IsObject()) {
+          Fail(isolate, "ERR_INVALID_ARG_TYPE", "A source-phase dependency must be an object");
+          return;
+        }
+        auto is_handle = value.As<Object>()->HasPrivate(host, Data(args)->module_key.Get(isolate));
+        if (is_handle.IsNothing()) return;
+        if (is_handle.FromJust()) {
+          Fail(isolate, "ERR_INVALID_ARG_TYPE", "Supply a source object, not a compiled module handle");
           return;
         }
         entry.dependencies.push_back(value.As<Object>());

@@ -1,8 +1,8 @@
 import { InternalError, type TaskCreationOptions } from '../../infra/index';
 import {
   JSRealm, bindAsyncContext, getAssociatedRealm, isObject,
-  type CompiledModule, type ModuleRequest,
-  type GlobalObject, type GlobalThis, type JSRealmOptions, type RealmFunctionSteps,
+  type CompiledModule, type ModuleRequestPhase,
+  type GlobalAccessSelector, type GlobalObject, type GlobalPrototypeKind, type GlobalThis, type RealmFunctionSteps,
 } from '../../js-engine/index';
 import type { CallbackHooks, StampedPlatformObject, WebIDLEnvironment, WebIDLRealm } from '../../web-idl/index';
 import { serializeURL } from '../../url/index';
@@ -21,8 +21,8 @@ import type { TaskSource } from './event-loop';
 import type { QueuedTaskHandle } from './tasks';
 import { DynamicModuleImport, getSupportedImportAttributes, loadImportedModule, type ModuleReferrer } from './module-loading';
 import {
-  JSScriptRecord, JSSourceTextModuleRecord, JSModuleRequest,
-  type ClassicScript, type JavaScriptModuleScript, type JSModuleRecord, type JSWebAssemblyModuleRecord, type WebAssemblyModuleScript,
+  JSScriptRecord, JSSourceTextModuleRecord, JSWasmModuleRecord, JSModuleRequest,
+  type ClassicScript, type JavaScriptModuleScript, type JSModuleRecord, type WasmModuleScript,
 } from './script';
 
 /** Create an HTML realm and install the host-selected global and global-this identities. */
@@ -48,7 +48,7 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
   /** Whether the realm was created with cross-origin isolation enabled. */
   crossOriginIsolated: boolean;
   /** Web IDL global names controlling interface exposure. */
-  globalNames: ReadonlySet<string>;
+  globalNames: Set<string>;
   /** Whether this host permits changes to the global prototype chain. */
   isGlobalPrototypeChainMutable: boolean;
   /** Imports from code with no Script/Module record, retained with this realm's lifetime. */
@@ -205,7 +205,7 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
   // Node supplies specifier/attributes/phase and owns the import Promise. It does
   // not expose that PromiseCapability; this boundary returns the evaluated Module instead.
   importModuleDynamically(
-    referrer: ModuleReferrer, specifier: string, attributes: Record<string, string>, phase: ModuleRequest['phase'],
+    referrer: ModuleReferrer, specifier: string, attributes: Record<string, string>, phase: ModuleRequestPhase,
   ): Promise<CompiledModule> {
     // EvaluateImportCall already performed expression evaluation, ToString, and
     // attribute-value conversion. Node's VM API leaves supported-key policy to us.
@@ -218,7 +218,7 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
       // Node turns a callback throw into rejection of the existing import Promise.
       throw new this.TypeError('Unsupported import attribute');
     }
-    if (phase !== 'evaluation') throw new InternalError('Source and deferred dynamic imports are not implemented');
+    if (phase === 'defer') throw new InternalError('Deferred dynamic imports are not implemented');
     const request = new JSModuleRequest(specifier, Object.entries(attributes).map(([key, value]) => ({ key, value })), phase);
     const payload = new DynamicModuleImport(this.env);
     // Native Promise usage is confined to Node's callback boundary; the graph
@@ -231,11 +231,17 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
   }
 
   /** Parse a WebAssembly ESM record, including its imports, in this realm. */
-  parseWebAssemblyModule(_bodyBytes: Uint8Array, _script: WebAssemblyModuleScript): JSWebAssemblyModuleRecord {
-    // TODO: Connect node-compat's adopted WebAssemblyModule through JSRealm here.
-    // Evaluation-phase JS/synthetic loading is connected; source-phase requests
-    // and Wasm records must join that graph deliberately, without JS fallbacks.
-    throw new InternalError('WebAssembly ESM parsing is not implemented');
+  // https://webassembly.github.io/esm-integration/js-api/#parse-a-webassembly-module
+  parseWebAssemblyModule(bodyBytes: Uint8Array, script: WasmModuleScript): JSWasmModuleRecord {
+    const code = this.compileWebAssemblyModule(bodyBytes, serializeURL(script.baseURL!),
+      (_module, imports) => record.createInstance(imports), () => record.instance.exports,
+      () => this.env.project(record.moduleSource)!);
+    // Reuse HTML's ModuleRequest records, with empty attributes and evaluation phase.
+    const requests = this.getModuleRequests(code).map((request) => new JSModuleRequest(
+      request.specifier, Object.entries(request.attributes).map(([key, value]) => ({ key, value })), request.phase,
+    ));
+    const record = new JSWasmModuleRecord(script, code, requests);
+    return record;
   }
 
   override evaluate(source: string, filename: string, lineOffset = 0): unknown {
@@ -440,8 +446,8 @@ export type BrowletRealmCustomizations = {
 export type BrowletRealmCreationOptions = Omit<BrowletRealmOptions, 'agent'>;
 
 export type BrowletRealmOptions = {
-  globalPrototypeChain?: JSRealmOptions['globalPrototypeChain'];
-  globalAccess?: JSRealmOptions['globalAccess'];
+  globalPrototypeChain?: GlobalPrototypeKind[];
+  globalAccess?: GlobalAccessSelector;
   reuseGlobalProxyFrom?: BrowletRealm;
   agent: Agent;
   crossOriginIsolated?: boolean;

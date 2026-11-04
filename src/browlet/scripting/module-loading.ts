@@ -1,5 +1,5 @@
 import { InternalError, internalType, type InternalPromise } from '../../infra/index';
-import type { CompiledModule } from '../../js-engine/index';
+import type { CompiledModule, ModuleRequestPhase } from '../../js-engine/index';
 import { idlType } from '../../web-idl/core/index';
 import type { URLRecord } from '../../url/index';
 
@@ -115,26 +115,27 @@ export class JSModuleGraphLoadingState {
     this.#reject = capability.reject;
   }
 
-  /** Visit a record and start any requests whose modules have not been supplied. */
-  // https://tc39.es/ecma262/#sec-InnerModuleLoading
-  load(module: JSModuleRecord): void {
+  /** Visit a source record once, or recursively load an evaluation graph. */
+  // https://tc39.es/proposal-source-phase-imports/#sec-InnerModuleLoading
+  // SPEC_MISMATCH: InnerModuleLoading(state, module, loadType)
+  // The request phase directly selects single versus recursive loading.
+  load(module: JSModuleRecord, phase: ModuleRequestPhase = 'evaluation'): void {
     if (!this.isLoading) throw new InternalError('Cannot visit a module after graph loading has finished');
-    if (!(module instanceof JSSyntheticModuleRecord) && !module.requestedModulesLoaded &&
+    if (phase === 'evaluation' && !(module instanceof JSSyntheticModuleRecord) && !module.requestedModulesLoaded &&
       module.code.status === 'unlinked' && !this.visited.has(module)) {
       this.visited.add(module);
       this.pendingModulesCount += module.requestedModules.length;
       const supportedAttributes = getSupportedImportAttributes();
       for (const request of module.requestedModules) {
-        if (request.phase !== 'evaluation') {
-          // TODO: Connect the source/deferred-phase records and Wasm parser before
-          // accepting these requests. They must not become ordinary JS imports.
-          throw new InternalError('Source and deferred module loading are not implemented');
+        if (request.phase === 'defer') {
+          // TODO: Deferred evaluation needs its own graph and namespace lifecycle.
+          throw new InternalError('Deferred module loading is not implemented');
         }
         if (request.attributes.some((attribute) => !supportedAttributes.includes(attribute.key))) {
-          this.continue({ type: 'throw', value: new module.realm.SyntaxError('Unsupported import attribute') });
+          this.continue(request.phase, { type: 'throw', value: new module.realm.SyntaxError('Unsupported import attribute') });
         } else {
           const loaded = module.getLoadedModule(request);
-          if (loaded !== undefined) this.load(loaded);
+          if (loaded !== undefined) this.load(loaded, request.phase);
           else loadImportedModule(module, request, this.loadState, this);
         }
         // Loading may synchronously re-enter continue() and settle this graph.
@@ -152,11 +153,11 @@ export class JSModuleGraphLoadingState {
   }
 
   /** Resume after a request completes, ignoring work arriving after settlement. */
-  // https://tc39.es/ecma262/#sec-ContinueModuleLoading
-  continue(completion: ModuleLoadingCompletion): void {
+  // https://tc39.es/proposal-source-phase-imports/#sec-ContinueModuleLoading
+  continue(phase: ModuleRequestPhase, completion: ModuleLoadingCompletion): void {
     if (!this.isLoading) return;
     if (completion.type === 'normal') {
-      this.load(completion.value);
+      this.load(completion.value, phase);
     } else {
       this.isLoading = false;
       this.#reject(completion.value);
@@ -164,7 +165,7 @@ export class JSModuleGraphLoadingState {
   }
 }
 
-/** Dynamic-import continuation; the VM boundary performs final namespace conversion. */
+/** Dynamic-import continuation; the VM boundary supplies the namespace or source object. */
 export class DynamicModuleImport {
   /** Internal completion retains the engine Module, without adopting namespace exports. */
   promise: InternalPromise<CompiledModule>;
@@ -178,17 +179,25 @@ export class DynamicModuleImport {
     this.#reject = capability.reject;
   }
 
-  /** Load descendants, link, and wait for evaluation before returning the engine Module. */
-  // https://tc39.es/ecma262/#sec-ContinueDynamicImport
-  // SPEC_MISMATCH: ContinueDynamicImport(promiseCapability, moduleCompletion)
+  /** Return a source record directly, or load and evaluate an ordinary import's graph. */
+  // https://tc39.es/proposal-source-phase-imports/#sec-ContinueDynamicImport
+  // SPEC_MISMATCH: ContinueDynamicImport(promiseCapability, phase, moduleCompletion)
   // Node owns the import Promise and final namespace resolution. Our internal
-  // completion supplies a Module after evaluation, avoiding an extra namespace adoption.
-  continue(completion: ModuleLoadingCompletion): void {
+  // completion supplies a Module, avoiding an extra namespace/source-object adoption.
+  continue(phase: ModuleRequestPhase, completion: ModuleLoadingCompletion): void {
     if (completion.type === 'throw') {
       this.#reject(completion.value);
       return;
     }
     const module = completion.value;
+    if (phase === 'source') {
+      if (module.moduleSource === null) {
+        this.#reject(new module.realm.SyntaxError('The imported module has no source object'));
+      } else {
+        this.#resolve(module.code);
+      }
+      return;
+    }
     module.loadRequestedModules().observe(() => {
       try {
         module.link();
@@ -228,7 +237,7 @@ export function finishLoadingImportedModule(
     }
     if (!found) referrer.loadedModules.set(request, completion.value);
   }
-  payload.continue(completion);
+  payload.continue(request.phase, completion);
 }
 
 /** The loaded record or exception passed to FinishLoadingImportedModule. */

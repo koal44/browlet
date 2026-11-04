@@ -539,11 +539,11 @@ export class EventLoop {
     this.#requestTurnIfNeeded();
   }
 
-  getTaskQueue(source: TaskSource): ReadonlySet<Task> {
+  getTaskQueue(source: TaskSource): Set<Task> {
     return this.#getTaskQueue(source);
   }
 
-  getTaskQueues(): ReadonlySet<ReadonlySet<Task>> {
+  getTaskQueues(): Set<Set<Task>> {
     return this.#taskQueues;
   }
 
@@ -688,8 +688,8 @@ export type LongTaskReporter = {
 };
 
 export type TaskQueueSelector = (
-  runnableTaskQueues: ReadonlySet<Task>[],
-) => ReadonlySet<Task>;
+  runnableTaskQueues: Set<Task>[],
+) => Set<Task>;
 
 /** Queued HTML work with source identity and document-activity gating. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#concept-task
@@ -699,7 +699,7 @@ export class Task {
   /** Environments whose scripts were evaluated while this task ran. */
   scriptEvaluationEnvironments = new Set<BrowletEnvironment>();
   /** Fixed source identity used to select the task's queue. */
-  readonly source: TaskSource;
+  source: TaskSource;
   /** Algorithm steps executed when this task is selected. */
   steps: () => void;
   /** Nesting level inherited by timer initialization inside this task. */
@@ -738,7 +738,7 @@ const microtaskTaskSource = createTaskSource('microtask');
 const hostEntryTaskSource = createTaskSource('host script entry');
 
 function findFirstRunnableTask(
-  taskQueue: ReadonlySet<Task>,
+  taskQueue: Set<Task>,
 ): Task | undefined {
   for (const task of taskQueue) {
     if (task.isRunnable) return task;
@@ -747,8 +747,8 @@ function findFirstRunnableTask(
 }
 
 function selectFirstTaskQueue(
-  runnableTaskQueues: ReadonlySet<Task>[],
-): ReadonlySet<Task> {
+  runnableTaskQueues: Set<Task>[],
+): Set<Task> {
   const [taskQueue] = runnableTaskQueues;
   if (taskQueue === undefined) {
     throw new InternalError('Cannot select from an empty set of task queues');

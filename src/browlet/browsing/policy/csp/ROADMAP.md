@@ -166,6 +166,44 @@ forwarding export, so their native compilation remains unenforced; integration
 assertions retain the previously approved `codeGeneration` expected-failure gate.
 The policy algorithm itself is exercised on every backend.
 
+## Wasm-compilation consumer (§4.5.1)
+
+[`CSPList.isWasmCompilationBlocked()`](list.ts) implements
+[EnsureCSPDoesNotBlockWasmByteCompilation](https://w3c.github.io/webappsec-csp/#can-compile-wasm-bytes).
+`script-src` takes precedence over `default-src`, including an empty directive.
+ASCII-insensitive `wasm-unsafe-eval` or `unsafe-eval` permits compilation. Other
+script allowances, including `trusted-types-eval`, do not. Every violated policy
+reports `script-src` / `wasm-eval` with no sample; report-only policies never block.
+
+Realm composition registers the live policy decision with JS Engine. All three
+addon bases intercept V8's native byte compilation, preserving Node's original
+handler and its disabled-Wasm contexts. No Node/V8 patch is needed. V8 creates
+CompileError in the compilation realm. The check covers Module construction,
+compile/instantiate bytes, response compilation, and HTML's Wasm module parser;
+it is separate from URL/Fetch policy. Borrowed operations use their own realm.
+Validation, retained-module instantiation, internal callback conversion bridges,
+and Module cloning remain available after compilation has been forbidden.
+
+Stock Node checks the same decision at Browlet's constructor and compilation
+entry points. It cannot intercept captured native functions used directly by the
+host. Stock Wasm ESM parsing remains an unsupported engine dependency. Worker
+startup must supply its policy container and global violation reporting before
+this Window integration can be reused there.
+
+The [policy tests](../../../../../test/browlet/browsing/policy/csp/wasm-compilation.test.ts)
+and [browser tests](../../../../../test/browlet/webassembly/csp.test.ts) cover
+fallback lists, report-only/multiple policies, realm ownership, live policy
+changes, and continued use of compiled modules. The
+[native tests](../../../../../node-compat/test/wasm-code-generation.test.cjs)
+also cover Node preservation, global reuse, collection, and worker teardown.
+
+Validation: the 55-file Wasm/CSP integration selection passes in all six runtime
+configurations, retaining existing expected failures only. All 25 new policy/API
+tests pass everywhere; the HTML module-parser case passes on all addon bases.
+Rebuilt addons pass their full native suites (393/393 on Node 24 and 26; 392 plus
+the existing installer skip on custom). Typechecking, focused lint, and import
+boundary checks pass. No failure classifications changed.
+
 ## Retained specification decisions
 
 The following source markers retain approved choices. September 2026 browser
@@ -239,7 +277,7 @@ documentation cleanup does not refresh those observations.
   Console Printer/output sink while retaining attribution; do not call the
   author's overridable console or substitute Node console output.
 - **Compilation:** classic/module script consumers, the preceding Trusted Types
-  validation in the string-compilation hook, string timers, Wasm compilation,
+  validation in the string-compilation hook and string timers,
   and WebRTC integrations. Their owning specifications provide these dependencies.
 
 Mixed Content and Upgrade Insecure Requests remain parent-policy algorithms;

@@ -167,10 +167,10 @@ export type RenderingOpportunityHost = {
 // style/layout and presentation owners. Presentation must follow current document
 // state after the initial render too; cached derived state must be invalidated or
 // recomputed. The mutation/invalidation contract remains with those future owners.
-export type RenderingUpdateHooks = Readonly<Partial<Record<
+export type RenderingUpdateHooks = Partial<Record<
   RenderingUpdatePhase,
   (context: RenderingUpdateContext) => void
->>> & {
+>> & {
   filters?: RenderingDocumentFilters;
 };
 
