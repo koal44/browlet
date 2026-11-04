@@ -92,6 +92,19 @@ testInWorker('declined Promise jobs stay on their original explicit queue', () =
   assert.deepEqual(calls, [1, 'host', 2]);
 });
 
+testInWorker('Promise jobs complete after a hot async function returns implicitly', async () => {
+  compat.setHostHooks({ enqueuePromiseJob() { return false; } });
+  let total = 0;
+  // Keep the captured counter and implicit return: this shape reproduced a
+  // native script-metadata snapshot fatal after the function's hot loop.
+  async function work() {
+    await 0;
+    for (let index = 0; index < 100_000_000; index++) total++;
+  }
+  await work();
+  assert.equal(total, 100_000_000);
+});
+
 testInWorker('host hook installation returns nothing and cannot be replaced', () => {
   assert.equal(typeof compat.setHostHooks, 'function');
   assert.throws(() => compat.setHostHooks({ unknown() {} }), /Unknown host hook/);

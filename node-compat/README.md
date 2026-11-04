@@ -861,6 +861,13 @@ Promise or registry path. Private async-context state preserves application ALS;
 recursive capture of the host's own work is suppressed. Pre-installation work
 keeps its original callback path. Teardown clears native hooks/references.
 
+Callback registration captures the executing script's host-defined options along
+with the context identities. Promise enqueue snapshots retain only the context
+identities and job kind; scheduling does not consume script metadata there.
+Collecting that unused metadata at enqueue caused a native fatal during hot async
+completion on the custom engine. Keep the lookup at registration; the native
+host-hook regression covers the failing completion shape.
+
 [JS Engine](../src/js-engine/runtime.ts) translates references to registered realms.
 [HTML](../src/browlet/scripting/host-hooks.ts) retains incumbent settings plus the
 modeled active-script context and owns callback cleanup, microtask tasks, generic

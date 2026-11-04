@@ -45,20 +45,10 @@ Local<Object> Snapshot(Isolate* isolate) {
   auto current = isolate->GetCurrentContext();
   auto entered = isolate->GetEnteredOrMicrotaskContext();
   auto incumbent = isolate->GetIncumbentContext();
-  Local<Data> options;
-  bool has_options = isolate->GetCurrentHostDefinedOptions(true).ToLocal(&options);
   auto result = Object::New(isolate);
   Set(current, result, "current", RealmValue(current, isolate));
   Set(current, result, "entered", RealmValue(entered, isolate));
   Set(current, result, "incumbent", RealmValue(incumbent, isolate));
-  auto values = Array::New(isolate);
-  if (has_options) {
-    auto primitives = options.As<PrimitiveArray>();
-    for (int i = 0; i < primitives->Length(); ++i) {
-      values->CreateDataProperty(current, i, primitives->Get(isolate, i)).Check();
-    }
-  }
-  Set(current, result, "hostDefinedOptions", values);
   return result;
 }
 
@@ -71,7 +61,20 @@ Local<Value> Capture(const char* kind, Local<Value> callback,
   EscapableHandleScope scope(isolate);
   state->capturing = true;
   auto hook = state->hooks[kCapture].Get(isolate);
-  Local<Value> argv[] = {Text(isolate, kind), Snapshot(isolate), callback, on_rejected};
+  auto current = isolate->GetCurrentContext();
+  auto snapshot = Snapshot(isolate);
+  // Only callback registration consumes script metadata. Querying it at enqueue
+  // can reach an optimized frame that cannot be summarized for script attribution.
+  Local<Data> options;
+  auto values = Array::New(isolate);
+  if (isolate->GetCurrentHostDefinedOptions(true).ToLocal(&options)) {
+    auto primitives = options.As<PrimitiveArray>();
+    for (int i = 0; i < primitives->Length(); ++i) {
+      values->CreateDataProperty(current, i, primitives->Get(isolate, i)).Check();
+    }
+  }
+  Set(current, snapshot, "hostDefinedOptions", values);
+  Local<Value> argv[] = {Text(isolate, kind), snapshot, callback, on_rejected};
   TryCatch caught(isolate);
   auto result = hook->Call(hook->GetCreationContext().ToLocalChecked(),
                            Undefined(isolate), 4, argv);
