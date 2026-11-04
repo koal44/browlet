@@ -10,6 +10,7 @@ Browlet.
 | Module | Responsibility |
 | --- | --- |
 | [syntax.ts](syntax.ts) | Tokens, whitespace, and Fetch's quoted-string collector |
+| [status.ts](status.ts) | Shared HTTP status code type, including the Fetch/HTML zero sentinel |
 | [headers.ts](headers.ts) | HTTP dates, entity tags, conditional fields, Content-Range, and Retry-After |
 | [link.ts](link.ts) | Ordered Link targets and parameters; consumers resolve URLs and interpret relations |
 | [authentication.ts](authentication.ts) | Challenge lists, Basic selection, and credential encoding |

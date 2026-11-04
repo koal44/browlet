@@ -1415,6 +1415,10 @@ Their event and report implementations depend on DOM events and shared
 Reporting, which sit below policy. CSP keeps type references to supplied Documents
 and environments without loading their concrete classes. Document retains policy
 initialization; the complete browser environment generates reports above those owners.
+Before an incoming global exists, CSP instead captures response metadata and
+Reporting-Endpoints using its UserAgent. Its reports use the browser's reporting
+scheduler and sandbox execution without assigning a parent/departing global as
+their client, event target, or observer owner.
 
 Browlet's style mixins sit among its lowest foundations: they load Stylelet and
 retain type references to supplied DOM nodes. Element and style/link elements

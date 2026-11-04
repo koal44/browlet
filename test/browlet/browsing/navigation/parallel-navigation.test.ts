@@ -285,7 +285,7 @@ describe('pending navigation history', () => {
     populate.mockRestore();
     abort.mockRestore();
     navigable.navigate(parseURL('https://example.test/next').url!, document, {}, env);
-    await expect(resumeNavigation(turns)).rejects.toThrow('Session-history entry Document population is not implemented');
+    await expect(resumeNavigation(turns)).rejects.toThrow('Navigation parameter creation by fetching is not implemented');
     expect(() => document.abortAndDescendants()).toThrow('Document and descendant abortion is not implemented');
   });
 });

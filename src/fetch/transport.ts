@@ -1,5 +1,6 @@
 import type { InternalPromise } from '../infra/promises';
 import { sitesAreSameSite, type Origin, type Site, type URLRecord } from '../url/index';
+import type { HTTPStatus } from '../http/index';
 
 import type { FetchHeaders } from './headers';
 import type { ConnectionTimingInfo } from './timing';
@@ -47,7 +48,7 @@ export interface HTTPTransportListener {
   /** Observe the HTTP parser's start of a response, before header completion. */
   onResponseStarted?(): void;
   /** Receive informational or final headers, preserving duplicate field values. */
-  onHeaders(status: number, statusMessage: string, headers: FetchHeaders, hasValidTLS: boolean): void;
+  onHeaders(status: HTTPStatus, statusMessage: string, headers: FetchHeaders, hasValidTLS: boolean): void;
   /** Retainable bytes that the transport will not modify after delivery. */
   onData(bytes: Uint8Array): void;
   /** The message body ended successfully; buffered bytes still need to be consumed. */

@@ -8,7 +8,7 @@ import {
 } from '../web-idl/core/index';
 import type { ReadableStreamImpl } from '../streams/index';
 import { copyURL, serializeURL, type Origin, type URLRecord } from '../url/index';
-import { calculateCacheFreshness, type CacheTiming } from '../http/index';
+import { calculateCacheFreshness, type CacheTiming, type HTTPStatus } from '../http/index';
 import type { BlobImpl } from '../file/index';
 import type { FormDataImpl } from '../xhr/index';
 
@@ -36,7 +36,7 @@ export class FetchResponse {
   /** Response URL history; empty when no response URL has been assigned. */
   urlList: URLRecord[] = [];
   /** HTTP status code, or zero for a network error or opaque response view. */
-  status = 200;
+  status: HTTPStatus = 200;
   /** HTTP reason phrase as a byte string; it may be empty. */
   statusMessage = '';
   /** Ordered response headers, or the exposed subset for a filtered response. */
@@ -324,7 +324,7 @@ export class ResponseImpl {
 
   // https://fetch.spec.whatwg.org/#dom-response-redirect
   static redirect(
-    url: string, status: number, env: FetchEnvironment,
+    url: string, status: HTTPStatus, env: FetchEnvironment,
   ): ResponseImpl {
     const parsedURL = env.parseURL(url, env.apiBaseURL);
     if (parsedURL === null) throw new TypeError('Invalid redirect URL');
@@ -393,7 +393,7 @@ const invalidStatusText = /[^\x09\x20-\x7e\x80-\xff]/;
 /** Post-conversion dictionary; Web IDL supplies status and statusText defaults. */
 export type FetchResponseInit = {
   /** Response status in the inclusive range 200 through 599. */
-  status: number;
+  status: HTTPStatus;
   /** HTTP reason phrase, restricted to the permitted byte-string characters. */
   statusText: string;
   /** Initial header entries, before any inferred body Content-Type is appended. */

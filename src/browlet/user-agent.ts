@@ -703,7 +703,7 @@ export class UserAgent implements
   /** Notify automation that a navigation failed before committing. */
   // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-navigation-failed
   webDriverBiDiNavigationFailed(
-    _navigable: Navigable, _status: { id: string; status: 'canceled'; url: URLRecord; },
+    _navigable: Navigable, _status: { id: string | null; status: 'canceled'; url: URLRecord; },
   ): void {
     // TODO(WebDriver BiDi): Resume navigation-failed waiters and emit navigationFailed to subscribed sessions.
     // PROVISIONAL: live sessions and navigation event delivery are not implemented.

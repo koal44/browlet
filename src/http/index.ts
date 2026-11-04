@@ -1,6 +1,7 @@
 export {
   collectHTTPQuotedString, isHTTPToken, isHTTPWhitespace, isHTTPTabOrSpace,
 } from './syntax';
+export type { HTTPStatus } from './status';
 export {
   EntityTag, parseHTTPDate, serializeHTTPDate, parseEntityTagList, serializeEntityTagList,
   isStrongLastModified, selectIfRangeValidator, parseIfRange, matchesIfRange,

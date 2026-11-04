@@ -279,8 +279,8 @@ tested build.
 
 This completes the navigation-request policy algorithm. The subsequent navigation
 slice connects ClassicScript execution; string-result document replacement remains
-unfinished. Network-navigation callers, response/frame-ancestor
-checks, and complete script-element checks remain below. Policy failures return
+unfinished. Network-navigation callers, response-policy/reporting integration,
+and complete script-element checks remain below. Policy failures return
 without reaching the loader; admitted javascript: requests execute in Navigable.
 
 Validation: the 61 focused policy/queued-navigation tests pass on Node 24.19.0,
@@ -288,6 +288,174 @@ Validation: the 61 focused policy/queued-navigation tests pass on Node 24.19.0,
 The broader CSP, Trusted Types, beginning-navigation, and abortion selection
 passes 603 tests on Node 26/addon. Typechecking, touched-file lint, import hierarchy,
 and whitespace checks pass; there are no new expected failures or native changes.
+
+## Navigation-response foundation
+
+HTML §7.4.5 needs [CSP §4.2.5](https://w3c.github.io/webappsec-csp/#should-block-navigation-response)
+before admitting an incoming response. `ContentSecurityPolicy.getViolatedNavigationResponseDirective()`
+now implements the [frame-ancestors response check](https://w3c.github.io/webappsec-csp/#frame-ancestors-navigation-response).
+This is the only nontrivial navigation-response directive check in this CSP draft;
+other directives default to Allowed. `form-action` remains a request check, not
+an additional ancestor or response-URL check.
+
+The method exempts Fetch local URLs (about/blob/data), ignores source-side
+frame-ancestors, and checks every live container Document origin. It uses the
+list's retained self origin and redirect count zero, independently of the incoming
+Document's sandboxed origin and the departing child's state. Report-only and
+enforced policies produce the same violation identity; the list-level algorithm
+reports both and blocks only enforced policies.
+
+Reviewed callable arrangement: the method omits the request and navigation type, which CSP
+explicitly declares unused, and returns the violated directive or undefined,
+matching our existing Fetch checks. `CSPList.isNavigationResponseBlocked()` has
+the full request/response/type/target inputs with the response list as `this`,
+plus the UserAgent needed before a destination realm exists. It accepts null
+requests because HTML supplies them for synthetic responses. Both callable
+arrangements are accepted; their `SPEC_MISMATCH` markers are removed.
+
+Eric approved these matching choices on 2026-11-03:
+
+- `SPEC_CLASH(csp-frame-ancestors-origin)`: compare serialized ancestor origins,
+  as CSP, Chromium, and WebKit do. Firefox matches its full principal URI, so a
+  `/parent` source can match a parent with that path; Browlet rejects it.
+- `SPEC_GAP(csp-frame-ancestors-opaque-origin)`: CSP passes the opaque origin's
+  serialization, `null`, through the URL parser without handling failure.
+  Reject that ancestor. `SPEC_CLASH` with the same identifier records that
+  Chromium/WebKit reject it even for `*`, while Firefox admits `*`.
+
+`CSPList.isNavigationResponseBlocked()` now aggregates response policies through
+the null-global reporting path below. Every violating policy queues a report,
+including report-only policies and policies after an enforcing violation. Matching
+policies do not report. The method consumes the selected list and its retained
+self origin; it does not reparse the response or substitute an existing Window's policies.
+
+The source-policy loop has been audited and is a no-op in the current draft:
+`frame-ancestors` explicitly returns Allowed for `source`, and every other
+directive's navigation-response check defaults to Allowed. In particular,
+`form-action` belongs to the pre-navigation check, while `frame-src` belongs to
+Fetch; neither becomes a second response restriction here. The original request
+and navigation-type parameters remain in the callable contract. A future
+source-side response directive must add its check and request-client reporting
+here when that directive is implemented.
+
+`SPEC_GAP(csp-navigation-response-null-request)` records that CSP dereferences a
+request which HTML leaves null for synthetic responses. With no source request,
+there is no source-policy loop; do not borrow the departing or embedding Window.
+This leaves all currently defined response checks intact, including local-URL
+exemptions for inherited frame-ancestors policies. Population now calls these
+checks before COEP and X-Frame-Options; error-page and ordinary Document creation
+remain explicit boundaries.
+
+### Navigation-response reporting
+
+`SPEC_GAP(csp-navigation-violation-global)` records that CSP creates response
+violations with a null global, then derives their URL/status and delivery context
+from that global. `CSPViolation.fromNavigationResponse()` now captures the incoming
+response and its Reporting-Endpoints with a UserAgent owner. `fromGlobal()` retains
+the existing Document event/observer behavior. The navigation factory's response
+input supplies information missing from the null-global construction algorithm;
+its `SPEC_MISMATCH` remains for callable-shape review.
+
+No existing Window substitutes for the absent global. There is no DOM event target
+or ReportingObserver, and no parent/departing report buffer or endpoint lookup.
+The UserAgent schedules delivery; its sandbox owns Fetch execution without
+becoming the request's client. Modern `report-to` uses the existing Reporting
+contract, retaining the response URL's origin separately from its sanitized URL.
+Legacy `report-uri` uses the separately approved opaque-origin contract below.
+Report-to presence still suppresses report-uri even without a configured endpoint.
+
+The browser-only `node-compat/experimental/navigation-csp-response.mjs` probe ran
+nine matching/metadata cases plus three cookie and two collector-redirect cases
+in Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2. All three
+admitted report-only failures and sandboxed destinations with an allowed response
+self origin. No securitypolicyviolation event was observed on the parent or
+destination for these frame-ancestor reports. Eric approved the reporting choices
+below on 2026-11-03:
+
+| HTTP 201 response rejected by frame-ancestors | Chromium | Firefox | WebKit |
+| --- | --- | --- | --- |
+| Protected document URI | Response origin only | Full sanitized response URL | Full sanitized response URL |
+| Blocked URI | Response origin only | Same-origin ancestor URL, otherwise empty | Full sanitized response URL |
+| Status | 200 | 0 | 201 |
+| Referrer in the direct iframe cases | Empty | Navigation request referrer | Navigation request referrer |
+| Report POST Origin header | null | Response origin | null |
+| Legacy cookies, including same-origin collector | Omitted | Omitted | Sent, including foreign collector |
+
+- `SPEC_CLASH(csp-navigation-report-resource)`: use the sanitized final response
+  URL for both protected and blocked resources and the actual response status,
+  matching WebKit in the HTTP probe. Do not copy an ancestor's URL or assume 200.
+- `SPEC_CLASH(csp-navigation-report-referrer)`: leave null-global referrer empty,
+  following CSP and Chromium's direct-frame reports.
+- `SPEC_GAP(csp-navigation-report-client)` and
+  `SPEC_CLASH(csp-navigation-report-credentials)`: use a clientless legacy request
+  with an opaque origin, matching Chromium. CSP's same-origin credentials mode
+  then omits credentials. Firefox likewise omits cookies; WebKit sends them even
+  to a foreign collector. Existing global reports retain their actual client.
+- `SPEC_CLASH(csp-report-no-cors-redirect)`: CSP prescribes no-cors with
+  redirect:error, while Fetch rejects this combination before sending a foreign
+  request. [CSP #320](https://github.com/w3c/webappsec-csp/issues/320) records the
+  conflict and the historical requirements: send without preflight and refuse
+  collector redirects. Fetch now admits this combination only for the internal
+  report destination. HTTP redirect handling still rejects 302/307; all three
+  browsers sent one POST and stopped in those probes. Ordinary author requests
+  and manual redirects keep Fetch's restriction.
+- `SPEC_GAP(keepalive-null-client)`: Fetch's keepalive accounting dereferences
+  the absent client group. Retain the 64 KiB per-request limit with zero additional
+  group bytes. Do not charge the parent or execution sandbox, invent a global,
+  or silently disable keepalive. This is an explicit implementation choice;
+  aggregate clientless quotas were not established by the browser probes.
+
+All three leave the direct no-referrer case empty. Chromium's nested opaque-ancestor
+case exposed older surrounding-frame metadata; it must not be treated as a reliable
+request-referrer source. Firefox's source location contained Playwright/privileged
+script details, which are probe artifacts and not a proposed author source location.
+Report-to transport was not tested in browsers by this legacy report-uri probe;
+production tests exercise it through the already implemented Reporting machinery.
+
+[CSP issue #460](https://github.com/w3c/webappsec-csp/issues/460) documents the
+referrer disagreement: the written null-global path leaves it empty; if populated,
+the request's referrer is the relevant candidate, not an arbitrary ancestor URL.
+[Gecko's Framing/CSP code](https://github.com/mozilla-firefox/firefox/blob/main/dom/security/nsCSPContext.cpp)
+collects principal URIs and suppresses frame-ancestor DOM events;
+[WebKit's directive checks](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/page/csp/ContentSecurityPolicyDirectiveList.cpp)
+convert ancestor origins to URLs and reject invalid URLs. The probe and local
+source inspection support the matching decisions above.
+[Blink's PingLoader](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/loader/ping_loader.cc)
+explicitly selects an opaque requestor origin for frame-ancestor violations and
+redirect:error for legacy reports. Gecko marks report channels anonymous and
+installs a redirect-rejecting sink.
+
+The real-upload regression first timed out because Fetch rejected the no-cors/error
+combination; a focused test observed zero transport calls. Once admitted, the
+clientless keepalive request exposed the missing-group assertion. Both cases are
+retained as passing regressions alongside ordinary-request rejection, redirect
+rejection, quota boundaries, and both report formats' HTTP/body-disposal tests.
+Window violation events and observers retain their existing tests.
+
+The factory is now connected to list-level aggregation, including null synthetic
+requests, and HTML's population task calls the aggregate checker. Remaining:
+HTML's error-page creation, downloads, empty responses, and Document loader. Worker
+global violation construction remains explicitly unfinished; this slice does not
+substitute the sandbox for a Worker either.
+
+Aggregation-slice validation: 12 new cases cover both dispositions, all reports
+after a blocking policy, selected self origin, source-policy exclusion, synthetic
+null requests, local URLs, and top-level targets. The 52 matcher/aggregation cases
+plus 12 violation/delivery cases pass on all six Node 24.19.0, Node 26.8.1, and
+custom Node 27.0.0-pre stock/compat configurations. Typecheck, touched-file lint,
+import hierarchy, and diff checks pass. No new expected failures or native changes.
+
+Reporting-slice validation: 677 tests in 30 CSP, Reporting, and Fetch suites pass
+on each of Node 24.19.0, Node 26.8.1, and custom Node 27.0.0-pre, with the addon
+both disabled and enabled. This includes real uploads for both report formats,
+existing Window events/observers, no-cors and redirect restrictions, and client
+versus clientless keepalive quotas. Typecheck, touched-file lint, import hierarchy,
+and diff checks pass. No new expected failures or native changes were introduced.
+
+Matcher-slice validation: 41 new focused cases plus the adjacent CSP parsing/source matching,
+navigation-request, XFO, and population suites pass: 268 tests on Node 26.8.1
+stock and compat. Typecheck, touched-file lint, import hierarchy, and diff checks
+pass. No runtime scheduling or native integration changed in this slice.
 
 ## Retained specification decisions
 
@@ -362,6 +530,9 @@ documentation cleanup does not refresh those observations.
   document replacement remains an explicit dependency. The ordinary
   network-navigation consumer must use this navigation algorithm too; Fetch's
   existing request check cannot substitute for it.
+  The frame-ancestor matcher, response-policy aggregation, and null-global
+  violation/reporting paths are implemented, including synthetic null requests.
+  HTML population now performs admission; its error-page and Document loaders remain unfinished.
 - **Globals:** worker/worklet initialization and violation construction;
   global event-handler attributes. Window addEventListener already works.
 - **Console:** `env.reportConsoleWarning()` is provisional. Supply a real

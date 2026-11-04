@@ -268,7 +268,7 @@ describe('beginning navigation', () => {
   it('reports start then failure for a traversing child without replacing its ongoing state', async () => {
     const { document, child, url } = await childFixture();
     child.setOngoingNavigation('traversal', document.env);
-    const statuses: { id: string; status: string; }[] = [];
+    const statuses: { id: string | null; status: string; }[] = [];
     vi.spyOn(document.env.userAgent, 'webDriverBiDiNavigationStarted').mockImplementation((_target, status) => {
       statuses.push(status);
     });

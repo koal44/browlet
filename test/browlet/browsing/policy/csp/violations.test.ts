@@ -90,7 +90,7 @@ describe('CSP violation delivery', () => {
     window.document.body.appendChild(target);
     const events: Event[] = [];
     window.document.addEventListener('securitypolicyviolation', (event) => events.push(event));
-    const violation = new CSPViolation(policy, 'script-src-elem', 'inline', env);
+    const violation = CSPViolation.fromGlobal(policy, 'script-src-elem', 'inline', env);
     violation.element = unwrap<ElementImpl>(target);
     violation.report();
     if (remove) target.remove();

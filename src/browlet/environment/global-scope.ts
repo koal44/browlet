@@ -119,7 +119,7 @@ export class WindowOrWorkerGlobalScopeMixin {
   /** Replace this global's Reporting endpoint list using its resource response. */
   // https://w3c.github.io/reporting/#initialize-a-globals-endpoint-list
   initializeReportingEndpoints(response: FetchResponse): void {
-    this.reportingEndpoints = ReportingEndpoint.parse(response, this.env);
+    this.reportingEndpoints = ReportingEndpoint.parse(response, this.env.userAgent);
   }
 
   /** Generate a report for local observation and, when enabled, later network delivery. */

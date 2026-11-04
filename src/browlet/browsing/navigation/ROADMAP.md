@@ -1991,9 +1991,9 @@ All navigation-param items have been considered:
 | Inputs | Current boundary |
 | --- | --- |
 | id and navigable | ID slot as above; the receiving Navigable supplies the destination through the already accepted ownership arrangement. |
-| request, response, fetch controller, commit early hints | Existing fields retain request/response/controller identity and the Document callback. Local routes supply a response with a URL and null request/controller. Fetch navigation and srcdoc producers remain §7.4.5 dependencies; network failures need its separate error-Document path. Early-hints invocation and controller-owned timing are already exercised by document-lifecycle tests. |
+| request, response, fetch controller, commit early hints | Existing fields retain request/response/controller identity and the Document callback. Local routes supply a response with a URL and null request/controller. The §7.4.5 srcdoc factory now supplies its synthetic response and null Fetch slots. Fetch navigation and network-failure error Documents remain dependencies. Early-hints invocation and controller-owned timing are already exercised by document-lifecycle tests. |
 | COOP enforcement result, reserved environment, opener policy | The supplied-response preparation fills these before creating the Document. The result is temporarily nullable during that local assembly. The full Fetch/redirect producer must supply finalized inputs; this slice preserves the existing COOP implementation and its reporting limitations. |
-| origin, policy container, final sandboxing flags, iframe referrer policy | Response policies and captured sandbox/referrer inputs are connected. about:blank/srcdoc origin, source/history-policy selection, and inherited base/cookie inputs retain their existing explicit dependencies. |
+| origin, policy container, final sandboxing flags, iframe referrer policy | Response policies and captured sandbox/referrer inputs are connected. The srcdoc factory now uses retained origin, history/parent policy selection, captured flags/referrer policy, and retained base URL. Its cookie URL and null-reserved-environment loader integration remain explicit dependencies; Fetch/local-URL assembly still needs its own audit. |
 | navigation timing type, about base URL, user involvement | Existing slots carry their values to Document/history creation. Local routes default to navigate/browser UI. Full Navigation Timing projection, reload/traversal producers, and about: inheritance remain unfinished. |
 
 HTML does not mutate a completed navigation-param record. Browlet's provisional
@@ -2471,11 +2471,13 @@ Dependencies remain executable boundaries:
   ordering open; resolve that during the lifecycle audit.
 - **§7.4.5 population:** Navigable.populateHistoryEntryDocument has the complete
   inputs, with optional arguments grouped into PopulateHistoryEntryOptions
-  (pending callable-shape review). It still throws. Its owner must handle srcdoc,
-  Fetch/external protocols/error Documents, replayable POST bytes, ID rechecks,
-  response/frame restrictions, and downloads/204/205 without replacing the old
-  Document. The completion callback appends finalization only after that owner
-  finishes, rather than finalizing an unpopulated entry immediately.
+  (pending callable-shape review). Source selection, srcdoc parameter assembly,
+  queued ID rechecks, and non-fetch routing/completion are implemented below.
+  Fetch parameter creation and ordinary response processing remain throwing
+  boundaries: POST replay, response/frame restrictions, error Documents,
+  downloads/204/205, and document loading are unfinished. The completion callback
+  appends finalization only after population finishes, rather than finalizing an
+  unpopulated entry immediately.
 - **§7.4.2.3.1/§7.4.6 finalization:** insertion into nested history and replacement
   identity are audited below. Full history application, unloading, reactivation,
   and other affected Documents' updates remain unfinished.
@@ -2781,7 +2783,7 @@ against WHATWG HTML `6d7788b` and the published standard (2026-11-03).
 | Requirement | Implementation and boundary |
 | --- | --- |
 | Non-fetch params | Retain nullable navigation ID, URL, target sandbox snapshot, source activation snapshot, initiator origin, navigation timing type, and user involvement. As with existing NavigationParams, the receiving Navigable supplies the destination rather than duplicating it in the record; this arrangement was reviewed and accepted. |
-| Direct and redirected producers | §7.4.5 population must assemble these inputs and call the new operation on the target's navigation-and-traversal task, after its stale-ID check. A redirect must retain the last fetch-scheme response's origin, not the final opaque/custom-scheme URL's origin or the destination Document's origin. The population TODO names these dependencies; no producer is claimed complete here. |
+| Direct and redirected producers | §7.4.5 population now assembles direct non-fetch inputs and calls the operation on the target's navigation-and-traversal task after its stale-ID check. It also accepts the Fetch factory's non-fetch result. Actual redirect production remains inside the unfinished Fetch factory, which must retain the last fetch-scheme response's origin, not the final opaque/custom-scheme URL's origin or the destination Document's origin. |
 | Select external or inline handling | `Navigable.attemptToCreateNonFetchSchemeDocument()` asks `UserAgent.shouldHandleURLExternally()`. That owner throws until host protocol support and §8.10.1.4 registered-handler selection are composed. Do not guess an external handler merely from an unfamiliar scheme. |
 | External route | Call `UserAgent.handoffToExternalSoftware()` with the captured restrictions, activation, and origin; return null. A sandbox refusal does not fall through to inline creation. No Document, URL, or history mutation occurs here. |
 | Handoff sandbox | Only non-top-level destinations are gated. Block when the custom-protocol flag is present and either the top-navigation-with-activation flag is present or captured source activation is false. Existing sandbox parsing supplies the allow-popups, allow-top-navigation, and allow-top-navigation-to-custom-protocols exceptions. The independent allow-downloads permission does not bypass this gate. |
@@ -3245,6 +3247,200 @@ touched-file lint, import hierarchy, and whitespace checks pass. Existing addon
 builds were used without modification.
 
 Next in document order: **§7.4.5, populating a session history entry**.
+
+## HTML §7.4.5: population selection, srcdoc, and task delivery
+
+This bounded pass implements the outer algorithm's source selection and delivery
+to the target Window, plus the complete srcdoc parameter factory. It does not
+load an ordinary response or commit a Document. The local HTML source is
+`6d7788b` (2026-11-03); the controlling algorithms are
+[attempt to populate](https://html.spec.whatwg.org/multipage/browsing-the-web.html#attempt-to-populate-the-history-entry's-document)
+and [create srcdoc params](https://html.spec.whatwg.org/multipage/browsing-the-web.html#create-navigation-params-from-a-srcdoc-resource).
+
+| Requirement | Implementation or explicit boundary |
+| --- | --- |
+| Parallel entry and supplied response assertion | The caller runs population through UserAgent parallel work; enforcing the parallel-entry assertion remains TODO alongside the history queue's assertions. NavigationParams requires a response, so a supplied object cannot have an absent response. |
+| Source selection | Supplied params take precedence. Any string resource, including an empty string, selects srcdoc before the URL scheme. Fetch schemes select Fetch for a null resource, or for permitted POST replay whose body is not failure. Denied/failed POST replay leaves null params for the error-page branch. Non-fetch schemes assemble their separate params even when POST replay is unavailable. |
+| Direct external-protocol inputs | Preserve the navigation ID, entry URL, target sandbox/source activation snapshots, stored initiator origin, timing type, and user involvement. Direct entries require their retained initiator origin; navigation entry creation already supplies it, including a fresh opaque origin for browser-UI navigation. |
+| Fetch factory | NavigationParams.fromFetch has all specified inputs and explicitly throws. Its reviewed result is InternalPromise of normal params, non-fetch params, or null: the caller observes completion without blocking a host thread. Fetch must use the UserAgent-owned promise/scheduling facilities so a departing Document cannot stall it. Internal failures report through the host; a specified Fetch failure must resolve null instead. Cancellation must also wake the wait and abort Fetch; the Promise alone does not implement that race. |
+| Task delivery and stale ID | After obtaining params, select the then-active Window and queue navigation-and-traversal work. Recheck the ongoing ID inside that task; stale work calls completion without processing or changing the entry. Tests replace the active Window while Fetch is pending and retain real HTML task delivery. |
+| Non-fetch response | Call attemptToCreateNonFetchSchemeDocument on that task, save its nullable Document, and set everPopulated only for a returned Document. Preserve stored origin/history policy/referrer, then complete. External handler selection, launch/confirmation, and inline page creation retain their existing throwing owners. A Fetch-produced non-fetch result preserves its own redirect-origin input. |
+| Srcdoc response | Build about:srcdoc, Content-Type text/html, and a UTF-8 body. The body uses the UserAgent's sandbox environment, independent of the departing Document's activity. Empty text and malformed-surrogate replacement are covered. |
+| Srcdoc origin and policy | Use the retained origin and captured sandbox flags, creating an opaque origin when sandboxed. Clone the stored history policy when present, otherwise the container Document's policy. Preserve target flags exactly; this operation does not add a second CSP sandbox merge. A real container is required. |
+| Remaining srcdoc slots | Supply a fresh opener policy and enforcement result, ID, iframe referrer policy, timing type, about base URL, and involvement. Request, controller, early hints, and reserved environment remain null. The destination remains the receiving Navigable under the previously accepted ownership arrangement. |
+| Normal/null response processing | Run CSP navigation-response checking, COEP only for a nonnull reserved environment, and then X-Frame-Options. Null params or a failed check select the error branch. The provisional loader's policy preparation does not replace those checks. |
+| Blocked/error response | Call the unfinished inline-content Document owner. Once it supplies a Document, mark navigation-failure unsalvageability, discard any reserved environment, and report BiDi failure for nonnull params. Synthetic params have no reservation to discard. Tests substitute only the unfinished Document creation to cover the remaining steps. |
+| Downloads and empty responses | Parse Content-Disposition; consult source downloading permission, target download sandboxing, and optional user-agent policy; invoke the download owner. Downloads and 204/205 leave the entry Document null and still complete. These consumers remain unfinished. |
+| Document loading and retained state | §7.5 loading and saving a loaded Document's origin/history-required policy remain unfinished. The common tail sets everPopulated, resolves a client referrer from a real request, and completes. A synthetic null request with an unresolved stored referrer explicitly throws pending its specification-gap audit. Population must not commit or activate the new Document itself. |
+
+The srcdoc factory has an explicit cookie-URL inheritance TODO tied to HTML
+issue #332 and §7.5.1. Before its response can reach document creation, that
+metadata and the null reserved environment must survive the loader correctly.
+The older `#prepareResponsePolicy()` path still fills a reserved environment;
+its previously documented removal condition remains in force. Iframe insertion,
+srcdoc attribute processing, parsing, and history reactivation are separate
+producers/consumers, not completed by assembling these params.
+
+The new `history-population.test.ts` suite covers selection and POST non-consumption,
+actual target tasks, delayed Fetch and Window replacement, stale completion,
+non-fetch handoff/metadata, internal failures, and srcdoc bytes/policy isolation.
+Tests substitute the unfinished Fetch or external-effect owner where needed;
+they also retain assertions that the real unfinished boundaries throw.
+
+Validation: eight affected suites exercise 157 cases on Node 24.19.0, 26.8.1,
+and custom 27.0.0-pre, each stock and with the addon. All 157 pass with the
+addon; stock runs have 154 passing and the same three existing expected native
+Window identity/prototype failures. All new population tests pass on all six
+configurations. Typechecking, touched-file lint, import hierarchy, and whitespace
+checks pass. Existing matching addon builds were used without changes.
+
+Response admission and failed-response orchestration are now connected below.
+Next bounded slice: **downloads and the no-Document completion paths** (including
+204/205), with Fetch/redirect assembly and §7.5 loading kept explicit.
+
+### Response admission: X-Frame-Options
+
+This bounded slice implements
+[X-Frame-Options checking](https://html.spec.whatwg.org/multipage/document-lifecycle.html#the-x-frame-options-header).
+`Navigable.checkResponseFrameOptions(response, cspList)` uses the existing Fetch
+header splitter and live container-Document ancestry. It ignores top-level
+navigation, honors enforced frame-ancestors precedence, rejects conflicting
+recognized tokens and DENY, and checks every ancestor for SAMEORIGIN. Invalid
+values and the legacy ALLOWALL/ALLOW-FROM forms follow HTML's recovery rules.
+Report-only CSP does not suppress XFO. An empty or blocking enforced
+frame-ancestors directive does suppress XFO, but CSP must enforce that directive
+independently before this check runs.
+
+The signature derives the comparison origin from the response URL instead of
+accepting HTML's separate destination-origin argument. Absent CSP means no policies
+under the existing PolicyContainer representation. A response URL is required
+only when SAMEORIGIN needs it; navigation response assembly already supplies one.
+The callable arrangement is reviewed; its `SPEC_MISMATCH` is removed. The browser
+behavior below retains its continuing `SPEC_CLASH` separately.
+
+Population now runs CSP before COEP and XFO, preserving enforced frame-ancestors
+precedence. Passing these checks still reaches the explicit download/Document
+loading boundary; it does not enter the provisional loader.
+
+[CSP navigation-response checking](https://w3c.github.io/webappsec-csp/#should-block-navigation-response)
+creates response-policy violations with a null global because the incoming
+Document does not exist yet. Its matcher, null-global reporting, and list-level
+aggregation are now implemented. Substituting the departing or embedding
+Document would give the report the wrong ownership; neither supplies policies
+or reporting state for synthetic null-request inputs. HTML now calls this checker
+from response population; actual error-page and ordinary Document creation remain unfinished.
+The clean CSP checkout was refreshed on 2026-11-03 and remained at `251d288`.
+
+The browser-only `node-compat/experimental/navigation-frame-options.mjs` probe
+ran 15 cases in Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2. All three
+agree on DENY, same-origin admission, duplicate tokens, trailing-empty conflicts,
+ignoring wholly invalid values, ALLOWALL mixed-value conflicts, all-ancestor
+checks, enforced frame-ancestors precedence, and lack of report-only precedence.
+An empty enforced frame-ancestors overrides XFO but independently blocks in CSP.
+
+Eric approved both choices on 2026-11-03; their source-side markers remain:
+
+| Conflict | Evidence and chosen behavior |
+| --- | --- |
+| `x-frame-options-sandbox-origin` | HTML supplies the incoming Document's destination origin, which becomes opaque under sandboxing. All three tested browsers instead allow SAMEORIGIN when the response URL and ancestors share an origin, even though the child's postMessage origin is `"null"`. Gecko compares the response URI with ancestor principals; WebKit constructs its comparison origin from the response URL. Browlet follows browsers for destination-origin selection and strictly checks every ancestor. This means same origin, not merely same site; document.domain relaxation is ignored. |
+| `x-frame-options-quoted-values` | HTML uses Fetch's quote-aware header splitter. Chromium likewise treats `"INVALID,SAMEORIGIN,INVALID"` as one invalid value and allows it; Firefox/WebKit split literal commas and reject the resulting conflict. Browlet uses the existing Fetch splitter, following HTML/Chromium. |
+
+Source evidence: Chromium's
+[XFO parser](https://github.com/chromium/chromium/blob/main/services/network/public/cpp/x_frame_options_parser.cc)
+uses HttpResponseHeaders enumeration; Gecko's
+[FramingChecker](https://github.com/mozilla-firefox/firefox/blob/main/dom/security/FramingChecker.cpp)
+uses literal comma splitting and the response URI; WebKit's
+[parser](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/platform/network/HTTPParsers.cpp)
+and [FrameLoader](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/loader/FrameLoader.cpp)
+explain its corresponding behavior. These are source observations plus live
+probes, not a claim that the specifications have adopted those choices.
+
+`frame-options.test.ts` covers the header matrix, CSP precedence, all ancestors,
+scheme/host/port comparisons, final redirect URL, document.domain, opaque ancestors,
+sandboxed destinations, departing child origins, and container adoption. These
+tests exercise the checker. `history-population.test.ts` separately covers its
+ordered use after CSP and COEP on the target's navigation-and-traversal task.
+
+Validation: 47 focused checks and 94 adjacent population/COEP checks pass on
+Node 26.8.1 stock and compat. Typecheck, touched-file lint, import hierarchy,
+and diff checks pass. This adds a pure policy algorithm; no runtime or addon
+behavior changed, so the six-runtime matrix was not repeated for this slice.
+
+### Response admission: frame-ancestors foundation
+
+The policy-level frame-ancestors response check is implemented.
+`ContentSecurityPolicy.getViolatedNavigationResponseDirective()` checks live
+ancestor origins, preserves the CSP list's self origin, and exempts local
+responses, source-side checks, and top-level targets. Report-only policies still
+produce violation identities for the reporting step. Eric approved
+origin-only matching and rejection of opaque ancestors; the corresponding
+SPEC_CLASH/SPEC_GAP evidence is in the
+[CSP audit](../policy/csp/ROADMAP.md#navigation-response-foundation).
+
+`CSPList.isNavigationResponseBlocked()` now completes CSP §4.2.5: report every
+violating response policy, blocking only enforcing policies and preserving later
+reports after a block. It uses the completed null-global violation/reporting path.
+The source-policy loop is currently a no-op: frame-ancestors allows source checks,
+and no other directive overrides the default Allowed response check. Synthetic
+null-request responses need no borrowed source policies, as recorded by
+`SPEC_GAP(csp-navigation-response-null-request)` in the CSP owner.
+The checker retains all specification
+inputs (the response list becomes `this`) plus the browser owner, with nullable
+requests for HTML's synthetic responses. The callable changes are reviewed and accepted.
+Population now calls this entry point before COEP and XFO; Document loading remains unfinished.
+
+The browser probes found material report-payload differences, so the reporting
+follow-up is separate from the matching algorithm. Its decisions include protected
+and blocked URLs, HTTP status, referrer, report request identity/credentials,
+incoming Reporting-Endpoints, and synthetic null-request handling. These are
+recorded in the CSP owner roadmap and source. The reporting slice now captures the
+final response URL/status, leaves the referrer empty, initializes incoming endpoints,
+and uses browser-owned delivery without an existing Window. Real Fetch tests exposed
+and repaired the CSP no-cors/error conflict and null-client keepalive accounting.
+These checks now feed the failed-response branch below. This remains HTML §7.4.5;
+§7.5 has not started.
+
+### Response admission and failed responses
+
+The queued population task now short-circuits CSP, COEP, and X-Frame-Options in
+specification order. Report-only violations continue through the later checks;
+enforced frame-ancestors suppresses XFO only after CSP has evaluated it. COEP runs
+only when the params carry a reserved environment. The CSP navigation type is
+captured at invocation, before Fetch or queued task delivery.
+
+Null or rejected params call `createDocumentForInlineContent()` with a null
+navigation ID, as HTML requires. That §7.5.7 owner still throws: opaque error-page
+creation, content/response inputs, browsing-context selection, and parser completion
+remain dependencies. Once it supplies a Document, population marks it unsalvageable
+with `navigation-failure`, discards the reservation if present, reports BiDi failure
+for nonnull params, records population/referrer state, and completes without activating
+the entry. Stored origin and history policy remain untouched for error and non-fetch
+Documents. BiDi's status ID now permits null, matching its own definition; protocol
+sessions and event delivery remain unfinished.
+
+Two nullable inputs remain explicit in source:
+
+- `SPEC_GAP(navigation-failure-null-environment)`: HTML unconditionally discards
+  the reservation for failed normal params although synthetic params can have
+  none. Browlet discards an existing reservation and does not invent one.
+- `SPEC_GAP(navigation-history-null-request)`: HTML asserts a request exists when
+  resolving a client history referrer, but synthetic params may lack one. A known
+  stored referrer is preserved; an unresolved referrer with a null request throws.
+  Choosing that missing value remains an audit dependency before enabling the loaders.
+
+Twelve additional population cases cover policy order and short-circuiting,
+report-only continuation, XFO precedence, reservation gating, null Fetch results,
+failure cleanup, retained origin/policy/referrer state, nullable BiDi IDs, and the
+unresolved synthetic referrer. Tests retain the real inline-owner failure and
+substitute only that owner for cleanup tests; they do not claim actual error-page
+creation is implemented. Downloads, 204/205, and normal Document loading still
+stop at their named boundary.
+
+Validation: all 274 tests in seven affected population, policy, reporting, and
+navigation suites pass on Node 24.19.0, 26.8.1, and custom 27.0.0-pre, each stock
+and with the addon. No expected failures or skips occur in this selection.
+Typechecking, touched-file lint, import hierarchy, and whitespace checks pass.
+Existing addon builds were used without changes.
 
 ## Removal condition
 

@@ -13,6 +13,7 @@ import { FetchResponse, isFilteredResponse } from '../../src/fetch/response';
 import { ParallelQueue } from '../../src/infra/parallel-queue';
 import { ReadableStreamImpl } from '../../src/streams/index';
 import { obtainURLOrigin, parseURL } from '../../src/url/url';
+import { createOpaqueOrigin } from '../../src/url/origin';
 import { serializeURL } from '../../src/url/core/index';
 import { mockHTTPTransport } from '../fetch/transport-fixture';
 
@@ -143,6 +144,76 @@ describe('Fetch entry', () => {
 });
 
 describe('Main fetch policy and dispatch', () => {
+  it.each([204, 302, 307])('sends an internal no-cors report once and rejects a redirect response: %s', async (status) => {
+    const { operation, request, agent, override } = await createFixture('https://collector.test/report');
+    request.client = null;
+    request.origin = createOpaqueOrigin();
+    request.destination = 'report';
+    request.method = 'POST';
+    request.body = new TextEncoder().encode('{}');
+    request.headerList.append('Content-Type', 'application/csp-report');
+    request.redirectMode = 'error';
+    request.allowServiceWorkerInterception = false;
+    operation.options.useParallelQueue = true;
+    override.mockReturnValue(null);
+    const transport = mockHTTPTransport(agent, (_request, listener) => {
+      const response = new FetchResponse();
+      if (status !== 204) response.headerList.append('Location', 'https://redirected.test/report');
+      listener.onHeaders(status, '', response.headerList, false);
+      listener.onEnd();
+    });
+    const { response } = await complete(operation);
+    expect(transport).toHaveBeenCalledOnce();
+    expect(transport.mock.calls[0]![0].method).toBe('POST');
+    expect(response.type).toBe(status === 204 ? 'opaque' : 'error');
+    expect(request.redirectCount).toBe(0);
+  });
+
+  it('does not permit manual redirects even for an internal no-cors report', async () => {
+    const { operation, request, override } = await createFixture('https://collector.test/report');
+    request.destination = 'report';
+    request.redirectMode = 'manual';
+    const { response } = await complete(operation);
+    expect(response.type).toBe('error');
+    expect(override).not.toHaveBeenCalled();
+  });
+
+  it('also admits a foreign report collector with the actual Window client', async () => {
+    const { operation, request, env, override } = await createFixture('https://collector.test/report');
+    request.destination = 'report';
+    request.redirectMode = 'error';
+    const { response } = await complete(operation);
+    expect(request.client).toBe(env);
+    expect(response.type).toBe('opaque');
+    expect(override).toHaveBeenCalledOnce();
+  });
+
+  it.each([1, 64 * 1024, 64 * 1024 + 1])('bounds a clientless keepalive body without borrowing the execution owner\'s group: %s', async (length) => {
+    const { operation, request, env, agent, override } = await createFixture('https://collector.test/report');
+    request.client = null;
+    request.origin = createOpaqueOrigin();
+    request.destination = 'report';
+    request.method = 'POST';
+    request.body = new Uint8Array(length);
+    request.keepalive = true;
+    request.redirectMode = 'error';
+    request.allowServiceWorkerInterception = false;
+    operation.options.useParallelQueue = true;
+    const unrelated = new FetchRequest(request.url, env);
+    unrelated.body = FetchBody.fromBytes(new Uint8Array(64 * 1024), env);
+    unrelated.keepalive = true;
+    env.fetchGroup.fetchRecords.push({ request: unrelated, controller: null });
+    override.mockReturnValue(null);
+    const transport = mockHTTPTransport(agent, (_request, listener) => {
+      listener.onHeaders(204, '', new FetchResponse().headerList, false);
+      listener.onEnd();
+    });
+    const { response } = await complete(operation);
+    expect(response.type).toBe(length > 64 * 1024 ? 'error' : 'opaque');
+    expect(transport).toHaveBeenCalledTimes(length > 64 * 1024 ? 0 : 1);
+    expect(env.fetchGroup.fetchRecords).not.toContainEqual(expect.objectContaining({ request }));
+  });
+
   it('reports the original URL, enforces after upgrades, and dispatches the upgraded URL', async () => {
     const { operation, request, env, override } = await createFixture('http://example.test/image');
     env.insecureRequestsPolicy.upgrade = true;

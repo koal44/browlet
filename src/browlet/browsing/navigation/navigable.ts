@@ -18,6 +18,7 @@ import type { PointerId } from '../../interaction/events/index';
 import {
   EmbedderPolicy, OpenerPolicy, PermissionsPolicy, PolicyContainer, queueCOEPInheritanceViolation, SandboxingFlagSet,
 } from '../policy/index';
+import type { CSPList } from '../policy/csp/index';
 import type { DocumentImpl, DocumentVisibilityState, ElementImpl } from '../../dom/nodes/index';
 import {
   HTMLIFrameElementImpl, type HTMLEmbedElementImpl, type HTMLObjectElementImpl,
@@ -699,17 +700,91 @@ export class Navigable {
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#attempt-to-populate-the-history-entry's-document
   // SPEC_MISMATCH: attempt to populate the history entry's document(entry, navigable, navTimingType, sourceSnapshotParams, targetSnapshotParams, userInvolvement, navigationId = null, navigationParams = null, cspNavigationType = "other", allowPOST = false, completionSteps = empty)
   populateHistoryEntryDocument(
-    _entry: SessionHistoryEntry, _navigationTimingType: NavigationTimingType,
-    _sourceSnapshotParams: SourceSnapshotParams, _targetSnapshotParams: TargetSnapshotParams,
-    _userInvolvement: UserNavigationInvolvement, _options: PopulateHistoryEntryOptions = {},
+    entry: SessionHistoryEntry, navigationTimingType: NavigationTimingType,
+    sourceSnapshotParams: SourceSnapshotParams, targetSnapshotParams: TargetSnapshotParams,
+    userInvolvement: UserNavigationInvolvement, options: PopulateHistoryEntryOptions = {},
   ): void {
-    // TODO(HTML §7.4.5): Select srcdoc, Fetch, external-protocol, or error processing; preserve POST bytes across retries.
-    // Assemble NonFetchSchemeNavigationParams for a direct non-fetch URL or a Fetch redirect, retaining the
-    // target sandbox/source activation snapshots and the last fetch response's origin after redirects.
-    // Dispatch to attemptToCreateNonFetchSchemeDocument() on the target's navigation-and-traversal task.
-    // Recheck the navigation ID, enforce response/frame policies, and leave the Document null for downloads/204/205.
-    // Document creation and completion must return through the specified task and history-queue boundaries.
-    throw new InternalError('Session-history entry Document population is not implemented');
+    // TODO(HTML §7.4.5): Enforce parallel execution alongside the navigation/history queue assertions.
+    const navigationId = options.navigationId ?? null;
+    const cspNavigationType = options.cspNavigationType ?? 'other';
+    const completionSteps = options.completionSteps;
+    const queueResponse = (params: NavigationParams | NonFetchSchemeNavigationParams | null) => {
+      const window = this.activeWindow;
+      if (window === null) throw new InternalError('History population requires an active Window');
+      window.env.queueTask('navigation-and-traversal', () => {
+        if (this.ongoingNavigation !== navigationId) {
+          completionSteps?.();
+          return;
+        }
+        if (params !== null && !(params instanceof NavigationParams)) {
+          entry.documentState.document = this.attemptToCreateNonFetchSchemeDocument(params);
+        } else if (
+          params === null ||
+          params.policyContainer.cspList?.isNavigationResponseBlocked(
+            params.request, params.response, cspNavigationType, this, window.env.userAgent,
+          ) ||
+          (params.reservedEnv !== null && !this.checkResponseEmbedderPolicy(params.response, params.policyContainer.embedderPolicy)) ||
+          !this.checkResponseFrameOptions(params.response, params.policyContainer.cspList)
+        ) {
+          // TODO(HTML §7.5.7): The inline-content owner must accept the failure description when it implements error pages.
+          const document = this.createDocumentForInlineContent(null, navigationTimingType, userInvolvement);
+          entry.documentState.document = document;
+          document.makeUnsalvageable('navigation-failure');
+          if (params !== null) {
+            // SPEC_GAP(navigation-failure-null-environment): HTML discards a nullable reservation; synthetic responses have none.
+            params.reservedEnv?.discard();
+            window.env.userAgent.webDriverBiDiNavigationFailed(this, {
+              id: navigationId, status: 'canceled', url: params.url,
+            });
+          }
+        } else {
+          // TODO(HTML §7.4.5): Select downloads (source/target sandbox and UA policy), 204/205, or §7.5 document loading.
+          // Save a loaded Document's origin and history-required policy before completion; synthetic params must retain null reservations.
+          throw new InternalError('Navigation download and document loading are not implemented');
+        }
+        // Non-fetch/error pages retain the entry's origin and history policies.
+        if (entry.document !== null) {
+          entry.documentState.everPopulated = true;
+          if (entry.documentState.requestReferrer === undefined && params instanceof NavigationParams) {
+            // SPEC_GAP(navigation-history-null-request): HTML asserts a request exists, although synthetic params can omit it.
+            // TODO(HTML §7.4.5): Resolve synthetic referrer persistence before enabling the inline/Document loaders.
+            if (params.request === null) throw new InternalError('Synthetic navigation history referrer capture is not implemented');
+            entry.documentState.requestReferrer = params.request.referrer;
+          }
+        }
+        completionSteps?.();
+      });
+    };
+
+    let params: NavigationParams | NonFetchSchemeNavigationParams | null = options.navigationParams ?? null;
+    const documentResource = entry.documentState.resource;
+    if (params === null) {
+      const fetchScheme = isFetchScheme(entry.url.scheme);
+      if (typeof documentResource === 'string') {
+        const env = this.activeWindow?.env;
+        if (env === undefined) throw new InternalError('Srcdoc population requires an active Window');
+        params = NavigationParams.fromSrcdoc(
+          entry, this, targetSnapshotParams, userInvolvement, navigationId, navigationTimingType, env,
+        );
+      } else if (fetchScheme && (documentResource === null || options.allowPOST === true && documentResource.requestBody !== 'failure')) {
+        const env = this.activeWindow?.env;
+        if (env === undefined) throw new InternalError('Fetching navigation parameters requires an active Window');
+        NavigationParams.fromFetch(
+          entry, this, sourceSnapshotParams, targetSnapshotParams, cspNavigationType,
+          userInvolvement, navigationId, navigationTimingType, env,
+        ).observe(queueResponse, (error) => { env.userAgent.runInParallel(() => { throw error; }); });
+        return;
+      } else if (!fetchScheme) {
+        const initiatorOrigin = entry.documentState.initiatorOrigin;
+        if (initiatorOrigin === null) throw new InternalError('Non-fetch population requires a retained initiator origin');
+        params = {
+          id: navigationId, url: entry.url, targetSnapshotSandboxingFlags: targetSnapshotParams.sandboxingFlags,
+          sourceSnapshotHasTransientActivation: sourceSnapshotParams.hasTransientActivation, initiatorOrigin,
+          navigationTimingType, userInvolvement,
+        };
+      }
+    }
+    queueResponse(params);
   }
 
   /** Evaluate a queued javascript: request after checking the source policy and live destination. */
@@ -982,6 +1057,32 @@ export class Navigable {
     if (!EmbedderPolicy.isCompatibleWithCrossOriginIsolation(parentPolicy.value) || compatible) return true;
     queueCOEPInheritanceViolation(response, 'navigation', parentPolicy.reportingEndpoint, 'enforce', document.env);
     return false;
+  }
+
+  /** Check child framing against the response URL's origin; an absent CSP list contains no policies. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#the-x-frame-options-header
+  checkResponseFrameOptions(response: FetchResponse, cspList: CSPList | undefined): boolean {
+    if (this.parent === null) return true;
+    if (cspList?.policies.some((policy) => policy.disposition === 'enforce' && policy.directives.has('frame-ancestors'))) return true;
+
+    // SPEC_CLASH(x-frame-options-quoted-values): Follow HTML/Fetch and Chromium's quoted splitting;
+    // Firefox/WebKit split commas inside quotes, which can turn an ignored invalid value into a conflict.
+    const values = new Set((response.headerList.getDecodeAndSplit('X-Frame-Options') ?? []).map(asciiLower));
+    if (values.size > 1) return !values.has('deny') && !values.has('allowall') && !values.has('sameorigin');
+    if (values.has('deny')) return false;
+    if (!values.has('sameorigin')) return true;
+
+    const url = response.url;
+    if (url === null) throw new InternalError('X-Frame-Options SAMEORIGIN requires a response URL');
+    // SPEC_CLASH(x-frame-options-sandbox-origin): All three browsers use the response URL's origin,
+    // not HTML's destination Document origin, which sandboxing can make opaque.
+    const origin = obtainURLOrigin(url);
+    let document = this.containerDocument;
+    while (document !== null) {
+      if (!areSameOrigin(document.origin, origin)) return false;
+      document = document.containerDocument;
+    }
+    return true;
   }
 
   /** Capture the target's sandbox restrictions and iframe referrer policy before navigation proceeds. */

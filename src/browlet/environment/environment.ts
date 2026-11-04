@@ -150,7 +150,7 @@ export class BrowletEnvironmentBase implements FetchEnvironmentBase {
   // https://html.spec.whatwg.org/multipage/webappapis.html#environment-discarding-steps
   // https://w3c.github.io/ServiceWorker/#service-worker-client-concept
   discard(): void {
-    // TODO: Call from failed/aborted navigation, redirect reservation replacement,
+    // TODO: Call from aborted navigation, redirect reservation replacement,
     // and failed worker startup when those processing paths are implemented.
     this.discarded = true;
   }

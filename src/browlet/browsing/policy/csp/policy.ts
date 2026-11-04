@@ -3,10 +3,12 @@ import {
   asciiWhitespaceRunPattern,
 } from '../../../../infra/index';
 import { isomorphicDecode } from '../../../../js-engine/index';
-import { stripURLForReporting, type Origin, type URLRecord } from '../../../../url/index';
-import { applyIntegrityAlgorithm, isScriptLikeDestination, type FetchRequest, type FetchResponse } from '../../../../fetch/index';
+import { parseURL, serializeOrigin, stripURLForReporting, type Origin, type URLRecord } from '../../../../url/index';
+import { applyIntegrityAlgorithm, isLocalURL, isScriptLikeDestination, type FetchRequest, type FetchResponse } from '../../../../fetch/index';
 
+import type { DocumentImpl } from '../../../dom/nodes/index';
 import type { BrowletEnvironment } from '../../../environment/index';
+import type { Navigable } from '../../navigation/index';
 
 import { CSPDirectives, CSPDirectiveValue, type CSPFetchDirectiveName } from './directives';
 import { CSPViolation } from './violation';
@@ -88,12 +90,40 @@ export class ContentSecurityPolicy {
       ? undefined : policyDirective;
   }
 
+  /** Identify a navigation-response violation independently of enforcement or reporting. */
+  // https://w3c.github.io/webappsec-csp/#frame-ancestors-navigation-response
+  // Request and navigation type are unused by this check. As with Fetch checks, return the directive for reporting.
+  getViolatedNavigationResponseDirective(
+    response: FetchResponse, target: Navigable, checkType: 'source' | 'response', selfOrigin: Origin,
+  ): 'frame-ancestors' | undefined {
+    // CSP defines no other nontrivial navigation-response checks; form-action belongs to the request check.
+    const sources = this.directives.get('frame-ancestors');
+    if (sources === undefined) return undefined;
+    const url = response.url;
+    if (url === null) throw new InternalError('CSP navigation-response checks require a response URL');
+    if (isLocalURL(url) || checkType === 'source') return undefined;
+
+    let current: Navigable | null = target;
+    while (current !== null && current.parent !== null) {
+      const document: DocumentImpl | null = current.containerDocument;
+      if (document === null) throw new InternalError('Frame-ancestors checking requires a container Document');
+      // SPEC_CLASH(csp-frame-ancestors-origin): Follow CSP/Chromium/WebKit's serialized origin;
+      // Firefox matches the ancestor's full principal URL, allowing path-bearing sources to match it.
+      const originURL = parseURL(serializeOrigin(document.origin)).url;
+      // SPEC_GAP(csp-frame-ancestors-opaque-origin): CSP leaves parsing the opaque origin's "null" unhandled.
+      // SPEC_CLASH(csp-frame-ancestors-opaque-origin): Block it as Chromium/WebKit do; Firefox allows '*'.
+      if (originURL === null || !sources.matchesURL(originURL, selfOrigin, 0)) return 'frame-ancestors';
+      current = document.getNodeNavigable();
+    }
+    return undefined;
+  }
+
   /** Capture a violation in the supplied client's environment, retaining the original request URL. */
   // https://w3c.github.io/webappsec-csp/#create-violation-for-request
   createViolationForRequest(request: FetchRequest, env: BrowletEnvironment): CSPViolation {
     const requestDirective = CSPDirectives.getRequestDirective(request);
     if (requestDirective === null) throw new InternalError('CSP violation requires a request directive');
-    return new CSPViolation(this, requestDirective, request.url, env);
+    return CSPViolation.fromGlobal(this, requestDirective, request.url, env);
   }
 
   /** Copy directive data without sharing mutable maps or value lists. */

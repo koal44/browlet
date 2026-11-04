@@ -368,10 +368,11 @@ function httpNetworkOrCacheFetch(
         httpRequest.headerList.append('Content-Length', '0');
       }
       if (request.keepalive && contentLength !== null) {
-        if (request.client === null) throw new InternalError('Keepalive body accounting requires a client fetch group');
+        // SPEC_GAP(keepalive-null-client): Fetch assumes a client group. Clientless reports retain
+        // the per-request limit, with no inflight group bytes or borrowed execution-owner group.
         let inflightBytes = 0;
-        for (const record of request.client.fetchGroup.fetchRecords) {
-        // SPEC_CLASH(keepalive-current-request-accounting): the draft counts the registered current request twice; browsers count it once.
+        for (const record of request.client?.fetchGroup.fetchRecords ?? []) {
+          // SPEC_CLASH(keepalive-current-request-accounting): the draft counts the registered current request twice; browsers count it once.
           if (record.request !== request && record.request.keepalive && !record.request.done && record.request.body instanceof FetchBody) {
             inflightBytes += record.request.body.length ?? 0;
           }
@@ -972,7 +973,10 @@ function dispatchFetch(params: FetchParams): FetchResponse | InternalPromise<Fet
   }
   if (request.mode === 'same-origin') return FetchResponse.networkError();
   if (request.mode === 'no-cors') {
-    if (request.redirectMode !== 'follow') return FetchResponse.networkError();
+    // SPEC_CLASH(csp-report-no-cors-redirect): CSP requires no-cors/error reports, which Fetch rejects
+    // before sending (CSP #320). Like browsers, admit internal reports; HTTP fetch still rejects redirects.
+    if (request.redirectMode !== 'follow' &&
+      !(request.destination === 'report' && request.redirectMode === 'error')) return FetchResponse.networkError();
     request.responseTainting = 'opaque';
     return overrideFetch(params, 'scheme-fetch');
   }

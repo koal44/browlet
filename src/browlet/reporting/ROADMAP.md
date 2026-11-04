@@ -24,6 +24,13 @@ syntax rejects the configuration; valid non-string members are ignored.
 Relative references resolve against the complete response URL. Empty or aborted
 parsing produces an empty configuration.
 
+Endpoint parsing takes its UserAgent directly; it needs URL parsing and origin
+trust, not a global or realm. CSP navigation-response violations capture this
+configuration before an incoming Window exists and use browser-owned delivery.
+They do not enter another Window's observer queue or report buffer. Their
+metadata and legacy transport decisions are in the
+[CSP audit](../browsing/policy/csp/ROADMAP.md#navigation-response-reporting).
+
 COEP, Integrity Policy, CSP, and test reports reach the shared observer/outbound
 paths. Permissions Policy's actual and potential violation producers use these
 paths, including local-only reports without an endpoint. The potential checker

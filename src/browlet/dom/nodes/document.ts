@@ -15,7 +15,7 @@ import {
   hostsEqual, isRegistrableDomainSuffixOfOrEqualTo, parseHost, serializeHost, serializeOrigin, serializeURL,
   type Origin, type URLRecord,
 } from '../../../url/index';
-import { HTTPCookie, parseHTTPDate, parseLinkHeader, type CookieHost } from '../../../http/index';
+import { HTTPCookie, parseHTTPDate, parseLinkHeader, type CookieHost, type HTTPStatus } from '../../../http/index';
 import { getMIMETypeEssence } from '../../../mime/index';
 import {
   fetch, FetchRequest, isFilteredResponse, isOkStatus, parseReferrerPolicyFromHeader,
@@ -179,7 +179,7 @@ export class DocumentImpl extends NodeImpl {
   /** Policies inherited or supplied when the document was created. */
   policyContainer = new PolicyContainer();
   /** HTTP status of the resource that created this Document; zero when there was no response. */
-  httpStatus = 0;
+  httpStatus: HTTPStatus = 0;
   /** Source modification time in Unix milliseconds, when supplied by the loader. */
   lastModificationTime?: number;
   /** Default selected by a successfully processed content-language meta pragma. */

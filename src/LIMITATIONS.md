@@ -1374,8 +1374,10 @@ and [same-document finalization audit](browlet/browsing/navigation/ROADMAP.md#ht
 Non-fetch navigation now has an internal external/inline routing operation and
 the specified child-sandbox handoff gate. Handler selection, external confirmation
 and launch, and inline browser-page creation each throw at explicit owners.
-§7.4.5 population still needs to construct the params and call that routing
-operation, including redirect-origin capture. This does not enable end-to-end
+§7.4.5 population now constructs direct non-fetch params and calls that routing
+operation on the target Window's task after its stale-ID check. It also accepts
+non-fetch Fetch results; the actual Fetch/redirect factory and redirect-origin
+capture remain unfinished. This does not enable end-to-end
 mailto/custom-protocol navigation or launch external applications. See the
 [non-fetch audit](browlet/browsing/navigation/ROADMAP.md#html-74234-non-fetch-schemes-and-external-software).
 Navigation target snapshots retain sandbox/referrer inputs independently of later
@@ -1413,8 +1415,27 @@ navigation reserves deferred-fetch quota for container-initiated loads, then ent
 parallel work and waits for unload checks on the relevant Document loops. After that
 check, the coordinator rechecks the navigation ID before queued recursive abortion,
 pending history-entry and supplied-response preparation, and a population completion
-callback that queues finalization. Recursive abortion and population also still
-throw. Prompt policy/UI, full history application, and releasing waits whose tasks
+callback that queues finalization. Recursive abortion still throws. Population
+now selects its source, assembles srcdoc params, queues target work, and completes
+stale/non-fetch results. Response admission runs CSP, COEP when a reservation
+exists, and X-Frame-Options in order. Failed responses call the unfinished inline
+Document owner; cleanup after that owner returns is implemented, including
+unsalvageability, reservation discard, BiDi notification, and retained history
+metadata. Fetch parameter creation, actual error-page creation, downloads/204/205,
+and ordinary Document loading remain explicit throwing boundaries. Resolving an
+unspecified history referrer from a synthetic null request also remains explicitly
+unfinished. X-Frame-Options uses the response URL's origin and Fetch's quoted
+header splitting. CSP's frame-ancestor matcher and reporting
+without an incoming global now exist, including both real Fetch report formats.
+The full response-policy checker now aggregates violations, including synthetic
+null-request inputs, and is connected to HTML response admission. Legacy reports
+use the approved internal no-cors/error exception, with redirects still blocked;
+clientless keepalive bodies retain a per-request 64 KiB bound without a client
+group budget. These specification gaps are recorded in the CSP and Fetch roadmaps.
+Srcdoc cookie-URL inheritance and null reserved-environment handling
+must be resolved before enabling its synthetic loader. See the
+[population audit](browlet/browsing/navigation/ROADMAP.md#html-745-population-selection-srcdoc-and-task-delivery).
+Prompt policy/UI, full history application, and releasing waits whose tasks
 are discarded by future teardown remain explicit dependencies.
 Quota accounting and creation-time release exist;
 fetchLater(), body validation/buffering, activation, and deferred request delivery

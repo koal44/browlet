@@ -168,6 +168,19 @@ Revisit these decisions when the specification or implementation evidence change
   with Blink and WebKit. **`basic-authored-authorization`:** prompting cannot
   replace an author header; return the 401 rather than retry unchanged, as Gecko
   tests. Scope selection/retry policy belongs to [HTTP authentication](../http/ROADMAP.md).
+- **`keepalive-null-client`:** the same algorithm assumes a client fetch group.
+  Pre-global CSP reports have none. Keep the 64 KiB per-request bound with zero
+  additional group bytes, without borrowing the execution owner's group. Eric
+  approved this gap resolution on 2026-11-03; aggregate clientless quotas remain
+  unspecified, rather than inferred from browser report uploads.
+- **`csp-report-no-cors-redirect`:** [CSP #320](https://github.com/w3c/webappsec-csp/issues/320)
+  records that CSP's no-cors/error report requests conflict with main fetch's
+  unconditional rejection. Admit that combination for the internal report
+  destination only; HTTP fetch still rejects redirects and sends no CORS
+  preflight. Chromium, Firefox, and WebKit sent one POST and rejected 302/307
+  collector redirects in the navigation-CSP probe. Ordinary no-cors requests and
+  report requests with manual redirects remain rejected. The focused regression
+  first observed zero dispatches, then passed after this approved correction.
 - **`cors-cache-credentialed-wildcard` / `cors-cache-permission-refresh`:**
   [§4.9 lookup](https://fetch.spec.whatwg.org/#cors-preflight-cache) expands `*`
   beyond §3.3's credential restriction; §4.8's broad refresh can renew older,

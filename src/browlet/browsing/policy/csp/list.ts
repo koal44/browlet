@@ -5,6 +5,8 @@ import type { FetchCSPList, FetchRequest, FetchResponse } from '../../../../fetc
 import { SandboxingFlagSet } from '../sandbox';
 import type { DocumentImpl, ElementImpl } from '../../../dom/nodes/index';
 import type { BrowletEnvironment } from '../../../environment/index';
+import type { Navigable } from '../../navigation/index';
+import type { UserAgent } from '../../../user-agent';
 
 import { ContentSecurityPolicy, type CSPDisposition } from './policy';
 import type { CSPInlineAttributeType } from './directives';
@@ -103,7 +105,7 @@ export class CSPList implements FetchCSPList {
         let violation: CSPViolation;
         if (name === 'form-action') {
           if (type !== 'form-submission' || value.matchesURL(request.currentURL, this.selfOrigin, request.redirectCount)) continue;
-          violation = new CSPViolation(policy, name, request.url, env);
+          violation = CSPViolation.fromGlobal(policy, name, request.url, env);
         } else if (name === 'require-trusted-types-for' && request.url.scheme === 'javascript') {
           // SPEC_CLASH(trusted-types-navigation-policies): Browsers require a valid 'script' token
           // and invoke the default policy once across policies; the written loop repeats it per directive.
@@ -115,7 +117,7 @@ export class CSPList implements FetchCSPList {
           if (!trustedTypesBlocked) continue;
           // SPEC_CLASH(trusted-types-navigation-report): Follow all three browsers' sink resource/sample;
           // CSP's generic pre-navigation report instead uses the URL and leaves the sample empty (TT #584).
-          violation = new CSPViolation(policy, name, 'trusted-types-sink', env);
+          violation = CSPViolation.fromGlobal(policy, name, 'trusted-types-sink', env);
           violation.sample = trustedTypesSample;
         } else {
           continue;
@@ -135,13 +137,32 @@ export class CSPList implements FetchCSPList {
       const sources = policy.directives.get('script-src-elem') ??
         policy.directives.get('script-src') ?? policy.directives.get('default-src');
       if (sources === undefined || sources.matchesInlineSource('navigation', source)) continue;
-      const violation = new CSPViolation(policy, 'script-src-elem', 'inline', env);
+      const violation = CSPViolation.fromGlobal(policy, 'script-src-elem', 'inline', env);
       // SPEC_CLASH(javascript-csp-sample): Browsers honor report-sample despite the navigation algorithm's
       // omission. Keep 40 encoded code units like WebKit; Chromium decodes and Firefox appends an ellipsis.
       if (sources.tokens.includes("'report-sample'")) violation.sample = source.slice(0, 40);
       violation.report();
       if (policy.disposition === 'enforce') blocked = true;
     }
+    return blocked;
+  }
+
+  /** Check response and source policies before admitting a navigation response. */
+  // https://w3c.github.io/webappsec-csp/#should-block-navigation-response
+  isNavigationResponseBlocked(
+    _request: FetchRequest | null, response: FetchResponse, _type: 'form-submission' | 'other',
+    target: Navigable, userAgent: UserAgent,
+  ): boolean {
+    let blocked = false;
+    for (const policy of this.policies) {
+      const directive = policy.getViolatedNavigationResponseDirective(response, target, 'response', this.selfOrigin);
+      if (directive === undefined) continue;
+      CSPViolation.fromNavigationResponse(policy, directive, response, userAgent).report();
+      if (policy.disposition === 'enforce') blocked = true;
+    }
+    // The source-policy loop is a no-op: frame-ancestors allows "source", and all other directives default to Allowed.
+    // SPEC_GAP(csp-navigation-response-null-request): HTML's synthetic responses have no request; omit source checks
+    // without borrowing an existing Window's policy. Neither request nor navigation type affects today's response checks.
     return blocked;
   }
 
@@ -181,7 +202,7 @@ export class CSPList implements FetchCSPList {
     for (const policy of this.policies) {
       const sources = policy.directives.get('base-uri');
       if (sources === undefined || sources.matchesURL(base, this.selfOrigin, 0)) continue;
-      new CSPViolation(policy, 'base-uri', 'inline', document.env).report();
+      CSPViolation.fromGlobal(policy, 'base-uri', 'inline', document.env).report();
       if (policy.disposition === 'enforce') return true;
     }
     return false;
@@ -200,7 +221,7 @@ export class CSPList implements FetchCSPList {
       const sources = policy.directives.get(directive) ??
         policy.directives.get(fallback) ?? policy.directives.get('default-src');
       if (sources === undefined || sources.matchesInlineSource(type, source)) continue;
-      const violation = new CSPViolation(policy, directive, 'inline', element.nodeDocument.env);
+      const violation = CSPViolation.fromGlobal(policy, directive, 'inline', element.nodeDocument.env);
       violation.element = element;
       // SPEC_CLASH(csp-style-attribute-sample): Follow CSP/Chromium/Firefox;
       // WebKit currently omits style-attribute samples despite report-sample.
@@ -225,7 +246,7 @@ export class CSPList implements FetchCSPList {
         const keyword = asciiLower(token);
         return keyword === "'unsafe-eval'" || (trustedTypesRequired && keyword === "'trusted-types-eval'");
       })) continue;
-      const violation = new CSPViolation(policy, 'script-src', 'eval', env);
+      const violation = CSPViolation.fromGlobal(policy, 'script-src', 'eval', env);
       if (sources.tokens.includes("'report-sample'")) violation.sample = source.slice(0, 40);
       violation.report();
       if (policy.disposition === 'enforce') blocked = true;
@@ -244,7 +265,7 @@ export class CSPList implements FetchCSPList {
         const keyword = asciiLower(token);
         return keyword === "'unsafe-eval'" || keyword === "'wasm-unsafe-eval'";
       })) continue;
-      new CSPViolation(policy, 'script-src', 'wasm-eval', env).report();
+      CSPViolation.fromGlobal(policy, 'script-src', 'wasm-eval', env).report();
       if (policy.disposition === 'enforce') blocked = true;
     }
     return blocked;
@@ -269,7 +290,7 @@ export class CSPList implements FetchCSPList {
     for (const policy of this.policies) {
       const tokens = policy.directives.get('require-trusted-types-for')?.tokens;
       if (!tokens?.some((token) => asciiLower(token) === "'script'")) continue;
-      const violation = new CSPViolation(policy, 'require-trusted-types-for', 'trusted-types-sink', env);
+      const violation = CSPViolation.fromGlobal(policy, 'require-trusted-types-for', 'trusted-types-sink', env);
       violation.sample = `${sink}|${sample.slice(0, 40)}`;
       violation.report();
       if (policy.disposition === 'enforce') blocked = true;
@@ -295,7 +316,7 @@ export class CSPList implements FetchCSPList {
       // Chromium/WebKit also reject unusual wildcard names and duplicate "default" through CSP.
       // The factory separately rejects a second default policy after these checks.
       if (allowsName && (!createdPolicyNames.has(policyName) || allowsDuplicates)) continue;
-      const violation = new CSPViolation(policy, 'trusted-types', 'trusted-types-policy', env);
+      const violation = CSPViolation.fromGlobal(policy, 'trusted-types', 'trusted-types-policy', env);
       violation.sample = policyName.slice(0, 40);
       violation.report();
       if (policy.disposition === 'enforce') blocked = true;

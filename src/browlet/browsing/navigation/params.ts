@@ -1,12 +1,13 @@
-import { InternalError } from '../../../infra/index';
-import { copyURL, type Origin, obtainURLOrigin, type URLRecord } from '../../../url/index';
-import type { FetchResponse, FetchRequest, FetchController, ReferrerPolicy } from '../../../fetch/index';
+import { InternalError, type InternalPromise } from '../../../infra/index';
+import { utf8Encode } from '../../../encoding/index';
+import { aboutBlankURL, copyURL, type Origin, obtainURLOrigin, type URLRecord } from '../../../url/index';
+import { FetchBody, FetchResponse, type FetchRequest, type FetchController, type ReferrerPolicy } from '../../../fetch/index';
 
 import { coarsenedSharedCurrentTime, type DOMHighResTimeStamp } from '../../timing/index';
 import { PolicyContainer, OpenerPolicy, SandboxingFlagSet } from '../policy/index';
 import type { DocumentImpl } from '../../dom/nodes/index';
 import type { NavigationTimingType } from '../../performance/index';
-import type { DocumentState } from './state/index';
+import type { DocumentState, SessionHistoryEntry, SourceSnapshotParams } from './state/index';
 import type { BrowletEnvironment, BrowletEnvironmentBase } from '../../environment/index';
 
 import { BrowsingContext } from './browsing-context';
@@ -21,7 +22,7 @@ import type { Navigable, UserNavigationInvolvement } from './navigable';
 // https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigation-params
 export class NavigationParams {
   /** Identifier supplied by the navigation algorithm, when present. */
-  // TODO(HTML §7.4.5): Fetch-created params must retain the ID; javascript: and supplied responses already supply it.
+  // TODO(HTML §7.4.5): Fetch-created params must retain the ID; javascript:, srcdoc, and supplied responses already supply it.
   id: string | null = null;
   /** Fetch request that produced the response, or null for a synthetic response or Browlet's local route. */
   request: FetchRequest | null = null;
@@ -33,7 +34,7 @@ export class NavigationParams {
   commitEarlyHints: ((document: DocumentImpl) => void) | null = null;
   /** Accumulated COOP response checks, or null before response policy preparation. */
   coopEnforcementResult: OpenerPolicyEnforcementResult | null = null;
-  /** Environment prepared before the destination realm; null for javascript: and HTML's supplied-response path. */
+  /** Environment prepared before the destination realm; null for javascript:, srcdoc, and supplied responses. */
   reservedEnv: BrowletEnvironmentBase | null = null;
   /** Origin selected for the new document. */
   origin: Origin;
@@ -106,6 +107,60 @@ export class NavigationParams {
     params.aboutBaseURL = documentState.aboutBaseURL;
     params.userInvolvement = userInvolvement;
     return params;
+  }
+
+  /** Assemble a synthetic HTML response and inherited policies from a retained srcdoc resource. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#create-navigation-params-from-a-srcdoc-resource
+  static fromSrcdoc(
+    entry: SessionHistoryEntry, navigable: Navigable, targetSnapshotParams: TargetSnapshotParams,
+    userInvolvement: UserNavigationInvolvement, navigationId: string | null, navigationTimingType: NavigationTimingType,
+    env: BrowletEnvironment,
+  ): NavigationParams {
+    const state = entry.documentState;
+    if (typeof state.resource !== 'string') throw new InternalError('Srcdoc navigation requires a string resource');
+    const containerDocument = navigable.containerDocument;
+    if (containerDocument === null) throw new InternalError('Srcdoc navigation requires a container Document');
+    const responseURL = copyURL(aboutBlankURL);
+    responseURL.path = 'srcdoc';
+    const response = new FetchResponse();
+    response.urlList.push(responseURL);
+    response.headerList.append('Content-Type', 'text/html');
+    response.body = FetchBody.fromBytes(utf8Encode(state.resource), env.userAgent.sandbox);
+    const origin = BrowsingContext.determineOrigin(responseURL, targetSnapshotParams.sandboxingFlags, state.origin);
+    const params = new NavigationParams(
+      response, targetSnapshotParams.sandboxingFlags, coarsenedSharedCurrentTime(env.crossOriginIsolatedCapability).milliseconds,
+    );
+    params.id = navigationId;
+    params.origin = origin;
+    params.policyContainer = PolicyContainer.determineForNavigation(
+      responseURL, state.historyPolicyContainer, null, containerDocument.policyContainer, null,
+    );
+    params.coopEnforcementResult = {
+      url: responseURL, origin, openerPolicy: params.openerPolicy, needsBrowsingContextGroupSwitch: false,
+      wouldNeedBrowsingContextGroupSwitchDueToReportOnly: false, currentContextIsNavigationSource: false,
+    };
+    params.iframeReferrerPolicy = targetSnapshotParams.iframeReferrerPolicy;
+    params.navigationTimingType = navigationTimingType;
+    params.aboutBaseURL = state.aboutBaseURL;
+    params.userInvolvement = userInvolvement;
+    // TODO(HTML #332 / §7.5.1): Resolve srcdoc cookie-URL inheritance before enabling the synthetic Document loader.
+    // Request, controller, early hints, and reserved environment retain their specified null defaults.
+    return params;
+  }
+
+  /** Obtain navigation parameters asynchronously; a redirect can instead select a non-fetch destination. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#create-navigation-params-by-fetching
+  static fromFetch(
+    _entry: SessionHistoryEntry, _navigable: Navigable, _sourceSnapshotParams: SourceSnapshotParams,
+    _targetSnapshotParams: TargetSnapshotParams, _cspNavigationType: 'form-submission' | 'other',
+    _userInvolvement: UserNavigationInvolvement, _navigationId: string | null, _navigationTimingType: NavigationTimingType,
+    _env: BrowletEnvironment,
+  ): InternalPromise<NavigationParams | NonFetchSchemeNavigationParams | null> {
+    // TODO(HTML §7.4.5): Create the request, retain/replay POST bytes, apply source policy and referrer inputs,
+    // reserve environments, coordinate Fetch/redirects/COOP/early hints, and preserve cancellation and response timing.
+    // Non-fetch redirects carry the last fetch response's origin. Resolve on the UserAgent's HostPromise owner;
+    // fetching must continue independently of the departing Document's script readiness or activity.
+    throw new InternalError('Navigation parameter creation by fetching is not implemented');
   }
 
   /** Final response URL, required when a response is selected for navigation. */

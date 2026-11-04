@@ -4,31 +4,33 @@ import {
   emptyDictionary, idlType, impl, integer, nullable, op, reference, roAttr, xattr,
 } from '../../../../web-idl/core/index';
 import { utf8Encode } from '../../../../encoding/index';
-import { copyURL, stripURLForReporting, type URLRecord } from '../../../../url/index';
-import { FetchRequest, fetch } from '../../../../fetch/index';
+import { copyURL, createOpaqueOrigin, obtainURLOrigin, stripURLForReporting, type URLRecord } from '../../../../url/index';
+import type { HTTPStatus } from '../../../../http/index';
+import { FetchRequest, fetch, isFilteredResponse, type FetchResponse } from '../../../../fetch/index';
 
 import type { DOMHighResTimeStamp } from '../../../timing/index';
 import { EventImpl, type EventInit } from '../../../dom/events/index';
-import { ReportBodyImpl } from '../../../reporting/index';
+import { ReportBodyImpl, ReportImpl, ReportingEndpoint } from '../../../reporting/index';
 import type { ElementImpl, DocumentImpl } from '../../../dom/nodes/index';
 import type { DOMEnvironment } from '../../../dom/index';
 import type { BrowletEnvironment } from '../../../environment/index';
+import type { UserAgent } from '../../../user-agent';
 
 import type { ContentSecurityPolicy, CSPDisposition } from './policy';
 
 /** A policy violation captured before its asynchronous event and report delivery. */
 // https://w3c.github.io/webappsec-csp/#framework-violation
 export class CSPViolation {
-  /** Environment whose policy was violated. Worker construction awaits its global implementation. */
-  env: BrowletEnvironment;
+  /** Environment whose policy was violated, or null before the incoming global exists. */
+  env: BrowletEnvironment | null = null;
   /** Protected resource URL captured when the violation occurs. */
   url: URLRecord;
   /** HTTP status of the protected resource, not the rejected subresource. */
-  status: number;
+  status: HTTPStatus;
   /** Original blocked URL or the kind of non-URL violation. */
   resource: CSPViolationResource;
   /** Referrer of the protected resource, or null when omitted. */
-  referrer: URLRecord | null;
+  referrer: URLRecord | null = null;
   /** Policy responsible for the violation. */
   policy: ContentSecurityPolicy;
   /** Operation's effective directive, before falling back to another source list. */
@@ -43,26 +45,57 @@ export class CSPViolation {
   element: ElementImpl | null = null;
   /** Authorized excerpt of violating inline code, otherwise empty. */
   sample = '';
-  /** Protected Document retained for queued event targeting. */
-  #document: DocumentImpl;
+  /** Protected Document retained for event targeting, or null before its creation. */
+  #document: DocumentImpl | null = null;
+  /** Browser owner for reports that have no global. */
+  #userAgent: UserAgent;
+  /** Incoming response's endpoint configuration, independent of existing globals. */
+  #reportingEndpoints: ReportingEndpoint[] = [];
 
-  // https://w3c.github.io/webappsec-csp/#create-violation-for-global
-  // Require the resource at construction instead of exposing a partially populated violation.
-  constructor(
-    policy: ContentSecurityPolicy, effectiveDirective: string, resource: CSPViolationResource, env: BrowletEnvironment,
+  private constructor(
+    policy: ContentSecurityPolicy, effectiveDirective: string, resource: CSPViolationResource,
+    url: URLRecord, status: HTTPStatus, userAgent: UserAgent,
   ) {
-    const document = env.realm.getAssociatedDocument();
-    if (document === null) throw new InternalError('CSP worker violation integration is not implemented');
-    this.env = env;
-    this.#document = document;
-    this.url = copyURL(document.url);
-    this.status = document.httpStatus;
-    this.resource = typeof resource === 'string' ? resource : copyURL(resource);
-    this.referrer = document.referrer === '' ? null : env.parseURL(document.referrer);
     this.policy = policy;
     this.effectiveDirective = effectiveDirective;
+    this.resource = typeof resource === 'string' ? resource : copyURL(resource);
+    this.url = copyURL(url);
+    this.status = status;
+    this.#userAgent = userAgent;
+  }
+
+  /** Capture the protected Document and its metadata before asynchronous delivery. */
+  // https://w3c.github.io/webappsec-csp/#create-violation-for-global
+  // Require the resource at construction instead of exposing a partially populated violation.
+  static fromGlobal(
+    policy: ContentSecurityPolicy, effectiveDirective: string, resource: CSPViolationResource, env: BrowletEnvironment,
+  ): CSPViolation {
+    const document = env.realm.getAssociatedDocument();
+    if (document === null) throw new InternalError('CSP worker violation integration is not implemented');
+    const violation = new CSPViolation(policy, effectiveDirective, resource, document.url, document.httpStatus, env.userAgent);
+    violation.env = env;
+    violation.#document = document;
+    violation.referrer = document.referrer === '' ? null : env.parseURL(document.referrer);
     // CSP permits omitting script locations when the engine cannot supply them.
     // Do not infer author locations from a host Node stack or disclose a redirect target.
+    return violation;
+  }
+
+  /** Capture an incoming resource without assigning its policy to an existing Window. */
+  // https://w3c.github.io/webappsec-csp/#should-block-navigation-response
+  static fromNavigationResponse(
+    policy: ContentSecurityPolicy, effectiveDirective: string, response: FetchResponse, userAgent: UserAgent,
+  ): CSPViolation {
+    const url = response.url;
+    if (url === null) throw new InternalError('CSP navigation violations require a response URL');
+    // SPEC_GAP(csp-navigation-violation-global): CSP derives URL/status and reporting from a null global.
+    // SPEC_CLASH(csp-navigation-report-resource): Use the final response URL/status, as WebKit does for HTTP;
+    // Chromium strips paths and reports 200, while Firefox reports an ancestor/empty blocked URI and status 0.
+    const violation = new CSPViolation(policy, effectiveDirective, url, url, response.status, userAgent);
+    // SPEC_CLASH(csp-navigation-report-referrer): Keep CSP's empty null-global referrer, as Chromium does;
+    // Firefox/WebKit use the navigation request's referrer (CSP #460).
+    violation.#reportingEndpoints = ReportingEndpoint.parse(response, userAgent);
+    return violation;
   }
 
   /** Sanitized blocked resource, shared by DOM events and both report formats. */
@@ -71,18 +104,16 @@ export class CSPViolation {
     return typeof this.resource === 'string' ? this.resource : stripURLForReporting(this.resource);
   }
 
-  /** Deliver a trusted event, then submit the policy's selected report format. */
+  /** Queue reports and, when a global exists, deliver its trusted violation event first. */
   // https://w3c.github.io/webappsec-csp/#report-violation
   report(): void {
     const { env } = this;
     let target = this.element;
-    // SPEC_CLASH(csp-violation-task-source): CSP leaves the source unnamed;
-    // WebKit uses DOM manipulation, Blink networking. Follow WebKit here.
-    env.queueTask('dom-manipulation', () => {
+    const steps = () => {
       const document = this.#document;
       if (target !== null && target.getShadowIncludingRoot() !== document) target = null;
       const body = new CSPViolationReportBodyImpl(this);
-      (target ?? document).fireEvent('securitypolicyviolation', SecurityPolicyViolationEventImpl, (event) => {
+      (target ?? document)?.fireEvent('securitypolicyviolation', SecurityPolicyViolationEventImpl, (event) => {
         (event as SecurityPolicyViolationEventImpl).initialize({
           documentURI: body.documentURL, referrer: body.referrer ?? '', blockedURI: body.blockedURL ?? '',
           effectiveDirective: body.effectiveDirective, violatedDirective: body.effectiveDirective,
@@ -94,11 +125,24 @@ export class CSPViolation {
       });
       const endpoints = this.policy.directives.get('report-to')?.tokens;
       if (endpoints !== undefined) {
-        for (const endpoint of endpoints) env.queueReport('csp-violation', endpoint, body);
+        if (env !== null) {
+          for (const endpoint of endpoints) env.queueReport('csp-violation', endpoint, body);
+        } else {
+          // No global means no ReportingObserver or global report buffer. Reuse browser-owned delivery.
+          const reports = endpoints.map((endpoint) => new ReportImpl(
+            body, 'csp-violation', endpoint, stripURLForReporting(this.url),
+            obtainURLOrigin(this.url), this.#userAgent.defaultUserAgentValue,
+          ));
+          this.#userAgent.sendReports(reports, this.#reportingEndpoints);
+        }
       } else {
         this.#sendLegacyReports();
       }
-    });
+    };
+    // SPEC_CLASH(csp-violation-task-source): CSP leaves the source unnamed;
+    // WebKit uses DOM manipulation, Blink networking. Follow WebKit for globals.
+    if (env !== null) env.queueTask('dom-manipulation', steps);
+    else this.#userAgent.queueReportingTask(steps);
   }
 
   /** Encode the deprecated report-uri payload as JSON bytes. */
@@ -124,15 +168,18 @@ export class CSPViolation {
   }
 
   #sendLegacyReports(): void {
-    const { env } = this;
-    if (!env.userAgent.reportDeliveryEnabled) return;
+    if (!this.#userAgent.reportDeliveryEnabled) return;
+    const env = this.env ?? this.#userAgent.sandbox;
     for (const token of this.policy.directives.get('report-uri')?.tokens ?? []) {
-      const endpoint = env.parseURL(token, this.url);
+      const endpoint = this.#userAgent.parseURL(token, this.url);
       if (endpoint === null) continue;
       const request = new FetchRequest(endpoint, env);
-      request.client = env;
+      request.client = this.env;
       request.method = 'POST';
-      request.origin = env.origin;
+      // SPEC_GAP(csp-navigation-report-client): CSP selects client/origin from the absent global.
+      // SPEC_CLASH(csp-navigation-report-credentials): Follow Chromium's clientless opaque origin,
+      // omitting cookies like Chromium/Firefox; WebKit sends cookies even to a foreign collector.
+      request.origin = this.env?.origin ?? createOpaqueOrigin();
       request.traversableForUserPrompts = null;
       request.destination = 'report';
       request.credentialsMode = 'same-origin';
@@ -140,7 +187,18 @@ export class CSPViolation {
       request.headerList.append('Content-Type', 'application/csp-report');
       request.body = this.serialize();
       request.redirectMode = 'error';
-      fetch(request, {}, env);
+      if (this.env === null) {
+        request.allowServiceWorkerInterception = false;
+        fetch(request, {
+          processResponse: (response) => {
+            const internalResponse = isFilteredResponse(response) ? response.internalResponse : response;
+            internalResponse.discardBody?.();
+          },
+          useParallelQueue: true,
+        }, env);
+      } else {
+        fetch(request, {}, env);
+      }
     }
   }
 }
@@ -167,7 +225,7 @@ export class CSPViolationReportBodyImpl extends ReportBodyImpl {
   /** Enforced or monitored policy. */
   disposition: CSPDisposition;
   /** HTTP status of the protected resource. */
-  statusCode: number;
+  statusCode: HTTPStatus;
   /** Source line, or null when the source file is unavailable. */
   lineNumber: number | null;
   /** Source column, or null when the source file is unavailable. */
@@ -251,7 +309,7 @@ export class SecurityPolicyViolationEventImpl extends EventImpl {
   /** Whether the violated policy enforces or only monitors. */
   disposition: CSPDisposition = 'enforce';
   /** HTTP status of the protected document or worker resource. */
-  statusCode = 0;
+  statusCode: HTTPStatus = 0;
   /** Source line, or zero when unavailable. */
   lineNumber = 0;
   /** Source column, or zero when unavailable. */
@@ -291,7 +349,7 @@ export interface SecurityPolicyViolationEventInit extends EventInit {
   sourceFile?: string;
   sample?: string;
   disposition?: CSPDisposition;
-  statusCode?: number;
+  statusCode?: HTTPStatus;
   lineNumber?: number;
   columnNumber?: number;
 }
