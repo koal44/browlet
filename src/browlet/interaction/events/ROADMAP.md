@@ -766,11 +766,177 @@ skips were added. Type checks, type contracts, scoped lint, import boundaries,
 and diff checks pass. The layer-coordinate stubs are excluded from the completed
 behavior above; a passing constructor suite does not validate CSS geometry.
 
+## Pointer Events §3.1: PointerEvent objects and orientation
+
+This bounded slice implements [PointerEvent and PointerEventInit](https://w3c.github.io/pointerevents/#pointerevent-interface),
+including inherited MouseEvent data, the constructor's copied coalesced/predicted
+lists, and [§3.1.5's orientation conversion](https://w3c.github.io/pointerevents/#converting-between-tiltx-tilty-and-altitudeangle-azimuthangle).
+The four orientation dictionary members deliberately have no IDL defaults:
+their presence determines whether to derive the other representation. Supplying
+any member from each pair preserves explicit values and defaults the absent
+members; it does not reconcile inconsistent supplied pairs.
+
+The constructor does not register a device or infer hardware state. Explicit
+pointer IDs, primary flags, pressure, dimensions, and pointer types are retained
+after Web IDL conversion. Hardware ranges/defaults describe producer obligations;
+they do not clamp author-created snapshots. All coordinates remain flat fields.
+
+Binding supplies fresh mutable sequence arrays, retaining contained event
+identities and their realms. Constructor lists are copied independently; neither
+synthetic dispatch nor author redispatch rewrites child samples. getCoalescedEvents
+is exposed only in secure contexts; getPredictedEvents is available in both.
+This covers the author-created list behavior in [§9](https://w3c.github.io/pointerevents/#coalesced-and-predicted-events),
+not native sample collection or prediction.
+
+The manual browser-only `node-compat/experimental/input-delivery/pointer-event.mjs`
+probe ran on Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2 on Windows.
+Eric approved these choices:
+
+- `SPEC_CLASH(pointer-event-coordinate-reinitialization)`: preserve fractions
+  except for construction as click/auxclick/contextmenu, whose coordinates are
+  floored under §3.3.12.2. All three agree at construction. Later initEvent calls
+  retain that choice like Firefox/WebKit; Chromium recalculates it from the new type.
+- `SPEC_CLASH(pointer-event-orientation-support)`: follow the draft and
+  Chromium/Firefox's defaults and omitted-pair derivation. The probed WebKit
+  lacks altitudeAngle, azimuthAngle, and persistentDeviceId and loses some
+  explicit tilts. This is evidence for that build, not every WebKit platform.
+- `SPEC_GAP(pointer-event-orientation-range)`: the draft leaves normalization
+  of out-of-range constructor orientation unspecified. Preserve explicit fields
+  and wrap only calculation inputs like Chromium; Firefox clamps altitude.
+  Use bounded modulo operations, avoiding Blink's repeated-subtraction loops
+  for very large finite inputs. Blink's pointer_event.cc and pointer_event_util.cc
+  corroborate the pair-presence and normalization behavior.
+- `SPEC_CLASH(pointer-event-list-realm)`: retain Binding's existing receiver-realm
+  allocation, matching Chromium/WebKit. Firefox allocates arrays in the borrowed
+  method's realm. All retain each contained event's identity.
+
+Native production remains explicit in PointerEventImpl's TODOs: §§3.1.3–3.1.4
+need capture and hit testing plus connection to the active state below;
+§§3.2–3.3 need internal initialization/creation and firing/order algorithms;
+§9 needs timestamp-ordered trusted samples and target propagation. Constructor
+and accessor paths operate only on supplied data. DOM dispatch already
+recognizes PointerEvent through its MouseEvent base; this does not implement
+HTML's synthetic-pointer-event operation or CSS geometry.
+
+Seventeen new PointerEvent tests pass on all six runtimes. The complete focused
+199-test interaction/DOM-event/binding/factory suite has 199 passes on each addon
+build and 198 passes plus the existing WindowProxy descriptor expected failure
+on each stock build. No new expected failures or skips were added. Type checks,
+type contracts, scoped lint, import boundaries, and diff checks pass.
+
+## Pointer Events §§3.1.1–3.1.2: button and primary-pointer state
+
+`UserAgent.activePointers` owns the active input sources in `interaction/pointer.ts`.
+Activation creates a retained `ActivePointer`; retirement removes that source.
+An active mouse or hovering pen need not have any buttons pressed. The first
+source of each pointer type is primary; removing it does not promote remaining
+sources, and a new primary is selected only after that type has no active sources.
+Vendor pointer-type strings use the same rules.
+
+`ActivePointer.changeButton()` accepts one normalized contact/button action and
+updates the held-button mask before returning its transition. The first press
+selects pointerdown; the last release selects pointerup; intermediate chord
+changes select pointermove. Unchanged actions return null. Touch/pen contact uses
+the primary-button bit; middle/right button numbers map to their distinct mask
+bits. Movement without a button transition separately uses button=-1 in the producer.
+These are internal state operations, not a new event-dispatch API.
+
+Eric approved `SPEC_CLASH(pointer-chord-release)`: follow
+[§3.1.1](https://w3c.github.io/pointerevents/#button-states) and Chromium/Firefox.
+The manual `node-compat/experimental/input-delivery/pointer-state.mjs` probe found
+that WebKit 27.2 emits pointerup while another mouse button remains held. Chromium
+156.0.8078.4 and Firefox 157.0 emit pointermove, then pointerup on the final release.
+Canceling pointerdown and dispatching an unrelated author-created event do not
+change the next hardware button mask. The Chromium-only CDP multi-touch probe
+confirms no primary promotion or replacement while other contacts remain; it
+does not establish Firefox/WebKit touch behavior. Blink's PointerEventFactory
+also retains the primary ID until removal and chooses a new primary only when
+the type's active count was zero.
+
+The state intentionally has no numeric pointer IDs. §3.1 requires author-visible
+IDs to be mapped independently within each top-level context. The eventual
+producer must retain source identity, supply activation/retirement notifications,
+and consume button transitions through §3.1.3's target/capture/dispatch steps.
+It must also supply the aggregate mouse input and platform device lifecycle.
+No adapter, WebDriver input command, trusted-event creation, or background task
+is connected by this slice. Source-side TODOs identify these producer boundaries;
+event constructors and dispatch never update active input state.
+
+Seventeen new enabled state/ownership tests pass in all six runtime configurations.
+The 222-test interaction/DOM-event/binding/factory suite has 222 passes on each
+addon build and 221 passes plus the existing WindowProxy descriptor expected
+failure on each stock build. Type checks, type contracts, scoped lint, import
+boundaries, and diff checks pass. No new expected failures or skips were added.
+
+## Pointer Events §3.1.3.1: internal event attributes
+
+`PointerEventImpl.setPointerEventAttributes()` extracts attribute assignment from
+[fire a pointer event](https://w3c.github.io/pointerevents/#firing-events-using-the-pointerevent-interface).
+It takes one of the eleven event names in the attribute table and updates the
+fresh event's type, bubbles, cancelable, composed, detail, and relatedTarget.
+This reviewed extraction is not the complete firing operation.
+The caller supplies pointer data and owns allocation and trust through
+DOM's existing event creation. No Binding or addon change is needed.
+
+Enter/leave neither bubble nor cross shadow roots and are not cancelable. Raw
+updates, cancellation, and capture notifications bubble and are composed, but
+cannot be canceled. Over/down/move/up/out bubble, are composed, and are cancelable.
+All eleven types have detail zero. Boundary events keep the supplied opposite
+target; capture notifications keep the triggering event's supplied relatedTarget.
+Other types clear relatedTarget. The initializer leaves view, pointer data,
+samples, timestamp, and trust unchanged. Constructors and author dispatch never
+invoke it or substitute native defaults for author-supplied attributes.
+
+Eric approved two continuing browser differences from the manual
+`node-compat/experimental/input-delivery/pointer-attributes.mjs` probe:
+
+- `SPEC_CLASH(pointer-rawupdate-cancelable)`: follow the draft and Chromium;
+  Firefox 157.0 reports cancelable=true and accepts preventDefault() on raw
+  updates. Chromium 156.0.8078.4 reports false and rejects cancellation. The
+  WebKit 27.2 run did not deliver raw updates, so it supplies no evidence here.
+- `SPEC_CLASH(pointer-event-detail)`: follow the draft and Chromium/Firefox's
+  zero. WebKit 27.2 reports detail=1 for the probed pointerdown/pointerup pair.
+
+The other observed table flags agree across the three browsers. Direct enter/leave
+listeners were needed to observe those events consistently. Capture notifications
+were observed in all three; pointercancel was driven only in Chromium using CDP.
+Blink's PointerEventFactory::SetEventSpecificFields independently matches the
+table's four scalar assignments. Browser observations are not Browlet test passes.
+
+Remaining dependencies are kept beside the initializer and at the existing
+PointerEvent/ActivePointer producer boundary:
+
+- §3.1.3 still needs hit testing or capture-target selection, active-document
+  updates, implicit capture, previous-target repair, and boundary event ordering.
+- §3.1.3.2 and §8 own pending capture, capture-notification creation/copying,
+  explicit/implicit capture and its release. Preserving already supplied fields
+  does not implement capture notification construction or those state changes.
+- §10's optional compatibility mouse mapping owns suppression after canceled
+  pointerdown. §11's Mouse Events and their HTML owners supply default actions.
+  Exposing cancelability does not implement those actions. Viewport panning and
+  zooming are controlled separately by §7 touch-action, not event cancellation.
+- The input producer still needs context-local IDs, normalized device samples,
+  target/view selection, and user-interaction task delivery. There is no native
+  adapter or automation input command connected by this slice.
+
+The enabled attribute tests use real DOM creation, Binding projection, and
+dispatch to check all eleven types, cancellation, retained/cleared related targets,
+pointer-data preservation, shadow boundaries, and author construction/redispatch.
+This tests attribute preparation and dispatch, not a complete input sequence.
+
+All 25 new tests pass in all six runtime configurations. The focused 16-file
+interaction/DOM-event/binding/factory suite has 247 passes on each addon build
+and 246 passes plus the existing WindowProxy descriptor expected failure on each
+stock build. No new expected failures or skips were added. Typecheck, type
+contracts, scoped lint, import boundaries, and diff checks pass.
+
 ## Next in document order
 
-Continue Pointer Events §3 with the PointerEvent object, constructor data,
-orientation conversion, and coalesced/predicted event lists. The MouseEvent base
-is connected, with the geometry dependencies above still explicit. Editing and selection producers
+Continue §3.1.3's remaining firing/default-action and pending-capture algorithms,
+followed by §3.1.3.3's stream suppression and §3.1.4's layout-driven boundary events.
+Those steps must consume active source
+state and expose any reached targeting/input dependencies explicitly in code;
+the MouseEvent geometry dependencies remain explicit. Editing and selection producers
 remain with their HTML/Input Events/Selection API owners. Complete HTML §6.6
 before claiming focus-event production, including the main/legacy focus-order
 conflict below.

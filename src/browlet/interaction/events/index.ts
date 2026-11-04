@@ -4,6 +4,10 @@ export { InputEventImpl, type InputEventInit } from './input-event';
 export { KeyboardEventImpl, type KeyboardEventInit } from './keyboard-event';
 export { EventModifierState, type EventModifierInit } from './event-modifiers';
 export { CompositionEventImpl, type CompositionEventInit } from './composition-event';
-export { MouseEventImpl, type MouseEventInit, type ScreenPosition } from './mouse-event';
+export { MouseEventImpl, type MouseEventInit, type MouseEventInput, type ScreenPosition } from './mouse-event';
+export {
+  PointerEventImpl, type PointerEventInit, type PointerEventType, type PointerInputEventType,
+  type PointerActivationEventType, type PointerEventSamples,
+} from './pointer-event';
 export { TextEventImpl } from './text-event';
 export { interactionEventIDLDefinitions } from './web-idl';

@@ -42,6 +42,7 @@ import { HTTPAuthenticationStore } from './loader/index';
 import {
   BrowsingContextGroup, Navigable, TopLevelTraversable, type NavigableContainer, type PostResource,
 } from './browsing/navigation/index';
+import { ActivePointers } from './interaction/index';
 import { NodeHTTPTransport, createContentDecoder, supportedContentCodings } from './integration/host/network/index';
 import { NodePromise, queueNodeTask, nodeTimerHost } from './integration/host/index';
 import type { PermissionStatusImpl } from './integration/permissions/index';
@@ -82,6 +83,8 @@ export class UserAgent implements
   runInParallel = queueNodeTask;
   /** Host wake-ups shared by this browser's globals; each global owns its timer state. */
   timerHost: TimerHost = nodeTimerHost;
+  /** Shared input lifetimes and button state, independent of author-created events. */
+  activePointers = new ActivePointers();
 
   /** Default identification header value, shared by this user agent's environments. */
   // https://fetch.spec.whatwg.org/#default-user-agent-value

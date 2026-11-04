@@ -17,8 +17,6 @@ import type { ErrorEventImpl } from './error-event';
 export class EventImpl {
   /** Name used to select registered listeners. */
   type = '';
-  /** Dispatch target, retargeted for the current listener. */
-  target: EventTargetImpl | null = null;
   /** Secondary target, retargeted for the current listener. */
   relatedTarget: EventTargetImpl | null = null;
   /** Touch targets, retargeted for the current listener. */
@@ -54,6 +52,9 @@ export class EventImpl {
   /** Creation time in milliseconds, using the event creator's clock. */
   timeStamp: DOMHighResTimeStamp;
 
+  /** Dispatch target, retargeted for the current listener. */
+  #target: EventTargetImpl | null = null;
+
   // https://dom.spec.whatwg.org/#dom-event-event
   constructor(
     type: string,
@@ -73,6 +74,16 @@ export class EventImpl {
 
   static is(value: unknown): value is EventImpl {
     return value instanceof EventImpl;
+  }
+
+  get target(): EventTargetImpl | null {
+    return this.#target;
+  }
+
+  set target(target: EventTargetImpl | null) {
+    if (this.#target === target) return;
+    this.#target = target;
+    this.targetChanged();
   }
 
   /** @deprecated Legacy alias of target. */
@@ -276,6 +287,9 @@ export class EventImpl {
     this.bubbles = bubbles;
     this.cancelable = cancelable;
   }
+
+  /** Let derived event state follow target changes selected by DOM dispatch and cleanup. */
+  protected targetChanged(): void {}
 
   // https://dom.spec.whatwg.org/#set-the-canceled-flag
   #setCanceled(): void {

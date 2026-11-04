@@ -340,6 +340,52 @@ export interface MouseEventInit {
   screenY?: number;
 }
 
+export interface PointerEventInit {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+  detail?: number;
+  view?: Window | null;
+  altKey?: boolean;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+  modifierAltGraph?: boolean;
+  modifierCapsLock?: boolean;
+  modifierFn?: boolean;
+  modifierFnLock?: boolean;
+  modifierHyper?: boolean;
+  modifierNumLock?: boolean;
+  modifierScrollLock?: boolean;
+  modifierSuper?: boolean;
+  modifierSymbol?: boolean;
+  modifierSymbolLock?: boolean;
+  shiftKey?: boolean;
+  button?: number;
+  buttons?: number;
+  clientX?: number;
+  clientY?: number;
+  movementX?: number;
+  movementY?: number;
+  relatedTarget?: EventTarget | null;
+  screenX?: number;
+  screenY?: number;
+  altitudeAngle?: number;
+  azimuthAngle?: number;
+  coalescedEvents?: Iterable<PointerEvent>;
+  height?: number;
+  isPrimary?: boolean;
+  persistentDeviceId?: number;
+  pointerId?: number;
+  pointerType?: string;
+  predictedEvents?: Iterable<PointerEvent>;
+  pressure?: number;
+  tangentialPressure?: number;
+  tiltX?: number;
+  tiltY?: number;
+  twist?: number;
+  width?: number;
+}
+
 export interface SecurityPolicyViolationEventInit {
   bubbles?: boolean;
   cancelable?: boolean;
@@ -2329,6 +2375,30 @@ export interface MouseEventConstructor extends Ctor<UIEventConstructor> {
   new (type: string, eventInitDict?: MouseEventInit): MouseEvent;
 }
 
+export interface PointerEvent extends MouseEvent {
+  readonly pointerId: number;
+  readonly width: number;
+  readonly height: number;
+  readonly pressure: number;
+  readonly tangentialPressure: number;
+  readonly tiltX: number;
+  readonly tiltY: number;
+  readonly twist: number;
+  readonly altitudeAngle: number;
+  readonly azimuthAngle: number;
+  readonly pointerType: string;
+  readonly isPrimary: boolean;
+  readonly persistentDeviceId: number;
+  getCoalescedEvents(): Array<PointerEvent>;
+  getPredictedEvents(): Array<PointerEvent>;
+}
+
+export interface PointerEventConstructor extends Ctor<MouseEventConstructor> {
+  readonly prototype: PointerEvent;
+  [Symbol.hasInstance](value: unknown): value is PointerEvent;
+  new (type: string, eventInitDict?: PointerEventInit): PointerEvent;
+}
+
 export interface NotRestoredReasonDetails {
   readonly reason: string;
   toJSON(): object;
@@ -2901,6 +2971,7 @@ export interface Window extends EventTarget {
   CompositionEvent: CompositionEventConstructor;
   TextEvent: TextEventConstructor;
   MouseEvent: MouseEventConstructor;
+  PointerEvent: PointerEventConstructor;
   NotRestoredReasonDetails: NotRestoredReasonDetailsConstructor;
   NotRestoredReasons: NotRestoredReasonsConstructor;
   ViewTransition: ViewTransitionConstructor;

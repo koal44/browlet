@@ -6,6 +6,7 @@ import {
 
 import type { DOMHighResTimeStamp } from '../../timing/index';
 import type { EventTargetImpl } from '../../dom/events/index';
+import type { NodeImpl } from '../../dom/nodes/index';
 import type { DOMEnvironment } from '../../dom/environment';
 import type { WindowImpl } from '../../browsing/window/index';
 
@@ -15,8 +16,9 @@ import { EventModifierState, type EventModifierInit } from './event-modifiers';
 /** Mouse-event data, independent of device state and native input delivery. */
 // https://w3c.github.io/pointerevents/#mouseevent-interface
 // TODO(Pointer Events, MouseEvent Algorithms): the native producer still needs
-// hit testing, held buttons/modifiers, click counting, and initialize a MouseEvent.
-// That initializer must clear movement before Window.setPointerLockAttributesForMousemove().
+// hit testing, held buttons/modifiers, and click counting. initializeMouseEvent()
+// consumes the producer's explicit input snapshot and clears movement before
+// Window.setPointerLockAttributesForMousemove().
 // Author construction and dispatch must not update the Window's movement history.
 export class MouseEventImpl extends UIEventImpl {
   /** Screen-relative coordinates after the MouseEvent compatibility rounding. */
@@ -31,8 +33,10 @@ export class MouseEventImpl extends UIEventImpl {
   /** Relative motion supplied by construction or the native producer. */
   movementX: number;
   movementY: number;
-  /** Modifier snapshot replaced only by construction or legacy initialization. */
+  /** Modifier snapshot shared when copying input data and replaced by legacy initialization. */
   #modifiers: EventModifierState;
+  /** Native initialization includes AltGraph in altKey without changing the separate Alt flag. */
+  #altKey: boolean;
 
   constructor(type: string, eventInitDict: MouseEventInit = {}, timeStamp?: DOMHighResTimeStamp) {
     super(type, eventInitDict, timeStamp);
@@ -48,6 +52,7 @@ export class MouseEventImpl extends UIEventImpl {
     this.movementX = eventInitDict.movementX ?? 0;
     this.movementY = eventInitDict.movementY ?? 0;
     this.#modifiers = new EventModifierState(eventInitDict);
+    this.#altKey = eventInitDict.altKey ?? false;
   }
 
   get layerX(): number {
@@ -64,7 +69,7 @@ export class MouseEventImpl extends UIEventImpl {
 
   get ctrlKey(): boolean { return this.#modifiers.getModifierState('Control'); }
   get shiftKey(): boolean { return this.#modifiers.getModifierState('Shift'); }
-  get altKey(): boolean { return this.#modifiers.getModifierState('Alt'); }
+  get altKey(): boolean { return this.#altKey; }
   get metaKey(): boolean { return this.#modifiers.getModifierState('Meta'); }
 
   // SPEC_CLASH(mouse-event-which): Use UI Events' button + 1 with unsigned-long wrapping, like Chromium/Firefox; WebKit returns zero for negative buttons and fresh legacy events.
@@ -72,6 +77,25 @@ export class MouseEventImpl extends UIEventImpl {
 
   getModifierState(keyArg: string): boolean {
     return this.#modifiers.getModifierState(keyArg);
+  }
+
+  /** Initialize producer data; the producer establishes trust after DOM initialization. */
+  // https://w3c.github.io/pointerevents/#dfn-initialize-a-mouseevent
+  // Native coordinates and device state are explicit inputs, not ambient globals.
+  initializeMouseEvent(
+    type: string, target: NodeImpl | WindowImpl, bubbles: boolean, cancelable: boolean, input: MouseEventInput,
+  ): void {
+    this.initializeUIEvent(type, target, bubbles, cancelable);
+    this.screenX = Math.floor(input.screenX);
+    this.screenY = Math.floor(input.screenY);
+    this.clientX = Math.floor(input.clientX);
+    this.clientY = Math.floor(input.clientY);
+    this.#modifiers = input.modifiers;
+    // "Set mouse event modifiers" keeps Alt and AltGraph distinct, but either sets altKey.
+    this.#altKey = input.modifiers.getModifierState('Alt') || input.modifiers.getModifierState('AltGraph');
+    this.button = 0;
+    this.buttons = input.buttons;
+    this.initializePointerLockAttributes();
   }
 
   /** @deprecated Reinitialize the legacy fields unless this event is being dispatched. */
@@ -92,6 +116,7 @@ export class MouseEventImpl extends UIEventImpl {
     this.clientX = clientX;
     this.clientY = clientY;
     this.#modifiers = new EventModifierState({ ctrlKey, altKey, shiftKey, metaKey });
+    this.#altKey = altKey;
     this.button = button;
     this.relatedTarget = relatedTarget;
     // SPEC_CLASH(mouse-event-legacy-buttons): Preserve the unaddressed buttons field, like Firefox/WebKit; Chromium clears it.
@@ -108,7 +133,39 @@ export class MouseEventImpl extends UIEventImpl {
   override isMouseEvent(): this is MouseEventImpl {
     return true;
   }
+
+  /** Copy input attributes into a fresh event without copying dispatch or cancellation state. */
+  protected copyInputFrom(source: MouseEventImpl): void {
+    this.timeStamp = source.timeStamp;
+    this.view = source.view;
+    this.detail = source.detail;
+    this.screenX = source.screenX;
+    this.screenY = source.screenY;
+    this.clientX = source.clientX;
+    this.clientY = source.clientY;
+    this.button = source.button;
+    this.buttons = source.buttons;
+    this.relatedTarget = source.relatedTarget;
+    this.movementX = source.movementX;
+    this.movementY = source.movementY;
+    // Modifier snapshots have no mutating operations; legacy initialization replaces the snapshot.
+    this.#modifiers = source.#modifiers;
+    this.#altKey = source.#altKey;
+  }
 }
+
+/** Normalized producer input, with positions already mapped to screen/viewport CSS pixels. */
+// TODO(Pointer Events, MouseEvent Algorithms / native input and CSSOM View): the
+// input adapter must supply current buttons/modifiers and mapped coordinates.
+// There is no default snapshot: missing input must not masquerade as an idle mouse.
+export type MouseEventInput = {
+  screenX: number;
+  screenY: number;
+  clientX: number;
+  clientY: number;
+  buttons: number;
+  modifiers: EventModifierState;
+};
 
 /** A position relative to the origin of the screen coordinate system. */
 export type ScreenPosition = {
