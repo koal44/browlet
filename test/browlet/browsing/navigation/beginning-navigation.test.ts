@@ -145,7 +145,7 @@ describe('beginning navigation', () => {
 
     await runInHostTask(() => { document.env.responsibleEventLoop.runTaskTurn(); });
 
-    expect(fragment).toHaveBeenCalledExactlyOnceWith(url, 'push', 'none', null, null, expect.any(String));
+    expect(fragment).toHaveBeenCalledExactlyOnceWith(url, 'push', 'none', null, null, expect.any(String), null);
   });
 
   it('reports distinct navigation IDs when unloading cancels successive requests', async () => {
@@ -197,7 +197,7 @@ describe('beginning navigation', () => {
     navigable.navigate(url, document, {
       historyHandling: 'replace', userInvolvement: 'activation', sourceElement, navigationAPIState: state,
     }, document.env);
-    expect(fragment).toHaveBeenCalledExactlyOnceWith(url, 'replace', 'activation', sourceElement, state, expect.any(String));
+    expect(fragment).toHaveBeenCalledExactlyOnceWith(url, 'replace', 'activation', sourceElement, state, expect.any(String), null);
     expect(document.url).toBe(originalURL);
     expect(navigable.activeSessionHistoryEntry).toBe(originalEntry);
     expect(navigable.isDelayingLoadEvents).toBe(false);
@@ -216,10 +216,10 @@ describe('beginning navigation', () => {
     },
   );
 
-  it('retains the fragment-processing dependency after dispatch is selected', async () => {
+  it('reaches the Document history-application dependency after fragment dispatch', async () => {
     const { document, navigable, fragment, url } = await fixture();
     fragment.mockRestore();
-    expect(() => navigable.navigate(url, document, {}, document.env)).toThrow('Fragment navigation is not implemented');
+    expect(() => navigable.navigate(url, document, {}, document.env)).toThrow('Document history-step application is not implemented');
   });
 
   it('reports the generated ID before making it ongoing, without changing the active Document', async () => {

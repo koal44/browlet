@@ -56,6 +56,7 @@ import type { NavigationTimingRecord } from '../../performance/index';
 // eslint-disable-next-line browlet/dependency-direction -- DOM's legacy event factory includes HTML-defined event interfaces.
 import { MessageEventImpl } from '../../communication/index';
 import type { StorageImpl } from '../../storage/index';
+import type { NavigationType } from '../../browsing/navigation/api/index';
 import type { LocationImpl, WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
 import type { BrowletEnvironment } from '../../environment/index';
 import type { DocumentParser } from '../../html/parser/index';
@@ -1154,6 +1155,19 @@ export class DocumentImpl extends NodeImpl {
     throw new InternalError('URL and history updates are not implemented');
   }
 
+  /** Apply this Document's selected entry and script-visible history state on its event loop. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#update-document-for-history-step-application
+  updateForHistoryStepApplication(
+    _entry: SessionHistoryEntry, _doNotReactivate: boolean, _scriptHistoryLength: number, _scriptHistoryIndex: number,
+    _navigationType: NavigationType | null, _entriesForNavigationAPI?: SessionHistoryEntry[],
+    _previousEntryForActivation?: SessionHistoryEntry,
+  ): void {
+    // TODO(HTML §7.4.6.2): Update index/length/latestEntry, restore classic History state and persisted state,
+    // update Navigation entries/activation, fire popstate and queue hashchange, and handle reactivation/scrolling/BiDi.
+    // Fragment navigation invokes this synchronously, then joint-history application reconciles it without duplicate events.
+    throw new InternalError('Document history-step application is not implemented');
+  }
+
   /** Scroll the viewport to its beginning edges using CSSOM View's scroll operation. */
   // https://drafts.csswg.org/cssom-view/#scroll-to-the-beginning-of-the-document
   scrollToBeginning(): void {
@@ -1164,7 +1178,7 @@ export class DocumentImpl extends NodeImpl {
   /** Reveal, scroll to, and focus the current fragment target. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#scroll-to-the-fragment-identifier
   scrollToFragment(): void {
-    // TODO(HTML §7.4.6.3): Update target element, reveal ancestors, scroll into view, focus with a viewport fallback,
+    // TODO(HTML §7.4.6.4): Update target element, reveal ancestors, scroll into view, focus with a viewport fallback,
     // and move the sequential focus navigation starting point; null/top have separate target-reset behavior.
     throw new InternalError('Document fragment scrolling is not implemented');
   }

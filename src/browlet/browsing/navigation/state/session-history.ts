@@ -22,7 +22,7 @@ export class SessionHistoryEntry {
   classicHistoryAPIState: SerializedRecord;
   /** Persisted Navigation API state, independent of classic History state. */
   navigationAPIState: SerializedRecord;
-  /** UUID identifying this history position; replacement retains it. */
+  /** UUID identifying this history position; same-origin replacement retains it. */
   navigationAPIKey: string = randomUUID();
   /** UUID identifying this specific entry; replacement creates a new ID. */
   navigationAPIID: string = randomUUID();

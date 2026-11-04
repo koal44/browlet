@@ -1336,6 +1336,32 @@ retained descendant histories. Their traversal-queue precondition is still
 unenforced while initial creation and provisional local commits call them
 synchronously; full finalization/history application must establish those paths.
 See the [low-level audit](browlet/browsing/navigation/ROADMAP.md#html-7414-low-level-operations-on-session-history).
+Cross-document finalization now inserts into child and grandchild history lists
+and retains a replacement's Navigation API key only for the same origin. History
+application still activates only the supplied entry: it does not unload old
+Documents, update every other affected Document, restore cached Documents, or
+deliver their lifecycle/history events on the appropriate event loops. The local
+loader still commits synchronously; the finalizer's traversal-queue assertion
+cannot yet be enforced. See the
+[finalization audit](browlet/browsing/navigation/ROADMAP.md#html-74231-cross-document-finalization).
+Fragment navigation now dispatches the real navigate event, carries method
+trackers and Navigation state, preserves interception, and prepares push/replace
+entries. An uncanceled hash change still throws at Document history-step
+application; scrolling and joint same-document history application also remain
+explicit throwing owners. Queued finalization now inserts/replaces entries and
+preserves rapid same-document updates, but cannot apply their joint history step
+yet. The provisional new-Document path explicitly rejects that work rather than
+reinitializing Navigation. The coordinator wires the BiDi completion hook, but
+does not yet deliver history events or complete ordinary fragment loads. See the
+[fragment audit](browlet/browsing/navigation/ROADMAP.md#html-74233-fragment-navigation-coordination)
+and [same-document finalization audit](browlet/browsing/navigation/ROADMAP.md#html-74233-same-document-finalization).
+Non-fetch navigation now has an internal external/inline routing operation and
+the specified child-sandbox handoff gate. Handler selection, external confirmation
+and launch, and inline browser-page creation each throw at explicit owners.
+§7.4.5 population still needs to construct the params and call that routing
+operation, including redirect-origin capture. This does not enable end-to-end
+mailto/custom-protocol navigation or launch external applications. See the
+[non-fetch audit](browlet/browsing/navigation/ROADMAP.md#html-74234-non-fetch-schemes-and-external-software).
 Navigation target snapshots retain sandbox/referrer inputs independently of later
 container changes and response CSP. The full navigate algorithm must still capture
 and carry them before parallel loading. Source capture requires the unfinished

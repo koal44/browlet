@@ -39,7 +39,7 @@ import type { PointerEventStream } from '../../interaction/index';
 import type { UserAgent } from '../../user-agent';
 
 import { BrowsingContext } from './browsing-context';
-import { NavigationParams, type TargetSnapshotParams } from './params';
+import { NavigationParams, type NonFetchSchemeNavigationParams, type TargetSnapshotParams } from './params';
 import { SessionHistoryTraversalQueue, type SessionHistoryTraversalSteps } from './session-history-traversal-queue';
 
 /** Owns a navigation destination and its current and active history entries. */
@@ -55,7 +55,6 @@ export class Navigable {
   /** Whether closing this navigable has begun. */
   isClosing = false;
   /** Whether its navigation is delaying the container document's load event. */
-  // TODO(HTML §7.4.2.3.1): Connect startup to queued finalizeCrossDocumentNavigation(), which releases this delay.
   isDelayingLoadEvents = false;
   /** Navigation UUID, "traversal" while applying history, or null when no navigation is ongoing. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#concept-navigate-mature
@@ -285,7 +284,7 @@ export class Navigable {
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#getting-session-history-entries
   getSessionHistoryEntries(): SessionHistoryEntry[] {
     const traversable = this.traversable;
-    // TODO(HTML §7.4.1.4): Enforce traversal-queue ownership after §7.4.2.3 replaces provisional synchronous commits.
+    // TODO(HTML §7.4.1.4/§7.4.6): Enforce queue ownership after local commits and history application use their specified queues.
     if (this instanceof Traversable) return this.sessionHistoryEntries;
     const documentStates = new Set<DocumentState>();
     for (const entry of traversable.sessionHistoryEntries) documentStates.add(entry.documentState);
@@ -498,7 +497,7 @@ export class Navigable {
       ) {
         this.navigateToFragment(
           url, historyHandling, userInvolvement, options.sourceElement ?? null,
-          options.navigationAPIState ?? null, navigationId,
+          options.navigationAPIState ?? null, navigationId, options.apiMethodTracker ?? null,
         );
         return;
       }
@@ -582,7 +581,7 @@ export class Navigable {
           navigationId, navigationParams, cspNavigationType, allowPOST: true,
           completionSteps: () => {
             this.traversable.appendSessionHistoryTraversalSteps(() => {
-              // TODO(HTML §7.4.2.3.1/§7.4.6): The finalizer still needs nested history and complete history application.
+              // TODO(HTML §7.4.6): History application still needs unloading and updates for every affected navigable.
               this.finalizeCrossDocumentNavigation(historyHandling, userInvolvement, historyEntry);
             });
           },
@@ -603,6 +602,9 @@ export class Navigable {
     _userInvolvement: UserNavigationInvolvement, _options: PopulateHistoryEntryOptions = {},
   ): void {
     // TODO(HTML §7.4.5): Select srcdoc, Fetch, external-protocol, or error processing; preserve POST bytes across retries.
+    // Assemble NonFetchSchemeNavigationParams for a direct non-fetch URL or a Fetch redirect, retaining the
+    // target sandbox/source activation snapshots and the last fetch response's origin after redirects.
+    // Dispatch to attemptToCreateNonFetchSchemeDocument() on the target's navigation-and-traversal task.
     // Recheck the navigation ID, enforce response/frame policies, and leave the Document null for downloads/204/205.
     // Document creation and completion must return through the specified task and history-queue boundaries.
     throw new InternalError('Session-history entry Document population is not implemented');
@@ -651,8 +653,7 @@ export class Navigable {
     // A fresh state clears the resource and child histories; the javascript: URL is never stored.
     const historyEntry = newDocument.env.createSessionHistoryEntry(entryToReplace.url, documentState);
     this.traversable.appendSessionHistoryTraversalSteps(() => {
-      // TODO(HTML §7.4.2.3.1/§7.4.6): The existing finalizer only applies top-level history;
-      // nested history, unloading, cancellation, and complete activation remain its dependencies.
+      // TODO(HTML §7.4.6): Full history application, including unloading and other Documents' updates, remains unfinished.
       this.finalizeCrossDocumentNavigation(historyHandling, userInvolvement, historyEntry);
     });
   }
@@ -712,12 +713,84 @@ export class Navigable {
   /** Update same-document history, navigate-event state, and scrolling for a fragment destination. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigate-fragid
   navigateToFragment(
-    _url: URLRecord, _historyHandling: HistoryHandlingBehavior, _userInvolvement: UserNavigationInvolvement,
-    _sourceElement: ElementImpl | null, _navigationAPIState: SerializedRecord | null, _navigationId: string,
+    url: URLRecord, historyHandling: HistoryHandlingBehavior, userInvolvement: UserNavigationInvolvement,
+    sourceElement: ElementImpl | null, navigationAPIState: SerializedRecord | null, navigationId: string,
+    apiMethodTracker: NavigationAPIMethodTracker | null = null,
   ): void {
-    // TODO(HTML §7.4.2.3.3): Fire the navigate event, handle interception/cancellation, update the entry,
-    // and coordinate synchronous history application and fragment scrolling. This must not enter the document loader.
-    throw new InternalError('Fragment navigation is not implemented');
+    const navigation = this.activeWindow?.navigation;
+    if (navigation === undefined) throw new InternalError('Fragment navigation requires an active Window');
+    // Capture Navigation state before firing; the live entry's Document and scroll mode are selected afterward.
+    // SPEC_CLASH(fragment-destination-state): Follow HTML/Firefox's inherited state; Chromium/WebKit expose undefined
+    // in the event's destination even though their committed entry inherits the state.
+    const destinationNavigationAPIState = navigationAPIState ?? this.activeSessionHistoryEntry.navigationAPIState;
+    // SPEC_GAP(fragment-navigation-method-tracker): HTML drops navigate()'s tracker here; retain event.info and result promises.
+    const shouldContinue = navigation.firePushReplaceReloadNavigateEvent(historyHandling, url, true, {
+      userInvolvement, sourceElement, navigationAPIState: destinationNavigationAPIState, apiMethodTracker,
+    });
+    if (!shouldContinue) {
+      // SPEC_CLASH(fragment-interception-abort): All browsers preserve the intercepted event. HTML's aborting setter
+      // cancels the event it just created, contrary to its note about keeping browser-UI/window.stop cancellation available.
+      if (navigation.ongoingNavigateEvent !== null) this.ongoingNavigation = navigationId;
+      return;
+    }
+
+    // Publish the new active entry synchronously; joint-history insertion happens on the traversal queue.
+    const activeEntry = this.activeSessionHistoryEntry;
+    const document = this.activeDocument;
+    if (document === null) throw new InternalError('Fragment navigation requires an active Document');
+    const historyEntry = document.env.createSessionHistoryEntry(url, activeEntry.documentState);
+    historyEntry.navigationAPIState = destinationNavigationAPIState;
+    historyEntry.scrollRestorationMode = activeEntry.scrollRestorationMode;
+    const entryToReplace = historyHandling === 'replace' ? activeEntry : null;
+    if (entryToReplace !== null) historyEntry.navigationAPIKey = entryToReplace.navigationAPIKey;
+    const history = document.history;
+    let scriptHistoryIndex = history.index;
+    let scriptHistoryLength = history.lengthValue;
+    if (historyHandling === 'push') {
+      history.stateValue = null;
+      scriptHistoryIndex++;
+      scriptHistoryLength = scriptHistoryIndex + 1;
+    }
+    document.url = url;
+    this.activeSessionHistoryEntry = historyEntry;
+    // SPEC_CLASH(fragment-history-length-index): HTML's fragment call swaps these arguments; use the callee's
+    // length/index order, matching browsers' synchronous history length and Navigation entry index.
+    document.updateForHistoryStepApplication(historyEntry, true, scriptHistoryLength, scriptHistoryIndex, historyHandling);
+    this.activeDocument!.scrollToFragment();
+
+    const traversable = this.traversable;
+    traversable.appendSessionHistorySynchronousNavigationSteps(this, () => {
+      traversable.finalizeSameDocumentNavigation(this, historyEntry, entryToReplace, historyHandling, userInvolvement);
+      document.env.userAgent.webDriverBiDiFragmentNavigated(this, { id: navigationId, url, status: 'complete' });
+    });
+  }
+
+  /** Route a non-fetch URL without changing history when it is handled externally. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#attempt-to-create-a-non-fetch-scheme-document
+  attemptToCreateNonFetchSchemeDocument(params: NonFetchSchemeNavigationParams): DocumentImpl | null {
+    const document = this.activeDocument;
+    if (document === null) throw new InternalError('Non-fetch navigation requires an active Document');
+    const userAgent = document.env.userAgent;
+    if (userAgent.shouldHandleURLExternally(params.url)) {
+      userAgent.handoffToExternalSoftware(
+        params.url, this, params.targetSnapshotSandboxingFlags,
+        params.sourceSnapshotHasTransientActivation, params.initiatorOrigin,
+      );
+      return null;
+    }
+    return this.createDocumentForInlineContent(params.id, params.navigationTimingType, params.userInvolvement);
+  }
+
+  /** Create a browser-provided page without activating it or committing history. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#navigate-ua-inline
+  createDocumentForInlineContent(
+    _navigationId: string | null, _navigationTimingType: NavigationTimingType, _userInvolvement: UserNavigationInvolvement,
+  ): DocumentImpl {
+    // TODO(HTML §7.5.7): Opaque origin/COOP, context selection, Document creation, browser rendering,
+    // and parser completion (including iframe load steps). A chosen registered handler instead navigates to its handler URL.
+    // SPEC_GAP(inline-document-response): HTML reads an undefined response URL and receives no content/resource input.
+    // Its callers can also supply a null navigation ID, retained here until this owner is audited.
+    throw new InternalError('Inline user-agent Document creation is not implemented');
   }
 
   /** Reload this destination after its cancelable navigate event and through the traversal queue. */
@@ -1016,14 +1089,14 @@ export class Navigable {
     return historyHandling;
   }
 
-  /** Commit a new document by pushing or replacing this navigable's history entry. */
+  /** Insert a populated entry into this navigable's history, then apply the joint history step. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#finalize-a-cross-document-navigation
-  // PROVISIONAL: commits run synchronously until §7.4.2.3 connects them to the traversal queue and full history application.
   finalizeCrossDocumentNavigation(
     historyHandling: HistoryHandlingBehavior,
     userInvolvement: UserNavigationInvolvement,
     historyEntry: SessionHistoryEntry,
   ): void {
+    // TODO(HTML §7.4.2.3.1): Enforce traversal-queue ownership once the provisional local loader also queues its commits.
     this.isDelayingLoadEvents = false;
     const document = historyEntry.documentState.document;
     if (document === null) return;
@@ -1047,30 +1120,31 @@ export class Navigable {
       historyEntry.documentState.navigableTargetName = '';
     }
 
-    const traversable = requireTopLevelTraversable(this);
-    const targetEntries = traversable.sessionHistoryEntries;
+    const entryToReplace = historyHandling === 'replace' ? this.activeSessionHistoryEntry : null;
+    const traversable = this.traversable;
+    const targetEntries = this.getSessionHistoryEntries();
     let targetStep: number;
-    if (historyHandling === 'push') {
+    if (entryToReplace === null) {
       traversable.clearForwardSessionHistory();
       targetStep = traversable.currentSessionHistoryStep + 1;
       historyEntry.step = targetStep;
       targetEntries.push(historyEntry);
     } else {
-      const entryToReplace = this.activeSessionHistoryEntry;
       const index = targetEntries.indexOf(entryToReplace);
       if (index < 0) {
         throw new InternalError('Active history entry is not in session history');
       }
       targetEntries[index] = historyEntry;
       historyEntry.step = entryToReplace.step;
-      historyEntry.navigationAPIKey = entryToReplace.navigationAPIKey;
+      const origin = historyEntry.documentState.origin;
+      const previousOrigin = entryToReplace.documentState.origin;
+      if (origin !== null && previousOrigin !== null && areSameOrigin(origin, previousOrigin)) {
+        historyEntry.navigationAPIKey = entryToReplace.navigationAPIKey;
+      }
       targetStep = traversable.currentSessionHistoryStep;
     }
 
-    const previousEntryForActivation = this.activeSessionHistoryEntry;
-    traversable.applyPushOrReplaceHistoryStep(this, targetStep, historyEntry);
-    document.getRelevantGlobalObject()!.navigation.updateActivation(historyHandling, previousEntryForActivation);
-    void userInvolvement;
+    traversable.applyPushOrReplaceHistoryStep(targetStep, historyHandling, userInvolvement, this, historyEntry);
   }
 
   /** Complete the provisional local loader's reserved environment and response policies. */
@@ -1225,6 +1299,35 @@ export class Traversable extends Navigable implements FetchPromptTarget {
     this.sessionHistoryTraversalQueue.append(Object.assign(() => steps(), { targetNavigable }));
   }
 
+  /** Reconcile a synchronous same-document change with this traversable's joint history. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#finalize-a-same-document-navigation
+  finalizeSameDocumentNavigation(
+    targetNavigable: Navigable, targetEntry: SessionHistoryEntry, entryToReplace: SessionHistoryEntry | null,
+    historyHandling: HistoryHandlingBehavior, userInvolvement: UserNavigationInvolvement,
+  ): void {
+    // TODO(HTML §7.4.1.4/§7.4.6): Enforce traversal-queue ownership alongside the other history operations.
+    // SPEC_CLASH(same-document-finalization-active-entry): HTML's exact-entry check drops earlier queued pushes/replacements.
+    // Preserve updates within the active DocumentState; discard work from a replaced or destroyed Document.
+    // https://github.com/whatwg/html/issues/10232 and https://github.com/whatwg/html/issues/10274
+    if (targetEntry.document === null || targetNavigable.activeSessionHistoryEntry.documentState !== targetEntry.documentState) return;
+
+    const targetEntries = targetNavigable.getSessionHistoryEntries();
+    let targetStep: number;
+    if (entryToReplace === null) {
+      this.clearForwardSessionHistory();
+      targetStep = this.currentSessionHistoryStep + 1;
+      targetEntry.step = targetStep;
+      targetEntries.push(targetEntry);
+    } else {
+      const index = targetEntries.indexOf(entryToReplace);
+      if (index < 0) throw new InternalError('The same-document replacement entry is not present in session history');
+      targetEntries[index] = targetEntry;
+      targetEntry.step = entryToReplace.step;
+      targetStep = this.currentSessionHistoryStep;
+    }
+    this.applyPushOrReplaceHistoryStep(targetStep, historyHandling, userInvolvement, targetNavigable, targetEntry);
+  }
+
   /** Reapply the current joint-history step after adding or removing a child. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#update-for-navigable-creation/destruction
   updateForNavigableCreationOrDestruction(): HistoryStepResult {
@@ -1255,7 +1358,7 @@ export class Traversable extends Navigable implements FetchPromptTarget {
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#getting-all-used-history-steps
   // The sorted, duplicate-free array supports the callers' indexed history lookup.
   getAllUsedHistorySteps(): number[] {
-    // TODO(HTML §7.4.1.4): Enforce traversal-queue ownership after §7.4.2.3 replaces provisional synchronous commits.
+    // TODO(HTML §7.4.1.4/§7.4.6): Enforce queue ownership after local commits and history application use their specified queues.
     const entryLists = new Set([this.sessionHistoryEntries]);
     const usedSteps = new Set<number>();
     for (const entries of entryLists) {
@@ -1292,18 +1395,26 @@ export class Traversable extends Navigable implements FetchPromptTarget {
     throw new InternalError('Resuming an intercepted history traversal is not implemented');
   }
 
-  /** Activate the committed entry and retarget its browsing context's WindowProxy. */
+  /** Activate the selected entry and retarget its browsing context's WindowProxy. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#apply-the-push/replace-history-step
-  // PROVISIONAL: only the supplied top-level entry participates in this history step.
+  // PROVISIONAL: Only the supplied entry participates; §7.4.6 must select all affected navigables from the target step.
   applyPushOrReplaceHistoryStep(
-    navigable: Navigable,
-    targetStep: number,
-    historyEntry: SessionHistoryEntry,
+    targetStep: number, historyHandling: HistoryHandlingBehavior, userInvolvement: UserNavigationInvolvement,
+    navigable: Navigable, historyEntry: SessionHistoryEntry,
   ): void {
     const document = historyEntry.documentState.document;
     if (document === null) return;
+    if (navigable.activeDocument === document) {
+      // TODO(HTML §7.4.6): Reconcile same-document history on the Document's event loop without
+      // repeating synchronous events, rewinding a newer active entry, or reinitializing Navigation.
+      // Nested application must coordinate joint-step allocation with queued updates (HTML issue #12576).
+      throw new InternalError('Same-document history-step application is not implemented');
+    }
 
-    // The full history-step algorithm must also update nonchanging child Documents.
+    // TODO(HTML §7.4.6): Unload/reactivate Documents and update nonchanging Documents on their own event loops.
+    // Forward user involvement to those updates; source/initiator and cancellation checks are null/false on this path.
+    void userInvolvement;
+    const previousEntryForActivation = navigable.activeSessionHistoryEntry;
     [document.history.lengthValue, document.history.index] = this.getHistoryLengthAndIndex(targetStep);
     document.latestEntry = historyEntry;
     navigable.currentSessionHistoryEntry = historyEntry;
@@ -1317,12 +1428,13 @@ export class Traversable extends Navigable implements FetchPromptTarget {
     document.getRelevantGlobalObject()!.navigation.initializeEntriesForNewDocument(
       navigable.getSessionHistoryEntriesForNavigationAPI(targetStep), historyEntry,
     );
+    document.getRelevantGlobalObject()!.navigation.updateActivation(historyHandling, previousEntryForActivation);
   }
 
   /** Discard forward entries in this traversable and the child histories retained after pruning. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#clear-the-forward-session-history
   clearForwardSessionHistory(): void {
-    // TODO(HTML §7.4.1.4): Enforce traversal-queue ownership after §7.4.2.3 replaces provisional synchronous commits.
+    // TODO(HTML §7.4.1.4/§7.4.6): Enforce queue ownership after local commits and history application use their specified queues.
     const step = this.currentSessionHistoryStep;
     const entryLists = new Set([this.sessionHistoryEntries]);
     for (const entries of entryLists) {
@@ -1465,10 +1577,3 @@ export class TopLevelTraversable extends Traversable {
 
 /** Outcome of applying a history step, including cancellation before or during navigate-event firing. */
 export type HistoryStepResult = 'initiator-disallowed' | 'canceled-by-beforeunload' | 'canceled-by-navigate' | 'applied';
-
-function requireTopLevelTraversable(navigable: Navigable): TopLevelTraversable {
-  if (!(navigable instanceof TopLevelTraversable)) {
-    throw new InternalError('Nested navigable history is not implemented');
-  }
-  return navigable;
-}

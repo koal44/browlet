@@ -1119,9 +1119,29 @@ pending navigation-state construction; NavigationParams owns its supplied-respon
 factory. BrowsingContext obtains the context for Document creation, associating a
 replacement with its existing Navigable before creation-time consumers need that
 relationship. These operations return their results to the coordinator without
-advancing history or activating the incoming Document. Fragment processing,
-unload cancellation, recursive abortion, population, and full finalization remain
+advancing history or activating the incoming Document. Fragment history application,
+unload cancellation, recursive abortion, population, and full history application remain
 explicit dependencies in the navigation roadmap.
+Cross-document finalization inserts into the destination's own retained history,
+including child lists, and preserves replacement keys only across the same origin.
+The provisional history application still receives that destination and entry
+explicitly; selecting all affected Documents from the joint step, updating them
+on their own event loops, and queuing the local loader's commits remain unfinished.
+Fragment navigation reuses Navigation's event dispatch and tracker handling, then
+prepares the active same-document entry synchronously. Document owns script-visible
+history application and scrolling; Traversable owns the later tagged finalization.
+The finalizer inserts or replaces entries in the destination's retained history,
+preserving queued changes within the active DocumentState. Document history updates,
+scrolling, and joint same-document history application remain explicit throwing
+boundaries. The provisional cross-document application rejects same-document
+changes before it can reinitialize Navigation's entries.
+
+Non-fetch URL routing stays on Navigable, using captured target sandbox and source
+activation inputs. UserAgent owns the external-handoff sandbox gate. Its handler
+selection and confirmation/handoff methods are explicit unfinished host boundaries;
+they do not invoke operating-system handlers. Inline browser-page creation remains
+a separate Document-creation dependency. Population must connect these operations
+on the destination's navigation-and-traversal task after checking its navigation ID.
 
 [`import-hierarchy.mjs`](../scripts/eslint/import-hierarchy.mjs) records the reviewed
 folder order for import layout and dependency review. Every entry ends in `/`

@@ -30,7 +30,7 @@ import {
   SharedWorkerAgent, WindowAgent, WorkletAgent,
 } from './scripting/index';
 import { type ReportingEndpoint, ReportImpl } from './reporting/index';
-import { PolicyContainer, HSTSStore, EmbedderPolicy } from './browsing/policy/index';
+import { PolicyContainer, HSTSStore, EmbedderPolicy, type SandboxingFlagSet } from './browsing/policy/index';
 import { CSPList } from './browsing/policy/csp/index';
 import type { IntersectionObserverMargin } from './dom/intersection-observer/index';
 import type { DocumentImpl, ElementImpl } from './dom/nodes/index';
@@ -334,6 +334,39 @@ export class UserAgent implements
     // PROVISIONAL: no browser UI is attached; retain this notification for a future UI host.
   }
 
+  /** Decide whether handling this URL leaves its destination navigable unchanged. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#attempt-to-create-a-non-fetch-scheme-document
+  shouldHandleURLExternally(_url: URLRecord): boolean {
+    // TODO(HTML §7.4.2.3.4/§8.10.1.4): Compose handler selection with the host's protocol support and
+    // registered web handlers. Unsupported schemes may need an inline error or handler-selection page.
+    throw new InternalError('External URL handler selection is not implemented');
+  }
+
+  /** Apply the destination sandbox before requesting an external handoff of a URL or response. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#hand-off-to-external-software
+  handoffToExternalSoftware(
+    resource: URLRecord | FetchResponse, navigable: Navigable, sandboxFlags: SandboxingFlagSet,
+    hasTransientActivation: boolean, initiatorOrigin: Origin,
+  ): void {
+    // SPEC_CLASH(external-protocol-sandbox-teams): Follow HTML's general gate; WebKit bypasses it for
+    // msteams: from teams.live.com/teams.microsoft.com when site-specific quirks are enabled.
+    if (
+      !navigable.isTopLevelTraversable && sandboxFlags.has('sandboxed-custom-protocols-navigation') &&
+      (sandboxFlags.has('sandboxed-top-level-navigation-with-user-activation') || !hasTransientActivation)
+    ) return;
+    this.requestExternalSoftwareHandoff(resource, navigable, hasTransientActivation, initiatorOrigin);
+  }
+
+  /** Ask the host to confirm and perform an allowed external handoff. */
+  requestExternalSoftwareHandoff(
+    _resource: URLRecord | FetchResponse, _navigable: Navigable, _hasTransientActivation: boolean, _initiatorOrigin: Origin,
+  ): void {
+    // TODO(HTML §7.4.2.3.4): Compose a host port for handler selection, confirmation, and safe resource delivery.
+    // Without transient activation, prior user confirmation is required; activation alone need not bypass prompting.
+    // Retain the initiating origin for that decision, including the last fetch origin after redirects.
+    throw new InternalError('External software confirmation and handoff are not implemented');
+  }
+
   /** Generate a fresh canonical UUID for browser-owned registrations. */
   generateUUID(): string {
     return randomUUID();
@@ -630,6 +663,15 @@ export class UserAgent implements
     _navigable: Navigable, _status: { id: string; status: 'canceled'; url: URLRecord; },
   ): void {
     // TODO(WebDriver BiDi): Resume navigation-failed waiters and emit navigationFailed to subscribed sessions.
+    // PROVISIONAL: live sessions and navigation event delivery are not implemented.
+  }
+
+  /** Notify automation after a fragment navigation's joint-history work completes. */
+  // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-fragment-navigated
+  webDriverBiDiFragmentNavigated(
+    _navigable: Navigable, _status: { id: string; status: 'complete'; url: URLRecord; },
+  ): void {
+    // TODO(WebDriver BiDi): Resume fragment-navigated waiters and emit fragmentNavigated to subscribed sessions.
     // PROVISIONAL: live sessions and navigation event delivery are not implemented.
   }
 

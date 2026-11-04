@@ -646,7 +646,7 @@ Navigable construction, so the constructor also records their association.
 | --- | --- |
 | Unique internal ID; nullable parent | Each Navigable gets a distinct Symbol and retains its parent. Nested histories use that identity. |
 | Current and active entries | Separate storage is retained. Either entry can advance independently; active Document/context/WindowProxy/Window and target name derive from the active entry. |
-| Mutation ownership | Current-entry changes belong to the traversable's history traversal queue; active-entry changes belong to the active Document's event loop. Existing provisional synchronous commits do not establish that queue/dispatch machinery. The field comments and existing throwing queue operation keep this requirement explicit. |
+| Mutation ownership | Current-entry changes belong to the traversable's history traversal queue; active-entry changes belong to the active Document's event loop. The queue now runs ordinary/tagged steps, but provisional local commits and history application still bypass the required queue/dispatch ownership. Field and operation comments retain those dependencies. |
 | Closing/load-delay flags | Both start false. Closing is for top-level traversables; load delay is for children. Definite closing and child loading remain later lifecycle producers. |
 | Navigation/history admission | The implementation-defined boolean query continues to permit all requests. It is not a substitute for sandbox/activation checks in their specified algorithms. |
 | Active views and target name | Existing getters select the active entry and its browsing context/WindowProxy. `Document.makeActive()` retargets that proxy; the provisional commit already invokes it. |
@@ -1955,8 +1955,9 @@ discarded child steps from `history.length`.
 The specification requires queue ownership for history lookup, clearing, and
 used-step collection. This remains an explicit dependency, not an enforced
 assertion: initial creation and the provisional local commit still call them
-synchronously. §7.4.2.3 finalization and §7.4.6 application must establish their
-proper call paths before enforcement. Delta traversal and the used-step selector
+synchronously. Navigate's population completion already queues finalization;
+the local loader and §7.4.6 application must establish their proper call paths
+before enforcement. Delta traversal and the used-step selector
 will consume the new helper when their algorithms are implemented; full history
 application, Document population, and queue-jumping wake-ups remain unfinished.
 Inserted histories must have committed numeric steps; collecting or clearing
@@ -2356,9 +2357,10 @@ reads the current active entry, builds fresh DocumentState/SessionHistoryEntry
 objects, and appends the existing finalizer to the traversal queue. It retains
 the old history URL rather than the evaluated javascript: URL. History policy is
 cloned; old referrer metadata, about-base, and target name are retained. The old
-resource and child histories are discarded. The finalizer remains provisional:
-it only applies top-level history and does not complete nested history, unloading,
-cancellation, activation, or traversal application.
+resource and child histories are discarded. The finalizer now inserts into the
+destination's retained history, including child lists. Its history application
+still needs unloading, other affected Documents' updates, cached-Document
+reactivation, and lifecycle/event delivery.
 
 The real loader call still throws before Document creation. Its earlier
 `ScriptHandler`/`ResourceReader` parameters are now optional so the specified call
@@ -2475,9 +2477,9 @@ Dependencies remain executable boundaries:
   response/frame restrictions, and downloads/204/205 without replacing the old
   Document. The completion callback appends finalization only after that owner
   finishes, rather than finalizing an unpopulated entry immediately.
-- **§7.4.2.3.1/§7.4.6 finalization:** the existing finalizer is still provisional.
-  Nested history, full history application, unloading, and activation must be
-  audited before this becomes a complete navigation path.
+- **§7.4.2.3.1/§7.4.6 finalization:** insertion into nested history and replacement
+  identity are audited below. Full history application, unloading, reactivation,
+  and other affected Documents' updates remain unfinished.
 
 `parallel-navigation.test.ts` controls only the missing owners and scheduler
 turns. It retains direct checks for the throwing dependencies, exercises the real
@@ -2493,7 +2495,7 @@ javascript: suites pass on Node 24.19.0, 26.8.1, and the existing custom Node
 this selection. Typechecking, touched-file ESLint, import hierarchy, and
 whitespace checks pass. No engine changes or addon rebuilds were needed.
 
-Next bounded slice: §7.4.2.3.1, the usual cross-document finalization case.
+The §7.4.2.3.1 finalization audit follows below.
 The explicit §7.5.2 loader and §7.4.6 history-application dependencies above
 remain necessary before javascript: replacement can complete end to end.
 
@@ -2544,6 +2546,293 @@ without the addon. All 419 pass with the addon; each addon-disabled run has 416
 passes and the same three existing expected failures. Typechecking, focused
 ESLint, and the import-hierarchy audit pass. No new expected failures or native
 changes were introduced.
+
+## HTML §7.4.2.3.1: Cross-document finalization
+
+Audited the [ending-navigation overview and usual cross-document case](https://html.spec.whatwg.org/multipage/browsing-the-web.html#finalize-a-cross-document-navigation)
+against WHATWG HTML `6d7788b` (2026-11-03), also checked against the published
+standard. Finalization runs after population's completion, on the traversable's
+session-history traversal queue. It inserts the entry before invoking history
+application; it does not fetch or populate the Document itself.
+
+| Requirement | Implementation and boundary |
+| --- | --- |
+| Queue ownership | `navigate()` and javascript: completion already append this work to the traversal queue. The provisional local loader still calls synchronously. The assertion remains an explicit source TODO until that caller and §7.4.6's Document-loop updates are connected. |
+| Release load delay and handle no Document | Release the flag first. Null-document results, including canceled loads and 204/205 paths, return without accessing history or invoking application. Producing those results remains §7.4.5 work. |
+| Reset target name | Preserve the existing strict-origin rule: clear on a cross-origin top-level load unless the incoming context is auxiliary with a live opener. Children retain their names. |
+| Select history | Capture the active replacement entry, obtain this Navigable's own retained list, and use its traversable's joint step. Child and grandchild lists are no longer rejected or replaced by the top-level list. |
+| Push | Clear forward history across retained lists; assign current joint step + 1 and append to the original target list. |
+| Replace | Replace the active entry, retain its step, and apply the current joint step. Copy its Navigation API key only when the retained origins are non-null and same origin. Preserve the new entry's ID. Replacement does not clear forward history. |
+| Apply the history step | Forward step, history handling, and user involvement to `Traversable.applyPushOrReplaceHistoryStep()`. The finalizer leaves activation to that operation. |
+
+The initial regressions observed a foreign-origin replacement incorrectly
+receiving its predecessor's key, and child push/replace throwing
+`Nested navigable history is not implemented`. The corrected cases run through
+the real traversal queue. Tests also cover grandchild lists, active versus current
+entry selection, joint steps advanced by another frame, forward pruning, retained
+opaque origins, domain relaxation, absent origins, name-reset conditions, and
+projected Navigation keys. Separate integration cases retain the top-level
+Document while the existing application machinery activates the incoming child.
+
+The key correction follows all three inspected browser implementations; no new
+browser disagreement was found for that rule. Blink's
+[`DocumentLoader::SetHistoryItemStateForCommit`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/loader/document_loader.cc)
+checks origin access before transferring the key. Gecko's
+[`MaybeReuseNavigationKeyFromActiveEntry`](https://searchfox.org/mozilla-central/source/docshell/base/CanonicalBrowsingContext.cpp)
+checks the old/new origin, including inherited about: URLs. WebKit's
+[`HistoryController::updateCurrentItem`](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/loader/HistoryController.cpp)
+retains the key only when the old/new URL origins match. This is source evidence,
+not a new live browser probe.
+
+The application method's provisional callable shape was reviewed and accepted:
+after the specified step/history-handling/user-involvement inputs, it
+still receives the chosen Navigable and entry, and returns void. §7.4.6 must
+derive all affected entries from the step and return its specified result.
+The current path activates only the supplied entry and initializes its Navigation
+entries/activation. It does not yet unload old Documents, handle cached-Document
+reactivation, update nonchanging Documents, dispatch lifecycle/history events, or
+honor user involvement in those Document-loop operations. The source TODO and
+existing throwing traversal/population owners retain these dependencies; this
+slice does not claim complete traversal or end-to-end navigation.
+
+Validation: all 22 new finalization cases pass in the six-runtime matrix. The
+broader selection covers 496 cases in 23 navigation, history, policy, loader,
+automation, messaging, and clock suites:
+
+| Runtime | Passed | Existing expected failures |
+| --- | ---: | ---: |
+| Node 24.19.0 stock | 481 | 15 |
+| Node 24.19.0 addon | 486 | 10 |
+| Node 26.8.1 stock | 482 | 14 |
+| Node 26.8.1 addon | 487 | 9 |
+| Custom Node 27.0.0-pre stock | 482 | 14 |
+| Custom Node 27.0.0-pre addon | 494 | 2 |
+
+Typechecking, touched-file ESLint, import hierarchy, and whitespace checks pass.
+No new expected failures, native changes, or addon rebuilds were needed.
+
+The intervening javascript: algorithms were covered above; their explicit loader
+and history-application dependencies remain open.
+
+## HTML §7.4.2.3.3: Fragment navigation coordination
+
+Audited [navigate to a fragment](https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigate-fragid)
+against WHATWG HTML `6d7788b` (2026-11-03) and the published standard. This slice
+implements the coordinator through its explicit Document, scrolling, and
+same-document-finalization boundaries. It does not complete hash navigation end to end.
+
+| Requirement | Implementation and boundary |
+| --- | --- |
+| Capture destination state | Capture the previous active entry's Navigation state before event callbacks, unless a supplied serialized value overrides it. Serialized undefined/null are explicit values; null as the operation's input means inheritance. |
+| Fire the navigate event | Reuse `firePushReplaceReloadNavigateEvent()` with the history type, same-document flag, involvement, source element, destination URL/state, and method tracker. Its existing abortion, disabled-entry checks, cancellation, and interception remain authoritative. |
+| Stop on cancellation/interception | Return without preparing an entry. A surviving intercepted event records the navigation ID directly, preserving its signal and tracker for later abortion. `window.stop()` and browser-UI cancellation remain unfinished callers. |
+| Construct the entry | After callbacks, select the live active entry's DocumentState and scroll-restoration mode. Keep Navigation state captured before callbacks, create fresh classic History state (serialized null), and retain the predecessor's key only for replacement. The new entry keeps its fresh ID and pending step. |
+| Synchronous script-visible updates | Push clears History state and computes index + 1 / length = index + 1; replace keeps the current index and length. Publish the Document URL and active entry, then call Document history application with length before index. Neither currentSessionHistoryEntry nor the joint step changes here. |
+| Apply Document history state | New `Document.updateForHistoryStepApplication()` has the complete §7.4.6.2 inputs and throws explicitly. Latest-entry maintenance, classic-state restoration, Navigation notifications, popstate/hashchange, persisted state, reactivation, and initial-load/BiDi behavior belong there. |
+| Scroll | Call `scrollToFragment()` on the live active Document after history callbacks. Its existing §7.4.6.4 dependency still throws; target selection, ancestor revealing, viewport geometry, focus, and retrying a not-yet-parsed fragment remain unfinished. |
+| Queue reconciliation | Append tagged synchronous-navigation steps to the real traversal queue. `Traversable.finalizeSameDocumentNavigation()` now inserts/replaces entries and discards work from a replaced/destroyed DocumentState; see the following audit. Joint same-document history application still throws explicitly instead of resetting Navigation through the provisional new-Document path. |
+| Automation | Call the new `UserAgent.webDriverBiDiFragmentNavigated()` only after finalization returns. The status carries the same navigation ID and URL with `complete`; subscribed sessions, waiters, and delivery remain a source-marked no-op dependency. |
+
+### Fragment specification corrections and browser evidence
+
+The preserved browser-only probe is
+`node-compat/experimental/fragment-navigation.mjs`, run against Chromium
+156.0.8078.4, Firefox 157.0, and WebKit 27.2 on 2026-11-03. It uses actual
+`navigation.navigate()`, Location hash changes, interception, result promises,
+and History/Navigation state; no Browlet mock stands in for browser behavior.
+
+| Rule | Chromium | Firefox | WebKit | Browlet choice |
+| --- | --- | --- | --- | --- |
+| Intercepted fragment while its handler waits | Signal remains live; committed fulfills, finished stays pending | Same | Same | Preserve the new event and record its navigation ID directly. |
+| Next canceled navigation | Aborts the earlier interception; rejects both new results with AbortError | Same | Same | Reuse existing navigate-event abortion and tracker handling. |
+| Supplied `info` / Navigation state | Same info object; supplied state in destination/current entry | Same | Same | Forward the existing tracker and serialized state. |
+| Ordinary hash destination state | undefined | Previous Navigation state | undefined | Follow HTML/Firefox; committed entries inherit the state in all three. |
+| Synchronous push | History length and Navigation index each increase by one; classic state becomes null | Same | Same | Pass length/index in the called algorithm's declared order. |
+| Fragment replacement | Retains Navigation key and History length | Same | Same | Follow HTML. |
+
+- `SPEC_CLASH(fragment-interception-abort)`: HTML step 5 invokes
+  [set the ongoing navigation](https://html.spec.whatwg.org/multipage/browsing-the-web.html#set-the-ongoing-navigation),
+  which aborts the newly intercepted event. That conflicts with the step's own
+  cancellation note and every tested browser. Eric approved retaining the event
+  and directly assigning the ID. Blink's
+  [`DocumentLoader::CommitSameDocumentNavigation`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/loader/document_loader.cc)
+  returns on interception, and Gecko's
+  [`nsDocShell::HandleSameDocumentNavigation`](https://searchfox.org/mozilla-central/source/docshell/base/nsDocShell.cpp)
+  returns when event firing says not to continue, without aborting the new event.
+  [HTML #11579](https://github.com/whatwg/html/issues/11579) explains the earlier
+  consolidation of abort paths and Blink's different ownership; it does not
+  resolve this fragment-step contradiction.
+- `SPEC_GAP(fragment-navigation-method-tracker)`: `navigate()` accepts the
+  explicit tracker but neither forwards it to the fragment operation nor from
+  there to event firing. The missing input would lose event.info and result
+  settlement. The implementation adds the optional tracker last and forwards
+  it unchanged; Gecko explicitly retrieves the tracker from its load state and
+  supplies it to fragment event firing. This added input was reviewed and accepted.
+  Omission or undefined defaults to null; there is no third tracker state.
+- `SPEC_CLASH(fragment-destination-state)`: Eric approved HTML/Firefox's inherited
+  destination state. Gecko explicitly selects the active entry's Navigation
+  state before event firing. Blink's fragment dispatch does not supply that
+  inherited state; WebKit's fragment call likewise omits its state argument.
+  The probe separately verifies that each event actually fired, that its
+  destination state was undefined where reported, and that the committed entry
+  still inherited the state.
+- `SPEC_CLASH(fragment-history-length-index)`: HTML's fragment call supplies
+  index, then length, while
+  [update document for history step application](https://html.spec.whatwg.org/multipage/browsing-the-web.html#update-document-for-history-step-application)
+  declares length, then index. Follow the called operation's signature and the
+  browser-observed counters; copying the call literally would swap them.
+
+Tests cover projected Location cancellation, Navigation tracker delivery and
+settlement, a retained pending interception and its later abortion, state capture
+across callbacks, explicit undefined/null state, live entry selection, keys/IDs,
+scroll mode, disabled Navigation events, length/index ordering, real tagged queue
+delivery, and the explicit unfinished-owner stops. Document update, scrolling,
+and finalization are substituted only in coordinator tests; one result test
+connects the actual Navigation entry update at the unfinished Document boundary.
+These fixtures do not claim that complete history application or scrolling works.
+
+Validation: all 340 cases in 16 focused navigation, History, Location, and queue
+suites pass on Node 24.19.0, Node 26.8.1, and custom Node 27.0.0-pre, each with
+and without the addon. This selection has no expected failures. Typechecking,
+touched-file ESLint, the import-hierarchy audit, and whitespace checks pass.
+Existing addon artifacts were used; no native changes or rebuilds were needed.
+
+The adjacent finalization algorithm is covered below. §7.4.4 URL/history updates
+and §7.4.6 Document updates and scrolling remain separate audits.
+
+## HTML §7.4.2.3.3: Same-document finalization
+
+Audited [finalize a same-document navigation](https://html.spec.whatwg.org/multipage/browsing-the-web.html#finalize-a-same-document-navigation)
+against WHATWG HTML `6d7788b` (2026-11-03). `Traversable` owns the operation;
+its inputs retain the specification's order, with the traversable as `this`.
+
+| Requirement | Implementation and boundary |
+| --- | --- |
+| Traversal queue | Fragment navigation already appends tagged steps. The finalizer runs on that queue; its ownership assertion remains a TODO alongside the other low-level history operations. §7.4.4 must connect the URL/history-update caller. |
+| Check stale work | Preserve queued entries sharing the active DocumentState, even when a later same-document entry is already active. Return before history lookup for a different active DocumentState or a cleared Document. This is the approved correction described below. |
+| Push | Obtain the destination's own retained history list, clear forward history across the traversable, assign the live joint step + 1, and append. Child/grandchild histories retain their own lists. |
+| Replace | Replace the explicitly captured predecessor, preserve its step, and apply the live joint step. Do not clear forward history or select the newer active/current entry as the predecessor. A missing predecessor is an internal contract failure. |
+| Apply even on replacement | Forward step, history handling, and user involvement to the existing application owner. Finalization does not change the active/current entry, Document URL, latest entry, or ongoing navigation ID, and does not reconstruct entry state or keys. |
+| Same-document application | `applyPushOrReplaceHistoryStep()` explicitly throws before new-Document activation when the destination Document is already active. §7.4.6 must reconcile all affected Documents on their event loops without repeating synchronous notifications or rewinding a newer active entry. |
+
+### Queued-entry conflict and evidence
+
+`SPEC_CLASH(same-document-finalization-active-entry)`: HTML returns whenever the
+queued entry is no longer the active entry. Two synchronous pushes therefore
+drop the first entry; push followed by replace can drop the predecessor before
+the replacement tries to find it. These are the open problems in
+[HTML #10232](https://github.com/whatwg/html/issues/10232) and
+[#10274](https://github.com/whatwg/html/issues/10274). Eric approved preserving
+queued updates within the active DocumentState, while discarding work whose
+Document has been replaced or destroyed.
+
+The browser-only probe `node-compat/experimental/same-document-finalization.mjs`
+ran on Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2 on 2026-11-03.
+All three preserve two immediate fragment pushes as two positions, and preserve
+fragment push/replace and History push/replace as one new position containing
+the replacement. Navigation entries and History length agree immediately and
+after a task; back traversal reaches the first fragment after push/push and the
+original URL after push/replace.
+
+This validates the observable rapid-update requirement, not the browsers'
+internal queue design or every unloading race. The stale-DocumentState guard
+also has implementation precedent in
+[Ladybird #11565](https://github.com/LadybirdBrowser/ladybird/pull/11565/changes):
+it preserves queued same-document updates while rejecting work from a different
+active DocumentState. Browlet does not adopt Ladybird's broader history service.
+
+### Remaining dependencies and regression coverage
+
+The initial application regression failed because the provisional helper called
+`initializeEntriesForNewDocument()` for a same-document entry. The new explicit
+stop prevents that reset, activation/visibility changes, and partial current-step
+updates. It does not implement same-document history application. Document's
+§7.4.6.2 update, fragment scrolling, automatic history events, and §7.4.4's
+URL/history-update coordinator remain separate throwing boundaries.
+
+Full §7.4.6 must also account for nested history application while population or
+Document tasks are pending. [HTML #12576](https://github.com/whatwg/html/issues/12576)
+documents duplicate steps, premature forward pruning, and an older operation
+rewinding the joint step when synchronous work jumps the queue. The source TODO
+keeps that coordination explicit; this slice does not add speculative pending-step
+registries. [HTML #12861](https://github.com/whatwg/html/issues/12861) separately
+identifies history application overwriting a newer navigation's ID. This finalizer
+leaves that ID untouched; the future application algorithm must preserve it too.
+
+Tests cover root/child/grandchild insertion, live queue-time steps, replacement
+with a later active entry, forward-history retention/pruning, all four queued
+push/replace pairs, stale/destroyed state, missing predecessors, and the explicit
+application stop. Fragment coordinator tests now also reach the real finalizer
+and verify BiDi ordering. Those tests substitute the unfinished application
+owner; they do not establish end-to-end hash navigation or nested §7.4.6 behavior.
+
+Validation: the 169-case selection in nine finalization, fragment, lifecycle,
+History, Navigation, and queue suites passes on all six runtime configurations.
+Node 24.19.0, Node 26.8.1, and custom Node 27.0.0-pre each pass all 169 cases
+with the addon; each stock run passes 166 with three existing expected failures.
+The 15 new cases pass everywhere. Typechecking, touched-file ESLint, import
+hierarchy, and whitespace checks pass. Existing matching addon artifacts were
+used; there were no native changes, rebuilds, or newly classified failures.
+
+## HTML §7.4.2.3.4: Non-fetch schemes and external software
+
+Audited the [non-fetch navigation params, document attempt, and external handoff](https://html.spec.whatwg.org/multipage/browsing-the-web.html#non-fetch-schemes-and-external-software)
+against WHATWG HTML `6d7788b` and the published standard (2026-11-03).
+
+| Requirement | Implementation and boundary |
+| --- | --- |
+| Non-fetch params | Retain nullable navigation ID, URL, target sandbox snapshot, source activation snapshot, initiator origin, navigation timing type, and user involvement. As with existing NavigationParams, the receiving Navigable supplies the destination rather than duplicating it in the record; this arrangement was reviewed and accepted. |
+| Direct and redirected producers | §7.4.5 population must assemble these inputs and call the new operation on the target's navigation-and-traversal task, after its stale-ID check. A redirect must retain the last fetch-scheme response's origin, not the final opaque/custom-scheme URL's origin or the destination Document's origin. The population TODO names these dependencies; no producer is claimed complete here. |
+| Select external or inline handling | `Navigable.attemptToCreateNonFetchSchemeDocument()` asks `UserAgent.shouldHandleURLExternally()`. That owner throws until host protocol support and §8.10.1.4 registered-handler selection are composed. Do not guess an external handler merely from an unfamiliar scheme. |
+| External route | Call `UserAgent.handoffToExternalSoftware()` with the captured restrictions, activation, and origin; return null. A sandbox refusal does not fall through to inline creation. No Document, URL, or history mutation occurs here. |
+| Handoff sandbox | Only non-top-level destinations are gated. Block when the custom-protocol flag is present and either the top-navigation-with-activation flag is present or captured source activation is false. Existing sandbox parsing supplies the allow-popups, allow-top-navigation, and allow-top-navigation-to-custom-protocols exceptions. The independent allow-downloads permission does not bypass this gate. |
+| Resource and confirmation | Handoff accepts either the original URL or FetchResponse. Allowed work reaches `requestExternalSoftwareHandoff()`, an explicit throwing host boundary. It retains origin and activation for abuse checks and confirmation; without transient activation, prior user confirmation is required. No process launch or host configuration API is added. |
+| Inline route | Forward navigation ID, timing type, and involvement to `Navigable.createDocumentForInlineContent()` and return its Document. That §7.5.7 owner throws pending opaque-origin/COOP setup, browsing-context selection, content/rendering, and parser-completion/iframe-load work. Choosing a registered web handler must instead navigate its handler URL. |
+
+### Browser evidence and chosen behavior
+
+Source inspection found the same core sandbox rule in Chromium's
+[`ChromeContentBrowserClient` external protocol handling](https://chromium.googlesource.com/chromium/src/+/1136757f47c7e2b6cc593f871a5d79fc0e9834b4/chrome/browser/chrome_content_browser_client.cc),
+Gecko's [`ExternalProtocolIsBlockedBySandbox`](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622782fe62529bb3a4809780da01d6c/uriloader/exthandler/nsExternalHelperAppService.cpp),
+and WebKit's [`frameSandboxAllowsOpeningExternalCustomProtocols`](https://github.com/WebKit/WebKit/blob/713192fabebfdd2955aa596c262c33bfbf3d50be/Source/WebKit/UIProcess/WebPageProxy.cpp).
+Gecko and WebKit also check popup/top-navigation flags directly; those exceptions
+already clear Browlet's custom-protocol restriction during sandbox parsing.
+This is source evidence, not a live external-application launch test. Product
+preferences, enterprise policy, and platform handler availability remain host work.
+
+`SPEC_CLASH(external-protocol-sandbox-teams)`: WebKit bypasses a failed sandbox
+check for `msteams:` when the source host is `teams.live.com` or
+`teams.microsoft.com` and site-specific quirks are enabled, through
+[`Quirks::shouldAllowNavigationToCustomProtocolWithoutUserGesture`](https://github.com/WebKit/WebKit/blob/713192fabebfdd2955aa596c262c33bfbf3d50be/Source/WebCore/page/Quirks.cpp).
+Eric approved HTML's general rule without that exception. Both source and tests
+retain the choice; there is no new site-quirk registry.
+
+### Inline dependency and signature review
+
+`SPEC_GAP(inline-document-response)`: §7.5.7 reads `response.URL` before defining
+any response and receives neither a resource nor content input. Its subsequently
+constructed empty response also has no specified URL. The missing resource/URL
+contract must be resolved when that owner is audited, rather than borrowing the
+active Document's URL or fabricating a successful error page here.
+
+The inline stub also accepts a null navigation ID because non-fetch params and
+population permit null, although §7.5.7 spells its input as a navigation ID.
+That callable shape was reviewed and accepted. The operation remains throwing;
+no inline-Document behavior is established by this accommodation.
+
+The 25 focused cases cover parsed sandbox exceptions, captured versus live
+activation/restrictions, top-level exemption, URL/response identity, initiating
+origin forwarding, the Teams decision, inline metadata/result forwarding, and
+the three explicit dependency stops. They substitute only handler selection,
+the host handoff, and inline creation where needed; the routing and gate are real.
+
+Validation: all 112 cases in five focused non-fetch, sandbox, beginning-navigation,
+navigate-event, and target-snapshot suites pass on Node 24.19.0, Node 26.8.1, and
+custom Node 27.0.0-pre, each with and without the addon. No expected failures in
+this selection. Typechecking, touched-file ESLint, import hierarchy, and whitespace
+checks pass. No native changes or rebuilds were needed.
+
+Next in document order: **§7.4.2.4, preventing navigation**.
 
 ## Removal condition
 

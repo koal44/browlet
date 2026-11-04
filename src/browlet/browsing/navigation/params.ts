@@ -131,6 +131,25 @@ export class NavigationParams {
   }
 }
 
+/** Inputs for a non-fetch URL; the receiving Navigable supplies the destination. */
+// https://html.spec.whatwg.org/multipage/browsing-the-web.html#non-fetch-scheme-navigation-params
+export type NonFetchSchemeNavigationParams = {
+  /** Navigation identity retained through external or inline handling. */
+  id: string | null;
+  /** Destination URL, including a non-fetch redirect target. */
+  url: URLRecord;
+  /** Target restrictions captured before navigation callbacks or loading. */
+  targetSnapshotSandboxingFlags: SandboxingFlagSet;
+  /** Source activation captured when navigation began, not the target's current activation. */
+  sourceSnapshotHasTransientActivation: boolean;
+  /** Initiating origin; after a redirect, the origin of the last fetch-scheme response. */
+  initiatorOrigin: Origin;
+  /** Timing category for an inline Document, if one is created. */
+  navigationTimingType: NavigationTimingType;
+  /** User involvement used when selecting the inline Document's browsing context. */
+  userInvolvement: UserNavigationInvolvement;
+};
+
 /** Captured target restrictions retained while navigation obtains its response. */
 // https://html.spec.whatwg.org/multipage/browsing-the-web.html#target-snapshot-params
 export type TargetSnapshotParams = {

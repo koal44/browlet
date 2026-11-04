@@ -4,7 +4,7 @@ export {
   type NavigableContainer, type NavigateOptions, type NavigationRequest, type ReloadOptions, type NavigationHistoryBehavior,
   type HistoryHandlingBehavior, type UserNavigationInvolvement, type HistoryStepResult,
 } from './navigable';
-export { NavigationParams, type TargetSnapshotParams, type OpenerPolicyEnforcementResult } from './params';
+export { NavigationParams, type NonFetchSchemeNavigationParams, type TargetSnapshotParams, type OpenerPolicyEnforcementResult } from './params';
 export { SessionHistoryTraversalQueue } from './session-history-traversal-queue';
 export {
   DocumentState, type DocumentBackedState, type PostResource,
