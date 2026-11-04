@@ -8,7 +8,7 @@ import {
   AbortSignalImpl,
 } from '../../../../src/browlet/dom/abort/abort-signal';
 import { EventImpl, EventPhase } from '../../../../src/browlet/dom/events/event';
-import { MouseEventImpl } from '../../../../src/browlet/dom/events/ui-event';
+import { MouseEventImpl, UIEventImpl } from '../../../../src/browlet/interaction/events/index';
 import { ShadowRootImpl } from '../../../../src/browlet/dom/nodes/shadow-root';
 
 describe('EventTargetImpl', () => {
@@ -133,6 +133,16 @@ describe('EventTargetImpl', () => {
       expect(calls).toEqual(['pre', 'listener', cancel ? 'canceled' : 'activation']);
     },
   );
+
+  it.each([EventImpl, UIEventImpl])('does not activate for a non-MouseEvent click (%s)', (EventClass) => {
+    const activate = vi.fn();
+    class ActivatingTarget extends EventTargetImpl {
+      override runActivationBehavior(): void { activate(); }
+    }
+    const target = new ActivatingTarget(createSandboxEnvironment());
+    target.dispatchEvent(new EventClass('click', { bubbles: true }));
+    expect(activate).not.toHaveBeenCalled();
+  });
 
   it('dispatches through node ancestors in capture and bubble order', () => {
     const document = parseTestDocument(

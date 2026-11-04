@@ -16,6 +16,7 @@ import {
   type SpeculationRulesParseResult, type TimerAction,
 } from '../../scripting/index';
 import { PageTransitionEventImpl } from '../navigation/events/index';
+import type { MouseEventImpl, ScreenPosition } from '../../interaction/events/index';
 import type { TrustedTypePolicyFactoryImpl } from '../policy/trusted-types/index';
 import type { HistoryImpl } from '../history/index';
 import { HTMLCollectionImpl, type DocumentImpl, type ElementImpl } from '../../dom/nodes/index';
@@ -74,6 +75,11 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   navigation: NavigationImpl;
   /** Idle callback registrations and scheduling for this Window. */
   idleCallbacks: WindowIdleCallbacks;
+  /** Last producer mousemove's desktop position, initially unknown. */
+  // https://w3c.github.io/uievents/#pointer-lock-global-window
+  // TODO(Pointer Lock §6): The input producer must clear this after a gap in native
+  // mouse input, so the next move reports zero rather than spanning that gap.
+  lastMouseMove: ScreenPosition | undefined = undefined;
   /** Last user activation time, initially +Infinity; transient consumption can set -Infinity. */
   // https://html.spec.whatwg.org/multipage/interaction.html#last-activation-timestamp
   // TODO(HTML 6.4): Input/automation activation notification must update this and notify close watchers.
@@ -231,6 +237,25 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   /** Forward local-storage access to this Window's mixin. */
   get localStorage(): StorageImpl {
     return this.#windowLocalStorageMixin.localStorage;
+  }
+
+  /** Set motion from this Window's previous mousemove before native-event dispatch. */
+  // https://w3c.github.io/uievents/#set-pointerlock-attributes-for-mousemove-id
+  // This recipe requires unlocked screen positions. Pointer Lock's locked/raw input
+  // path must supply native deltas instead, because locked screen coordinates freeze.
+  // TODO(Pointer Events): Call from handle native mouse move, never generic DOM dispatch.
+  setPointerLockAttributesForMousemove(event: MouseEventImpl): void {
+    if (event.type !== 'mousemove') return;
+
+    const previous = this.lastMouseMove;
+    if (previous === undefined) {
+      event.initializePointerLockAttributes();
+    } else {
+      event.movementX = event.screenX - previous.x;
+      // SPEC_CLASH(pointer-lock-movement-y): UI Events §5 uses screenX here; follow Pointer Lock and Chromium/Firefox's Y-coordinate difference.
+      event.movementY = event.screenY - previous.y;
+    }
+    this.lastMouseMove = { x: event.screenX, y: event.screenY };
   }
 
   /** Whether this Window currently has unconsumed transient user activation. */

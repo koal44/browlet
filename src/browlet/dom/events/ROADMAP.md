@@ -10,9 +10,6 @@
   host-created events. Signal-bound listeners use Browlet `AbortSignal`
   implementations and internal abort algorithms, which remove listeners
   before the signal's public `abort` event.
-- [ui-event.ts](ui-event.ts): UIEvent and MouseEvent identities, defined by
-  UI Events and used by DOM click activation. These extensions share the
-  events component; their platform declarations remain unfinished.
 - `error-event.ts` and `promise-rejection-event.ts`: HTML event payloads and
   Web IDL declarations. Scripting owns their reporting and notification algorithms.
 
@@ -26,7 +23,7 @@ nodes so Document's legacy factory can construct HashChangeEvent and
 BeforeUnloadEvent without loading navigation. PopStateEvent is not in that table.
 Event's boolean `returnValue` binding adapts its cancellation state independently
 of BeforeUnloadEvent's string attribute. The base implementation's
-`isBeforeUnloadEvent()` predicate supports HTML's future special handler processing.
+`isBeforeUnloadEvent()` predicate supports HTML's connected special handler processing.
 
 [`DOMEnvironment`](../environment.ts) requires a `DOMRealm` and `createEvent()` for
 the whole DOM subsystem. The realm supplies timestamps and the associated-document
@@ -48,6 +45,14 @@ The public Browlet tests already cover realm-specific constructors, trusted
 event creation, callback-interface identity, legacy `Window.event`, exception
 reporting, and Web IDL dictionary access order. Lower-level tests cover the
 dispatch path and shadow retargeting.
+
+## UI Events and Pointer Events audit
+
+The [interaction events roadmap](../../interaction/events/ROADMAP.md) owns the
+UI Events reading inventory and event hierarchy. UIEvent's interface and
+initializers live there, alongside the still-incomplete MouseEvent identity.
+DOM dispatch uses `Event.isMouseEvent()` plus the event type to select click
+activation. Only type references connect DOM's foundation to those event classes.
 
 ## Audit corrections
 
@@ -94,8 +99,8 @@ not in the generic event implementation. Blink similarly separates generic
 events (`core/events`) from Window/frame ownership (`core/frame`).
 
 HTML's `ErrorEvent` and `PromiseRejectionEvent` implementations live here;
-their producers remain owned by `scripting/`. `MessageEvent` remains future
-`communication/` work. Generic dispatch must not acquire their payload, realm,
+their producers remain owned by `scripting/`. `MessageEvent` retains its
+`communication/` owner. Generic dispatch must not acquire their payload, realm,
 or task-delivery state.
 
 Dispatch and firing stay synchronous. HTML, Fetch, timers, workers, and other

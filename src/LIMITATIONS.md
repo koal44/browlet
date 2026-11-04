@@ -595,7 +595,45 @@ at the explicit `Document.focusedArea` dependency. The getter's retargeting and
 fallback steps are implemented; document focus state and its lifecycle are not.
 The [interaction roadmap](browlet/interaction/ROADMAP.md#focused-area-dependency)
 records the remaining work. Getter tests supply focus state explicitly and do
-not establish end-to-end focus support.
+not establish end-to-end focus support. UI Events' FocusEvent constructor,
+relatedTarget conversion/retargeting, and legacy event creation are available;
+they do not implement HTML §6.6's automatic focus transitions or event production.
+
+InputEvent exposes UI Events' data/isComposing/inputType constructor data and
+ordinary dispatch. HTML editing, selection, and IME producers remain unfinished;
+synthetic beforeinput/input dispatch does not edit content. The separate Input
+Events extension's dataTransfer and getTargetRanges/targetRanges are not yet
+implemented. See the [event roadmap](browlet/interaction/events/ROADMAP.md#section-34-event-objects-and-producer-boundary).
+
+KeyboardEvent construction, all specified modifier queries, legacy initialization,
+and DOM's legacy factory are available. Keyboard input production is not:
+UserAgent modifier tracking, native mapping, focus selection/traversal, editing,
+and activation/composition default actions still need their owners. Synthetic
+keyboard dispatch does not enact those actions or enforce device-event order.
+The [keyboard slice](browlet/interaction/events/ROADMAP.md#section-35-event-objects-and-keyboard-ordering)
+records those dependencies and the approved modifier/legacy browser differences.
+
+CompositionEvent construction, legacy initialization, and DOM's legacy factory
+are available. They do not create an IME session or edit text. Composition
+sequencing and isComposing state need the input producer; UI Events and Input
+Events also disagree on compositionupdate/beforeinput ordering and cancelability.
+That choice remains explicit in the [composition audit](browlet/interaction/events/ROADMAP.md#section-36-event-objects-and-composition-dependencies).
+
+TextEvent's legacy factory and initializer are available; its interface has no
+author constructor. Synthetic textInput dispatch delivers listeners/cancellation
+without editing, following Chromium/Firefox rather than WebKit. Trusted textInput,
+keypress, and legacy focus/activation production remain unfinished, with native
+ordering conflicts documented in the [legacy audit](browlet/interaction/events/ROADMAP.md#sections-68-legacy-audit-and-textevent).
+
+UI Events §5's internal mouse-movement initializer and Window-owned coordinate
+deltas are implemented. MouseEvent now exposes construction, modifiers, related
+targets, legacy initialization/factory names, and movement fields. Its layerX
+and layerY getters throw explicitly because CSS layout/painting geometry is
+missing; CSSOM View's page/offset coordinates and x/y aliases are not exposed.
+Native mouse production, input-gap notification, locked/raw deltas, and Pointer
+Lock APIs remain unfinished. PointerEvent itself is the next slice. The
+[MouseEvent prerequisite](browlet/interaction/events/ROADMAP.md#pointer-events-12-and-the-3-mouseevent-prerequisite)
+records the approved coordinate/legacy choices without claiming device input.
 
 Element attribute setters, Attr attachment, and attached `Attr.value`,
 `nodeValue`, and `textContent` writes enforce Trusted Types. Their common change

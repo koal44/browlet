@@ -77,16 +77,30 @@ explicit dependencies. The §8.1.6 host-hook audit has connected static and dyna
 evaluation-phase `HostLoadImportedModule`. The available §8.1.7 scheduling
 operations are implemented; its [remaining dependencies](browlet/scripting/ROADMAP.md#outstanding-event-loop-work)
 retain their owner and engine boundaries. §8.1.8.1's existing IDL event handlers
-now check target automation policy and callback Document activity. Window's
-`onerror` also supplies its five arguments and return-true cancellation. Body and
-frameset `onstorage` now forward to their current active Document's Window. Continue
-within [event handlers](browlet/scripting/ROADMAP.md#html-8181-event-handler-idl-invocation)
-with beforeunload processing once Ged's §7.2.7 event interface is consolidated.
+check target automation policy and callback Document activity. Window's
+`onerror` supplies its five arguments and return-true cancellation; beforeunload
+now converts nullable strings and preserves an existing returnValue. The
+§8.1.8.2 declarations and Window/body/frameset targeting are connected through
+the shared [event-handler machinery](browlet/scripting/ROADMAP.md#html-8181-event-handler-idl-invocation).
 Window and HTML element content attributes now use CSP checks, raw storage, and
 lazy realm-owned FunctionBody compilation with projected Document/form/element
 scopes. Form-owner discovery (§4.10.18.3) and precise source-location reporting
-remain explicit dependencies. The subsection is not complete.
-Broader handler declarations are §8.1.8.2.
+remain explicit dependencies. The [UI Events foundation](browlet/interaction/events/ROADMAP.md)
+now exposes UIEvent, FocusEvent, the base InputEvent, KeyboardEvent, CompositionEvent,
+and legacy TextEvent, including initialization, related-target dispatch, input
+payload conversion, and modifier snapshots. The event-type audits
+retain their HTML producer dependencies and the separate Input Events extension.
+UI Events §4's keyboard mapping/cancellation audit retains explicit producer dependencies.
+Section 5 supplies internal movement initialization and Window-owned mousemove deltas;
+native input and Pointer Lock APIs remain unfinished. The main
+UI Events audit now covers §§1–12, with producer dependencies and ordering
+conflicts retained. Pointer Events §§1–2 are reviewed, and §3's MouseEvent
+prerequisite now exposes construction, modifiers, related targets, movement,
+and legacy initialization/factory names. Layer coordinates remain explicit
+CSS layout/painting dependencies. Continue §3 with PointerEvent itself.
+HTML §8.1.8.3's synthetic
+pointer-event operation depends on those event interfaces. Input producers retain
+their HTML, editing, and layout owners.
 Source/deferred imports and the HTML Wasm parser remain explicit boundaries.
 Later host-hook algorithms must be connected before judging
 the complete model; the uncertain cross-realm observer test is skipped.

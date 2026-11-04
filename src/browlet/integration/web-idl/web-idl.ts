@@ -23,6 +23,7 @@ import {
   reportingObserverOptionsIDL, reportListIDL,
 } from '../../reporting/index';
 import { navigationEventIDLDefinitions } from '../../browsing/navigation/events/index';
+import { interactionEventIDLDefinitions } from '../../interaction/events/index';
 import {
   integrityViolationReportBodyIDL, coepViolationReportBodyIDL, coepInheritanceViolationReportBodyIDL,
   permissionsPolicyIDL, documentPermissionsPolicyIDL, iframePermissionsPolicyIDL,
@@ -86,6 +87,7 @@ export const browletDefinitions = [
   historyIDL, scrollRestorationIDL,
   ...navigationIDLDefinitions,
   ...navigationEventIDLDefinitions,
+  ...interactionEventIDLDefinitions,
   notRestoredReasonDetailsIDL, notRestoredReasonsIDL,
   ...renderingIDLDefinitions,
   barPropIDL,

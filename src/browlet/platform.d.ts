@@ -219,6 +219,125 @@ export interface PageTransitionEventInit {
   persisted?: boolean;
 }
 
+export interface UIEventInit {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+  detail?: number;
+  view?: Window | null;
+}
+
+export interface FocusEventInit {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+  detail?: number;
+  view?: Window | null;
+  relatedTarget?: EventTarget | null;
+}
+
+export interface InputEventInit {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+  detail?: number;
+  view?: Window | null;
+  data?: string | null;
+  inputType?: string;
+  isComposing?: boolean;
+}
+
+export interface EventModifierInit {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+  detail?: number;
+  view?: Window | null;
+  altKey?: boolean;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+  modifierAltGraph?: boolean;
+  modifierCapsLock?: boolean;
+  modifierFn?: boolean;
+  modifierFnLock?: boolean;
+  modifierHyper?: boolean;
+  modifierNumLock?: boolean;
+  modifierScrollLock?: boolean;
+  modifierSuper?: boolean;
+  modifierSymbol?: boolean;
+  modifierSymbolLock?: boolean;
+  shiftKey?: boolean;
+}
+
+export interface KeyboardEventInit {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+  detail?: number;
+  view?: Window | null;
+  altKey?: boolean;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+  modifierAltGraph?: boolean;
+  modifierCapsLock?: boolean;
+  modifierFn?: boolean;
+  modifierFnLock?: boolean;
+  modifierHyper?: boolean;
+  modifierNumLock?: boolean;
+  modifierScrollLock?: boolean;
+  modifierSuper?: boolean;
+  modifierSymbol?: boolean;
+  modifierSymbolLock?: boolean;
+  shiftKey?: boolean;
+  charCode?: number;
+  code?: string;
+  isComposing?: boolean;
+  key?: string;
+  keyCode?: number;
+  location?: number;
+  repeat?: boolean;
+}
+
+export interface CompositionEventInit {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+  detail?: number;
+  view?: Window | null;
+  data?: string;
+}
+
+export interface MouseEventInit {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+  detail?: number;
+  view?: Window | null;
+  altKey?: boolean;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+  modifierAltGraph?: boolean;
+  modifierCapsLock?: boolean;
+  modifierFn?: boolean;
+  modifierFnLock?: boolean;
+  modifierHyper?: boolean;
+  modifierNumLock?: boolean;
+  modifierScrollLock?: boolean;
+  modifierSuper?: boolean;
+  modifierSymbol?: boolean;
+  modifierSymbolLock?: boolean;
+  shiftKey?: boolean;
+  button?: number;
+  buttons?: number;
+  clientX?: number;
+  clientY?: number;
+  movementX?: number;
+  movementY?: number;
+  relatedTarget?: EventTarget | null;
+  screenX?: number;
+  screenY?: number;
+}
+
 export interface SecurityPolicyViolationEventInit {
   bubbles?: boolean;
   cancelable?: boolean;
@@ -2077,6 +2196,118 @@ export interface BeforeUnloadEventConstructor extends Ctor<EventConstructor> {
   [Symbol.hasInstance](value: unknown): value is BeforeUnloadEvent;
 }
 
+export interface UIEvent extends Event {
+  readonly view: Window | null;
+  readonly detail: number;
+  initUIEvent(typeArg: string, bubblesArg?: boolean, cancelableArg?: boolean, viewArg?: Window | null, detailArg?: number): void;
+  readonly which: number;
+}
+
+export interface UIEventConstructor extends Ctor<EventConstructor> {
+  readonly prototype: UIEvent;
+  [Symbol.hasInstance](value: unknown): value is UIEvent;
+  new (type: string, eventInitDict?: UIEventInit): UIEvent;
+}
+
+export interface FocusEvent extends UIEvent {
+  readonly relatedTarget: EventTarget | null;
+}
+
+export interface FocusEventConstructor extends Ctor<UIEventConstructor> {
+  readonly prototype: FocusEvent;
+  [Symbol.hasInstance](value: unknown): value is FocusEvent;
+  new (type: string, eventInitDict?: FocusEventInit): FocusEvent;
+}
+
+export interface InputEvent extends UIEvent {
+  readonly data: string | null;
+  readonly isComposing: boolean;
+  readonly inputType: string;
+}
+
+export interface InputEventConstructor extends Ctor<UIEventConstructor> {
+  readonly prototype: InputEvent;
+  [Symbol.hasInstance](value: unknown): value is InputEvent;
+  new (type: string, eventInitDict?: InputEventInit): InputEvent;
+}
+
+export interface KeyboardEvent extends UIEvent {
+  readonly DOM_KEY_LOCATION_STANDARD: 0;
+  readonly DOM_KEY_LOCATION_LEFT: 1;
+  readonly DOM_KEY_LOCATION_RIGHT: 2;
+  readonly DOM_KEY_LOCATION_NUMPAD: 3;
+  readonly key: string;
+  readonly code: string;
+  readonly location: number;
+  readonly ctrlKey: boolean;
+  readonly shiftKey: boolean;
+  readonly altKey: boolean;
+  readonly metaKey: boolean;
+  readonly repeat: boolean;
+  readonly isComposing: boolean;
+  getModifierState(keyArg: string): boolean;
+  initKeyboardEvent(typeArg: string, bubblesArg?: boolean, cancelableArg?: boolean, viewArg?: Window | null, keyArg?: string, locationArg?: number, ctrlKey?: boolean, altKey?: boolean, shiftKey?: boolean, metaKey?: boolean): void;
+  readonly charCode: number;
+  readonly keyCode: number;
+}
+
+export interface KeyboardEventConstructor extends Ctor<UIEventConstructor> {
+  readonly prototype: KeyboardEvent;
+  [Symbol.hasInstance](value: unknown): value is KeyboardEvent;
+  new (type: string, eventInitDict?: KeyboardEventInit): KeyboardEvent;
+  readonly DOM_KEY_LOCATION_STANDARD: 0;
+  readonly DOM_KEY_LOCATION_LEFT: 1;
+  readonly DOM_KEY_LOCATION_RIGHT: 2;
+  readonly DOM_KEY_LOCATION_NUMPAD: 3;
+}
+
+export interface CompositionEvent extends UIEvent {
+  readonly data: string;
+  initCompositionEvent(typeArg: string, bubblesArg?: boolean, cancelableArg?: boolean, viewArg?: WindowProxy | null, dataArg?: string): void;
+}
+
+export interface CompositionEventConstructor extends Ctor<UIEventConstructor> {
+  readonly prototype: CompositionEvent;
+  [Symbol.hasInstance](value: unknown): value is CompositionEvent;
+  new (type: string, eventInitDict?: CompositionEventInit): CompositionEvent;
+}
+
+export interface TextEvent extends UIEvent {
+  readonly data: string;
+  initTextEvent(type: string, bubbles?: boolean, cancelable?: boolean, view?: Window | null, data?: string): void;
+}
+
+export interface TextEventConstructor extends Ctor<UIEventConstructor> {
+  readonly prototype: TextEvent;
+  [Symbol.hasInstance](value: unknown): value is TextEvent;
+}
+
+export interface MouseEvent extends UIEvent {
+  readonly screenX: number;
+  readonly screenY: number;
+  readonly clientX: number;
+  readonly clientY: number;
+  readonly layerX: number;
+  readonly layerY: number;
+  readonly ctrlKey: boolean;
+  readonly shiftKey: boolean;
+  readonly altKey: boolean;
+  readonly metaKey: boolean;
+  readonly button: number;
+  readonly buttons: number;
+  readonly relatedTarget: EventTarget | null;
+  getModifierState(keyArg: string): boolean;
+  initMouseEvent(typeArg: string, bubblesArg?: boolean, cancelableArg?: boolean, viewArg?: Window | null, detailArg?: number, screenXArg?: number, screenYArg?: number, clientXArg?: number, clientYArg?: number, ctrlKeyArg?: boolean, altKeyArg?: boolean, shiftKeyArg?: boolean, metaKeyArg?: boolean, buttonArg?: number, relatedTargetArg?: EventTarget | null): void;
+  readonly movementX: number;
+  readonly movementY: number;
+}
+
+export interface MouseEventConstructor extends Ctor<UIEventConstructor> {
+  readonly prototype: MouseEvent;
+  [Symbol.hasInstance](value: unknown): value is MouseEvent;
+  new (type: string, eventInitDict?: MouseEventInit): MouseEvent;
+}
+
 export interface NotRestoredReasonDetails {
   readonly reason: string;
   toJSON(): object;
@@ -2642,6 +2873,13 @@ export interface Window extends EventTarget {
   PageRevealEvent: PageRevealEventConstructor;
   PageTransitionEvent: PageTransitionEventConstructor;
   BeforeUnloadEvent: BeforeUnloadEventConstructor;
+  UIEvent: UIEventConstructor;
+  FocusEvent: FocusEventConstructor;
+  InputEvent: InputEventConstructor;
+  KeyboardEvent: KeyboardEventConstructor;
+  CompositionEvent: CompositionEventConstructor;
+  TextEvent: TextEventConstructor;
+  MouseEvent: MouseEventConstructor;
   NotRestoredReasonDetails: NotRestoredReasonDetailsConstructor;
   NotRestoredReasons: NotRestoredReasonsConstructor;
   ViewTransition: ViewTransitionConstructor;

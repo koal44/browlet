@@ -36,6 +36,29 @@ DOM event dispatch already provides overridable activation methods.
 Section 6 work supplies the HTML element behaviors, commands, and
 user-activation consequences.
 
+## UI and pointer event production
+
+The [UI Events audit](events/ROADMAP.md) places the event hierarchy and bindings
+in `interaction/events/`, above DOM's shared Event/EventTarget machinery and
+below input producers. Input processing belongs here, with state retained by
+the specified Window, Document, or UserAgent owner.
+Synthetic construction and dispatch do not themselves supply native input,
+focus changes, editing, pointer capture, or scrolling.
+
+The first visible dependencies are HTML §6.6's focus model; HTML §6.8 editing,
+Selection API and Input Events; keyboard layout/modifier input and IME behavior;
+and HTML §6.5 element activation. FocusEvent and KeyboardEvent constructors can
+be implemented before those producers. Actual default actions must call their
+owners rather than approximate the effect in an event listener.
+
+Pointer Events additionally needs hit testing and coordinate geometry from
+CSSOM View/layout, computed touch-action and pointer-events values from CSS,
+scrolling/zooming, and device-input timing. Pointer capture methods belong on
+Element, backed by shared active-pointer state. Panning and zooming follow
+touch-action rules, not a general pointer-event cancellation shortcut. Keep these
+dependencies explicit at the algorithms that consume them; this audit does not
+claim that the CSS, layout, or input implementations are already available.
+
 ## Planned ownership
 
 | Planned source or owner | Contract | Specification |

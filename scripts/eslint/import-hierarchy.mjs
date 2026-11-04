@@ -47,7 +47,7 @@ export const layers = [
   // Policy consumes event/report primitives; documents construct and retain policy state.
   ['browlet/reporting/'],
   // Feature event payloads can serve Document's legacy factory without loading their producers.
-  ['browlet/storage/events/', 'browlet/browsing/navigation/events/'],
+  ['browlet/storage/events/', 'browlet/browsing/navigation/events/', 'browlet/interaction/events/'],
   // Policy owns the source-expression algorithms shared with its CSP implementation.
   ['browlet/browsing/policy/'],
   ['browlet/browsing/policy/csp/'],

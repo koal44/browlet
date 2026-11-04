@@ -38,6 +38,9 @@ import {
 import { StorageEventImpl } from '../../storage/events/index';
 import { BeforeUnloadEventImpl, HashChangeEventImpl } from '../../browsing/navigation/events/index';
 import {
+  UIEventImpl, FocusEventImpl, KeyboardEventImpl, CompositionEventImpl, TextEventImpl, MouseEventImpl,
+} from '../../interaction/events/index';
+import {
   InsecureRequestsPolicy, PolicyContainer, OpenerPolicy, PermissionsPolicy, PermissionsPolicyImpl, SandboxingFlagSet,
   type SandboxingFlag, type PolicyControlledFeature, type PolicyFeatureValue,
 } from '../../browsing/policy/index';
@@ -694,6 +697,8 @@ export class DocumentImpl extends NodeImpl {
   // https://html.spec.whatwg.org/multipage/interaction.html#focused-area-of-the-document
   get focusedArea(): FocusableArea {
     // TODO(HTML §6.6): initialize focus state and maintain it through focus updates and fixup.
+    // The focus update steps (#focus-update-steps) must also dispatch FocusEvent with the old/new
+    // focus-chain targets; the event interface alone does not supply those transitions.
     throw new InternalError('Document focused area is not implemented');
   }
 
@@ -2148,6 +2153,17 @@ export class DocumentImpl extends NodeImpl {
 // Supported entries in DOM's legacy createEvent table.
 const legacyEventConstructors = new Map([
   ['event', EventImpl], ['events', EventImpl], ['htmlevents', EventImpl],
+  ['uievent', UIEventImpl], ['uievents', UIEventImpl],
+  // SPEC_CLASH(focus-event-legacy-view): DOM defaults give view=null, matching Chromium/WebKit; Firefox supplies the Window.
+  ['focusevent', FocusEventImpl],
+  // SPEC_CLASH(keyboard-event-legacy-factory): Follow DOM's singular name and null view; Chromium/WebKit also accept KeyboardEvents and Firefox supplies a Window view.
+  ['keyboardevent', KeyboardEventImpl],
+  // SPEC_CLASH(composition-event-legacy-view): Follow DOM's null view, as Chromium/WebKit do; Firefox supplies the Window.
+  ['compositionevent', CompositionEventImpl],
+  // SPEC_CLASH(text-event-legacy-view): Follow DOM's null view, as Chromium/WebKit do; Firefox supplies the Window.
+  ['textevent', TextEventImpl],
+  // SPEC_CLASH(mouse-event-legacy-view): Follow DOM's null view, as Chromium/WebKit do; Firefox supplies the Window.
+  ['mouseevent', MouseEventImpl], ['mouseevents', MouseEventImpl],
   ['customevent', CustomEventImpl], ['messageevent', MessageEventImpl],
   ['storageevent', StorageEventImpl], ['hashchangeevent', HashChangeEventImpl],
   ['beforeunloadevent', BeforeUnloadEventImpl],

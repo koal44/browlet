@@ -6,7 +6,6 @@ export {
   EventImpl, EventPhase, eventIDL, type EventInit, eventInitIDL, CustomEventImpl, customEventIDL,
   type CustomEventInit, customEventInitIDL, type EventPathItem,
 } from './event';
-export { UIEventImpl, MouseEventImpl } from './ui-event';
 export { ErrorEventImpl, errorEventIDL, errorEventInitIDL, type ErrorEventInit, type ErrorInformation } from './error-event';
 export {
   PromiseRejectionEventImpl, promiseRejectionEventIDL, promiseRejectionEventInitIDL, type PromiseRejectionEventInit,

@@ -12,7 +12,6 @@ import type { DOMEnvironment, DOMRealm, EventImplConstructor } from '../environm
 import type { WindowImpl } from '../../browsing/window/index';
 
 import { EventPhase, type EventImpl, type EventPathItem } from './event';
-import { MouseEventImpl } from './ui-event';
 
 /** Owns listener registrations and delivers events through the dispatch path. */
 // https://dom.spec.whatwg.org/#interface-eventtarget
@@ -253,6 +252,8 @@ export class EventTargetImpl {
     let relatedTarget = event.relatedTarget?.retargetAgainst(target) ?? null;
     let clearTargets = false;
 
+    // SPEC_CLASH(event-related-target-suppression): Follow DOM/Chromium when this guard suppresses dispatch;
+    // leave target/relatedTarget unchanged. Firefox clears relatedTarget; WebKit sets target to the host.
     if (
       target !== relatedTarget ||
       target === event.relatedTarget
@@ -261,7 +262,7 @@ export class EventTargetImpl {
         .map((touchTarget) => touchTarget?.retargetAgainst(target) ?? null);
       event.appendToPath(target, targetOverride, relatedTarget, touchTargets, false);
 
-      const isActivationEvent = MouseEventImpl.is(event) &&
+      const isActivationEvent = event.isMouseEvent() &&
         event.type === 'click';
 
       if (

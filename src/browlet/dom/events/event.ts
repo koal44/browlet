@@ -6,6 +6,7 @@ import {
 
 import { unsafeSharedCurrentTime, type DOMHighResTimeStamp } from '../../timing/index';
 import type { BeforeUnloadEventImpl } from '../../browsing/navigation/events/index';
+import type { MouseEventImpl } from '../../interaction/events/index';
 import type { DOMEnvironment } from '../environment';
 
 import type { EventTargetImpl } from './event-target';
@@ -62,7 +63,7 @@ export class EventImpl {
     const init = eventInitDict ?? {};
 
     this.timeStamp = timeStamp;
-    this.#initialize(
+    this.initializeEvent(
       type,
       init.bubbles ?? false,
       init.cancelable ?? false,
@@ -97,6 +98,11 @@ export class EventImpl {
 
   /** Whether this event implements BeforeUnloadEvent, independently of its event type. */
   isBeforeUnloadEvent(): this is BeforeUnloadEventImpl {
+    return false;
+  }
+
+  /** Whether this event implements MouseEvent, independently of its event type. */
+  isMouseEvent(): this is MouseEventImpl {
     return false;
   }
 
@@ -206,7 +212,7 @@ export class EventImpl {
   initEvent(type: string, bubbles = false, cancelable = false): void {
     if (this.dispatching) return;
 
-    this.#initialize(type, bubbles, cancelable);
+    this.initializeEvent(type, bubbles, cancelable);
   }
 
   /** Append a dispatch target with its retargeted values and shadow-tree visibility flags. */
@@ -253,8 +259,9 @@ export class EventImpl {
     }
   }
 
+  /** Reset the base event attributes for construction and subclass initialization algorithms. */
   // https://dom.spec.whatwg.org/#concept-event-initialize
-  #initialize(
+  protected initializeEvent(
     type: string,
     bubbles: boolean,
     cancelable: boolean,
