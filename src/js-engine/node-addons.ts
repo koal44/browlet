@@ -107,6 +107,10 @@ export class NodeAPI {
     realmReference: object,
     callback: ((source: unknown, isCodeLike: boolean) => string | false | undefined) | undefined,
   ) => void;
+  /** Internal, nonthrowing Wasm policy decision. Node's own compilation checks still apply. */
+  setAllowWasmCodeGenerationCallback?: (
+    realmReference: object, callback: (() => boolean) | undefined,
+  ) => void;
   /** Install an internal nonthrowing clock returning signed-64-bit Unix-epoch nanoseconds. */
   setTemporalHostSystemUTCEpochNanosecondsCallback?: (
     realmReference: object, callback: (() => bigint) | undefined,
@@ -158,6 +162,7 @@ export class NodeAPI {
     this.setExceptionReporter = this.#loadMethod(backend, 'setExceptionReporter');
     this.setWasmAsyncCompletionCallback = this.#loadMethod(backend, 'setWasmAsyncCompletionCallback');
     this.setModifyCodeGenerationFromStringsCallback = this.#loadMethod(backend, 'setModifyCodeGenerationFromStringsCallback');
+    this.setAllowWasmCodeGenerationCallback = this.#loadMethod(backend, 'setAllowWasmCodeGenerationCallback');
     this.setTemporalHostSystemUTCEpochNanosecondsCallback = this.#loadMethod(backend, 'setTemporalHostSystemUTCEpochNanosecondsCallback');
     this.runInContext = this.#loadMethod(backend, 'runInContext');
     this.setGlobalObject = this.#loadMethod(backend, 'setGlobalObject');

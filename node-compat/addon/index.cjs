@@ -36,6 +36,7 @@ exports.setWasmAsyncCompletionCallback = native.setWasmAsyncCompletionCallback;
 exports.createWebAssemblyImportCall = require('./wasm-functions.cjs')(native);
 exports.cloneWebAssemblyModule = native.cloneWebAssemblyModule;
 exports.setModifyCodeGenerationFromStringsCallback = native.setModifyCodeGenerationFromStringsCallback;
+exports.setAllowWasmCodeGenerationCallback = native.setAllowWasmCodeGenerationCallback;
 exports.setTemporalHostSystemUTCEpochNanosecondsCallback = native.setTemporalHostSystemUTCEpochNanosecondsCallback;
 exports.isPromiseHandled = native.isPromiseHandled;
 exports.getPromiseResult = native.getPromiseResult;

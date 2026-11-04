@@ -178,6 +178,23 @@ export class CSPList implements FetchCSPList {
     return blocked;
   }
 
+  /** Report every Wasm compilation violation; only enforcing policies block. */
+  // https://w3c.github.io/webappsec-csp/#can-compile-wasm-bytes
+  // Return the denial flag to the engine, which creates CompileError in the compilation realm.
+  isWasmCompilationBlocked(env: BrowletEnvironment): boolean {
+    let blocked = false;
+    for (const policy of this.policies) {
+      const sources = policy.directives.get('script-src') ?? policy.directives.get('default-src');
+      if (sources === undefined || sources.tokens.some((token) => {
+        const keyword = asciiLower(token);
+        return keyword === "'unsafe-eval'" || keyword === "'wasm-unsafe-eval'";
+      })) continue;
+      new CSPViolation(policy, 'script-src', 'wasm-eval', env).report();
+      if (policy.disposition === 'enforce') blocked = true;
+    }
+    return blocked;
+  }
+
   /** Whether any applicable policy requires a trusted value for this sink group. */
   // https://w3c.github.io/trusted-types/dist/spec/#does-sink-require-trusted-types
   doesSinkTypeRequireTrustedTypes(sinkGroup: string, includeReportOnlyPolicies: boolean): boolean {

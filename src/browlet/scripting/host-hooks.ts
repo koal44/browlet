@@ -40,6 +40,9 @@ export function installHostHooks(): void {
 export function installRealmHostHooks(
   env: BrowletEnvironment, getCodeForEval: (argument: unknown) => string | undefined,
 ): void {
+  // CSP §4.5.1. Read live settings after navigation has attached the Document.
+  // Worker startup must supply its own policy container and violation reporting.
+  env.realm.setAllowWasmCodeGenerationCallback(() => !env.policyContainer.cspList?.isWasmCompilationBlocked(env));
   // HostGetCodeForEval's platform identity check belongs to Binding. Check the
   // current policy at compilation, including cached code and retained functions.
   env.realm.setModifyCodeGenerationFromStringsCallback((argument) => {

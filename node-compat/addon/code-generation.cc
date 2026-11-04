@@ -3,13 +3,55 @@
 
 namespace node_compat {
 namespace {
-#ifdef NODE_COMPAT_CODE_GENERATION
 using namespace v8;
 
 struct Registration {
   Isolate* isolate;
 };
 
+Local<Private> WasmCallbackKey(Isolate* isolate) {
+  return Private::ForApi(isolate, String::NewFromUtf8Literal(isolate, "browlet.wasmCodeGeneration.callback"));
+}
+
+bool AllowWasmCodeGeneration(Local<Context> context, Local<String> source) {
+  // Node's public handler preserves vm.createContext({ codeGeneration: { wasm: false } }).
+  // Unlike the string-compilation forwarder, this export is available on every supported base.
+  if (!node::AllowWasmCodeGenerationCallback(context, source)) return false;
+  auto isolate = Isolate::GetCurrent();
+  HandleScope handles(isolate);
+  auto callback = context->GetExtrasBindingObject()->GetPrivate(context, WasmCallbackKey(isolate)).ToLocalChecked();
+  if (callback->IsUndefined()) return true;
+  auto function = callback.As<Function>();
+  auto host = function->GetCreationContext().ToLocalChecked();
+  Context::Scope scope(host);
+  Local<Value> result;
+  // This is an internal policy decision, not an author callback. V8 expects a
+  // boolean and creates CompileError itself; it cannot propagate a thrown value here.
+  if (!function->Call(host, Undefined(isolate), 0, nullptr).ToLocal(&result)) {
+    node::OnFatalError("node-compat Wasm code generation", "Policy callback must not throw");
+  }
+  if (!result->IsBoolean()) {
+    node::OnFatalError("node-compat Wasm code generation", "Policy callback must return a boolean");
+  }
+  return result->IsTrue();
+}
+
+void SetAllowWasmCodeGenerationCallback(const FunctionCallbackInfo<Value>& args) {
+  auto isolate = args.GetIsolate();
+  if (!args[0]->IsObject() || (!args[1]->IsFunction() && !args[1]->IsUndefined())) {
+    isolate->ThrowException(Exception::TypeError(String::NewFromUtf8Literal(
+        isolate, "Expected a realm reference and a callback or undefined")));
+    return;
+  }
+  Local<Context> context;
+  if (!args[0].As<Object>()->GetCreationContext().ToLocal(&context)) return;
+  // Context-local private state neither retains dead realms globally nor follows a reused global proxy.
+  auto state = context->GetExtrasBindingObject();
+  if (args[1]->IsUndefined()) state->DeletePrivate(context, WasmCallbackKey(isolate)).Check();
+  else state->SetPrivate(context, WasmCallbackKey(isolate), args[1]).Check();
+}
+
+#ifdef NODE_COMPAT_CODE_GENERATION
 Local<Private> CallbackKey(Isolate* isolate) {
   return Private::ForApi(isolate, String::NewFromUtf8Literal(isolate, "browlet.codeGeneration.callback"));
 }
@@ -86,14 +128,21 @@ void SetModifyCodeGenerationFromStringsCallback(const FunctionCallbackInfo<Value
 }  // namespace
 
 void InitializeCodeGeneration(v8::Local<v8::Object> exports) {
-#ifdef NODE_COMPAT_CODE_GENERATION
   auto isolate = v8::Isolate::GetCurrent();
+  isolate->SetAllowWasmCodeGenerationCallback(AllowWasmCodeGeneration);
+#ifdef NODE_COMPAT_CODE_GENERATION
   isolate->SetModifyCodeGenerationFromStringsCallback(ModifyCodeGenerationFromStrings);
+#endif
   node::AddEnvironmentCleanupHook(isolate, [](void* pointer) {
     auto registration = static_cast<Registration*>(pointer);
+    registration->isolate->SetAllowWasmCodeGenerationCallback(node::AllowWasmCodeGenerationCallback);
+#ifdef NODE_COMPAT_CODE_GENERATION
     registration->isolate->SetModifyCodeGenerationFromStringsCallback(node::ModifyCodeGenerationFromStrings);
+#endif
     delete registration;
   }, new Registration{isolate});
+  NODE_SET_METHOD(exports, "setAllowWasmCodeGenerationCallback", SetAllowWasmCodeGenerationCallback);
+#ifdef NODE_COMPAT_CODE_GENERATION
   NODE_SET_METHOD(exports, "setModifyCodeGenerationFromStringsCallback", SetModifyCodeGenerationFromStringsCallback);
 #endif
 }

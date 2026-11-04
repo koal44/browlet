@@ -1,5 +1,5 @@
 import {
-  copyWebAssemblyModule, getBufferSourceView, isWebAssemblyModule, getWebAssemblyModuleImports, isCallable, isObject, isWebAssemblyFunction,
+  copyWebAssemblyModule, getBufferSourceView, getWebAssemblyModuleImports, isCallable, isObject, isWebAssemblyFunction,
   type JSBufferSource, type JSEnvironment, type JSFunction, type JSWasmModule, type JSWasmInstance,
   type JSWasmModuleImport, type JSWasmImportExportKind,
 } from '../../js-engine/index';
@@ -16,17 +16,19 @@ export class WasmModuleImpl {
   /** Compiled engine state, accessible only through this implementation's operations. */
   #backing: JSWasmModule;
 
-  constructor(backing: JSWasmModule);
-  constructor(bytes: JSBufferSource, options: WebAssemblyCompileOptions, env: JSEnvironment);
-  constructor(source: JSWasmModule | JSBufferSource, options?: WebAssemblyCompileOptions, env?: JSEnvironment) {
-    if (isWebAssemblyModule(source)) {
-      this.#backing = source;
+  constructor(
+    ...args: [backing: JSWasmModule] | [bytes: JSBufferSource, options: WebAssemblyCompileOptions, env: JSEnvironment]
+  ) {
+    if (args.length === 1) {
+      this.#backing = args[0];
     } else {
-      const view = getBufferSourceView(source);
-      if (new Set(options!.builtins).size !== options!.builtins.length) {
-        throw new env!.realm.WebAssemblyCompileError('Duplicate WebAssembly builtin names');
+      const [bytes, options, env] = args;
+      const view = getBufferSourceView(bytes);
+      if (new Set(options.builtins).size !== options.builtins.length) {
+        throw new env.realm.WebAssemblyCompileError('Duplicate WebAssembly builtin names');
       }
-      this.#backing = Reflect.construct(env!.realm.WebAssemblyModule, [view, options]) as JSWasmModule;
+      env.realm.ensureCanCompileWasmBytes();
+      this.#backing = Reflect.construct(env.realm.WebAssemblyModule, [view, options]) as JSWasmModule;
     }
   }
 

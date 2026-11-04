@@ -118,8 +118,7 @@ export class WasmImpl {
   }
 
   /** Start native compilation with the task source required by the calling API. */
-  // TODO(CSP): Enforce the browser's Wasm compilation policy at native entry points;
-  // response eligibility and Fetch policy checks do not supply that compilation check.
+  // The realm's Wasm compilation hook enforces CSP independently of Fetch checks.
   #compile(
     bytes: JSBufferSource, options: WebAssemblyCompileOptions, source: TaskSourceKey,
     compiled: InternalPromiseWithResolvers<WasmModuleImpl>, env: JSEnvironment, responseURL?: string,

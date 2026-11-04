@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { InternalError } from '../../../src/infra/index';
 import { addon } from '../../../src/js-engine/index';
+import { CSPList } from '../../../src/browlet/browsing/policy/csp/list';
+import { ContentSecurityPolicy } from '../../../src/browlet/browsing/policy/csp/policy';
 import { utf8Encode } from '../../../src/encoding/index';
 import { FetchHeaders } from '../../../src/fetch/index';
 import { serializeURL } from '../../../src/url/index';
@@ -30,6 +32,18 @@ describe('HTML WebAssembly module records', () => {
     });
     return;
   }
+
+  it('records a compilation-realm CSP failure before creating the Wasm module graph', () => {
+    const f = fixture();
+    const policies = new CSPList(f.env.origin);
+    f.env.policyContainer.cspList = policies;
+    policies.policies.push(ContentSecurityPolicy.parse("script-src 'none'", 'header', 'enforce'));
+    const blocked = f.wasm(constant());
+    expect(blocked.record).toBeNull();
+    expect(blocked.parseError).toBeInstanceOf(f.env.realm.WebAssemblyCompileError);
+    policies.policies[0] = ContentSecurityPolicy.parse("script-src 'wasm-unsafe-eval'", 'header', 'enforce');
+    expect(f.wasm(constant()).parseError).toBeNull();
+  });
 
   it('retains copied source bytes, realm, URL, HTML association, and unlinked state', () => {
     const f = fixture();

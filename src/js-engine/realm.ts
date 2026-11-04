@@ -241,6 +241,8 @@ export class JSRealm {
   #wasmCompletionSources = new WeakMap<Promise<unknown>, TaskSourceKey>();
   /** V8 can report a compilation failure before returning its Promise. */
   #wasmCompilationSource: TaskSourceKey = 'engine';
+  /** Host compilation decision used at our entry points when the native hook is unavailable. */
+  #allowWasmCodeGeneration: (() => boolean) | undefined;
 
   /**
    * Create a context on the supplied microtask queue and capture its built-ins.
@@ -773,6 +775,7 @@ export class JSRealm {
 
   /** Compile converted bytes/options natively, selecting completion delivery before any author then lookup. */
   compileWebAssembly(bytes: ArrayBufferView, options: object, source: TaskSourceKey, responseURL?: string): Promise<unknown> {
+    this.ensureCanCompileWasmBytes();
     const previous = this.#wasmCompilationSource;
     this.#wasmCompilationSource = source;
     try {
@@ -811,6 +814,22 @@ export class JSRealm {
   ): void {
     // A captured intrinsic identifies this context even after global-proxy reuse.
     addon.setModifyCodeGenerationFromStringsCallback?.(this.Object, callback);
+  }
+
+  /** Install a nonthrowing Wasm compilation decision; Node's own checks still apply. */
+  setAllowWasmCodeGenerationCallback(callback: (() => boolean) | undefined): void {
+    this.#allowWasmCodeGeneration = callback;
+    addon.setAllowWasmCodeGenerationCallback?.(this.Object, callback);
+  }
+
+  /** Apply the host's compilation check on stock Node; the addon checks native entry points instead. */
+  ensureCanCompileWasmBytes(): void {
+    // ACCOMMODATION: Without the addon, only our compilation entry points can
+    // enforce this decision. Retained native constructors/functions bypass it.
+    // With the addon, let V8 perform the check once and create its CompileError.
+    if (!addon.setAllowWasmCodeGenerationCallback && this.#allowWasmCodeGeneration?.() === false) {
+      throw new this.WebAssemblyCompileError('WebAssembly compilation disallowed by the host');
+    }
   }
 
   /**
