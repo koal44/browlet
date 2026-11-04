@@ -61,7 +61,7 @@ import type { DocumentParser } from '../../html/parser/index';
 import type { SerializedRecord } from '../../scripting/structured-data/index';
 import type {
   BrowsingContext, Navigable, NavigableContainer, NavigationParams, HistoryHandlingBehavior,
-  NotRestoredReasonDetails, NotRestoredReasons,
+  NotRestoredReasonDetails, NotRestoredReasons, SessionHistoryEntry,
 } from '../../browsing/navigation/index';
 import type { FocusableArea } from '../../interaction/index';
 
@@ -143,6 +143,9 @@ export class DocumentImpl extends NodeImpl {
   cookieURL = copyURL(this.url);
   /** Loading state exposed by readyState. */
   currentDocumentReadiness: DocumentReadyState = 'complete';
+  /** Most recent history entry represented by this Document, retained while the Document is inactive. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#latest-entry
+  latestEntry: SessionHistoryEntry | null = null;
   /** Whether this document may be retained for restoration from session history. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#concept-document-salvageable
   salvageable = true;
@@ -1144,7 +1147,9 @@ export class DocumentImpl extends NodeImpl {
     _newURL: URLRecord, _serializedData: SerializedRecord | null = null,
     _historyHandling: HistoryHandlingBehavior = 'replace',
   ): void {
-    // TODO: Update History/Navigation state and queue the shared same-document history steps.
+    // TODO(HTML §7.4.4): Store entry.classicHistoryAPIState, update History/Navigation state,
+    // and queue the shared same-document history steps; entry storage alone does not commit a push/replace.
+    // These steps must set this.latestEntry and share DocumentState across same-document entries.
     throw new InternalError('URL and history updates are not implemented');
   }
 

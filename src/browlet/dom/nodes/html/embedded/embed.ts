@@ -43,7 +43,7 @@ export class HTMLEmbedElementImpl extends HTMLElementImpl {
     // Potential activity and src/type changes must queue these steps on the embed task source.
     // Create missing children through this.nodeDocument.env.userAgent.createChildNavigable(this), then navigate.
     // Removal and display-no-plugin steps must use nodeDocument.env.userAgent.destroyChildNavigable(this).
-    // Recursive Document teardown and traversal queuing remain unfinished.
+    // Recursive Document teardown and history application remain unfinished.
     throw new InternalError('Embed resource selection and child navigation are not implemented');
   }
 

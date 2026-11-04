@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { BrowsingContext, createDocumentState, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
+import { BrowsingContext, DocumentState, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { createSiblingWindow } from '../../support/windows';
 
@@ -299,7 +299,7 @@ describe('WebAssembly Exported Functions', () => {
     const document = foreign.getAssociatedDocument();
     document.browsingContext = new BrowsingContext(foreign.windowProxy);
     document.makeActive();
-    new TopLevelTraversable(createDocumentState(document));
+    new TopLevelTraversable(DocumentState.create(document));
     expect(await browser.evaluate(async (source) => {
       const read = Reflect.get(globalThis, 'readCallbackState') as () => CallbackState;
       const foreign = Reflect.get(globalThis, 'foreign') as typeof globalThis;
@@ -503,7 +503,7 @@ describe('WebAssembly Exported Functions', () => {
     const document = c.getAssociatedDocument();
     document.browsingContext = new BrowsingContext(c.windowProxy);
     document.makeActive();
-    new TopLevelTraversable(createDocumentState(document));
+    new TopLevelTraversable(DocumentState.create(document));
     const loop = a.env.responsibleEventLoop;
     Reflect.set(cWindow, 'readCallbackState', () => ({
       callbackRealm: loop.runningExecutionContext?.realm === c,

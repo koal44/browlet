@@ -4,7 +4,7 @@ import { Browlet } from '../../../src/browlet/browlet';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { createWindowEnvironment } from '../../../src/browlet/integration/web-idl/index';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { Navigable, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
 import { StorageBottle } from '../../../src/storage/index';
@@ -82,7 +82,7 @@ function createEnvironment(url: string, userAgent: UserAgent, parent: Navigable 
   document.browsingContext = new BrowsingContext(env.realm.windowProxy);
   env.window.setAssociatedDocument(document);
   document.makeActive();
-  const state = createDocumentState(document);
+  const state = DocumentState.create(document);
   const navigable = parent === null ? new TopLevelTraversable(state) : new Navigable(state, parent);
   return { env, navigable };
 }

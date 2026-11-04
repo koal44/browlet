@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import type { HTMLElement } from '../../../src/browlet/platform';
 import { BrowsingContext, Navigable } from '../../../src/browlet/browsing/navigation/index';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl, ElementImpl } from '../../../src/browlet/dom/nodes/index';
 import type { HTMLIFrameElementImpl } from '../../../src/browlet/dom/nodes/html/embedded/index';
 import { DirectManipulation, PanDirection, PointerEventStream, type DirectManipulationLayout } from '../../../src/browlet/interaction/index';
@@ -153,7 +153,7 @@ describe('Pointer Events §§7.2–7.3: direct-manipulation permissions', () => 
     parent.body!.appendChild(container);
     const [, child] = BrowsingContext.createTopLevel(parent.env.userAgent);
     // Child startup remains unfinished; connect the real retained navigable association.
-    container.contentNavigable = new Navigable(createDocumentState(child), parent.getNodeNavigable());
+    container.contentNavigable = new Navigable(DocumentState.create(child), parent.getNodeNavigable());
     container.setAttribute('style', 'touch-action: none');
     const target = child.createElement('div');
     child.body!.appendChild(target);

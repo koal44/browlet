@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { createDocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
 import { obtainURLOrigin, parseURL } from '../../../../src/url/index';
@@ -252,7 +252,7 @@ function createChild(parent: Navigable, name: string) {
   const container = owner.createElement('iframe') as HTMLIFrameElementImpl;
   const group = parent.topLevelTraversable.activeBrowsingContext!.group!;
   const [, document] = BrowsingContext.create(owner, container, group);
-  const state = createDocumentState(document);
+  const state = DocumentState.create(document);
   state.navigableTargetName = name;
   const navigable = new Navigable(state, parent);
   // Connect the child without requiring the still-unfinished traversal-queue drain.

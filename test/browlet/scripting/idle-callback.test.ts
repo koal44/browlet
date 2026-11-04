@@ -5,7 +5,7 @@ import { UserAgent } from '../../../src/browlet/user-agent';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
 import { queueNodeTask } from '../../../src/browlet/integration/host/index';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { IdleDeadlineImpl, type IdleRequestCallback } from '../../../src/browlet/browsing/window/idle-callback';
 import { domManipulationTaskSource, idleTaskSource } from '../../../src/browlet/scripting/tasks';
 import { Moment, monotonicClock, UnsafeMoment } from '../../../src/browlet/timing/clock';
@@ -248,7 +248,7 @@ describe('idle callback scheduling', () => {
   it('retains inactive callbacks and wakes them when the Document becomes active', () => {
     const fixture = createFixture();
     const entry = fixture.traversable.activeSessionHistoryEntry;
-    fixture.traversable.activeSessionHistoryEntry = { ...entry, documentState: createDocumentState(null) };
+    fixture.traversable.activeSessionHistoryEntry = fixture.window.env.createSessionHistoryEntry(entry.url, new DocumentState());
     const callback = vi.fn<IdleRequestCallback>();
     fixture.window.requestIdleCallback(callback, {});
     fixture.flush();
@@ -262,7 +262,7 @@ describe('idle callback scheduling', () => {
   it('counts elapsed timeout time while inactive but gates its delivery task', () => {
     const fixture = createFixture();
     const entry = fixture.traversable.activeSessionHistoryEntry;
-    fixture.traversable.activeSessionHistoryEntry = { ...entry, documentState: createDocumentState(null) };
+    fixture.traversable.activeSessionHistoryEntry = fixture.window.env.createSessionHistoryEntry(entry.url, new DocumentState());
     const callback = vi.fn<IdleRequestCallback>();
     fixture.window.requestIdleCallback(callback, { timeout: 5 });
     fixture.advance(10);

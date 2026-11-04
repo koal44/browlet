@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { Navigable } from '../../../src/browlet/browsing/navigation/navigable';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl } from '../../../src/browlet/dom/nodes/html/embedded/iframe';
@@ -172,7 +172,7 @@ describe('History traversal requests', () => {
     const parentDocument = unwrap<DocumentImpl>(browser.document);
     const container = parentDocument.createElement('iframe') as HTMLIFrameElementImpl;
     const [, document] = BrowsingContext.createTopLevel(parentDocument.env.userAgent);
-    const navigable = new Navigable(createDocumentState(document), parentDocument.getNodeNavigable());
+    const navigable = new Navigable(DocumentState.create(document), parentDocument.getNodeNavigable());
     // Child creation is unfinished; connect the real implementations at their retained association.
     container.contentNavigable = navigable;
     parentDocument.body!.appendChild(container);

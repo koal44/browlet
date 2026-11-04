@@ -277,7 +277,7 @@ History movement remains blocked at its explicitly unfinished owners.
   receiver's navigation-and-traversal task source and realm, then clean up the
   tracker. Navigate-event cancellation and successful application retain their
   own event/commit/finish responsibilities; this callback does not settle them.
-- If an unfinished snapshot/queue owner throws before accepting the work, the
+- If source snapshot capture or the host scheduler throws before accepting the work, the
   newly registered tracker is removed before propagating that internal failure.
   Regression tests first observed an unreachable pending request otherwise.
 
@@ -310,12 +310,15 @@ is insufficient. This protects cleanup; it does not implement traversal cancella
 Ordinary requests to a different entry currently stop at Window's explicit
 `hasTransientActivation()` dependency (§6.4). Capture is implemented, but activation
 timestamps, expiry, notification, and consumption are not. Once that input exists,
-`Traversable.appendSessionHistoryTraversalSteps()` still throws: the §7.3.2 parallel
-queue, algorithm set, draining, and synchronous-navigation queue jumping are absent.
+`Traversable.appendSessionHistoryTraversalSteps()` now runs through the browser-owned
+§7.4.1.3 parallel queue. Its serial drain waits for a returned internal completion
+promise; synchronous-navigation queue jumping still needs §7.4.6.2 history application.
 `Traversable.applyTraverseHistoryStep()` separately declares all inputs and all four
 outcomes but throws until §7.4.6 supplies permission/cancellation checks, Document
 restoration, history application, and event/tracker notifications. The existing
-SessionHistoryTraversalQueue remains an identity placeholder. Tests control these
+queue now reaches that application dependency on a later background turn, after
+request acceptance; its commit/finish settlement still requires the unfinished
+history algorithm. Tests control these
 three owner boundaries and execute the prepared callback; they do not establish
 working traversal. Source snapshots still need their later navigation, delta
 traversal, and closing consumers. Child destruction and ongoing-navigation abortion
@@ -897,7 +900,7 @@ The full firing section was read. Its dependencies, updated by the next slice, a
 | Shared event initialization and dispatch | Implemented through cancellation and intercepted-transition creation. FormData adopts the supplied entry list; form submission does not yet produce it. |
 | History-action activation and browser visual transitions | Window owns history-action timestamps, the predicate, and consumption (§6.4); input/automation notification and transient/sticky activation remain absent. Browlet displays no cached history rendering, so the event's visual flag is false. Introducing that UI requires its presentation state; a current/active history entry alone is insufficient. |
 | Interception and precommit | Implemented: owner-realm transition/controller creation, adapted callback execution, waiting for all results, and failure routing. Vin's scheduling integration is included, with supported host-bridge idle-progress tests. |
-| Commit and same-document entries | Commit and entry updates are implemented, including tracker notification, currententrychange, disposal, and captured-handler invocation. Document URL/history updates and traversal queue/resume remain explicit unfinished owners. |
+| Commit and same-document entries | Commit and entry updates are implemented, including tracker notification, currententrychange, disposal, and captured-handler invocation. Document URL/history updates and queued traversal resumption remain explicit unfinished owners. |
 | Postcommit completion and failure | Handler invocation, wait-for-all, activity/abortion guards, tracker/transition settlement, and success/error delivery are implemented. Nonintercepted and manually managed intercepted completion work; automatic focus/scroll effects remain unfinished. |
 | Navigation producers | General navigation, fragments, reload, traversal/history application, and hyperlink download must call the appropriate preparation entry point, respecting exclusions for browser-UI and another Window's cross-document navigation. Only classic History is connected so far. |
 
@@ -1210,7 +1213,7 @@ The remaining requirements are accounted for at these source boundaries:
 | --- | --- |
 | Automatic focus reset | `NavigateEventImpl.potentiallyResetFocus()` stops after the implemented guards. HTML §6.6 must select the Document's autofocus delegate, fall back to body/document element, run focusing steps with the viewport fallback, and move the sequential focus navigation starting point. `interaction/focus.ts` has only a minimal area type; focus chains, inertness, shadow delegation, actual focus events, and viewport focus are not implemented. |
 | Author/user focus changes | HTML's focus update steps must set `NavigationImpl.focusChangedDuringOngoingNavigation`. The field and consumer exist, but there is no real producer yet; tests supply that state explicitly. A separate Navigation-only activeElement would contradict the shared focus model. |
-| Traversal scroll | `processScrollBehavior()` calls `restoreScrollPositionData()` with the navigable's active entry, independently of its current traversal entry. The session-history operation still throws: saved position data, restorable regions, user-scroll state, optional retries during content loading, and scroll anchoring need the §7.4.6.3/CSSOM View audit. Navigation does not insert an extra History scrollRestoration-mode check here. |
+| Traversal scroll | `processScrollBehavior()` calls the navigable's active entry's `restoreScrollPositionData()`, independently of its current traversal entry. The session-history operation still throws: saved position data, restorable regions, user-scroll state, optional retries during content loading, and scroll anchoring need the §7.4.6.3/CSSOM View audit. Navigation does not insert an extra History scrollRestoration-mode check here. |
 | Beginning versus fragment | `Document.indicatedPart` explicitly awaits §7.4.6.3's HTML selection and MIME-specific rules for other document types. Null selects `scrollToBeginning()`; an element or the top sentinel selects `scrollToFragment()`. |
 | Beginning scroll | `Document.scrollToBeginning()` awaits CSSOM View §3.1: viewport/scrolling-area beginning edges, current position and ongoing smooth scroll, and the root element supplied to the scroll operation. This is not invariably the numeric position (0, 0). |
 | Fragment scroll | `Document.scrollToFragment()` awaits target-element updates for null/top/element, ancestor revealing, CSSOM View scrolling into view, focusing with a viewport fallback, and the sequential starting point. Manual **focus reset** does not suppress fragment scrolling's separate focusing step. |

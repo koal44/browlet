@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 import { createSandboxEnvironment } from '../../../../src/browlet/integration/web-idl/index';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
 import { EmbedderPolicy, queueCOEPInheritanceViolation, type EmbedderPolicyValue } from '../../../../src/browlet/browsing/policy/coep';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
@@ -209,7 +209,7 @@ function createOwner() {
 
 function createChild(owner: ReturnType<typeof createOwner>) {
   const [, document] = BrowsingContext.create(null, null, owner.navigable.activeBrowsingContext!.group!);
-  const child = new Navigable(createDocumentState(document), owner.navigable);
+  const child = new Navigable(DocumentState.create(document), owner.navigable);
   const container = owner.window.document.createElement('iframe');
   unwrap<HTMLIFrameElementImpl>(container).contentNavigable = child;
   return { child, container };

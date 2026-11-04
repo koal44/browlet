@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { createWindowEnvironment } from '../../../../src/browlet/integration/web-idl/index';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
@@ -349,6 +349,6 @@ function createLocalChildDocument(parent: DocumentImpl, url: string, sandboxed =
   document.makeActive();
   const container = parent.createElement('iframe') as HTMLIFrameElementImpl;
   parent.body!.appendChild(container);
-  container.contentNavigable = new Navigable(createDocumentState(document), parent.getNodeNavigable());
+  container.contentNavigable = new Navigable(DocumentState.create(document), parent.getNodeNavigable());
   return document;
 }

@@ -7,7 +7,8 @@ import { NavigationCurrentEntryChangeEventImpl } from '../../../src/browlet/brow
 import { NavigateEventImpl } from '../../../src/browlet/browsing/navigation/api/navigate-event';
 import { NavigationHistoryEntryImpl } from '../../../src/browlet/browsing/navigation/api/navigation-history-entry';
 import type { NavigationType } from '../../../src/browlet/browsing/navigation/api/navigation';
-import { createSessionHistoryEntry, createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import type { SessionHistoryTraversalSteps } from '../../../src/browlet/browsing/navigation/session-history-traversal-queue';
 import { idlType } from '../../../src/web-idl/core/index';
 import { getRelevantRealm, unwrap } from '../../support/browlet-binding';
 import { runInHostTask } from '../../support/tasks';
@@ -42,7 +43,7 @@ describe('Navigate-event commit coordination', () => {
   it('reloads the active entry rather than the current traversal entry, without a URL update', async () => {
     const { document, navigation, navigable, event, tracker } = await fixture('reload');
     const active = navigable.activeSessionHistoryEntry;
-    navigable.currentSessionHistoryEntry = { ...active };
+    navigable.currentSessionHistoryEntry = document.env.createSessionHistoryEntry(active.url, active.documentState);
     const update = vi.spyOn(navigation, 'updateEntriesForSameDocumentNavigation').mockImplementation(() => {});
     const urlUpdate = vi.spyOn(document, 'updateURLAndHistory');
     event.commit(tracker);
@@ -54,7 +55,7 @@ describe('Navigate-event commit coordination', () => {
   it.each([false, true])('queues intercepted traversal with userInitiated=%s and suppresses ordinary scroll restoration', async (userInitiated) => {
     const { navigation, navigable, event, tracker, loop } = await fixture('traverse');
     event.userInitiated = userInitiated;
-    let queued!: () => void;
+    let queued!: SessionHistoryTraversalSteps;
     const enqueue = vi.spyOn(navigable.traversable, 'appendSessionHistoryTraversalSteps').mockImplementation((steps) => {
       expect(event.interceptionState).toBe('committed');
       expect(navigation.suppressNormalScrollRestorationDuringOngoingNavigation).toBe(true);
@@ -167,26 +168,24 @@ describe('Navigate-event commit coordination', () => {
     expect(event.signal.aborted).toBe(true);
   });
 
-  it.each(['push', 'traverse'] as const)('retains the %s dependency and unwinds script preparation on failure', async (type) => {
-    const { navigation, event, tracker, loop } = await fixture(type);
+  it('retains the history-update dependency and unwinds script preparation on failure', async () => {
+    const { navigation, event, tracker, loop } = await fixture('push');
     const transition = navigation.transition!;
     const resolve = vi.spyOn(transition, 'resolveCommitted');
-    const expected = {
-      push: 'URL and history updates are not implemented',
-      traverse: 'Session history traversal queue is not implemented',
-    }[type];
-    expect(() => event.commit(tracker)).toThrow(expected);
+    expect(() => event.commit(tracker)).toThrow('URL and history updates are not implemented');
     expect(event.interceptionState).toBe('committed');
     expect(loop.executionContextStack).toEqual([]);
     expect(resolve).not.toHaveBeenCalled();
     expect(navigation.ongoingAPIMethodTracker).toBe(tracker);
   });
 
-  it('keeps resumed history application explicit after traversal queueing becomes available', async () => {
-    const { navigable, event, tracker } = await fixture('traverse');
+  it('queues traversal resumption after unwinding script preparation and reaches its unfinished owner', async () => {
+    const { document, event, tracker, loop } = await fixture('traverse');
     let queued!: () => void;
-    vi.spyOn(navigable.traversable, 'appendSessionHistoryTraversalSteps').mockImplementation((steps) => { queued = steps; });
+    vi.spyOn(document.env.userAgent, 'runInParallel').mockImplementation((steps) => { queued = steps; });
     event.commit(tracker);
+    expect(event.interceptionState).toBe('committed');
+    expect(loop.executionContextStack).toEqual([]);
     expect(queued).toBeTypeOf('function');
     expect(queued).toThrow('Resuming an intercepted history traversal is not implemented');
   });
@@ -225,7 +224,7 @@ async function fixture(type: NavigationType = 'push', intercept = true, sameDocu
   const document = unwrap<DocumentImpl>(browser.document);
   const navigation = document.getRelevantGlobalObject()!.navigation;
   const navigable = document.getNodeNavigable()!;
-  const destination = type === 'traverse' ? createSessionHistoryEntry(createDocumentState(document)) : null;
+  const destination = type === 'traverse' ? document.env.createSessionHistoryEntry(document.url, DocumentState.create(document)) : null;
   if (destination !== null) destination.step = 7;
   const tracker = destination === null
     ? navigation.setupNavigateReloadMethodTracker(undefined, null)

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import { createWindowEnvironment } from '../../../src/browlet/integration/web-idl/index';
-import { BrowsingContext, TopLevelTraversable, createDocumentState } from '../../../src/browlet/browsing/navigation/index';
+import { BrowsingContext, TopLevelTraversable, DocumentState } from '../../../src/browlet/browsing/navigation/index';
 import { BroadcastChannelImpl } from '../../../src/browlet/communication/index';
 import type { BroadcastChannel, MessageEvent } from '../../../src/browlet/platform';
 import { AgentCluster, WindowAgent } from '../../../src/browlet/scripting/agents';
@@ -441,7 +441,7 @@ function createWindow(
   document.browsingContext = new BrowsingContext(env.realm.windowProxy);
   env.window.setAssociatedDocument(document);
   document.makeActive();
-  const navigable = new TopLevelTraversable(createDocumentState(document));
+  const navigable = new TopLevelTraversable(DocumentState.create(document));
   return {
     env, window: env.realm.windowProxy.platform, document, navigable,
     drain() { while (agent.eventLoop.runTaskTurn()) { /* Drain runnable tasks. */ } },

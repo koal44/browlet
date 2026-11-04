@@ -5,7 +5,7 @@ import type { Document, DocumentVisibilityState } from '../../../../src/browlet/
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { createDocumentState, createSessionHistoryEntry } from '../../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { project, unwrap } from '../../../support/browlet-binding';
 import { createTestDocument } from '../../../support/dom';
 
@@ -21,7 +21,7 @@ describe('navigable initialization and lookup', () => {
     document.browsingContext = new BrowsingContext();
     const observed: [boolean, DocumentVisibilityState][] = [];
     document.observeFullyActiveState((active) => { observed.push([active, platform.visibilityState]); });
-    const traversable = new TopLevelTraversable(createDocumentState(document));
+    const traversable = new TopLevelTraversable(DocumentState.create(document));
 
     expect(traversable.systemVisibilityState).toBe('visible');
     expect(platform.visibilityState).toBe('visible');
@@ -40,7 +40,7 @@ describe('navigable initialization and lookup', () => {
     for (let depth = 0; depth < 2; ++depth) {
       const childDocument = createTestDocument(document.env);
       childDocument.browsingContext = new BrowsingContext();
-      const child = new Navigable(createDocumentState(childDocument), parent);
+      const child = new Navigable(DocumentState.create(childDocument), parent);
       const platform = project(childDocument) as Document;
 
       expect(child.parent).toBe(parent);
@@ -86,7 +86,7 @@ describe('navigable initialization and lookup', () => {
 
     const replacement = createTestDocument(document.env);
     replacement.browsingContext = document.browsingContext;
-    navigable.activeSessionHistoryEntry = createSessionHistoryEntry(createDocumentState(replacement));
+    navigable.activeSessionHistoryEntry = replacement.env.createSessionHistoryEntry(replacement.url, DocumentState.create(replacement));
     expect(navigable.currentSessionHistoryEntry.documentState.document).toBe(document);
     for (const node of [document, element, text, fragment]) expect(node.getNodeNavigable()).toBeNull();
     expect(replacement.getNodeNavigable()).toBe(navigable);
@@ -99,10 +99,10 @@ describe('navigable initialization and lookup', () => {
     const active = navigable.activeSessionHistoryEntry;
     active.documentState.navigableTargetName = 'active';
     const pendingDocument = createTestDocument(document.env);
-    const pendingState = createDocumentState(pendingDocument);
+    const pendingState = DocumentState.create(pendingDocument);
     pendingState.navigableTargetName = 'current';
 
-    navigable.currentSessionHistoryEntry = createSessionHistoryEntry(pendingState);
+    navigable.currentSessionHistoryEntry = pendingDocument.env.createSessionHistoryEntry(pendingDocument.url, pendingState);
 
     expect(navigable.activeSessionHistoryEntry).toBe(active);
     expect(navigable.activeDocument).toBe(document);
@@ -147,7 +147,7 @@ describe('traversable foundations', () => {
     for (let depth = 0; depth < 2; ++depth) {
       const document = createTestDocument(env);
       document.browsingContext = new BrowsingContext();
-      const child = new Navigable(createDocumentState(document), parent);
+      const child = new Navigable(DocumentState.create(document), parent);
       expect(child.traversable).toBe(traversable);
       expect(child.topLevelTraversable).toBe(traversable);
       parent = child;
@@ -158,5 +158,5 @@ describe('traversable foundations', () => {
 function createTraversable(): TopLevelTraversable {
   const document = createTestDocument();
   document.browsingContext = new BrowsingContext();
-  return new TopLevelTraversable(createDocumentState(document));
+  return new TopLevelTraversable(DocumentState.create(document));
 }

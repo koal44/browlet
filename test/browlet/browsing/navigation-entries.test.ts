@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
 import type { NavigationHistoryEntryImpl } from '../../../src/browlet/browsing/navigation/api/navigation-history-entry';
-import { createDocumentState, createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { Navigable } from '../../../src/browlet/browsing/navigation/navigable';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { createOpaqueOrigin, obtainURLOrigin, parseURL } from '../../../src/url/index';
@@ -120,9 +120,9 @@ describe('Navigation entry lists', () => {
   it('selects around a target-step gap and retains both back and forward entries', async () => {
     const { browser, document, navigable } = await fixture();
     const entries = [0, 3, 7].map((step) => {
-      const state = createDocumentState(document);
+      const state = DocumentState.create(document);
       state.origin = document.origin;
-      return { ...createSessionHistoryEntry(state), step };
+      return Object.assign(document.env.createSessionHistoryEntry(document.url, state), { step });
     });
     navigable.traversable.sessionHistoryEntries = entries;
     expect(navigable.getSessionHistoryEntriesForNavigationAPI(5)).toEqual(entries);
@@ -134,7 +134,8 @@ describe('Navigation entry lists', () => {
     expect(browser.window.navigation.currentEntry!.index).toBe(1);
     expect(browser.window.navigation.canGoBack).toBe(true);
     expect(browser.window.navigation.canGoForward).toBe(true);
-    expect(navigation.getEntryIndex({ ...entries[1]! })).toBe(-1);
+    const unlisted = Object.assign(document.env.createSessionHistoryEntry(document.url, entries[1]!.documentState), entries[1]);
+    expect(navigation.getEntryIndex(unlisted)).toBe(-1);
     expect(() => navigation.initializeEntriesForNewDocument(entries, entries[1]!)).toThrow('already initialized');
     entries[2]!.documentState.origin = createOpaqueOrigin();
     expect(navigable.getSessionHistoryEntriesForNavigationAPI(5)).toEqual(entries.slice(0, 2));
@@ -145,15 +146,17 @@ describe('Navigation entry lists', () => {
     const childBrowser = new Browlet({ route: () => '' });
     const childDocument = unwrap<DocumentImpl>(childBrowser.document);
     childDocument.browsingContext = new BrowsingContext();
-    const child = new Navigable(createDocumentState(childDocument), parent);
-    const childState = createDocumentState(childDocument);
+    const child = new Navigable(DocumentState.create(childDocument), parent);
+    const childState = DocumentState.create(childDocument);
     childState.origin = obtainURLOrigin(parseURL('https://child.test/').url!);
-    const childEntries = [0, 2].map((step) => ({ ...createSessionHistoryEntry(childState), step }));
+    const childEntries = [0, 2].map((step) => Object.assign(
+      childDocument.env.createSessionHistoryEntry(childDocument.url, childState), { step },
+    ));
     // Child history production is unfinished; provide retained records at its owner boundary.
-    const intermediateState = createDocumentState(null);
+    const intermediateState = new DocumentState();
     intermediateState.nestedHistories.push({ id: child.id, entries: childEntries });
     parent.activeSessionHistoryEntry.documentState.nestedHistories.push({
-      id: Symbol('intermediate'), entries: [{ ...childEntries[0]!, documentState: intermediateState }],
+      id: Symbol('intermediate'), entries: [childDocument.env.createSessionHistoryEntry(childDocument.url, intermediateState)],
     });
     expect(child.getSessionHistoryEntries()).toBe(childEntries);
     expect(child.getSessionHistoryEntriesForNavigationAPI(2)).toEqual(childEntries);

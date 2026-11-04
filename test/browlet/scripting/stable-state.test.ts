@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/index';
 import type { Task } from '../../../src/browlet/scripting/event-loop';
@@ -115,9 +115,7 @@ describe('stable-state scheduling', () => {
 
     await runInHostTask(() => {
       env.awaitStableState(section);
-      traversable.activeSessionHistoryEntry = {
-        ...traversable.activeSessionHistoryEntry, documentState: createDocumentState(null),
-      };
+      traversable.activeSessionHistoryEntry = env.createSessionHistoryEntry(traversable.activeSessionHistoryEntry.url, new DocumentState());
       expect(document.isFullyActive()).toBe(false);
       loop.queueTask(networkingTaskSource, document, task);
       expect(loop.runTaskTurn()).toBe(false);

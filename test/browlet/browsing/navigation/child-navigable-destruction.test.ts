@@ -4,7 +4,7 @@ import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
 import { NavigateEventImpl } from '../../../../src/browlet/browsing/navigation/api/navigate-event';
-import { createDocumentState, createSessionHistoryEntry } from '../../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { navigationAndTraversalTaskSource } from '../../../../src/browlet/scripting/tasks';
 import { getRelevantRealm, unwrap } from '../../../support/browlet-binding';
@@ -71,9 +71,11 @@ describe('child navigable destruction', () => {
   it('selects the parent active state after notification, leaving its different current state alone', () => {
     const { owner, container, child, parent } = fixture();
     const previousState = parent.activeSessionHistoryEntry.documentState;
-    const nextState = { ...previousState, document: owner, nestedHistories: [...previousState.nestedHistories] };
+    const nextState = Object.assign(new DocumentState(), previousState, {
+      document: owner, nestedHistories: [...previousState.nestedHistories],
+    });
     vi.spyOn(child, 'informNavigationAPIAboutChildNavigableDestruction').mockImplementation(() => {
-      parent.activeSessionHistoryEntry = createSessionHistoryEntry(nextState);
+      parent.activeSessionHistoryEntry = owner.env.createSessionHistoryEntry(owner.url, nextState);
     });
 
     owner.env.userAgent.destroyChildNavigable(container);
@@ -151,7 +153,7 @@ function fixture(tag = 'iframe', sameAgent = true) {
   } else {
     [, document] = BrowsingContext.createTopLevel(owner.env.userAgent);
   }
-  const child = new Navigable(createDocumentState(document), parent);
+  const child = new Navigable(DocumentState.create(document), parent);
   container.contentNavigable = child;
   parent.activeSessionHistoryEntry.documentState.nestedHistories.push({ id: child.id, entries: [child.activeSessionHistoryEntry] });
   // Supply only the unfinished recursive teardown and traversal queue; notifications remain real.

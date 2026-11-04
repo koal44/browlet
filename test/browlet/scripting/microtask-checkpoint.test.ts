@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import { networkingTaskSource } from '../../../src/browlet/scripting/tasks';
 import { createManualUserAgent, mockEventLoopTurns } from '../../support/browlet-agent';
@@ -107,9 +107,7 @@ describe('microtask checkpoint integration', () => {
       expect(loop.currentlyRunningTask?.document).toBe(document);
       realm.queueMicrotask(() => { order.push('nested'); });
     });
-    traversable.activeSessionHistoryEntry = {
-      ...traversable.activeSessionHistoryEntry, documentState: createDocumentState(null),
-    };
+    traversable.activeSessionHistoryEntry = document.env.createSessionHistoryEntry(traversable.activeSessionHistoryEntry.url, new DocumentState());
     expect(document.isFullyActive()).toBe(false);
     expect(loop.runTaskTurn()).toBe(false);
 

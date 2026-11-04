@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { createDocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { OpenerPolicy } from '../../../../src/browlet/browsing/policy/coop';
 import { SandboxingFlagSet } from '../../../../src/browlet/browsing/policy/sandbox';
 import { PermissionsPolicy } from '../../../../src/browlet/browsing/policy/permissions';
@@ -78,7 +78,7 @@ describe('initial browsing-context inheritance', () => {
     topDocument.openerPolicy.value = 'same-origin-allow-popups';
     const iframe = topDocument.createElement('iframe') as HTMLIFrameElementImpl;
     const [creatorContext, creator] = BrowsingContext.create(topDocument, iframe, group);
-    const child = new Navigable(createDocumentState(creator), topDocument.getNodeNavigable());
+    const child = new Navigable(DocumentState.create(creator), topDocument.getNodeNavigable());
     iframe.contentNavigable = child;
     creatorContext.virtualBrowsingContextGroupID = 77;
     creator.openerPolicy = new OpenerPolicy();
@@ -164,7 +164,7 @@ describe('auxiliary browsing-context creation', () => {
     const { document: parent, context: topContext, group } = await fixture();
     const iframe = parent.createElement('iframe') as HTMLIFrameElementImpl;
     const [opener, creator] = BrowsingContext.create(parent, iframe, group);
-    iframe.contentNavigable = new Navigable(createDocumentState(creator), parent.getNodeNavigable());
+    iframe.contentNavigable = new Navigable(DocumentState.create(creator), parent.getNodeNavigable());
     topContext.virtualBrowsingContextGroupID = 41;
     opener.virtualBrowsingContextGroupID = 99;
     const [context, document] = BrowsingContext.createAuxiliary(opener);

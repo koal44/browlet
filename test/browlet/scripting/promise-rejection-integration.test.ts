@@ -3,7 +3,7 @@ import { afterEach, describe, expect, vi } from 'vitest';
 import { getPromiseResult, isPromiseHandled } from '../../../src/js-engine/index';
 import { Browlet } from '../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import type { PromiseRejectionEvent } from '../../../src/browlet/platform';
 import { domManipulationTaskSource } from '../../../src/browlet/scripting/tasks';
@@ -164,7 +164,7 @@ describe('native HostPromiseRejectionTracker to HTML events', () => {
     document.browsingContext = new BrowsingContext();
     document.browsingContext.initializeWindowProxy(otherRealm.windowProxy);
     document.makeActive();
-    new TopLevelTraversable(createDocumentState(document));
+    new TopLevelTraversable(DocumentState.create(document));
     expect(document.isFullyActive()).toBe(true);
     expect(otherRealm.agent.eventLoop).toBe(f.loop);
     const otherEvents: PromiseRejectionEvent[] = [];

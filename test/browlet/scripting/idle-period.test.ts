@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createManualEventLoop, createManualUserAgent } from '../../support/browlet-agent';
 import { runInHostTask } from '../../support/tasks';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import type { WindowImpl } from '../../../src/browlet/browsing/window/window';
 import { WindowIdleCallbacks } from '../../../src/browlet/browsing/window/idle-callback';
 import { DedicatedWorkerAgent, SandboxAgent } from '../../../src/browlet/scripting/agents';
@@ -143,7 +143,7 @@ describe('Window idle periods', () => {
     const steps = vi.fn();
     fixture.loop.queueTask(domManipulationTaskSource, fixture.window.document, steps);
     const entry = fixture.traversable.activeSessionHistoryEntry;
-    fixture.traversable.activeSessionHistoryEntry = { ...entry, documentState: createDocumentState(null) };
+    fixture.traversable.activeSessionHistoryEntry = fixture.window.env.createSessionHistoryEntry(entry.url, new DocumentState());
 
     expect(fixture.loop.runTaskTurn()).toBe(false);
     expect(steps).not.toHaveBeenCalled();

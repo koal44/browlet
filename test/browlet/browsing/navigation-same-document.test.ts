@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import type { NavigationCurrentEntryChangeEvent } from '../../../src/browlet/platform';
 import { createOpaqueOrigin } from '../../../src/url/index';
@@ -11,7 +10,7 @@ describe('Navigation same-document entry updates', () => {
   it('pushes after the current entry, disposing the forward entries in list order', async () => {
     const { browser, document, navigation, entries } = await fixture();
     const previous = browser.window.navigation.entries();
-    const added = createSessionHistoryEntry({ ...entries[0]!.documentState, document });
+    const added = document.env.createSessionHistoryEntry(document.url, entries[0]!.documentState);
     const order: unknown[] = [];
     browser.window.navigation.oncurrententrychange = (event) => {
       const change = event as NavigationCurrentEntryChangeEvent;
@@ -45,7 +44,9 @@ describe('Navigation same-document entry updates', () => {
   it.each(['replace', 'reload', 'traverse'] as const)('updates %s identities without truncating forward history', async (type) => {
     const { browser, document, navigation, entries } = await fixture();
     const previous = browser.window.navigation.entries();
-    const destination = type === 'replace' ? createSessionHistoryEntry({ ...entries[1]!.documentState, document }) : entries[0]!;
+    const destination = type === 'replace'
+      ? document.env.createSessionHistoryEntry(document.url, entries[1]!.documentState)
+      : entries[0]!;
     const disposed: number[] = [];
     const changes: unknown[] = [];
     for (const [index, entry] of previous.entries()) entry.ondispose = () => { disposed.push(index); };
@@ -71,7 +72,7 @@ describe('Navigation same-document entry updates', () => {
 
   it('notifies the captured method tracker before entry-change and disposal callbacks', async () => {
     const { browser, document, navigation, entries } = await fixture();
-    const destination = createSessionHistoryEntry({ ...entries[1]!.documentState, document });
+    const destination = document.env.createSessionHistoryEntry(document.url, entries[1]!.documentState);
     const tracker = navigation.setupNavigateReloadMethodTracker(undefined, document.env.serializeForStorage({ value: 42 }));
     navigation.ongoingAPIMethodTracker = tracker;
     const callbacks: string[] = [];
@@ -115,8 +116,10 @@ describe('Navigation same-document entry updates', () => {
   });
 
   it('requires a traversal destination already present by session-history identity', async () => {
-    const { navigation, entries } = await fixture();
-    expect(() => navigation.updateEntriesForSameDocumentNavigation({ ...entries[0]! }, 'traverse'))
+    const { navigation, entries, document } = await fixture();
+    const previous = entries[0]!;
+    const unlisted = Object.assign(document.env.createSessionHistoryEntry(previous.url, previous.documentState), previous);
+    expect(() => navigation.updateEntriesForSameDocumentNavigation(unlisted, 'traverse'))
       .toThrow('Traversal requires an existing Navigation entry');
   });
 });
@@ -127,7 +130,9 @@ async function fixture() {
   const document = unwrap<DocumentImpl>(browser.document);
   const navigation = document.getRelevantGlobalObject()!.navigation;
   const active = document.getNodeNavigable()!.activeSessionHistoryEntry;
-  const entries = [active, ...Array.from({ length: 3 }, () => createSessionHistoryEntry({ ...active.documentState, document }))];
+  const entries = [active, ...Array.from({ length: 3 }, () => document.env.createSessionHistoryEntry(
+    document.url, active.documentState,
+  ))];
   // §7.4 history application supplies these already-selected session-history records.
   navigation.entryList = [];
   navigation.currentEntryIndex = -1;

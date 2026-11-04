@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import { JSExecutionContext } from '../../../src/browlet/scripting/execution-context';
 import type { Task } from '../../../src/browlet/scripting/event-loop';
@@ -181,7 +181,7 @@ describe('continuation-based event-loop spinning', () => {
       loop.spinUntil((resume) => { ready.push(resume); }, continuation);
     });
     while (turns.length > 0) turns.shift()!();
-    traversable.activeSessionHistoryEntry = { ...entry, documentState: createDocumentState(null) };
+    traversable.activeSessionHistoryEntry = document.env.createSessionHistoryEntry(entry.url, new DocumentState());
     ready[0]!();
     expect(task.document).toBe(document);
     expect(loop.runTaskTurn()).toBe(false);

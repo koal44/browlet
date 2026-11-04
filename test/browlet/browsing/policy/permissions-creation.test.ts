@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
 import { PermissionsPolicy } from '../../../../src/browlet/browsing/policy/permissions';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
@@ -186,7 +186,7 @@ describe('Permissions Policy response Document initialization', () => {
     const group = parent.activeBrowsingContext!.group!;
     const [context, initial] = BrowsingContext.create(null, null, group);
     group.append(context);
-    const child = new Navigable(createDocumentState(initial), parent);
+    const child = new Navigable(DocumentState.create(initial), parent);
     const iframe = unwrap<HTMLIFrameElementImpl>(browser.document.createElement('iframe'));
     iframe.setAttributeValue('allow', "cross-origin-isolated 'none'");
     iframe.contentNavigable = child;

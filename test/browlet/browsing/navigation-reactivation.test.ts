@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { navigationAndTraversalTaskSource } from '../../../src/browlet/scripting/tasks';
 import { createOpaqueOrigin } from '../../../src/url/index';
@@ -12,7 +11,7 @@ describe('Navigation entry reactivation', () => {
   it('preserves matching entry identities, creates new ones, and disposes missing entries after pageshow', async () => {
     const { browser, document, navigation, entries } = await fixture();
     const previous = browser.window.navigation.entries();
-    const added = createSessionHistoryEntry({ ...entries[1]!.documentState, document });
+    const added = document.env.createSessionHistoryEntry(document.url, entries[1]!.documentState);
     const order: unknown[] = [];
     for (const [index, entry] of previous.entries()) {
       entry.ondispose = (event) => {
@@ -55,7 +54,8 @@ describe('Navigation entry reactivation', () => {
     const old = browser.window.navigation.entries()[0]!;
     let disposed = 0;
     old.ondispose = () => { disposed++; };
-    const replacement = { ...entries[0]! };
+    const previous = entries[0]!;
+    const replacement = Object.assign(document.env.createSessionHistoryEntry(previous.url, previous.documentState), previous);
     navigation.updateEntriesForReactivation([replacement], replacement);
     expect(browser.window.navigation.currentEntry).not.toBe(old);
     expect(browser.window.navigation.currentEntry!.key).toBe(old.key);
@@ -135,8 +135,8 @@ async function fixture() {
   const navigation = document.getRelevantGlobalObject()!.navigation;
   const current = document.getNodeNavigable()!.activeSessionHistoryEntry;
   const entries = [current,
-    createSessionHistoryEntry({ ...current.documentState, document }),
-    createSessionHistoryEntry({ ...current.documentState, document })];
+    document.env.createSessionHistoryEntry(document.url, current.documentState),
+    document.env.createSessionHistoryEntry(document.url, current.documentState)];
   // The full history-application producer is unfinished; initialize its record inputs at the owner boundary.
   navigation.entryList = [];
   navigation.currentEntryIndex = -1;

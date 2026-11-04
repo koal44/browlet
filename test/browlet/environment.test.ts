@@ -5,7 +5,7 @@ import { getBindingContext, getRelevantRealm } from '../support/browlet-binding'
 import { Browlet } from '../../src/browlet/browlet';
 import type { Document, Window } from '../../src/browlet/platform';
 import { BrowsingContext } from '../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState } from '../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../src/browlet/browsing/navigation/state/index';
 import { Navigable, TopLevelTraversable } from '../../src/browlet/browsing/navigation/navigable';
 import { WindowAgent } from '../../src/browlet/scripting/agents';
 import { createWindowEnvironment } from '../../src/browlet/integration/web-idl/index';
@@ -408,7 +408,7 @@ function createEnvironment(url: string, parent: Navigable | null = null) {
   document.browsingContext = new BrowsingContext(proxy);
   window.setAssociatedDocument(document);
   document.makeActive();
-  const documentState = createDocumentState(document);
+  const documentState = DocumentState.create(document);
   const navigable = parent === null
     ? new TopLevelTraversable(documentState)
     : new Navigable(documentState, parent);

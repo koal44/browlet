@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
 import { PermissionsPolicy } from '../../../../src/browlet/browsing/policy/permissions';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
@@ -101,7 +101,7 @@ describe('Permissions Policy §§9.12 and 9.14: potential iframe violations', ()
     const group = parent.activeBrowsingContext!.group!;
     const [context, childDocument] = BrowsingContext.create(null, null, group);
     group.append(context);
-    iframe.contentNavigable = new Navigable(createDocumentState(childDocument), parent);
+    iframe.contentNavigable = new Navigable(DocumentState.create(childDocument), parent);
     childDocument.permissionsPolicyState.inheritedPolicy.set(feature, 'Disabled');
     childDocument.reportOnlyPermissionsPolicyState.inheritedPolicy.set(feature, 'Disabled');
     iframe.setAttributeValue('src', 'https://child.test/');

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { createDocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl, HTMLObjectElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/index';
 import type { HTMLFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/legacy/frame';
@@ -198,7 +198,7 @@ function createChild(document: DocumentImpl, tag: 'iframe' | 'object' | 'frame' 
   const container = document.createElement(tag) as HTMLIFrameElementImpl | HTMLObjectElementImpl | HTMLFrameElementImpl;
   const [context, childDocument] = BrowsingContext.createTopLevel(document.env.userAgent);
   childDocument.origin = document.origin;
-  const navigable = new Navigable(createDocumentState(childDocument), document.getNodeNavigable());
+  const navigable = new Navigable(DocumentState.create(childDocument), document.getNodeNavigable());
   container.contentNavigable = navigable;
   document.body!.appendChild(container);
   return { container, document: childDocument, navigable, proxy: context.windowProxy.platform };

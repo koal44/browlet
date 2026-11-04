@@ -31,7 +31,7 @@ export class HTMLObjectElementImpl extends HTMLElementImpl {
   /** Child navigation destination, or null when the object is not displaying a Document. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#content-navigable
   // TODO(HTML object loading): Use the node Document's user agent to create/destroy the child as resource selection changes.
-  // Child startup, recursive Document teardown, and traversal queuing remain unfinished.
+  // Child startup, recursive Document teardown, and history application remain unfinished.
   get contentNavigable(): Navigable | null {
     return this.#contentNavigable;
   }

@@ -6,7 +6,7 @@ import type { NavigationType } from '../../../src/browlet/browsing/navigation/ap
 import { NavigationTransitionImpl } from '../../../src/browlet/browsing/navigation/api/navigation-transition';
 import { NavigationDestinationImpl } from '../../../src/browlet/browsing/navigation/api/navigation-destination';
 import { NavigationHistoryEntryImpl } from '../../../src/browlet/browsing/navigation/api/navigation-history-entry';
-import { createSessionHistoryEntry, createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import type { NavigationTransition as BrowletNavigationTransition } from '../../../src/browlet/platform';
 import { getRelevantRealm, unwrap } from '../../support/browlet-binding';
 import { runInHostTask } from '../../support/tasks';
@@ -164,7 +164,7 @@ describe('Navigation destinations', () => {
     Object.defineProperties(entry, { key: { value: 'shadow' }, id: { value: 'shadow' }, index: { value: 100 } });
     const platform = browser.window.navigation.transition!.to;
     expect({ key: platform.key, id: platform.id, index: platform.index }).toEqual(expected);
-    const preceding = createSessionHistoryEntry(createDocumentState(document));
+    const preceding = document.env.createSessionHistoryEntry(document.url, DocumentState.create(document));
     ownerNavigation.entryList.unshift(new NavigationHistoryEntryImpl(preceding, ownerNavigation.env));
     expect(platform.index).toBe(1);
     ownerNavigation.entryList = [];

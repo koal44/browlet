@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
 import { SandboxingFlagSet } from '../../../../src/browlet/browsing/policy/sandbox';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
@@ -153,7 +153,7 @@ describe('Sandbox state and creation flags', () => {
     const parent = document.getNodeNavigable()!;
     document.setActiveSandboxingFlagSet(new SandboxingFlagSet(['sandboxed-forms']));
     const [, childDocument] = BrowsingContext.create(null, null, parent.activeBrowsingContext!.group!);
-    const child = new Navigable(createDocumentState(childDocument), parent);
+    const child = new Navigable(DocumentState.create(childDocument), parent);
     const iframe = browser.document.createElement('iframe');
     iframe.setAttribute('sandbox', 'allow-scripts allow-forms');
     iframe.setAttribute('referrerpolicy', 'NO-REFERRER');
@@ -176,7 +176,7 @@ describe('Sandbox state and creation flags', () => {
     const browser = new Browlet({ route: () => '' });
     const document = unwrap<DocumentImpl>(browser.document);
     const [, childDocument] = BrowsingContext.createTopLevel(document.env.userAgent);
-    const child = new Navigable(createDocumentState(childDocument), document.getNodeNavigable());
+    const child = new Navigable(DocumentState.create(childDocument), document.getNodeNavigable());
     const container = document.createElement(tag) as HTMLObjectElementImpl | HTMLFrameElementImpl;
     container.contentNavigable = child;
     const response = new FetchResponse();

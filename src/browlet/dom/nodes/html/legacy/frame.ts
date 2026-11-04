@@ -23,7 +23,7 @@ export class HTMLFrameElementImpl extends HTMLElementImpl {
   /** Child navigation destination, or null before creation and after destruction. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#content-navigable
   // TODO(HTML legacy frames): Insertion/removal must call the node Document's user agent to create/destroy its child.
-  // Frame context inheritance, recursive Document teardown, and traversal queuing remain unfinished.
+  // Frame context inheritance, recursive Document teardown, and history application remain unfinished.
   get contentNavigable(): Navigable | null {
     return this.#contentNavigable;
   }

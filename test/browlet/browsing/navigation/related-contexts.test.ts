@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { Navigable, Traversable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { createDocumentState, createSessionHistoryEntry } from '../../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
 import { InternalError } from '../../../../src/infra/index';
 import { createOpaqueOrigin, obtainURLOrigin, parseURL } from '../../../../src/url/index';
@@ -54,7 +54,7 @@ describe('related browsing contexts', () => {
     const [replacement, document] = BrowsingContext.create(null, null, root.context.group!);
     document.adoptNode(child.container);
     document.body!.appendChild(child.container);
-    root.navigable.activeSessionHistoryEntry = createSessionHistoryEntry(createDocumentState(document));
+    root.navigable.activeSessionHistoryEntry = document.env.createSessionHistoryEntry(document.url, DocumentState.create(document));
 
     expect(root.context.navigable).toBe(root.navigable);
     expect(root.context.isTopLevel).toBe(false);
@@ -216,7 +216,7 @@ function createChild(parent: Navigable, url?: string, traversable = false) {
   owner.body!.appendChild(container);
   const [context, document] = BrowsingContext.create(owner, container, parent.topLevelTraversable.activeBrowsingContext!.group!);
   if (url !== undefined) document.origin = obtainURLOrigin(parseURL(url).url!);
-  const state = createDocumentState(document);
+  const state = DocumentState.create(document);
   const navigable = traversable ? new Traversable(state, parent) : new Navigable(state, parent);
   container.contentNavigable = navigable;
   return { context, document, navigable, container };
@@ -232,6 +232,6 @@ function createAuxiliary(opener: BrowsingContext, url?: string) {
 function replaceDocument(navigable: Navigable) {
   const document = navigable.activeDocument!.env.createDocument();
   document.browsingContext = navigable.activeBrowsingContext;
-  navigable.activeSessionHistoryEntry = createSessionHistoryEntry(createDocumentState(document));
+  navigable.activeSessionHistoryEntry = document.env.createSessionHistoryEntry(document.url, DocumentState.create(document));
   document.makeActive();
 }

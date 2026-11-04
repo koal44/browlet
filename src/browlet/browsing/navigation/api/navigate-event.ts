@@ -8,7 +8,6 @@ import type { FormDataImpl } from '../../../../xhr/index';
 import { ErrorEventImpl, EventImpl, type EventInit } from '../../../dom/events/index';
 import type { AbortControllerImpl, AbortSignalImpl } from '../../../dom/abort/index';
 import type { ElementImpl } from '../../../dom/nodes/index';
-import { restoreScrollPositionData } from '../state/index';
 import type { BrowletEnvironment } from '../../../environment/index';
 import type { SerializedRecord } from '../../../scripting/structured-data/index';
 
@@ -230,7 +229,7 @@ export class NavigateEventImpl extends EventImpl {
     this.interceptionState = 'scrolled';
     const document = this.env.getAssociatedDocument()!;
     if (this.navigationType === 'traverse') {
-      restoreScrollPositionData(document.getNodeNavigable()!.activeSessionHistoryEntry);
+      document.getNodeNavigable()!.activeSessionHistoryEntry.restoreScrollPositionData();
     } else if (document.indicatedPart === null) {
       document.scrollToBeginning();
     } else {

@@ -2,8 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import { PageEvaluation } from '../../../src/browlet/automation/evaluation';
-import { BrowsingContext, createDocumentState, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
-import { createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/state/index';
+import { BrowsingContext, DocumentState, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
 import { NavigateEventImpl } from '../../../src/browlet/browsing/navigation/api/navigate-event';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { idlType } from '../../../src/web-idl/core/index';
@@ -206,7 +205,7 @@ describe('Navigate-event postcommit execution', () => {
     // Child/auxiliary creation is unfinished; provide its activity relationship.
     otherDocument.browsingContext = new BrowsingContext(siblingRealm.windowProxy);
     otherDocument.makeActive();
-    const foreign = new PageEvaluation(new TopLevelTraversable(createDocumentState(otherDocument)));
+    const foreign = new PageEvaluation(new TopLevelTraversable(DocumentState.create(otherDocument)));
     expect(siblingRealm.agent).toBe(realm.agent);
     Reflect.set(siblingRealm.globalObject, 'ownerNavigation', browser.window.navigation);
     const result = { called: false, succeeded: false };
@@ -272,7 +271,7 @@ async function fixture() {
   const navigable = document.getNodeNavigable()!;
   // Supply the still-unfinished §7.4 URL/history effect; entry updates and callbacks remain real.
   vi.spyOn(document, 'updateURLAndHistory').mockImplementation((url, _state, type = 'push') => {
-    const entry = createSessionHistoryEntry({ ...navigable.activeSessionHistoryEntry.documentState, document });
+    const entry = document.env.createSessionHistoryEntry(document.url, navigable.activeSessionHistoryEntry.documentState);
     entry.url = url;
     navigable.activeSessionHistoryEntry = entry;
     navigation.updateEntriesForSameDocumentNavigation(entry, type);

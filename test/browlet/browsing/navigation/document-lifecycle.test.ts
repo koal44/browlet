@@ -13,7 +13,7 @@ import { BrowletRealm, WindowRealm } from '../../../../src/browlet/scripting/rea
 import { WindowAgent } from '../../../../src/browlet/scripting/agents';
 import { BrowletEnvironmentBase } from '../../../../src/browlet/environment/index';
 import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { createDocumentState, createSessionHistoryEntry } from '../../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { monotonicClock } from '../../../../src/browlet/timing/clock';
 import { WindowProxyHandle } from '../../../../src/browlet/browsing/window/window-proxy';
 import { WindowImpl } from '../../../../src/browlet/browsing/window/window';
@@ -97,7 +97,7 @@ describe('browsing context groups', () => {
     const parent = TopLevelTraversable.create(new UserAgent(), null, '');
     const parentContext = parent.activeBrowsingContext!;
     const [childContext, childDocument] = BrowsingContext.create(null, null, parentContext.group!);
-    const child = new Navigable(createDocumentState(childDocument), parent);
+    const child = new Navigable(DocumentState.create(childDocument), parent);
     const container = parent.activeDocument!.createElement('iframe') as HTMLIFrameElementImpl;
     container.contentNavigable = child;
 
@@ -272,7 +272,7 @@ describe('navigables', () => {
     const document = createTestDocument();
     document.browsingContext = new BrowsingContext();
     document.url = requireURL('https://example.test/page');
-    const documentState = createDocumentState(document);
+    const documentState = DocumentState.create(document);
     const activity: boolean[] = [];
     document.observeFullyActiveState((active) => { activity.push(active); });
     const traversable = new TopLevelTraversable(documentState);
@@ -309,9 +309,7 @@ describe('navigables', () => {
     expect(secondDocument.getNodeNavigable()).toBeNull();
     expect(secondDocument.isFullyActive()).toBe(false);
 
-    traversable.activeSessionHistoryEntry = createSessionHistoryEntry(
-      createDocumentState(secondDocument),
-    );
+    traversable.activeSessionHistoryEntry = secondDocument.env.createSessionHistoryEntry(secondDocument.url, DocumentState.create(secondDocument));
 
     expect(firstDocument.getNodeNavigable()).toBeNull();
     expect(firstDocument.isFullyActive()).toBe(false);
@@ -322,14 +320,12 @@ describe('navigables', () => {
   it('allows an active history entry whose Document is absent', () => {
     const document = createTestDocument();
     document.browsingContext = new BrowsingContext();
-    const traversable = new TopLevelTraversable(createDocumentState(document));
+    const traversable = new TopLevelTraversable(DocumentState.create(document));
     const initialEntry = traversable.activeSessionHistoryEntry;
     const activity: boolean[] = [];
     document.observeFullyActiveState((active) => { activity.push(active); });
 
-    traversable.activeSessionHistoryEntry = {
-      ...initialEntry, documentState: createDocumentState(null),
-    };
+    traversable.activeSessionHistoryEntry = document.env.createSessionHistoryEntry(initialEntry.url, new DocumentState());
 
     expect(traversable.activeDocument).toBeNull();
     expect(traversable.activeBrowsingContext).toBeNull();
@@ -359,7 +355,7 @@ describe('navigables', () => {
     const childDocument = createTestDocument();
     const childContext = new BrowsingContext();
     childDocument.browsingContext = childContext;
-    const child = new Navigable(createDocumentState(childDocument), parent);
+    const child = new Navigable(DocumentState.create(childDocument), parent);
 
     expect(childDocument.getNodeNavigable()).toBe(child);
     expect(parentDocument.isFullyActive()).toBe(true);

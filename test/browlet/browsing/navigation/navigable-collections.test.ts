@@ -3,7 +3,7 @@ import { assert, describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { createDocumentState, createSessionHistoryEntry } from '../../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { unwrap } from '../../../support/browlet-binding';
 
@@ -89,7 +89,7 @@ describe('related navigable collections', () => {
     const child = createChild(root.document, 'iframe');
     const previous = createChild(child.document, 'embed');
     const [, replacement] = BrowsingContext.createTopLevel(root.document.env.userAgent);
-    child.navigable.currentSessionHistoryEntry = createSessionHistoryEntry(createDocumentState(replacement));
+    child.navigable.currentSessionHistoryEntry = replacement.env.createSessionHistoryEntry(replacement.url, DocumentState.create(replacement));
 
     expect(root.document.getDescendantNavigables()).toEqual([child.navigable, previous.navigable]);
     child.navigable.activeSessionHistoryEntry = child.navigable.currentSessionHistoryEntry;
@@ -124,7 +124,7 @@ function createChild(owner: DocumentImpl, tag: 'iframe' | 'object' | 'embed' | '
   const container = owner.createElement(tag);
   assert(container.isNavigableContainer());
   const [, document] = BrowsingContext.createTopLevel(owner.env.userAgent);
-  const navigable = new Navigable(createDocumentState(document), owner.getNodeNavigable());
+  const navigable = new Navigable(DocumentState.create(document), owner.getNodeNavigable());
   // Supply the retained association while creator inheritance and child startup remain unfinished.
   container.contentNavigable = navigable;
   owner.body!.appendChild(container);

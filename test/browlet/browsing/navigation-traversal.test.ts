@@ -4,7 +4,6 @@ import { Browlet } from '../../../src/browlet/browlet';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import type { BrowletEnvironment } from '../../../src/browlet/environment/index';
 import type { NavigationResultResult } from '../../../src/browlet/platform';
-import { createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/state/index';
 import { navigationAndTraversalTaskSource } from '../../../src/browlet/scripting/tasks';
 import { getRelevantRealm, unwrap } from '../../support/browlet-binding';
 import { runInHostTask } from '../../support/tasks';
@@ -165,23 +164,51 @@ describe('Navigation traversal preparation', () => {
     expect(tracked.committed).toBe(navigation.upcomingTraverseAPIMethodTrackers.get(entries[0]!.navigationAPIKey)!.committedPromise.backing);
   });
 
-  it.each(['activation', 'queue'] as const)('keeps the missing %s dependency explicit without leaving a pending request', async (owner) => {
-    const { browser, activation, queue, navigation } = await fixture();
-    if (owner === 'activation') activation.mockRestore();
-    else queue.mockRestore();
-    const error = owner === 'activation' ? 'Window transient activation is not implemented' : 'Session history traversal queue is not implemented';
+  it.each(['activation', 'scheduling'] as const)('does not leave a pending request when %s fails before acceptance', async (owner) => {
+    const { browser, document, activation, queue, navigation } = await fixture();
+    const error = owner === 'activation' ? 'Window transient activation is not implemented' : 'Host scheduling failed';
+    if (owner === 'activation') {
+      activation.mockRestore();
+    } else {
+      queue.mockRestore();
+      vi.spyOn(document.env.userAgent, 'runInParallel').mockImplementation(() => { throw new Error(error); });
+    }
     expect(() => browser.window.navigation.back()).toThrow(error);
     expect(navigation.upcomingTraverseAPIMethodTrackers.size).toBe(0);
   });
 });
 
 describe('queued Navigation traversal work', () => {
+  it('reaches the unfinished history application through the real queue', async () => {
+    const { browser, document, queue, apply } = await fixture();
+    let queued!: () => void;
+    vi.spyOn(document.env.userAgent, 'runInParallel').mockImplementation((steps) => { queued = steps; });
+    queue.mockRestore();
+    apply.mockRestore();
+    browser.window.navigation.back();
+    expect(queued).toBeTypeOf('function');
+    expect(queued).toThrow('Traverse history-step application is not implemented');
+  });
+
+  it('delivers cancellation from actual parallel queue execution to the Navigation owner', async () => {
+    const { browser, document, queue, apply, navigation } = await fixture();
+    queue.mockRestore();
+    apply.mockReturnValue('canceled-by-beforeunload');
+    const errors = await rejections(browser.window.navigation.back(), document.env);
+    expect(apply).toHaveBeenCalledOnce();
+    expect(errors).toHaveLength(2);
+    for (const error of errors) expect(error).toMatchObject({ name: 'AbortError' });
+    expect(navigation.upcomingTraverseAPIMethodTrackers.size).toBe(0);
+  });
+
   it('looks up current history at execution, while retaining the earlier source snapshot', async () => {
     const { browser, document, entries, traversable, steps, apply, navigable, activation } = await fixture();
     document.policyContainer.referrerPolicy = 'no-referrer';
     activation.mockReturnValue(true);
     browser.window.navigation.back();
-    const replacement = { ...entries[0]!, step: 17 };
+    const previous = entries[0]!;
+    const replacement = Object.assign(document.env.createSessionHistoryEntry(previous.url, previous.documentState), previous);
+    replacement.step = 17;
     traversable.sessionHistoryEntries[0] = replacement;
     document.policyContainer.referrerPolicy = 'origin';
     activation.mockReturnValue(false);
@@ -284,8 +311,8 @@ async function fixture() {
   const navigable = document.getNodeNavigable()!;
   const traversable = navigable.traversable;
   const current = navigable.activeSessionHistoryEntry;
-  const entries = [createSessionHistoryEntry({ ...current.documentState, document }), current,
-    createSessionHistoryEntry({ ...current.documentState, document })];
+  const entries = [document.env.createSessionHistoryEntry(document.url, current.documentState), current,
+    document.env.createSessionHistoryEntry(document.url, current.documentState)];
   for (const [i, entry] of entries.entries()) entry.step = i;
   // Full history application is unfinished; provide its committed entry records at the owner boundary.
   traversable.sessionHistoryEntries = entries;

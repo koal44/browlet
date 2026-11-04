@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { getRelevantRealm } from '../../../support/browlet-binding';
 
@@ -97,13 +97,15 @@ describe('Window opening and closing state', () => {
   it('requires a top-level traversable and either web creation or a single history entry for script-closability', () => {
     const traversable = TopLevelTraversable.create(new UserAgent(), null, '');
     expect(traversable.isScriptClosable).toBe(true);
-    traversable.sessionHistoryEntries.push({ ...traversable.activeSessionHistoryEntry });
+    const document = traversable.activeDocument!;
+    const entry = traversable.activeSessionHistoryEntry;
+    traversable.sessionHistoryEntries.push(document.env.createSessionHistoryEntry(entry.url, entry.documentState));
     expect(traversable.isScriptClosable).toBe(false);
     traversable.isCreatedByWebContent = true;
     expect(traversable.isScriptClosable).toBe(true);
 
     const [, childDocument] = BrowsingContext.createTopLevel(new UserAgent());
-    const navigable = new Navigable(createDocumentState(childDocument), traversable);
+    const navigable = new Navigable(DocumentState.create(childDocument), traversable);
     expect(navigable.isScriptClosable).toBe(false);
     expect(getRelevantRealm(childDocument).windowProxy.platform.close()).toBeUndefined();
   });
@@ -120,9 +122,9 @@ describe('window-open entry', () => {
     const top = TopLevelTraversable.create(userAgent, null, '');
     // Compose the hierarchy explicitly until child browsing-context creation is implemented.
     const [, parentDocument] = BrowsingContext.createTopLevel(userAgent);
-    const parent = new Navigable(createDocumentState(parentDocument), top);
+    const parent = new Navigable(DocumentState.create(parentDocument), top);
     const [, childDocument] = BrowsingContext.createTopLevel(userAgent);
-    const child = new Navigable(createDocumentState(childDocument), parent);
+    const child = new Navigable(DocumentState.create(childDocument), parent);
     const window = child.activeWindowProxy.platform;
 
     expect(window.open('', '_self')).toBe(window);

@@ -1,13 +1,14 @@
 export { BrowsingContext, BrowsingContextGroup } from './browsing-context';
 export {
-  Navigable, Traversable, TopLevelTraversable, SessionHistoryTraversalQueue,
+  Navigable, Traversable, TopLevelTraversable,
   type NavigableContainer, type NavigateOptions, type ReloadOptions, type NavigationHistoryBehavior,
   type HistoryHandlingBehavior, type UserNavigationInvolvement, type HistoryStepResult,
 } from './navigable';
 export { NavigationParams, type OpenerPolicyEnforcementResult } from './params';
+export { SessionHistoryTraversalQueue } from './session-history-traversal-queue';
 export {
-  createDocumentState, type DocumentState, type DocumentBackedState, type PostResource,
-  createSessionHistoryEntry, restoreScrollPositionData, type SessionHistoryEntry, type NestedHistory,
+  DocumentState, type DocumentBackedState, type PostResource,
+  SessionHistoryEntry, type NestedHistory,
 } from './state/index';
 export {
   NotRestoredReasonDetailsImpl, NotRestoredReasonsImpl, notRestoredReasonDetailsIDL, notRestoredReasonsIDL,

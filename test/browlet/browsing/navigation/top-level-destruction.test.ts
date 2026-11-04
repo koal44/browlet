@@ -2,7 +2,8 @@ import { afterEach, assert, describe, expect, it, vi } from 'vitest';
 
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { createDocumentState, createSessionHistoryEntry } from '../../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
+import type { SessionHistoryTraversalSteps } from '../../../../src/browlet/browsing/navigation/session-history-traversal-queue';
 import { navigationAndTraversalTaskSource } from '../../../../src/browlet/scripting/tasks';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { PointerEventStream } from '../../../../src/browlet/interaction/index';
@@ -20,11 +21,12 @@ describe('top-level traversable destruction', () => {
     const session = putSession(traversable);
     const otherSession = putSession(other);
     const retiredDocument = document.env.createDocument();
-    const retiredEntry = createSessionHistoryEntry(createDocumentState(retiredDocument));
-    const emptyEntry = { ...retiredEntry, documentState: createDocumentState(null) };
+    const retiredEntry = retiredDocument.env.createSessionHistoryEntry(retiredDocument.url, DocumentState.create(retiredDocument));
+    const emptyEntry = document.env.createSessionHistoryEntry(retiredEntry.url, new DocumentState());
     const activeEntry = traversable.activeSessionHistoryEntry;
     // Preserve the per-entry requests, including repeated Document identity; completion belongs to recursive teardown.
-    traversable.sessionHistoryEntries = [retiredEntry, emptyEntry, activeEntry, { ...activeEntry }];
+    const otherActiveEntry = document.env.createSessionHistoryEntry(activeEntry.url, activeEntry.documentState);
+    traversable.sessionHistoryEntries = [retiredEntry, emptyEntry, activeEntry, otherActiveEntry];
     const retired = vi.spyOn(retiredDocument, 'destroyAndDescendants').mockImplementation(() => {});
     const active = vi.spyOn(document, 'destroyAndDescendants').mockImplementation(() => {});
     const ui = vi.spyOn(userAgent, 'removeTopLevelTraversableFromUI').mockImplementation((removed) => {
@@ -138,7 +140,7 @@ describe('top-level traversable closing', () => {
     shadow.appendChild(container);
     // Supply the child-startup dependency; collection and closing use real retained owners.
     const [, childDocument] = BrowsingContext.createTopLevel(userAgent);
-    const child = new Navigable(createDocumentState(childDocument), traversable);
+    const child = new Navigable(DocumentState.create(childDocument), traversable);
     container.contentNavigable = child;
     const check = vi.spyOn(Navigable, 'checkIfUnloadingIsCanceled').mockReturnValue('continue');
     const queue = vi.spyOn(traversable, 'appendSessionHistoryTraversalSteps').mockImplementation(() => {
@@ -165,7 +167,7 @@ describe('top-level traversable closing', () => {
     expect(queued).toHaveLength(1);
     expect(originalUnload).not.toHaveBeenCalled();
     const [replacementContext, replacement] = BrowsingContext.createTopLevel(userAgent);
-    traversable.activeSessionHistoryEntry = createSessionHistoryEntry(createDocumentState(replacement));
+    traversable.activeSessionHistoryEntry = replacement.env.createSessionHistoryEntry(replacement.url, DocumentState.create(replacement));
     traversable.sessionHistoryEntries.push(traversable.activeSessionHistoryEntry);
     const active = vi.spyOn(replacement, 'destroyAndDescendants').mockImplementation(() => {});
     let afterAllUnloads: (() => void) | undefined;
@@ -193,7 +195,7 @@ describe('top-level traversable closing', () => {
     const ui = vi.spyOn(userAgent, 'removeTopLevelTraversableFromUI');
     const destroyed = vi.spyOn(userAgent, 'webDriverBiDiNavigableDestroyed');
     vi.spyOn(Navigable, 'checkIfUnloadingIsCanceled').mockReturnValue('continue');
-    let queued: (() => void) | undefined;
+    let queued: SessionHistoryTraversalSteps | undefined;
     vi.spyOn(traversable, 'appendSessionHistoryTraversalSteps').mockImplementation((steps) => { queued = steps; });
     let afterAllUnloads: (() => void) | undefined;
     vi.spyOn(document, 'unloadAndDescendants').mockImplementation((_newDocument, after) => { afterAllUnloads = after; });
@@ -222,13 +224,12 @@ describe('top-level traversable closing', () => {
     expect(destroyed).toHaveBeenCalledExactlyOnceWith(traversable);
   });
 
-  it('keeps cancellation, traversal execution, and unloading as separate explicit dependencies', () => {
-    const { traversable } = fixture();
+  it('keeps cancellation and queued unloading as separate explicit dependencies', () => {
+    const { userAgent, traversable } = fixture();
     expect(() => traversable.close()).toThrow('Unload cancellation checks are not implemented');
     vi.spyOn(Navigable, 'checkIfUnloadingIsCanceled').mockReturnValue('continue');
-    expect(() => traversable.close()).toThrow('Session history traversal queue is not implemented');
     let unload: (() => void) | undefined;
-    vi.spyOn(traversable, 'appendSessionHistoryTraversalSteps').mockImplementation((steps) => { unload = steps; });
+    vi.spyOn(userAgent, 'runInParallel').mockImplementation((steps) => { unload = steps; });
     traversable.close();
     expect(() => unload!()).toThrow('Document and descendant unloading is not implemented');
   });

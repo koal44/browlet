@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import type { Task } from '../../../src/browlet/scripting/event-loop';
 import { permissionsTaskSource } from '../../../src/browlet/scripting/tasks';
@@ -200,7 +200,7 @@ describe('Permissions §6.2: query()', () => {
     if (outcome === 'destruction') env.queueTask('permissions', () => { document.destroy(); });
     const promise = window.navigator.permissions.query({ name: 'persistent-storage' });
     const observed = observeBrowletPromise(window, promise).then(settled, settled);
-    traversable.activeSessionHistoryEntry = { ...activeEntry, documentState: createDocumentState(null) };
+    traversable.activeSessionHistoryEntry = env.createSessionHistoryEntry(activeEntry.url, new DocumentState());
     expect(document.isFullyActive()).toBe(false);
     for (const steps of background) steps();
     await runInHostTask(() => { expect(loop.runTaskTurn()).toBe(false); });

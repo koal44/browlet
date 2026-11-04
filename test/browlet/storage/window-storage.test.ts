@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { BrowsingContext, Navigable, TopLevelTraversable, createDocumentState } from '../../../src/browlet/browsing/navigation/index';
+import { BrowsingContext, Navigable, TopLevelTraversable, DocumentState } from '../../../src/browlet/browsing/navigation/index';
 import type { Window as WindowPlatform } from '../../../src/browlet/platform';
 import type { StorageImpl } from '../../../src/browlet/storage/index';
 import { StorageBottle } from '../../../src/storage/index';
@@ -197,7 +197,7 @@ function createRelatedWindow(browser: Browlet, parent: Navigable | null = null) 
   const [, document] = BrowsingContext.createTopLevel(env.userAgent);
   document.url = env.window.document.url;
   document.origin = env.origin;
-  const state = createDocumentState(document);
+  const state = DocumentState.create(document);
   const navigable = parent === null ? new TopLevelTraversable(state) : new Navigable(state, parent);
   return navigable.activeWindowProxy.platform;
 }

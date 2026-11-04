@@ -6,7 +6,7 @@ import {
   TopLevelTraversable, Navigable,
 } from '../../../src/browlet/browsing/navigation/navigable';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl } from '../../../src/browlet/dom/nodes/html/embedded/iframe';
 import {
@@ -401,7 +401,7 @@ function appendFrame(document: DocumentImpl): HTMLIFrameElementImpl {
 
 function attachChildDocument(document: DocumentImpl, container: HTMLIFrameElementImpl): Navigable {
   // Connect real implementation owners through the existing seam until child creation is implemented.
-  const navigable = new Navigable(createDocumentState(document), container.nodeDocument.getNodeNavigable());
+  const navigable = new Navigable(DocumentState.create(document), container.nodeDocument.getNodeNavigable());
   container.contentNavigable = navigable;
   return navigable;
 }

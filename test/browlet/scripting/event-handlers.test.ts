@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { PageEvaluation } from '../../../src/browlet/automation/index';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import { getRelevantRealm } from '../../support/browlet-binding';
 
@@ -443,6 +443,6 @@ function createSibling(browser: Browlet) {
   document.browsingContext = new BrowsingContext(env.realm.windowProxy);
   env.window.setAssociatedDocument(document);
   document.makeActive();
-  const traversable = new TopLevelTraversable(createDocumentState(document));
+  const traversable = new TopLevelTraversable(DocumentState.create(document));
   return { window: env.realm.windowProxy.platform, evaluation: new PageEvaluation(traversable) };
 }

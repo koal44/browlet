@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { createDocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { PermissionsPolicy } from '../../../../src/browlet/browsing/policy/permissions';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { monotonicClock } from '../../../../src/browlet/timing/clock';
@@ -98,7 +98,7 @@ describe('Window script settings', () => {
     const browser = new Browlet({ route: () => '' });
     const parent = getRelevantRealm(browser.window).windowImplementation.navigable!;
     const [, document] = BrowsingContext.createTopLevel(parent.activeDocument!.env.userAgent);
-    const child = new Navigable(createDocumentState(document), parent);
+    const child = new Navigable(DocumentState.create(document), parent);
     document.env.realm.agent.agentCluster!.crossOriginIsolationMode = 'concrete';
     expect(document.getNodeNavigable()).toBe(child);
     expect(document.isFullyActive()).toBe(false);

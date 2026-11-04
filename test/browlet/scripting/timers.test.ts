@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createManualUserAgent } from '../../support/browlet-agent';
 import { createTestDocument } from '../../support/dom';
-import { createDocumentState, createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import { Duration } from
   '../../../src/browlet/timing/clock';
@@ -21,7 +21,7 @@ describe('HTML timers', () => {
     const inactiveDocument = createTestDocument();
     inactiveDocument.browsingContext = fixture.traversable.activeBrowsingContext;
     fixture.traversable.activeSessionHistoryEntry =
-      createSessionHistoryEntry(createDocumentState(inactiveDocument));
+      inactiveDocument.env.createSessionHistoryEntry(inactiveDocument.url, DocumentState.create(inactiveDocument));
     fixture.host.advanceBy(100);
 
     expect(completion).not.toHaveBeenCalled();

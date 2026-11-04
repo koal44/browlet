@@ -5,7 +5,7 @@ import type { Element, PointerEvent } from '../../../src/browlet/platform';
 import type { DocumentImpl, ElementImpl } from '../../../src/browlet/dom/nodes/index';
 import type { HTMLIFrameElementImpl } from '../../../src/browlet/dom/nodes/html/embedded/index';
 import { BrowsingContext, Navigable, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { PointerEventStream } from '../../../src/browlet/interaction/index';
 import { PointerEventImpl, type PointerInputEventType } from '../../../src/browlet/interaction/events/index';
 import { project, unwrap } from '../../support/browlet-binding';
@@ -170,7 +170,7 @@ describe('Pointer Events §4: Element capture methods', () => {
     parentDocument.body!.appendChild(container);
     const [, child] = BrowsingContext.createTopLevel(parentDocument.env.userAgent);
     // Child creation remains unfinished; use the same retained association as the stream tests.
-    container.contentNavigable = new Navigable(createDocumentState(child), parentDocument.getNodeNavigable());
+    container.contentNavigable = new Navigable(DocumentState.create(child), parentDocument.getNodeNavigable());
     const childImpl = child.createElement('div');
     child.body!.appendChild(childImpl);
     const target = project(childImpl) as Element;

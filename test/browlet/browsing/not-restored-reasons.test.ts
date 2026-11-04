@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import {
-  BrowsingContext, Navigable, createDocumentState, createSessionHistoryEntry,
+  BrowsingContext, Navigable, DocumentState,
   NotRestoredReasonsImpl, type NotRestoredReasons, type TopLevelTraversable,
 } from '../../../src/browlet/browsing/navigation/index';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
@@ -222,9 +222,9 @@ describe('HTML §7.2.8: NotRestoredReasons', () => {
     expect(document.notRestoredReasons).toBeNull();
     const active = record({ id: 'active' });
     navigable.activeSessionHistoryEntry.documentState.notRestoredReasons = active;
-    const nextState = createDocumentState(document);
+    const nextState = DocumentState.create(document);
     nextState.notRestoredReasons = record({ id: 'next' });
-    navigable.currentSessionHistoryEntry = createSessionHistoryEntry(nextState);
+    navigable.currentSessionHistoryEntry = document.env.createSessionHistoryEntry(document.url, nextState);
     expect(document.notRestoredReasons).toBe(active);
     navigable.activeSessionHistoryEntry = navigable.currentSessionHistoryEntry;
     expect(document.notRestoredReasons).toBe(nextState.notRestoredReasons);
@@ -256,7 +256,7 @@ describe('HTML §7.2.8: NotRestoredReasons', () => {
     expect(detached.notRestoredReasons).toBeNull();
     const childDocument = fixture().document;
     childDocument.browsingContext = new BrowsingContext();
-    const state = createDocumentState(childDocument);
+    const state = DocumentState.create(childDocument);
     state.notRestoredReasons = record({ id: 'child' });
     const child = new Navigable(state, document.getNodeNavigable());
     expect(childDocument.getNodeNavigable()).toBe(child);

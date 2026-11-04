@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { BrowsingContext, createDocumentState, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
+import { BrowsingContext, DocumentState, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
 import { jsEngineTaskSource, networkingTaskSource } from '../../../src/browlet/scripting/tasks';
 import { ResponseImpl } from '../../../src/fetch/response';
 import { addon, JSRealm } from '../../../src/js-engine/index';
@@ -318,7 +318,7 @@ function addForeignWindow(browser: Browlet): void {
   const document = realm.getAssociatedDocument();
   // Native completion belongs to this Document and must wait while it is inactive.
   document.browsingContext = new BrowsingContext(realm.windowProxy);
-  new TopLevelTraversable(createDocumentState(document));
+  new TopLevelTraversable(DocumentState.create(document));
   Reflect.set(browser.window, 'foreign', foreign);
 }
 

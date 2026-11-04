@@ -55,6 +55,7 @@ import type { HTMLFormElementImpl } from '../dom/nodes/html/forms/index';
 import { HTMLAreaElementImpl } from '../dom/nodes/html/embedded/index';
 import type { DOMEnvironment, DOMStringListImpl, EventImplConstructor } from '../dom/index';
 import { MessageEventImpl, type MessagePortImpl } from '../communication/index';
+import { SessionHistoryEntry, type DocumentState } from '../browsing/navigation/state/index';
 import { openWindow, WindowImpl, type WindowProxyHandle } from '../browsing/window/index';
 import { OriginImpl } from '../browsing/index';
 import type {
@@ -660,6 +661,11 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#window-open-steps
   openWindow(url: string, target: string, features: string): WindowProxyHandle | null {
     return openWindow(url, target, features, this);
+  }
+
+  /** Create a history entry with this environment's storage serialization facilities. */
+  createSessionHistoryEntry(url: URLRecord, documentState: DocumentState): SessionHistoryEntry {
+    return new SessionHistoryEntry(url, documentState, this);
   }
 
   /** Resolve using the referring script, with this environment as the current execution owner. */

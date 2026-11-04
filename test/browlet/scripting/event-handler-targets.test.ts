@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { PageEvaluation } from '../../../src/browlet/automation/index';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { Navigable, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import type { EventTargetImpl } from '../../../src/browlet/dom/events/index';
 import type { HTMLIFrameElementImpl } from '../../../src/browlet/dom/nodes/html/embedded/index';
@@ -129,7 +129,7 @@ describe.each(['body', 'frameset'] as const)('HTML %s event-handler targets', (t
     const [childContext, childDocument] = BrowsingContext.createTopLevel(parentDocument.env.userAgent);
     const container = parentDocument.createElement('iframe') as HTMLIFrameElementImpl;
     parentDocument.body!.appendChild(container);
-    container.contentNavigable = new Navigable(createDocumentState(childDocument), parentDocument.getNodeNavigable());
+    container.contentNavigable = new Navigable(DocumentState.create(childDocument), parentDocument.getNodeNavigable());
     const parentContext = parentDocument.browsingContext;
     parentDocument.browsingContext = null;
     try {
@@ -198,6 +198,6 @@ function createSibling(browser: Browlet) {
   document.browsingContext = new BrowsingContext(env.realm.windowProxy);
   env.window.setAssociatedDocument(document);
   document.makeActive();
-  const traversable = new TopLevelTraversable(createDocumentState(document));
+  const traversable = new TopLevelTraversable(DocumentState.create(document));
   return { window: env.realm.windowProxy.platform, evaluation: new PageEvaluation(traversable) };
 }

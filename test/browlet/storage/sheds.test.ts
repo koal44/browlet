@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { Navigable, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import type { HTMLIFrameElementImpl } from '../../../src/browlet/dom/nodes/html/embedded/iframe';
 import { StorageKey, StorageShelf } from '../../../src/storage/index';
@@ -66,7 +66,7 @@ describe('Storage §4.3: browser ownership', () => {
     parent.body!.appendChild(iframe);
     const [opener, childDocument] = BrowsingContext.create(parent, iframe, top.activeBrowsingContext!.group!);
     // Compose the child without requiring the traversal-queue drain.
-    iframe.contentNavigable = new Navigable(createDocumentState(childDocument), top);
+    iframe.contentNavigable = new Navigable(DocumentState.create(childDocument), top);
     const key = keyFor('https://example.test/');
     const shelf = StorageShelf.create('session');
     const original = shelf.bucketMap.get('default')!.bottleMap.get('sessionStorage')!.map;

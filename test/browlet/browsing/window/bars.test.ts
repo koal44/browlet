@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { createDocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
 import { parseURL } from '../../../../src/url/index';
@@ -46,7 +46,7 @@ describe('Historical Window interface APIs', () => {
     const context = document.browsingContext!;
     const container = document.createElement('iframe') as HTMLIFrameElementImpl;
     const [childContext, childDocument] = BrowsingContext.createTopLevel(document.env.userAgent);
-    container.contentNavigable = new Navigable(createDocumentState(childDocument), document.getNodeNavigable());
+    container.contentNavigable = new Navigable(DocumentState.create(childDocument), document.getNodeNavigable());
     document.body!.appendChild(container);
     const childWindow = childContext.windowProxy.platform;
     childContext.isPopup = true;
@@ -74,7 +74,7 @@ describe('Historical Window interface APIs', () => {
     const browser = new Browlet({ route: () => '' });
     const document = unwrap<DocumentImpl>(browser.document);
     const [context, childDocument] = BrowsingContext.createTopLevel(document.env.userAgent);
-    new Navigable(createDocumentState(childDocument), document.getNodeNavigable());
+    new Navigable(DocumentState.create(childDocument), document.getNodeNavigable());
     // This child's container/creation lifecycle has not made it fully active.
     expect(context.topLevelBrowsingContext).toBeNull();
     expect(() => context.windowProxy.platform.menubar.visible).toThrow(

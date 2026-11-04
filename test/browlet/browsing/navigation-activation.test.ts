@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
-import { createSessionHistoryEntry, createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { NavigationHistoryEntryImpl } from '../../../src/browlet/browsing/navigation/api/navigation-history-entry';
 import { createOpaqueOrigin, obtainURLOrigin, parseURL } from '../../../src/url/index';
 import { getRelevantRealm, unwrap } from '../../support/browlet-binding';
@@ -128,9 +128,9 @@ describe('Navigation activation', () => {
     const { browser, navigation, document, current } = await fixture();
     const activation = browser.window.navigation.activation!;
     const originalEntry = activation.entry;
-    const replacement = {
-      ...createSessionHistoryEntry({ ...current.documentState, document }), url: document.env.parseHTMLURL('#replaced')!,
-    };
+    const replacement = document.env.createSessionHistoryEntry(
+      document.env.parseHTMLURL('#replaced')!, current.documentState,
+    );
     // The same-document commit producer is unfinished; supply its completed list edit at the owner boundary.
     navigation.entryList = [new NavigationHistoryEntryImpl(replacement, document.env)];
     navigation.currentEntryIndex = 0;
@@ -171,9 +171,14 @@ describe('Navigation activation', () => {
     const activation = browser.window.navigation.activation!;
     const entry = activation.entry;
     expect(activation.from).not.toBeNull();
-    const previous = { ...navigation.entryList[0]!.sessionHistoryEntry };
+    const previousEntry = navigation.entryList[0]!.sessionHistoryEntry;
+    const previous = Object.assign(
+      navigation.env.createSessionHistoryEntry(previousEntry.url, previousEntry.documentState), previousEntry,
+    );
     if (kind === 'cross-origin') {
-      previous.documentState = { ...previous.documentState, origin: obtainURLOrigin(parseURL('https://other.test/').url!) };
+      previous.documentState = Object.assign(new DocumentState(), previous.documentState, {
+        origin: obtainURLOrigin(parseURL('https://other.test/').url!),
+      });
     }
     // History restoration is unfinished; exercise its activation step with an unlisted predecessor.
     navigation.updateActivation('traverse', previous);
@@ -189,7 +194,9 @@ describe('Navigation activation', () => {
     const navigation = document.getRelevantGlobalObject()!.navigation;
     const activation = browser.window.navigation.activation!;
     const previous = navigation.entryList[0]!.sessionHistoryEntry;
-    const destination = createSessionHistoryEntry({ ...navigation.currentEntry!.sessionHistoryEntry.documentState, document });
+    const destination = document.env.createSessionHistoryEntry(
+      document.url, navigation.currentEntry!.sessionHistoryEntry.documentState,
+    );
     // Supply history application's selected entry without claiming that its traversal/events are implemented.
     navigation.entryList.push(new NavigationHistoryEntryImpl(destination, document.env));
     navigation.currentEntryIndex = navigation.entryList.length - 1;
@@ -244,9 +251,10 @@ describe('Navigation activation', () => {
     const { browser, document, navigation } = await fixture();
     const initial = new Browlet({ route: () => '' });
     const initialDocument = unwrap<DocumentImpl>(initial.document);
-    const previousState = createDocumentState(initialDocument);
+    const previousState = DocumentState.create(initialDocument);
     previousState.origin = document.origin;
-    navigation.updateActivation('replace', createSessionHistoryEntry(previousState));
+    const previous = initialDocument.env.createSessionHistoryEntry(initialDocument.url, previousState);
+    navigation.updateActivation('replace', previous);
     expect(browser.window.navigation.activation!.from).toBeNull();
   });
 
@@ -267,7 +275,9 @@ describe('Navigation activation', () => {
 
   it('keeps the missing previous-Document dependency explicit for unlisted replacements', async () => {
     const { browser, navigation, current } = await fixture();
-    const previous = { ...current, documentState: { ...current.documentState, document: null } };
+    const previous = navigation.env.createSessionHistoryEntry(
+      current.url, Object.assign(new DocumentState(), current.documentState, { document: null }),
+    );
     const activation = browser.window.navigation.activation;
     expect(() => navigation.updateActivation('replace', previous))
       .toThrow('requires the previous Document');

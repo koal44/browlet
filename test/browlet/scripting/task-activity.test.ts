@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
 import { Navigable, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl } from '../../../src/browlet/dom/nodes/html/embedded/iframe';
 import { networkingTaskSource } from '../../../src/browlet/scripting/tasks';
@@ -18,7 +18,7 @@ describe('task runnability after document activity changes', () => {
     const parent = TopLevelTraversable.create(new UserAgent(), null, '');
     const parentDocument = parent.activeDocument!;
     const [, document] = BrowsingContext.createTopLevel(parentDocument.env.userAgent);
-    const child = new Navigable(createDocumentState(document), parent);
+    const child = new Navigable(DocumentState.create(document), parent);
     const steps = vi.fn();
 
     document.env.realm.queueGlobalTask(networkingTaskSource, steps);
@@ -55,9 +55,7 @@ describe('task runnability after document activity changes', () => {
     }
     expect(turns).toHaveLength(3);
 
-    parent.activeSessionHistoryEntry = {
-      ...activeEntry, documentState: createDocumentState(null),
-    };
+    parent.activeSessionHistoryEntry = parentDocument.env.createSessionHistoryEntry(activeEntry.url, new DocumentState());
     for (const document of documents) expect(document.isFullyActive()).toBe(false);
     for (const turn of turns.splice(0)) turn();
     expect(observed).toEqual([]);
@@ -97,7 +95,7 @@ function createChildDocument(parentDocument: DocumentImpl, inShadowTree = false)
     parentDocument.body!.appendChild(container);
   }
   const [, document] = BrowsingContext.createTopLevel(parentDocument.env.userAgent);
-  const child = new Navigable(createDocumentState(document), parentDocument.getNodeNavigable());
+  const child = new Navigable(DocumentState.create(document), parentDocument.getNodeNavigable());
   // Use the existing container seam until HTML child creation owns this graph.
   container.contentNavigable = child;
   return document;

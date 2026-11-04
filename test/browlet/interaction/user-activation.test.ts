@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { BrowsingContext, createDocumentState, Navigable } from '../../../src/browlet/browsing/navigation/index';
+import { BrowsingContext, DocumentState, Navigable } from '../../../src/browlet/browsing/navigation/index';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl } from '../../../src/browlet/dom/nodes/html/embedded/iframe';
 import type { HTMLObjectElementImpl } from '../../../src/browlet/dom/nodes/html/embedded/object';
@@ -140,7 +140,7 @@ async function fixture() {
 function createChild(document: DocumentImpl, tag: 'iframe' | 'object' | 'frame') {
   const container = document.createElement(tag) as HTMLIFrameElementImpl | HTMLObjectElementImpl | HTMLFrameElementImpl;
   const [, childDocument] = BrowsingContext.createTopLevel(document.env.userAgent);
-  const navigable = new Navigable(createDocumentState(childDocument), document.getNodeNavigable());
+  const navigable = new Navigable(DocumentState.create(childDocument), document.getNodeNavigable());
   // Child navigation/startup is unfinished; provide the association used by the actual descendant traversal.
   container.contentNavigable = navigable;
   return { container, document: childDocument, navigable, window: childDocument.getRelevantGlobalObject()! };

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { CSPList } from '../../../src/browlet/browsing/policy/csp/list';
 import { ContentSecurityPolicy, type CSPDisposition } from '../../../src/browlet/browsing/policy/csp/policy';
-import { BrowsingContext, createDocumentState, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
+import { BrowsingContext, DocumentState, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
 import { addon } from '../../../src/js-engine/index';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { createSiblingWindow } from '../../support/windows';
@@ -91,7 +91,7 @@ describe('WebAssembly CSP integration', () => {
     const realm = getRelevantRealm(foreign);
     const document = realm.getAssociatedDocument();
     document.browsingContext = new BrowsingContext(realm.windowProxy);
-    new TopLevelTraversable(createDocumentState(document));
+    new TopLevelTraversable(DocumentState.create(document));
     const policies = new CSPList(realm.env.origin);
     policies.policies.push(ContentSecurityPolicy.parse("script-src 'none'", 'header', 'enforce'));
     realm.env.policyContainer.cspList = policies;

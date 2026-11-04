@@ -973,6 +973,12 @@ Fetch's `queueFetchTask()` accepts an explicit global or parallel queue, so
 it works for both full settings and sandbox execution. Host-owned continuations
 use `HostPromise` without pretending to belong to a retired Document.
 
+Session-history traversal queues retain their UserAgent across Document changes.
+They serialize background algorithms, using that owner's `HostPromise` to observe
+a suspended algorithm's completion. History application owns selection of tagged
+synchronous-navigation steps from the pending set; the generic drain does not
+decide when navigation may jump ahead.
+
 ## Choosing a dependency
 
 | Need | Placement |

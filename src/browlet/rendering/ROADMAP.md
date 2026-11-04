@@ -65,6 +65,14 @@ state. Range geometry consumes text fragments; use shared
 Non-live rectangle results have a different lifetime from live style queries.
 None of these measurement APIs is supplied by current computed-style snapshots.
 
+HTML history entries now retain an explicit `scrollPositionData` placeholder.
+§7.4.6.3 capture/restoration needs the viewport and other restorable scrollable
+regions, excluding navigable containers (children restore through their own
+entries). The capture format must support Document recreation without retaining
+old layout boxes or Documents. Position measurement, restore attempts as content
+loads, user-scroll cancellation, and scroll anchoring remain missing inputs to
+the throwing [history-state operations](../browsing/navigation/state/session-history.ts).
+
 Coordinate explicit update/flush behavior with the document lifecycle. CSSOM
 resolved values and container queries need particular facts at particular
 phases; neither should trigger uncontrolled nested layout from a generic query.

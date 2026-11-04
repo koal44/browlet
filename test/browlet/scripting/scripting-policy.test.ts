@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { createSessionHistoryEntry, createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { getRelevantRealm } from '../../support/browlet-binding';
 
 afterEach(() => vi.restoreAllMocks());
@@ -88,7 +88,7 @@ describe('check if we can run script', () => {
     const navigable = document.getNodeNavigable()!;
     const replacement = env.createDocument();
     replacement.browsingContext = document.browsingContext;
-    navigable.activeSessionHistoryEntry = createSessionHistoryEntry(createDocumentState(replacement));
+    navigable.activeSessionHistoryEntry = replacement.env.createSessionHistoryEntry(replacement.url, DocumentState.create(replacement));
     const scripting = vi.spyOn(env, 'isScriptingEnabled');
     expect(env.canRunScript()).toBe(false);
     expect(scripting).not.toHaveBeenCalled();

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { NavigateEventImpl } from '../../../src/browlet/browsing/navigation/api/navigate-event';
 import { NavigationHistoryEntryImpl } from '../../../src/browlet/browsing/navigation/api/navigation-history-entry';
-import { BrowsingContext, createDocumentState, createSessionHistoryEntry, Navigable } from '../../../src/browlet/browsing/navigation/index';
+import { BrowsingContext, DocumentState, Navigable } from '../../../src/browlet/browsing/navigation/index';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import type { ElementImpl } from '../../../src/browlet/dom/nodes/element';
 import type { HTMLIFrameElementImpl } from '../../../src/browlet/dom/nodes/html/embedded/iframe';
@@ -134,11 +134,11 @@ describe('Navigate-event dispatch and cancellation', () => {
       parent.document.body!.appendChild(container);
       document.browsingContext = new BrowsingContext(window.env.realm.windowProxy);
       document.makeActive();
-      container.contentNavigable = new Navigable(createDocumentState(document), parent.navigable);
+      container.contentNavigable = new Navigable(DocumentState.create(document), parent.navigable);
     }
     if (activated) window.lastActivationTimestamp = 12;
-    const state = kind === 'other' ? createDocumentState(null) : createDocumentState(document);
-    const she = { ...navigable.activeSessionHistoryEntry, documentState: state };
+    const state = kind === 'other' ? new DocumentState() : DocumentState.create(document);
+    const she = document.env.createSessionHistoryEntry(navigable.activeSessionHistoryEntry.url, state);
     let observed: unknown;
     browser.window.navigation.addEventListener('navigate', (baseEvent) => {
       const event = baseEvent as BrowletNavigateEvent;
@@ -152,7 +152,7 @@ describe('Navigate-event dispatch and cancellation', () => {
 
   it('selects only the destination traversal tracker and rejects it on cancellation', async () => {
     const { browser, document, navigation, navigable } = await fixture();
-    const she = createSessionHistoryEntry(createDocumentState(document));
+    const she = document.env.createSessionHistoryEntry(document.url, DocumentState.create(document));
     navigation.entryList.push(new NavigationHistoryEntryImpl(she, document.env));
     const tracker = navigation.addUpcomingTraverseMethodTracker(she.navigationAPIKey, 'destination-info');
     const other = navigation.addUpcomingTraverseMethodTracker(navigable.activeSessionHistoryEntry.navigationAPIKey, 'other-info');

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { BrowsingContext, createDocumentState, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
+import { BrowsingContext, DocumentState, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { createSiblingWindow } from '../../support/windows';
 
@@ -237,7 +237,7 @@ function fixture(): Browlet {
   const document = realm.getAssociatedDocument();
   // Native asynchronous completion runs as an HTML task on the sibling's active Document.
   document.browsingContext = new BrowsingContext(realm.windowProxy);
-  new TopLevelTraversable(createDocumentState(document));
+  new TopLevelTraversable(DocumentState.create(document));
   Reflect.set(browser.window, 'foreign', foreign);
   return browser;
 }

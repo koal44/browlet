@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { NavigateEventImpl } from '../../../src/browlet/browsing/navigation/api/navigate-event';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
-import * as sessionHistory from '../../../src/browlet/browsing/navigation/state/index';
 import { idlType } from '../../../src/web-idl/core/index';
 import { unwrap } from '../../support/browlet-binding';
 
@@ -142,12 +141,12 @@ describe('Navigate-event scroll effects', () => {
     const navigable = document.getNodeNavigable()!;
     const active = navigable.activeSessionHistoryEntry;
     active.scrollRestorationMode = 'manual';
-    navigable.currentSessionHistoryEntry = { ...active };
-    const restore = vi.spyOn(sessionHistory, 'restoreScrollPositionData').mockImplementation(() => {
+    navigable.currentSessionHistoryEntry = document.env.createSessionHistoryEntry(active.url, active.documentState);
+    const restore = vi.spyOn(active, 'restoreScrollPositionData').mockImplementation(() => {
       expect(event.interceptionState).toBe('scrolled');
     });
     event.processScrollBehavior();
-    expect(restore).toHaveBeenCalledExactlyOnceWith(active);
+    expect(restore).toHaveBeenCalledExactlyOnceWith();
   });
 
   it('retains the scroll restoration dependency on an unimplemented saved history position', async () => {

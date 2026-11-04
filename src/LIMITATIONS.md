@@ -1308,6 +1308,31 @@ the URL/state unchanged. Precommit handlers run and can reject the change.
 Commit coordinates script execution, interception state, owner operations, and
 transition settlement, but accepted History changes still reach the explicit
 unfinished URL/history application boundary.
+Session history entries now retain separate serialized classic History and
+Navigation states, including entries whose Document has not loaded. Scroll data
+and optional persisted user state have explicit null-only fields. Capture and
+restoration remain throwing operations; adding the entry fields does not implement
+History-state commits, traversal/PopStateEvent delivery, or scrolling. See the
+[entry audit](browlet/browsing/navigation/ROADMAP.md#html-7411-session-history-entries).
+`DocumentState` retains the recreation inputs and guards eviction of fully active
+Documents. Eviction still reaches unfinished recursive destruction; automatic
+cache selection, Fetch/srcdoc/POST repopulation, and history reactivation remain
+missing. `Document.latestEntry` is maintained by the local commit path, but full
+History updates and traversal still need to maintain it. HTML also leaves child
+history identification across reloads unspecified. See the
+[Document state audit](browlet/browsing/navigation/ROADMAP.md#html-7412-document-state).
+Session-history traversal queues now execute ordinary and target-tagged steps in
+order, waiting for returned internal completion promises through their UserAgent.
+History application still needs document-population waits and selective synchronous
+navigation queue jumping. Existing callers now reach their unfinished history or
+unloading operation on the queued background turn; the queue does not complete
+those operations or settle their Navigation trackers. See the
+[queue audit](browlet/browsing/navigation/ROADMAP.md#html-7413-centralized-modifications-of-session-history).
+Low-level history lookup, forward clearing, and used-step collection include
+retained descendant histories. Their traversal-queue precondition is still
+unenforced while initial creation and provisional local commits call them
+synchronously; full finalization/history application must establish those paths.
+See the [low-level audit](browlet/browsing/navigation/ROADMAP.md#html-7414-low-level-operations-on-session-history).
 `UserAgent.createFreshTopLevelTraversable()` prepares an unnamed initial
 about:blank context and requests navigation with its own active Document as
 source. It still reaches the unfinished `Navigable.navigate()` operation.
@@ -1319,8 +1344,8 @@ keeps that conflict explicit.
 Iframe, object, and legacy frame `contentDocument`/`contentWindow` accessors now
 project a retained child, including same-origin-domain filtering for Documents
 and stable WindowProxy identity. Creating that child automatically remains
-unfinished: the new creation operation reaches explicit creator-inheritance,
-history-queue, and joint-history application dependencies. Object/frame context
+unfinished: the creation operation still reaches joint-history application after
+its queued history insertion. Object/frame context
 creation, element lifecycle callers, and BiDi delivery are also still missing;
 see the [child audit](browlet/browsing/navigation/ROADMAP.md#html-7313-child-navigables).
 `Window.navigation` exposes its
@@ -1345,8 +1370,8 @@ settlement and event acceptance/cancellation are implemented; commit/completion
 producers remain unfinished. Document's unload counter is checked but its lifecycle producers
 are still missing. `traverseTo()`, `back()`, and `forward()` now select destinations,
 resolve the current-entry case, and reuse pending requests. Their new-request
-path still stops at transient activation, then the unfinished traversal queue
-and history-step application. Source capture and queued failure handling are
+path still stops at transient activation, then the unfinished history-step
+application within the traversal queue. Source capture and queued failure handling are
 implemented, including protection against an obsolete failure deleting a newer
 request. `navigation.transition`, NavigationTransition, and NavigationDestination
 now expose retained state and realm-owned commit/completion promises. Intercepted
@@ -1384,13 +1409,13 @@ manually managed intercepted completion work. Automatic focus reset still needs
 the shared §6.6 focus model and its focus-change producer. Scrolling selects
 active-entry restoration or beginning/fragment scrolling, but saved positions,
 indicated-part selection, and CSSOM View viewport effects remain explicit stubs.
-URL/history updates, traversal queue/resumption, and the other navigation/child-
+URL/history updates, traversal resumption, and the other navigation/child-
 destruction lifecycle callers remain unfinished. Precommit
 completion has idle-progress coverage through the supported host bridge after
 integrating the scheduling repairs. Node-injected callbacks between independent
 Browlet Agents retain a separate failing Experimental probe; same-Agent
 cross-Window callbacks pass. See the [Navigation API inventory](./browlet/browsing/navigation/api/ROADMAP.md).
-Traversal queue/application,
+History-step application,
 state restoration, navigation lifecycle cancellation, and
 actual scrolling remain explicit dependencies. Inactive access follows HTML's SecurityError rule,
 including the recorded browser disagreement for retained `state`. See the
@@ -1441,7 +1466,7 @@ Documents. See the [navigable audit](browlet/browsing/navigation/ROADMAP.md#html
 iframe/object/embed/frame associations. Those associations still require internal
 creation/destruction producers; appending a container alone creates no child.
 `UserAgent.createChildNavigable()` provides the element-to-navigation entry,
-but non-iframe contexts, traversal queuing, and history
+but non-iframe contexts and queued history
 application still throw. Embed's `setup()` also throws explicitly for its missing
 Fetch/content-selection/navigation lifecycle; its retained child state and
 collection integration do not imply automatic loading. See the
@@ -1449,10 +1474,11 @@ collection integration do not imply automatic loading. See the
 `UserAgent.destroyChildNavigable()` supplies the removal coordinator, but currently
 throws at recursive Document teardown after clearing the container and notifying
 Navigation. Automatic removal is not connected. Teardown scheduling for inactive
-Documents, queued abortion, traversal execution, and BiDi delivery remain explicit
+Documents, queued abortion, history application, and BiDi delivery remain explicit
 [destruction dependencies](browlet/browsing/navigation/ROADMAP.md#html-7316-child-navigable-destruction).
 Top-level destruction and closing now have coordinators, but recursive teardown,
-unload cancellation, descendant unloading, and traversal execution still throw.
+unload cancellation, and descendant unloading still throw. The traversal queue
+now executes definite closing's unload request on a later background turn.
 Window's script-closing authorization remains unfinished. UI removal and BiDi
 delivery are provisional hooks. See the
 [top-level audit](browlet/browsing/navigation/ROADMAP.md#html-7316-top-level-destruction-and-closing).

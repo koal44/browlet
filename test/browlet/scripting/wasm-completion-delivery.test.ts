@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { JSRealm } from '../../../src/js-engine/index';
 import type { TaskSourceKey } from '../../../src/infra/index';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import { jsEngineTaskSource, taskSources } from '../../../src/browlet/scripting/tasks';
 import { createManualUserAgent } from '../../support/browlet-agent';
@@ -23,7 +23,7 @@ describe('WebAssembly completion task delivery', () => {
       expect(loop.entryExecutionContext).toBe(env.realm.executionContext);
     });
     const activeEntry = traversable.activeSessionHistoryEntry;
-    traversable.activeSessionHistoryEntry = { ...activeEntry, documentState: createDocumentState(null) };
+    traversable.activeSessionHistoryEntry = env.createSessionHistoryEntry(activeEntry.url, new DocumentState());
 
     notify(complete, source);
     expect(loop.runTaskTurn()).toBe(false);

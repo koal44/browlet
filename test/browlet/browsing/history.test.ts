@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { createDocumentState, createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { parseURL } from '../../../src/url/index';
 import { getRelevantRealm, unwrap } from '../../support/browlet-binding';
@@ -33,10 +33,12 @@ describe('History foundations', () => {
     const browser = new Browlet({ route: () => '' });
     const document = unwrap<DocumentImpl>(browser.document);
     const traversable = document.getNodeNavigable()!.traversable;
-    const state = createDocumentState(document);
-    const entries = [0, 3, 7].map((step) => ({ ...createSessionHistoryEntry(state), step }));
+    const state = DocumentState.create(document);
+    const entries = [0, 3, 7].map((step) => Object.assign(document.env.createSessionHistoryEntry(document.url, state), { step }));
     // Child-history production is unfinished; supply its retained lists at their owner boundary.
-    const nested = [1, 3].map((step) => ({ ...createSessionHistoryEntry(createDocumentState(document)), step }));
+    const nested = [1, 3].map((step) => Object.assign(
+      document.env.createSessionHistoryEntry(document.url, DocumentState.create(document)), { step },
+    ));
     state.nestedHistories.push({ id: Symbol('child'), entries: nested });
     traversable.sessionHistoryEntries = entries;
     expect(traversable.getHistoryLengthAndIndex(3)).toEqual([4, 2]);
@@ -73,12 +75,10 @@ describe('History foundations', () => {
       history.scrollRestoration = 'manual';
       return history.scrollRestoration;
     })).toBe('manual');
-    const navigable = unwrap<DocumentImpl>(browser.document).getNodeNavigable()!;
+    const document = unwrap<DocumentImpl>(browser.document);
+    const navigable = document.getNodeNavigable()!;
     expect(navigable.activeSessionHistoryEntry.scrollRestorationMode).toBe('manual');
-    navigable.currentSessionHistoryEntry = {
-      ...createSessionHistoryEntry(createDocumentState(unwrap<DocumentImpl>(browser.document))),
-      scrollRestorationMode: 'auto',
-    };
+    navigable.currentSessionHistoryEntry = document.env.createSessionHistoryEntry(document.url, DocumentState.create(document));
     expect(browser.window.history.scrollRestoration).toBe('manual');
     browser.window.history.scrollRestoration = 'auto';
     expect(navigable.activeSessionHistoryEntry.scrollRestorationMode).toBe('auto');

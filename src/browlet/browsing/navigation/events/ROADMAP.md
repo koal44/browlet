@@ -87,7 +87,7 @@ borrowed PopStateEvent getters, and the legacy event-factory distinction.
 | Requirement | Owner and remaining work |
 | --- | --- |
 | Restore and expose History state | HTML §7.4.6.2 history application must deserialize the entry's classic History state into the target realm, assign History's retained state, and pass that same value to PopStateEvent. Constructor state is not a substitute for this restoration. |
-| Popstate delivery | §7.4.6.2 must implement its changed-entry/history conditions and synchronous dispatch to the Document's global, after Navigation entry updates. The traversal queue and history application are still unfinished. |
+| Popstate delivery | §7.4.6.2 must implement its changed-entry/history conditions and synchronous dispatch to the Document's global, after Navigation entry updates. History application is still unfinished; the traversal queue now runs its supplied work. |
 | Native visual transitions | The user agent must report whether it already displayed a cached rendering. Browlet has no such UI; automatic production must keep hasUAVisualTransition false until a real presentation owner supplies it. Synthetic construction can explicitly set true. |
 | Hashchange delivery | §7.4.6.2 must compare entry URL fragments, serialize the previous/new URLs, restore persisted user state, and then queue the DOM manipulation task. URL/history application and persisted state remain unfinished; constructing an event does not change location or traverse history. |
 | Window handler attributes | §8.1.8 WindowEventHandlers currently supplies onstorage only. onpopstate/onhashchange and body/frameset forwarding remain scripting work; addEventListener accepts both events now. |

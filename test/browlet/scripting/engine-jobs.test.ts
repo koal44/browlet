@@ -5,7 +5,7 @@ import { itPassesWith } from '../../test-runtime';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState, createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { Duration } from '../../../src/browlet/timing/clock';
 import { type Task } from '../../../src/browlet/scripting/event-loop';
 import { installHostHooks } from '../../../src/browlet/scripting/host-hooks';
@@ -58,7 +58,7 @@ describe('HTML generic and timeout jobs', () => {
     const activeEntry = owner.traversable.activeSessionHistoryEntry;
     const otherDocument = createTestDocument(owner.realm.env);
     otherDocument.browsingContext = owner.traversable.activeBrowsingContext;
-    owner.traversable.activeSessionHistoryEntry = createSessionHistoryEntry(createDocumentState(otherDocument));
+    owner.traversable.activeSessionHistoryEntry = otherDocument.env.createSessionHistoryEntry(otherDocument.url, DocumentState.create(otherDocument));
     expect(owner.document.isFullyActive()).toBe(false);
     expect(caller.document.isFullyActive()).toBe(true);
     expect(owner.loop.runTaskTurn()).toBe(false);
@@ -102,7 +102,7 @@ describe('HTML generic and timeout jobs', () => {
     const otherDocument = createTestDocument(fixture.realm.env);
     otherDocument.browsingContext = fixture.traversable.activeBrowsingContext;
     fixture.traversable.activeSessionHistoryEntry =
-      createSessionHistoryEntry(createDocumentState(otherDocument));
+      otherDocument.env.createSessionHistoryEntry(otherDocument.url, DocumentState.create(otherDocument));
     expect(caller.document.isFullyActive()).toBe(borrowed);
     advance(10000);
     expect(fixture.jobs.size).toBe(0);
@@ -120,7 +120,7 @@ describe('HTML generic and timeout jobs', () => {
     // Finishing the active-time wait only queues work. Becoming inactive again
     // before that task runs must still hold back the native timeout operation.
     fixture.traversable.activeSessionHistoryEntry =
-      createSessionHistoryEntry(createDocumentState(otherDocument));
+      otherDocument.env.createSessionHistoryEntry(otherDocument.url, DocumentState.create(otherDocument));
     expect(fixture.loop.runTaskTurn()).toBe(false);
     fixture.loop.performMicrotaskCheckpoint();
     expect(caller.observations).toEqual([]);
@@ -200,5 +200,5 @@ function createSiblingTraversable(first: TopLevelTraversable): TopLevelTraversab
   document.browsingContext = new BrowsingContext(env.realm.windowProxy);
   env.window.setAssociatedDocument(document);
   document.makeActive();
-  return new TopLevelTraversable(createDocumentState(document));
+  return new TopLevelTraversable(DocumentState.create(document));
 }

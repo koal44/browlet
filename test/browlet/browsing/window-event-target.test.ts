@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { BrowsingContext, TopLevelTraversable, createDocumentState } from '../../../src/browlet/browsing/navigation/index';
+import { BrowsingContext, TopLevelTraversable, DocumentState } from '../../../src/browlet/browsing/navigation/index';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { createSiblingWindow } from '../../support/windows';
 
@@ -64,7 +64,7 @@ it('selects the target WindowProxy when a listener belongs to another realm', as
   const { env, windowProxy } = getRelevantRealm(peer);
   const document = env.window.document;
   document.browsingContext = new BrowsingContext(windowProxy);
-  new TopLevelTraversable(createDocumentState(document));
+  new TopLevelTraversable(DocumentState.create(document));
   document.makeActive();
   Reflect.set(caller.window, 'peerWindow', peer);
   expect(await caller.evaluate(() => {

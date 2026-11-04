@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import type { NavigationAPIMethodTracker } from '../../../src/browlet/browsing/navigation/api/method-tracker';
-import { createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/state/index';
 import type { NavigationResultResult } from '../../../src/browlet/platform';
 import { serializeURL } from '../../../src/url/index';
 import { getRelevantRealm, unwrap } from '../../support/browlet-binding';
@@ -228,7 +227,7 @@ describe('Navigation method trackers', () => {
     await settle(result.committed!, browser);
     expect(order).toEqual(['committed']);
     expect(navigation.ongoingAPIMethodTracker).toBe(tracker);
-    const next = createSessionHistoryEntry({ ...entry.sessionHistoryEntry.documentState, document });
+    const next = document.env.createSessionHistoryEntry(document.url, entry.sessionHistoryEntry.documentState);
     navigation.updateEntriesForReactivation([entry.sessionHistoryEntry, next], next);
     expect(browser.window.navigation.currentEntry).not.toBe(platformEntry);
     tracker.resolveFinished();

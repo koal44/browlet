@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { createDocumentState, createSessionHistoryEntry } from '../../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type {
   HTMLEmbedElementImpl, HTMLIFrameElementImpl, HTMLObjectElementImpl,
@@ -79,7 +79,7 @@ describe.each(['iframe', 'object', 'frame'] as const)('%s child-container access
     replacement.origin = owner.origin;
     replacement.browsingContext = document.browsingContext;
     navigable.activeWindow!.setAssociatedDocument(replacement);
-    navigable.activeSessionHistoryEntry = createSessionHistoryEntry(createDocumentState(replacement));
+    navigable.activeSessionHistoryEntry = replacement.env.createSessionHistoryEntry(replacement.url, DocumentState.create(replacement));
 
     // Compare identity without asking the matcher to inspect native Window properties.
     expect(platform.contentDocument === project(replacement), 'new active Document').toBe(true);
@@ -89,7 +89,7 @@ describe.each(['iframe', 'object', 'frame'] as const)('%s child-container access
 
     const [, switchedDocument] = BrowsingContext.createTopLevel(owner.env.userAgent);
     switchedDocument.origin = owner.origin;
-    navigable.activeSessionHistoryEntry = createSessionHistoryEntry(createDocumentState(switchedDocument));
+    navigable.activeSessionHistoryEntry = switchedDocument.env.createSessionHistoryEntry(switchedDocument.url, DocumentState.create(switchedDocument));
 
     expect(platform.contentDocument === project(switchedDocument), 'switched Document').toBe(true);
     expect(platform.contentWindow === navigable.activeWindowProxy.platform, 'switched browsing context proxy').toBe(true);
@@ -193,14 +193,16 @@ describe('embed child-navigation state', () => {
 });
 
 describe('child navigable creation', () => {
-  it('creates the inherited iframe context before reaching the unfinished traversal queue', () => {
+  it('creates the inherited iframe context, then reaches the unfinished history application on the queue', () => {
     const userAgent = new UserAgent();
+    const turns: (() => void)[] = [];
+    vi.spyOn(userAgent, 'runInParallel').mockImplementation((steps) => { turns.push(steps); });
     const parent = TopLevelTraversable.create(userAgent, null, '');
     const owner = parent.activeDocument!;
     const container = owner.createElement('iframe') as HTMLIFrameElementImpl;
     owner.body!.appendChild(container);
 
-    expect(() => userAgent.createChildNavigable(container)).toThrow('Session history traversal queue is not implemented');
+    userAgent.createChildNavigable(container);
 
     const child = container.contentNavigable!;
     const document = child.activeDocument!;
@@ -212,6 +214,11 @@ describe('child navigable creation', () => {
     expect(document.env.realm).not.toBe(owner.env.realm);
     expect(child.activeSessionHistoryEntry.step).toBe('pending');
     expect(parent.activeSessionHistoryEntry.documentState.nestedHistories).toEqual([]);
+    expect(turns).toHaveLength(1);
+    expect(() => turns.shift()!()).toThrow('History update for navigable creation/destruction is not implemented');
+    expect(child.activeSessionHistoryEntry.step).toBe(0);
+    expect(parent.activeSessionHistoryEntry.documentState.nestedHistories)
+      .toEqual([{ id: child.id, entries: [child.activeSessionHistoryEntry] }]);
   });
 
   it.each([null, '', 'child-target'])('initializes a child with name %s before queuing its history', (name) => {
@@ -251,9 +258,13 @@ describe('child navigable creation', () => {
     const child = container.contentNavigable!;
 
     // The queue must read the parent's active state at execution, not at insertion.
-    const laterState = { ...initialState, nestedHistories: [] };
-    const first = { ...parent.activeSessionHistoryEntry, step: 2, documentState: laterState };
-    const current = { ...first, step: 4 };
+    const laterState = Object.assign(new DocumentState(), initialState, { nestedHistories: [] });
+    const { env } = container.nodeDocument;
+    const url = parent.activeSessionHistoryEntry.url;
+    const first = env.createSessionHistoryEntry(url, laterState);
+    first.step = 2;
+    const current = env.createSessionHistoryEntry(url, laterState);
+    current.step = 4;
     parent.sessionHistoryEntries.push(first, current);
     parent.activeSessionHistoryEntry = current;
     const update = vi.spyOn(parent, 'updateForNavigableCreationOrDestruction').mockImplementation(() => {
@@ -319,7 +330,7 @@ function createChild(tag: 'iframe' | 'object' | 'frame') {
   const container = owner.createElement(tag) as Container;
   const [, document] = BrowsingContext.createTopLevel(owner.env.userAgent);
   document.origin = owner.origin;
-  const navigable = new Navigable(createDocumentState(document), owner.getNodeNavigable());
+  const navigable = new Navigable(DocumentState.create(document), owner.getNodeNavigable());
   // Child creation is unfinished; exercise the accessors through real retained implementations and bindings.
   container.contentNavigable = navigable;
   owner.body!.appendChild(container);

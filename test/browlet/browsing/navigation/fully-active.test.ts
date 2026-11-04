@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { createDocumentState, createSessionHistoryEntry } from '../../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
 import { Task } from '../../../../src/browlet/scripting/event-loop';
 import { domManipulationTaskSource } from '../../../../src/browlet/scripting/tasks';
@@ -27,7 +27,7 @@ describe('fully active Documents', () => {
     const [, replacement] = BrowsingContext.create(
       root.activeDocument, parent.container, root.activeBrowsingContext!.group!,
     );
-    const nextEntry = createSessionHistoryEntry(createDocumentState(replacement));
+    const nextEntry = replacement.env.createSessionHistoryEntry(replacement.url, DocumentState.create(replacement));
     parent.navigable.currentSessionHistoryEntry = nextEntry;
     expect(replacement.isFullyActive()).toBe(false);
     expect(parent.document.isFullyActive()).toBe(true);
@@ -67,10 +67,11 @@ describe('fully active Documents', () => {
     const auxiliary = TopLevelTraversable.create(userAgent, context, 'auxiliary');
     const document = auxiliary.activeDocument!;
     const entry = opener.activeSessionHistoryEntry;
+    const openerDocument = opener.activeDocument!;
 
-    opener.activeSessionHistoryEntry = { ...entry, documentState: createDocumentState(null) };
+    opener.activeSessionHistoryEntry = openerDocument.env.createSessionHistoryEntry(entry.url, new DocumentState());
 
-    expect(entry.documentState.document!.isFullyActive()).toBe(false);
+    expect(openerDocument.isFullyActive()).toBe(false);
     expect(auxiliary.activeBrowsingContext!.openerBrowsingContext).toBe(context);
     expect(auxiliary.containerDocument).toBeNull();
     expect(document.isFullyActive()).toBe(true);
@@ -84,7 +85,7 @@ function createChild(parent: Navigable) {
   const container = owner.createElement('iframe') as HTMLIFrameElementImpl;
   owner.body!.appendChild(container);
   const [, document] = BrowsingContext.create(owner, container, parent.topLevelTraversable.activeBrowsingContext!.group!);
-  const navigable = new Navigable(createDocumentState(document), parent);
+  const navigable = new Navigable(DocumentState.create(document), parent);
   container.contentNavigable = navigable;
   return { container, document, navigable };
 }

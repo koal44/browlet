@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HTML_NAMESPACE, SVG_NAMESPACE } from '../../../src/infra/index';
 import type { Document } from '../../../src/browlet/platform';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import type { ElementImpl } from '../../../src/browlet/dom/nodes/element';
 import { domManipulationTaskSource } from '../../../src/browlet/scripting/tasks';
 import { createManualUserAgent } from '../../support/browlet-agent';
@@ -74,9 +74,7 @@ describe('queue an element task', () => {
       const paused = inactive === 'source' ? source : inactive === 'destination' ? destination : null;
       const activeEntry = paused?.traversable.activeSessionHistoryEntry;
       if (paused !== null && activeEntry !== undefined) {
-        paused.traversable.activeSessionHistoryEntry = {
-          ...activeEntry, documentState: createDocumentState(null),
-        };
+        paused.traversable.activeSessionHistoryEntry = paused.documentImpl.env.createSessionHistoryEntry(activeEntry.url, new DocumentState());
         expect(paused.documentImpl.isFullyActive()).toBe(false);
       }
 

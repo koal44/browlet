@@ -1,3 +1,4 @@
+import { InternalError } from '../../../../infra/index';
 import type { Origin, URLRecord } from '../../../../url/index';
 import type { ReferrerPolicy } from '../../../../fetch/index';
 
@@ -9,61 +10,61 @@ import type { NestedHistory } from './session-history';
 
 /** Retains the document or the inputs needed to recreate it during history traversal. */
 // https://html.spec.whatwg.org/multipage/browsing-the-web.html#document-state
-export type DocumentState = {
+export class DocumentState {
   /** Live document, or null when it must be recreated. */
-  document: DocumentImpl | null;
+  document: DocumentImpl | null = null;
   /** Policy container retained for a later history load. */
-  historyPolicyContainer: PolicyContainer | null;
-  /** Navigation referrer; undefined until selected, null when no referrer is sent. */
-  requestReferrer: URLRecord | null | undefined;
-  /** Referrer policy retained for reloading this entry. */
-  requestReferrerPolicy: ReferrerPolicy;
+  historyPolicyContainer: PolicyContainer | null = null;
+  /** Request referrer using Fetch's representation: undefined means client, null means no-referrer. */
+  requestReferrer: URLRecord | null | undefined = undefined;
+  /** Policy for fetches of this Document, distinct from its policy container's policy for outgoing fetches. */
+  requestReferrerPolicy: ReferrerPolicy = 'strict-origin-when-cross-origin';
   /** Origin of the document that initiated this navigation. */
-  initiatorOrigin: Origin | null;
-  /** Origin assigned to the history document, when determined. */
-  origin: Origin | null;
+  initiatorOrigin: Origin | null = null;
+  /** Retained origin for local about: Documents and comparison after repopulation. */
+  // TODO(HTML §7.4.2/§7.4.6): Repopulation must compare origins and clear the target name if it changes.
+  origin: Origin | null = null;
   /** Inherited base URL used by about:blank and srcdoc documents. */
-  aboutBaseURL: URLRecord | null;
+  aboutBaseURL: URLRecord | null = null;
   /** Session histories belonging to child navigables. */
-  nestedHistories: NestedHistory[];
-  /** Stored source text or POST data used to recreate the document. */
-  resource: string | PostResource | null;
+  nestedHistories: NestedHistory[] = [];
+  /** Stored srcdoc HTML or POST data used to recreate the document. */
+  // TODO(HTML §7.4.2): Navigation must consume retained srcdoc/POST resources when populating an entry.
+  resource: string | PostResource | null = null;
   /** Whether a reload was requested for this state. */
-  reloadPending: boolean;
+  reloadPending = false;
   /** Whether this state has previously held a populated document. */
-  everPopulated: boolean;
+  everPopulated = false;
   /** Target name to restore with the navigable. */
-  navigableTargetName: string;
+  navigableTargetName = '';
   /** Back/forward-cache restoration diagnostics, when available. */
-  notRestoredReasons: NotRestoredReasons | null;
-};
+  notRestoredReasons: NotRestoredReasons | null = null;
+
+  /** Initialize state with a live Document; navigation separately supplies its retained metadata. */
+  static create(document: DocumentImpl): DocumentBackedState {
+    return Object.assign(new DocumentState(), { document });
+  }
+
+  /** Request destruction of a cached Document; a fully active Document cannot be evicted. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#document-state
+  evictDocument(): void {
+    const document = this.document;
+    if (document === null) return;
+    if (document.isFullyActive()) throw new InternalError('A fully active Document cannot be evicted');
+    // TODO(HTML §7.5.10): Recursive destruction must clear this retained state, even for an inactive Document.
+    // The lifecycle owner clears the Document after teardown; this request does not clear it early.
+    document.destroyAndDescendants();
+  }
+}
 
 /** Session-history state while its Document is present. */
 export type DocumentBackedState = DocumentState & { document: DocumentImpl; };
 
-/** Initialize history state, retaining the supplied document when present. */
-export function createDocumentState(document: DocumentImpl): DocumentBackedState;
-export function createDocumentState(document: DocumentImpl | null): DocumentState;
-export function createDocumentState(document: DocumentImpl | null): DocumentState {
-  return {
-    document,
-    historyPolicyContainer: null,
-    requestReferrer: undefined,
-    requestReferrerPolicy: 'strict-origin-when-cross-origin',
-    initiatorOrigin: null,
-    origin: null,
-    aboutBaseURL: null,
-    nestedHistories: [],
-    resource: null,
-    reloadPending: false,
-    everPopulated: false,
-    navigableTargetName: '',
-    notRestoredReasons: null,
-  };
-}
-
+// https://html.spec.whatwg.org/multipage/browsing-the-web.html#post-resource
 export type PostResource = {
-  /** Captured submission body, or failure when it could not be retained. */
+  /** Stable submission bytes, read only in parallel; failure when they cannot be recovered unchanged. */
+  // TODO(HTML §4.10.22/§7.4.2): Submission must snapshot the body; navigation must replay it or handle failure.
+  // A future external store must return the same bytes on every read, or transition to failure.
   requestBody: Uint8Array | 'failure';
   /** Form encoding used for the retained body. */
   requestContentType:

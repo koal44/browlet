@@ -5,7 +5,7 @@ import { getPlatformRecord, PlatformRecordSource } from '../../../src/web-idl/va
 import { WasmModuleImpl } from '../../../src/browlet/webassembly/index';
 import { Browlet } from '../../../src/browlet/browlet';
 import { browletBindingWorld } from '../../../src/browlet/integration/web-idl/index';
-import { BrowsingContext, createDocumentState, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
+import { BrowsingContext, DocumentState, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
 import { getBindingContext, getRelevantRealm } from '../../support/browlet-binding';
 import { createSiblingWindow } from '../../support/windows';
 
@@ -119,7 +119,7 @@ function fixture() {
   const document = foreignRealm.getAssociatedDocument();
   document.browsingContext = new BrowsingContext(foreignRealm.windowProxy);
   document.makeActive();
-  new TopLevelTraversable(createDocumentState(document));
+  new TopLevelTraversable(DocumentState.create(document));
   Reflect.set(browser.window, 'foreign', foreign);
   return { browser, context, foreignRealm };
 }

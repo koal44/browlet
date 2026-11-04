@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { BrowsingContext, Navigable, TopLevelTraversable, createDocumentState } from '../../../src/browlet/browsing/navigation/index';
+import { BrowsingContext, Navigable, TopLevelTraversable, DocumentState } from '../../../src/browlet/browsing/navigation/index';
 import type { HTMLIFrameElementImpl } from '../../../src/browlet/dom/nodes/html/embedded/index';
 import type { StorageEvent as StorageEventPlatform, Window as WindowPlatform } from '../../../src/browlet/platform';
 import type { StorageImpl } from '../../../src/browlet/storage/index';
@@ -198,7 +198,7 @@ function createPage(
   const [, document] = BrowsingContext.createTopLevel(userAgent);
   document.url = parseURL(url).url!;
   document.origin = obtainURLOrigin(document.url);
-  const state = createDocumentState(document);
+  const state = DocumentState.create(document);
   const navigable = parent === null ? new TopLevelTraversable(state) : new Navigable(state, parent.navigable);
   if (parent !== null) {
     const frame = unwrap<HTMLIFrameElementImpl>(parent.window.document.createElement('iframe'));

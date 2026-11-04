@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { createDocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { ShadowRootImpl } from '../../../../src/browlet/dom/nodes/shadow-root';
 import type { HTMLIFrameElementImpl, HTMLObjectElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/index';
@@ -340,7 +340,7 @@ function createChild(document: DocumentImpl, tag: 'iframe' | 'object' | 'frame',
   const container = document.createElement(tag) as HTMLIFrameElementImpl | HTMLObjectElementImpl | HTMLFrameElementImpl;
   const [, childDocument] = BrowsingContext.createTopLevel(document.env.userAgent);
   childDocument.origin = document.origin;
-  const state = createDocumentState(childDocument);
+  const state = DocumentState.create(childDocument);
   state.navigableTargetName = name;
   const navigable = new Navigable(state, document.getNodeNavigable());
   // Child creation is unfinished; connect real implementations at the retained association.

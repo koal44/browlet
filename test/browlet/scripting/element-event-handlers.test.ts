@@ -4,7 +4,7 @@ import { itPassesWith } from '../../test-runtime';
 import { Browlet } from '../../../src/browlet/browlet';
 import { ContentSecurityPolicy } from '../../../src/browlet/browsing/policy/csp/policy';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import { getRelevantRealm, unwrap } from '../../support/browlet-binding';
 import type { HTMLElementImpl } from '../../../src/browlet/dom/nodes/html/index';
@@ -205,6 +205,6 @@ function createSibling(browser: Browlet) {
   document.browsingContext = new BrowsingContext(env.realm.windowProxy);
   env.window.setAssociatedDocument(document);
   document.makeActive();
-  new TopLevelTraversable(createDocumentState(document));
+  new TopLevelTraversable(DocumentState.create(document));
   return { window: env.realm.windowProxy.platform };
 }

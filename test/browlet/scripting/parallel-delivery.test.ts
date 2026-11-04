@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { BlobData, BlobImpl, BlobReadFailure, type BlobByteSource } from '../../../src/file/index';
 import type { Blob } from '../../../src/browlet/platform';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import type { Task } from '../../../src/browlet/scripting/event-loop';
 import { fileTaskSource } from '../../../src/browlet/scripting/tasks';
@@ -47,9 +47,7 @@ describe('parallel work returning to a global task', () => {
 
     await requested.promise;
     expect(readTasks).toEqual([null]);
-    traversable.activeSessionHistoryEntry = {
-      ...activeEntry, documentState: createDocumentState(null),
-    };
+    traversable.activeSessionHistoryEntry = document.env.createSessionHistoryEntry(activeEntry.url, new DocumentState());
     expect(document.isFullyActive()).toBe(false);
     if (outcome === 'success') bytes.resolve(Uint8Array.of(5));
     else bytes.reject(new BlobReadFailure('SnapshotState'));

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import type { PointerEvent } from '../../../src/browlet/platform';
 import { BrowsingContext, Navigable } from '../../../src/browlet/browsing/navigation/index';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl, ElementImpl, NodeImpl } from '../../../src/browlet/dom/nodes/index';
 import type { HTMLIFrameElementImpl } from '../../../src/browlet/dom/nodes/html/embedded/index';
 import { PointerButton, PointerEventStream } from '../../../src/browlet/interaction/index';
@@ -376,6 +376,6 @@ function createChildDocument(browser: Browlet): DocumentImpl {
   parent.body!.appendChild(container);
   const [, child] = BrowsingContext.createTopLevel(parent.env.userAgent);
   // Child creation is unfinished; connect real implementations at the retained association.
-  container.contentNavigable = new Navigable(createDocumentState(child), parent.getNodeNavigable());
+  container.contentNavigable = new Navigable(DocumentState.create(child), parent.getNodeNavigable());
   return child;
 }

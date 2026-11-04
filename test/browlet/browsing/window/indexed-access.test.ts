@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { createDocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { addon } from '../../../../src/js-engine/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl, HTMLObjectElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/index';
@@ -526,7 +526,7 @@ describe('WindowProxy child-index enumeration', () => {
 function createChild(document: DocumentImpl, localName: 'iframe' | 'object' | 'frame') {
   const container = document.createElement(localName) as HTMLIFrameElementImpl | HTMLObjectElementImpl | HTMLFrameElementImpl;
   const [, childDocument] = BrowsingContext.createTopLevel(document.env.userAgent);
-  const navigable = new Navigable(createDocumentState(childDocument), document.getNodeNavigable());
+  const navigable = new Navigable(DocumentState.create(childDocument), document.getNodeNavigable());
   // Child creation is unfinished; connect real implementations at the retained association.
   container.contentNavigable = navigable;
   return { container, navigable, document: childDocument };

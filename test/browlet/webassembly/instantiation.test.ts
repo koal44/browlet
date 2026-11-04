@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { BrowsingContext, createDocumentState, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
+import { BrowsingContext, DocumentState, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { createSiblingWindow } from '../../support/windows';
 
@@ -155,7 +155,7 @@ function fixture(): Browlet {
   // Native completion uses an HTML task, which requires an active Document.
   document.browsingContext = new BrowsingContext(realm.windowProxy);
   document.makeActive();
-  new TopLevelTraversable(createDocumentState(document));
+  new TopLevelTraversable(DocumentState.create(document));
   Reflect.set(browser.window, 'foreign', foreign);
   return browser;
 }

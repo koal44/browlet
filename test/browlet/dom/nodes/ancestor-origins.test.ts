@@ -1,7 +1,7 @@
 import { assert, describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
@@ -123,9 +123,9 @@ describe('Document ancestor origins', () => {
     const replacement = createTestDocument(original.env);
     replacement.browsingContext = original.browsingContext;
     const parent = original.getNodeNavigable()!;
-    parent.activeSessionHistoryEntry = {
-      ...parent.activeSessionHistoryEntry, documentState: createDocumentState(replacement),
-    };
+    parent.activeSessionHistoryEntry = replacement.env.createSessionHistoryEntry(
+      parent.activeSessionHistoryEntry.url, DocumentState.create(replacement),
+    );
 
     expect(child.containerDocument).toBe(original);
     expect(original.containerDocument).toBeNull();
@@ -178,7 +178,7 @@ function childDocument(parent: DocumentImpl, url: string, policy: ReferrerPolicy
   document.populateWithHTMLHeadBody();
   document.origin = obtainURLOrigin(parseURL(url).url!);
   document.browsingContext = new BrowsingContext();
-  const navigable = new Navigable(createDocumentState(document), parent.getNodeNavigable());
+  const navigable = new Navigable(DocumentState.create(document), parent.getNodeNavigable());
   const container = parent.createElementNode('iframe', HTML_NAMESPACE);
   assert.instanceOf(container, HTMLIFrameElementImpl);
   parent.documentElement!.appendChild(container);

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
 import { OpenerPolicy } from '../../../../src/browlet/browsing/policy/coop';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
@@ -177,7 +177,7 @@ function createChild(parent: ReturnType<typeof createWindow>, origin: Origin = p
   const container = parent.document.createElement('iframe') as HTMLIFrameElementImpl;
   const [context, document] = BrowsingContext.createTopLevel(parent.document.env.userAgent);
   document.origin = origin;
-  const navigable = new Navigable(createDocumentState(document), parent.document.getNodeNavigable());
+  const navigable = new Navigable(DocumentState.create(document), parent.document.getNodeNavigable());
   // Child creation is unfinished; connect actual implementations at the retained association.
   container.contentNavigable = navigable;
   parent.document.body!.appendChild(container);

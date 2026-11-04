@@ -4,7 +4,7 @@ import { Browlet } from '../../../src/browlet/browlet';
 import { NavigateEventImpl } from '../../../src/browlet/browsing/navigation/api/navigate-event';
 import { NavigationHistoryEntryImpl } from '../../../src/browlet/browsing/navigation/api/navigation-history-entry';
 import { NavigationDestinationImpl } from '../../../src/browlet/browsing/navigation/api/navigation-destination';
-import { createDocumentState, createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import type { ElementImpl } from '../../../src/browlet/dom/nodes/element';
 import type { FormDataEntry } from '../../../src/xhr/index';
@@ -17,7 +17,7 @@ afterEach(() => { vi.restoreAllMocks(); });
 describe('Traversal navigate-event preparation', () => {
   it('retains the visible entry and its state by session-history identity', async () => {
     const { browser, document, navigation, inner } = await fixture();
-    const she = createSessionHistoryEntry(createDocumentState(document));
+    const she = document.env.createSessionHistoryEntry(document.url, DocumentState.create(document));
     she.navigationAPIState = document.env.serializeForStorage({ value: 1 });
     const entry = new NavigationHistoryEntryImpl(she, document.env);
     navigation.entryList.push(entry);
@@ -38,7 +38,8 @@ describe('Traversal navigate-event preparation', () => {
 
   it('does not expose state merely because a different record has a matching key and ID', async () => {
     const { document, navigation, inner } = await fixture();
-    const she = { ...navigation.currentEntry!.sessionHistoryEntry };
+    const current = navigation.currentEntry!.sessionHistoryEntry;
+    const she = Object.assign(document.env.createSessionHistoryEntry(current.url, current.documentState), current);
     she.navigationAPIState = document.env.serializeForStorage({ hidden: true });
     navigation.fireTraverseNavigateEvent(she, 'browser UI');
     const [, , destination, involvement] = inner.mock.calls[0]!;
@@ -51,7 +52,8 @@ describe('Traversal navigate-event preparation', () => {
   it.each(['other', 'evicted'] as const)('classifies a visible %s Document destination independently of entry visibility', async (kind) => {
     const { document, navigation, inner } = await fixture();
     const other = new Browlet({ route: () => '' });
-    const she = createSessionHistoryEntry(createDocumentState(unwrap<DocumentImpl>(other.document)));
+    const otherDocument = unwrap<DocumentImpl>(other.document);
+    const she = otherDocument.env.createSessionHistoryEntry(otherDocument.url, DocumentState.create(otherDocument));
     if (kind === 'evicted') she.documentState.document = null;
     she.navigationAPIState = document.env.serializeForStorage('retained state');
     navigation.entryList.push(new NavigationHistoryEntryImpl(she, document.env));

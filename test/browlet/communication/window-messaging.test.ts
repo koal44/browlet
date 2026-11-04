@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import { createWindowEnvironment } from '../../../src/browlet/integration/web-idl/index';
-import { BrowsingContext, TopLevelTraversable, createDocumentState } from '../../../src/browlet/browsing/navigation/index';
+import { BrowsingContext, TopLevelTraversable, DocumentState } from '../../../src/browlet/browsing/navigation/index';
 import type { WindowImpl } from '../../../src/browlet/browsing/window/index';
 import type { MessageEvent } from '../../../src/browlet/platform';
 import { AgentCluster, WindowAgent } from '../../../src/browlet/scripting/agents';
@@ -255,9 +255,9 @@ describe('Window.postMessage (§9.3)', () => {
     const target = createWindow('https://b.example.test/', sender.agent);
     sender.run(() => target.window.postMessage('pending', '*'));
     const entry = target.navigable.activeSessionHistoryEntry;
-    target.navigable.activeSessionHistoryEntry = {
-      ...entry, documentState: { ...entry.documentState, document: null },
-    };
+    target.navigable.activeSessionHistoryEntry = target.document.env.createSessionHistoryEntry(
+      entry.url, Object.assign(new DocumentState(), entry.documentState, { document: null }),
+    );
     target.drain();
     expect(target.events).toEqual([]);
     target.navigable.activeSessionHistoryEntry = entry;
@@ -456,7 +456,7 @@ function createWindow(url: string, agent = new WindowAgent(createManualEventLoop
   document.browsingContext = new BrowsingContext(env.realm.windowProxy);
   env.window.setAssociatedDocument(document);
   document.makeActive();
-  const navigable = new TopLevelTraversable(createDocumentState(document));
+  const navigable = new TopLevelTraversable(DocumentState.create(document));
   const window = env.realm.windowProxy.platform;
   const events: MessageEvent[] = [];
   for (const type of ['message', 'messageerror']) {

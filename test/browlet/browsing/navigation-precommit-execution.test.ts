@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import { PageEvaluation } from '../../../src/browlet/automation/evaluation';
-import { BrowsingContext, createDocumentState, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
+import { BrowsingContext, DocumentState, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
 import { NavigateEventImpl } from '../../../src/browlet/browsing/navigation/api/navigate-event';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { getRelevantRealm, unwrap } from '../../support/browlet-binding';
@@ -155,7 +155,7 @@ describe('Navigate-event precommit execution', () => {
     // Auxiliary/iframe creation is unfinished; provide its existing activity relationship.
     otherDocument.browsingContext = new BrowsingContext(siblingRealm.windowProxy);
     otherDocument.makeActive();
-    const traversable = new TopLevelTraversable(createDocumentState(otherDocument));
+    const traversable = new TopLevelTraversable(DocumentState.create(otherDocument));
     const foreign = { realm: siblingRealm, browser: new PageEvaluation(traversable) };
     expect(foreign.realm.agent).toBe(realm.agent);
     const result = { owner: false, foreign: true, receiver: false, error: undefined as unknown, path: '', state: null as unknown };
