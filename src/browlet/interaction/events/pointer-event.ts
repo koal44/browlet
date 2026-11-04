@@ -209,8 +209,9 @@ export class PointerEventImpl extends MouseEventImpl {
 
     // TODO(Pointer Events §3.1.3 / input producer): connect PointerEventStream's target
     // preparation and dispatch steps to context-local device delivery.
-    // TODO(Pointer Events §§10–11): mouse default actions and compatibility-event
-    // suppression belong to the producer after dispatch; cancellation alone does not implement them.
+    // §§10.2–10.3's compatibility mapping and suppression run in PointerEventStream.
+    // TODO(Pointer Events §11 / HTML): mouse default actions still need their focus,
+    // editing and drag owners; event cancellation alone does not implement them.
   }
 
   /** Copy input fields into a fresh pointer event, retaining independent dispatch state and sample lists. */

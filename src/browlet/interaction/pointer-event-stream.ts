@@ -20,6 +20,8 @@ export class PointerEventStream {
   pointerId: number;
   /** Device capability supplied by the input owner, independent of its pointerType string. */
   isDirectManipulation: boolean;
+  /** Whether the device can hover, supplied independently of direct-manipulation capability or pointerType. */
+  supportsHover: boolean;
   /** Current normalized buttons for this context, updated before capture notifications or input listeners. */
   buttons = 0;
   /** Pending and effective capture belonging to this stream. */
@@ -45,9 +47,12 @@ export class PointerEventStream {
   /** Private down/up snapshot survives capture release, hover restoration, and author reinitialization. */
   #activation: { input: PointerEventImpl; target: NodeImpl; captured: boolean; } | null = null;
 
-  constructor(pointerId: number, isDirectManipulation: boolean, hasLockedElement: (document: DocumentImpl) => boolean) {
+  constructor(
+    pointerId: number, isDirectManipulation: boolean, supportsHover: boolean, hasLockedElement: (document: DocumentImpl) => boolean,
+  ) {
     this.pointerId = pointerId;
     this.isDirectManipulation = isDirectManipulation;
+    this.supportsHover = supportsHover;
     this.#hasLockedElement = hasLockedElement;
   }
 
@@ -118,13 +123,17 @@ export class PointerEventStream {
    * A null hover target lets the next contact enter again before pointerdown.
    * Raw updates to insecure target documents are suppressed without retaining input.
    * Optional sample lists contain measured inputs and predictions, not dispatched events.
+   * mouseClickCount comes from the input producer; pointer detail remains zero.
    * Returns false when the ordinary event was canceled; boundary cancellation is independent.
    */
   // https://w3c.github.io/pointerevents/#firing-events-using-the-pointerevent-interface
   // This extracts the dispatch/previous-target steps for an already prepared event and target.
   // §9 sample lists are supplied explicitly by the input producer as a final argument.
+  // TODO(Pointer Events §11 / input producer): supply real click counting and mapped
+  // relative movement. Compatibility dispatch does not infer timing/distance thresholds.
   dispatchToTarget(
-    event: PointerEventImpl, target: NodeImpl, getHoverTarget: () => NodeImpl | null, samples?: PointerEventSamples,
+    event: PointerEventImpl, target: NodeImpl, getHoverTarget: () => NodeImpl | null, mouseClickCount: number,
+    samples?: PointerEventSamples,
   ): boolean {
     const type = event.type;
     // https://w3c.github.io/pointerevents/#the-pointerrawupdate-event
@@ -133,11 +142,17 @@ export class PointerEventStream {
     event.initializeSampleLists(samples, target);
     const input = this.#lastInput ??= new PointerEventImpl('', {}, 0);
     input.copyInputFrom(event);
+    input.type = type;
+    const mouse = input.isPrimary ? target.nodeDocument.legacyMousePointer : null;
+    mouse?.preparePointerEvent(target);
     this.clearDisconnectedTarget();
     // §§3.3.1–3.3.2 require entry before a first non-hover pointerdown as well as
     // movement into a new target. Pressing while already hovering does not re-enter.
     // SPEC_CLASH(pointer-rawupdate-boundary-order): Follow the shared firing algorithm and Firefox; Chromium sends raw before the boundary transition.
     this.#sendBoundaryEvents(input, target);
+    if (mouse !== null && (type === 'pointerdown' || type === 'pointermove' || type === 'pointerup')) {
+      mouse.updatePosition(input, mouse.pointerTarget);
+    }
     if (type === 'pointerdown' || type === 'pointerup') {
       if (type === 'pointerdown') this.#pointerDownTarget = target;
       const activation = this.#activation ??= { input: new PointerEventImpl('', {}, 0), target, captured: false };
@@ -154,6 +169,8 @@ export class PointerEventStream {
     else if (type === 'pointerup' || type === 'pointercancel') this.#pointerDownSent = false;
     // SPEC_CLASH(pointer-target-after-boundary-mutation): Keep the selected target like the draft/Chromium/Firefox; WebKit can redirect after reparenting in a boundary listener.
     const result = target.dispatch(event, false, (dispatchPath) => { path = dispatchPath; });
+    // The source snapshot survives author reinitialization and DOM retargeting.
+    mouse?.dispatchAfterPointer(input, !result, mouseClickCount);
     this.previousTarget = target;
     this.needsOverEvent = false;
     this.#previousPath = path;
@@ -168,6 +185,7 @@ export class PointerEventStream {
       // SPEC_CLASH(pointer-up-hover-target): Restore the hit target per §8.5 and Chromium/Firefox; WebKit missed the destination in the captured-mouse probe.
       const hoverTarget = type === 'pointerup' ? getHoverTarget() : null;
       const hoverPath = this.#sendBoundaryEvents(input, hoverTarget);
+      mouse?.updatePosition(input, hoverTarget);
       if (hoverPath !== null) this.#previousPath = hoverPath;
       this.previousTarget = hoverTarget;
       this.needsOverEvent = false;
@@ -177,10 +195,6 @@ export class PointerEventStream {
         this.#lastInput = null;
       }
     }
-    // TODO(Pointer Events §§10.2–10.3 / compatibility mapping): a canceled primary
-    // down sets PREVENT MOUSE EVENT for its pointerType. The mapper must consume
-    // this result, suppress mapped down/move/up, and clear the flag after up/cancel.
-    // That flag never suppresses mouse boundary events or click/auxclick/contextmenu.
     // TODO(Pointer Events §11 / UI Events and HTML): connect the mapped mouse
     // events to their default-action owners; cancellation does not undo input state.
     return result;
@@ -252,7 +266,7 @@ export class PointerEventStream {
     event.copyInputFrom(input);
     event.timeStamp = timeStamp;
     event.setPointerEventAttributes('pointercancel');
-    this.dispatchToTarget(event, target, hitTest);
+    this.dispatchToTarget(event, target, hitTest, 0);
   }
 
   /**
@@ -278,6 +292,10 @@ export class PointerEventStream {
     const target = this.capture.targetOverride ?? hitTest();
     const path = this.#sendBoundaryEvents(input, target);
     if (path === null) return;
+    if (input.isPrimary) {
+      const document = target?.nodeDocument ?? this.previousTarget?.nodeDocument;
+      document?.legacyMousePointer.updatePosition(input, target);
+    }
     this.#previousPath = path;
     this.previousTarget = target;
     this.needsOverEvent = false;
@@ -359,6 +377,9 @@ export class PointerEventStream {
     type: PointerInputEventType, target: NodeImpl, relatedTarget: NodeImpl | null, source: PointerEventImpl,
     capturePath?: (path: EventPathItem[]) => void,
   ): void {
+    if (type === 'pointerover' && source.isPrimary && !this.supportsHover && !this.#pointerDownSent) {
+      target.nodeDocument.legacyMousePointer.dispatchInitialMove(source, target);
+    }
     const notification = target.createTrustedEvent(PointerEventImpl) as PointerEventImpl;
     notification.copyInputFrom(source);
     notification.setPointerEventAttributes(type);

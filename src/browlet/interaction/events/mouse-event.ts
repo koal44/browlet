@@ -12,6 +12,7 @@ import type { WindowImpl } from '../../browsing/window/index';
 
 import { UIEventImpl } from './ui-event';
 import { EventModifierState, type EventModifierInit } from './event-modifiers';
+import type { PointerEventImpl } from './pointer-event';
 
 /** Mouse-event data, independent of device state and native input delivery. */
 // https://w3c.github.io/pointerevents/#mouseevent-interface
@@ -53,6 +54,29 @@ export class MouseEventImpl extends UIEventImpl {
     this.movementY = eventInitDict.movementY ?? 0;
     this.#modifiers = new EventModifierState(eventInitDict);
     this.#altKey = eventInitDict.altKey ?? false;
+  }
+
+  /** Create a trusted mapped MouseEvent from pointer input and the producer's click count. */
+  // https://w3c.github.io/pointerevents/#compatibility-mapping-with-mouse-events
+  static fromPointerEvent(
+    type: MappedMouseType, target: NodeImpl | WindowImpl, source: PointerEventImpl, clickCount: number,
+  ): MouseEventImpl {
+    const event = target.createTrustedEvent(MouseEventImpl) as MouseEventImpl;
+    event.copyInputFrom(source);
+    event.type = type;
+    // https://w3c.github.io/pointerevents/#mouse-event-types
+    event.bubbles = event.cancelable = event.composed = type !== 'mouseenter' && type !== 'mouseleave';
+    event.view = target.isWindow() ? target : target.nodeDocument.getRelevantGlobalObject();
+    const buttonEvent = type === 'mousedown' || type === 'mouseup';
+    event.detail = buttonEvent ? clickCount : 0;
+    event.button = buttonEvent ? Math.max(source.button, 0) : 0;
+    event.screenX = Math.floor(source.screenX);
+    event.screenY = Math.floor(source.screenY);
+    event.clientX = Math.floor(source.clientX);
+    event.clientY = Math.floor(source.clientY);
+    if (type !== 'mousemove') event.initializePointerLockAttributes();
+    event.relatedTarget = null;
+    return event;
   }
 
   get layerX(): number {
@@ -153,6 +177,9 @@ export class MouseEventImpl extends UIEventImpl {
     this.#altKey = source.#altKey;
   }
 }
+
+export type MouseBoundaryType = 'mouseover' | 'mouseout' | 'mouseenter' | 'mouseleave';
+export type MappedMouseType = MouseBoundaryType | 'mousedown' | 'mousemove' | 'mouseup';
 
 /** Normalized producer input, with positions already mapped to screen/viewport CSS pixels. */
 // TODO(Pointer Events, MouseEvent Algorithms / native input and CSSOM View): the

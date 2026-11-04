@@ -212,7 +212,7 @@ function createFixture() {
   parent.append(a, b);
   outer.append(parent);
   browser.document.body!.append(outer);
-  const stream = new PointerEventStream(7, false, () => false);
+  const stream = new PointerEventStream(7, false, true, () => false);
   const activations: PointerEvent[] = [];
   const delivered: string[] = [];
   for (const type of ['pointerdown', 'pointerup', 'pointerover', 'pointerout', 'gotpointercapture',
@@ -228,7 +228,7 @@ function createFixture() {
     const event = target.createTrustedEvent(PointerEventImpl) as PointerEventImpl;
     event.copyInputFrom(input);
     event.setPointerEventAttributes(type);
-    stream.dispatchToTarget(event, target, () => hover === null ? null : unwrap<ElementImpl>(hover));
+    stream.dispatchToTarget(event, target, () => hover === null ? null : unwrap<ElementImpl>(hover), 1);
     return event;
   };
   return { browser, stream, send, a, b, parent, outer, activations, delivered };

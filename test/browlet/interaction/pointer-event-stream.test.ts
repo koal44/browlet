@@ -124,7 +124,7 @@ describe('Pointer Events §3.1.3: target preparation', () => {
   it('keeps IDs, active Documents, and capture independent between streams', () => {
     const { browser, stream, event, a } = createFixture();
     const otherBrowser = new Browlet({ route: () => '' });
-    const otherStream = new PointerEventStream(8, false, () => false);
+    const otherStream = new PointerEventStream(8, false, true, () => false);
     const otherEvent = new PointerEventImpl('pointermove');
     stream.capture.pendingTargetOverride = unwrap<ElementImpl>(a);
     stream.prepareTarget('pointermove', event, () => unwrap<ElementImpl>(a));
@@ -337,7 +337,7 @@ function createFixture(isDirectManipulation = false) {
     return target;
   });
   const hasLockedElement = vi.fn((_document: DocumentImpl) => false);
-  const stream = new PointerEventStream(7, isDirectManipulation, hasLockedElement);
+  const stream = new PointerEventStream(7, isDirectManipulation, !isDirectManipulation, hasLockedElement);
   const event = new PointerEventImpl('input-snapshot', { pointerId: 0, clientX: 12.5, detail: 9 });
   const trace: string[] = [];
   for (const type of ['gotpointercapture', 'lostpointercapture']) {
@@ -364,7 +364,7 @@ function createButtonFixture(pointerType: string, isDirectManipulation = false) 
     event.pointerType = pointer.pointerType;
     event.isPrimary = pointer.isPrimary;
     const selected = fixture.stream.prepareTarget(change.type, event, () => target);
-    const accepted = fixture.stream.dispatchToTarget(event, selected, () => null);
+    const accepted = fixture.stream.dispatchToTarget(event, selected, () => null, 1);
     return { event, accepted };
   };
   return { ...fixture, pointer, sendButton };

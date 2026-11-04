@@ -110,7 +110,7 @@ async function createFixture(secure = true) {
   a.id = 'a';
   b.id = 'b';
   browser.document.body!.append(a, b);
-  const stream = new PointerEventStream(7, false, () => false);
+  const stream = new PointerEventStream(7, false, true, () => false);
   const events: PointerEvent[] = [];
   for (const type of ['pointerover', 'pointerenter', 'pointerout', 'pointerleave', 'pointerdown',
     'pointermove', 'pointerrawupdate', 'pointerup', 'pointercancel', 'gotpointercapture', 'lostpointercapture']) {
@@ -124,7 +124,7 @@ async function createFixture(secure = true) {
     const event = target.createTrustedEvent(PointerEventImpl) as PointerEventImpl;
     event.copyInputFrom(input);
     event.setPointerEventAttributes(type);
-    return { event, accepted: stream.dispatchToTarget(event, target, () => null) };
+    return { event, accepted: stream.dispatchToTarget(event, target, () => null, 1) };
   };
   return { browser, stream, send, a, b, events };
 }

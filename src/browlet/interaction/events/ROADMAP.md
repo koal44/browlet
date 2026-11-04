@@ -1085,7 +1085,7 @@ scoped lint, import boundaries, and diff checks pass.
 
 ## Pointer Events §3.1.3: boundary sequence, dispatch, and previous-target repair
 
-`PointerEventStream.dispatchToTarget(event, target, getHoverTarget)` completes delivery of a
+`PointerEventStream.dispatchToTarget(event, target, getHoverTarget, mouseClickCount, samples?)` completes delivery of a
 prepared, realm-owned ordinary input. It sends out/leave, then over/enter, then
 the ordinary event, and returns its cancellation result. The reviewed callable extracts the
 remaining dispatch steps of "fire a pointer event" rather than creating an input
@@ -1387,14 +1387,13 @@ dispatch. They cover mouse/pen chords and canceled/passive touch down delivery.
 Canceling down reports failure to the caller without reverting button state or
 implicit capture; the subsequent release still dispatches up and releases capture.
 
-The note about `PREVENT MOUSE EVENT` belongs to the optional compatibility mapper
+The note about `PREVENT MOUSE EVENT` belongs to the compatibility mapper
 defined in [§§10.2–10.3](https://w3c.github.io/pointerevents/#compatibility-mapping-with-mouse-events).
-That owner must consume a canceled primary down, retain the flag per pointerType,
-suppress mapped down/move/up, and clear it after up/cancel. It must preserve mouse
-boundary events and click/auxclick/contextmenu. The TODO at `dispatchToTarget()`'s
-return now identifies those exact requirements. Native input normalization,
-source-to-stream composition, compatibility mapping, and default actions remain
-explicit future owners; this audit adds no new runtime behavior.
+That owner now consumes a canceled primary down, retains the flag per pointerType,
+suppresses mapped down/move/up, and clears it after up/cancel, as documented in
+the §§10.2–10.3 slice below. Mouse boundaries and click/auxclick/contextmenu remain
+independent. Native input normalization, source-to-stream composition, and default
+actions still need their owners; this earlier audit added no runtime behavior.
 
 Validation: the source-state, stream, and boundary suites pass all 98 cases on
 custom Node, Node 24.19.0, and Node 26.8.1, each with and without the addon.
@@ -1868,6 +1867,137 @@ timestamps to the parent realm, preserve raw/move sample correspondence, and flu
 earlier movement before later down/up delivery. These dependencies are explicit
 beside `prepareTarget()`; this slice does not claim a device scheduling pipeline.
 
+## Pointer Events §10.1: effective legacy mouse position
+
+[§10.1](https://w3c.github.io/pointerevents/#tracking-the-effective-position-of-the-legacy-mouse-pointer)
+now has a lazy `Document.legacyMousePointer` owner in `interaction/mouse/`.
+Its `updatePosition(event, target)` shares one position across all primary pointer
+types. The selected target is explicit because this precedes DOM dispatch's
+assignment to `event.target`; null means leaving the window. Unchanged targets
+return before allocating ancestor lists or events. Transitions send mouseout,
+inner-to-outer mouseleave, mouseover, then outer-to-inner mouseenter, excluding
+shared ancestors. Cancellation never suppresses the remaining transition.
+
+`MouseEventImpl.fromPointerEvent()` creates a fresh trusted MouseEvent in each
+target's realm. It copies the input timestamp, coordinates, buttons and modifiers,
+applies MouseEvent coordinate rounding, resets button/detail/movement, and selects
+§11's boundary flags. DOM retains all dispatch and shadow-retargeting ownership.
+
+Eric approved Document ownership and the following browser choices:
+
+- `SPEC_CLASH(mouse-boundary-document-entry)`: notify only Element ancestors,
+  following §11/Firefox/WebKit; Chromium additionally enters Document.
+- `SPEC_CLASH(mouse-boundary-ancestor-snapshot)`: snapshot both ancestor chains
+  before notifications, like Firefox/WebKit; Chromium recomputes the destination
+  chain after mouseout when a listener reparents it.
+- `SPEC_CLASH(mouse-boundary-removed-related-target)`: after removal, retain the
+  surviving ancestor as relatedTarget on the next over event, like Chromium/Firefox;
+  WebKit uses null. The same distinction holds after reinsertion.
+- `SPEC_CLASH(mouse-boundary-related-target)`: use the opposite target, extending
+  the approved pointer-boundary choice and matching all three browsers. §11's
+  mouseenter/mouseleave table descriptions reverse entering and exiting.
+
+DOM removal notifies only existing mouse state, once immediately after unlinking.
+The old parent supplies the ancestor at removal time; no old dispatch path or
+reverse registry is retained. State-preserving moves leave the position intact,
+and destruction clears it. The selected target is retained before boundary
+callbacks so this hook also records removal/reinsertion inside those callbacks;
+local snapshots determine the transition already in progress.
+
+Experimental's `input-delivery/legacy-mouse-boundaries.mjs` checked native mouse
+movement, initial entry, closed shadow roots, reparenting during mouseout, and
+removal/reinsertion in Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2.
+The ordinary order, flags, zero boundary button/detail/movement, and shadow
+retargeting agree. Chromium/Firefox deliver the removal recovery during their
+stationary refresh; WebKit waits for the next movement in this probe. Blink's
+[`MouseEventManager`](https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/core/input/mouse_event_manager.cc)
+likewise retains one position, updates it before callbacks, and receives subtree
+removal notifications separately from pointer capture.
+
+The focused regression covers independent Documents, multiple primary pointer
+types, nonprimary exclusion, unchanged-target allocation avoidance, related targets,
+flags and realm identity, cancellation, ancestor snapshots, slots/shadow hosts,
+removal-time ancestry, reinsertion, state-preserving moves, synthetic dispatch,
+and destruction. The §§10.2–10.3 slice below connects this operation before
+primary down/up/move/window-leave delivery even when PREVENT MOUSE EVENT is set.
+This earlier slice supplied the shared position without a native producer,
+mouse suppression flag, or ordinary compatibility down/move/up dispatch.
+
+Validation: all 25 new regressions and the 9 Document-destruction tests pass on
+custom Node 27, Node 24.19.0, and Node 26.8.1, each with and without the addon.
+The broader interaction/DOM mutation, shadow, range, traversal and destruction
+run passes 666 tests with the one existing Stylelet shadow-scope expected failure.
+No new expected failures were added. Typecheck, type contracts, scoped lint,
+import boundaries and diff checks pass. Browser temporary profiles were removed;
+the reproducible probe remains in Experimental.
+
+## Pointer Events §§10.2–10.3: compatibility mouse mapping
+
+The [hover](https://w3c.github.io/pointerevents/#mapping-for-devices-that-support-hover)
+and [non-hover](https://w3c.github.io/pointerevents/#mapping-for-devices-that-do-not-support-hover)
+algorithms now surround ordinary dispatch in `PointerEventStream`. The existing
+Document-owned `LegacyMousePointer` updates boundaries before primary down/move/up,
+then maps down/move/up/cancel after pointer listeners. Cancellation sends mouseup
+to Window before capture loss and boundary exit. Nonprimary input produces no
+compatibility events. Raw updates produce no ordinary mapped mouse motion.
+
+The callable arrangement splits preparation and completion around the existing
+pointer dispatch, rather than dispatching the pointer again inside the mapper.
+Eric approved the required `supportsHover` constructor input and
+`mouseClickCount` delivery argument. Hover capability is independent of direct
+manipulation and pointerType; click counting is independent of PointerEvent's
+required zero detail. The optional sample-list argument remains last.
+
+`LegacyMousePointer` owns a per-pointer-type PREVENT MOUSE EVENT set. A canceled
+primary down suppresses mapped down/move/up until up/cancel; a hover move with
+zero buttons also clears a stale flag after a release outside the context.
+Passive listeners cannot set it, and canceling later pointer events does not set
+it. Mouse boundaries and click/auxclick/contextmenu remain independent.
+Mouse cancellation is separate from the pointer dispatch's return value.
+
+The selected target is retained before pointer boundary listeners run, alongside
+the effective mouse position. DOM's existing post-unlink notification repairs
+both using ancestry at removal time. A regression first failed when pointerover
+removed the destination before pointerdown: mousedown reached the detached child
+instead of its parent. Retaining the pending target fixes that gap and preserves
+the approved remove/reinsert behavior without another registry or DOM hook.
+
+Eric approved these browser/specification choices:
+
+- `compatibility-mouse-touch-timing`: use §10.3's immediate interleaving, including
+  the initial mousemove before a non-hover pointerover. Chromium/Firefox defer
+  touch mouse events until release; WebKit supplied none in the probe. §10 permits
+  such gesture grouping, but this implementation does not add buffering.
+- `compatibility-mouse-chords`: a pointermove that represents a button transition
+  produces mousedown/mouseup. All three browsers and §11 preserve those mouse
+  transitions; §10's literal list maps every pointermove to mousemove.
+- `compatibility-mouse-removed-target`: mapped events use the repaired ancestor
+  even after reinsertion, like Chromium/Firefox. WebKit drops the removed-target
+  mousedown or uses the reinserted target in the probed cases.
+
+The browser-only `compatibility-mouse.mjs` probe remains in Experimental's
+`input-delivery/`. Ordinary mapping, canceled/passive down, later cancellation,
+chords, removal, and touch input were checked in Chromium 156.0.8078.4,
+Firefox 157.0, and WebKit 27.2. Cancellation via native touch was additionally
+probed with Chromium CDP; its delayed policy produced no mapped mouseup.
+The required Window mouseup here follows the chosen immediate algorithm.
+
+Remaining dependencies are explicit beside their operations: native device
+scheduling and source-to-stream composition; layout/hit testing; UI Events
+click-count and movement inputs; HTML focus/editing/drag default actions; and
+avoiding duplicate compatibility delivery when a Touch Events producer is added.
+`updateAfterLayout()` also refreshes mouse boundaries without inventing a move.
+Author dispatch never enters the compatibility mapper.
+
+Validation: all 25 new mapping regressions, 25 legacy-position regressions, and
+11 top-level destruction tests pass on custom Node 27, Node 24.19.0, and Node
+26.8.1, each with and without the addon. The broader custom/compat interaction,
+DOM event, structural-mutation, and destruction run passes 568 tests with the
+one previously approved Stylelet shadow-scope expected failure. No new expected
+failures were added. Typecheck, type contracts, scoped lint, and import-boundary
+checks pass. Browser temporary profiles were removed; the probe remains in
+Experimental.
+
 ## Next in document order
 
 §3.1.5's orientation conversion is already covered by PointerEvent construction.
@@ -1882,9 +2012,11 @@ device-capacity and BiDi dependencies above. §7 now has its CSS property,
 permission snapshot, and takeover guard, up to the explicit layout, Stylelet, and
 input-owner dependencies above. §8's capture audit and DOM removal hookup are
 complete up to the owner dependencies above. §9's trusted sample preparation and
-target maintenance are implemented up to the producer dependencies above. Continue
-with §10's compatibility mapping with mouse events. Stream registration/retirement
-and previous-boundary-target removal notification remain explicit integration work.
+target maintenance are implemented up to the producer dependencies above. §10's
+shared position, hover/non-hover mapping, and suppression are connected to the
+internal stream. Continue with §11's Mouse Events and Interfaces audit. Stream
+registration/retirement and per-pointer previous-boundary-target removal notification
+remain explicit integration work.
 Those steps must consume active source
 state and expose any reached targeting/input dependencies explicitly in code;
 the MouseEvent geometry dependencies remain explicit. Editing and selection producers

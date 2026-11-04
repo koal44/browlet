@@ -205,7 +205,7 @@ async function createFixture(secure = true) {
   await browser.navigate(`${secure ? 'https' : 'http'}://pointer.test/`);
   const target = browser.document.createElement('div');
   browser.document.body!.append(target);
-  const stream = new PointerEventStream(7, false, () => false);
+  const stream = new PointerEventStream(7, false, true, () => false);
   const send = (type: PointerInputEventType, hit: Element = target, samples?: PointerEventSamples) => {
     const input = new PointerEventImpl(type, {
       pointerType: 'pen', isPrimary: true, clientX: 12.5, clientY: 23.5, pressure: 0.75, buttons: 1,
@@ -214,7 +214,7 @@ async function createFixture(secure = true) {
     const event = selected.createTrustedEvent(PointerEventImpl) as PointerEventImpl;
     event.copyInputFrom(input);
     event.setPointerEventAttributes(type);
-    stream.dispatchToTarget(event, selected, () => null, samples);
+    stream.dispatchToTarget(event, selected, () => null, 1, samples);
     return event;
   };
   return { browser, target, stream, send };

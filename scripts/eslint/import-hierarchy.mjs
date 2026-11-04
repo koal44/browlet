@@ -48,6 +48,8 @@ export const layers = [
   ['browlet/reporting/'],
   // Feature event payloads can serve Document's legacy factory without loading their producers.
   ['browlet/storage/events/', 'browlet/browsing/navigation/events/', 'browlet/interaction/events/'],
+  // Document owns mouse position; transitions use event primitives and typed nodes only.
+  ['browlet/interaction/mouse/'],
   // Policy owns the source-expression algorithms shared with its CSP implementation.
   ['browlet/browsing/policy/'],
   ['browlet/browsing/policy/csp/'],

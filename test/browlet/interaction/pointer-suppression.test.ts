@@ -271,7 +271,7 @@ describe('Pointer Events §8.5: implicit capture release after pointerup', () =>
 /** Real Binding and DOM dispatch; only device capability, geometry, and the unfinished lock query are supplied. */
 function createFixture(hover = true, directManipulation = false) {
   const browser = new Browlet({ route: () => '' });
-  const stream = new PointerEventStream(7, directManipulation, () => false);
+  const stream = new PointerEventStream(7, directManipulation, hover, () => false);
   const trace: string[] = [];
   const events: PointerEvent[] = [];
   const labels = new Map<EventTarget, string>();
@@ -308,7 +308,7 @@ function createFixture(hover = true, directManipulation = false) {
     const event = target.createTrustedEvent(PointerEventImpl) as PointerEventImpl;
     event.copyInputFrom(input);
     event.setPointerEventAttributes(type);
-    return { event, accepted: stream.dispatchToTarget(event, target, getHoverTarget) };
+    return { event, accepted: stream.dispatchToTarget(event, target, getHoverTarget, 1) };
   };
   return { browser, stream, trace, events, a, b, c, geometry, hitTest, getHoverTarget, capture, send };
 }

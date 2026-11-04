@@ -143,7 +143,7 @@ describe('Pointer Events §5: GlobalEventHandlers', () => {
     browser.document.body!.append(a, b);
     const aImpl = unwrap<ElementImpl>(a);
     const bImpl = unwrap<ElementImpl>(b);
-    const stream = new PointerEventStream(7, false, () => false);
+    const stream = new PointerEventStream(7, false, true, () => false);
     document.getNodeNavigable()!.topLevelTraversable.pointerEventStreams.set(7, stream);
     const trace: string[] = [];
     a.onpointerdown = () => { a.setPointerCapture(7); trace.push('down'); };
@@ -157,7 +157,7 @@ describe('Pointer Events §5: GlobalEventHandlers', () => {
       const event = target.createTrustedEvent(PointerEventImpl) as PointerEventImpl;
       event.copyInputFrom(input);
       event.setPointerEventAttributes(type);
-      stream.dispatchToTarget(event, target, () => hit);
+      stream.dispatchToTarget(event, target, () => hit, 1);
     };
     send('pointerdown', 1, aImpl);
     send('pointermove', 1, bImpl);

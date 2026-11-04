@@ -40,6 +40,7 @@ import { BeforeUnloadEventImpl, HashChangeEventImpl } from '../../browsing/navig
 import {
   UIEventImpl, FocusEventImpl, KeyboardEventImpl, CompositionEventImpl, TextEventImpl, MouseEventImpl, pointerEventHandlers,
 } from '../../interaction/events/index';
+import { LegacyMousePointer } from '../../interaction/mouse/index';
 import {
   InsecureRequestsPolicy, PolicyContainer, OpenerPolicy, PermissionsPolicy, PermissionsPolicyImpl, SandboxingFlagSet,
   type SandboxingFlag, type PolicyControlledFeature, type PolicyFeatureValue,
@@ -266,6 +267,8 @@ export class DocumentImpl extends NodeImpl {
   #lazyLoadIntersectionObserver: IntersectionObserverImpl | null = null;
   /** Internal subscribers notified when navigation changes this document's activity. */
   #fullyActiveObservers = new Set<FullyActiveStateObserver>();
+  /** Shared compatibility mouse position, allocated only when a primary pointer is delivered. */
+  #legacyMousePointer?: LegacyMousePointer;
   /** Lazily created style engine for this document. */
   #stylelet?: Stylelet;
   /** Stylesheet collections and matching context, retained independently of the engine. */
@@ -309,6 +312,11 @@ export class DocumentImpl extends NodeImpl {
 
   static is(value: unknown): value is DocumentImpl {
     return value instanceof DocumentImpl;
+  }
+
+  /** One effective mouse position shared by primary mouse, pen, and touch input in this Document. */
+  get legacyMousePointer(): LegacyMousePointer {
+    return this.#legacyMousePointer ??= new LegacyMousePointer(this);
   }
 
   /** Classic history state owned by this Document rather than by its Window. */
@@ -1292,6 +1300,7 @@ export class DocumentImpl extends NodeImpl {
     this.salvageable = false;
     for (const port of global.messagePorts) port.disentangle();
     this.runUnloadingCleanup();
+    this.#legacyMousePointer?.clear();
     eventLoop.removeTasksForDocument(this);
     global.handoffReports();
     global.clearReportingState();
@@ -1350,6 +1359,11 @@ export class DocumentImpl extends NodeImpl {
     }
     env.userAgent.blobURLStore.removeForEnvironment(env);
     // TODO: connect fullscreen, media, service-worker, and lock cleanup as implemented.
+  }
+
+  /** Notify existing compatibility mouse state without allocating it for documents with no input. */
+  notifyLegacyMouseRemoval(node: NodeImpl, parent: NodeImpl): void {
+    this.#legacyMousePointer?.removedFrom(node, parent);
   }
 
   /** Inherit the browsing context's upgrade policy before applying this document's own directives. */

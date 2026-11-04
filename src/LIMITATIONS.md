@@ -813,7 +813,7 @@ remain unconnected owner dependencies. The input owner must supply the prepared
 event in its target's realm. Device-to-context ID assignment, stream registration
 and retirement, individual Document teardown, suppression
 triggers (device loss, modal UI, pan/zoom, HTML drag), and compatibility mouse default
-actions still need their producer. Previous-boundary-target disconnection
+actions still need their producer. Per-pointer previous-boundary-target disconnection
 cleanup must be called by the future removal/input integration before reinsertion;
 checking connectivity during processing cannot detect a missed remove/reinsert.
 Author construction and dispatch keep their supplied attributes and do not change
@@ -831,6 +831,17 @@ independent identities are established before delivery. This does not accumulate
 hardware inputs, predict motion, flush pending moves before later down/up events,
 or schedule raw updates before corresponding moves. Author constructor lists and
 redispatch remain unchanged; the source identifies the remaining producer work.
+
+Pointer Events §10's lazy, Document-owned legacy mouse state now connects to
+the internal pointer stream. Primary input produces trusted mouse boundaries and
+mapped down/move/up, with per-pointer-type cancellation suppression and immediate
+non-hover interleaving. Chorded button changes retain their mouse down/up meaning.
+DOM removal repairs both the effective position and the pending mapped target
+before reinsertion; an unchanged position allocates no boundary notifications.
+This still requires a native input producer: hover capability and click count are
+required inputs, and device scheduling, real hit testing, gesture recognition,
+and mouse default actions remain explicit dependencies in source. Synthetic
+dispatch neither produces compatibility events nor changes suppression state.
 
 §3.3.12 now supplies internal click/auxclick/contextmenu creation and pointer-based
 target selection. The stream retains down/up facts across capture release and

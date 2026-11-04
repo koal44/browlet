@@ -79,7 +79,7 @@ describe('Pointer Events §8.5: capture during DOM removal', () => {
     browser.document.body!.append(host);
     const shadow = host.attachShadow({ mode: 'open' });
     shadow.append(a, b);
-    const otherStream = new PointerEventStream(8, false, () => false);
+    const otherStream = new PointerEventStream(8, false, true, () => false);
     top.pointerEventStreams.set(8, otherStream);
     send(a);
     send(b, otherStream);
@@ -160,7 +160,7 @@ function createFixture() {
   const browser = new Browlet({ route: () => '' });
   const document = unwrap<DocumentImpl>(browser.document);
   const top = document.getNodeNavigable()!.topLevelTraversable;
-  const stream = new PointerEventStream(7, false, () => false);
+  const stream = new PointerEventStream(7, false, true, () => false);
   top.pointerEventStreams.set(7, stream);
   const a = browser.document.createElement('div');
   const b = browser.document.createElement('div');
@@ -180,7 +180,7 @@ function createFixture() {
     const event = target.createTrustedEvent(PointerEventImpl) as PointerEventImpl;
     event.copyInputFrom(input);
     event.setPointerEventAttributes('pointermove');
-    inputStream.dispatchToTarget(event, target, () => unwrap<ElementImpl>(hit));
+    inputStream.dispatchToTarget(event, target, () => unwrap<ElementImpl>(hit), 1);
     return event;
   };
   return { browser, a, b, send, notifications, stream, top };

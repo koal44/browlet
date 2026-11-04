@@ -455,7 +455,7 @@ describe('Pointer Events §3.1.4: boundary events after layout changes', () => {
 /** Real DOM/Binding allocation and dispatch, with only geometry and Pointer Lock supplied by the test. */
 function createFixture(isDirectManipulation = false) {
   const browser = new Browlet({ route: () => '' });
-  const stream = new PointerEventStream(7, isDirectManipulation, () => false);
+  const stream = new PointerEventStream(7, isDirectManipulation, !isDirectManipulation, () => false);
   const trace: string[] = [];
   const labels = new Map<EventTarget, string>();
   const observe = (target: EventTarget, label: string) => {
@@ -489,7 +489,7 @@ function createFixture(isDirectManipulation = false) {
     const event = unwrap<DocumentImpl>(browser.document).createTrustedEvent(PointerEventImpl) as PointerEventImpl;
     event.copyInputFrom(new PointerEventImpl(type, { pointerType: 'mouse', buttons: 1, clientX: 12.5, ...init }));
     const target = stream.prepareTarget(type, event, () => unwrap<NodeImpl>(hit));
-    const accepted = stream.dispatchToTarget(event, target, () => hoverTarget === null ? null : unwrap<NodeImpl>(hoverTarget));
+    const accepted = stream.dispatchToTarget(event, target, () => hoverTarget === null ? null : unwrap<NodeImpl>(hoverTarget), 1);
     return { event, accepted };
   };
   const update = (hit: Element | null, timeStamp = unwrap<DocumentImpl>(browser.document).env.realm.eventTimeStamp()) => {

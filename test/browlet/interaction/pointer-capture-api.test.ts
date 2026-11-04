@@ -201,7 +201,7 @@ describe('Pointer Events §4: Element capture methods', () => {
     send('pointerdown', a, 1);
     a.setPointerCapture(7);
     expect(() => other.setPointerCapture(7)).toThrow(expect.objectContaining({ name: 'NotFoundError' }));
-    const otherStream = new PointerEventStream(7, false, () => false);
+    const otherStream = new PointerEventStream(7, false, true, () => false);
     otherTop.pointerEventStreams.set(7, otherStream);
     otherStream.prepareTarget('pointerdown', new PointerEventImpl('', { buttons: 1 }), () => otherImpl);
     other.setPointerCapture(7);
@@ -262,7 +262,7 @@ function createFixture() {
   b.id = 'b';
   browser.document.body!.append(a, b);
   const hasLockedElement = vi.fn((_document: DocumentImpl) => false);
-  const stream = new PointerEventStream(7, false, hasLockedElement);
+  const stream = new PointerEventStream(7, false, true, hasLockedElement);
   top.pointerEventStreams.set(7, stream);
   const notifications: string[] = [];
   for (const type of ['gotpointercapture', 'lostpointercapture']) {
@@ -274,7 +274,7 @@ function createFixture() {
     const event = target.createTrustedEvent(PointerEventImpl) as PointerEventImpl;
     event.copyInputFrom(input);
     event.setPointerEventAttributes(type);
-    stream.dispatchToTarget(event, target, () => unwrap<ElementImpl>(hit));
+    stream.dispatchToTarget(event, target, () => unwrap<ElementImpl>(hit), 1);
     return event;
   };
   return { browser, a, b, stream, top, send, notifications, hasLockedElement };

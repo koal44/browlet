@@ -175,7 +175,7 @@ describe('Pointer Events §§7.2–7.3: direct-manipulation permissions', () => 
     const manipulation = snapshot();
     const targetImpl = unwrap<ElementImpl>(target);
     const hitTest = () => targetImpl;
-    const stream = new PointerEventStream(7, true, () => false);
+    const stream = new PointerEventStream(7, true, false, () => false);
     const canceled = vi.fn();
     target.addEventListener('pointercancel', canceled);
     target.addEventListener('pointerdown', (event) => {
@@ -186,7 +186,7 @@ describe('Pointer Events §§7.2–7.3: direct-manipulation permissions', () => 
     event.pointerType = 'touch';
     event.buttons = 1;
     const selected = stream.prepareTarget('pointerdown', event, hitTest);
-    expect(stream.dispatchToTarget(event, selected, () => null)).toBe(false);
+    expect(stream.dispatchToTarget(event, selected, () => null, 1)).toBe(false);
     expect(manipulation.considerPan(Down)).toBe(true);
     expect(stream.suppressForDirectManipulation(hitTest)).toBe(true);
     expect(canceled).toHaveBeenCalledOnce();
