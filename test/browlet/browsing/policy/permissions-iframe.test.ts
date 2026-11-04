@@ -194,7 +194,7 @@ describe('Permissions Policy §§6.2–6.3 / §9.4: container-policy inputs', ()
     iframe.setAttributeValue('allowfullscreen', '');
     iframe.setAttributeValue('allow', 'fullscreen *; cross-origin-isolated');
     expect([...iframe.processPolicyAttributes().keys()]).toEqual([feature]);
-    expect([...new PermissionsPolicy().inheritedPolicy.keys()]).toEqual([feature]);
+    expect(PermissionsPolicy.getSupportedFeatureNames()).not.toContain('fullscreen');
     // TODO(Fullscreen): Exercise allowfullscreen fallback and explicit allow precedence
     // when Fullscreen adds its definition to the supported feature catalog.
   });

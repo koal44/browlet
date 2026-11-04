@@ -33,6 +33,15 @@ hook currently follows HTML's call shape. The
 [top-level audit](../browsing/navigation/ROADMAP.md#html-7312-top-level-traversables)
 records the unresolved contract. No event is emitted by the current hook.
 
+Unload/throttle rejection supplies a generated UUID to
+`UserAgent.webDriverBiDiNavigationFailed()`. Requests continuing beyond the fragment
+branch call `webDriverBiDiNavigationStarted()` after target policy capture. An ongoing traversal
+receives started followed by failed with the same UUID. The
+[started](https://w3c.github.io/webdriver-bidi/#webdriver-bidi-navigation-started) and
+[failed](https://w3c.github.io/webdriver-bidi/#webdriver-bidi-navigation-failed)
+operations still need navigation-info serialization, waiter resumption,
+subscriptions, and event delivery. Both hooks are provisional and emit no event.
+
 The commands are **not yet executable end to end**. These dependencies throw
 explicitly:
 

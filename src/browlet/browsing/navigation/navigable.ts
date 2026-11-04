@@ -1,8 +1,15 @@
 import { asciiLower, assertNever, InternalError } from '../../../infra/index';
-import { areSameOrigin, areSameOriginDomain, copyURL, createOpaqueOrigin, urlsEqual, type Origin, type URLRecord } from '../../../url/index';
+import { randomUUID } from '../../../js-engine/index';
+import { DOMExceptionImpl } from '../../../web-idl/core/index';
+import {
+  aboutBlankURL, areSameOrigin, areSameOriginDomain, copyURL, createOpaqueOrigin, obtainURLOrigin,
+  serializeURL, urlsEqual, type Origin, type URLRecord,
+} from '../../../url/index';
 import { StorageShed } from '../../../storage/index';
 import type { FormDataEntry } from '../../../xhr/index';
-import { FetchResponse, type FetchPromptTarget, type fetchPromptTargetBrand, type ReferrerPolicy } from '../../../fetch/index';
+import {
+  FetchRequest, FetchResponse, isFetchScheme, type FetchPromptTarget, type fetchPromptTargetBrand, type ReferrerPolicy,
+} from '../../../fetch/index';
 
 import { coarsenedSharedCurrentTime } from '../../timing/index';
 import type { EventLoop } from '../../scripting/index';
@@ -16,13 +23,14 @@ import {
 } from '../../dom/nodes/html/embedded/index';
 import type { HTMLFrameElementImpl } from '../../dom/nodes/html/legacy/index';
 import { CustomElementRegistryImpl } from '../../dom/nodes/html/custom-elements/index';
+import type { NavigationTimingType } from '../../performance/index';
 import {
   DocumentState, SourceSnapshotParams, type SessionHistoryEntry,
   type DocumentBackedState, type PostResource,
 } from './state/index';
 import type { NavigationAPIMethodTracker } from './api/index';
 import type { WindowImpl, WindowProxyHandle } from '../window/index';
-import { BrowletEnvironmentBase } from '../../environment/index';
+import { BrowletEnvironmentBase, type BrowletEnvironment } from '../../environment/index';
 import { HTMLDocumentParser, type ScriptHandler } from '../../html/parser/index';
 import type { SerializedRecord } from '../../scripting/structured-data/index';
 import type { ResourceReader } from '../../loader/index';
@@ -30,7 +38,7 @@ import type { PointerEventStream } from '../../interaction/index';
 import type { UserAgent } from '../../user-agent';
 
 import { BrowsingContext } from './browsing-context';
-import { NavigationParams } from './params';
+import { NavigationParams, type TargetSnapshotParams } from './params';
 import { SessionHistoryTraversalQueue, type SessionHistoryTraversalSteps } from './session-history-traversal-queue';
 
 /** Owns a navigation destination and its current and active history entries. */
@@ -46,7 +54,12 @@ export class Navigable {
   /** Whether closing this navigable has begun. */
   isClosing = false;
   /** Whether its navigation is delaying the container document's load event. */
+  // TODO(HTML §7.4.2.3.1): Connect startup to queued finalizeCrossDocumentNavigation(), which releases this delay.
   isDelayingLoadEvents = false;
+  /** Navigation UUID, "traversal" while applying history, or null when no navigation is ongoing. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#concept-navigate-mature
+  // TODO(HTML §7.4.6): Connect history's direct assignments, distinct from setOngoingNavigation's abortion notification.
+  ongoingNavigation: string | null = null;
 
   /** History entry supplying the active Document, independently of the current traversal entry. */
   // HTML permits mutation only on that Document's event loop; history application must preserve this ownership.
@@ -143,7 +156,7 @@ export class Navigable {
     _navigablesThatNeedBeforeUnload: Navigable[], _traversable?: Traversable,
     _targetStep?: number, _userInvolvementForNavigateEvent?: UserNavigationInvolvement,
   ): 'canceled-by-beforeunload' | 'canceled-by-navigate' | 'continue' {
-    // TODO(HTML §7.4.2.5): Snapshot active Documents, queue beforeunload/navigate checks on their Windows,
+    // TODO(HTML §7.4.2.4): Snapshot active Documents, queue beforeunload/navigate checks on their Windows,
     // coordinate the shared prompt state, and wait for all results. The optional traversal needs all three inputs.
     throw new InternalError('Unload cancellation checks are not implemented');
   }
@@ -416,22 +429,214 @@ export class Navigable {
   /** Check navigation permission against the initiating Document's captured sandbox state. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#allowed-to-navigate
   isAllowedBySandboxingToNavigate(_target: Navigable, _sourceSnapshotParams: SourceSnapshotParams): boolean {
-    // TODO(HTML §7.4.2.5): Apply self/ancestor relationships, activation-dependent top navigation,
+    // TODO(HTML §7.4.2.4): Apply self/ancestor relationships, activation-dependent top navigation,
     // and the target browsing context's one permitted sandboxed navigator.
     throw new InternalError('Sandbox navigation permission is not implemented');
   }
 
+  /** Navigate from source admission through Document population and queued history finalization. */
+  // env supplies the executing Agent; null denotes host/parallel work without a surrounding HTML Agent.
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigate
   navigate(
-    _url: URLRecord, _sourceDocument: DocumentImpl | null = null,
-    _options: NavigateOptions = {},
+    url: URLRecord, sourceDocument: DocumentImpl | null = null,
+    options: NavigateOptions = {}, env: BrowletEnvironment | null = null,
   ): void {
-    // TODO(HTML §7.4): Connect source snapshots, permissions, Fetch/history, and tracker settlement.
-    // Response selection must preserve the active Document for 204/205/downloads and enforce X-Frame-Options.
-    // Fragment, javascript:, and srcdoc navigation need their separate paths and history synchronization.
-    // Entry population must replay retained referrer/policy, about: origin/base, and srcdoc/POST resources.
-    // POST capture/replay must preserve identical bytes across retries, handle failure, and read the body only in parallel.
-    throw new InternalError('Document-initiated navigation is not implemented');
+    // Capture the source state and check its permission to navigate this destination.
+    const cspNavigationType = (options.formDataEntryList ?? null) === null ? 'other' : 'form-submission';
+    const sourceSnapshotParams = new SourceSnapshotParams(sourceDocument);
+    let initiatorOriginSnapshot: Origin = createOpaqueOrigin();
+    let initiatorBaseURLSnapshot = copyURL(aboutBlankURL);
+    if (sourceDocument === null) {
+      if (options.userInvolvement !== 'browser UI') throw new InternalError('Sourceless navigation requires browser UI involvement');
+      if (url.scheme === 'javascript') {
+        const document = this.activeDocument;
+        if (document === null) throw new InternalError('Navigation requires an active Document');
+        initiatorOriginSnapshot = document.origin;
+      }
+    } else {
+      if (options.userInvolvement === 'browser UI') throw new InternalError('Document-initiated navigation cannot have browser UI involvement');
+      const sourceNavigable = sourceDocument.getNodeNavigable();
+      if (sourceNavigable === null) throw new InternalError('Navigation requires the source Document\'s node navigable');
+      if (!sourceNavigable.isAllowedBySandboxingToNavigate(this, sourceSnapshotParams)) {
+        if (options.exceptionsEnabled === true) throw new DOMExceptionImpl('Sandboxing prevents navigation', 'SecurityError');
+        return;
+      }
+      initiatorOriginSnapshot = sourceDocument.origin;
+      initiatorBaseURLSnapshot = sourceDocument.getBaseURL();
+    }
+    options = { ...options };
+    const navigationId = randomUUID();
+    const targetEnv = this.activeDocument?.env;
+    if (targetEnv === undefined) throw new InternalError('Navigation requires an active Document');
+
+    // These steps read live target state, on its Agent after the source snapshots above.
+    const steps = () => {
+      let document = this.activeDocument;
+      if (document === null) throw new InternalError('Navigation requires an active Document');
+      const userAgent = document.env.userAgent;
+      if (document.unloadCounter > 0) {
+        userAgent.webDriverBiDiNavigationFailed(this, { id: navigationId, status: 'canceled', url });
+        return;
+      }
+      const container = this.container;
+      if (container instanceof HTMLIFrameElementImpl && container.willLazyLoad()) {
+        container.nodeDocument.stopObservingLazyLoadingElement(container);
+        container.lazyLoadResumptionSteps = null;
+      }
+      if (this.isNavigationOrHistoryUpdateBlocked()) {
+        userAgent.webDriverBiDiNavigationFailed(this, { id: navigationId, status: 'canceled', url });
+        return;
+      }
+      // Select history handling and take the same-document fragment path when applicable.
+      const userInvolvement = options.userInvolvement ?? 'none';
+      const historyHandling = this.resolveHistoryBehavior(url, initiatorOriginSnapshot, options.historyHandling, userInvolvement);
+      const { documentResource = null, response = null } = options;
+      if (
+        documentResource === null && response === null &&
+        urlsEqual(url, this.activeSessionHistoryEntry.url, true) && url.fragment !== null
+      ) {
+        this.navigateToFragment(
+          url, historyHandling, userInvolvement, options.sourceElement ?? null,
+          options.navigationAPIState ?? null, navigationId,
+        );
+        return;
+      }
+      // Capture target policy before replacing the ongoing navigation and notifying author code.
+      if (this.parent !== null) this.isDelayingLoadEvents = true;
+      const targetSnapshotParams = this.snapshotTargetParams();
+      userAgent.webDriverBiDiNavigationStarted(this, { id: navigationId, status: 'pending', url });
+      if (this.ongoingNavigation === 'traversal') {
+        userAgent.webDriverBiDiNavigationFailed(this, { id: navigationId, status: 'canceled', url });
+        return;
+      }
+      this.setOngoingNavigation(navigationId, document.env);
+
+      if (url.scheme === 'javascript') {
+        const activeEnv = this.activeWindow?.env;
+        if (activeEnv === undefined) throw new InternalError('JavaScript URL navigation requires an active Window');
+        // CSP consumes a synthetic request; this path never sends it to Fetch.
+        const request: NavigationRequest = Object.assign(new FetchRequest(url, activeEnv), {
+          client: sourceSnapshotParams.fetchClient, policyContainer: sourceSnapshotParams.sourcePolicyContainer,
+        });
+        activeEnv.queueTask('navigation-and-traversal', () => this.navigateToJavaScriptURL(
+          request, historyHandling, initiatorOriginSnapshot, userInvolvement,
+          cspNavigationType, options.initialInsertion ?? false, navigationId, targetSnapshotParams,
+        ));
+        return;
+      }
+
+      // Aborting the previous navigation can change the active Document.
+      document = this.activeDocument;
+      if (document === null) throw new InternalError('Navigation requires an active Document');
+      // SPEC_CLASH(navigate-event-top-level-data): Follow HTML/Firefox/WebKit's fetch-scheme gate;
+      // Chromium separately blocks page-initiated top-level data: loads before navigate-event dispatch.
+      if (
+        userInvolvement !== 'browser UI' && areSameOriginDomain(document.origin, sourceDocument!.origin) &&
+        !document.isInitialAboutBlank && isFetchScheme(url.scheme)
+      ) {
+        const navigation = this.activeWindow!.navigation;
+        const entryListForFiring = documentResource !== null && typeof documentResource !== 'string'
+          ? options.formDataEntryList ?? null : null;
+        const shouldContinue = navigation.firePushReplaceReloadNavigateEvent(historyHandling, url, false, {
+          userInvolvement, sourceElement: options.sourceElement ?? null, formDataEntryList: entryListForFiring,
+          navigationAPIState: options.navigationAPIState ?? navigation.env.serializeForStorage(undefined),
+          apiMethodTracker: options.apiMethodTracker ?? null,
+        });
+        if (!shouldContinue) return;
+      }
+      const currentContainer = this.container;
+      // SPEC_GAP(deferred-fetch-null-container): Browser-UI top-level navigation has neither
+      // a source Document nor a container Document; their equality cannot reserve on a null container.
+      if (currentContainer !== null && sourceDocument === currentContainer.nodeDocument) {
+        currentContainer.reserveDeferredFetchQuota(obtainURLOrigin(url));
+      }
+
+      // In parallel, check unloading and populate an entry before queued history finalization.
+      document.env.userAgent.runInParallel(() => {
+        const activeDocument = this.activeDocument;
+        if (activeDocument === null) throw new InternalError('Navigation requires an active Document');
+        // TODO(HTML §7.4.2.4): This owner still throws; its eventual cross-loop wait must resume these parallel steps.
+        const unloadPromptCanceled = Navigable.checkIfUnloadingIsCanceled(activeDocument.getInclusiveDescendantNavigables());
+        if (unloadPromptCanceled !== 'continue' || this.ongoingNavigation !== navigationId) {
+          activeDocument.env.userAgent.webDriverBiDiNavigationFailed(this, { id: navigationId, status: 'canceled', url });
+          return;
+        }
+        const activeEnv = this.activeWindow?.env;
+        if (activeEnv === undefined) throw new InternalError('Navigation requires an active Window');
+        activeEnv.queueTask('navigation-and-traversal', () => {
+          const documentToAbort = this.activeDocument;
+          if (documentToAbort === null) throw new InternalError('Navigation abortion requires an active Document');
+          documentToAbort.abortAndDescendants();
+        });
+        const documentState = DocumentState.createForNavigation(
+          url, initiatorOriginSnapshot, initiatorBaseURLSnapshot,
+          options.referrerPolicy ?? '', documentResource, this.targetName,
+        );
+        const historyEntry = activeEnv.createSessionHistoryEntry(url, documentState);
+        const navigationParams = response === null ? null : NavigationParams.fromSuppliedResponse(
+          response, this, sourceDocument, targetSnapshotParams, documentState,
+          navigationId, userInvolvement, activeEnv,
+        );
+        this.populateHistoryEntryDocument(historyEntry, 'navigate', sourceSnapshotParams, targetSnapshotParams, userInvolvement, {
+          navigationId, navigationParams, cspNavigationType, allowPOST: true,
+          completionSteps: () => {
+            this.traversable.appendSessionHistoryTraversalSteps(() => {
+              // TODO(HTML §7.4.2.3.1/§7.4.6): The finalizer still needs nested history and complete history application.
+              this.finalizeCrossDocumentNavigation(historyHandling, userInvolvement, historyEntry);
+            });
+          },
+        });
+      });
+    };
+
+    if (env?.realm.agent === targetEnv.realm.agent) steps();
+    else targetEnv.queueTask('navigation-and-traversal', steps);
+  }
+
+  /** Populate a pending entry in parallel, then run its completion steps without committing it here. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#attempt-to-populate-the-history-entry's-document
+  // SPEC_MISMATCH: attempt to populate the history entry's document(entry, navigable, navTimingType, sourceSnapshotParams, targetSnapshotParams, userInvolvement, navigationId = null, navigationParams = null, cspNavigationType = "other", allowPOST = false, completionSteps = empty)
+  populateHistoryEntryDocument(
+    _entry: SessionHistoryEntry, _navigationTimingType: NavigationTimingType,
+    _sourceSnapshotParams: SourceSnapshotParams, _targetSnapshotParams: TargetSnapshotParams,
+    _userInvolvement: UserNavigationInvolvement, _options: PopulateHistoryEntryOptions = {},
+  ): void {
+    // TODO(HTML §7.4.5): Select srcdoc, Fetch, external-protocol, or error processing; preserve POST bytes across retries.
+    // Recheck the navigation ID, enforce response/frame policies, and leave the Document null for downloads/204/205.
+    // Document creation and completion must return through the specified task and history-queue boundaries.
+    throw new InternalError('Session-history entry Document population is not implemented');
+  }
+
+  /** Evaluate a queued javascript: request after checking the source policy and live destination. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigate-to-a-javascript:-url
+  navigateToJavaScriptURL(
+    _request: NavigationRequest, _historyHandling: HistoryHandlingBehavior, _initiatorOrigin: Origin,
+    _userInvolvement: UserNavigationInvolvement, _cspNavigationType: 'form-submission' | 'other',
+    _initialInsertion: boolean, _navigationId: string, _targetSnapshotParams: TargetSnapshotParams,
+  ): void {
+    // TODO(HTML §7.4.2.3.2): Evaluate javascript: URLs with CSP and Trusted Types, then replace history.
+    throw new InternalError('JavaScript URL navigation is not implemented');
+  }
+
+  /** Run a URL as a classic script; only a normal string completion produces a replacement Document. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#evaluate-a-javascript:-url
+  evaluateJavaScriptURL(
+    _url: URLRecord, _newDocumentOrigin: Origin, _userInvolvement: UserNavigationInvolvement, _navigationId: string,
+    _targetSnapshotParams: TargetSnapshotParams,
+  ): DocumentImpl | null {
+    // TODO(HTML §7.4.2.3.2): Evaluate javascript: URLs with CSP and Trusted Types, then replace history.
+    throw new InternalError('JavaScript URL navigation is not implemented');
+  }
+
+  /** Update same-document history, navigate-event state, and scrolling for a fragment destination. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigate-fragid
+  navigateToFragment(
+    _url: URLRecord, _historyHandling: HistoryHandlingBehavior, _userInvolvement: UserNavigationInvolvement,
+    _sourceElement: ElementImpl | null, _navigationAPIState: SerializedRecord | null, _navigationId: string,
+  ): void {
+    // TODO(HTML §7.4.2.3.3): Fire the navigate event, handle interception/cancellation, update the entry,
+    // and coordinate synchronous history application and fragment scrolling. This must not enter the document loader.
+    throw new InternalError('Fragment navigation is not implemented');
   }
 
   /** Reload this destination after its cancelable navigate event and through the traversal queue. */
@@ -448,6 +653,14 @@ export class Navigable {
     // TODO: Respect the active Document's unload counter, cancel ongoing navigation
     // without stopping traversal, then abort the Document and its descendants.
     throw new InternalError('Navigation stopping and descendant abortion are not implemented');
+  }
+
+  /** Notify Navigation before changing the ongoing request; null env denotes host/parallel work. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#set-the-ongoing-navigation
+  setOngoingNavigation(newValue: string | null, env: BrowletEnvironment | null = null): void {
+    if (this.ongoingNavigation === newValue) return;
+    this.informNavigationAPIAboutAbortingNavigation(env?.responsibleEventLoop ?? null);
+    this.ongoingNavigation = newValue;
   }
 
   /** Notify on the active Window's loop; null means the caller is running in parallel. */
@@ -503,26 +716,37 @@ export class Navigable {
     return false;
   }
 
-  /** Prepare response policies and sandbox restrictions before selecting the document's realm. */
-  createNavigationParams(response: FetchResponse): NavigationParams {
+  /** Capture the target's sandbox restrictions and iframe referrer policy before navigation proceeds. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#snapshotting-target-snapshot-params
+  snapshotTargetParams(): TargetSnapshotParams {
+    const context = this.activeBrowsingContext;
+    if (context === null) throw new InternalError('Target snapshot requires an active browsing context');
+    const container = this.container;
+    // TODO(HTML child navigation): Resolve sandbox inheritance for object/embed/frame; §7.1.5 refers to their nonexistent iframe flag set.
+    if (container !== null && !(container instanceof HTMLIFrameElementImpl)) {
+      throw new InternalError('Object, embed, and frame navigation sandboxing is not implemented');
+    }
+    return {
+      sandboxingFlags: context.determineCreationSandboxingFlags(container),
+      iframeReferrerPolicy: HTMLIFrameElementImpl.determineReferrerPolicy(container),
+    };
+  }
+
+  /** Prepare response policies using target restrictions captured before loading, or at local-route entry. */
+  createNavigationParams(response: FetchResponse, targetSnapshotParams = this.snapshotTargetParams()): NavigationParams {
     const context = this.activeBrowsingContext;
     if (context === null) throw new InternalError('Navigation requires an active browsing context');
     const env = context.activeWindow.env;
-    const container = this.container;
-    // TODO(HTML child navigation): Audit object/embed/frame inheritance; iframe sandbox flags are not defined on them.
-    if (container !== null && !(container instanceof HTMLIFrameElementImpl)) {
-      throw new InternalError('Object and frame navigation sandboxing is not implemented');
-    }
     const params = new NavigationParams(
       response,
-      context.determineCreationSandboxingFlags(container),
+      new SandboxingFlagSet(targetSnapshotParams.sandboxingFlags),
       coarsenedSharedCurrentTime(env.crossOriginIsolatedCapability).milliseconds,
     );
     // COEP needs the reserved environment's security decision after origin selection.
     params.policyContainer = env.userAgent.createPolicyContainerFromResponse(response, null);
     for (const flag of params.policyContainer.cspList?.getSandboxingFlags() ?? []) params.finalSandboxingFlagSet.add(flag);
     if (params.finalSandboxingFlagSet.has('sandboxed-origin')) params.origin = createOpaqueOrigin();
-    params.iframeReferrerPolicy = HTMLIFrameElementImpl.determineReferrerPolicy(container);
+    params.iframeReferrerPolicy = targetSnapshotParams.iframeReferrerPolicy;
     return params;
   }
 
@@ -537,14 +761,22 @@ export class Navigable {
 
   /**
    * Create an HTML document after handler selection and start consuming its response.
-   * Supply the reader whose determined MIME type selected this handler, retaining its inspected bytes.
+   * The current byte-loading path requires the reader whose MIME type selected this handler
+   * and a script callback; production setup for the one-argument call remains unfinished.
    */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-html
-  // SPEC_MISMATCH: load an HTML document(navigationParams) -> Document
   loadHTMLDocument(
-    params: NavigationParams, handleScript: ScriptHandler, resource: ResourceReader,
+    params: NavigationParams, handleScript?: ScriptHandler, resource?: ResourceReader,
   ): DocumentImpl {
+    if (handleScript === undefined || resource === undefined) {
+      // TODO(HTML §7.5.2/§4.12.1): Select/reuse the response reader, supply parser script preparation,
+      // and honor scripts-may-run while history activation is pending. Synthetic params also need
+      // the null reserved-environment path audited before creating a Window/Document.
+      throw new InternalError('HTML document loading requires response-reader setup and parser script preparation');
+    }
     const document = this.createAndInitializeDocument('html', 'text/html', params);
+    // SPEC_CLASH(javascript-about-blank-body): All three browsers parse string-result bodies at
+    // about:blank; HTML's blanket branch discards them. Resolve before enabling the synthetic-response caller.
     if (document.URL === 'about:blank') {
       document.populateWithHTMLHeadBody();
       return document;
@@ -583,7 +815,7 @@ export class Navigable {
       // TODO: Fetch navigation must replace the blocked response with a network error.
       throw new InternalError('COEP-blocked navigation requires network-error processing');
     }
-    const browsingContext = this.#obtainBrowsingContext(params);
+    const browsingContext = BrowsingContext.obtainForNavigation(this, params);
     const permissionsPolicy = PermissionsPolicy.fromResponse(this.container, params.origin, response);
     // https://w3c.github.io/webappsec-permissions-policy/#changes-to-html
     const reportOnlyPermissionsPolicy = PermissionsPolicy.fromResponse(this.container, params.origin, response, true);
@@ -595,8 +827,8 @@ export class Navigable {
     if (activeDocument.isInitialAboutBlank && areSameOriginDomain(activeDocument.origin, params.origin)) {
       window = browsingContext.activeWindow;
     } else {
-      const group = browsingContext.group;
-      if (group === null) throw new InternalError('Navigation browsing context has no group');
+      const group = this.parent === null ? browsingContext.group : this.topLevelTraversable.activeBrowsingContext?.group;
+      if (group === undefined || group === null) throw new InternalError('Navigation browsing context has no group');
       const parent = this.parent?.activeWindow ?? null;
       const isSecureContext = params.reservedEnv!.isSecureContext;
       const agent = group.obtainSimilarOriginWindowAgent(
@@ -656,8 +888,7 @@ export class Navigable {
     if (this.isTopLevelTraversable && response.headerList.get('Speculation-Rules') !== null) {
       throw new InternalError('Speculation-Rules response processing is not implemented');
     }
-    // https://fetch.spec.whatwg.org/#potentially-free-deferred-fetch-quota
-    // TODO(Fetch): potentially free deferred-fetch quota for this document.
+    document.potentiallyFreeDeferredFetchQuota();
     return document;
   }
 
@@ -683,25 +914,24 @@ export class Navigable {
 
   /** Choose whether navigation appends a history entry or replaces the active one. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigate-convert-to-replace
-  resolveHistoryBehavior(url: URLRecord, origin: Origin): HistoryHandlingBehavior {
+  // Extracts navigate's automatic-history resolution and mandatory replacement steps.
+  resolveHistoryBehavior(
+    url: URLRecord, initiatorOrigin: Origin,
+    historyHandling: NavigationHistoryBehavior = 'auto', userInvolvement: UserNavigationInvolvement = 'none',
+  ): HistoryHandlingBehavior {
     const activeDocument = this.activeDocument;
     if (activeDocument === null) {
       throw new InternalError('Navigation requires an active Document');
     }
 
-    const activeURL = this.activeSessionHistoryEntry.url;
-    let historyHandling: HistoryHandlingBehavior =
-      urlsEqual(url, activeURL) &&
-      areSameOrigin(origin, activeDocument.origin)
+    if (historyHandling === 'auto') {
+      historyHandling = urlsEqual(url, activeDocument.url) &&
+        (userInvolvement === 'browser UI' || areSameOrigin(initiatorOrigin, activeDocument.origin))
         ? 'replace'
         : 'push';
-
-    if (
-      url.scheme === 'javascript' ||
-      activeDocument.isInitialAboutBlank
-    ) {
-      historyHandling = 'replace';
     }
+
+    if (activeDocument.navigationMustBeReplace(url)) historyHandling = 'replace';
     return historyHandling;
   }
 
@@ -762,7 +992,9 @@ export class Navigable {
     void userInvolvement;
   }
 
-  /** Prepare a supplied response; Fetch navigation must carry this state across each redirect. */
+  /** Complete the provisional local loader's reserved environment and response policies. */
+  // TODO(HTML §7.4.5/§7.5.1): Remove this late preparation once params producers, including Browlet's local route,
+  // supply complete inputs and Document creation preserves intentionally null reserved environments.
   #prepareResponsePolicy(params: NavigationParams): void {
     const browsingContext = this.activeBrowsingContext;
     if (browsingContext === null) throw new InternalError('Navigation requires an active browsing context');
@@ -782,7 +1014,7 @@ export class Navigable {
     if (params.url.scheme !== 'blob') {
       params.policyContainer.embedderPolicy = EmbedderPolicy.obtain(params.response, params.reservedEnv);
     }
-    // Supplied responses originate in browser UI, without an initiator or history restoration.
+    // The local route supplies browser-UI inputs, without an initiator or history restoration.
     // TODO(HTML navigation): Supply captured source/target policy containers and history state in the full loader.
     params.policyContainer = PolicyContainer.determineForNavigation(
       params.url, null, null, this.containerDocument?.policyContainer ?? null, params.policyContainer,
@@ -793,7 +1025,7 @@ export class Navigable {
       url: activeDocument.url,
       origin: activeDocument.origin,
       openerPolicy: activeDocument.openerPolicy,
-      // Supplied-response navigation currently originates in the host/browser UI.
+      // Local-route navigation currently originates in the host/browser UI.
       currentContextIsNavigationSource: false,
     };
     if (this.isTopLevelTraversable) {
@@ -806,33 +1038,6 @@ export class Navigable {
         throw new InternalError('Sandboxed COOP navigation requires network-error processing');
       }
     }
-  }
-
-  /** Select the browsing context in which the response will create a document. */
-  // https://html.spec.whatwg.org/multipage/browsers.html#obtain-browsing-context-navigation
-  #obtainBrowsingContext(params: NavigationParams): BrowsingContext {
-    const browsingContext = this.activeBrowsingContext;
-    if (browsingContext === null) throw new InternalError('Navigation requires an active browsing context');
-    if (this.parent !== null) return browsingContext;
-    const result = params.coopEnforcementResult!;
-    // Optional cross-site and singleton-group swaps are not used.
-    if (!result.needsBrowsingContextGroupSwitch) {
-      if (result.wouldNeedBrowsingContextGroupSwitchDueToReportOnly) browsingContext.resetVirtualBrowsingContextGroupID();
-      return browsingContext;
-    }
-    const [newBrowsingContext] = BrowsingContext.createTopLevel(browsingContext.activeWindow.env.userAgent);
-    if (params.openerPolicy.value === 'same-origin-plus-COEP') {
-      // Logical isolation keys agents without granting capabilities that require physical isolation.
-      newBrowsingContext.group!.crossOriginIsolationMode = 'logical';
-    }
-    if (params.finalSandboxingFlagSet.size > 0) {
-      if (params.openerPolicy.value !== 'unsafe-none') {
-        throw new InternalError('A sandboxed group switch requires an unsafe-none opener policy');
-      }
-      newBrowsingContext.popupSandboxingFlagSet = new SandboxingFlagSet(params.finalSandboxingFlagSet);
-    }
-    params.reservedEnv!.targetBrowsingContext = newBrowsingContext;
-    return newBrowsingContext;
   }
 }
 
@@ -858,6 +1063,23 @@ export type NavigateOptions = {
   initialInsertion?: boolean;
   apiMethodTracker?: NavigationAPIMethodTracker | null;
 };
+
+/** Optional population inputs; IDs/params default to null, CSP type to other, POST to false, and completion to no steps. */
+export type PopulateHistoryEntryOptions = {
+  navigationId?: string | null;
+  navigationParams?: NavigationParams | null;
+  cspNavigationType?: 'form-submission' | 'other';
+  allowPOST?: boolean;
+  completionSteps?: () => void;
+};
+
+/** A navigation request retains HTML's concrete source client and captured policy container. */
+export interface NavigationRequest extends FetchRequest {
+  /** Initiating environment, or null for browser-UI navigation. */
+  client: BrowletEnvironment | null;
+  /** Independent source policy snapshot, including CSP's browser-owned algorithms. */
+  policyContainer: PolicyContainer;
+}
 
 /** Optional reload inputs: state and tracker default to null; user involvement defaults to 'none'. */
 // https://html.spec.whatwg.org/multipage/browsing-the-web.html#reload

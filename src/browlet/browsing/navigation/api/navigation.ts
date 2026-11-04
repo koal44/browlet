@@ -148,7 +148,7 @@ export class NavigationImpl extends EventTargetImpl {
     const tracker = this.setupNavigateReloadMethodTracker(options.info, serializedState);
     document.getNodeNavigable()!.navigate(urlRecord, document, {
       historyHandling: options.history, navigationAPIState: serializedState, apiMethodTracker: tracker,
-    });
+    }, methodEnv);
     return this.getMethodTrackerResult(tracker, methodEnv);
   }
 
@@ -374,7 +374,7 @@ export class NavigationImpl extends EventTargetImpl {
     const document = this.env.getAssociatedDocument()!;
     const navigable = document.getNodeNavigable();
     if (navigable === null) throw new InternalError('Navigate-event preparation requires a live node navigable');
-    // This Window-local entry point is reached by History's owning Document.
+    // History calls its own Window; ordinary navigation hands execution to the target Agent before reaching this Window.
     // TODO(navigation-abort-caller-loop): Audit the other producers' handoffs before removing the provisional loop parameter.
     navigable.informNavigationAPIAboutAbortingNavigation(this.env.responsibleEventLoop);
     let tracker = options.apiMethodTracker ?? null;

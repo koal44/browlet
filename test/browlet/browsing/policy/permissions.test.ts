@@ -11,12 +11,14 @@ import { getRelevantRealm } from '../../../support/browlet-binding';
 import { createTestDocument } from '../../../support/dom';
 
 describe('Permissions Policy §§4.1–4.2: features and policy state', () => {
-  it('starts the supported feature Enabled in an empty policy despite its self default allowlist', () => {
+  it('starts supported features Enabled in an empty policy independently of their default allowlists', () => {
     const policy = new PermissionsPolicy();
 
     // Defaults govern later feature evaluation; they do not disable an empty inherited policy.
     expect([...policy.inheritedPolicy]).toEqual([
       [{ name: 'cross-origin-isolated', defaultAllowlist: 'self' }, 'Enabled'],
+      [{ name: 'deferred-fetch', defaultAllowlist: 'self' }, 'Enabled'],
+      [{ name: 'deferred-fetch-minimal', defaultAllowlist: '*' }, 'Enabled'],
     ]);
     expect(policy.declaredPolicy.declarations.size).toBe(0);
     expect(policy.declaredPolicy.reportingConfiguration.size).toBe(0);

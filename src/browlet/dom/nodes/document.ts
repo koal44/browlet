@@ -11,7 +11,7 @@ import {
 import { createSelectlet, type Selectlet } from '../../../selectlet/index';
 import { decode, getEncoding, utf8DecodeWithoutBOM, utf8Encode, type Encoding } from '../../../encoding/index';
 import {
-  aboutBlankURL, areSameOrigin, areSameSite, copyURL, createOpaqueOrigin, effectiveDomain,
+  aboutBlankURL, areSameOrigin, areSameSite, copyURL, createOpaqueOrigin, effectiveDomain, obtainURLOrigin,
   hostsEqual, isRegistrableDomainSuffixOfOrEqualTo, parseHost, serializeHost, serializeOrigin, serializeURL,
   type Origin, type URLRecord,
 } from '../../../url/index';
@@ -19,6 +19,7 @@ import { HTTPCookie, parseHTTPDate, parseLinkHeader, type CookieHost } from '../
 import { getMIMETypeEssence } from '../../../mime/index';
 import {
   fetch, FetchRequest, isFilteredResponse, isOkStatus, parseReferrerPolicyFromHeader,
+  DeferredFetchQuota, minimalDeferredFetchQuotaPool,
   type FetchController, type FetchResponse, type ReferrerPolicy,
 } from '../../../fetch/index';
 import {
@@ -1323,6 +1324,14 @@ export class DocumentImpl extends NodeImpl {
     for (const worklet of this.workletGlobalScopes) worklet.terminate();
   }
 
+  /** Abort this Document in its owning task and queue abortion of the active descendant Documents. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#abort-a-document-and-its-descendants
+  abortAndDescendants(): void {
+    // TODO(HTML §7.5.11): Snapshot descendants, queue abort() on each active Window, and propagate unsalvageability.
+    // HTML leaves descendant ordering open; audit it before connecting recursive cancellation.
+    throw new InternalError('Document and descendant abortion is not implemented');
+  }
+
   /** Stop this document's fetches and active parser from its owning event-loop task. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#abort-a-document
   abort(): void {
@@ -1679,6 +1688,63 @@ export class DocumentImpl extends NodeImpl {
     const navigables = this.getDescendantNavigables();
     navigables.unshift(navigable);
     return navigables;
+  }
+
+  /** Find the highest contiguous same-origin Document sharing this active Document's quota. */
+  // https://fetch.spec.whatwg.org/#deferred-fetch-control-document
+  getDeferredFetchControlDocument(): DocumentImpl {
+    const navigable = this.getNodeNavigable();
+    if (navigable === null) throw new InternalError('Deferred fetch quota requires an active Document');
+    const parent = navigable.containerDocument;
+    return parent === null || !areSameOrigin(this.origin, parent.origin) ? this : parent.getDeferredFetchControlDocument();
+  }
+
+  /** Remaining shared capacity, capped by the destination origin's allowance; null is for reservation. */
+  // https://fetch.spec.whatwg.org/#available-deferred-fetch-quota
+  getAvailableDeferredFetchQuota(origin: Origin | null): number {
+    const controlDocument = this.getDeferredFetchControlDocument();
+    const navigable = controlDocument.getNodeNavigable()!;
+    const normalAllowed = controlDocument.isAllowedToUse('deferred-fetch');
+    const minimalAllowed = controlDocument.isAllowedToUse('deferred-fetch-minimal');
+    let quota: number;
+    if (navigable.isTopLevelTraversable) {
+      // SPEC_CLASH(deferred-fetch-minimal-disabled): Follow Fetch's 640 KiB pool when minimal
+      // delegation is disabled; Chromium instead gives the top-level Document zero capacity.
+      quota = !normalAllowed ? 0 : 640 * 1024 - (minimalAllowed ? minimalDeferredFetchQuotaPool : 0);
+    } else {
+      const reserved = navigable.container!.reservedDeferredFetchQuota;
+      quota = normalAllowed && reserved === DeferredFetchQuota.Normal ||
+        minimalAllowed && reserved === DeferredFetchQuota.Minimal ? reserved : 0;
+    }
+    let quotaForRequestOrigin = DeferredFetchQuota.Normal;
+    for (const descendant of controlDocument.getInclusiveDescendantNavigables()) {
+      const document = descendant.activeDocument!;
+      if (document.getDeferredFetchControlDocument() !== controlDocument) continue;
+      for (let node = document.firstChild; node !== null; node = node.nextShadowIncludingDescendant(document)) {
+        if (node.isNavigableContainer()) quota -= node.reservedDeferredFetchQuota;
+      }
+      for (const record of document.env.fetchGroup.deferredFetchRecords) {
+        if (record.invokeState !== 'pending') continue;
+        const length = record.request.totalRequestLength;
+        quota -= length;
+        if (origin !== null && areSameOrigin(obtainURLOrigin(record.request.url), origin)) quotaForRequestOrigin -= length;
+      }
+    }
+    if (quota <= 0) return 0;
+    return Math.min(quota, quotaForRequestOrigin);
+  }
+
+  /** Release a child's reservation once its final origin shares the container Document's quota. */
+  // https://fetch.spec.whatwg.org/#potentially-free-deferred-fetch-quota
+  potentiallyFreeDeferredFetchQuota(): void {
+    // SPEC_GAP(deferred-fetch-creation-navigable): Creation runs before activation, so the new
+    // Document has no node navigable yet. Its assigned browsing context identifies the destination.
+    const navigable = this.browsingContext?.navigable;
+    if (navigable === undefined || navigable === null) throw new InternalError('Deferred fetch quota release requires a navigable');
+    const container = navigable.container;
+    if (container !== null && areSameOrigin(this.origin, container.nodeDocument.origin)) {
+      container.reservedDeferredFetchQuota = DeferredFetchQuota.None;
+    }
   }
 
   /** Collect the current child navigables in document tree order, excluding shadow trees. */

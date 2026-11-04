@@ -16,7 +16,6 @@ export function isHTTPScheme(scheme: string): boolean {
 }
 
 // https://fetch.spec.whatwg.org/#fetch-scheme
-// UNUSED: only direct tests call this scheme classification.
 export function isFetchScheme(scheme: string): boolean {
   return isLocalScheme(scheme) || scheme === 'file' || isHTTPScheme(scheme);
 }

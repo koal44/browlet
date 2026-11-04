@@ -59,6 +59,13 @@ describe('EventImpl', () => {
     expect(fixed.defaultPrevented).toBe(false);
   });
 
+  it('rejects navigation-involvement classification for a non-click event', () => {
+    const event = new EventImpl('keydown');
+    event.isTrusted = true;
+
+    expect(() => event.getUserNavigationInvolvement()).toThrow('Navigation involvement requires a click event');
+  });
+
   it('reinitializes legacy mutable state without changing composed or timeStamp', () => {
     const event = new EventImpl('before', {
       bubbles: true,

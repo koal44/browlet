@@ -16,6 +16,7 @@ import { createTestDocument } from '../../../support/dom';
 declare const window: Window;
 
 const feature = PermissionsPolicy.getSupportedFeature('cross-origin-isolated')!;
+const supportedFeatures = ['cross-origin-isolated', 'deferred-fetch', 'deferred-fetch-minimal'];
 
 describe('Permissions Policy §7.2: allowsFeature()', () => {
   it('checks the Document default origin and rejects unknown or differently cased feature names', async () => {
@@ -193,7 +194,7 @@ describe('Permissions Policy §7.2: allowedFeatures()', () => {
         illegalReceiver,
       };
     })).toEqual({
-      distinct: true, realmArray: true, current: [feature.name], supported: [feature.name], illegalReceiver: true,
+      distinct: true, realmArray: true, current: supportedFeatures, supported: supportedFeatures, illegalReceiver: true,
     });
   });
 
@@ -201,17 +202,17 @@ describe('Permissions Policy §7.2: allowedFeatures()', () => {
     const { browser, document } = await createBrowser();
     const policy = browser.document.permissionsPolicy;
     declareFeature(document, "'none'", true);
-    expect(policy.allowedFeatures()).toEqual([feature.name]);
+    expect(policy.allowedFeatures()).toEqual(supportedFeatures);
     declareFeature(document, 'https://other.test');
-    expect(policy.allowedFeatures()).toEqual([]);
-    expect(policy.features()).toEqual([feature.name]);
+    expect(policy.allowedFeatures()).toEqual(['deferred-fetch', 'deferred-fetch-minimal']);
+    expect(policy.features()).toEqual(supportedFeatures);
     declareFeature(document, '*');
-    expect(policy.allowedFeatures()).toEqual([feature.name]);
+    expect(policy.allowedFeatures()).toEqual(supportedFeatures);
     document.permissionsPolicyState.inheritedPolicy.set(feature, 'Disabled');
-    expect(policy.allowedFeatures()).toEqual([]);
+    expect(policy.allowedFeatures()).toEqual(['deferred-fetch', 'deferred-fetch-minimal']);
     document.permissionsPolicyState = new PermissionsPolicy();
     document.origin = createOpaqueOrigin();
-    expect(policy.allowedFeatures()).toEqual([feature.name]);
+    expect(policy.allowedFeatures()).toEqual(supportedFeatures);
   });
 
   it('recomputes iframe permissions after source, allow, and sandbox changes', async () => {
@@ -230,7 +231,11 @@ describe('Permissions Policy §7.2: allowedFeatures()', () => {
       iframe.allow = "cross-origin-isolated 'self'";
       const denied = policy.allowedFeatures();
       return { initial, undelegated, delegated, opaque, denied };
-    })).toEqual({ initial: [feature.name], undelegated: [], delegated: [feature.name], opaque: [feature.name], denied: [] });
+    })).toEqual({
+      initial: supportedFeatures, undelegated: ['deferred-fetch-minimal'],
+      delegated: [feature.name, 'deferred-fetch-minimal'], opaque: [feature.name, 'deferred-fetch-minimal'],
+      denied: ['deferred-fetch-minimal'],
+    });
   });
 
   it('uses the new parent policy after adoption while preserving earlier result arrays', async () => {
@@ -243,11 +248,11 @@ describe('Permissions Policy §7.2: allowedFeatures()', () => {
     const before = policy.allowedFeatures();
     declareFeature(second.document, "'none'");
     second.browser.document.adoptNode(iframe);
-    expect(policy.allowedFeatures()).toEqual([]);
-    expect(before).toEqual([feature.name]);
+    expect(policy.allowedFeatures()).toEqual(['deferred-fetch-minimal']);
+    expect(before).toEqual([feature.name, 'deferred-fetch-minimal']);
     expect(iframe.permissionsPolicy).toBe(policy);
     declareFeature(second.document, '*');
-    expect(policy.allowedFeatures()).toEqual([feature.name]);
+    expect(policy.allowedFeatures()).toEqual([feature.name, 'deferred-fetch-minimal']);
   });
 });
 
@@ -417,7 +422,7 @@ describe('Permissions Policy §§9.7–9.9: query dependencies', () => {
     expect(PermissionsPolicy.getInheritedValue(feature, null, opaque)).toBe('Enabled');
     expect(PermissionsPolicy.getInheritedValue(wildcard, iframe, opaque)).toBe('Enabled');
     expect(document.permissionsPolicyState.check(wildcard, opaque, document.origin)).toBe('Enabled');
-    expect(document.permissionsPolicy.features()).toEqual([feature.name]);
+    expect(document.permissionsPolicy.features()).toEqual(supportedFeatures);
   });
 
   it('permits an actual opaque default origin while rejecting an explicit opaque string', () => {

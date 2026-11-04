@@ -7,6 +7,7 @@ import { SandboxingFlagSet } from '../../../../src/browlet/browsing/policy/sandb
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
 import type { HTMLObjectElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/object';
+import type { HTMLEmbedElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/embed';
 import type { HTMLFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/legacy/frame';
 import { FetchResponse } from '../../../../src/fetch/response';
 import { parseURL } from '../../../../src/url/url';
@@ -172,15 +173,15 @@ describe('Sandbox state and creation flags', () => {
     expect(params.iframeReferrerPolicy).toBe('no-referrer');
   });
 
-  it.each(['object', 'frame'] as const)('does not treat the %s container as an absent embedder', (tag) => {
+  it.each(['object', 'embed', 'frame'] as const)('does not treat the %s container as an absent embedder', (tag) => {
     const browser = new Browlet({ route: () => '' });
     const document = unwrap<DocumentImpl>(browser.document);
     const [, childDocument] = BrowsingContext.createTopLevel(document.env.userAgent);
     const child = new Navigable(DocumentState.create(childDocument), document.getNodeNavigable());
-    const container = document.createElement(tag) as HTMLObjectElementImpl | HTMLFrameElementImpl;
+    const container = document.createElement(tag) as HTMLObjectElementImpl | HTMLEmbedElementImpl | HTMLFrameElementImpl;
     container.contentNavigable = child;
     const response = new FetchResponse();
     response.urlList.push(parseURL('https://child.test/').url!);
-    expect(() => child.createNavigationParams(response)).toThrow('Object and frame navigation sandboxing is not implemented');
+    expect(() => child.createNavigationParams(response)).toThrow('Object, embed, and frame navigation sandboxing is not implemented');
   });
 });

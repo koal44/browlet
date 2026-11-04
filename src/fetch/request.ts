@@ -149,6 +149,19 @@ export class FetchRequest {
     return this.urlList[this.urlList.length - 1]!;
   }
 
+  /** Count retained request data without reading the body; deferred requests require a known length. */
+  // https://fetch.spec.whatwg.org/#total-request-length
+  get totalRequestLength(): number {
+    let length = serializeURL(this.url, true).length;
+    // SPEC_GAP(deferred-fetch-request-length): Fetch assumes a URL referrer and a body;
+    // use Request's referrer serialization and zero for an absent body, as Chromium does.
+    length += this.referrer === undefined ? 'about:client'.length : this.referrer === null ? 0 : serializeURL(this.referrer).length;
+    for (const [name, value] of this.headerList) length += name.length + value.length;
+    const bodyLength = this.body === null ? 0 : this.body.length;
+    if (bodyLength === null) throw new InternalError('Deferred fetch quota requires a known body length');
+    return length + bodyLength;
+  }
+
   // https://fetch.spec.whatwg.org/#subresource-request
   get isSubresource(): boolean {
     return isSubresourceDestination(this.destination);

@@ -346,6 +346,88 @@ describe('Navigable abortion notifications', () => {
   });
 });
 
+describe('Ongoing navigation identity', () => {
+  it.each([null, 'original'])('does not notify abortion when the value remains %s', async (value) => {
+    const { browser, document, navigation, navigable, start } = await fixture();
+    expect(navigable.ongoingNavigation).toBeNull();
+    navigable.setOngoingNavigation(value, document.env);
+    const active = start();
+    navigable.setOngoingNavigation(value, document.env);
+    expect(navigable.ongoingNavigation).toBe(value);
+    expect(active.platform.signal.aborted).toBe(false);
+    expect(navigation.ongoingNavigateEvent).toBe(active.event);
+    navigation.abortOngoingNavigation();
+    await settle(active.settled, browser);
+  });
+
+  it.each(['replacement', 'traversal', null])('aborts before setting a different value (%s)', async (value) => {
+    const { browser, document, navigation, navigable, start } = await fixture();
+    navigable.setOngoingNavigation('original', document.env);
+    const active = start();
+    const observed: (string | null)[] = [];
+    active.platform.signal.addEventListener('abort', () => { observed.push(navigable.ongoingNavigation); });
+    browser.window.navigation.addEventListener('navigateerror', () => { observed.push(navigable.ongoingNavigation); });
+
+    navigable.setOngoingNavigation(value, document.env);
+
+    expect(observed).toEqual(['original', 'original']);
+    expect(navigable.ongoingNavigation).toBe(value);
+    expect(navigation.ongoingNavigateEvent).toBeNull();
+    expect(active.platform.signal.reason).toMatchObject({ name: 'AbortError' });
+    expect(await settle(active.settled, browser)).toEqual(Array.from({ length: 4 }, () => ({
+      status: 'rejected', reason: active.platform.signal.reason as unknown,
+    })));
+  });
+
+  it.each(['parallel', 'other-Agent'] as const)('queues %s abortion while updating the value immediately', async (caller) => {
+    const { browser, document, navigable, start } = await fixture();
+    navigable.setOngoingNavigation('original', document.env);
+    const active = start();
+    const env = caller === 'parallel' ? null : getRelevantRealm(new Browlet({ route: () => '' }).window).env;
+    const observed: (string | null)[] = [];
+    active.platform.signal.addEventListener('abort', () => { observed.push(navigable.ongoingNavigation); });
+
+    navigable.setOngoingNavigation('replacement', env);
+
+    expect(navigable.ongoingNavigation).toBe('replacement');
+    expect(active.platform.signal.aborted).toBe(false);
+    await runInHostTask(() => { document.env.responsibleEventLoop.runTaskTurn(); });
+    expect(observed).toEqual(['replacement']);
+    expect(active.platform.signal.aborted).toBe(true);
+    await settle(active.settled, browser);
+  });
+
+  it('connects a new navigation to the previous event, signal, tracker, and transition', async () => {
+    const { browser, document, navigable, navigate, start } = await fixture();
+    const turns: (() => void)[] = [];
+    vi.spyOn(document.env.userAgent, 'runInParallel').mockImplementation((steps) => { turns.push(steps); });
+    navigable.setOngoingNavigation('original', document.env);
+    const active = start();
+    navigate.mockRestore();
+    // Only the earlier activation and sandbox owners are missing; navigation and abortion remain real.
+    vi.spyOn(document.getRelevantGlobalObject()!, 'hasTransientActivation').mockReturnValue(false);
+    vi.spyOn(navigable, 'isAllowedBySandboxingToNavigate').mockReturnValue(true);
+    const sandbox = navigable.activeBrowsingContext!.popupSandboxingFlagSet;
+    sandbox.add('sandboxed-forms');
+    const snapshot = vi.spyOn(navigable, 'snapshotTargetParams');
+    active.platform.signal.addEventListener('abort', () => { sandbox.add('sandboxed-scripts'); });
+
+    navigable.navigate(document.env.parseHTMLURL('/replacement')!, document, {}, document.env);
+    expect(turns).toHaveLength(1);
+    expect(turns.shift()!).toThrow('Unload cancellation checks are not implemented');
+
+    expect(navigable.ongoingNavigation).not.toBe('original');
+    expect(navigable.ongoingNavigation).toEqual(expect.any(String));
+    expect(active.platform.signal.aborted).toBe(true);
+    expect(snapshot).toHaveBeenCalledOnce();
+    const captured = snapshot.mock.results[0]!.value as ReturnType<typeof navigable.snapshotTargetParams>;
+    expect(captured.sandboxingFlags.has('sandboxed-forms')).toBe(true);
+    expect(captured.sandboxingFlags.has('sandboxed-scripts')).toBe(false);
+    expect(sandbox.has('sandboxed-scripts')).toBe(true);
+    expect((await settle(active.settled, browser)).every((result) => result.status === 'rejected')).toBe(true);
+  });
+});
+
 describe('Child-destruction Navigation notifications', () => {
   it('rejects each pending traversal with its own owner-realm AbortError and leaves other Navigations alone', async () => {
     const { browser, document, navigation, navigable } = await fixture();
@@ -424,9 +506,9 @@ async function fixture() {
   await browser.navigate('https://example.test/current');
   const document = unwrap<DocumentImpl>(browser.document);
   const navigation = document.getRelevantGlobalObject()!.navigation;
-  // Navigate-event production is unfinished. Supply its objects/acceptance at that boundary;
+  // Navigation startup does not yet dispatch its navigate event. Supply its objects/acceptance at that boundary;
   // cancellation, event dispatch, promise settlement, and projection use their real owners.
-  vi.spyOn(document.getNodeNavigable()!, 'navigate').mockImplementation((_url, _source, options) => {
+  const navigate = vi.spyOn(document.getNodeNavigable()!, 'navigate').mockImplementation((_url, _source, options) => {
     const tracker = options!.apiMethodTracker!;
     tracker.pending = false;
     navigation.ongoingAPIMethodTracker = tracker;
@@ -453,7 +535,7 @@ async function fixture() {
     const settled = Promise.allSettled([result.committed!, result.finished!, platformTransition.committed, platformTransition.finished]);
     return { result, tracker, event, platform, transition, settled };
   };
-  return { browser, document, navigation, navigable: document.getNodeNavigable()!, start };
+  return { browser, document, navigation, navigable: document.getNodeNavigable()!, navigate, start };
 }
 
 function settle<T>(promise: Promise<T>, browser: Browlet): Promise<T> {

@@ -1,6 +1,7 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, nullable, reference, roAttr, xattr } from '../../../../../web-idl/core/index';
 import { areSameOriginDomain } from '../../../../../url/index';
+import { DeferredFetchQuota } from '../../../../../fetch/index';
 
 import { ElementTag, ContentCategory, transparentContent } from '../../element-definitions/index';
 import type { WindowProxyHandle } from '../../../../browsing/window/index';
@@ -23,6 +24,9 @@ export class HTMLObjectElementImpl extends HTMLElementImpl {
     this.prototype.contentModel = { childRules: [transparentContent] };
   }
 
+  /** Quota delegated to this container by its node Document's navigation. */
+  // https://fetch.spec.whatwg.org/#reserved-deferred-fetch-quota
+  reservedDeferredFetchQuota: number = DeferredFetchQuota.None;
   /** Document destination selected by loading, with its reverse container link maintained by the accessor. */
   #contentNavigable: Navigable | null = null;
   /** Whether resource selection currently displays the object's fallback children. */

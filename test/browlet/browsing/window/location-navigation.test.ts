@@ -22,7 +22,7 @@ describe('Location URL navigation preparation', () => {
     }, member);
     expect(navigate).toHaveBeenCalledExactlyOnceWith(expect.any(Object), document, {
       exceptionsEnabled: true, historyHandling: member === 'replace' ? 'replace' : 'auto',
-    });
+    }, document.env);
     expect(navigate.mock.contexts[0]).toBe(navigable);
     expect(serializeURL(navigate.mock.calls[0]![0])).toBe('https://example.test/next?query#fragment');
     expect(document.url).toBe(originalURL);
@@ -45,6 +45,7 @@ describe('Location URL navigation preparation', () => {
     }));
     expect(serializeURL(navigate.mock.calls[0]![0])).toBe('https://example.test/entry/next?query=%E9');
     expect(navigate.mock.calls[0]![1]).toBe(incumbent.window.document);
+    expect(navigate.mock.calls[0]![3]).toBe(incumbent);
     expect(loop.executionContextStack).toHaveLength(0);
   });
 
@@ -216,7 +217,7 @@ describe('Location URL navigation preparation', () => {
     });
     expect(navigate).toHaveBeenCalledExactlyOnceWith(expect.any(Object), currentDocument, {
       exceptionsEnabled: true, historyHandling: member === 'replace' ? 'replace' : 'auto',
-    });
+    }, currentDocument.env);
     expect(navigate.mock.contexts[0]).toBe(navigable);
     expect(serializeURL(navigate.mock.calls[0]![0])).toBe('https://example.test/replacement/next');
     expect(serializeURL(document.url)).toBe('https://example.test/current/page');
@@ -242,7 +243,7 @@ describe('Location URL navigation preparation', () => {
       write();
       expect(navigate).toHaveBeenCalledExactlyOnceWith(expect.any(Object), entry.window.document, {
         exceptionsEnabled: true, historyHandling: member === 'replace' ? 'replace' : 'auto',
-      });
+      }, entry);
       expect(navigate.mock.contexts[0]).toBe(navigable);
       expect(serializeURL(navigate.mock.calls[0]![0])).toBe('https://example.test/source/next');
     }
@@ -264,7 +265,7 @@ describe('Location URL navigation preparation', () => {
     expect(previousActivation).not.toHaveBeenCalled();
     expect(navigate).toHaveBeenCalledExactlyOnceWith(expect.any(Object), currentDocument, {
       exceptionsEnabled: true, historyHandling: active ? 'auto' : 'replace',
-    });
+    }, currentDocument.env);
   });
 
   it.each(['href', 'assign', 'replace'] as const)('does not navigate through retained %s after its owning Window disconnects', async (member) => {

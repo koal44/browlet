@@ -45,6 +45,27 @@ export class DocumentState {
     return Object.assign(new DocumentState(), { document });
   }
 
+  /** Retain navigation inputs before the destination Document is populated. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigation-create-document-state
+  static createForNavigation(
+    url: URLRecord, initiatorOriginSnapshot: Origin, initiatorBaseURLSnapshot: URLRecord,
+    referrerPolicy: ReferrerPolicy, resource: PostResource | string | null, targetName: string,
+  ): DocumentState {
+    const state = new DocumentState();
+    state.requestReferrerPolicy = referrerPolicy;
+    state.initiatorOrigin = initiatorOriginSnapshot;
+    state.resource = resource;
+    state.navigableTargetName = targetName;
+    if (
+      url.scheme === 'about' && url.host === null && url.username === '' && url.password === '' &&
+      (url.path === 'blank' || (url.path === 'srcdoc' && url.query === null && url.fragment === null))
+    ) {
+      state.origin = initiatorOriginSnapshot;
+      state.aboutBaseURL = initiatorBaseURLSnapshot;
+    }
+    return state;
+  }
+
   /** Request destruction of a cached Document; a fully active Document cannot be evicted. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#document-state
   evictDocument(): void {

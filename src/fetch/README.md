@@ -37,6 +37,13 @@ and Body declarations accompany their implementations. Binding machinery owns
 author conversion, platform identity, realm selection, and promise projection.
 Import across subsystem boundaries through [index.ts](index.ts).
 
+Fetch defines deferred-request byte budgets and `FetchRequest.totalRequestLength`.
+HTML's existing Element and Document implementations own the container reservation,
+shared-document accounting, policy checks, and creation-time release because those
+algorithms operate on the browser tree. They read pending records from each
+environment's `FetchGroup`; no second request store or environment is created.
+The public `fetchLater()` API and deferred invocation remain unfinished.
+
 [referrer-policy.ts](referrer-policy.ts) keeps the complete policy values, type,
 and Web IDL enumeration with their algorithms. Consumers such as Stylelet use
 Fetch's index to share this definition.

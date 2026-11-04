@@ -144,6 +144,26 @@ describe('EventTargetImpl', () => {
     expect(activate).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [false, false, 'none'], [true, false, 'activation'], [true, true, 'none'],
+  ] as const)('classifies navigation from activation (trusted=%s, author dispatch=%s)', (trusted, authorDispatch, expected) => {
+    const involvement: string[] = [];
+    class ActivatingTarget extends EventTargetImpl {
+      override runActivationBehavior(event: EventImpl): void {
+        involvement.push(event.getUserNavigationInvolvement());
+      }
+    }
+    class ClickEvent extends MouseEventImpl {}
+    const target = new ActivatingTarget(createSandboxEnvironment());
+    const event = new ClickEvent('click');
+    event.isTrusted = trusted;
+
+    if (authorDispatch) target.dispatchEvent(event);
+    else target.dispatch(event);
+
+    expect(involvement).toEqual([expected]);
+  });
+
   it('dispatches through node ancestors in capture and bubble order', () => {
     const document = parseTestDocument(
       '<main id="parent"><button id="target"></button></main>',

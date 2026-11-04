@@ -213,16 +213,21 @@ source-side marker.
 
 ### Remaining producers and specification gap
 
-Valid requests still throw at `Navigable.navigate()` or `reload()` because those
-owners are explicitly unfinished. Tests control that boundary to exercise real
-conversion, promises, state, and realm ownership; they do not establish successful
-document-initiated navigation or reload. Full navigation must supply:
+Ordinary `Navigable.navigate()` now reaches event firing: cancellation rejects the
+accepted tracker, and pending precommit interception stops ordinary loading.
+Accepted non-intercepted requests still throw before quota/unload/population;
+immediate interception reaches the explicit URL/history update dependency.
+Reload remains unfinished. The earlier method tests control the navigation
+boundary to exercise conversion, promises, state, and realm ownership; the
+[ordinary caller tests](../ROADMAP.md#ordinary-navigate-event-caller) exercise its
+new production connection. Full navigation must still supply:
 
 - Navigate-event acceptance: clear pending, register the ongoing tracker, preserve
   upcoming traversal identity, and invoke commit/finish/reject at the specified
   points. These operations, same-document entry updates, transitions, focus/scroll
   policy, and abort propagation are implemented in the subsequent slices below.
-  Full navigation still needs to call them at its actual lifecycle boundaries.
+  History and ordinary navigation call event preparation; later lifecycle
+  producers and completion effects remain unfinished.
 - Actual fetching, cancellation, navigation/traversal queues, history commits, and
   unload/reload effects. Cross-document loads, non-navigating 204/205 responses,
   attachment downloads, and non-intercepted reloads must leave the original method
@@ -574,7 +579,10 @@ navigation/frame scheduling boundary and expose a no-argument local notification
 helper. That requires auditing the real callers' synchronous versus queued
 handoffs; substituting the destination's own loop as the caller would always pick
 the synchronous branch. The explicit caller parameter remains provisional.
-No current-loop field is added to Navigable or Document.
+No current-loop field is added to Navigable or Document. The ordinary-navigation
+producer now joins History at this Window-local entry point: its same-Agent call
+or queued target-Agent handoff precedes event preparation. This does not yet prove
+that iframe removal, parallel work, and all other producers can drop the argument.
 
 ### Deferred decision: caller-loop parameter
 
@@ -583,8 +591,9 @@ signature decision until production callers can demonstrate the required
 handoffs. The current parameter is a tested implementation, not a proven
 necessity or an accepted permanent API. Keep its `SPEC_MISMATCH` markers pending.
 
-Reopen this decision when connecting the first production caller below. Trace
-the caller's existing Document/environment and scheduling boundary before
+History and ordinary navigation now establish owner-loop execution before their
+local notification. Reopen the broader decision when connecting removal and
+parallel lifecycle callers. Trace their existing Document/environment and scheduling boundary before
 propagating another loop argument. In particular, evaluate routing iframe
 removal through the container's owning Document and invoking a no-argument
 notification helper after any required handoff.
@@ -607,7 +616,7 @@ ownership. Resolve the markers with Eric after that comparison.
 | Push/replace/reload navigate-event firing (§7.2.6.10.4) | History now reaches preparation and aborts the previous navigation before disabled-entry and activity checks. This Window-local entry obtains the loop from its own environment; no loop argument was added to History or the firing operation. Navigation/Location, fragment navigation, reload, and other navigation producers still need their execution handoffs audited. |
 | [Download the hyperlink](https://html.spec.whatwg.org/multipage/links.html#downloading-hyperlinks) (§4.6.5) | For a non-browser-UI request that proceeds after its download navigate event, notify the subject element's node navigable before the parallel download work. Its node Document supplies the local environment. Hyperlink activation/download and download-event production remain unfinished. |
 | Child navigable destruction (§7.3.1.6) | `UserAgent.destroyChildNavigable()` now reaches the coordinator, which clears content navigable and invokes the child notification using the container Document's loop. Recursive Document teardown, traversal queuing, BiDi delivery, and automatic iframe/object/embed/frame removal remain unfinished. Tests cover shared/separate Agent notification, but off-loop abortion remains gated by the detached Document's activity; resolve delivery with teardown before connecting removal. |
-| Setting the ongoing navigation (§7.4.2.5) | Navigable still lacks its navigation-ID/`traversal`/null state and setter. The setter must notify before changing a different value. Navigation startup can originate in a different Document; the `javascript:` navigation path is explicitly queued to the target Window. Fragment navigation and stop-loading also call this setter. Preserve the distinction between invoking it and the history algorithms' direct state assignments. |
+| Setting the ongoing navigation (§7.4.2.5) | Navigable now owns its navigation-ID/`traversal`/null state and setter. It notifies before changing a different value. Startup reaches it after the target-Agent handoff and uses the executing target environment. Queued javascript: admission clears the matching ID on that Window's loop. Explicit host/parallel calls queue notification. Fragment navigation, stop-loading, and history's direct assignments remain unfinished; the caller-loop decision is still open for those producers. |
 | `window.stop()`, browser stop, and `Document.open()` | `WindowImpl.stop()` already reaches the explicit `stopLoading()` stub. HTML's document-open steps reach it conditionally when ongoing navigation is a navigation ID; stop-loading then invokes the ongoing-navigation setter. Gecko additionally notifies from `Document::Open` without such an ID, citing unresolved [HTML #12247](https://github.com/whatwg/html/issues/12247). Audit that behavior with document-open/stop; do not silently add an unconditional call. |
 
 Tests exercise actual task queues, event dispatch, realm-owned errors, and promise
@@ -1269,7 +1278,7 @@ Navigation IDL are accounted for below.
 | `traverseTo`, `back`, `forward` | §7.2.6.7 selection, no-op success, deduplication, source capture, and queued failure handling implemented. Traversal activation and traversal queue/history application remain explicit dependencies. |
 | `transition` | §7.2.6.8 attribute, state/getters, event production, commit/abort, and postcommit settlement implemented, including original-transition protection. Manual interception finishes; automatic focus/scroll, URL/history, and lifecycle integration remain explicit above. |
 | `activation` | §7.2.6.9 interface, retained state, and update operation implemented; top-level new-Document commits populate it. Full history/reactivation/reload and separate pageswap production remain explicit above. |
-| `navigate` firing, cancellation and exceptions to firing | Preparation, shared dispatch, tracker acceptance, and cancellation are implemented, including restricted traversal cancellation and history-action consumption. History is the connected producer. Caller exclusions, other lifecycle producers, input activation, and completion dependencies remain above. |
+| `navigate` firing, cancellation and exceptions to firing | Preparation, shared dispatch, tracker acceptance, and cancellation are implemented, including restricted traversal cancellation and history-action consumption. History and ordinary navigation are connected producers; the latter applies its source/target/initial-document/scheme exclusions. Other lifecycle producers, input activation, and completion dependencies remain above. |
 | Interception and asynchronous completion | Destination/event interfaces, interception registration, hash/download discrimination, transition creation, scroll validation, precommit controller/execution, commit coordination, postcommit handlers/settlement, and finishing policy are implemented. Full URL/history effects, loading UI, and automatic focus/scroll effects remain unfinished. |
 
 The [§§7.2.7.1–3 event audit](../events/ROADMAP.md) confirms the existing

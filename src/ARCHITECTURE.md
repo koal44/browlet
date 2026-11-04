@@ -1102,6 +1102,27 @@ becomes active. Document loading and parsing use that document's owner.
 BrowsingContext creates the initial about:blank document before the navigable
 is initialized.
 
+`Navigable.navigate()` receives the executing environment as `env` last; null denotes host
+or parallel work without a surrounding HTML Agent. Source and destination
+Documents do not identify the executing caller. The source-side admission and
+snapshots precede the handoff; local variables retain them and a shallow copy of
+the option arguments across scheduled steps. Target checks run immediately for
+the same Agent or through the active Window's navigation-and-traversal task source
+otherwise, selecting the live target state when the task runs. This uses existing
+task delivery and adds no ambient current-Agent registry. After fragment selection,
+`navigate()` captures target policy and sets the ongoing navigation through the
+existing Navigation API abortion notification. Its executing environment selects
+synchronous notification; independent host/parallel setter calls queue that notification.
+The same method owns javascript: routing, ordinary navigate-event dispatch,
+parallel unload checks, population, and queued finalization. DocumentState owns
+pending navigation-state construction; NavigationParams owns its supplied-response
+factory. BrowsingContext obtains the context for Document creation, associating a
+replacement with its existing Navigable before creation-time consumers need that
+relationship. These operations return their results to the coordinator without
+advancing history or activating the incoming Document. Fragment processing,
+unload cancellation, recursive abortion, population, and full finalization remain
+explicit dependencies in the navigation roadmap.
+
 [`import-hierarchy.mjs`](../scripts/eslint/import-hierarchy.mjs) records the reviewed
 folder order for import layout and dependency review. Every entry ends in `/`
 and names an existing directory; the longest matching folder owns a module.

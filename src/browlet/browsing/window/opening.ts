@@ -52,11 +52,11 @@ export function openWindow(
       if (document === null) throw new InternalError('A new target needs an active Document');
       document.updateURLAndHistory(urlRecord);
     } else {
-      targetNavigable.navigate(urlRecord, sourceDocument, { exceptionsEnabled: true, referrerPolicy });
+      targetNavigable.navigate(urlRecord, sourceDocument, { exceptionsEnabled: true, referrerPolicy }, entryEnv);
     }
   } else {
     if (urlRecord !== null) {
-      targetNavigable.navigate(urlRecord, sourceDocument, { exceptionsEnabled: true, referrerPolicy });
+      targetNavigable.navigate(urlRecord, sourceDocument, { exceptionsEnabled: true, referrerPolicy }, entryEnv);
     }
     if (!noopener) {
       const browsingContext = targetNavigable.activeBrowsingContext;

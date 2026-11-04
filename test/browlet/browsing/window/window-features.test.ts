@@ -125,7 +125,7 @@ describe('window-open coordination', () => {
     expect(browser.window.open('https://target.test/page', 'named')).toBe(target.activeWindowProxy.platform);
     expect(navigate).toHaveBeenCalledExactlyOnceWith(
       sourceEnv.parseURL('https://target.test/page'), sourceEnv.window.document,
-      { exceptionsEnabled: true, referrerPolicy: '' },
+      { exceptionsEnabled: true, referrerPolicy: '' }, sourceEnv,
     );
     expect(updateURLAndHistory).not.toHaveBeenCalled();
   });

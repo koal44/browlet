@@ -2,7 +2,8 @@ export { FetchController, deserializeAbortReason } from './controller';
 export { fetch, type FetchOptions } from './fetch';
 export { fetchForGlobal } from './fetch-global';
 export { FetchGroup } from './group';
-export type { FetchBody } from './body';
+export { DeferredFetchQuota, minimalDeferredFetchQuotaPool } from './deferred-fetch';
+export { FetchBody } from './body';
 export { ConnectionPool, networkPartitionKeysEqual, type NetworkPartitionKey } from './transport';
 export type {
   HTTPTransport, HTTPTransportRequest, HTTPTransportListener, HTTPTransportControl, HTTPConnection, HTTPUploadSource,
@@ -32,5 +33,5 @@ export {
   parseReferrerPolicyFromHeader, setRequestReferrerPolicyOnRedirect, determineRequestReferrer, stripURLForReferrer,
 } from './referrer-policy';
 export type { FetchIntegrityPolicy, IntegrityViolationReportBody } from './policy';
-export { isLocalScheme, isLocalURL } from './url';
+export { isLocalScheme, isLocalURL, isFetchScheme } from './url';
 export { fetchIDLDefinitions } from './web-idl';

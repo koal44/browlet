@@ -964,8 +964,11 @@ the existing response-header path supplies enforced policies.
 
 `TrustedHTMLParserOptions`, `createParserOptions`, and its callback are absent,
 including from generated declarations, until the real Sanitizer dependencies
-exist. Markup parsing, script compilation, string timers, navigation, and Worker
-integrations retain the separate gates in the [Trusted Types roadmap](browlet/browsing/policy/trusted-types/ROADMAP.md).
+exist. javascript: navigation now runs the default-policy/CSP check and evaluates
+the rewritten URL through ClassicScript; string-result document replacement is
+still unfinished. Markup parsing, script
+compilation, string timers, complete navigation, and Worker integrations retain
+the separate gates in the [Trusted Types roadmap](browlet/browsing/policy/trusted-types/ROADMAP.md).
 That roadmap also records the approved CSP policy-creation difference and the
 explicit standard content-handler list used for sink metadata.
 
@@ -1333,6 +1336,50 @@ retained descendant histories. Their traversal-queue precondition is still
 unenforced while initial creation and provisional local commits call them
 synchronously; full finalization/history application must establish those paths.
 See the [low-level audit](browlet/browsing/navigation/ROADMAP.md#html-7414-low-level-operations-on-session-history).
+Navigation target snapshots retain sandbox/referrer inputs independently of later
+container changes and response CSP. The full navigate algorithm must still capture
+and carry them before parallel loading. Source capture requires the unfinished
+Window transient-activation producer; object/embed/frame target sandbox inheritance,
+complete navigation-param assembly, navigation-ID propagation/BiDi delivery, and hyperlink/form
+activation callers remain explicit dependencies. Event's trusted-click involvement
+helper does not implement those callers. See the
+[supporting-concepts audit](browlet/browsing/navigation/ROADMAP.md#html-7421-navigation-supporting-concepts).
+`Navigable.navigate()` now captures source inputs, checks sandbox admission, and
+continues immediately on the same Agent or queues target work using an explicit
+caller environment. It implements unload/throttle cancellation, lazy-load cleanup,
+history selection, and fragment dispatch. Non-fragment navigation sets child load
+delay, captures target policy, rejects an ongoing traversal, and replaces the
+ongoing navigation ID through the existing Navigation API abortion operation.
+javascript: requests now queue a separate target task, ignore stale IDs, clear the
+matching ongoing navigation, and apply the live destination's origin-domain check.
+Captured source policies now apply form-action, Trusted Types URL rewriting,
+and inline CSP checks with both dispositions' reports. Allowed requests execute
+through ClassicScript in the live target environment. Abrupt/non-string results
+leave the Document and history intact. Primitive strings assemble a UTF-8 HTML
+response and inherited navigation params, but still throw at the explicit loader
+boundary for response-reader setup and parser-script preparation. Replacement
+history preparation and traversal queuing exist after that boundary; full
+Document creation/activation and finalization remain unfinished. Initial about:blank completion
+fires load at non-iframe containers; iframes reach a throwing runLoadEventSteps()
+dependency for load flags, resource timing, and Permissions Policy reporting.
+These internal algorithms do not connect unfinished iframe insertion/loading.
+Ordinary navigation now fires the gated navigate event, forwards state/tracker
+and POST-only form entries, and stops for cancellation or interception. Immediate
+interception still reaches the unfinished URL/history update operation; a pending
+precommit handler can hold it without starting a load. Accepted non-intercepted
+navigation reserves deferred-fetch quota for container-initiated loads, then enters
+parallel work and stops at the explicit unload-cancellation dependency. After that
+check, the coordinator has cancellation-ID checks, queued recursive abortion,
+pending history-entry and supplied-response preparation, and a population completion
+callback that queues finalization. Recursive abortion and population also still
+throw; the unload check needs a cross-loop completion contract when implemented.
+Quota accounting and creation-time release exist;
+fetchLater(), body validation/buffering, activation, and deferred request delivery
+remain unavailable. Fragment processing also still throws. This is not end-to-end navigation. Traversal's own state writes, later ID
+checks, and complete history application/load-delay cleanup remain
+unfinished. The generated UUID reaches provisional BiDi started/failed hooks,
+which emit no protocol events.
+See the [beginning-navigation audit](browlet/browsing/navigation/ROADMAP.md#html-7422-beginning-navigation-admission-and-handoff).
 `UserAgent.createFreshTopLevelTraversable()` prepares an unnamed initial
 about:blank context and requests navigation with its own active Document as
 source. It still reaches the unfinished `Navigable.navigate()` operation.

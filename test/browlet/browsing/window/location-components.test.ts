@@ -40,7 +40,7 @@ describe('Location URL component navigation', () => {
     await browser.evaluate(({ member, value }) => { location[member] = value; }, { member, value });
     expect(navigate).toHaveBeenCalledExactlyOnceWith(expect.any(Object), document, {
       exceptionsEnabled: true, historyHandling: 'auto',
-    });
+    }, document.env);
     expect(navigate.mock.contexts[0]).toBe(navigable);
     expect(serializeURL(navigate.mock.calls[0]![0])).toBe(expected);
     expect(browser.window.location.href).toBe(initialURL);
@@ -162,7 +162,7 @@ describe('Location URL component navigation', () => {
     }));
     expect(navigate).toHaveBeenCalledExactlyOnceWith(expect.any(Object), incumbent.window.document, {
       exceptionsEnabled: true, historyHandling: 'replace',
-    });
+    }, incumbent);
     expect(activation).toHaveBeenCalledOnce();
     expect(loop.executionContextStack).toHaveLength(0);
   });

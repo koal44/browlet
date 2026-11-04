@@ -13,6 +13,8 @@ import { createTestDocument } from '../../../support/dom';
 
 declare const window: Window;
 
+const supportedFeatures = ['cross-origin-isolated', 'deferred-fetch', 'deferred-fetch-minimal'];
+
 describe('Permissions Policy §7.2: inspection object and supported features', () => {
   it.each(['https://example.test/', 'http://example.test/'])(
     'exposes stable, branded, getter-only inspection objects at %s', async (url) => {
@@ -53,7 +55,7 @@ describe('Permissions Policy §7.2: inspection object and supported features', (
         sameDocument: true, sameFrame: true, distinct: true,
         documentBrand: true, frameBrand: true, tag: '[object PermissionsPolicy]',
         getterOnly: true, rejectedWrite: true, retained: true,
-        documentFeatures: ['cross-origin-isolated'], frameFeatures: ['cross-origin-isolated'],
+        documentFeatures: supportedFeatures, frameFeatures: supportedFeatures,
         illegalConstructor: true, illegalDocument: true, illegalFrame: true, illegalOperation: true,
       });
     },
@@ -75,7 +77,7 @@ describe('Permissions Policy §7.2: inspection object and supported features', (
         realmArray: Object.getPrototypeOf(first) === Array.prototype,
         current: policy.features(),
       };
-    })).toEqual({ distinct: true, realmArray: true, current: ['cross-origin-isolated'] });
+    })).toEqual({ distinct: true, realmArray: true, current: supportedFeatures });
   });
 
   it('gives detached Documents and cloned iframes their own inspection identities', async () => {
@@ -95,7 +97,7 @@ describe('Permissions Policy §7.2: inspection object and supported features', (
       };
     })).toEqual({
       documentDistinct: true, documentStable: true, frameDistinct: true, frameStable: true,
-      features: ['cross-origin-isolated'],
+      features: supportedFeatures,
     });
   });
 

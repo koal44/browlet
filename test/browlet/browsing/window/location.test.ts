@@ -29,8 +29,8 @@ describe('Location', () => {
 
     expect(() => {
       location.href = 'https://example.test/next';
-    }).toThrow('Document-initiated navigation is not implemented');
+    }).toThrow('Window transient activation is not implemented');
     expect(() => location.assign('/next'))
-      .toThrow('Document-initiated navigation is not implemented');
+      .toThrow('Window transient activation is not implemented');
   });
 });

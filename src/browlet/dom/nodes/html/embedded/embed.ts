@@ -1,5 +1,6 @@
 import { HTML_NAMESPACE, InternalError } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/core/index';
+import { DeferredFetchQuota } from '../../../../../fetch/index';
 
 import { ElementTag, ContentCategory } from '../../element-definitions/index';
 import type { Navigable } from '../../../../browsing/navigation/index';
@@ -19,6 +20,9 @@ export class HTMLEmbedElementImpl extends HTMLElementImpl {
     ];
   }
 
+  /** Quota delegated to this container by its node Document's navigation. */
+  // https://fetch.spec.whatwg.org/#reserved-deferred-fetch-quota
+  reservedDeferredFetchQuota: number = DeferredFetchQuota.None;
   /** Document destination selected by setup, with its reverse container link maintained by the accessor. */
   #contentNavigable: Navigable | null = null;
 

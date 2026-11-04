@@ -236,4 +236,7 @@ export class PermissionsPolicyAllowlist {
 // https://html.spec.whatwg.org/multipage/infrastructure.html#cross-origin-isolated-feature
 const supportedPolicyFeatures = new Map<string, PolicyControlledFeature>([
   ['cross-origin-isolated', { name: 'cross-origin-isolated', defaultAllowlist: 'self' }],
+  // https://fetch.spec.whatwg.org/#deferred-fetch-quota
+  ['deferred-fetch', { name: 'deferred-fetch', defaultAllowlist: 'self' }],
+  ['deferred-fetch-minimal', { name: 'deferred-fetch-minimal', defaultAllowlist: '*' }],
 ]);

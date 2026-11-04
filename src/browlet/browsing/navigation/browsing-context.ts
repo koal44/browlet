@@ -16,7 +16,7 @@ import type { WindowProxyHandle, WindowImpl } from '../window/index';
 import type { UserAgent } from '../../user-agent';
 
 import { Traversable, type Navigable, type TopLevelTraversable } from './navigable';
-import type { OpenerPolicyEnforcementResult } from './params';
+import type { NavigationParams, OpenerPolicyEnforcementResult } from './params';
 
 /** Retains a WindowProxy and the sequence of documents presented through it. */
 // https://html.spec.whatwg.org/multipage/document-sequences.html#browsing-context
@@ -189,6 +189,36 @@ export class BrowsingContext {
     browsingContext.virtualBrowsingContextGroupID = openerTop.virtualBrowsingContextGroupID;
     browsingContext.openerOriginAtCreation = creator.origin;
     return [browsingContext, document];
+  }
+
+  /** Reuse or replace the destination's browsing context for a navigation response. */
+  // https://html.spec.whatwg.org/multipage/browsers.html#obtain-browsing-context-navigation
+  // The destination remains explicit; NavigationParams does not retain its Navigable.
+  static obtainForNavigation(navigable: Navigable, params: NavigationParams): BrowsingContext {
+    const browsingContext = navigable.activeBrowsingContext;
+    if (browsingContext === null) throw new InternalError('Navigation requires an active browsing context');
+    if (navigable.parent !== null) return browsingContext;
+    const result = params.coopEnforcementResult!;
+    // Optional cross-site and singleton-group swaps are not used.
+    if (!result.needsBrowsingContextGroupSwitch) {
+      if (result.wouldNeedBrowsingContextGroupSwitchDueToReportOnly) browsingContext.resetVirtualBrowsingContextGroupID();
+      return browsingContext;
+    }
+    const [newBrowsingContext] = BrowsingContext.createTopLevel(browsingContext.activeWindow.env.userAgent);
+    if (params.openerPolicy.value === 'same-origin-plus-COEP') {
+      // Logical isolation keys agents without granting capabilities that require physical isolation.
+      newBrowsingContext.group!.crossOriginIsolationMode = 'logical';
+    }
+    if (params.finalSandboxingFlagSet.size > 0) {
+      if (params.openerPolicy.value !== 'unsafe-none') {
+        throw new InternalError('A sandboxed group switch requires an unsafe-none opener policy');
+      }
+      newBrowsingContext.popupSandboxingFlagSet = new SandboxingFlagSet(params.finalSandboxingFlagSet);
+    }
+    // Document creation needs the destination before history activation makes it the active context.
+    newBrowsingContext.setNavigable(navigable);
+    params.reservedEnv!.targetBrowsingContext = newBrowsingContext;
+    return newBrowsingContext;
   }
 
   /** Select a new Document's origin, retaining the source identity for inherited URLs. */

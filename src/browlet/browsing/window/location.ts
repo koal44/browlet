@@ -259,7 +259,7 @@ export class LocationImpl {
     if (document.completelyLoadedTime === null && !incumbentEnv.window.hasTransientActivation()) {
       historyHandling = 'replace';
     }
-    navigable.navigate(url, sourceDocument, { exceptionsEnabled: true, historyHandling });
+    navigable.navigate(url, sourceDocument, { exceptionsEnabled: true, historyHandling }, incumbentEnv);
   }
 }
 

@@ -23,10 +23,14 @@ and upstream-test disagreements remain documented under retained decisions.
   HTML's task/data disposal and keepalive/deferred rules; controller cancellation
   and non-keepalive group termination already work.
 - **Deferred fetching:** [§4.12](https://fetch.spec.whatwg.org/#deferred-fetch)
-  still needs `fetchLater()`, FetchLaterResult, quotas, activation, and pending
-  record processing. Coordinate HTML lifecycle, Permissions Policy, and the
+  now has quota reservation/accounting and request-length calculation, connected
+  to HTML navigation and Document creation. `fetchLater()`, FetchLaterResult,
+  body validation/buffering, activation, and pending record processing remain
+  unfinished. Coordinate HTML lifecycle, Permissions Policy, and the
   deferred-fetch task source's priority over script-running tasks. Pending
   records currently fail explicitly; do not mark them sent without execution.
+  See [the quota audit](../browlet/browsing/navigation/ROADMAP.md#deferred-fetch-quota-at-navigation)
+  for the approved Chromium disagreements and missing specification inputs.
 - **Transport:** HTTPS DNS resource-record upgrades must not retry as HTTP.
   External DNS/connection establishment currently belongs to the Node adapter;
   any DNS caching must respect network partitions. Commented `ConnectionPool.obtain()`

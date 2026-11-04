@@ -18,8 +18,8 @@ outside consumers use its index, while its modules import each other directly.
   explicit unfinished boundary.
 - `UserAgent.createChildNavigable()` forwards to `Navigable.createChild()`,
   which prepares iframe child state and nested-history work;
-  traversal-queue execution and the final history update
-  remain explicit dependencies. Iframe/object/frame `contentDocument` and
+  the final history update remains an explicit dependency.
+  Iframe/object/frame `contentDocument` and
   `contentWindow` project the retained child through their existing bindings.
   Embed retains the same internal child association; its resource setup throws
   explicitly until Fetch, content selection, and navigation are connected.
@@ -31,7 +31,7 @@ outside consumers use its index, while its modules import each other directly.
 - `TopLevelTraversable.destroy()`, `close()`, and `definitelyClose()` express
   top-level teardown and cancellation/unload coordination. Existing group removal
   and session-storage cleanup are connected, while cancellation, recursive
-  unloading/destruction, and traversal execution remain throwing dependencies.
+  unloading/destruction, and full history application remain throwing dependencies.
   UI removal and BiDi delivery retain explicit provisional UserAgent hooks.
 - Document owns the ancestor, inclusive-ancestor, descendant, inclusive-descendant,
   and document-tree child collections. History-action activation consumption and
@@ -46,7 +46,8 @@ outside consumers use its index, while its modules import each other directly.
   [related-context audit](#html-7322-related-browsing-contexts) records its boundaries.
 - `Navigable` prepares response policy inputs, selects the browsing context and
   Window/realm, and creates the destination document and history entry.
-  `loadHTMLDocument()` starts HTML parsing and coordinates completion or abortion.
+  `loadHTMLDocument()` starts HTML parsing with a supplied reader/script callback
+  and coordinates completion or abortion; production setup remains explicit.
   Its bounded cross-document commit activates the entry; `Traversable` applies
   the history step and clears forward entries.
 - `state/session-history.ts` models entries and nested histories for the active
@@ -1967,7 +1968,582 @@ the addon: seven suites, 148 cases, no expected failures. Typechecking,
 touched-file ESLint, import hierarchy, and whitespace checks pass. No scheduler,
 binding, or native changes were needed.
 
-Next: §7.4.2.1, navigation supporting concepts.
+## HTML §7.4.2.1: Navigation supporting concepts
+
+Audited the navigation overview and all [supporting concepts](https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigation-supporting-concepts)
+against local WHATWG HTML `404b3eb14a7a936dddefb2d78e224dbeb01d2358`
+(2026-10-30), refreshed earlier in this session. This slice stops before
+§7.4.2.2's navigate algorithm.
+
+The overview distinguishes the `navigate` algorithm from reload/delta traversal
+and non-fragment URL/history updates. Their existing separate entry points remain;
+the supporting helpers do not complete any of those pipelines.
+
+| Concept | Implementation and remaining dependency |
+| --- | --- |
+| Source snapshot and capture | Existing `SourceSnapshotParams` captures activation, active sandbox flags, download permission, the source Fetch client, and a cloned policy container. Null denotes browser UI, with unrestricted fresh defaults. Real Document capture still reaches the explicit §6.4 transient-activation boundary. |
+| Target snapshot and capture | `Navigable.snapshotTargetParams()` now returns the creation sandbox flags and iframe referrer-policy keyword together. It uses the current active browsing context and the container's current node Document, including after adoption. The existing object/embed/frame sandbox-inheritance boundary remains explicit; §7.1.5 refers to an iframe flag set those containers do not define. |
+| Capture before asynchronous work | `createNavigationParams()` can consume an earlier target snapshot. Its local-route default captures immediately. Final sandbox flags are copied before response CSP is added, so later iframe/ancestor changes and response preparation cannot mutate the saved snapshot. `navigate()` captures the source before its Agent handoff; target capture before parallel loading and onward propagation remain in its non-fragment continuation. |
+| Navigation ID | `navigate()` now generates a UUID and supplies it to early cancellation and fragment dispatch. `NavigationParams.id` and Document's loading ID retain their inputs; connecting the generated value to ongoing-navigation and population remains §7.4.2.2 work. Local supplied-response navigation still uses null. |
+| NavigationHistoryBehavior and history handling | Existing IDL/type declarations distinguish auto/push/replace from resolved push/replace. Push clears forward history; replacement retains the position. The beginning-navigation prefix now resolves auto with the specified URL/origin/browser-UI conditions. |
+| Navigation must be a replace | `Document.navigationMustBeReplace()` already implements javascript: or initial about:blank. The provisional local resolver now calls that predicate instead of duplicating it. Equal URLs and not-completely-loaded Documents are context-dependent rules in later algorithms, not additional conditions in this predicate. |
+| User navigation involvement | Existing values retain browser UI, activation, and none. New `EventImpl.getUserNavigationInvolvement()` checks for click and returns activation for trusted events, none otherwise. Calling it from an activation behavior remains the caller's precondition; dispatch tests exercise that route. Hyperlink/form activation consumers remain absent. This classification neither creates nor consumes Window transient activation. |
+
+All navigation-param items have been considered:
+
+| Inputs | Current boundary |
+| --- | --- |
+| id and navigable | ID slot as above; the receiving Navigable supplies the destination through the already accepted ownership arrangement. |
+| request, response, fetch controller, commit early hints | Existing fields retain request/response/controller identity and the Document callback. Local routes supply a response with a URL and null request/controller. Fetch navigation and srcdoc producers remain §7.4.5 dependencies; network failures need its separate error-Document path. Early-hints invocation and controller-owned timing are already exercised by document-lifecycle tests. |
+| COOP enforcement result, reserved environment, opener policy | The supplied-response preparation fills these before creating the Document. The result is temporarily nullable during that local assembly. The full Fetch/redirect producer must supply finalized inputs; this slice preserves the existing COOP implementation and its reporting limitations. |
+| origin, policy container, final sandboxing flags, iframe referrer policy | Response policies and captured sandbox/referrer inputs are connected. about:blank/srcdoc origin, source/history-policy selection, and inherited base/cookie inputs retain their existing explicit dependencies. |
+| navigation timing type, about base URL, user involvement | Existing slots carry their values to Document/history creation. Local routes default to navigate/browser UI. Full Navigation Timing projection, reload/traversal producers, and about: inheritance remain unfinished. |
+
+HTML does not mutate a completed navigation-param record. Browlet's provisional
+response path still assembles fields in stages; `params.ts` now explicitly names
+the §7.4.5 dependency to finish assembly before consumption. This does not add a
+second parameter record or change the accepted destination ownership. Existing
+cookie URL and timing conveniences remain implementation inputs.
+
+The target tests cover retained snapshots, independent popup flags, response-CSP
+isolation, adoption, and the active-context precondition. Existing sandbox tests
+now include embed at the unfinished non-iframe boundary. Event tests use real
+activation dispatch, including author redispatch clearing trust. The existing
+source-snapshot and must-replace tests remain enabled. No new browser disagreement
+or expected failure was introduced.
+
+Validation: eleven related navigation, policy, document-loader, and Event suites
+pass on Node 26.8.1 with the addon: 291 cases, no expected failures. Typechecking,
+touched-file ESLint, import hierarchy, and whitespace checks pass. No scheduler,
+binding, or native changes were needed.
+
+## HTML §7.4.2.2: Beginning navigation admission and handoff
+
+The beginning of [navigate](https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigate)
+implements the step 1–24 orchestration against WHATWG HTML
+`404b3eb14a7a936dddefb2d78e224dbeb01d2358` (2026-10-30). The live standard still
+has that date. Step 15 selects the fragment operation; its implementation remains
+a named, throwing §7.4.2.3.3 dependency. Step 21 queues javascript: navigation
+through the admission checks below. Other URLs pass step 22's event gate and
+step 23's container-initiated deferred-fetch quota reservation, then start the
+parallel cancellation/history preparation below. Unload cancellation and history
+population remain throwing owner dependencies; this does not enter the provisional
+supplied-response loader or complete end-to-end navigation.
+
+| Steps | Implementation and boundary |
+| --- | --- |
+| 1–6: source preparation and admission | Capture CSP form-submission classification, source policy/activation, initiator origin/base, and enforce the source/user-involvement assertions. Null source uses browser UI defaults; its javascript: case captures the destination origin. Sandbox rejection returns or throws SecurityError according to exceptionsEnabled. Transient activation and sandbox permission still stop at their existing owner stubs. An inactive source without a node navigable is an internal invariant failure; this slice does not invent a permission rule for it. |
+| 7–8: identity and Agent handoff | Generate a UUID, retain the source-side values and a shallow copy of option argument values in navigate's local variables, then compare the explicit caller environment's Agent with the destination's. Same Agent continues synchronously; a different Agent or null caller queues on the active Window's navigation-and-traversal task source. No global current-Agent inference or engine changes were added. |
+| 9–12: target admission | Read the active Document when continuation runs, report cancellation for its unload counter, stop an eligible iframe's existing lazy-load observer and clear resumption steps, then apply navigation throttling. The BiDi failure hook is provisional: subscription delivery and waiter resumption are unimplemented. |
+| 13–14: history selection | Extend the existing resolveHistoryBehavior helper with requested history handling and user involvement. Auto compares against the active Document URL, with strict origin equality or browser UI permitting replacement. Explicit push/replace is preserved unless javascript: or initial about:blank mandates replacement. |
+| 15: fragment dispatch | Require no resource, no supplied response, equality to the active history-entry URL excluding the fragment, and a non-null fragment. Forward resolved history, involvement, source element, serialized Navigation state, and the UUID to navigateToFragment. It throws until §7.4.2.3.3; the branch does not create a Document or set the child load-delay flag. |
+| 16–20: target preparation and ongoing navigation | Set child load delay, capture sandbox/referrer policy before abortion callbacks, and report BiDi started. A traversal produces a canceled notification with the same UUID and returns without changing ongoing state. Otherwise invoke setOngoingNavigation with the generated UUID and the environment executing the target continuation. Both ordinary-URL and javascript: continuations receive the target snapshot; the approved missing-input correction is recorded below. |
+| 21: javascript: dispatch | Create a synthetic FetchRequest with the URL, captured source client (including null), and captured policy container. Queue navigateToJavaScriptURL on the live active Window's navigation-and-traversal task source and return. This request never goes to Fetch. Preserve resolved history handling, initiator origin, user involvement, CSP type, initial insertion, navigation ID, and target snapshot. |
+| 22: ordinary navigate-event dispatch | Require non-browser-UI involvement, live source/target same-origin-domain, a non-initial target Document, and a Fetch scheme. Use the active Window's existing Navigation event operation with resolved history handling, sameDocument false, source element, POST-only form entries, supplied or serialized-undefined Navigation state, and the method tracker. Cancellation or interception stops this continuation. |
+| 23: deferred-fetch reservation | If the source is the non-null container's node Document, reserve quota for the destination URL's origin through Element.reserveDeferredFetchQuota(). The four container implementations retain the reservation; Document owns control-document selection and available-quota accounting, with FetchRequest supplying retained request length. |
+| 24: parallel preparation | Schedule through UserAgent.runInParallel, collect live inclusive descendants, call the explicit unload check, and report cancellation for a blocked or superseded request. Queue recursive abortion on the active Window, prepare fresh DocumentState/SessionHistoryEntry inputs, assemble any supplied-response params, and call the throwing population owner. Its completion appends finalization to the traversable's queue. |
+
+Eric approved the explicit caller environment. Navigation.navigate supplies its
+method environment; Location supplies its already-selected incumbent environment;
+window-open supplies its entry environment. Those Window call paths execute in
+that Agent. Host-only fresh-traversable creation leaves the caller null. The
+source Document still supplies initiator data, independently of the caller and
+destination; the argument is not inferred from either Document. Existing modeled
+entry/incumbent capture limitations remain in the binding owners. This does not
+settle the separate abort-notification caller-loop review.
+
+[Setting the ongoing navigation (§7.4.2.5)](https://html.spec.whatwg.org/multipage/browsing-the-web.html#set-the-ongoing-navigation)
+now owns the unchanged-value early return, Navigation API abortion notification,
+and subsequent assignment. Its invocation-selected environment supplies the loop;
+null means host/parallel work. On the same loop, abort/error listeners observe the
+old value; from another loop or parallel work, notification is queued and the new
+value is assigned immediately. Navigation startup has already handed execution to
+the target Agent, so it supplies the active Document's environment without another
+task. Tests exercise real signal delivery and tracker/transition rejection, plus
+target policy capture before a signal listener changes sandbox flags.
+
+The state is public because later history algorithms also assign it directly,
+without this setter's notification. Traversal has not yet connected those writes;
+tests supply `traversal` explicitly. Fragment processing and stop-loading still
+need their setter calls; further navigation/history work
+must connect the ID checks and resets. The existing local-route finalizer clears
+the child load delay, but this prefix does not yet reach it through the specified
+traversal queue. The current prefix can leave an ongoing ID and a child load delay
+at its explicit continuation failure; it does not pretend a navigation has
+completed. BiDi started/failed hooks still emit no protocol events.
+
+The history regression first returned push instead of replace when the active
+Document's URL differed from its retained entry. It now compares the specified
+Document URL; fragment detection deliberately continues comparing the entry URL.
+The local Browlet.navigate caller also now forwards its browser-UI classification:
+an opaque-origin Document's same-URL visit previously grew history from one entry
+to two; the retained public-path regression requires replacement at that position.
+Tests also cover explicit history, browser UI origin exemption, synchronous
+sandbox rejection and projected SecurityError, same-Agent different-Window calls,
+real cross-Agent/host task delivery, source snapshot versus live target changes,
+lazy-load ordering, cancellation UUIDs, fragment inputs, and the unfinished paths.
+The two existing source-owner dependencies and fragment execution are supplied by
+focused spies in orchestration tests; those tests do not claim those owners work.
+
+The step 24 dependencies now have named calls and signatures. The parallel
+preparation audit below records which operations still throw, the eventual wait
+contract, and the supplied-response boundary. Frame policy checks, POST replay,
+download/204/205 selection, and full history application remain unfinished.
+
+The earlier admission slice's 23 beginning-navigation cases and related Navigation
+API/Location initiation suites passed in all six runtime configurations (92 cases each), with
+no expected failures. The broader Node 26.8.1/addon run passes nine suites and
+273 cases. Typechecking, touched-file ESLint, import hierarchy, and whitespace
+checks pass. Custom validation used the existing Node 27.0.0-pre executable in
+the regular Node checkout and this worktree's existing addon; no build or engine
+change was required.
+
+The steps 16–20/ongoing-navigation follow-up adds 13 cases. Its beginning-navigation,
+abortion, and target-snapshot suites pass all 65 cases on Node 24.19.0, 26.8.1,
+and the existing custom Node 27.0.0-pre, each with and without the addon. Six
+additional initiation/event/commit/Location suites pass all 128 cases on Node 26
+with the addon. No expected failures were added. Typechecking, touched-file
+ESLint, import hierarchy, and whitespace checks pass; no binaries were rebuilt.
+
+### Ordinary navigate-event caller
+
+Step 22 now connects the already implemented §7.2.6.10.4 event machinery. Its
+origin gate compares the live source and target Documents after ongoing-navigation
+abortion callbacks, not the captured initiator origin and not the destination URL's
+origin. A same-origin source can therefore initiate a foreign-destination event;
+that event remains cancelable but cannot be intercepted when URL rewriting is
+forbidden. Browser-UI initiation, initial about:blank, and non-Fetch schemes skip
+this event path. A supplied response does not bypass the gate.
+
+The operation receives form entries only when documentResource is a POST resource,
+including an empty entry list. GET/srcdoc do not expose formData. Absence or null
+in the navigationAPIState option means serialize undefined here; serialized null
+remains null. This differs from the event operation's default serialized null
+used by History, so the caller supplies it explicitly. Tracker acceptance, info
+identity, destination projection, AbortError rejection, and interception remain
+owned by Navigation and Binding; the caller does not duplicate them.
+
+Production tests exercise Location assign/replace cancellation and
+Navigation.navigate state/info with both rejected promises. Pending precommit
+interception stops ordinary loading. Immediate intercepted commit still reaches
+Document.updateURLAndHistory's explicit §7.4.4 dependency. Accepted non-intercepted
+events reach quota reservation and the parallel unload-cancellation dependency. No Fetch,
+unload, or new-Document completion is claimed. The target-Agent handoff is already
+complete before event firing, so this producer uses the Window-local notification
+path without a new environment/loop parameter. The broader caller-loop decision
+remains open for other lifecycle producers.
+
+The retained browser-only probe is
+`node-compat/experimental/navigation-ordinary-event.mjs`. Chromium 156.0.8078.4,
+Firefox 157.0, and WebKit 27.2 agree on the tested HTTP/foreign-destination/about:
+events, undefined default state, Navigation API info/state and canceled promises,
+GET versus POST form data, and initial-about:blank suppression.
+
+`SPEC_CLASH(navigate-event-top-level-data)`: Eric approved HTML/Firefox/WebKit's
+Fetch-scheme gate, including data:. Chromium's
+[FrameLoader::StartNavigation](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/loader/frame_loader.cc)
+blocks renderer-initiated top-level data: navigation with supported rendering MIME
+types before reaching event dispatch, unless its embedder allows it. This is an
+additional admission policy, not a different definition of Fetch schemes. Browlet
+does not add that blocker in this slice. The probe cancels events, so it establishes
+event visibility, not final data: loading behavior. Foreign-source and relaxed-domain
+eligibility are covered by the written gate and focused implementation tests, not
+claimed as observations from this live probe.
+
+Validation: 139 ordinary-event, beginning-navigation, javascript-navigation,
+Navigation initiation, and abortion tests pass on Node 24.19.0, 26.8.1, and the
+existing custom Node 27.0.0-pre, each with and without the addon. Typechecking,
+touched-file ESLint, import hierarchy, and whitespace checks pass. No new expected
+failures, native changes, or builds were needed.
+
+### Deferred-fetch quota at navigation
+
+Beginning-navigation step 23 is implemented against Fetch §4.12.1 at `59afe34`
+(2026-10-19), matching the live standard's revision. The existing Permissions
+Policy parser/inheritance and Document feature checks supply both Fetch-defined
+features. No replacement policy machinery or additional environment was added.
+
+- `Element.reserveDeferredFetchQuota()` is restricted to `NavigableContainer`
+  receivers. Each iframe/object/embed/legacy-frame implementation stores its
+  own numeric reservation; ordinary elements acquire no quota field. Reservation
+  clears the previous value first, tries 64 KiB with sufficient shared capacity,
+  then tries the separate 8 KiB pool with its sixteen-descendant limit.
+- `Document.getDeferredFetchControlDocument()` walks contiguous strict-origin
+  ancestors; document.domain relaxation does not join quota pools. Available
+  quota checks both policies, subtracts shadow-including container reservations
+  and pending requests from shared Documents, and applies the 64 KiB destination
+  origin cap. Sent/aborted records and independent foreign control Documents do
+  not spend that pool. These queries require an active Document, as their
+  navigation and future fetchLater callers do.
+- `FetchRequest.totalRequestLength` counts the serialized initial URL without
+  its fragment, serialized referrer, header bytes, and retained body length.
+  It never consumes the stream. An unknown body length throws; future fetchLater
+  body validation/buffering must establish that length before creating a record.
+- `Document.potentiallyFreeDeferredFetchQuota()` releases a child's reservation
+  once its final origin is strictly same-origin with its container Document.
+  `createAndInitializeDocument()` now calls it. A focused regression also exposed
+  a pre-existing child replacement failure: child contexts have no direct group
+  association, so Window creation must select the top-level context's group.
+  Both same-origin and foreign replacement cases retain that regression.
+
+Recorded decisions and gaps:
+
+- **SPEC_CLASH(deferred-fetch-minimal-disabled):** Follow Fetch's 640 KiB top-level
+  pool when minimal delegation is disabled; with minimal enabled, 128 KiB is
+  reserved and the ordinary pool is 512 KiB. Chromium's
+  [GetReservedDeferredFetchQuota](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/fetch/fetch_later_util.cc)
+  instead returns zero when minimal is disabled. Eric approved Fetch's rule.
+- **SPEC_CLASH(deferred-fetch-reservation-check):** Follow Fetch's available-quota
+  check before assigning 64 KiB. Chromium's `GetContainerDeferredFetchPolicyOnNavigation`
+  checks inherited policy but omits that capacity check. Eric approved preserving
+  the check. The retained internal regression fills eight normal reservations
+  before the ninth falls back to minimal quota; this is source-comparison evidence,
+  not a claim of a live nine-frame browser probe.
+- **SPEC_GAP(deferred-fetch-reservation-origin):** Reservation calls available
+  quota without its required origin-or-null argument. Pass null: this reserves
+  shared capacity and is not itself a request to the navigation destination.
+  A regression fills that destination's request allowance while leaving shared
+  capacity available, and verifies that reservation still succeeds.
+- **SPEC_GAP(deferred-fetch-request-length):** The length algorithm assumes a URL
+  referrer and a body, despite allowing client/no-referrer and null body states.
+  Use Request's existing serialization (`about:client` / empty string) and zero
+  bytes for no body, matching Chromium's `CalculateRequestSize`. Unknown stream
+  lengths remain an explicit failed precondition, not zero-cost requests.
+- **SPEC_GAP(deferred-fetch-creation-navigable):** Fetch's release algorithm uses
+  the new Document's node navigable before HTML has activated it. Resolve the
+  destination through its already assigned browsing context; do not fall back to
+  an ambient or currently executing Document. Fetch's origin-to-Document wording
+  is read as comparison with that Document's origin, consistent with its note and
+  Chromium's `ShouldClearDeferredFetchPolicy`.
+- **SPEC_GAP(deferred-fetch-null-container):** In browser-UI top-level navigation,
+  both source Document and container Document can be null. Require a real container
+  before reservation; equality of those null inputs does not identify one.
+
+The retained browser-only probe is
+`node-compat/experimental/deferred-fetch-quota.mjs`. Chromium 156.0.8078.4 accepts
+a small request under default policy and throws QuotaExceededError when the
+response disables `deferred-fetch-minimal`. Firefox 157.0 and WebKit 27.2 do not
+expose fetchLater in these builds. Each attempted request is aborted and the local
+server observes zero deliveries; the probe tests admission, not eventual delivery.
+
+Validation: 28 new quota/request-length tests pass. The selected 17-suite run
+passes 486 tests with the addon on each of Node 24.19.0, 26.8.1, and the existing
+custom Node 27.0.0-pre. Without the addon, each base passes 483 tests and retains
+the same three existing native-global identity/prototype expected failures.
+Typechecking, touched-file ESLint, import hierarchy, and whitespace checks pass.
+No new expected failures, native changes, or binary builds were needed.
+
+**Remaining dependencies:** `fetchLater()` / FetchLaterResult, body admission and
+buffering, record creation, activation, and deferred-task priority/delivery remain
+Fetch §4.12/§5.6 work. `FetchGroup` still throws on pending-record processing.
+Quota release does not finish response loading, redirects, or Document activation.
+Object/embed/legacy-frame loading still needs its existing child-creation and
+policy integration. Step 24's parallel unload checks, abortion, retained state,
+entry population and finalization are the next navigation slice; this step still
+throws at that boundary and does not start a network request.
+
+## HTML §7.4.2.3.2: Queued javascript: navigation admission
+
+The [javascript: special case](https://html.spec.whatwg.org/multipage/browsing-the-web.html#javascript-protocol)
+has been read in full against the same source revision; the live standard still
+reports 2026-10-30. The first slice implemented navigate-to-javascript steps 1–4 after
+the new step-21 dispatch. It asserts replacement, ignores a superseded ID, clears
+the matching ongoing navigation through the existing abortion operation, and
+checks the live active Document's origin using same-origin-domain. The origin
+read follows abortion callbacks. This entry runs on the target Window's queued
+task, so its environment supplies the executing loop without another argument.
+The earlier Agent handoff and this javascript: task remain separate turns.
+
+The policy slice implements step 5 through the source CSP list: form-action,
+Trusted Types rewriting, inline matching, and violation reporting. Browser choices
+and upstream evidence live in the [CSP audit](../policy/csp/ROADMAP.md#navigation-request-consumer).
+Admitted requests now run through ClassicScript as described below. The following
+dependencies remain explicit; passing admission/evaluation tests does not establish
+string-result replacement or the earlier unfinished navigation callers:
+
+| Dependency | Existing facilities and remaining work |
+| --- | --- |
+| [CSP navigation request check](https://w3c.github.io/webappsec-csp/#should-block-navigation-request) | Implemented and connected through the captured policy container and source client. Pre-navigation directives run before inline checks, both dispositions report, and the default Trusted Types policy may rewrite the request URL. Fetch request checks remain a different algorithm. The next ordinary-network navigation slice still needs to connect its caller. |
+| Evaluate a javascript: URL | `Navigable.evaluateJavaScriptURL()` serializes, strips the scheme, percent-decodes, UTF-8-decodes, creates/runs ClassicScript with default fetch options, and returns null for abrupt or non-string completions. It selects the live target Document's environment/API base URL after CSP callbacks and retains the runner's reporting/cleanup and scripting policy. Primitive strings now assemble replacement inputs and reach the explicit HTML-loading dependency. |
+| Initial insertion without a replacement Document | Implemented selection after author callbacks: re-read the container and active Document, then fire load for an initial about:blank non-iframe child. Iframes call `HTMLIFrameElementImpl.runLoadEventSteps()`, an explicit throwing dependency for mute/load-in-progress flags, resource timing, and post-handler Permissions Policy reporting. Actual element insertion/loading and document.open() must supply that lifecycle state. A removed container receives no event. |
+| String-result response and HTML loading | Implemented response/parameter assembly: UTF-8 bytes, text/html, live active Document URL/policy/COOP/about-base/cookie URL, CSP-derived sandbox flags, supplied origin/ID/involvement, and captured iframe policy. The one-argument loader call explicitly throws until response-reader setup, parser-script preparation, and creation/activation integration are supplied. Its existing supplied-reader/script-callback path remains usable. |
+| Replacement history | Implemented after the loader returns: retain the live old entry URL and policy/referrer/name/about-base state, clone the history policy container when present, set origin/initiator origin and ever-populated, and append traversal work to finalize replacement. Fresh state clears the old resource/child histories and initializes fresh API state. Full finalization/history application still has its documented dependencies; tests supply the missing loader result and observe queued finalizer arguments. |
+
+`SPEC_GAP(javascript-navigation-target-snapshot)`: the evaluation algorithm's
+navigation-params assembly reads targetSnapshotParams. Neither evaluate-a-javascript-URL
+nor navigate-to-javascript-URL receives it, and neither defines it. Beginning
+navigation already captures this value. Eric approved forwarding that snapshot
+as the final argument of both operations, before abortion, Trusted Types, and
+script callbacks can change the iframe policy. No fresh read substitutes for it.
+The browser probe below does not establish matching capture timing. HTML also
+questions request-referrer-policy inheritance; the replacement entry follows its
+specified copy of the old history metadata. The synthetic null request is a
+separate choice from that retained metadata, recorded below.
+
+Initial admission validation: 12 javascript: cases cover task association, captured policies and
+arguments, null/foreign source clients, the extra target task, stale IDs, live
+origin checks, domain relaxation, and the explicit CSP boundary. Together with
+beginning-navigation and abortion, all 72 cases pass on Node 24.19.0, 26.8.1,
+and the existing custom Node 27.0.0-pre, each with and without the addon. The
+Navigation API, Location, and window-opening caller suites pass another 84 cases
+on Node 26 with the addon. Typechecking, touched-file ESLint, import hierarchy,
+and whitespace checks pass. No engine or addon changes or new expected failures
+were needed.
+
+The CSP follow-up now passes 61 navigation/policy cases on the same six runtimes,
+including actual queued source-policy selection, source/target separation, browser-UI
+null clients, form submissions, and a projected default-policy rewrite reaching
+the then-unimplemented evaluation boundary. The wider CSP, Trusted Types, beginning-navigation,
+and abortion set passes 603 tests on Node 26 with the addon. Typechecking,
+touched-file ESLint, import hierarchy, and whitespace checks pass. No new expected
+failures, engine changes, or addon builds were needed.
+
+### Classic-script evaluation
+
+`evaluateJavaScriptURL()` now executes in the live destination environment, even
+when a Trusted Types callback changes the active Document. The URL's query and
+fragment remain part of the serialized source. Decoding occurs once, removes an
+initial UTF-8 BOM, and uses replacement for malformed UTF-8. The retained script
+captures the target API base URL and default ScriptFetchOptions, without muted
+errors or an external-script source URL. Script creation/running handles disabled
+scripting, sandboxed scripts, inactive settings, execution contexts, error reporting,
+and cleanup; navigation does not reproduce that machinery or use automation evaluation.
+
+Abrupt completion and every non-string value return no Document. Boxed strings
+are not coerced; empty primitive strings do require replacement and currently throw
+at the same explicit dependency as nonempty strings. A non-string result leaves
+the active entry and Document intact and initiates no Fetch. Initial-insertion
+load handling follows evaluation, including script errors. Its iframe path stops
+at the named owner dependency above; it does not substitute a plain load event.
+
+`SPEC_CLASH(javascript-url-utf8-decoding)` follows HTML, Firefox 157.0, and WebKit
+27.2: `%FF` becomes U+FFFD, `%C3%A9%FF` becomes `é` followed by U+FFFD, and `%E2%82`
+becomes one replacement character. Chromium 156.0.8078.4 uses byte-for-byte
+characters for the invalid escaped run instead (`ÿ`, `Ã©ÿ`, and U+00E2/U+0082).
+Its `LocalDOMWindow::CheckAndGetJavascriptUrl` selects `kUtf8OrIsomorphic`; Gecko's
+`JSURLInputStream::EvaluateScript` percent-decodes before `NS_ConvertUTF8toUTF16`.
+Eric approved UTF-8 replacement. The retained browser-only probe is
+`node-compat/experimental/javascript-navigation-evaluation.mjs`; all three browsers
+also preserve the Document for boxed-string and thrown-string results, and agree
+on valid UTF-8, invalid percent escapes, and the tested leading BOM.
+
+Validation: all 110 queued-navigation, evaluation, beginning-navigation, and
+abortion tests pass on Node 24.19.0, 26.8.1, and the existing custom Node
+27.0.0-pre, each with and without the addon. The Node 26/addon selection including
+CSP/Trusted Types navigation and classic-script creation/running/error reporting
+passes 213 tests with two existing skips. Typechecking, touched-file ESLint,
+import hierarchy, and whitespace checks pass. No new expected failures or
+engine/addon changes were needed.
+
+### String-result response and replacement history
+
+The remaining evaluation steps now assemble the synthetic response and navigation
+params, then call `loadHTMLDocument(params)`. Policy and response URL come from the
+live Document after script execution, while origin, ID, user involvement, and the
+target snapshot come from navigation. Only CSP-derived sandbox flags enter these
+params; this algorithm does not merge the captured iframe sandbox flags. COOP is
+inherited with both group-switch flags false. Request, Fetch controller, early
+hints, and reserved environment retain HTML's null values.
+
+Fetch owns byte-body creation through `FetchBody.fromBytes()`. The existing
+UserAgent sandbox owns delivery so pending bytes do not become unrunnable when
+the old Document becomes inactive. No second loader, host Fetch, or new environment
+was introduced. The body preserves UTF-8 bytes for replay; delivery copies them
+into its owning realm.
+
+On a returned Document, navigate-to-javascript asserts the supplied origin,
+reads the current active entry, builds fresh DocumentState/SessionHistoryEntry
+objects, and appends the existing finalizer to the traversal queue. It retains
+the old history URL rather than the evaluated javascript: URL. History policy is
+cloned; old referrer metadata, about-base, and target name are retained. The old
+resource and child histories are discarded. The finalizer remains provisional:
+it only applies top-level history and does not complete nested history, unloading,
+cancellation, activation, or traversal application.
+
+The real loader call still throws before Document creation. Its earlier
+`ScriptHandler`/`ResourceReader` parameters are now optional so the specified call
+can reach that explicit boundary; supplying both retains the reviewed byte-loader arrangement. Completion
+requires selecting/reusing the response reader, parser-script preparation and
+scripts-may-run gating, and auditing creation with a null reserved environment.
+The current provisional response preparer would otherwise manufacture one and
+reprocess inherited policy. These are loader/document-creation dependencies, not
+successful replacement behavior hidden behind test substitutes.
+
+Browser-only probe: `node-compat/experimental/javascript-navigation-replacement.mjs`,
+Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2. It retains an iframe from its
+parent, changes referrerpolicy before navigation or during the evaluated script,
+and inspects the replaced Document, referrer, ancestry, character set, and body.
+
+- `SPEC_CLASH(javascript-replacement-referrer)`: Eric approved HTML/Firefox's null
+  request and empty replacement `document.referrer`. Chromium/WebKit preserve
+  the previous referrer. [Blink's DocumentLoader](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/loader/document_loader.cc)
+  explicitly copies `referrer_` in `CreateWebNavigationParamsToCloneDocument`;
+  [WebKit replaces through DocumentWriter](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/loader/DocumentWriter.cpp) with the
+  old owner Document. History request-referrer metadata remains separately retained.
+- `SPEC_CLASH(javascript-result-encoding)`: Eric approved HTML/Chromium/WebKit's
+  UTF-8. Firefox uses Windows-1252 for Latin-1-only results, including mapping U+0080
+  to U+20AC. [Gecko's JSURLInputStream::EvaluateScript](https://searchfox.org/firefox-main/source/dom/jsurl/nsJSProtocolHandler.cpp) explicitly attributes the
+  single-byte path to legacy image compatibility. All three replace lone
+  surrogates with U+FFFD.
+- Snapshot timing remains inconclusive: Chromium/WebKit preserve unmasked ancestry
+  for all tested policy changes, while Firefox's replacement has an empty
+  ancestorOrigins list even when its predecessor had a parent entry. Those results
+  cannot distinguish when HTML's missing target snapshot should be captured.
+- `SPEC_CLASH(javascript-about-blank-body)`: all three parse the replacement body
+  when the old URL is about:blank. HTML's general loader instead takes a blanket
+  empty-about:blank branch. The source marks this unresolved choice at the loader
+  boundary; this slice does not enable that incorrect path for synthetic responses.
+
+Browser source also checks lifetime changes during script/unload in ways this
+algorithm does not fully describe: Blink checks frame survival and a newly started
+provisional navigation; WebKit checks the frame after document replacement begins.
+These are source observations, not new live-probe results or behavior adopted here.
+Revisit removal/reentrant navigation with the real loader and finalizer.
+
+Validation: 122 queued-navigation, evaluation, replacement, beginning-navigation,
+and abortion tests pass on Node 24.19.0, 26.8.1, and the existing custom Node
+27.0.0-pre, each with and without the addon. The existing supplied-reader HTML
+loader and document-lifecycle suites pass another 41 tests on Node 26 with the
+addon. Typechecking, touched-file ESLint, import hierarchy, and whitespace checks
+pass. No new expected failures, engine changes, or addon builds were needed.
+
+## HTML §7.4.2.2: Parallel navigation preparation
+
+`navigate()` owns the full sequence: source admission, target-Agent handoff,
+fragment/javascript: routing, ordinary event dispatch and quota reservation,
+parallel cancellation checks, population, and queued finalization. Its local task
+steps retain the source snapshots and copied options. `DocumentState.createForNavigation()`
+constructs the pending state; the existing environment factory wraps it in a history
+entry. `NavigationParams.fromSuppliedResponse()` constructs the supplied-response
+params. Neither factory schedules nor advances navigation.
+`BrowsingContext.obtainForNavigation()` owns context selection during Document
+creation, with the destination Navigable passed explicitly rather than retained
+in NavigationParams. This preserves the ordering of HTML `6d7788b` (2026-11-03), whose
+navigate algorithm is unchanged from the audit above, without a chain of
+begin/continue/preparation methods or a separate navigation object.
+
+Step 24 of [navigate](https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigate)
+now runs through the UserAgent's existing parallel scheduler. It reads the active
+Document's inclusive descendants when that work starts and asks
+`Navigable.checkIfUnloadingIsCanceled()`. Cancellation or a changed navigation ID
+reports BiDi failure with the original ID/URL and returns before abortion,
+history preparation, or population. The BiDi hook itself still has no sessions
+or protocol delivery.
+
+After approval, the active Window receives a navigation-and-traversal task that
+calls `abortAndDescendants()` on the then-active Document. History preparation
+does not wait for that task. Fresh state retains the selected referrer policy,
+captured initiator origin, resource, and live target name. Local about: entries
+also retain the captured base/origin. The pending entry initializes independent
+History/Navigation state and does not replace either current or active history.
+POST bodies are retained without being read here.
+
+Supplied responses use their response URL, clone the live source policy, select
+the parent policy for srcdoc, union CSP restrictions with the captured target
+sandbox flags, determine the response origin, and initialize the specified COOP
+result. Request, Fetch controller, early-hints callback, and reserved environment
+stay null. This branch does not parse response policy headers through Browlet's
+provisional local-route helper. The existing timing fallback and unfinished local
+cookie-URL selection remain recorded on NavigationParams.
+
+**SPEC_GAP(supplied-response-parent-policy):** HTML lists multipart response
+processing among this branch's callers but dereferences the container Document
+when selecting policies. A top-level multipart response has no container.
+Browlet passes null for the absent parent policy, which
+[policy selection](https://html.spec.whatwg.org/multipage/browsers.html#determining-navigation-params-policy-container)
+already accepts. The focused top-level regression first failed at the new
+container assertion; it now reaches population. Multipart parsing/delivery
+remains separate; this is an input-contract correction, not live browser evidence
+that multipart loading works.
+
+Dependencies remain executable boundaries:
+
+- **§7.4.2.4 unload cancellation:** the existing owner still throws. Its eventual
+  implementation must snapshot Documents, dispatch beforeunload/navigate checks
+  on their owning loops, coordinate prompt state, and resume these parallel steps
+  after all results. Its current synchronous result signature is provisional;
+  adding a real wait must update both this caller and top-level closing. No
+  blocking wait, unconditional approval, or substitute beforeunload dispatch was added.
+- **§7.5.11 recursive abortion:** Document.abortAndDescendants explicitly throws.
+  The existing single-Document abort operation is insufficient: descendants need
+  their own Window tasks and unsalvageability propagation. HTML leaves their
+  ordering open; resolve that during the lifecycle audit.
+- **§7.4.5 population:** Navigable.populateHistoryEntryDocument has the complete
+  inputs, with optional arguments grouped into PopulateHistoryEntryOptions
+  (pending callable-shape review). It still throws. Its owner must handle srcdoc,
+  Fetch/external protocols/error Documents, replayable POST bytes, ID rechecks,
+  response/frame restrictions, and downloads/204/205 without replacing the old
+  Document. The completion callback appends finalization only after that owner
+  finishes, rather than finalizing an unpopulated entry immediately.
+- **§7.4.2.3.1/§7.4.6 finalization:** the existing finalizer is still provisional.
+  Nested history, full history application, unloading, and activation must be
+  audited before this becomes a complete navigation path.
+
+`parallel-navigation.test.ts` controls only the missing owners and scheduler
+turns. It retains direct checks for the throwing dependencies, exercises the real
+parallel scheduler and target-Agent task handoff, and covers cancellation IDs,
+captured versus live state, POST non-consumption, supplied-response policies,
+and queued completion. Existing event, admission, quota, and abortion regressions
+now observe the asynchronous boundary instead of expecting the former immediate
+continuation error.
+
+Validation, repeated after the orchestration refactor: 203 cases in eight related navigation, quota, abortion, and
+javascript: suites pass on Node 24.19.0, 26.8.1, and the existing custom Node
+27.0.0-pre, each with and without the addon. There are no expected failures in
+this selection. Typechecking, touched-file ESLint, import hierarchy, and
+whitespace checks pass. No engine changes or addon rebuilds were needed.
+
+Next bounded slice: §7.4.2.3.1, the usual cross-document finalization case.
+The explicit §7.5.2 loader and §7.4.6 history-application dependencies above
+remain necessary before javascript: replacement can complete end to end.
+
+## Navigation ownership and local response preparation
+
+`navigate()` retains scheduling, branch selection, population, and the completion
+callback that queues finalization. Its value construction now belongs to
+DocumentState and NavigationParams, and BrowsingContext owns obtaining a context
+for a navigation response. The source-side conflict/gap markers moved with their
+algorithms. The owner moves do not complete any of the remaining lifecycle steps.
+
+The expanded COOP checks exposed a missing association after a context-group swap:
+the new browsing context had no Navigable until history activation, but Document
+creation already needs it for deferred-fetch quota release. Six existing COOP
+cases and a focused new creation-time regression failed with
+`Deferred fetch quota release requires a navigable`. Obtaining the replacement
+now associates it with the existing destination before returning. The regression
+also requires the original history entry and Document to remain active, and the
+incoming Document's node navigable to remain null until activation.
+
+`Navigable.#prepareResponsePolicy()` stays in place for now. It is called by
+`createAndInitializeDocument()`, including the current `Browlet.navigate()` local
+source route and the supplied-reader HTML loader. It fills the reserved environment,
+COEP, policy container, and COOP result before those callers consume them. Deleting
+it now would remove work those paths still require.
+
+Its replacement boundary is explicit:
+
+- [§7.4.5 population](https://html.spec.whatwg.org/multipage/browsing-the-web.html#populating-a-session-history-entry)
+  must select the appropriate params producer. In particular,
+  [create navigation params by fetching](https://html.spec.whatwg.org/multipage/browsing-the-web.html#create-navigation-params-by-fetching)
+  owns the request/reserved client and policy/COOP decisions across redirects.
+  The local source route must likewise supply completed inputs before Document
+  creation, rather than depend on a late generic preparation call.
+- [§7.5.1 Document creation](https://html.spec.whatwg.org/multipage/document-lifecycle.html#create-and-initialize-a-document-object)
+  must consume the selected inputs and handle the intentional null reserved
+  environments in javascript: and HTML supplied-response params. It currently
+  depends on this fallback and non-null environment reads; that consumer audit
+  is still required before enabling those paths end to end.
+- Once the producers and consumer meet that contract, remove the call and helper,
+  keeping local-route, policy/group-switch, and inherited-policy/null-environment
+  regressions. The policy checks remain at their producers; full history
+  traversal is not itself a prerequisite for retiring this preparation helper.
+
+Validation covers 419 cases across 16 navigation, lifecycle, policy, and local-loader
+suites on Node 24.19.0, Node 26.8.1, and custom Node 27.0.0-pre, each with and
+without the addon. All 419 pass with the addon; each addon-disabled run has 416
+passes and the same three existing expected failures. Typechecking, focused
+ESLint, and the import-hierarchy audit pass. No new expected failures or native
+changes were introduced.
 
 ## Removal condition
 

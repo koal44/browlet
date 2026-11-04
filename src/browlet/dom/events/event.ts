@@ -8,6 +8,7 @@ import { unsafeSharedCurrentTime, type DOMHighResTimeStamp } from '../../timing/
 import type { BeforeUnloadEventImpl } from '../../browsing/navigation/events/index';
 import type { MouseEventImpl } from '../../interaction/events/index';
 import type { DOMEnvironment } from '../environment';
+import type { UserNavigationInvolvement } from '../../browsing/navigation/index';
 
 import type { EventTargetImpl } from './event-target';
 import type { ErrorEventImpl } from './error-event';
@@ -115,6 +116,14 @@ export class EventImpl {
   /** Whether this event implements MouseEvent, independently of its event type. */
   isMouseEvent(): this is MouseEventImpl {
     return false;
+  }
+
+  /** Classify this click for an activation behavior; callers must already be running that behavior. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#event-uni
+  getUserNavigationInvolvement(): UserNavigationInvolvement {
+    if (this.type !== 'click') throw new InternalError('Navigation involvement requires a click event');
+    // TODO(HTML §4.6/§4.10): Hyperlink and form activation must pass this value to their navigation algorithms.
+    return this.isTrusted ? 'activation' : 'none';
   }
 
   /** Return dispatch targets visible from the current listener's shadow-tree position. */

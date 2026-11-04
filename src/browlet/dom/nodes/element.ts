@@ -4,6 +4,8 @@ import {
   nullable, op, reference, roAttr, sequence, union, xattr,
   DOMExceptionImpl, DOMExceptionNames,
 } from '../../../web-idl/core/index';
+import type { Origin } from '../../../url/index';
+import { DeferredFetchQuota, minimalDeferredFetchQuotaPool } from '../../../fetch/index';
 import type { CSSStyleSheetImpl, CSSDeclarationBlock } from '../../../stylelet/index';
 
 import { isValidAttributeLocalName, validateAndExtract } from '../infra/index';
@@ -13,11 +15,12 @@ import { DOMTokenListImpl, type TokenListAttribute } from '../lists/index';
 import type { EventImpl } from '../events/index';
 import type { TaskSource } from '../../scripting/index';
 import type { PointerId } from '../../interaction/events/index';
-import type { PermissionsPolicyDirective } from '../../browsing/policy/index';
+import { PermissionsPolicy, type PermissionsPolicyDirective } from '../../browsing/policy/index';
 import { getTrustedTypeDataForAttribute, type TrustedTypeValue } from '../../browsing/policy/trusted-types/index';
 import type { IntersectionObserverRegistration } from '../intersection-observer/index';
 import { ElementAssociations, type ElementConstructor } from '../../html/reflection/index';
 import type { BrowletEnvironment } from '../../environment/index';
+import type { NavigableContainer } from '../../browsing/navigation/index';
 
 import { NodeImpl, NodeType } from './node';
 import type { AttrImpl } from './attribute';
@@ -756,6 +759,33 @@ export class ElementImpl extends NodeImpl {
   // https://w3c.github.io/webappsec-permissions-policy/#process-policy-attributes
   processPolicyAttributes(): PermissionsPolicyDirective {
     return new Map();
+  }
+
+  /** Reserve quota before a container-initiated navigation; only navigable containers carry this state. */
+  // https://fetch.spec.whatwg.org/#reserve-deferred-fetch-quota
+  reserveDeferredFetchQuota(this: NavigableContainer, originToNavigateTo: Origin): void {
+    this.reservedDeferredFetchQuota = DeferredFetchQuota.None;
+    const document = this.nodeDocument.getDeferredFetchControlDocument();
+    const normal = PermissionsPolicy.getSupportedFeature('deferred-fetch')!;
+    // SPEC_GAP(deferred-fetch-reservation-origin): The reservation caller omits the required
+    // request-origin input. Null reserves shared capacity without charging a request destination.
+    // SPEC_CLASH(deferred-fetch-reservation-check): Follow Fetch's availability check;
+    // Chromium's reservation path currently checks policy without checking available capacity.
+    if (PermissionsPolicy.getInheritedValue(normal, this, originToNavigateTo) === 'Enabled' &&
+      document.getAvailableDeferredFetchQuota(null) >= DeferredFetchQuota.Normal) {
+      this.reservedDeferredFetchQuota = DeferredFetchQuota.Normal;
+      return;
+    }
+    if (!document.getNodeNavigable()!.isTopLevelTraversable) return;
+    const minimal = PermissionsPolicy.getSupportedFeature('deferred-fetch-minimal')!;
+    if (PermissionsPolicy.getInheritedValue(minimal, this, originToNavigateTo) === 'Disabled') return;
+    let count = 0;
+    for (const navigable of document.getDescendantNavigables()) {
+      if (navigable.container!.reservedDeferredFetchQuota === DeferredFetchQuota.Minimal) count++;
+    }
+    if (count < minimalDeferredFetchQuotaPool / DeferredFetchQuota.Minimal) {
+      this.reservedDeferredFetchQuota = DeferredFetchQuota.Minimal;
+    }
   }
 
   /** Record parser creation before attributes and insertion; ordinary elements need no state. */

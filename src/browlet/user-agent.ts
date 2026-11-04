@@ -615,6 +615,24 @@ export class UserAgent implements
     // PROVISIONAL: live BiDi sessions, context registration, and notification delivery are not implemented.
   }
 
+  /** Notify automation that an identified navigation has started. */
+  // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-navigation-started
+  webDriverBiDiNavigationStarted(
+    _navigable: Navigable, _status: { id: string; status: 'pending'; url: URLRecord; },
+  ): void {
+    // TODO(WebDriver BiDi): Resume navigation-started waiters and serialize navigation info for subscribed navigationStarted events.
+    // PROVISIONAL: live sessions and navigation event delivery are not implemented.
+  }
+
+  /** Notify automation that a navigation failed before committing. */
+  // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-navigation-failed
+  webDriverBiDiNavigationFailed(
+    _navigable: Navigable, _status: { id: string; status: 'canceled'; url: URLRecord; },
+  ): void {
+    // TODO(WebDriver BiDi): Resume navigation-failed waiters and emit navigationFailed to subscribed sessions.
+    // PROVISIONAL: live sessions and navigation event delivery are not implemented.
+  }
+
   /** Notify automation that an identified navigation was canceled. */
   // PROVISIONAL: no WebDriver BiDi sessions exist to receive this notification.
   webDriverBiDiNavigationAborted(

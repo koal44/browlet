@@ -1,6 +1,7 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, nullable, reference, roAttr, xattr } from '../../../../../web-idl/core/index';
 import { areSameOriginDomain } from '../../../../../url/index';
+import { DeferredFetchQuota } from '../../../../../fetch/index';
 
 import { ElementTag } from '../../element-definitions/index';
 import type { WindowProxyHandle } from '../../../../browsing/window/index';
@@ -17,6 +18,9 @@ export class HTMLFrameElementImpl extends HTMLElementImpl {
     this.prototype.isAllNamedElement = true;
   }
 
+  /** Quota delegated to this container by its node Document's navigation. */
+  // https://fetch.spec.whatwg.org/#reserved-deferred-fetch-quota
+  reservedDeferredFetchQuota: number = DeferredFetchQuota.None;
   /** Retained child destination; the accessor keeps its reverse container link in sync. */
   #contentNavigable: Navigable | null = null;
 

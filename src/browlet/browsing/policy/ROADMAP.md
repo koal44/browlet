@@ -311,9 +311,13 @@ does not replace iframe or CSP sandbox restrictions.
 
 The policy module indexes Browlet's supported feature definitions by their unique
 tokens. This fixed catalog is shared across browser instances. The initial entry
-is HTML's `cross-origin-isolated`, whose default allowlist is `self`. Future
-feature owners must add their definitions; unsupported APIs are not advertised
-merely because the specification lists them.
+is HTML's `cross-origin-isolated`, whose default allowlist is `self`. Fetch's
+`deferred-fetch` (`self`) and `deferred-fetch-minimal` (`*`) now support navigation
+quota reservation and Document accounting. Their registration also makes them
+visible in policy inspection and potential-violation reporting; it does not
+expose the unfinished `fetchLater()` API. See the
+[quota audit](../navigation/ROADMAP.md#deferred-fetch-quota-at-navigation).
+Future feature owners must add their definitions when their consumers exist.
 
 Each `PermissionsPolicy` owns its inherited feature values and a declared-policy
 record containing declarations and reporting configuration. An empty policy has
@@ -777,7 +781,7 @@ have two integration points:
 | Amendment | Current implementation |
 | --- | --- |
 | Initialize each Document's report-only policy, then install the response-derived policy during creation | `DocumentImpl` owns an independent empty policy. `Navigable.createAndInitializeDocument()` derives the response policy from the actual container and origin and installs it before exposing the new Document. Covered by the policy initialization and response-creation tests. |
-| Check potential violations after the iframe element's `load` event | The checker exists; the iframe load event steps and their lifecycle callers do not. `DocumentImpl.finishLoading()` fires the child Window's event, which is a different completion point. |
+| Check potential violations after the iframe element's `load` event | The checker exists. `HTMLIFrameElementImpl.runLoadEventSteps()` explicitly throws and has its initial-insertion javascript: caller; flags/timing and ordinary loading callers remain unfinished. `DocumentImpl.finishLoading()` fires the child Window's event, which is a different completion point. |
 
 The remaining [iframe load event steps](https://html.spec.whatwg.org/multipage/iframe-embed-object.html#iframe-load-event-steps)
 must honor the child Document's mute flag, finish pending iframe resource timing,

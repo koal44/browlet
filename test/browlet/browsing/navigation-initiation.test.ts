@@ -32,6 +32,7 @@ describe('Navigation.navigate preparation', () => {
     expect(ownerDocument.env.deserialize(options!.navigationAPIState!)).toEqual({ value: 1 });
     expect(options!.apiMethodTracker!.info).toBe(browser.document);
     expect(options!.apiMethodTracker!.serializedState).toBe(options!.navigationAPIState);
+    expect(navigate.mock.calls[0]![3]).toBe(ownerDocument.env);
   });
 
   it('defaults history to auto and keeps API URL parsing in UTF-8 with the receiver base', async () => {
@@ -104,7 +105,7 @@ describe('Navigation.navigate preparation', () => {
   it('retains the explicit navigation dependency for a valid request', async () => {
     const { browser, navigate } = await fixture();
     navigate.mockRestore();
-    expect(() => browser.window.navigation.navigate('/next')).toThrow('Document-initiated navigation is not implemented');
+    expect(() => browser.window.navigation.navigate('/next')).toThrow('Window transient activation is not implemented');
   });
 });
 

@@ -3,7 +3,7 @@ import {
   attr, ctor, defineInterface, idlType, impl, nullable, reference, reflect, reflectEnumerated, roAttr, xattr,
 } from '../../../../../web-idl/core/index';
 import { areSameOriginDomain, createOpaqueOrigin, obtainURLOrigin, type Origin } from '../../../../../url/index';
-import type { ReferrerPolicy } from '../../../../../fetch/index';
+import { DeferredFetchQuota, type ReferrerPolicy } from '../../../../../fetch/index';
 
 import { ElementTag, ContentCategory } from '../../element-definitions/index';
 import { loadingAttribute, referrerPolicyAttribute } from '../attributes/index';
@@ -39,6 +39,9 @@ export class HTMLIFrameElementImpl extends HTMLElementImpl {
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#lazy-load-resumption-steps
   // PROVISIONAL: revisit callbacks versus retained navigation state when loading exists; see loader/ROADMAP.md.
   lazyLoadResumptionSteps: (() => void) | null = null;
+  /** Quota delegated to this container by its node Document's navigation. */
+  // https://fetch.spec.whatwg.org/#reserved-deferred-fetch-quota
+  reservedDeferredFetchQuota: number = DeferredFetchQuota.None;
   /** Retained child destination; the accessor keeps its reverse container link in sync. */
   #contentNavigable: Navigable | null = null;
   /** Stable inspection object associated with this element, including while detached or adopted. */

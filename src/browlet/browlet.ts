@@ -128,6 +128,7 @@ export class Browlet {
     const historyHandling = this.#traversable.resolveHistoryBehavior(
       documentURLRecord,
       navigationParams.origin,
+      'auto', navigationParams.userInvolvement,
     );
     const document = this.#traversable.createAndInitializeDocument(
       'html',

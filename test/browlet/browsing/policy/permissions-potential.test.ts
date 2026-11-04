@@ -31,14 +31,16 @@ describe('Permissions Policy §§9.12 and 9.14: potential iframe violations', ()
     observer.observe();
     check(iframe);
     const reports = observer.takeRecords();
+    // The separate self-default Fetch feature is not delegated by this iframe.
+    expect(reports.at(-1)!.body!.toJSON()).toMatchObject({ featureId: 'deferred-fetch', disposition: 'enforce' });
     if (disposition === null) {
-      expect(reports).toEqual([]);
-      expect(scope.reports).toEqual([]);
+      expect(reports).toHaveLength(1);
+      expect(scope.reports).toHaveLength(1);
       return;
     }
     // Enforced denial wins when both policies would prevent inheritance.
-    expect(reports).toHaveLength(1);
-    expect(scope.reports).toHaveLength(1);
+    expect(reports).toHaveLength(2);
+    expect(scope.reports).toHaveLength(2);
     expect(reports[0]!.type).toBe(type);
     expect(reports[0]!.url).toBe('https://parent.test/page');
     expect(reports[0]!.body).toBeInstanceOf(window.PermissionsPolicyViolationReportBody);
@@ -56,7 +58,9 @@ describe('Permissions Policy §§9.12 and 9.14: potential iframe violations', ()
     if (allow !== null) iframe.setAttributeValue('allow', allow);
     check(iframe);
     // §9.12 checks every supported feature, even absent from allow (unlike Chromium).
-    expect(scope.reports).toHaveLength(1);
+    expect(scope.reports.map((report) => report.data)).toMatchObject([
+      { featureId: feature.name }, { featureId: 'deferred-fetch' },
+    ]);
     expect(scope.reports[0]!.data).toMatchObject({ featureId: feature.name, disposition: 'enforce', allowAttribute: allow });
     expect(scope.reports[0]!.destination).toBe('');
   });
@@ -66,7 +70,7 @@ describe('Permissions Policy §§9.12 and 9.14: potential iframe violations', ()
     iframe.setAttributeValue('src', 'https://child.test/page');
     iframe.setAttributeValue('allow', 'cross-origin-isolated *');
     check(iframe);
-    expect(scope.reports).toHaveLength(1);
+    expect(scope.reports).toHaveLength(2);
     expect(scope.reports[0]!.data).toMatchObject({ disposition: 'enforce' });
     expect(scope.reports[0]!.destination).toBe('blocked');
   });
@@ -88,10 +92,10 @@ describe('Permissions Policy §§9.12 and 9.14: potential iframe violations', ()
     expect(scope.reports).toEqual([]);
     iframe.setAttributeValue('src', 'https://child.test/');
     check(iframe);
-    expect(scope.reports).toHaveLength(1);
+    expect(scope.reports).toHaveLength(2);
     iframe.setAttributeValue('srcdoc', '');
     check(iframe);
-    expect(scope.reports).toHaveLength(1);
+    expect(scope.reports).toHaveLength(2);
     expect(iframe.contentNavigable).toBeNull();
   });
 
@@ -105,7 +109,7 @@ describe('Permissions Policy §§9.12 and 9.14: potential iframe violations', ()
     childDocument.permissionsPolicyState.inheritedPolicy.set(feature, 'Disabled');
     childDocument.reportOnlyPermissionsPolicyState.inheritedPolicy.set(feature, 'Disabled');
     iframe.setAttributeValue('src', 'https://child.test/');
-    iframe.setAttributeValue('allow', 'cross-origin-isolated *');
+    iframe.setAttributeValue('allow', 'cross-origin-isolated *; deferred-fetch *');
     // This supplies child state, without claiming to implement iframe loading.
     check(iframe);
     expect(scope.reports).toEqual([]);
@@ -114,11 +118,11 @@ describe('Permissions Policy §§9.12 and 9.14: potential iframe violations', ()
   it('uses a changed allow attribute and wildcard delegation for an opaque sandbox origin', () => {
     const { iframe, scope } = createWindow();
     iframe.setAttributeValue('sandbox', 'allow-scripts');
-    iframe.setAttributeValue('allow', 'cross-origin-isolated *');
+    iframe.setAttributeValue('allow', 'cross-origin-isolated *; deferred-fetch *');
     expect(iframe.declaredOrigin.kind).toBe('opaque');
     check(iframe);
     expect(scope.reports).toEqual([]);
-    iframe.setAttributeValue('allow', "cross-origin-isolated 'none'");
+    iframe.setAttributeValue('allow', "cross-origin-isolated 'none'; deferred-fetch *");
     check(iframe);
     expect(scope.reports).toHaveLength(1);
     expect(scope.reports[0]!.data).toMatchObject({ disposition: 'enforce' });
@@ -187,7 +191,9 @@ describe('Permissions Policy §§9.12 and 9.14: potential iframe violations', ()
     expect(scope.reportBuffer).toEqual([]);
     // The unfinished iframe load event steps must call this check after dispatching load.
     check(iframe);
-    expect(scope.reportBuffer).toHaveLength(1);
+    expect(scope.reportBuffer.map((report) => report.data)).toMatchObject([
+      { featureId: feature.name }, { featureId: 'deferred-fetch' },
+    ]);
   });
 });
 
