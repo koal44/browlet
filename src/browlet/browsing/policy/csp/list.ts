@@ -1,5 +1,5 @@
 import { InternalError, asciiLower } from '../../../../infra/index';
-import { obtainURLOrigin, type Origin, type URLRecord } from '../../../../url/index';
+import { obtainURLOrigin, parseURL, serializeURL, type Origin, type URLRecord } from '../../../../url/index';
 import type { FetchCSPList, FetchRequest, FetchResponse } from '../../../../fetch/index';
 
 import { SandboxingFlagSet } from '../sandbox';
@@ -90,6 +90,61 @@ export class CSPList implements FetchCSPList {
     return blocked;
   }
 
+  /** Check captured navigation policies; Trusted Types can rewrite the request before inline checks. */
+  // https://w3c.github.io/webappsec-csp/#should-block-navigation-request
+  isNavigationRequestBlocked(request: FetchRequest, type: 'form-submission' | 'other', env: BrowletEnvironment | null): boolean {
+    if (this.policies.length === 0) return false;
+    if (env === null) throw new InternalError('Navigation CSP checks require the source client environment');
+    let blocked = false;
+    let trustedTypesBlocked: boolean | undefined;
+    let trustedTypesSample = '';
+    for (const policy of this.policies) {
+      for (const [name, value] of policy.directives) {
+        let violation: CSPViolation;
+        if (name === 'form-action') {
+          if (type !== 'form-submission' || value.matchesURL(request.currentURL, this.selfOrigin, request.redirectCount)) continue;
+          violation = new CSPViolation(policy, name, request.url, env);
+        } else if (name === 'require-trusted-types-for' && request.url.scheme === 'javascript') {
+          // SPEC_CLASH(trusted-types-navigation-policies): Browsers require a valid 'script' token
+          // and invoke the default policy once across policies; the written loop repeats it per directive.
+          if (!value.tokens.some((token) => asciiLower(token) === "'script'")) continue;
+          if (trustedTypesBlocked === undefined) {
+            trustedTypesSample = `Location href|${serializeURL(request.url).slice(11, 51)}`;
+            trustedTypesBlocked = this.#isTrustedTypesNavigationBlocked(request, env);
+          }
+          if (!trustedTypesBlocked) continue;
+          // SPEC_CLASH(trusted-types-navigation-report): Follow all three browsers' sink resource/sample;
+          // CSP's generic pre-navigation report instead uses the URL and leaves the sample empty (TT #584).
+          violation = new CSPViolation(policy, name, 'trusted-types-sink', env);
+          violation.sample = trustedTypesSample;
+        } else {
+          continue;
+        }
+        violation.report();
+        if (policy.disposition === 'enforce') blocked = true;
+      }
+    }
+    if (blocked || request.currentURL.scheme !== 'javascript') return blocked;
+
+    // SPEC_CLASH(javascript-csp-encoding): Hash the full serialized URL, as CSP/Firefox/WebKit do;
+    // Chromium percent-decodes it first. Nonces cannot authorize a navigation.
+    const source = serializeURL(request.currentURL);
+    // SPEC_CLASH(javascript-trusted-types-order): Follow CSP/Firefox: check the rewritten URL after
+    // the default policy; Chromium/WebKit can reject the original URL before invoking that policy.
+    for (const policy of this.policies) {
+      const sources = policy.directives.get('script-src-elem') ??
+        policy.directives.get('script-src') ?? policy.directives.get('default-src');
+      if (sources === undefined || sources.matchesInlineSource('navigation', source)) continue;
+      const violation = new CSPViolation(policy, 'script-src-elem', 'inline', env);
+      // SPEC_CLASH(javascript-csp-sample): Browsers honor report-sample despite the navigation algorithm's
+      // omission. Keep 40 encoded code units like WebKit; Chromium decodes and Firefox appends an ellipsis.
+      if (sources.tokens.includes("'report-sample'")) violation.sample = source.slice(0, 40);
+      violation.report();
+      if (policy.disposition === 'enforce') blocked = true;
+    }
+    return blocked;
+  }
+
   /** Apply document initialization directives after the loader has selected its policy container. */
   // https://w3c.github.io/webappsec-csp/#run-document-csp-initialization
   initializeDocument(document: DocumentImpl): void {
@@ -136,7 +191,7 @@ export class CSPList implements FetchCSPList {
   // https://w3c.github.io/webappsec-csp/#should-block-inline
   // Attribute consumers only; script/style element bodies still need their own checks.
   isInlineAttributeBlocked(element: ElementImpl, type: CSPInlineAttributeType, source: string): boolean {
-    const scriptAttribute = type === 'script attribute';
+    const scriptAttribute = type === 'script-attr';
     const directive = scriptAttribute ? 'script-src-attr' : 'style-src-attr';
     const fallback = scriptAttribute ? 'script-src' : 'style-src';
     let blocked = false;
@@ -144,7 +199,7 @@ export class CSPList implements FetchCSPList {
       // https://w3c.github.io/webappsec-csp/#directive-fallback-list
       const sources = policy.directives.get(directive) ??
         policy.directives.get(fallback) ?? policy.directives.get('default-src');
-      if (sources === undefined || sources.matchesInlineAttribute(type, source)) continue;
+      if (sources === undefined || sources.matchesInlineSource(type, source)) continue;
       const violation = new CSPViolation(policy, directive, 'inline', element.nodeDocument.env);
       violation.element = element;
       // SPEC_CLASH(csp-style-attribute-sample): Follow CSP/Chromium/Firefox;
@@ -253,6 +308,27 @@ export class CSPList implements FetchCSPList {
     const copy = new CSPList(this.selfOrigin);
     copy.policies = this.policies.map((policy) => policy.clone());
     return copy;
+  }
+
+  // https://w3c.github.io/trusted-types/dist/spec/#require-trusted-types-for-pre-navigation-check
+  #isTrustedTypesNavigationBlocked(request: FetchRequest, env: BrowletEnvironment): boolean {
+    // SPEC_CLASH(javascript-trusted-types-encoding): Follow Trusted Types/Firefox's encoded input;
+    // Chromium/WebKit percent-decode before invoking the default policy.
+    const source = serializeURL(request.url).slice(11);
+    let converted: string | null;
+    try {
+      converted = env.getWindowOrWorkerGlobalScopeMixin().trustedTypes
+        .processValueWithDefaultPolicy('TrustedScript', source, 'Location href');
+    } catch {
+      // SPEC_CLASH(trusted-types-navigation-exception): Follow CSP/Firefox/WebKit: report the failure,
+      // and let disposition decide blocking. Chromium stops even report-only navigation without reporting.
+      return true;
+    }
+    if (converted === null) return true;
+    const url = parseURL(`javascript:${converted}`).url;
+    if (url === null) return true;
+    request.urlList[0] = url;
+    return false;
   }
 
   #reportRequestViolation(policy: ContentSecurityPolicy, request: FetchRequest): void {

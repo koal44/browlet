@@ -1,4 +1,4 @@
-import { HTML_NAMESPACE } from '../../../../../infra/index';
+import { HTML_NAMESPACE, InternalError } from '../../../../../infra/index';
 import {
   attr, ctor, defineInterface, idlType, impl, nullable, reference, reflect, reflectEnumerated, roAttr, xattr,
 } from '../../../../../web-idl/core/index';
@@ -116,6 +116,16 @@ export class HTMLIFrameElementImpl extends HTMLElementImpl {
     return 'name';
   }
 
+  /** Complete this iframe's resource timing and dispatch its guarded load event. */
+  // https://html.spec.whatwg.org/multipage/iframe-embed-object.html#iframe-load-event-steps
+  runLoadEventSteps(): void {
+    // TODO(HTML §4.8.5; Permissions Policy §10.1): Honor the child Document's mute flag,
+    // finish pending resource timing, set load-in-progress, fire load, check potential
+    // policy violations after handlers, then clear load-in-progress. The flags and timing
+    // state still need their insertion/loading and document.open() lifecycle producers.
+    throw new InternalError('Iframe load event steps are not implemented');
+  }
+
   /** Read a fresh container policy from this iframe's current attributes and node Document. */
   // https://w3c.github.io/webappsec-permissions-policy/#process-policy-attributes
   override processPolicyAttributes(): PermissionsPolicyDirective {
@@ -134,8 +144,8 @@ export class HTMLIFrameElementImpl extends HTMLElementImpl {
 
   /** Report potential restrictions from the current embedding policy, retaining the supplied attribute text. */
   // https://w3c.github.io/webappsec-permissions-policy/#check-potential-violation-in-container
-  // TODO(HTML iframe loading): Call after the element's load handlers return, reading
-  // the current raw allow/src, before clearing the child Document's load-in-progress flag (§10.1).
+  // TODO(HTML iframe loading): runLoadEventSteps must call this after load handlers,
+  // reading current raw allow/src before clearing the child's load-in-progress flag (§10.1).
   checkPotentialPermissionsPolicyViolation(allowAttribute: string | null, srcAttribute: string | null): void {
     const document = this.nodeDocument;
     const env = document.env;

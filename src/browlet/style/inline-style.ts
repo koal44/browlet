@@ -44,7 +44,7 @@ export class ElementCSSInlineStyleMixin {
       // SPEC_CLASH(csp-blocked-style-attribute): Chromium/WebKit retain both the
       // raw attribute and prior accepted declarations; Firefox clears both.
       if (this.#element.nodeDocument.env.policyContainer.cspList!
-        .isInlineAttributeBlocked(this.#element, 'style attribute', value)) return;
+        .isInlineAttributeBlocked(this.#element, 'style-attr', value)) return;
       (this.#block ??= new CSSDeclarationBlock()).setText(value, { env: this.#env });
     }
   }

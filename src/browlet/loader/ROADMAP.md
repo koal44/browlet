@@ -16,12 +16,30 @@ have different response processing and cancellation lifetimes. Preloading a
 stylesheet does not apply it; speculative or lazy discovery does not establish
 successful use. Keep each completion contract with its consuming owner.
 
-The iframe load event steps must call
+`HTMLIFrameElementImpl.runLoadEventSteps()` is an explicit throwing dependency,
+now called by initial-insertion javascript: completion. It must call
 `HTMLIFrameElementImpl.checkPotentialPermissionsPolicyViolation()` after the
 element's `load` handlers return, using the then-current raw `allow` and `src`,
 before clearing the child Document's load-in-progress flag. Child Window `load`
-is a separate event. The checker exists; iframe timing/flags and completion
-callers remain unfinished. See the [integration review](../browsing/policy/ROADMAP.md#101-html-integration).
+is a separate event. The checker exists; iframe timing/flags, attribute processing,
+and document-completion callers remain unfinished.
+See the [integration review](../browsing/policy/ROADMAP.md#101-html-integration).
+
+The javascript: string-result path now calls `Navigable.loadHTMLDocument(params)`
+with a synthetic UTF-8 response, inherited policy, null request/controller/reserved
+environment, and the original target snapshot's iframe policy. That call explicitly
+throws until the loader supplies response-reader setup and parser-script preparation;
+the existing path with a supplied reader and callback still works. Audit
+scripts-may-run gating and document creation's null reserved-environment path before
+connecting it: provisional response preparation currently creates a reserved
+environment and reprocesses policy. Do not replace inherited synthetic params with
+ordinary response-derived policy.
+
+`SPEC_CLASH(javascript-about-blank-body)` also remains unresolved at that boundary:
+HTML's blanket about:blank loader branch skips response parsing, while all three
+browsers parse a javascript: replacement body at that URL. The
+[navigation audit](../browsing/navigation/ROADMAP.md#string-result-response-and-replacement-history)
+records the probe, approved UTF-8/referrer choices, and remaining history finalization.
 
 For stylesheet integration, follow the
 [style-loading reading order](../style/ROADMAP.md#loading-algorithm-reading-order)

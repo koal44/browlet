@@ -1,18 +1,19 @@
 import { asciiLower, assertNever, InternalError } from '../../../infra/index';
 import { randomUUID } from '../../../js-engine/index';
 import { DOMExceptionImpl } from '../../../web-idl/core/index';
+import { utf8Decode, utf8Encode } from '../../../encoding/index';
 import {
   aboutBlankURL, areSameOrigin, areSameOriginDomain, copyURL, createOpaqueOrigin, obtainURLOrigin,
-  serializeURL, urlsEqual, type Origin, type URLRecord,
+  percentDecodeString, serializeURL, urlsEqual, type Origin, type URLRecord,
 } from '../../../url/index';
 import { StorageShed } from '../../../storage/index';
 import type { FormDataEntry } from '../../../xhr/index';
 import {
-  FetchRequest, FetchResponse, isFetchScheme, type FetchPromptTarget, type fetchPromptTargetBrand, type ReferrerPolicy,
+  FetchBody, FetchRequest, FetchResponse, isFetchScheme, type FetchPromptTarget, type fetchPromptTargetBrand, type ReferrerPolicy,
 } from '../../../fetch/index';
 
 import { coarsenedSharedCurrentTime } from '../../timing/index';
-import type { EventLoop } from '../../scripting/index';
+import { ClassicScript, ScriptFetchOptions, type EventLoop } from '../../scripting/index';
 import type { PointerId } from '../../interaction/events/index';
 import {
   EmbedderPolicy, OpenerPolicy, PermissionsPolicy, PolicyContainer, queueCOEPInheritanceViolation, SandboxingFlagSet,
@@ -610,22 +611,102 @@ export class Navigable {
   /** Evaluate a queued javascript: request after checking the source policy and live destination. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigate-to-a-javascript:-url
   navigateToJavaScriptURL(
-    _request: NavigationRequest, _historyHandling: HistoryHandlingBehavior, _initiatorOrigin: Origin,
-    _userInvolvement: UserNavigationInvolvement, _cspNavigationType: 'form-submission' | 'other',
-    _initialInsertion: boolean, _navigationId: string, _targetSnapshotParams: TargetSnapshotParams,
+    request: NavigationRequest, historyHandling: HistoryHandlingBehavior, initiatorOrigin: Origin,
+    userInvolvement: UserNavigationInvolvement, cspNavigationType: 'form-submission' | 'other',
+    initialInsertion: boolean, navigationId: string, targetSnapshotParams: TargetSnapshotParams,
   ): void {
-    // TODO(HTML §7.4.2.3.2): Evaluate javascript: URLs with CSP and Trusted Types, then replace history.
-    throw new InternalError('JavaScript URL navigation is not implemented');
+    if (historyHandling !== 'replace') throw new InternalError('JavaScript URL navigation must replace history');
+    if (this.ongoingNavigation !== navigationId) return;
+    const env = this.activeWindow?.env;
+    if (env === undefined) throw new InternalError('JavaScript URL navigation requires an active Window');
+    // The navigate algorithm queues this operation on the target Window, establishing the executing loop.
+    this.setOngoingNavigation(null, env);
+    const document = this.activeDocument;
+    if (document === null) throw new InternalError('JavaScript URL navigation requires an active Document');
+    if (!areSameOriginDomain(initiatorOrigin, document.origin)) return;
+
+    if (request.policyContainer.cspList?.isNavigationRequestBlocked(request, cspNavigationType, request.client)) return;
+    const newDocument = this.evaluateJavaScriptURL(request.url, initiatorOrigin, userInvolvement, navigationId, targetSnapshotParams);
+    if (newDocument === null) {
+      // Trusted Types or script execution can remove the container or replace its Document.
+      const container = this.container;
+      if (initialInsertion && container !== null && this.activeDocument!.isInitialAboutBlank) {
+        if (container instanceof HTMLIFrameElementImpl) container.runLoadEventSteps();
+        else container.fireEvent('load');
+      }
+      return;
+    }
+    if (newDocument.origin !== initiatorOrigin) throw new InternalError('JavaScript URL replacement must retain the initiator origin');
+    const entryToReplace = this.activeSessionHistoryEntry;
+    const oldState = entryToReplace.documentState;
+    const documentState = DocumentState.create(newDocument);
+    documentState.historyPolicyContainer = oldState.historyPolicyContainer?.clone() ?? null;
+    documentState.requestReferrer = oldState.requestReferrer;
+    documentState.requestReferrerPolicy = oldState.requestReferrerPolicy;
+    documentState.initiatorOrigin = initiatorOrigin;
+    documentState.origin = initiatorOrigin;
+    documentState.aboutBaseURL = oldState.aboutBaseURL;
+    documentState.everPopulated = true;
+    documentState.navigableTargetName = oldState.navigableTargetName;
+    // A fresh state clears the resource and child histories; the javascript: URL is never stored.
+    const historyEntry = newDocument.env.createSessionHistoryEntry(entryToReplace.url, documentState);
+    this.traversable.appendSessionHistoryTraversalSteps(() => {
+      // TODO(HTML §7.4.2.3.1/§7.4.6): The existing finalizer only applies top-level history;
+      // nested history, unloading, cancellation, and complete activation remain its dependencies.
+      this.finalizeCrossDocumentNavigation(historyHandling, userInvolvement, historyEntry);
+    });
   }
 
   /** Run a URL as a classic script; only a normal string completion produces a replacement Document. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#evaluate-a-javascript:-url
   evaluateJavaScriptURL(
-    _url: URLRecord, _newDocumentOrigin: Origin, _userInvolvement: UserNavigationInvolvement, _navigationId: string,
-    _targetSnapshotParams: TargetSnapshotParams,
+    url: URLRecord, newDocumentOrigin: Origin, userInvolvement: UserNavigationInvolvement, navigationId: string,
+    targetSnapshotParams: TargetSnapshotParams,
   ): DocumentImpl | null {
-    // TODO(HTML §7.4.2.3.2): Evaluate javascript: URLs with CSP and Trusted Types, then replace history.
-    throw new InternalError('JavaScript URL navigation is not implemented');
+    const encodedSource = serializeURL(url).slice('javascript:'.length);
+    // SPEC_CLASH(javascript-url-utf8-decoding): Follow HTML/Firefox/WebKit's UTF-8 replacement;
+    // Chromium falls back to byte-for-byte characters when the escaped bytes are invalid UTF-8.
+    const source = utf8Decode(Uint8Array.from(percentDecodeString(encodedSource)));
+    const env = this.activeDocument?.env;
+    if (env === undefined) throw new InternalError('JavaScript URL evaluation requires an active Document');
+    const script = new ClassicScript(source, env, env.apiBaseURL, new ScriptFetchOptions());
+    const completion = script.run();
+    if (completion.type !== 'normal' || typeof completion.value !== 'string') return null;
+
+    const document = this.activeDocument;
+    if (document === null) throw new InternalError('JavaScript URL replacement requires an active Document');
+    const response = new FetchResponse();
+    response.urlList.push(document.url);
+    response.headerList.append('Content-Type', 'text/html;charset=utf-8');
+    // SPEC_CLASH(javascript-result-encoding): Follow HTML/Chromium/WebKit's UTF-8;
+    // Firefox encodes Latin-1-only results as Windows-1252 for legacy image compatibility.
+    // The browser's internal Fetch environment keeps delivery independent of the departing Document.
+    response.body = FetchBody.fromBytes(utf8Encode(completion.value), document.env.userAgent.sandbox);
+    const policyContainer = document.policyContainer;
+    const finalSandboxFlags = policyContainer.cspList?.getSandboxingFlags() ?? new SandboxingFlagSet();
+    const coop = document.openerPolicy;
+    // SPEC_CLASH(javascript-replacement-referrer): Keep HTML/Firefox's null request and empty
+    // Document.referrer. Chromium/WebKit preserve the previous Document's referrer instead.
+    const params = new NavigationParams(
+      response, finalSandboxFlags, coarsenedSharedCurrentTime(document.env.crossOriginIsolatedCapability).milliseconds,
+    );
+    params.id = navigationId;
+    params.origin = newDocumentOrigin;
+    params.policyContainer = policyContainer;
+    params.openerPolicy = coop;
+    params.coopEnforcementResult = {
+      needsBrowsingContextGroupSwitch: false,
+      wouldNeedBrowsingContextGroupSwitchDueToReportOnly: false,
+      url, origin: newDocumentOrigin, openerPolicy: coop, currentContextIsNavigationSource: false,
+    };
+    // SPEC_GAP(javascript-navigation-target-snapshot): HTML reads an undefined snapshot;
+    // carry beginning-navigation's existing target snapshot through both javascript: operations.
+    params.iframeReferrerPolicy = targetSnapshotParams.iframeReferrerPolicy;
+    params.aboutBaseURL = document.aboutBaseURL;
+    params.cookieURL = copyURL(document.cookieURL);
+    params.userInvolvement = userInvolvement;
+    // Request, Fetch controller, early hints, and reserved environment retain their specified null defaults.
+    return this.loadHTMLDocument(params);
   }
 
   /** Update same-document history, navigate-event state, and scrolling for a fragment destination. */

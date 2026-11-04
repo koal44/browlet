@@ -1,4 +1,6 @@
-export { CSPDirectives, CSPDirectiveValue, type CSPFetchDirectiveName, type CSPInlineAttributeType } from './directives';
+export {
+  CSPDirectives, CSPDirectiveValue, type CSPFetchDirectiveName, type CSPInlineSourceType, type CSPInlineAttributeType,
+} from './directives';
 export { CSPList } from './list';
 export { ContentSecurityPolicy, type CSPDisposition, type CSPSource } from './policy';
 export {

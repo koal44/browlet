@@ -140,6 +140,14 @@ record `SPEC_MISMATCH` stays for the observer implementation review.
 
 ## Later slices and dependency gates
 
+HTML §7.4.2.3.2 now connects the javascript: pre-navigation check. The factory's
+default-policy processing is shared with ordinary compliant-string conversion;
+navigation owns exception-to-violation handling, URL reparsing, and disposition.
+The [CSP navigation audit](../csp/ROADMAP.md#navigation-request-consumer) records
+the approved encoding, ordering, repeated-policy, and reporting choices with
+browser and upstream evidence. Navigation now executes the rewritten URL through
+ClassicScript; string-result replacement and the other TT-E consumers remain unfinished.
+
 These branches follow their consumers rather than one mandatory serial queue.
 None is a prerequisite for TT-A/TT-B.
 
@@ -147,7 +155,7 @@ None is a prerequisite for TT-A/TT-B.
 | --- | --- | --- |
 | TT-C. Trusted parser options | HTML-owned `SetHTMLUnsafeOptions`, Sanitizer/configuration/preset types, configuration validation/copying, and realm-correct Sanitizer construction | `TrustedHTMLParserOptions`, `createParserOptions`, its callback, and compliant-options processing. Configuration is independently testable; defer it rather than inventing a permissive Sanitizer. No tokenization/tree-builder changes belong here |
 | TT-D. Markup consumers | The actual DOM/HTML parsing API, shared fragment/document parsing as applicable, and TT-C wherever parser options participate | Integrate each available markup sink, including the distinct HTML/XML and streaming rules. Safe setters additionally require real sanitization. Dynamic document writes need their active-parser lifecycle; a helper-only test does not complete the consumer |
-| TT-E. Script and navigation consumers | HTML script preparation/trustedness, string-timer compilation, `javascript:` navigation, and the relevant JS Engine host hooks | Window `HostGetCodeForEval` uses Binding recognition and native extraction on custom Node. CSP source-list checks are connected, but `HostEnsureCanCompileStrings` still lacks its preceding Trusted Types/default-policy validation; see the [CSP consumer](../csp/ROADMAP.md#string-compilation-consumer). Add each remaining consumer with its owner; parser-created script trustedness needs the real parser lifecycle |
+| TT-E. Script and navigation consumers | HTML script preparation/trustedness, string-timer compilation, `javascript:` navigation, and the relevant JS Engine host hooks | javascript: pre-navigation rewriting and ClassicScript evaluation are connected; string-result replacement remains unfinished. Window `HostGetCodeForEval` uses Binding recognition and native extraction on custom Node. CSP source-list checks are connected, but `HostEnsureCanCompileStrings` still lacks its preceding Trusted Types/default-policy validation; see the [CSP consumer](../csp/ROADMAP.md#string-compilation-consumer). Add each remaining consumer with its owner; parser-created script trustedness needs the real parser lifecycle |
 | TT-F. Workers | Worker globals/settings, CSP initialization and violation construction, script loading, and lifetime | Per-global factories and enforcement through actual worker consumers. Window-only tests do not establish Worker support |
 
 Sanitizer configuration work can eventually be separated from tree walking;

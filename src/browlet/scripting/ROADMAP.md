@@ -29,7 +29,7 @@ This introduction inventories consumers; it does not define a new dispatcher.
 | Entry | Present and missing dependencies |
 | --- | --- |
 | HTML script elements | [Script state](../dom/nodes/html/scripting/script.ts), parser handoff, and [Browlet's script handler](../browlet.ts) exist. Formal classic/module records, preparation/readiness, script fetching, and execution checks remain §§4.12 and 8.1.4 work. |
-| `javascript:` navigation | The [navigation path](../browsing/navigation/ROADMAP.md) is missing; do not treat generic evaluation as its implementation. |
+| `javascript:` navigation | [Queued admission](../browsing/navigation/ROADMAP.md#html-74232-queued-javascript-navigation-admission) now checks ID/origin and stops at the missing CSP navigation check. ClassicScript creation/run exists for the later consumer; decoding, string-result loading, and replacement remain navigation work. Do not substitute generic evaluation. |
 | Event listeners and handlers | DOM listeners and the [IDL-handler core](event-handlers.ts) run callbacks. [GlobalEventHandlers](global-event-handlers.ts) is connected on Window, Document, HTML, SVG, and MathML. [WindowEventHandlers](window-event-handlers.ts) is connected on Window/body/frameset, along with Document-only handlers. Raw attributes and lazy compilation use the shared map. Window error handlers use five arguments and return-true cancellation; beforeunload converts nullable strings and preserves an existing returnValue. Form discovery, source locations, and event producers retain their explicit dependencies. |
 | SVG scripting | [SVGScriptElement](../dom/nodes/svg/script-element.ts) supplies identity only. Its attributes, preparation, loading, and execution remain SVG-owned dependencies. |
 

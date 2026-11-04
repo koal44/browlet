@@ -50,8 +50,8 @@ retains an optional `CSSDeclarationBlock` and an optional
 
 The policy operation is
 [`CSPList.isInlineAttributeBlocked()`](../browsing/policy/csp/list.ts) with
-type `style attribute`. It authorizes raw inline source and reports policy
-violations; it does not parse
+type `style-attr` (CSP's `style attribute`). It authorizes raw inline source and
+reports policy violations; it does not parse
 CSS or selectively allow property names. Hash matching precedes CSS parsing
 because source spelling matters. Policy is read from the current node document,
 including after adoption. See the [CSP evidence](../browsing/policy/csp/ROADMAP.md#style-attribute-consumer).

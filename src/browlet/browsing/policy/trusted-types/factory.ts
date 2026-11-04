@@ -91,10 +91,7 @@ export class TrustedTypePolicyFactoryImpl {
     const initialPolicies = env.policyContainer.cspList;
     if (!initialPolicies?.doesSinkTypeRequireTrustedTypes(sinkGroup, true)) return value;
 
-    // https://w3c.github.io/trusted-types/dist/spec/#process-value-with-a-default-policy-algorithm
-    // Keep the callback's converted string directly: the specification's temporary trusted
-    // value would immediately be unwrapped here and is never exposed to author code.
-    const converted = this.defaultPolicy?.getPolicyValue(expectedType, value, [expectedType, sink], false) ?? null;
+    const converted = this.processValueWithDefaultPolicy(expectedType, value, sink);
     if (converted !== null) return converted;
 
     // The callback can change policy state. Consult the selected global again after it returns.
@@ -102,6 +99,13 @@ export class TrustedTypePolicyFactoryImpl {
       throw new TypeError(`${sink} requires ${expectedType}`);
     }
     return value;
+  }
+
+  /** Invoke the default policy, returning null when the callback or its result is absent; exceptions propagate. */
+  // https://w3c.github.io/trusted-types/dist/spec/#process-value-with-a-default-policy-algorithm
+  // Keep the converted string directly: the temporary trusted value would immediately be unwrapped.
+  processValueWithDefaultPolicy(expectedType: TrustedTypeName, input: string, sink: string): string | null {
+    return this.defaultPolicy?.getPolicyValue(expectedType, input, [expectedType, sink], false) ?? null;
   }
 }
 

@@ -102,10 +102,10 @@ export class CSPDirectiveValue {
     });
   }
 
-  /** Match attribute source, where nonces cannot authorize and hashes require unsafe-hashes. */
+  /** Match attribute or navigation source, where nonces cannot authorize and hashes require unsafe-hashes. */
   // https://w3c.github.io/webappsec-csp/#match-element-to-source-list
-  matchesInlineAttribute(type: CSPInlineAttributeType, source: string): boolean {
-    const scriptAttribute = type === 'script attribute';
+  matchesInlineSource(type: CSPInlineSourceType, source: string): boolean {
+    const script = type !== 'style-attr';
     let unsafeInline = false;
     let unsafeHashes = false;
     let excludesUnsafeInline = false;
@@ -116,7 +116,7 @@ export class CSPDirectiveValue {
         unsafeInline = true;
       } else if (keyword === "'unsafe-hashes'") {
         unsafeHashes = true;
-      } else if (scriptAttribute && keyword === "'strict-dynamic'") {
+      } else if (script && keyword === "'strict-dynamic'") {
         excludesUnsafeInline = true;
       } else if (nonceSourcePattern.test(token)) {
         excludesUnsafeInline = true;
@@ -147,8 +147,11 @@ export class CSPDirectiveValue {
   }
 }
 
-/** Inline attribute consumers; script/style element bodies have separate nonce and parser rules. */
-export type CSPInlineAttributeType = 'script attribute' | 'style attribute';
+/** Supported inline-source consumers; script/style element bodies need separate nonce and parser rules. */
+export type CSPInlineSourceType = CSPInlineAttributeType | 'navigation';
+
+/** CSP's "script attribute" and "style attribute" inline types, used by attribute-only checks. */
+export type CSPInlineAttributeType = 'script-attr' | 'style-attr';
 
 /** Names of source directives governing external requests and their fallbacks. */
 export type CSPFetchDirectiveName = 'default-src' | 'child-src' | 'connect-src' | 'font-src' | 'frame-src' |

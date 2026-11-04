@@ -558,7 +558,7 @@ export class ElementImpl extends NodeImpl {
       if (handlers?.has(localName)) {
         if (newValue === null) {
           handlers.set(localName, null);
-        } else if (!this.nodeDocument.policyContainer.cspList?.isInlineAttributeBlocked(this, 'script attribute', newValue)) {
+        } else if (!this.nodeDocument.policyContainer.cspList?.isInlineAttributeBlocked(this, 'script-attr', newValue)) {
           // A DOM-created Document still has its initially empty CSP list.
           handlers.setSource(localName, newValue, this.nodeDocument.URL);
         }

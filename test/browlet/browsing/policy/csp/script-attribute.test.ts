@@ -35,7 +35,7 @@ describe('CSP script attributes', () => {
     const { document, runTask } = createCSPWindow(serialized);
     const element = document.createElement('body');
     expect(document.policyContainer.cspList!
-      .isInlineAttributeBlocked(element, 'script attribute', 'return false')).toBe(blocked);
+      .isInlineAttributeBlocked(element, 'script-attr', 'return false')).toBe(blocked);
     expect(runTask()).toBe(blocked);
     expect(runTask()).toBe(false);
   });
@@ -45,21 +45,21 @@ describe('CSP script attributes', () => {
     const element = window.document.createElement('body');
     element.nonce = 'abc';
     expect(document.policyContainer.cspList!
-      .isInlineAttributeBlocked(unwrap<ElementImpl>(element), 'script attribute', 'return false')).toBe(true);
+      .isInlineAttributeBlocked(unwrap<ElementImpl>(element), 'script-attr', 'return false')).toBe(true);
     expect(runTask()).toBe(true);
   });
 
   it.each(['sha256', 'sha384', 'sha512'])('authorizes exact UTF-8 handler source using %s and unsafe-hashes', (algorithm) => {
     const source = 'globalThis.foo = "שלום 😀";\r\nreturn false;';
     const hash = `'${algorithm}-${createHash(algorithm).update(source).digest('base64')}'`;
-    expect(new CSPDirectiveValue([hash]).matchesInlineAttribute('script attribute', source)).toBe(false);
+    expect(new CSPDirectiveValue([hash]).matchesInlineSource('script-attr', source)).toBe(false);
     expect(new CSPDirectiveValue(["'unsafe-inline'", hash])
-      .matchesInlineAttribute('script attribute', source)).toBe(false);
+      .matchesInlineSource('script-attr', source)).toBe(false);
     const sources = new CSPDirectiveValue(["'UNSAFE-HASHES'", hash]);
-    expect(sources.matchesInlineAttribute('script attribute', source)).toBe(true);
-    expect(sources.matchesInlineAttribute('script attribute', `${source} `)).toBe(false);
-    expect(sources.matchesInlineAttribute('script attribute', source.replace('\r\n', '\n'))).toBe(false);
-    expect(sources.matchesInlineAttribute('script attribute', `function onstorage(event) {\n${source}\n}`)).toBe(false);
+    expect(sources.matchesInlineSource('script-attr', source)).toBe(true);
+    expect(sources.matchesInlineSource('script-attr', `${source} `)).toBe(false);
+    expect(sources.matchesInlineSource('script-attr', source.replace('\r\n', '\n'))).toBe(false);
+    expect(sources.matchesInlineSource('script-attr', `function onstorage(event) {\n${source}\n}`)).toBe(false);
   });
 
   it('still accepts an authorized hash when strict-dynamic suppresses unsafe-inline', () => {
@@ -67,10 +67,10 @@ describe('CSP script attributes', () => {
     const hash = `'sha256-${createHash('sha256').update(source).digest('base64')}'`;
     const { document, runTask } = createCSPWindow(`script-src-attr 'unsafe-inline' 'strict-dynamic' 'unsafe-hashes' ${hash}`);
     const element = document.createElement('body');
-    expect(document.policyContainer.cspList!.isInlineAttributeBlocked(element, 'script attribute', source)).toBe(false);
+    expect(document.policyContainer.cspList!.isInlineAttributeBlocked(element, 'script-attr', source)).toBe(false);
     expect(runTask()).toBe(false);
     expect(document.policyContainer.cspList!
-      .isInlineAttributeBlocked(element, 'script attribute', 'globalThis.foo = 6;')).toBe(true);
+      .isInlineAttributeBlocked(element, 'script-attr', 'globalThis.foo = 6;')).toBe(true);
     expect(runTask()).toBe(true);
   });
 
@@ -87,7 +87,7 @@ describe('CSP script attributes', () => {
     const events: SecurityPolicyViolationEvent[] = [];
     element.addEventListener('securitypolicyviolation', (event) => events.push(event));
     const source = `globalThis.foo = '${'x'.repeat(60)}';`;
-    expect(policies.isInlineAttributeBlocked(unwrap<ElementImpl>(element), 'script attribute', source)).toBe(true);
+    expect(policies.isInlineAttributeBlocked(unwrap<ElementImpl>(element), 'script-attr', source)).toBe(true);
     expect(events).toHaveLength(0);
     expect(runTask()).toBe(true);
     expect(runTask()).toBe(true);
@@ -123,7 +123,7 @@ describe('CSP script attributes', () => {
       "script-src-attr 'none'; default-src 'none' 'report-sample'; report-to handlers", 'report',
     );
     expect(document.policyContainer.cspList!
-      .isInlineAttributeBlocked(document.createElement('body'), 'script attribute', 'return false')).toBe(false);
+      .isInlineAttributeBlocked(document.createElement('body'), 'script-attr', 'return false')).toBe(false);
     expect(runTask()).toBe(true);
     expect(scope.reports[0]!.data).toMatchObject({ disposition: 'report', effectiveDirective: 'script-src-attr', sample: '' });
     expect(runTask()).toBe(false);
@@ -138,7 +138,7 @@ describe('CSP script attributes', () => {
     const events: SecurityPolicyViolationEvent[] = [];
     target.window.document.addEventListener('securitypolicyviolation', (event) => events.push(event));
     expect(target.document.policyContainer.cspList!
-      .isInlineAttributeBlocked(unwrap<ElementImpl>(element), 'script attribute', 'return false')).toBe(true);
+      .isInlineAttributeBlocked(unwrap<ElementImpl>(element), 'script-attr', 'return false')).toBe(true);
     element.remove();
     expect(source.runTask()).toBe(false);
     expect(target.runTask()).toBe(true);
@@ -156,7 +156,7 @@ describe('CSP script attributes', () => {
     expect(element.style.opacity).toBe('0.5');
     expect(runTask()).toBe(false);
     expect(document.policyContainer.cspList!
-      .isInlineAttributeBlocked(unwrap<ElementImpl>(element), 'script attribute', 'return false')).toBe(true);
+      .isInlineAttributeBlocked(unwrap<ElementImpl>(element), 'script-attr', 'return false')).toBe(true);
     expect(runTask()).toBe(true);
   });
 });

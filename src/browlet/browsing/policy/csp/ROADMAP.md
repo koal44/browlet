@@ -65,7 +65,7 @@ or digests when available instead of reading twice.
 
 HTML §3.2.6.5 now calls the inline CSP check for `style` attribute input through
 the [style integration](../../../style/ROADMAP.md#style-attributes--html-3265).
-`CSPList.isInlineAttributeBlocked(element, 'style attribute', source)` specializes
+`CSPList.isInlineAttributeBlocked(element, 'style-attr', source)` specializes
 [should-block-inline](https://w3c.github.io/webappsec-csp/#should-block-inline)
 to `style attribute`, returning a boolean. It selects `style-src-attr`, then
 `style-src`, then `default-src`; an empty present directive stops fallback.
@@ -105,7 +105,8 @@ fallback inputs, and keywords. No new expected failures or skips are needed.
 ## Script-attribute policy prerequisite
 
 The same `CSPList.isInlineAttributeBlocked(element, type, source)` operation now
-accepts `script attribute`. It retains the existing boolean result (`true` means
+accepts `script-attr` (CSP's `script attribute`). It retains the existing boolean
+result (`true` means
 an enforcing policy blocks) and violation delivery. Source selection is
 `script-src-attr`, then `script-src`, then `default-src`; an empty present
 directive stops fallback. Rejected policies report effective directive
@@ -204,6 +205,90 @@ Rebuilt addons pass their full native suites (393/393 on Node 24 and 26; 392 plu
 the existing installer skip on custom). Typechecking, focused lint, and import
 boundary checks pass. No failure classifications changed.
 
+## Navigation-request consumer
+
+HTML §7.4.2.3.2 now calls
+[`isNavigationRequestBlocked`](list.ts) with the captured source policies and
+source client. The target Window owns the queued task and request allocation;
+it does not supply the source factory or receive the source's violation events.
+`NavigationRequest`, beside Navigable's other input types, preserves those concrete
+HTML types without changing Fetch's portable policy contract. Browser-UI navigation
+has a null source client and an
+empty source policy container. A nonempty list requires its source environment.
+
+The [CSP §4.2.4 check](https://w3c.github.io/webappsec-csp/#should-block-navigation-request)
+first applies `form-action` and Trusted Types pre-navigation checks. All rejected
+policies report; only enforcing policies block. A blocked pre-navigation phase
+skips inline checks but does not suppress the remaining pre-navigation checks.
+`form-action` applies only to form submissions, matches the current request URL
+with its redirect count and retained self origin, and reports the original URL.
+It has no default-src fallback.
+
+Trusted Types may rewrite the first request URL. Its factory's
+`processValueWithDefaultPolicy()` reuses the existing converted callback, keeping
+the temporary trusted value's string without allocating an immediately discarded
+object. Missing callbacks, null results, exceptions, and URL parse failure are
+failed pre-navigation checks. Empty strings are successful conversions.
+`getCompliantString()` still propagates author exceptions for ordinary DOM sinks;
+navigation catches them at its own specified boundary.
+
+If pre-navigation allows a javascript: URL, inline matching uses `script-src-elem`,
+then `script-src`, then `default-src`, retaining `script-src-elem` as the effective
+report directive. Nonces cannot authorize navigation; hashes require unsafe-hashes.
+The shared attribute/navigation matcher preserves unsafe-inline suppression by
+nonces, hashes, and script strict-dynamic. Script/style element-body matching is
+still a separate missing consumer.
+
+`CSPInlineSourceType` names the supported matching inputs: `script-attr`,
+`style-attr`, and `navigation`. Attribute-only checks retain `CSPInlineAttributeType`,
+so they cannot accidentally receive a navigation request. The hyphenated attribute
+values correspond to CSP's `script attribute` and `style attribute` names.
+
+### Reviewed browser differences
+
+Live HTTP/header probes on 2026-11-02 used Chromium 156.0.8078.4, Firefox 157.0,
+and WebKit 27.2. The reproducible probe is
+`node-compat/experimental/javascript-navigation-policy.mjs` in Experimental;
+an optional name filter selects one case. Each case starts with a fresh document.
+CSP `251d288` and Trusted Types `3cd79cb` were refreshed fast-forward-only and
+already matched upstream. HTML was read at `404b3eb14a7a936dddefb2d78e224dbeb01d2358`.
+
+| Source marker | Browlet's approved choice and observed alternatives |
+| --- | --- |
+| `javascript-csp-encoding` | Hash the full serialized URL without percent-decoding, as the written algorithm, Firefox, and WebKit do. Chromium decodes first. All tested engines include `javascript:`; hashing only the script does not authorize it. |
+| `javascript-trusted-types-encoding` | Pass the encoded script, without the scheme, to the default policy, as Trusted Types and Firefox do. Chromium/WebKit decode first. All receive `TrustedScript` and `Location href` as additional arguments. |
+| `javascript-trusted-types-order` | Rewrite before inline checks, as CSP/Firefox do. Chromium/WebKit can block the original inline source without invoking the default callback. A hash authorizing only the rewritten URL passes Firefox and Browlet. |
+| `trusted-types-navigation-exception` | Report a throwing callback and let disposition decide blocking, as the algorithms, Firefox, and WebKit do. Chromium stops even a report-only request and emits no violation for the throw. |
+| `trusted-types-navigation-policies` | Invoke the default callback once across policies, and require a valid `'script'` token, matching all three engines. The written per-directive loop would repeat conversion and does not inspect the token. Still report each failing applicable policy. |
+| `trusted-types-navigation-report` | Report `trusted-types-sink` and `Location href\|` plus the first 40 source code units, matching browser report structure. CSP's generic pre-navigation report instead uses the request URL and supplies no sample. Encoding follows the separate approved input choice. |
+| `javascript-csp-sample` | Honor report-sample on the selected inline directive, using the first 40 encoded URL code units as WebKit does. The navigation algorithm omits this step; Chromium decodes first, and Firefox appends an ellipsis. |
+
+[Trusted Types #584](https://github.com/w3c/trusted-types/issues/584) explicitly
+identifies the reporting disconnect and Chromium's missing exception report;
+it also supplies the invalid `javascript://test:test/` reparse case. Browser
+structure explains the differing order: Blink's
+`LocalDOMWindow::CheckAndGetJavascriptUrl` decodes and checks inline CSP before
+Trusted Types. Gecko's `GetConvertedScriptSourceForPreNavigationCheck` retains
+encoded input, and `nsJSProtocolHandler.cpp` passes the full URL to inline CSP.
+WebKit's `requireTrustedTypesForPreNavigationCheckPasses` decodes the input and
+uses its shared sink reporting; earlier loading checks can reject inline CSP.
+These traces explain the results without making browser behavior the default rule.
+[CSP #553](https://github.com/w3c/webappsec-csp/issues/553) discusses hashing the
+scheme-inclusive URL; its historical Firefox observation no longer matches the
+tested build.
+
+This completes the navigation-request policy algorithm. The subsequent navigation
+slice connects ClassicScript execution; string-result document replacement remains
+unfinished. Network-navigation callers, response/frame-ancestor
+checks, and complete script-element checks remain below. Policy failures return
+without reaching the loader; admitted javascript: requests execute in Navigable.
+
+Validation: the 61 focused policy/queued-navigation tests pass on Node 24.19.0,
+26.8.1, and the existing custom Node 27.0.0-pre, each with and without the addon.
+The broader CSP, Trusted Types, beginning-navigation, and abortion selection
+passes 603 tests on Node 26/addon. Typechecking, touched-file lint, import hierarchy,
+and whitespace checks pass; there are no new expected failures or native changes.
+
 ## Retained specification decisions
 
 The following source markers retain approved choices. September 2026 browser
@@ -269,8 +354,14 @@ documentation cleanup does not refresh those observations.
   script-attribute check now gates lazy body/frameset Window handlers. General
   element handlers still await their declarations and scope integration. Parsing the
   remaining directives is not enforcement.
-- **Navigation:** form-action, navigation and frame-ancestor checks with real
-  nested contexts, navigation state, and response policies.
+- **Navigation:** network request/response and frame-ancestor integration with
+  real nested contexts, navigation state, and response policies. The queued
+  [javascript: admission path](../../navigation/ROADMAP.md#html-74232-queued-javascript-navigation-admission)
+  now uses form-action, pre-navigation Trusted Types rewriting, and inline checks.
+  Admitted requests now execute through ClassicScript, while string-result
+  document replacement remains an explicit dependency. The ordinary
+  network-navigation consumer must use this navigation algorithm too; Fetch's
+  existing request check cannot substitute for it.
 - **Globals:** worker/worklet initialization and violation construction;
   global event-handler attributes. Window addEventListener already works.
 - **Console:** `env.reportConsoleWarning()` is provisional. Supply a real
