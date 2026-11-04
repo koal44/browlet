@@ -16,6 +16,7 @@ export {
   type CSSStyleSheetInit, type StyleSheetLoad, type FetchImportedStyleSheet,
 } from './cssom/index';
 export { CSSDeclarationBlock } from './cssom/declarations/index';
+export { TouchActionValue } from './props/built-in/index';
 export {
   decodeStylesheetBytes, getStylesheetEncoding, parseStylesheetContents, isCustomPropertyName, type CustomPropertyName,
 } from './syntax/index';

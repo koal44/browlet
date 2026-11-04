@@ -254,7 +254,7 @@ resolution/serialization boundary.
 | [BoxSides](box-sides.ts) | A four-item physical-side tuple introduced for HTML lazy loading | A provisional type, not shorthand expansion or layout. |
 | [Supports conditions](supports-condition.ts), [media queries](media-query.ts), and [boolean expressions](boolean-expr.ts) | Shared condition grammars and nodes with their own evaluation or resolution; if() reuses the supports parser | Query-value resolution is distinct from capability checks, device matching, and stylesheet participation; see the [condition roadmap](../conditional/ROADMAP.md). |
 
-The [property registry inventory](../props/README.md) records the seven installed
+The [property registry inventory](../props/README.md) records the installed
 built-ins and unregistered animation-name parser. Additional generic types do
 not register background images, fonts, transforms, or layout properties.
 The [value roadmap](ROADMAP.md#context-inputs-and-freshness) names the required

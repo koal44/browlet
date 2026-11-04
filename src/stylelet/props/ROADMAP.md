@@ -18,7 +18,7 @@ in the [Stylelet roadmap](../ROADMAP.md#specification-families).
   claiming animation or layout integration.
 - [x] Require `appliesTo(context): boolean` on properties and built-in definitions.
   Record all-element rules and custom properties' universal pseudo-element support.
-- [ ] Supply box classification for margin applicability, which currently throws.
+- [ ] Supply box classification for margin and touch-action applicability, which currently throw.
   Integrate pseudo-element property restrictions and applicability at used-value
   processing, while retaining computed values for non-applicable properties.
 - [x] Record CSSOM's `resolvedValueStage` on every property: Used for colors,
@@ -132,7 +132,7 @@ need their own interpretation and CSSOM path. The
 | [Transforms](https://drafts.csswg.org/css-transforms-1/#transform-box), paths, filters, masks, compositing, SVG paint | Opacity plus color/image/position math; registered transform syntax still reaches a value-consumer stub | Value lists, interpolation and property definitions. HTML/SVG reference boxes, SVG resource targets, rasterization and compositing remain outside a generic property value. |
 | Pseudo-elements and highlights | Selector representations, not a complete pseudo-style pipeline | Element/pseudo-specific applicability and style subjects; coordinate identity/ranges with [Browlet style integration](../../browlet/style/ROADMAP.md#pseudo-elements-and-highlights), and fragments/paint with layout/rendering. |
 | Animation and transitions | Unregistered animation-name parser and type-specific interpolation helpers | Timing/property definitions, keyframes and effect participation. [Animation](../../animation/ROADMAP.md) owns playback/effects and host delivery dependencies; a time value does not establish an animation engine. |
-| [UI](https://drafts.csswg.org/css-ui-4/#appearance-switching), viewport, scroll interaction | URL/image/numeric foundations; no registered family properties | Appearance, cursor, outlines, scroll and navigation inputs. Native widgets, input devices, hit testing, viewport/scroll state and output selection remain host/rendering responsibilities. |
+| [UI](https://drafts.csswg.org/css-ui-4/#appearance-switching), viewport, scroll interaction | touch-action grammar, declared/computed values, and CSSOM participation; URL/image/numeric foundations | touch-action applicability needs box classification; gesture decisions belong to Pointer Events §7.2 and the input producer. Appearance, cursor, outlines, native widgets, hit testing, viewport/scroll state and output selection remain unfinished. |
 | [Speech](https://drafts.csswg.org/css-speech-1/#speaking-props-speak) | Generic frequency/time/string values | Property definitions only if included in the supported profile; speech output/voices are an external dependency, not an inline-style prerequisite. |
 
 [Conditions](../conditional/ROADMAP.md) control participation across these

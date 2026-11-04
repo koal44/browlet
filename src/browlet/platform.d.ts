@@ -4094,6 +4094,8 @@ export interface CSSStyleProperties extends CSSStyleDeclaration {
   marginTop: string;
   "margin-top": string;
   opacity: string;
+  touchAction: string;
+  "touch-action": string;
   readonly [index: number]: string | undefined;
   [Symbol.iterator](): IterableIterator<string>;
 }

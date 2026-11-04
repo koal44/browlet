@@ -9,7 +9,7 @@ export {
   consumeDollarDelim, consumeDotDelim, consumeIdHashToken, consumeTildeDelim, createKeywordConsumer,
 } from './component-consumers';
 export {
-  adaptConsumer, withTrivia, commaRepeat, one, oneOf, sequenceOf, opt, plus, recursive, allOf, repeat,
+  adaptConsumer, withTrivia, commaRepeat, one, oneOf, sequenceOf, opt, plus, recursive, allOf, someOf, repeat,
   requiredSequenceOf, requiredSomeOf, any,
 } from './component-grammar';
 export { TokenCursor, type TryConsumerResult, type TryConsumer } from './token-cursor';

@@ -5,6 +5,7 @@ import {
   marginProperty, marginTopProperty, marginRightProperty, marginBottomProperty, marginLeftProperty,
 } from './margin';
 import { opacityProperty } from './opacity';
+import { touchActionProperty } from './touch-action';
 
 /** Installed built-in properties, retaining each definition's concrete type. */
 export const builtInRegistry = {
@@ -16,6 +17,7 @@ export const builtInRegistry = {
   'margin-right': marginRightProperty,
   'margin-top': marginTopProperty,
   opacity: opacityProperty,
+  'touch-action': touchActionProperty,
 } as const;
 
 /** Installed property records, retaining each entry's concrete type. */

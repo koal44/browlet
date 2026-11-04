@@ -29,6 +29,7 @@ describe('property records', () => {
     ['margin-right', false, '0'],
     ['margin-bottom', false, '0'],
     ['margin-left', false, '0'],
+    ['touch-action', false, 'auto'],
   ] as const)('stores the parsed initial value and inheritance for %s', (name, inherits, text) => {
     const property = builtInRegistry[name];
     expect(property.inherits).toBe(inherits);

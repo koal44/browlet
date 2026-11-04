@@ -23,7 +23,7 @@ result. [index.ts](index.ts) exports the supported entry points and implementati
 | [selector/](selector/README.md) | Selector parsing, serialization, specificity, stylesheet matching, and its caches; separate from Selectlet's selector engine |
 | [values/](values/README.md) | The shared Value contract, reusable value grammars, representations, resolution, and serialization, with supporting numeric literals and collections |
 | [value-processing/](value-processing/README.md) | Value stages; complete element-level orchestration remains missing |
-| [props/](props/README.md) | Shared property contracts and registries; built-in grammars and metadata live in `props/built-in/`. Seven installed names; animation-name has a separate unregistered parser. |
+| [props/](props/README.md) | Shared property contracts and registries; built-in grammars and metadata live in `props/built-in/`. The registry includes touch-action; animation-name has a separate unregistered parser. |
 | [conditional/](conditional/README.md) | Roadmap for condition evaluation and applicability; supports capability checks and device/container matching are not implemented |
 | [engine/](engine/README.md) | Sheet participation, tree-scope collections, cascade selection, and computed-style construction |
 | [cssom/](cssom/README.md) | Rule construction, authoritative stylesheet/rule implementations, collections, and mutation behavior |

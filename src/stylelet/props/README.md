@@ -9,7 +9,7 @@ families and their dependencies.
 
 ## Installed properties
 
-The [property registry](built-in/registry.ts) installs seven built-in longhands and the
+The [property registry](built-in/registry.ts) installs eight built-in longhands and the
 `margin` shorthand:
 
 | Module | Registered names | Current behavior |
@@ -17,6 +17,7 @@ The [property registry](built-in/registry.ts) installs seven built-in longhands 
 | [color.ts](built-in/color.ts) | `color`, `background-color` | Shared color parser. Color inherits and starts at symbolic CanvasText; background-color does not inherit and starts at transparent. Property-specific currentColor rules remain unfinished. |
 | [margin.ts](built-in/margin.ts) | `margin`, `margin-top`, `margin-right`, `margin-bottom`, `margin-left` | The four longhands start at zero, do not inherit, and accept length-percentage or auto. Resolution preserves auto and delegates numeric values to the shared resolver. The shorthand expands and serializes these sides. All belong to the physical margin group; logical longhands remain absent. |
 | [opacity.ts](built-in/opacity.ts) | `opacity` | Starts at one and does not inherit. OpacityValue handles percentage conversion and computed-stage clamping. |
+| [touch-action.ts](built-in/touch-action.ts) | `touch-action` | Starts at auto, does not inherit, and is not animatable. Supports Pointer Events' directions and Compatibility's pinch-zoom extension. Computes to the specified keywords in grammar order; box applicability explicitly throws until classification is available. |
 
 [animation-name.ts](built-in/animation-name.ts) separately parses and serializes lists
 of none, custom identifiers, or strings. It is **not registered** and has no
@@ -104,7 +105,7 @@ must remain at Computed; CSSOM's later query pass will select the exposed stage.
 The metadata does not certify a representation or supply missing resolution inputs.
 
 The animation categories come from [Web Animations](https://drafts.csswg.org/web-animations-1/#animating-properties).
-All currently installed built-ins combine by computed value.
+Colors, opacity, and margins combine by computed value; touch-action is not animatable.
 [CustomProperty](custom-property.ts) supplies the [Variables 1](https://drafts.csswg.org/css-variables-1/#defining-variables)
 defaults, including discrete animation, while registered syntax can change that behavior.
 Unregistered custom values combine discretely; registered animation still throws
@@ -239,7 +240,7 @@ shorthand parser or a box model.
 ## Evidence
 
 The [property tests](../../../test/stylelet/unit/props/property.test.ts) cover all
-seven initial/inheritance records, shared color grammar, stage-aware margin
+eight initial/inheritance records, shared color grammar, stage-aware margin
 percentage references (including unavailable and zero sizes), contextual resolution
 without changing the shared initial value, and registry/value typing. They do
 not establish complete CSSOM, inheritance, or used-value behavior. The
@@ -247,3 +248,11 @@ not establish complete CSSOM, inheritance, or used-value behavior. The
 cover pure combinations, discrete fallback, source retention, unclamped intermediate
 opacity, and explicit missing dependencies. They do not establish an animation engine. The
 [engine baseline](../README.md#cascade-and-values) covers the connected query path.
+
+[Touch-action value tests](../../../test/stylelet/unit/props/touch-action.test.ts)
+cover grammar, canonical ordering, CSS-wide values, and animation exclusion.
+[Browlet integration tests](../../../test/browlet/interaction/touch-action.test.ts)
+exercise CSSOM mutation, the cascade, defaulting, and custom-property substitution.
+The [Pointer Events audit](../../browlet/interaction/events/ROADMAP.md#pointer-events-71-touch-action-css-property)
+records browser disagreements and the pending layout/gesture consumers. This
+property's computed value does not itself restrict scrolling or zooming.

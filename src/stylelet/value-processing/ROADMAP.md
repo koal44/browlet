@@ -24,7 +24,7 @@ Individual algorithms in these sections still need implementation review.
 ## Property metadata and failure states
 
 - [x] Connect engine defaulting to the initial values and inherited flags in
-  the seven installed [property records](../props/README.md).
+  the installed [property records](../props/README.md).
   Records also require animation and percentage metadata. Contextual percentage
   references have a stage-aware callback; `BuiltInProperty.resolve()` forwards its
   result into MathContext. Layout facts have a `LayoutContext` contract, but layout
