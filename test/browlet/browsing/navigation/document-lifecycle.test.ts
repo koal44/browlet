@@ -55,6 +55,7 @@ describe('browsing context groups', () => {
   it('starts a browsing context with HTML\'s scalar defaults', () => {
     const context = new BrowsingContext(new WindowProxyHandle());
 
+    expect(context.activeDocument).toBeNull();
     expect(() => context.windowProxy.associatedWindow).toThrow(InternalError);
     expect(context.openerBrowsingContext).toBeNull();
     expect(context.openerOriginAtCreation).toBeNull();
@@ -72,18 +73,43 @@ describe('browsing context groups', () => {
     context.windowProxy.setAssociatedWindow(platform);
 
     expect(context.activeWindow).toBe(window);
+    expect(context.activeDocument).toBeNull();
+    document.browsingContext = context;
+    document.makeActive();
     expect(context.activeDocument).toBe(document);
     expect(Reflect.get(context.windowProxy.platform, 'addEventListener'))
       .toBe(Reflect.get(platform, 'addEventListener'));
   });
 
-  it.each(['activeWindow', 'activeDocument'] as const)(
-    'rejects %s access before the WindowProxy has a Window', (property) => {
-      const context = new BrowsingContext(new WindowProxyHandle());
+  it('has no active Document before its WindowProxy is initialized', () => {
+    const context = new BrowsingContext();
 
-      expect(() => context[property]).toThrow(InternalError);
-    },
-  );
+    expect(context.activeDocument).toBeNull();
+    expect(context.topLevelBrowsingContext).toBeNull();
+    expect(() => context.activeWindow).toThrow(InternalError);
+    expect(() => context.topLevelTraversable).toThrow(InternalError);
+    context.initializeWindowProxy(new WindowProxyHandle());
+    expect(context.activeDocument).toBeNull();
+    expect(() => context.activeWindow).toThrow(InternalError);
+  });
+
+  it('finds the top-level traversable through the active Document, including for a child context', () => {
+    const parent = TopLevelTraversable.create(new UserAgent(), null, '');
+    const parentContext = parent.activeBrowsingContext!;
+    const [childContext, childDocument] = BrowsingContext.create(null, null, parentContext.group!);
+    const child = new Navigable(createDocumentState(childDocument), parent);
+    const container = parent.activeDocument!.createElement('iframe') as HTMLIFrameElementImpl;
+    container.contentNavigable = child;
+
+    expect(parentContext.topLevelTraversable).toBe(parent);
+    expect(childContext.topLevelTraversable).toBe(parent);
+    expect(childContext.topLevelBrowsingContext).toBe(parentContext);
+
+    childDocument.browsingContext = null;
+    expect(childContext.navigable).toBe(child);
+    expect(childContext.topLevelBrowsingContext).toBeNull();
+    expect(() => childContext.topLevelTraversable).toThrow(InternalError);
+  });
 
   it('gives a Window realm its Window and WindowProxy identities', () => {
     expectTypeOf<object>().not.toExtend<ConstructorParameters<typeof WindowProxyHandle>[0]>();
@@ -534,6 +560,7 @@ describe('navigation response inputs', () => {
     const traversable = TopLevelTraversable.create(new UserAgent(), null, '');
     const window = traversable.activeWindow!;
     const initialDocument = traversable.activeDocument!;
+    const browsingContext = traversable.activeBrowsingContext!;
     const handle = window.env.realm.windowProxy;
     const params = traversable.createNavigationParamsFromSource(requireURL('about:blank?first'));
     params.origin = initialDocument.origin;
@@ -546,9 +573,12 @@ describe('navigation response inputs', () => {
     expect(window.env.realm.windowProxy).toBe(handle);
     expect(initialDocument.defaultView).toBe(handle);
     expect(document.defaultView).toBe(handle);
+    expect(browsingContext.activeDocument).toBe(initialDocument);
+    expect(() => document.finishLoading()).toThrow('Only an active Document can finish loading');
 
     const entry = traversable.createHistoryEntry(document, params);
     traversable.finalizeCrossDocumentNavigation('replace', params.userInvolvement, entry);
+    expect(browsingContext.activeDocument).toBe(document);
     const nextParams = traversable.createNavigationParamsFromSource(requireURL('about:blank?second'));
     nextParams.origin = document.origin;
     const nextDocument = traversable.createAndInitializeDocument('html', 'text/html', nextParams);

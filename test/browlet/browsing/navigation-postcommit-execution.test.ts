@@ -205,6 +205,7 @@ describe('Navigate-event postcommit execution', () => {
     const otherDocument = siblingRealm.env.getAssociatedDocument()!;
     // Child/auxiliary creation is unfinished; provide its activity relationship.
     otherDocument.browsingContext = new BrowsingContext(siblingRealm.windowProxy);
+    otherDocument.makeActive();
     const foreign = new PageEvaluation(new TopLevelTraversable(createDocumentState(otherDocument)));
     expect(siblingRealm.agent).toBe(realm.agent);
     Reflect.set(siblingRealm.globalObject, 'ownerNavigation', browser.window.navigation);

@@ -59,6 +59,8 @@ export class NavigationParams {
     finalSandboxingFlagSet: SandboxingFlagSet, startTime: DOMHighResTimeStamp,
   ) {
     this.response = response;
+    // TODO(HTML §7.4): Supply the navigation source origin to BrowsingContext.determineOrigin()
+    // for about:blank/srcdoc inheritance; this provisional response path has no source snapshot yet.
     this.origin = obtainURLOrigin(this.url);
     this.cookieURL = copyURL(this.url);
     this.finalSandboxingFlagSet = finalSandboxingFlagSet;

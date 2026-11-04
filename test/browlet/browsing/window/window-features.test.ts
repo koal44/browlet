@@ -144,7 +144,11 @@ describe('window-open coordination', () => {
     choose.mockReturnValue([target, 'existing-or-none']);
     const replacement = new BrowsingContext(target.activeWindowProxy);
     replacement.setNavigable(target);
-    navigate.mockImplementation(() => { target.activeDocument!.browsingContext = replacement; });
+    navigate.mockImplementation(() => {
+      const document = target.activeDocument!;
+      document.browsingContext = replacement;
+      document.makeActive();
+    });
     browser.window.open('https://target.test/', 'named');
     expect(replacement.openerBrowsingContext).toBe(sourceEnv.window.browsingContext);
     expect(browsingContext.openerBrowsingContext).toBeNull();

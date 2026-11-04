@@ -133,6 +133,7 @@ describe('Navigate-event dispatch and cancellation', () => {
       const container = parent.document.createElement('iframe') as HTMLIFrameElementImpl;
       parent.document.body!.appendChild(container);
       document.browsingContext = new BrowsingContext(window.env.realm.windowProxy);
+      document.makeActive();
       container.contentNavigable = new Navigable(createDocumentState(document), parent.navigable);
     }
     if (activated) window.lastActivationTimestamp = 12;

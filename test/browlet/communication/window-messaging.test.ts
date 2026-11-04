@@ -455,9 +455,8 @@ function createWindow(url: string, agent = new WindowAgent(createManualEventLoop
   document.origin = origin;
   document.browsingContext = new BrowsingContext(env.realm.windowProxy);
   env.window.setAssociatedDocument(document);
-  env.realm.windowProxy.setAssociatedWindow(env.realm.globalObject);
+  document.makeActive();
   const navigable = new TopLevelTraversable(createDocumentState(document));
-  env.markExecutionReady();
   const window = env.realm.windowProxy.platform;
   const events: MessageEvent[] = [];
   for (const type of ['message', 'messageerror']) {

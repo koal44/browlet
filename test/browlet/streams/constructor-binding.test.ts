@@ -134,6 +134,6 @@ function createRelatedWindow(first: Window): WindowProxy {
   const document = createTestDocument(relatedEnv);
   document.browsingContext = new BrowsingContext(proxy);
   window.setAssociatedDocument(document);
-  proxy.setAssociatedWindow(window.env.realm.globalObject);
+  document.makeActive();
   return proxy.platform;
 }

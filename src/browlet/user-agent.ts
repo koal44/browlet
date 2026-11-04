@@ -251,6 +251,8 @@ export class UserAgent implements
     return this.#obtainWorkerOrWorkletAgent(null, true, false);
   }
 
+  /** Register a group before its initial browsing context and Document are created. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#creating-a-new-browsing-context-group
   createBrowsingContextGroup(): BrowsingContextGroup {
     const group = new BrowsingContextGroup(this);
     this.browsingContextGroupSet.add(group);
@@ -308,12 +310,22 @@ export class UserAgent implements
     }
   }
 
+  /** Release an empty group after its last top-level context has been removed. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#bcg-remove
   removeBrowsingContextGroup(group: BrowsingContextGroup): void {
     if (group.browsingContextSet.size !== 0) {
       throw new InternalError('A nonempty browsing context group cannot be removed');
     }
 
     this.browsingContextGroupSet.delete(group);
+  }
+
+  /** Remove top-level contexts after all their Documents are destroyed and their WindowProxy is collectible. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#a-browsing-context-is-discarded
+  collectBrowsingContexts(): void {
+    // TODO(HTML §7.3.2.3): track all referring Documents and WindowProxy collection eligibility.
+    // Group membership currently retains the context and its proxy; an empty active slot is insufficient.
+    throw new InternalError('Browsing-context collection requires Document lifetime tracking and WindowProxy collection eligibility');
   }
 
   /** Refresh browser UI displaying URLs or derived data affected by this document's base URL. */

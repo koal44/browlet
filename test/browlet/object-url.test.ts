@@ -212,8 +212,7 @@ describe('Blob URLs at the URL and Fetch boundaries', () => {
     expect(obtainURLOrigin(document.getBaseURL())).toBe(env.origin);
   });
 
-  // Requires HTML's creator browsing-context and Document-state inheritance.
-  it.todo('retains a frozen Blob base URL when a new document inherits it after revocation', () => {
+  it('retains a frozen Blob base URL when a new document inherits it after revocation', () => {
     const { window, env, document } = createWindow(new UserAgent(), null);
     const url = window.URL.createObjectURL(new window.Blob([]));
     const base = window.document.createElement('base');

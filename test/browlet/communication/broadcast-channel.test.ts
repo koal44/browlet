@@ -440,9 +440,8 @@ function createWindow(
   document.origin = origin;
   document.browsingContext = new BrowsingContext(env.realm.windowProxy);
   env.window.setAssociatedDocument(document);
-  env.realm.windowProxy.setAssociatedWindow(env.realm.globalObject);
+  document.makeActive();
   const navigable = new TopLevelTraversable(createDocumentState(document));
-  env.markExecutionReady();
   return {
     env, window: env.realm.windowProxy.platform, document, navigable,
     drain() { while (agent.eventLoop.runTaskTurn()) { /* Drain runnable tasks. */ } },

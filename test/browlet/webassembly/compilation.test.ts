@@ -186,6 +186,7 @@ function fixture(): Browlet {
   const document = realm.getAssociatedDocument();
   // Compilation completes in an HTML task, so the sibling needs an active Document.
   document.browsingContext = new BrowsingContext(realm.windowProxy);
+  document.makeActive();
   new TopLevelTraversable(createDocumentState(document));
   Reflect.set(browser.window, 'foreign', foreign);
   return browser;

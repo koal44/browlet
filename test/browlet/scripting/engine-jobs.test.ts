@@ -199,6 +199,6 @@ function createSiblingTraversable(first: TopLevelTraversable): TopLevelTraversab
   const document = env.createDocument();
   document.browsingContext = new BrowsingContext(env.realm.windowProxy);
   env.window.setAssociatedDocument(document);
-  env.realm.windowProxy.setAssociatedWindow(env.realm.globalObject);
+  document.makeActive();
   return new TopLevelTraversable(createDocumentState(document));
 }

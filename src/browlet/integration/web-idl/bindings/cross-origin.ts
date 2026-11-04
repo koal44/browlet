@@ -7,6 +7,7 @@ import {
 import { areSameOrigin, areSameOriginDomain, type Origin } from '../../../../url/index';
 
 import { OpenerPolicy, type OpenerPolicyAccessReportParams } from '../../../browsing/policy/index';
+import type { DocumentImpl } from '../../../dom/nodes/index';
 import type { WindowProxyHandle } from '../../../browsing/window/index';
 import type { BrowletEnvironment } from '../../../environment/index';
 import type { BrowsingContext } from '../../../browsing/navigation/index';
@@ -234,15 +235,21 @@ export class CrossOriginObjectBinding {
     if (typeof property !== 'string' || !this.isCrossOriginAccessibleWindowPropertyName(property)) return;
     const accessorDocument = accessor.activeDocument;
     const accessedDocument = accessed.activeDocument;
-    if (!accessorDocument.isFullyActive() || !accessedDocument.isFullyActive()) {
+    if (
+      accessorDocument === null || accessedDocument === null ||
+      !accessorDocument.isFullyActive() || !accessedDocument.isFullyActive()
+    ) {
       throw new InternalError('COOP access reporting requires fully active documents');
     }
     const accessorTop = accessor.topLevelBrowsingContext!;
     const accessedTop = accessed.topLevelBrowsingContext!;
     const accessorTopDocument = accessorTop.activeDocument;
     const accessedTopDocument = accessedTop.activeDocument;
-    const accessorAncestors = getSameOriginAncestorContexts(accessor, accessorTopDocument.origin);
-    const accessedAncestors = getSameOriginAncestorContexts(accessed, accessedTopDocument.origin);
+    if (accessorTopDocument === null || accessedTopDocument === null) {
+      throw new InternalError('COOP access reporting requires active top-level documents');
+    }
+    const accessorAncestors = getSameOriginAncestorContexts(accessorDocument, accessorTopDocument.origin);
+    const accessedAncestors = getSameOriginAncestorContexts(accessedDocument, accessedTopDocument.origin);
     if (accessorAncestors === null || accessedAncestors === null) return;
     if (accessorTop.virtualBrowsingContextGroupID === accessedTop.virtualBrowsingContextGroupID) return;
 
@@ -439,9 +446,9 @@ const interfaceProperties = new WeakMap<AssembledInterface, readonly CrossOrigin
 const fallbackKeys: (string | symbol)[] = ['then', Symbol.toStringTag, Symbol.hasInstance, Symbol.isConcatSpreadable];
 
 /** Collect the live inclusive ancestry, rejecting a cross-origin participant before reporting. */
-function getSameOriginAncestorContexts(context: BrowsingContext, topOrigin: Origin): BrowsingContext[] | null {
+function getSameOriginAncestorContexts(document: DocumentImpl, topOrigin: Origin): BrowsingContext[] | null {
   const ancestors: BrowsingContext[] = [];
-  for (const navigable of context.activeDocument.getInclusiveAncestorNavigables()) {
+  for (const navigable of document.getInclusiveAncestorNavigables()) {
     if (!areSameOrigin(navigable.activeDocument!.origin, topOrigin)) return null;
     ancestors.push(navigable.activeBrowsingContext!);
   }

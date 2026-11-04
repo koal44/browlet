@@ -101,9 +101,9 @@ describe('new navigable target selection', () => {
     expect(window.lastActivationTimestamp).toBe(-Infinity);
   });
 
-  it('uses the real top-level factory after auxiliary creation, including storage cloning and registration', () => {
+  it('creates an auxiliary top-level traversable, including storage cloning and registration', () => {
     const { userAgent, source, window } = fixture();
-    const auxiliary = supplyAuxiliaryCreation(source);
+    const auxiliary = vi.spyOn(BrowsingContext, 'createAuxiliary');
     const clone = vi.spyOn(source.storageShed, 'cloneSessionStorageInto');
     const created = vi.spyOn(userAgent, 'webDriverBiDiNavigableCreated');
 
@@ -122,7 +122,6 @@ describe('new navigable target selection', () => {
 
   it.each([false, true])('copies popup sandbox restrictions with noopener=%s and retains only a permitted opener', (noopener) => {
     const { source, document } = fixture();
-    supplyAuxiliaryCreation(source);
     const flags = document.activeSandboxingFlagSet;
     flags.add('sandboxed-navigation');
     flags.add('sandboxed-forms');
@@ -156,7 +155,7 @@ describe('new navigable target selection', () => {
     document.openerPolicy.value = policy;
     document.env.topLevelOrigin = crossOrigin ? createOpaqueOrigin() : document.origin;
     vi.spyOn(source, 'isAllowedBySandboxingToNavigate').mockReturnValue(true);
-    const auxiliary = supplyAuxiliaryCreation(source);
+    const auxiliary = vi.spyOn(BrowsingContext, 'createAuxiliary');
 
     const [target, type] = source.chooseNavigable('named', false);
 
@@ -170,7 +169,7 @@ describe('new navigable target selection', () => {
     const { source, document } = fixture();
     document.openerPolicy.reportOnlyValue = 'same-origin-plus-COEP';
     document.env.topLevelOrigin = createOpaqueOrigin();
-    const auxiliary = supplyAuxiliaryCreation(source);
+    const auxiliary = vi.spyOn(BrowsingContext, 'createAuxiliary');
 
     const [, type] = source.chooseNavigable('_blank', false);
 
@@ -178,11 +177,13 @@ describe('new navigable target selection', () => {
     expect(auxiliary).toHaveBeenCalledOnce();
   });
 
-  it('keeps the auxiliary dependency explicit, after activation consumption and before registration', () => {
+  it('propagates creation failure after activation consumption and before registration', () => {
     const { userAgent, source, window } = fixture();
     const created = vi.spyOn(userAgent, 'webDriverBiDiNavigableCreated');
+    const failure = new Error('Creation failed');
+    vi.spyOn(BrowsingContext, 'createAuxiliary').mockImplementation(() => { throw failure; });
 
-    expect(() => source.chooseNavigable('_blank', false)).toThrow('Auxiliary browsing-context creation is not implemented');
+    expect(() => source.chooseNavigable('_blank', false)).toThrow(failure);
     expect(window.lastActivationTimestamp).toBe(-Infinity);
     expect(userAgent.topLevelTraversableSet).toEqual(new Set([source]));
     expect(created).not.toHaveBeenCalled();
@@ -207,16 +208,4 @@ function fixture() {
   // Notification and expiry are unfinished; consumption and creation run their real algorithms.
   const activation = vi.spyOn(window, 'hasTransientActivation').mockReturnValue(true);
   return { userAgent, source, document, window, activation };
-}
-
-function supplyAuxiliaryCreation(source: TopLevelTraversable) {
-  return vi.spyOn(BrowsingContext, 'createAuxiliary').mockImplementation((opener) => {
-    const group = source.activeBrowsingContext!.group!;
-    const [context, document] = BrowsingContext.create(null, null, group);
-    // Supply only the unfinished context inheritance; retain the real top-level factory above it.
-    group.append(context);
-    context.openerBrowsingContext = opener;
-    context.isAuxiliary = true;
-    return [context, document];
-  });
 }

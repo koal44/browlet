@@ -147,6 +147,7 @@ function fixture(tag = 'iframe', sameAgent = true) {
     const realm = getRelevantRealm(createSiblingWindow(browser));
     document = realm.env.getAssociatedDocument()!;
     document.browsingContext = new BrowsingContext(realm.windowProxy);
+    document.makeActive();
   } else {
     [, document] = BrowsingContext.createTopLevel(owner.env.userAgent);
   }

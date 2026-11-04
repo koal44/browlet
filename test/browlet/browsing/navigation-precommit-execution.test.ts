@@ -154,6 +154,7 @@ describe('Navigate-event precommit execution', () => {
     const otherDocument = siblingRealm.env.getAssociatedDocument()!;
     // Auxiliary/iframe creation is unfinished; provide its existing activity relationship.
     otherDocument.browsingContext = new BrowsingContext(siblingRealm.windowProxy);
+    otherDocument.makeActive();
     const traversable = new TopLevelTraversable(createDocumentState(otherDocument));
     const foreign = { realm: siblingRealm, browser: new PageEvaluation(traversable) };
     expect(foreign.realm.agent).toBe(realm.agent);

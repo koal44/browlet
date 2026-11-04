@@ -104,8 +104,8 @@ mutate independently. Other buckets, endpoint data, and proxy references are
 not copied; equal destination keys are replaced without clearing unrelated keys.
 Top-level traversable creation resolves the opener's top-level traversable and
 calls this operation with the two sheds directly; Storage needs no traversable
-interface or runtime object. Auxiliary browsing-context creation is still a navigation
-stub; its integration test supplies only that missing step.
+interface or runtime object. Auxiliary browsing-context creation now supplies the
+creator state; the integration test exercises the real factory with a nested opener.
 
 Cloning reaches the shelf/bucket factories and bottle records from §§4.4–4.6,
 so those small dependencies are implemented here. They initialize the default

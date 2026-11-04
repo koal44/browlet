@@ -163,6 +163,7 @@ describe('native HostPromiseRejectionTracker to HTML events', () => {
     const document = otherRealm.windowImplementation.document;
     document.browsingContext = new BrowsingContext();
     document.browsingContext.initializeWindowProxy(otherRealm.windowProxy);
+    document.makeActive();
     new TopLevelTraversable(createDocumentState(document));
     expect(document.isFullyActive()).toBe(true);
     expect(otherRealm.agent.eventLoop).toBe(f.loop);

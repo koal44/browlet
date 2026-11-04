@@ -193,6 +193,27 @@ describe('embed child-navigation state', () => {
 });
 
 describe('child navigable creation', () => {
+  it('creates the inherited iframe context before reaching the unfinished traversal queue', () => {
+    const userAgent = new UserAgent();
+    const parent = TopLevelTraversable.create(userAgent, null, '');
+    const owner = parent.activeDocument!;
+    const container = owner.createElement('iframe') as HTMLIFrameElementImpl;
+    owner.body!.appendChild(container);
+
+    expect(() => userAgent.createChildNavigable(container)).toThrow('Session history traversal queue is not implemented');
+
+    const child = container.contentNavigable!;
+    const document = child.activeDocument!;
+    expect(child.parent).toBe(parent);
+    expect(document.origin).toBe(owner.origin);
+    expect(document.isFullyActive()).toBe(true);
+    expect(document.policyContainer).not.toBe(owner.policyContainer);
+    expect(child.activeBrowsingContext!.activeDocument).toBe(document);
+    expect(document.env.realm).not.toBe(owner.env.realm);
+    expect(child.activeSessionHistoryEntry.step).toBe('pending');
+    expect(parent.activeSessionHistoryEntry.documentState.nestedHistories).toEqual([]);
+  });
+
   it.each([null, '', 'child-target'])('initializes a child with name %s before queuing its history', (name) => {
     const { parent, container, document, context, createContext, queued, created } = prepareChildCreation();
     if (name !== null) container.setAttribute('name', name);
@@ -315,7 +336,7 @@ function prepareChildCreation() {
   const owner = parent.activeDocument!;
   const container = owner.createElement('iframe') as HTMLIFrameElementImpl;
   owner.body!.appendChild(container);
-  // Supply only the unfinished creator/embedding inheritance and queue drain.
+  // Supply a controllable initial Document and the unfinished queue drain for the ordering tests.
   const [context, document] = BrowsingContext.create(null, null, parent.activeBrowsingContext!.group!);
   document.origin = owner.origin;
   const createContext = vi.spyOn(BrowsingContext, 'create').mockReturnValue([context, document]);

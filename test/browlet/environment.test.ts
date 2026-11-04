@@ -407,7 +407,7 @@ function createEnvironment(url: string, parent: Navigable | null = null) {
   document.origin = origin;
   document.browsingContext = new BrowsingContext(proxy);
   window.setAssociatedDocument(document);
-  proxy.setAssociatedWindow(window.env.realm.globalObject);
+  document.makeActive();
   const documentState = createDocumentState(document);
   const navigable = parent === null
     ? new TopLevelTraversable(documentState)

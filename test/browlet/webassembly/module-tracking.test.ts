@@ -118,6 +118,7 @@ function fixture() {
   const foreignRealm = getRelevantRealm(foreign);
   const document = foreignRealm.getAssociatedDocument();
   document.browsingContext = new BrowsingContext(foreignRealm.windowProxy);
+  document.makeActive();
   new TopLevelTraversable(createDocumentState(document));
   Reflect.set(browser.window, 'foreign', foreign);
   return { browser, context, foreignRealm };

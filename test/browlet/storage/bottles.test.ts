@@ -81,7 +81,7 @@ function createEnvironment(url: string, userAgent: UserAgent, parent: Navigable 
   document.origin = origin;
   document.browsingContext = new BrowsingContext(env.realm.windowProxy);
   env.window.setAssociatedDocument(document);
-  env.realm.windowProxy.setAssociatedWindow(env.realm.globalObject);
+  document.makeActive();
   const state = createDocumentState(document);
   const navigable = parent === null ? new TopLevelTraversable(state) : new Navigable(state, parent);
   return { env, navigable };

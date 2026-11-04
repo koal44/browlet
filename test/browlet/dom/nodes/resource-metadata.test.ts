@@ -346,7 +346,7 @@ function createLocalChildDocument(parent: DocumentImpl, url: string, sandboxed =
   if (sandboxed) document.activeSandboxingFlagSet.add('sandboxed-origin');
   document.browsingContext = new BrowsingContext(env.realm.windowProxy);
   env.window.setAssociatedDocument(document);
-  env.realm.windowProxy.setAssociatedWindow(env.realm.globalObject);
+  document.makeActive();
   const container = parent.createElement('iframe') as HTMLIFrameElementImpl;
   parent.body!.appendChild(container);
   container.contentNavigable = new Navigable(createDocumentState(document), parent.getNodeNavigable());

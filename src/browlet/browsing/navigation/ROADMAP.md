@@ -8,13 +8,17 @@ outside consumers use its index, while its modules import each other directly.
 
 - `browsing-context.ts` retains context/group relationships and creates the
   initial Window and about:blank document through the UserAgent's factory.
+  Its nullable active Document is stored separately from the Window association;
+  `Document.makeActive()` updates it before retargeting the WindowProxy.
+  Creator/iframe inheritance and auxiliary-context creation are connected;
+  the [§7.3.2.1 audit](#html-7321-creating-browsing-contexts) records the remaining consumers.
 - `TopLevelTraversable.create()` registers the initialized entry and calls the
   UserAgent's provisional BiDi creation hook. `UserAgent.createFreshTopLevelTraversable()`
   adds the initial navigation request; that request still reaches `navigate()`'s
   explicit unfinished boundary.
 - `UserAgent.createChildNavigable()` forwards to `Navigable.createChild()`,
   which prepares iframe child state and nested-history work;
-  context inheritance, traversal-queue execution, and the final history update
+  traversal-queue execution and the final history update
   remain explicit dependencies. Iframe/object/frame `contentDocument` and
   `contentWindow` project the retained child through their existing bindings.
   Embed retains the same internal child association; its resource setup throws
@@ -35,8 +39,11 @@ outside consumers use its index, while its modules import each other directly.
 - `Navigable.findNavigableByTargetName()` searches the source subtree, its
   traversable, and then familiar contexts in the same group. `chooseNavigable()`
   uses it for existing named targets and coordinates new-target policy, activation
-  consumption, COOP/noopener, creation, and sandbox bookkeeping. Activation lookup,
-  sandbox permission, familiarity, and auxiliary creation remain explicit dependencies.
+  consumption, COOP/noopener, creation, and sandbox bookkeeping. Activation lookup
+  and sandbox permission remain explicit dependencies. Context familiarity checks
+  active origins, live ancestry, and auxiliary openers. Named lookup limits that
+  walk to the immediate opener; the
+  [related-context audit](#html-7322-related-browsing-contexts) records its boundaries.
 - `Navigable` prepares response policy inputs, selects the browsing context and
   Window/realm, and creates the destination document and history entry.
   `loadHTMLDocument()` starts HTML parsing and coordinates completion or abortion.
@@ -64,8 +71,8 @@ outside consumers use its index, while its modules import each other directly.
   unfinished; its [audit](./api/ROADMAP.md) records the remaining dependencies.
 - `Traversable` owns its session-storage shed across Document replacements.
   Top-level creation clones the opener's top-level shed through the
-  [Storage substrate](../../../storage/ROADMAP.md#storage-sheds); auxiliary
-  browsing-context creation still blocks the full opener flow.
+  [Storage substrate](../../../storage/ROADMAP.md#storage-sheds), including
+  the real auxiliary-context creation path.
   Final `UserAgent.removeTopLevelTraversable()` clears that traversable's session
   data after document teardown. Definite closing must reach this step only after
   unload cancellation and history/descendant destruction; those callers remain
@@ -287,15 +294,16 @@ now expose name/closed state and delegate `stop()` to `Navigable.stopLoading()`.
 That operation is explicitly unfinished: it must use the unload counter and
 ongoing-navigation state, preserve traversals, and abort the active Document
 and its descendants. `isScriptClosable` implements the history/web-creation
-predicate, but source snapshots, familiarity, sandbox navigation permission,
-and definite closing remain prerequisites for a successful `Window.close()`.
+predicate, but source snapshots, incumbent-context selection for familiarity,
+sandbox navigation permission, and definite closing remain prerequisites for a
+successful `Window.close()`.
 Opening now coordinates feature processing, target selection, new/existing
 branches, and return rules. `Navigable.chooseNavigable()` handles empty, `_self`,
 `_parent`, and `_top` names and calls the existing-target lookup coordinator.
-Named lookup still needs source activation, sandbox permission, and familiarity.
+Named lookup still needs source activation and sandbox permission.
 New-target selection now supplies popup policy, activation consumption,
-COOP/noopener, and sandbox propagation. Auxiliary creator inheritance remains
-unfinished; null-opener creation already uses the existing top-level factory.
+COOP/noopener, and sandbox propagation. Both auxiliary and null-opener creation
+now use their context factories; feature setup and navigation remain unfinished.
 The empty-name branch applies to direct algorithm
 callers; `Window.open()` normalizes its empty target to `_blank` first.
 
@@ -417,8 +425,8 @@ responses require network-error processing, currently an explicit guard.
 Policy selection now implements history/srcdoc/initiator/response precedence,
 but full navigation must capture source/target policies and supply its actual
 history state. Inline-srcdoc creation must combine inherited CSP before selecting
-its origin. Initial blank creator inheritance, history reconstruction, and popup
-creator state remain unfinished.
+its origin. Initial blank and auxiliary creator inheritance now run in context
+creation; history reconstruction and navigation-source capture remain unfinished.
 
 `isNavigationOrHistoryUpdateBlocked()` is HTML's implementation-defined
 navigation/history throttle; Browlet currently chooses not to throttle. It is
@@ -756,7 +764,7 @@ Traversable base does not implement a new kind of embedded traversable.
 
 The existing `TopLevelTraversable.create()` follows both context-selection
 branches: a null opener creates a top-level context/group; a supplied opener
-reaches the explicit auxiliary-context dependency. It captures the resulting
+creates an auxiliary context in the opener's top-level group. It captures the resulting
 Document, initiator origin, origin, target name, and about base URL in document
 state; initializes the navigable; assigns step 0; and appends the initial entry.
 The existing provisional History length/index initialization remains in place.
@@ -765,11 +773,10 @@ audits' explicit dependencies.
 
 For an opener, session storage is cloned from its **top-level** traversable,
 including when the opener is a child. The existing Storage implementation and
-focused clone test cover separate destination maps. Auxiliary context creation
-still throws: creator origin/base URL, policy/referrer inheritance, opener/group
-relationships, and the new Window environment need the §7.3.2.1 audit. The test
-supplies only that unfinished context factory; it does not establish working
-`window.open()` or auxiliary browsing contexts.
+focused clone test cover separate destination maps. The §7.3.2.1 follow-up supplies
+creator origin/base URL, policy/referrer inheritance, opener/group relationships,
+and the new Window environment. The clone test now uses the real factory;
+`window.open()` still needs feature setup and navigation.
 
 After registration, creation now calls
 `UserAgent.webDriverBiDiNavigableCreated(traversable, openerNavigableForWebDriver)`.
@@ -891,15 +898,16 @@ entry, and call `Traversable.updateForNavigableCreationOrDestruction()`.
 The BiDi creation hook follows queue submission and receives the child.
 Tests exercise delayed parent-state selection, same-Document history entries,
 grandchild group/queue ownership, and factory failure without attachment or
-notification. Only unfinished factories, queue draining, and final history
-application are substituted by the creation tests.
+notification. Ordering tests control their initial Document, queue draining, and
+final history application. A separate case uses the real creator/iframe factory
+and confirms that it reaches the unfinished traversal queue.
 
 The complete path is **not executable yet**:
 
-- `BrowsingContext.create()` throws for creator inheritance; §7.3.2.1 must supply
-  creator/group state, inherited origin/base/cookie/referrer/policy state,
-  embedder environment ancestry, sandbox/Permissions Policy, and Window setup.
-  Its current embedder type is iframe-only. `createChild()` explicitly rejects
+- `BrowsingContext.create()` now supplies creator/group state, inherited
+  origin/base/cookie/referrer/policy state, embedder environment ancestry,
+  sandbox/Permissions Policy, and Window setup. Its embedder type remains
+  iframe-only. `createChild()` explicitly rejects
   object, embed, and legacy frame until their context/policy inputs are supported.
 - `appendSessionHistoryTraversalSteps()` still throws at §7.4.1.3's missing queue
   drain. Accepting work without running it would leave child entries pending.
@@ -1111,8 +1119,8 @@ teardown audit rather than an ad hoc deduplication here.
 `UserAgent.removeTopLevelTraversableFromUI()` is an explicit no-op while Browlet
 has no UI host. A future host must connect this removal effect. The existing
 provisional BiDi hook remains unfinished. Window's public `close()` still stops
-before its source snapshot, script-closability, familiarity, sandbox permission,
-and DOM-manipulation-task handoff; its source now names `definitelyClose()` as
+before its source snapshot, script-closability, incumbent-context familiarity
+check, sandbox permission, and DOM-manipulation-task handoff; its source names `definitelyClose()` as
 that task's destination. These checks are not replaced with unconditional close.
 
 ### Specification gaps and lifecycle choices
@@ -1240,22 +1248,24 @@ an identical early sandbox check from one current probe.
   self/ancestor relationships, activation-dependent top navigation, sandbox flags,
   and the target's one permitted sandboxed navigator. The snapshot is passed
   intact instead of consulting potentially changed source state per candidate.
-- `BrowsingContext.isFamiliarWith(other)` is the explicit throwing owner for
-  HTML §7.3.2.2: active origins, the source's top-level context, the target's
-  auxiliary opener chain, and its ancestor contexts. Other-group contexts are
-  not searched, even if this future predicate would consider them familiar.
+- `BrowsingContext.isFamiliarWith(other)` implements HTML §7.3.2.2: active
+  origins, the source's top-level context, the target's auxiliary opener chain,
+  and its ancestor contexts. Other-group contexts are not searched, even if the
+  predicate would consider them familiar. Named lookup uses
+  `isFamiliarForNamedLookup()`'s approved one-opener restriction; see the
+  [follow-up audit](#html-7322-related-browsing-contexts).
 - The [new-target follow-up](#html-7317-new-target-selection) now supplies the
   choosing branch, its UserAgent settings, and activation consumption. Its
   missing creation/navigation dependencies remain separate from named lookup.
-- `TopLevelTraversable.create()` already supplies null-opener creation,
-  registration, and opener session-storage cloning. Non-null openers still reach
-  `BrowsingContext.createAuxiliary()` and creator-state inheritance. Immediate
+- `TopLevelTraversable.create()` supplies null-opener and auxiliary creation,
+  registration, and opener session-storage cloning. Immediate
   replacement navigation, CSSOM View feature effects, and `Window.open()`'s
   URL/history updates remain their existing explicit dependencies.
 
 Production named opening is therefore still incomplete. Tests supply only
-activation, sandbox permission, familiarity, and pre-existing child/group
-associations; they do not claim these owners are implemented. The new lookup
+activation and sandbox permission, with explicit child/group associations.
+Familiarity now runs through its implementation; tests of candidate ordering
+still override individual predicates deliberately. The new lookup
 requires no native changes. The follow-up below completes the subsection's
 coordinator while preserving these prerequisites.
 
@@ -1322,10 +1332,10 @@ defaults allow popups; these probes do not measure browser popup-blocker default
 
 ### Remaining dependencies and stopping point
 
-Selection still reaches `Window.hasTransientActivation()` when popup blocking
-is enabled and `BrowsingContext.createAuxiliary()` for a non-null opener. The
-latter needs creator/opener/group inheritance in §7.3.2.1. Named lookup still
-needs sandbox permission and familiarity. The one-permitted-navigator field is
+Selection still reaches the unfinished `Window.hasTransientActivation()` when
+popup blocking is enabled. `BrowsingContext.createAuxiliary()` now supplies
+creator/opener/group inheritance for a non-null opener. Named lookup still
+needs sandbox permission. The one-permitted-navigator field is
 now populated, but §7.4.2.5 must consume it.
 
 `Window.open()` still needs CSSOM View feature setup and about:blank URL/history
@@ -1344,15 +1354,372 @@ Twenty-eight new selection tests and two consumption tests cover policy and
 sandbox rejection, current/none choices, successful null-opener creation,
 COOP-forced separation, naming, sandbox copying, BiDi provenance, storage-clone
 coordination, and activation scope/ordering. The tests supply the unfinished
-activation predicate, local sandbox permission when named lookup needs it, and
-auxiliary creation only where that branch is being exercised. The top-level
-factory and consumption algorithm run normally. Separate cases retain the real
-auxiliary error and exercise sandbox rejection through projected `Window.open()`.
+activation predicate and local sandbox permission when named lookup needs it.
+Following §7.3.2.1, both context factories and the consumption algorithm run
+normally. Separate cases inject a creation failure to check its propagation and
+exercise sandbox rejection through projected `Window.open()`.
 
 Together with target lookup, top-level creation, existing activation, and opening
 suites, all 129 tests pass on Node 24.19.0, Node 26.8.1, and custom Node 27.0.0-pre,
 each with and without the addon. Typechecking, touched-file ESLint, import
 hierarchy, and whitespace checks pass. No new expected failures or runtime rebuilds.
+
+## HTML §7.3.2: Browsing-context foundations
+
+Audited the [browsing-context preamble](https://html.spec.whatwg.org/multipage/document-sequences.html#windows)
+against HTML `404b3eb` (30 October 2026), refreshed on 2 November. This slice
+stops before §7.3.2.1's creation algorithms.
+
+`BrowsingContext.activeDocument` now stores the specified nullable state and
+starts at null, independently of WindowProxy initialization. `activeWindow`
+continues to read the proxy's associated Window. Reusing the initial about:blank
+Window can associate a replacement Document before activation; that preparation
+must not replace the context's active Document. The existing
+[make-active operation](https://html.spec.whatwg.org/multipage/browsing-the-web.html#make-active)
+now assigns that state before retargeting the proxy and marking execution ready.
+`finishLoading()` checks the stored active Document before producing load events.
+
+`topLevelTraversable` follows the active Document's node navigable, rather than
+the context's retained inverse navigable link. It requires an active Document
+with a node navigable and throws InternalError when an internal caller violates
+that precondition. Top-level opener storage cloning uses this accessor.
+`topLevelBrowsingContext` still returns null without a fully active Document.
+Navigation response preparation and COOP reporting retain their active-Document
+preconditions; named-target lookup ignores contexts awaiting initial activation.
+
+The rest of the preamble maps to these existing owners and explicit dependencies:
+
+| Passage | Implementation or remaining dependency |
+| --- | --- |
+| WindowProxy and document sequence | BrowsingContext retains the proxy; navigation can replace Window/Document while the proxy persists. A navigable can retain multiple contexts across group switches. |
+| Opener context/origin, popup and auxiliary flags, initial URL, virtual group ID | Existing fields have the specified null/false/0 defaults. Auxiliary identity remains distinct from opener presence; the §7.3.2.1 follow-up initializes it through `createAuxiliary()`. |
+| Popup visibility and optional UI | `BarProp.visible` reads the popup flag. Position/size setup remains the throwing CSSOM View `setUpFeatures()` dependency; browser window/tab UI remains a provisional UserAgent host effect. |
+| Virtual group ID | COOP enforcement already allocates and propagates report-only group identities; reporting delivery dependencies remain in the policy roadmap. |
+| Document's nullable browsing context | Document construction initializes null, including DOMImplementation-created documents. `Document.destroy()` clears the association; recursive destruction and iframe removal callers remain unfinished. |
+| Window reuse and initial history replacement | The current response path reuses a same-origin initial about:blank Window. Full navigation/history application must supply replacement handling; this slice does not complete those producers. |
+| Prefer Document/navigable terminology | New behavior stays on those owners unless it needs the context's proxy, active-document slot, group, or agent selection. |
+
+The §7.3.2.1 follow-up below supplies creator/iframe policy and environment
+inheritance and auxiliary creation. The §7.3.2.2 follow-up implements context
+familiarity in `browsing-context.ts`.
+
+Regressions reproduced the fresh-context getter throwing instead of returning
+null, premature active-Document replacement during Window reuse, and premature
+load completion. Coverage also checks activation, child-to-top-level lookup,
+and rejection of a retained context whose Document no longer has a navigable.
+
+### Validation
+
+The browsing checks and affected fixture suites cover 122 files and 2,719 cases
+per configuration. Hand-built Window fixtures now call `Document.makeActive()`
+instead of only retargeting their proxy, so they initialize the active Document
+and execution readiness through the same operation as production.
+
+| Configuration | Passing | Existing expected failures |
+| --- | ---: | ---: |
+| Node 24.19.0, Node 26.8.1, custom Node 27.0.0-pre; addon disabled | 2,636 each | 83 each |
+| Node 24.19.0 and Node 26.8.1; addon enabled | 2,706 each | 13 each |
+| Custom Node 27.0.0-pre; addon enabled | 2,711 | 8 |
+
+All six runs pass. Typechecking, type contracts, touched-file ESLint, import
+hierarchy, and whitespace checks also pass. No expected-failure classifications
+changed, and no runtime or addon rebuild was needed.
+
+## HTML §7.3.2.1: Creating browsing contexts
+
+Audited [creating browsing contexts](https://html.spec.whatwg.org/multipage/document-sequences.html#creating-a-new-browsing-context)
+against HTML `404b3eb` (30 October 2026), refreshed on 2 November. This includes
+common creation, top-level creation, auxiliary creation, and origin determination;
+it stops before §7.3.2.2's related-context algorithms.
+
+### Creation and inheritance
+
+| Specification requirements | Owner and result |
+| --- | --- |
+| Fresh context, creation time, creator origin/base/virtual ID | `BrowsingContext.create()` retains the creator origin and base URL records, obtains the top-level virtual ID, and requires that creator to have a fully active context. Retaining the base record preserves a captured Blob entry after revocation. |
+| Creation sandbox flags, origin, Permissions Policy, similar-origin agent | The existing flag and policy factories run before Window allocation; `determineOrigin()` applies sandbox opacity before inheritance. The agent request uses `false` for origin-agent-cluster, as specified. |
+| Realm, Window, global-this, environment | UserAgent's existing Window factory creates the realm and WindowProxy. Top-level creation URL comes from the embedder's relevant environment, then the creator's, then about:blank. Top-level origin comes from the embedder's relevant environment or the newly selected origin. |
+| Initial Document and load timing | Existing initialization supplies HTML/`text/html`/quirks state, context, policy, independent active flags, coarsened navigation start, initial-blank state, inherited base, declarative-shadow-root permission, and a fresh custom-element registry. The reviewed cookie-URL inheritance choice remains intact. |
+| Iframe policy and ancestor lists | The referrer-policy selector and Document ancestry algorithms run with the embedder's current node Document, including after adoption. Insecure-request upgrade inheritance also uses that Document; it does not substitute the element's original environment. |
+| Creator referrer, policy container, COOP | The full creator URL is serialized; the policy container is cloned. A creator same-origin with its environment's top-level origin shares the top-level active Document's opener-policy object. A foreign creator retains the default opener policy. |
+| Initial completion | URL assertions, post-load readiness, HTML/head/body population, activation, and complete-loading bookkeeping run in order. Container load-event delivery remains explicitly unfinished in `Document.completelyFinishLoading()`. |
+| Top-level factory | `createTopLevel()` uses the existing new-group factory and returns its first context and Document. Common creation does not append a context to a group's top-level set. |
+| Auxiliary factory | `createAuxiliary()` selects the opener's top-level traversable's active context/group, creates with the active opener Document, marks auxiliary status, appends group membership, and records opener identity/origin and the top-level virtual ID. |
+
+`TopLevelTraversable.create()` now reaches the real auxiliary factory before
+cloning the opener's top-level session-storage shed and registering the new
+traversable. Selection/storage tests no longer supply a fake auxiliary factory.
+Iframe child creation now reaches the traversal queue rather than failing at
+creator inheritance; its remaining queue/history work is still visible.
+
+### Origin determination and callable shape
+
+`BrowsingContext.determineOrigin(url, sandboxFlags, sourceOrigin)` returns a
+fresh opaque origin for sandboxed-origin or null URL, retains source identity
+for srcdoc and matching about:blank URLs, and otherwise uses the URL origin.
+Srcdoc requires a source origin. Shared identity preserves subsequent
+`document.domain` changes; query/fragment handling and URL-origin fallback have
+focused tests.
+
+The reviewed URL input permits null. `SPEC_CLASH(origin-null-url-input)` records
+why: HTML's header requires a URL, but its second step explicitly handles null.
+Browlet implements that step; the pending signature-review marker is removed.
+The already-reviewed iframe-only embedder type remains unchanged: HTML's
+generic-element creation algorithm reaches sandbox flags defined only on iframe.
+Object/embed/legacy-frame creation still throws at its explicit owner boundary.
+
+### Initial about:blank referrer disagreement
+
+`SPEC_CLASH(initial-blank-referrer)` follows HTML/Chromium, as Eric approved on
+2 November: clone the creator's policy separately, but set the initial Document's
+referrer to its full serialized URL, including the fragment. This is initial
+Document state, not the network request referrer selected by Fetch.
+
+The reproducible browser-only probe is
+`node-compat/experimental/browsing-context-creation.mjs` in Experimental.
+It creates an iframe with no src and `window.open('', '_blank')`, reads both
+Documents synchronously, and compares default policy with a `no-referrer` meta
+policy. For `https://creation.test/creator?query#fragment`, the observed results
+were identical between those two policy variants:
+
+| Browser | Initial iframe referrer | Initial popup referrer |
+| --- | --- | --- |
+| Chromium 156.0.8078.4 | Full creator URL, with fragment | Full creator URL, with fragment |
+| Firefox 157.0 | Empty | Empty |
+| WebKit 27.2 | Creator URL without fragment | Empty |
+
+All three exposed about:blank, inherited the `/base/` base URL and creator
+origin, and reported complete readiness. The no-referrer probe alone initially
+suggested policy application in Firefox and WebKit popups; the default control
+does not establish that explanation. These notes record the observed initial
+Document behavior without claiming how later navigation computes its referrer.
+
+### Remaining dependencies
+
+- `Navigable.createChild()` still stops at the throwing traversal-queue append;
+  its queued history update remains §7.4.6.1 work. No automatic iframe insertion,
+  src/srcdoc loading, non-iframe loading, or container load-event producer is added.
+- Later navigation must supply its source origin and final flags to
+  `determineOrigin()`. `NavigationParams` now names that dependency beside its
+  provisional URL-origin selection; it lacks the source snapshot needed for
+  about:blank/srcdoc inheritance. Cookie/base/policy source capture and inline
+  srcdoc CSP ordering remain later navigation work too.
+- Popup restrictions are copied by target selection **after** initial creation;
+  subsequent navigation must consume that context state. The one-permitted
+  navigator still needs the navigation-permission consumer.
+- New Window creation does not complete `Window.open()`: activation lookup,
+  named-target sandbox checks, CSSOM View features, URL/history
+  effects, and navigation retain their explicit boundaries. BiDi delivery and
+  browser UI remain provisional host effects.
+- Existing engine/addon limitations and policy/report delivery dependencies are
+  unchanged; this slice adds no native machinery or runtime-specific fallback.
+
+### Validation
+
+The 24 new creation/origin tests cover creator and iframe inheritance, policy
+copying, COOP from a nested creator's top-level Document, adopted-element settings,
+auxiliary group/opener ownership, source identity, sandbox precedence, null URLs,
+and ordinary/Blob URL origins. The retained Blob-base regression now runs as an
+ordinary passing test. Child creation also exercises the real factory up to the
+remaining traversal-queue boundary, and target selection/storage use real
+auxiliary creation.
+
+The focused matrix runs 77 suites and 1,867 cases per configuration across
+navigation, policy, opening, environments, storage sheds, and object URLs:
+
+| Configuration | Passing | Existing expected failures |
+| --- | ---: | ---: |
+| Node 24.19.0, Node 26.8.1, custom Node 27.0.0-pre; addon disabled | 1,863 each | 4 each |
+| The same three bases; addon enabled | 1,866 each | 1 each |
+
+All six runs pass. Typechecking, type contracts, touched-file ESLint, import
+hierarchy, and whitespace checks pass. No new expected failures, addon changes,
+or runtime rebuilds were needed.
+
+## HTML §7.3.2.2: Related browsing contexts
+
+This audit covers [Related browsing contexts](https://html.spec.whatwg.org/multipage/document-sequences.html#nested-browsing-contexts)
+in HTML source `404b3eb14a7a936dddefb2d78e224dbeb01d2358` (2026-10-30),
+through familiarity and before §7.3.2.3's group algorithms.
+
+| Requirement | Implementation and boundary |
+| --- | --- |
+| Ancestor browsing context | `BrowsingContext.isAncestorOf()` checks the descendant's full activity and maps its ancestor navigables to their current active contexts. It excludes self and retained inactive ancestry. |
+| Top-level classification | `isTopLevel` checks whether the active Document's node navigable is a `Traversable`, as specified, rather than requiring `TopLevelTraversable`. HTML currently permits only top-level traversables, but deliberately defines this predicate more broadly. |
+| Top-level context lookup | The existing `topLevelBrowsingContext` returns null without a fully active Document and otherwise follows the navigable tree to its outermost context. Tests cover retained contexts and ancestor replacement. |
+| Prefer Document/navigable concepts | These context predicates stay with context-specific consumers. Existing tree traversal remains Document/navigable work; no reverse registry or second ancestry model is introduced. |
+| Familiarity | `isFamiliarWith()` implements strict origin equality, the source's top-level context, the target's auxiliary opener chain, and same-origin ancestors of fully active target Documents. `isFamiliarForNamedLookup()` shares those conditions but limits named lookup to one opener. |
+
+Familiarity is asymmetric and does not itself require group identity. Named
+lookup independently limits candidates to the source's group. Direct origin
+matches remain valid for retained active Documents that are no longer *fully*
+active; only ancestry/top-level checks require full activity. Fresh contexts
+without active Documents violate the familiarity operation's internal precondition
+and throw `InternalError`.
+
+### Specification choices and browser evidence
+
+- `SPEC_CLASH(browsing-context-ancestor-direction)`: HTML's opening sentence
+  reverses `potentialAncestor` and `potentialDescendant`; its steps test the
+  descendant's ancestor list. Browlet follows those steps and ordinary ancestry.
+- `SPEC_CLASH(familiarity-distant-target)`: retain HTML's direct same-origin
+  match even across several opener links. Chromium/Firefox reuse such a target;
+  WebKit's named lookup additionally restricts the opener relationship.
+- `SPEC_CLASH(familiarity-document-domain)`: use strict origin equality. In the
+  disowned-target probe, matching relaxed domains permit reuse in Chromium but
+  not Firefox/WebKit. [HTML issue #3747](https://github.com/whatwg/html/issues/3747)
+  discusses this exact distinction and the preference to ignore deprecated
+  `document.domain` here. This does not change same-origin-domain checks elsewhere.
+- `SPEC_CLASH(familiarity-opener-depth)`: limit named lookup to one opener,
+  following the browsers rather than HTML's recursive familiarity rule.
+  With A opening foreign B and B opening C, A is familiar with C under HTML;
+  all three browsers instead create another window for the named lookup.
+  [Gecko's documented algorithm](https://github.com/whatwg/html/issues/313#issuecomment-453648260)
+  explicitly stops before the opener's opener and describes its accumulated
+  security/compatibility constraints. This evidence prompted the approved
+  revision from recursive named lookup. The regression now rejects C, but accepts
+  it if B becomes same-origin with A. General `isFamiliarWith()` remains recursive;
+  `Window.close()` must be audited before adopting this lookup-specific limit.
+- `SPEC_GAP(familiarity-opener-termination)`: HTML recurses into a nullable opener
+  and supplies no cycle termination. Window APIs can clear or cycle these links;
+  all three browsers terminate and reject an unrelated target in those cases.
+  Browlet stops at null or a repeated context, retaining origin/top-level/ancestor
+  matches encountered. Checking each context's nonrecursive conditions before
+  following its opener preserves finite-chain results and allows matches within
+  cycles without recursion or rejecting the whole cycle in advance.
+
+Live browser-only probe `node-compat/experimental/browsing-context-familiarity.mjs`,
+2026-11-02: Chromium 156.0.8078.4, Firefox 157.0, WebKit 27.2. Each case uses
+actual Window APIs, verifies the opener links, and waits for the foreign Document;
+`Origin-Agent-Cluster: ?0` permits the domain-relaxation control. All three reuse
+a direct foreign auxiliary target, reject it after opener removal, and reject
+the unrelated opener cycle. The distant same-origin, foreign-chain, and relaxed
+domain differences are recorded above. These are named-lookup observations,
+not direct calls into a browser's private familiarity predicate.
+
+Source inspection explains the lookup boundaries: Chromium `1136757f47`
+(`FrameTree::FindFrameForNavigationInternal`, `LocalFrame::CanNavigate`) combines
+navigation permission with origin-domain ancestor checks and one target opener;
+Gecko `d92a7ec0e622` (`WindowGlobalChild::FindBrowsingContextWithName`,
+`nsContentUtils::CanNavigate`) uses strict principals and limits opener recursion
+to one link. WebKit `713192fa` (`FrameTree::find`, `isFrameFamiliarWith`) limits
+other-page candidates to direct/shared opener relationships. The discussion in
+[HTML issue #313](https://github.com/whatwg/html/issues/313) separates group
+membership from origin/opener lookup checks; clearing an opener does not move
+the context to another group. [Issue #5680](https://github.com/whatwg/html/issues/5680)
+tracks auxiliary identity versus current opener presence. Browlet preserves the
+existing distinction and follows the current HTML predicate for general familiarity.
+
+The [WebKit change](https://github.com/WebKit/WebKit/commit/7b91738ddc761fee01c2c20cf7f65b3693e7a156)
+introduced its additional relationship restriction in 2018 to enable process
+swapping. Browlet retains the direct same-origin match allowed by HTML and the
+other engines. HTML's [2023 opener change](https://github.com/whatwg/html/pull/8573)
+replaced the disowned flag with null without adjusting familiarity's recursion;
+its [2024 named-lookup rewrite](https://github.com/whatwg/html/pull/10818) also
+reused that predicate unchanged. Neither change supplies a cycle rule or an
+argument for transitive opener lookup.
+
+### Remaining dependencies and validation
+
+Named lookup still reaches `Window.hasTransientActivation()` and
+`Navigable.isAllowedBySandboxingToNavigate()`'s explicit unfinished boundaries.
+`Window.close()` must select its incumbent context, take a source snapshot,
+apply familiarity and sandbox permission, and queue the existing closing
+coordinator; implementing the predicate does not complete that caller. Creation,
+navigation/history, CSSOM View, and teardown dependencies remain as documented
+above. The grouping audit follows below.
+
+The 16 related-context tests cover live/retained ancestry, top-level classification,
+strict and opaque origins, opener chains, disowned openers, cycles, and internal
+preconditions. Named-target tests now use real familiarity by default and cover
+both disowning and the one-opener named-lookup boundary independently of the
+general familiarity algorithm.
+
+All 11 focused suites pass across Node 24.19.0, Node 26.8.1, and custom Node
+27.0.0-pre, each with and without the addon: 229 passing cases per addon run;
+226 passing and the same three existing expected failures per fallback run.
+Those failures concern native Window identity and prototype immutability, not
+familiarity. Typechecking, type contracts, touched-file ESLint, import hierarchy,
+and whitespace checks pass. No new expected failures or runtime changes.
+
+After the approved opener-depth revision, the focused 93 cases pass on Node
+26.8.1 with the addon. Typechecking, touched-file ESLint, and whitespace checks
+pass. The revision changes a pure predicate, with no engine or binding changes.
+
+## HTML §7.3.2.3: Groupings of browsing contexts
+
+Audited against local WHATWG HTML `404b3eb14a7a936dddefb2d78e224dbeb01d2358`
+(2026-10-30), from [groupings of browsing contexts](https://html.spec.whatwg.org/multipage/document-sequences.html#groupings-of-browsing-contexts)
+through automatic context removal, stopping before §7.3.3's fully active Documents.
+
+| Requirement | Owner and status |
+| --- | --- |
+| Nullable top-level group and user-agent group set | `BrowsingContext.group` starts null; `UserAgent.browsingContextGroupSet` owns registered groups. |
+| Ordered top-level context membership | `BrowsingContextGroup.browsingContextSet` preserves insertion order. New groups contain their initial context; auxiliary creation appends to the opener's group. Child creation does not register a top-level context. |
+| Weak ordered agent-cluster map | `AgentClusterMap` now holds weak values with structural origin/site keys. Lookup and iteration prune collected entries; recreating a collected entry places it last. Live agents, realms, or scheduled work can still retain their cluster. |
+| Historical origin-to-key decisions | `HistoricalAgentClusterKeyMap` remains strong and only gains entries through the allocation algorithm. It survives cluster collection, preserving the first Origin-Agent-Cluster decision when a cluster is recreated. |
+| Isolation modes | Groups default to `none`. Both `logical` and `concrete` select origin-keyed clusters. COOP/COEP processing selects `logical` for the required policy combination; the host does not provide physical isolation. Window capability requires `concrete` and the Permissions Policy check. Logical isolation grants no capability. See the [policy audit](../policy/ROADMAP.md). |
+| New group and Document | `BrowsingContextGroup.create()` registers the group with its UserAgent, creates with null creator/embedder, appends the context, and returns the group and Document. |
+| Append/remove primitives | Append maintains the reciprocal association. Remove clears that association, removes membership, and unregisters an empty group. Existing creation/destruction callers use these primitives; explicit destruction retains its documented teardown dependencies. |
+| Automatic collection | `UserAgent.collectBrowsingContexts()` is an explicit throwing boundary for the final lifetime rule. Document lifetime tracking and WindowProxy collection eligibility remain unfinished; there is no automatic caller yet. |
+
+The automatic rule needs **both** destruction of every Document referring to a
+context and collection eligibility of its WindowProxy. A null active Document,
+detached iframe, or empty current history entry does not establish those conditions.
+The group's strong context membership currently also reaches the proxy. Completing
+this rule therefore needs lifetime integration with Document destruction and the
+WindowProxy owner, not merely a finalizer attached to the current object graph.
+`Document.destroyAndDescendants()` and inactive-history teardown remain explicit
+§7.5.10 dependencies. Weak cluster storage does not complete any of those paths.
+
+The focused regression first failed because the group kept an otherwise
+unreachable cluster alive. It now proves collection of real Window agents without
+Windows, retaining both initial site-keyed and origin-keyed choices on recreation.
+Additional coverage checks creation order, reciprocal membership, removal of the
+last context, isolation between groups, and ordered live-cluster iteration.
+These tests do not claim that a retired Window or native realm is collectible.
+
+All nine focused suites pass across Node 24.19.0, Node 26.8.1, and custom Node
+27.0.0-pre, each with and without the addon: 192 passing cases and one existing
+expected failure per addon run; 188 passing and five existing expected failures
+per fallback run. The shared failure is Window's blocking Atomics policy; the
+fallback-only cases concern native Window identity/prototype behavior and
+per-Agent microtask queues. No new expected failures or runtime changes.
+Typechecking, type contracts, touched-file ESLint, import hierarchy, and
+whitespace checks pass.
+
+## HTML §7.3.3: Fully active Documents
+
+Audited against local WHATWG HTML `404b3eb14a7a936dddefb2d78e224dbeb01d2358`
+(2026-10-30), [fully active Documents](https://html.spec.whatwg.org/multipage/document-sequences.html#fully-active-documents),
+stopping before §7.4's navigation and session history overview.
+
+| Requirement | Owner and status |
+| --- | --- |
+| Active Document of a navigable | `NodeImpl.getNodeNavigable()` checks the active history entry's Document identity. A retained browsing context or the current entry alone does not establish activity. |
+| Top-level or recursively active container | `Document.isFullyActive()` accepts an active top-level Document; otherwise it recurses through `Navigable.containerDocument`. That is the embedding element's actual node Document, which can differ from the parent navigable's replacement Document. The existing implementation needs no behavior change. |
+| User interaction restriction | The future host input-targeting/delivery and WebDriver input paths must reject interaction with inactive child Documents. The shared predicate is ready; these consumers do not exist yet. This dependency is marked at the predicate and in the [interaction roadmap](../../interaction/ROADMAP.md). |
+| Nested-document example | A → B-1 → C followed by replacement of B-1 with B-2 is covered directly: A and B-2 remain fully active, B-1 becomes inactive, and C remains its navigable's active Document while becoming not fully active. Restoring B-1 restores C's full activity. |
+
+Existing consumers already include History, Location, Permissions Policy,
+Navigation API checks, timers, and task runnability. `Task.isRunnable` defers
+Document-associated tasks while full activity is false; this does not provide
+input targeting or replace the rules for programmatic DOM event dispatch.
+The activity-notification tree already includes shadow-tree containers and wakes
+child loops after restoration, covered by `task-activity.test.ts`.
+
+The new focused tests cover the specification's nested example, distinguish the
+current entry from the active entry, and check retained Location/History access,
+task runnability, and activity notifications across replacement/restoration.
+An auxiliary top-level Document also remains fully active when its opener is
+inactive. Fixtures prepare real context/Window/Document graphs and select entries
+directly; they do not claim to implement iframe loading or history traversal.
+
+Validation: the five focused suites pass on Node 26.8.1 with the addon, with
+67 passing cases and no expected failures in that selection. Typechecking,
+touched-file ESLint, and whitespace checks pass. No runtime behavior changed.
+
+Next: §7.4's overview and §7.4.1's session history infrastructure.
 
 ## Removal condition
 

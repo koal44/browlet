@@ -1,7 +1,7 @@
 import { InternalError } from '../../../infra/index';
 import {
   aboutBlankURL, serializeSite, copyURL, createOpaqueOrigin, serializeOrigin, serializeURL,
-  areSameOrigin, isOrigin, obtainSite, type Origin, type URLRecord,
+  areSameOrigin, isOrigin, obtainSite, obtainURLOrigin, type Origin, type URLRecord,
 } from '../../../url/index';
 
 import { unsafeSharedCurrentTime } from '../../timing/index';
@@ -15,14 +15,18 @@ import { CustomElementRegistryImpl } from '../../dom/nodes/html/custom-elements/
 import type { WindowProxyHandle, WindowImpl } from '../window/index';
 import type { UserAgent } from '../../user-agent';
 
-import type { Navigable } from './navigable';
+import { Traversable, type Navigable, type TopLevelTraversable } from './navigable';
 import type { OpenerPolicyEnforcementResult } from './params';
 
 /** Retains a WindowProxy and the sequence of documents presented through it. */
 // https://html.spec.whatwg.org/multipage/document-sequences.html#browsing-context
 export class BrowsingContext {
+  /** Next identity allocated for report-only opener-policy group switches. */
   static #nextVirtualGroupID = 0;
 
+  /** Document made active in this context; null until initial activation. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#active-document
+  activeDocument: DocumentImpl | null = null;
   /** Sandbox restrictions inherited when this context was opened as a popup. */
   popupSandboxingFlagSet = new SandboxingFlagSet();
   /** Browsing context that opened this one, if it retains an opener. */
@@ -46,8 +50,10 @@ export class BrowsingContext {
   /** Group whose membership is maintained by append() and remove(). */
   group: BrowsingContextGroup | null = null;
 
+  /** Stable WindowProxy, connected during context construction. */
   #windowProxy: WindowProxyHandle | undefined;
 
+  /** Navigable presenting this context's document sequence. */
   // A navigable can present a series of browsing contexts. This inverse link
   // lets Document activity follow the existing Document -> browsing context
   // relationship without maintaining a second per-Document activity index.
@@ -71,33 +77,31 @@ export class BrowsingContext {
     const creatorBaseURL = creator?.getBaseURL() ?? null;
     const creatorCookieURL = creator?.cookieURL ?? null;
     const parentDocument = embedder?.nodeDocument ?? null;
+    const creatorTop = creator?.browsingContext?.topLevelBrowsingContext ?? null;
 
     if (creator !== null) {
-      // https://html.spec.whatwg.org/multipage/document-sequences.html#creator-browsing-context
-      // TODO: inherit the creator's top-level virtual browsing context group ID. The
-      // creator's Document state must also be inherited below before enabling this path.
-      throw new InternalError('Creator browsing-context inheritance is not implemented');
+      if (creatorTop === null) throw new InternalError('A creator needs a fully active top-level browsing context');
+      browsingContext.virtualBrowsingContextGroupID = creatorTop.virtualBrowsingContextGroupID;
     }
 
     const sandboxFlags = browsingContext.determineCreationSandboxingFlags(embedder);
-    // https://html.spec.whatwg.org/multipage/document-sequences.html#about-blank-origin
-    const origin = sandboxFlags.has('sandboxed-origin') || creatorOrigin === null
-      ? createOpaqueOrigin()
-      : creatorOrigin;
+    const origin = BrowsingContext.determineOrigin(aboutBlankURL, sandboxFlags, creatorOrigin);
     const permissionsPolicy = PermissionsPolicy.create(embedder, origin);
     const agent = group.obtainSimilarOriginWindowAgent(origin, false);
     const creationURL = copyURL(aboutBlankURL);
-    if (embedder !== null) {
-      // TODO: inherit top-level creation URL and origin from the embedder's node document environment.
-      throw new InternalError('Embedder environment inheritance is not implemented');
+    const topLevelCreationURL = embedder !== null ? embedder.env.topLevelCreationURL
+      : creator !== null ? creator.env.topLevelCreationURL : creationURL;
+    const topLevelOrigin = embedder !== null ? embedder.env.topLevelOrigin : origin;
+    if (topLevelCreationURL === null || topLevelOrigin === null) {
+      throw new InternalError('Browsing-context creation requires initialized Window environment settings');
     }
     const env = group.userAgent.createWindowEnvironment({
       agent, userAgent: group.userAgent,
       creationURL,
       origin,
-      parent: null,
-      topLevelCreationURL: creationURL,
-      topLevelOrigin: origin,
+      parent: parentDocument?.getRelevantGlobalObject() ?? null,
+      topLevelCreationURL,
+      topLevelOrigin,
     });
     const { window, realm } = env;
     browsingContext.initializeWindowProxy(realm.windowProxy);
@@ -123,9 +127,18 @@ export class BrowsingContext {
 
     document.initializeAncestry(HTMLIFrameElementImpl.determineReferrerPolicy(embedder), parentDocument);
 
-    // https://html.spec.whatwg.org/multipage/document-sequences.html#creating-a-new-browsing-context
-    // TODO: for a non-null creator, set the referrer from its URL, clone its policy
-    // container, and inherit its top-level opener policy when origins match.
+    if (creator !== null) {
+      // SPEC_CLASH(initial-blank-referrer): Follow HTML/Chromium's full URL, including fragments and despite no-referrer.
+      // Firefox's initial Documents and WebKit popups expose ""; WebKit iframes strip fragments.
+      document.referrer = serializeURL(creator.url);
+      document.policyContainer = creator.policyContainer.clone();
+      const creatorTopOrigin = creator.env.topLevelOrigin;
+      if (creatorTopOrigin !== null && areSameOrigin(creator.origin, creatorTopOrigin)) {
+        const topDocument = creatorTop!.activeDocument;
+        if (topDocument === null) throw new InternalError('Opener-policy inheritance requires an active top-level Document');
+        document.openerPolicy = topDocument.openerPolicy;
+      }
+    }
 
     if (
       document.URL !== 'about:blank' ||
@@ -160,11 +173,37 @@ export class BrowsingContext {
 
   /** Create an opener-associated browsing context and its initial document. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#creating-a-new-auxiliary-browsing-context
-  // TODO: Implement opener and group inheritance as part of auxiliary browsing-context support.
   static createAuxiliary(
-    _opener: BrowsingContext,
+    opener: BrowsingContext,
   ): [browsingContext: BrowsingContext, document: DocumentImpl] {
-    throw new InternalError('Auxiliary browsing-context creation is not implemented');
+    const openerTop = opener.topLevelTraversable.activeBrowsingContext;
+    const group = openerTop?.group;
+    const creator = opener.activeDocument;
+    if (openerTop === null || group === undefined || group === null || creator === null) {
+      throw new InternalError('Auxiliary creation requires an active opener and top-level browsing-context group');
+    }
+    const [browsingContext, document] = BrowsingContext.create(creator, null, group);
+    browsingContext.isAuxiliary = true;
+    group.append(browsingContext);
+    browsingContext.openerBrowsingContext = opener;
+    browsingContext.virtualBrowsingContextGroupID = openerTop.virtualBrowsingContextGroupID;
+    browsingContext.openerOriginAtCreation = creator.origin;
+    return [browsingContext, document];
+  }
+
+  /** Select a new Document's origin, retaining the source identity for inherited URLs. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#determining-the-origin
+  // SPEC_CLASH(origin-null-url-input): Follow the explicit null-URL step despite the URL-only signature.
+  static determineOrigin(url: URLRecord | null, sandboxFlags: SandboxingFlagSet, sourceOrigin: Origin | null): Origin {
+    if (sandboxFlags.has('sandboxed-origin') || url === null) return createOpaqueOrigin();
+    if (url.scheme === 'about' && url.host === null && url.username === '' && url.password === '') {
+      if (url.path === 'srcdoc' && url.query === null) {
+        if (sourceOrigin === null) throw new InternalError('Srcdoc origin determination requires a source origin');
+        return sourceOrigin;
+      }
+      if (url.path === 'blank' && sourceOrigin !== null) return sourceOrigin;
+    }
+    return obtainURLOrigin(url);
   }
 
   get windowProxy(): WindowProxyHandle {
@@ -178,28 +217,55 @@ export class BrowsingContext {
   }
 
   /** Current Window; throws until the WindowProxy has been connected. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#active-window
   get activeWindow(): WindowImpl {
     return this.windowProxy.windowImplementation;
   }
 
-  /** Document associated with the current Window. */
-  get activeDocument(): DocumentImpl {
-    return this.activeWindow.getAssociatedDocument();
+  /** Whether the active Document is presented by a traversable navigable. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#top-level-browsing-context
+  get isTopLevel(): boolean {
+    return this.activeDocument?.getNodeNavigable() instanceof Traversable;
   }
 
+  /** Top-level traversable presenting the active Document; requires a live node navigable. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#bc-traversable
+  get topLevelTraversable(): TopLevelTraversable {
+    const navigable = this.activeDocument?.getNodeNavigable();
+    if (!navigable) throw new InternalError('Browsing context needs an active Document with a node navigable');
+    return navigable.topLevelTraversable;
+  }
+
+  /** Top-level browsing context, or null when this context has no fully active Document. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#bc-tlbc
   get topLevelBrowsingContext(): BrowsingContext | null {
     const document = this.activeDocument;
-    if (!document.isFullyActive()) return null;
-    return document.getNodeNavigable()!.topLevelTraversable.activeBrowsingContext;
+    if (document === null || !document.isFullyActive()) return null;
+    return this.topLevelTraversable.activeBrowsingContext;
   }
 
-  /** Whether this context can address another through their origins, ancestry, or opener relationship. */
+  /** Whether this context is a strict ancestor of the fully active descendant. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#ancestor-browsing-context
+  isAncestorOf(descendant: BrowsingContext): boolean {
+    // SPEC_CLASH(browsing-context-ancestor-direction): Follow the steps; HTML's opening sentence reverses ancestor and descendant.
+    const document = descendant.activeDocument;
+    if (document === null || !document.isFullyActive()) return false;
+    return document.getAncestorNavigables().some((ancestor) => ancestor.activeBrowsingContext === this);
+  }
+
+  /** Compare active origins and live ancestry, following the target's auxiliary opener chain. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#familiar-with
-  isFamiliarWith(_other: BrowsingContext): boolean {
-    // TODO(HTML §7.3.2.2): Compare active origins, the source's top-level context,
-    // the target's auxiliary opener chain, and its ancestor contexts.
-    throw new InternalError('Browsing-context familiarity is not implemented');
+  isFamiliarWith(other: BrowsingContext): boolean {
+    return this.#checkFamiliarity(other, Infinity);
+  }
+
+  /** Check named-target familiarity using only the target and its immediate auxiliary opener. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#find-a-navigable-by-target-name
+  isFamiliarForNamedLookup(other: BrowsingContext): boolean {
+    // SPEC_CLASH(familiarity-opener-depth): Match browsers' one-opener lookup boundary, not HTML's recursive familiarity.
+    // Gecko documents this limit in https://github.com/whatwg/html/issues/313#issuecomment-453648260.
+    // Window.close() needs its own audit before adopting this lookup-specific restriction.
+    return this.#checkFamiliarity(other, 1);
   }
 
   /** Attach the stable proxy exactly once during context construction. */
@@ -242,7 +308,9 @@ export class BrowsingContext {
       openerPolicy: responseCOOP,
       currentContextIsNavigationSource: true,
     };
-    const isInitialAboutBlank = this.activeDocument.isInitialAboutBlank;
+    const document = this.activeDocument;
+    if (document === null) throw new InternalError('COOP enforcement requires an active Document');
+    const isInitialAboutBlank = document.isInitialAboutBlank;
     if (isInitialAboutBlank && this.initialURL === null) this.initialURL = responseURL;
     const group = this.group;
     if (group === null) throw new InternalError('COOP enforcement requires a browsing context group');
@@ -285,6 +353,33 @@ export class BrowsingContext {
     }
     this.#navigable = navigable;
   }
+
+  /** Apply the shared origin and ancestry conditions within the caller's opener limit. */
+  #checkFamiliarity(other: BrowsingContext, openerLimit: number): boolean {
+    const document = this.activeDocument;
+    if (document === null) throw new InternalError('Familiarity requires an active source Document');
+    const top = this.topLevelBrowsingContext;
+    const visited = new Set<BrowsingContext>();
+    // SPEC_GAP(familiarity-opener-termination): Null or cyclic openers end the walk; all tested browsers reject an unrelated cycle.
+    for (let target: BrowsingContext | null = other; target !== null && !visited.has(target);
+      target = target.isAuxiliary ? target.openerBrowsingContext : null) {
+      visited.add(target);
+      const targetDocument = target.activeDocument;
+      if (targetDocument === null) throw new InternalError('Familiarity requires an active target Document');
+      // SPEC_CLASH(familiarity-distant-target): Keep HTML's direct origin match; WebKit's lookup also limits the opener relationship.
+      // SPEC_CLASH(familiarity-document-domain): Follow HTML's strict origin check; Chromium's lookup allows domain relaxation.
+      if (areSameOrigin(document.origin, targetDocument.origin)) return true;
+      if (target === top) return true;
+      if (targetDocument.isFullyActive()) {
+        for (const ancestor of targetDocument.getAncestorNavigables()) {
+          if (areSameOrigin(document.origin, ancestor.activeDocument!.origin)) return true;
+        }
+      }
+      if (openerLimit === 0) break;
+      openerLimit--;
+    }
+    return false;
+  }
 }
 
 /** Groups related top-level browsing contexts and their agent-cluster allocation state. */
@@ -292,9 +387,11 @@ export class BrowsingContext {
 export class BrowsingContextGroup {
   /** Top-level contexts currently belonging to this group. */
   browsingContextSet = new Set<BrowsingContext>();
-  /** Agent clusters selected by site or origin keys. */
+  /** Weakly held agent clusters selected by site or origin keys. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#agent-cluster-map
   agentClusterMap = new AgentClusterMap();
-  /** First cluster-key decision retained for each origin. */
+  /** First cluster-key decision retained for each origin, even after cluster collection. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#historical-agent-cluster-key-map
   historicalAgentClusterKeyMap = new HistoricalAgentClusterKeyMap();
   /** Isolation mode shared by clusters created in this group. */
   crossOriginIsolationMode: CrossOriginIsolationMode = 'none';
@@ -357,6 +454,8 @@ export class BrowsingContextGroup {
     return windowAgent;
   }
 
+  /** Register a top-level context and establish its reciprocal group association. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#bcg-append
   append(browsingContext: BrowsingContext): void {
     if (
       browsingContext.group !== null &&
@@ -369,6 +468,8 @@ export class BrowsingContextGroup {
     browsingContext.group = this;
   }
 
+  /** Unregister a context, releasing an empty group from its user agent. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#bcg-remove
   remove(browsingContext: BrowsingContext): void {
     if (browsingContext.group !== this) {
       throw new InternalError('The browsing context is not in this group');
@@ -385,10 +486,8 @@ export class BrowsingContextGroup {
 
 /** Indexes clusters by origin or site value rather than record identity. */
 class AgentClusterMap {
-  // HTML defines this as a weak map. JavaScript WeakMap cannot combine weak
-  // keys with value equality, so this retains clusters for the lifetime of the
-  // browsing context group until Browlet implements cluster collection.
-  #values = new Map<string | symbol, AgentCluster>();
+  /** Value-comparable keys do not keep otherwise unreachable clusters alive. */
+  #values = new Map<string | symbol, WeakRef<AgentCluster>>();
 
   static #getKey(key: AgentClusterKey): string | symbol {
     if (Array.isArray(key)) return `site:${serializeSite(key)}`;
@@ -397,20 +496,31 @@ class AgentClusterMap {
   }
 
   get(key: AgentClusterKey): AgentCluster | undefined {
-    return this.#values.get(AgentClusterMap.#getKey(key));
+    const mapKey = AgentClusterMap.#getKey(key);
+    const value = this.#values.get(mapKey)?.deref();
+    if (value === undefined) this.#values.delete(mapKey);
+    return value;
   }
 
   set(key: AgentClusterKey, value: AgentCluster): void {
-    this.#values.set(AgentClusterMap.#getKey(key), value);
+    const mapKey = AgentClusterMap.#getKey(key);
+    // A collected entry no longer occupies its old position in the ordered map.
+    if (this.#values.get(mapKey)?.deref() === undefined) this.#values.delete(mapKey);
+    this.#values.set(mapKey, new WeakRef(value));
   }
 
-  values(): MapIterator<AgentCluster> {
-    return this.#values.values();
+  *values(): IterableIterator<AgentCluster> {
+    for (const [key, reference] of this.#values) {
+      const value = reference.deref();
+      if (value === undefined) this.#values.delete(key);
+      else yield value;
+    }
   }
 }
 
 /** Remembers each origin's initial cluster key using origin value equality. */
 class HistoricalAgentClusterKeyMap {
+  /** Origin decisions remain available for the entire group's lifetime. */
   #values = new Map<string | symbol, AgentClusterKey>();
 
   static #getKey(origin: Origin): string | symbol {

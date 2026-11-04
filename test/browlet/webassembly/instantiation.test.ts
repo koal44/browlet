@@ -154,6 +154,7 @@ function fixture(): Browlet {
   const document = realm.getAssociatedDocument();
   // Native completion uses an HTML task, which requires an active Document.
   document.browsingContext = new BrowsingContext(realm.windowProxy);
+  document.makeActive();
   new TopLevelTraversable(createDocumentState(document));
   Reflect.set(browser.window, 'foreign', foreign);
   return browser;

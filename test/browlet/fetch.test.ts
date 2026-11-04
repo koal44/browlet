@@ -323,7 +323,7 @@ function createRelatedWindow(first: Window): WindowProxy {
   document.url = creationURL;
   document.origin = env.origin;
   window.setAssociatedDocument(document);
-  proxy.setAssociatedWindow(window.env.realm.globalObject);
+  document.makeActive();
   return proxy.platform;
 }
 

@@ -25,6 +25,7 @@ export function createPolicyEnvironment(
   document.origin = origin;
   document.browsingContext = new BrowsingContext(env.realm.windowProxy);
   env.window.setAssociatedDocument(document);
+  document.makeActive();
   const state = createDocumentState(document);
   if (parent) new Navigable(state, parent.window.getAssociatedDocument().getNodeNavigable());
   else new TopLevelTraversable(state);

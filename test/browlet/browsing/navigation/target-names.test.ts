@@ -1,10 +1,12 @@
-import { afterEach, assert, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
 import { createDocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
+import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
+import { obtainURLOrigin, parseURL } from '../../../../src/url/index';
 import { unwrap } from '../../../support/browlet-binding';
 
 afterEach(() => { vi.restoreAllMocks(); });
@@ -160,6 +162,16 @@ describe('existing navigable target selection', () => {
     ]);
   });
 
+  it('ignores contexts awaiting initial activation during named lookup', () => {
+    const { navigable: source } = createRoot();
+    source.activeBrowsingContext!.group!.append(new BrowsingContext());
+    const target = createOtherTopLevel(source, 'needle');
+    const { familiarity } = supplyLookupDependencies(source);
+
+    expect(source.findNavigableByTargetName('needle')).toBe(target);
+    expect(familiarity).toHaveBeenCalledExactlyOnceWith(target.activeBrowsingContext);
+  });
+
   it('does not search another browsing-context group and applies popup blocking after a miss', () => {
     const { document, navigable: source } = createRoot();
     TopLevelTraversable.create(document.env.userAgent, null, 'needle');
@@ -179,7 +191,7 @@ describe('existing navigable target selection', () => {
     expect(lookup).not.toHaveBeenCalled();
   });
 
-  it('keeps activation, sandbox permission, and familiarity as explicit unfinished owners', () => {
+  it('keeps activation and sandbox permission explicit while using real familiarity', () => {
     const { navigable: source } = createRoot();
     const other = createOtherTopLevel(source, 'needle');
 
@@ -187,9 +199,34 @@ describe('existing navigable target selection', () => {
     vi.spyOn(source.activeWindow!, 'hasTransientActivation').mockReturnValue(false);
     expect(() => source.findNavigableByTargetName('needle')).toThrow('Sandbox navigation permission is not implemented');
     vi.spyOn(source, 'isAllowedBySandboxingToNavigate').mockReturnValue(true);
-    expect(() => source.findNavigableByTargetName('needle')).toThrow('Browsing-context familiarity is not implemented');
-    vi.spyOn(source.activeBrowsingContext!, 'isFamiliarWith').mockReturnValue(true);
     expect(source.findNavigableByTargetName('needle')).toBe(other);
+  });
+
+  it('loses a foreign named target when it disowns its opener, but retains a direct-origin match', () => {
+    const { document, navigable: source } = createRoot();
+    const other = createOtherTopLevel(source, 'needle');
+    other.activeDocument!.origin = obtainURLOrigin(parseURL('https://foreign.test/').url!);
+    const { familiarity } = supplyLookupDependencies(source);
+
+    expect(source.findNavigableByTargetName('needle')).toBe(other);
+    other.activeWindow!.disownOpener();
+    expect(source.findNavigableByTargetName('needle')).toBeNull();
+    other.activeDocument!.origin = document.origin;
+    expect(source.findNavigableByTargetName('needle')).toBe(other);
+    expect(familiarity).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not find a named target through a foreign opener\'s opener', () => {
+    const { navigable: source } = createRoot();
+    const middle = createOtherTopLevel(source, 'middle');
+    middle.activeDocument!.origin = obtainURLOrigin(parseURL('https://foreign.test/').url!);
+    const target = createOtherTopLevel(middle, 'needle');
+    supplyLookupDependencies(source);
+
+    // SPEC_CLASH(familiarity-opener-depth): Match browsers' one-opener boundary for named lookup.
+    expect(source.findNavigableByTargetName('needle')).toBeNull();
+    middle.activeDocument!.origin = source.activeDocument!.origin;
+    expect(source.findNavigableByTargetName('needle')).toBe(target);
   });
 
   it('connects projected Window.open to existing lookup without navigating for an empty URL', async () => {
@@ -212,36 +249,25 @@ function createRoot() {
 
 function createChild(parent: Navigable, name: string) {
   const owner = parent.activeDocument!;
-  const container = owner.createElement('iframe');
-  assert(container.isNavigableContainer());
+  const container = owner.createElement('iframe') as HTMLIFrameElementImpl;
   const group = parent.topLevelTraversable.activeBrowsingContext!.group!;
-  const [, document] = BrowsingContext.create(null, null, group);
+  const [, document] = BrowsingContext.create(owner, container, group);
   const state = createDocumentState(document);
   state.navigableTargetName = name;
   const navigable = new Navigable(state, parent);
-  // Supply the child association while creator/embedder inheritance and startup remain unfinished.
+  // Connect the child without requiring the still-unfinished traversal-queue drain.
   container.contentNavigable = navigable;
   owner.body!.appendChild(container);
   return { container, navigable };
 }
 
 function createOtherTopLevel(source: Navigable, name: string) {
-  const group = source.topLevelTraversable.activeBrowsingContext!.group!;
-  const [context, document] = BrowsingContext.create(null, null, group);
-  // Supply group membership without pretending auxiliary-context creation is implemented.
-  group.append(context);
-  const state = createDocumentState(document);
-  state.navigableTargetName = name;
-  const navigable = new TopLevelTraversable(state);
-  navigable.activeSessionHistoryEntry.step = 0;
-  navigable.sessionHistoryEntries.push(navigable.activeSessionHistoryEntry);
-  group.userAgent.appendTopLevelTraversable(navigable);
-  return navigable;
+  return TopLevelTraversable.create(source.activeDocument!.env.userAgent, source.activeBrowsingContext, name);
 }
 
 function supplyLookupDependencies(source: Navigable) {
   const activation = vi.spyOn(source.activeWindow!, 'hasTransientActivation').mockReturnValue(false);
   const permission = vi.spyOn(source, 'isAllowedBySandboxingToNavigate').mockReturnValue(true);
-  const familiarity = vi.spyOn(source.activeBrowsingContext!, 'isFamiliarWith').mockReturnValue(true);
+  const familiarity = vi.spyOn(source.activeBrowsingContext!, 'isFamiliarForNamedLookup');
   return { activation, permission, familiarity };
 }

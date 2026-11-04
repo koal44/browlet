@@ -1,10 +1,11 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
 import { createDocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { Navigable, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import type { HTMLIFrameElementImpl } from '../../../src/browlet/dom/nodes/html/embedded/iframe';
 import { StorageKey, StorageShelf } from '../../../src/storage/index';
 import { obtainURLOrigin, parseURL } from '../../../src/url/index';
 import { getRelevantRealm } from '../../support/browlet-binding';
@@ -57,28 +58,24 @@ describe('Storage §4.3: browser ownership', () => {
     expect(session.bucketMap.get('default')!.bottleMap.get('sessionStorage')!.map.get('draft')).toBe('saved');
   });
 
-  it('clones a nested opener from its top-level traversable once auxiliary creation completes', () => {
+  it('clones a nested opener from its top-level traversable during auxiliary creation', () => {
     const userAgent = new UserAgent();
     const top = TopLevelTraversable.create(userAgent, null, '');
-    const [opener, childDocument] = BrowsingContext.createTopLevel(userAgent);
-    // Compose the child until navigation supplies child browsing-context creation.
-    new Navigable(createDocumentState(childDocument), top);
+    const parent = top.activeDocument!;
+    const iframe = parent.createElement('iframe') as HTMLIFrameElementImpl;
+    parent.body!.appendChild(iframe);
+    const [opener, childDocument] = BrowsingContext.create(parent, iframe, top.activeBrowsingContext!.group!);
+    // Compose the child without requiring the traversal-queue drain.
+    iframe.contentNavigable = new Navigable(createDocumentState(childDocument), top);
     const key = keyFor('https://example.test/');
     const shelf = StorageShelf.create('session');
     const original = shelf.bucketMap.get('default')!.bottleMap.get('sessionStorage')!.map;
     original.set('draft', 'opener');
     top.storageShed.set(key, shelf);
 
-    // Only the still-unimplemented auxiliary creation step is supplied here.
-    const createAuxiliary = vi.spyOn(BrowsingContext, 'createAuxiliary')
-      .mockImplementationOnce(() => BrowsingContext.createTopLevel(userAgent));
-    let opened: TopLevelTraversable;
-    try {
-      opened = TopLevelTraversable.create(userAgent, opener, 'new tab');
-      expect(createAuxiliary).toHaveBeenCalledExactlyOnceWith(opener);
-    } finally {
-      createAuxiliary.mockRestore();
-    }
+    const opened = TopLevelTraversable.create(userAgent, opener, 'new tab');
+    expect(opened.activeBrowsingContext!.openerBrowsingContext).toBe(opener);
+    expect(opened.activeBrowsingContext!.group).toBe(top.activeBrowsingContext!.group);
 
     const copy = opened.storageShed.get(key)!.bucketMap.get('default')!.bottleMap.get('sessionStorage')!.map;
     expect(copy).not.toBe(original);

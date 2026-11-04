@@ -65,7 +65,7 @@ it('selects the target WindowProxy when a listener belongs to another realm', as
   const document = env.window.document;
   document.browsingContext = new BrowsingContext(windowProxy);
   new TopLevelTraversable(createDocumentState(document));
-  env.markExecutionReady();
+  document.makeActive();
   Reflect.set(caller.window, 'peerWindow', peer);
   expect(await caller.evaluate(() => {
     const peer = Reflect.get(window, 'peerWindow') as Window;

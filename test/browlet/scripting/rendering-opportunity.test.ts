@@ -390,7 +390,7 @@ function createDocumentInAgent(source: DocumentImpl): DocumentImpl {
   document.origin = source.origin;
   document.browsingContext = new BrowsingContext(env.realm.windowProxy);
   env.window.setAssociatedDocument(document);
-  env.realm.windowProxy.setAssociatedWindow(env.realm.globalObject);
+  document.makeActive();
   document.populateWithHTMLHeadBody();
   return document;
 }

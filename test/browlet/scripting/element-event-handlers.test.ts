@@ -204,7 +204,7 @@ function createSibling(browser: Browlet) {
   document.initializeCSP();
   document.browsingContext = new BrowsingContext(env.realm.windowProxy);
   env.window.setAssociatedDocument(document);
-  env.realm.windowProxy.setAssociatedWindow(env.realm.globalObject);
+  document.makeActive();
   new TopLevelTraversable(createDocumentState(document));
   return { window: env.realm.windowProxy.platform };
 }

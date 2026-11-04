@@ -209,7 +209,7 @@ function createWindow(siblingOf?: WindowRealm) {
     const document = realm.env.createDocument();
     document.browsingContext = new BrowsingContext(proxy);
     sibling.window.setAssociatedDocument(document);
-    proxy.setAssociatedWindow(realm.globalObject);
+    document.makeActive();
   } else {
     const traversable = TopLevelTraversable.create(createManualUserAgent(), null, '');
     realm = getRelevantRealm(traversable.activeWindow!);

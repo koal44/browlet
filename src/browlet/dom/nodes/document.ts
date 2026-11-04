@@ -1181,6 +1181,7 @@ export class DocumentImpl extends NodeImpl {
     }
 
     const env = window.env;
+    browsingContext.activeDocument = this;
     browsingContext.windowProxy.setAssociatedWindow(env.realm.globalObject);
     env.markExecutionReady();
   }
@@ -1211,10 +1212,10 @@ export class DocumentImpl extends NodeImpl {
     if (browsingContext === null) {
       throw new InternalError('A completely loaded Document needs a browsing context');
     }
-    const window = browsingContext.activeWindow;
-    if (window.getAssociatedDocument() !== this) {
+    if (browsingContext.activeDocument !== this) {
       throw new InternalError('Only an active Document can finish loading');
     }
+    const window = browsingContext.activeWindow;
 
     // PROVISIONAL: these phases still run together; deferred scripts, load-event
     // delays, and separate DOM-manipulation tasks await the full parser lifecycle.
@@ -1707,13 +1708,15 @@ export class DocumentImpl extends NodeImpl {
     }
   }
 
-  /** Whether this document is active throughout its navigable ancestry. */
-  // https://html.spec.whatwg.org/#fully-active
+  /** Whether this is the active Document and every container Document is fully active. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#fully-active
+  // TODO(HTML §7.3.3): the future user-input targeting/delivery pipeline must enforce this check.
   isFullyActive(): boolean {
     const navigable = this.getNodeNavigable();
     if (navigable === null) return false;
     if (navigable.isTopLevelTraversable) return true;
 
+    // The container can still belong to an old Document after its parent navigable changes Documents.
     return navigable.containerDocument?.isFullyActive() ?? false;
   }
 

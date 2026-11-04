@@ -88,7 +88,6 @@ export class Navigable {
     if (parentNavigable === null || group === undefined || group === null) {
       throw new InternalError('Child creation needs an active parent browsing-context group');
     }
-    // TODO(HTML §7.3.2.1): Creator/embedding inheritance currently throws in this factory.
     const [, document] = BrowsingContext.create(creator, element, group);
     const documentState = createDocumentState(document);
     documentState.initiatorOrigin = document.origin;
@@ -343,10 +342,12 @@ export class Navigable {
     // SPEC_CLASH(named-target-group-order): Use oldest registration first; Chromium prefers newer contexts, unlike tested Firefox/WebKit.
     for (const topLevelBrowsingContext of group.browsingContextSet) {
       if (topLevelBrowsingContext === currentTopLevelBrowsingContext) continue;
-      for (const navigable of topLevelBrowsingContext.activeDocument.getInclusiveDescendantNavigables()) {
+      const document = topLevelBrowsingContext.activeDocument;
+      if (document === null) continue;
+      for (const navigable of document.getInclusiveDescendantNavigables()) {
         const browsingContext = navigable.activeBrowsingContext;
         if (browsingContext === null) throw new InternalError('Named targets require an active browsing context');
-        if (!currentBrowsingContext.isFamiliarWith(browsingContext)) continue;
+        if (!currentBrowsingContext.isFamiliarForNamedLookup(browsingContext)) continue;
         if (!this.isAllowedBySandboxingToNavigate(navigable, sourceSnapshotParams)) continue;
         if (navigable.targetName === name) return navigable;
       }
@@ -398,7 +399,6 @@ export class Navigable {
 
     const opener = noopener ? null : this.activeBrowsingContext;
     if (!noopener && opener === null) throw new InternalError('A new auxiliary target requires an opener context');
-    // Non-null openers still reach the explicit §7.3.2.1 auxiliary-creation dependency.
     const chosen = TopLevelTraversable.create(userAgent, opener, targetName, this);
     const browsingContext = chosen.activeBrowsingContext;
     if (browsingContext === null) throw new InternalError('A new target requires an active browsing context');
@@ -584,6 +584,7 @@ export class Navigable {
     const reportOnlyPermissionsPolicy = PermissionsPolicy.fromResponse(this.container, params.origin, response, true);
     const creationURL = params.request?.currentURL ?? params.url;
     const activeDocument = browsingContext.activeDocument;
+    if (activeDocument === null) throw new InternalError('Document creation requires an active browsing context');
 
     let window: WindowImpl;
     if (activeDocument.isInitialAboutBlank && areSameOriginDomain(activeDocument.origin, params.origin)) {
@@ -761,6 +762,7 @@ export class Navigable {
     const browsingContext = this.activeBrowsingContext;
     if (browsingContext === null) throw new InternalError('Navigation requires an active browsing context');
     const activeDocument = browsingContext.activeDocument;
+    if (activeDocument === null) throw new InternalError('Navigation requires an active Document');
     const userAgent = activeDocument.env.userAgent;
     const parent = this.parent?.activeWindow ?? null;
     params.reservedEnv ??= new BrowletEnvironmentBase({
@@ -1054,9 +1056,7 @@ export class TopLevelTraversable extends Traversable {
     [document.history.lengthValue, document.history.index] = traversable.getHistoryLengthAndIndex(0);
 
     if (opener !== null) {
-      const openerNavigable = opener.activeDocument.getNodeNavigable();
-      if (openerNavigable === null) throw new InternalError('An opener needs an active navigable');
-      openerNavigable.topLevelTraversable.storageShed.cloneSessionStorageInto(traversable.storageShed);
+      opener.topLevelTraversable.storageShed.cloneSessionStorageInto(traversable.storageShed);
     }
 
     userAgent.appendTopLevelTraversable(traversable);

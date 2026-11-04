@@ -48,7 +48,7 @@ were included as direct dependencies; the full §7.1.4 audit is recorded below.
 | Policy values and matching | `OpenerPolicy` retains both values and nullable endpoints. Matching uses strict origin equality, including opaque identity, and ignores domain relaxation. Two unsafe-none values match across origins. |
 | Header processing | `OpenerPolicy.obtain()` uses Fetch's structured-item parser and the reserved environment's security decision. It accepts only tokens, applies string report-to parameters, rejects lists/quoted strings, and preserves the specified difference between enforced and report-only noopener-allow-popups. |
 | COEP dependency | `EmbedderPolicy.obtain()` parses both dispositions. Enforced COOP promotion uses enforced COEP; report-only promotion accepts either COEP disposition. The internal same-origin-plus-COEP value is not accepted as a header token. |
-| Popup and ordinary navigation comparisons | Static policy operations implement each branch, including the unsafe-none popup allowances and matching report-only suppression. Actual popup creation still needs creator/opener inheritance. |
+| Popup and ordinary navigation comparisons | Static policy operations implement each branch, including the unsafe-none popup allowances and matching report-only suppression. Initial auxiliary context creation now inherits creator/opener state; opening still needs activation, feature setup, and navigation. |
 | Response enforcement | `BrowsingContext.enforceResponseOpenerPolicy()` carries both accumulated switch flags, URL, origin, policy, and navigation-source state through repeated response checks. It retains the first initial URL and requests navigation reports only when another context shares the group. |
 | Navigation integration | The supplied-response path reserves the destination environment, parses its policies, and computes enforcement before creating the document. Existing prepared results are retained. The Fetch navigation loop must call enforcement at every redirect and supply its actual source state. |
 | Group selection | Required switches create a new top-level context/group; report-only switches change only the virtual group identifier. Final sandbox flags are cloned. Old contexts remain available to history. Optional cross-site/browser-UI/singleton swaps are not taken. Nested destinations retain their context. |
@@ -205,8 +205,8 @@ including every flag description, token exception, and state owner, against HTML
 | --- | --- |
 | Directive parsing | `SandboxingFlagSet.parse()` already covers all sixteen flags, ASCII whitespace/case, unknown tokens, activation distinctions, and the three custom-protocol exceptions. It returns a fresh set rather than taking an output set, as previously reviewed. |
 | Iframe flag set | `HTMLIFrameElementImpl.sandboxingFlagSet` follows null-namespace sandbox attribute creation, mutation, and removal. Absence means no restrictions; an empty attribute means all restrictions. The projected `sandbox` DOMTokenList remains §4.8.5 work. |
-| Popup and active-document sets | Contexts start with an empty popup set; Documents retain independent active-flag snapshots. Later iframe attribute changes do not alter an existing document's flags. Actual popup propagation remains with auxiliary-context creation. |
-| Permitted navigator | `BrowsingContext.onePermittedSandboxedNavigator` starts null. Target selection must populate it and navigation permission checks must consume it; neither lifecycle exists yet. |
+| Popup and active-document sets | Contexts start with an empty popup set; Documents retain independent active-flag snapshots. Later iframe attribute changes do not alter an existing document's flags. New-target selection copies popup restrictions after context creation; subsequent navigation must consume them. |
+| Permitted navigator | `BrowsingContext.onePermittedSandboxedNavigator` starts null. New-target selection populates it; navigation permission checks must still consume it. |
 | CSP-derived restrictions | Existing `CSPList.getSandboxingFlags()` unions enforced header policies and ignores reporting/meta policies. Keep the reviewed `SPEC_CLASH(csp-sandbox-combination)`: HTML currently retains only the last directive, whereas Browlet and all three reference engines combine restrictions. Evidence remains in the [CSP audit](csp/ROADMAP.md#retained-specification-decisions). |
 | Creation flags | `BrowsingContext.determineCreationSandboxingFlags()` copies popup flags without an embedder; with an iframe, it unions the iframe's flags and its current node Document's active flags. Child creation does not inherit the context's popup set separately. Object/frame response preparation throws pending a sandbox inheritance audit: HTML's element case asks for an iframe flag set not defined on those elements. |
 | Supplied-response navigation | `createNavigationParams()` combines creation flags and response CSP before selecting an opaque origin, then document creation copies the final set. Full navigation still needs source/target snapshots and the inline-srcdoc path's inherited-CSP ordering. |
@@ -216,11 +216,11 @@ Every flag's remaining enforcement owner is explicit:
 | Flags | Existing behavior or remaining consumer |
 | --- | --- |
 | navigation; auxiliary navigation; top-level navigation with/without activation; custom-protocol navigation | Navigation target selection, user-activation checks, popup creation, close, and external-protocol handling remain unfinished. `isNavigationOrHistoryUpdateBlocked()` is the separate implementation-defined throttle, not sandbox enforcement. |
-| origin | Context/response preparation can select an opaque origin. Origin-sensitive DOM/storage/cookie checks exist, but creator/iframe/srcdoc origin and cookie-URL inheritance still require their lifecycles. |
+| origin | Context/response preparation can select an opaque origin. Initial iframe and auxiliary creation inherit creator origin/base/cookie state. Source capture for later about:blank/srcdoc navigation remains unfinished. |
 | forms; pointer lock | Form submission and pointer-lock entry points must apply their flags. |
 | scripts; automatic features | The environment's scripting predicate reads the scripts flag. Parser/script preparation, automatic media playback, and autofocus still need their owning consumers; parsing the automatic-features flag does not enforce them. |
 | document.domain | The Document setter rejects the flag before domain relaxation. |
-| propagation to auxiliary contexts | Auxiliary browsing-context creation must copy restrictions unless the source permits escape. |
+| propagation to auxiliary contexts | New-target selection copies restrictions unless the source permits escape; subsequent navigation must consume the context's popup flag set. |
 | modals; orientation lock; presentation; downloads | Dialogs/beforeunload, orientation, Presentation API, and both navigation/hyperlink downloads need their checks. |
 
 [Sandbox tests](../../../../test/browlet/browsing/policy/sandbox.test.ts) cover
@@ -275,8 +275,8 @@ Two continuing specification conflicts are recorded in code:
 The supplied-response path represents browser-UI navigation, with no initiator or
 history restoration. Full §7.4 navigation must capture source/target policies,
 feed retained history state into selection, and implement inline srcdoc ordering.
-Initial blank creator inheritance, history reconstruction, worker startup, and
-worklet policy association remain lifecycle work. Do not infer those integrations
+Initial blank creation now clones the creator's container. History reconstruction,
+worker startup, and worklet policy association remain lifecycle work. Do not infer those integrations
 from the standalone selection tests. [Container tests](../../../../test/browlet/browsing/policy/container.test.ts)
 cover precedence, copy/identity rules, all response fields, Blob revocation, and
 history retention; [worker tests](../../../../test/browlet/workers/policy-container.test.ts)
@@ -643,8 +643,8 @@ query. Creation can instead use a different destination origin, such as after a
 redirect. [Creation tests](../../../../test/browlet/browsing/policy/permissions-creation.test.ts)
 cover delegation, parent restrictions, destination-origin changes, independent
 policy state, and denial through nested supplied Documents. They do not simulate
-iframe loading. Browsing-context creator/environment inheritance still blocks
-automatic embedded Document creation.
+iframe loading. Initial iframe context creation now applies those inherited
+policies; automatic element loading and child history application remain unfinished.
 
 ### §9.6: response policy creation and §10.1 Document initialization
 
@@ -828,8 +828,8 @@ these sections.
   iframe-load steps must supply and retain actual container/response policies.
   `processPolicyAttributes()` supplies container directives from current DOM state.
   Supplied containers/responses now produce and install both policy dispositions.
-  Browsing-context creator/environment inheritance and automatic iframe loading
-  remain unfinished. Completing policy algorithms does not complete child navigation.
+  Initial creator/environment inheritance is connected; automatic iframe loading
+  and child history application remain unfinished. Completing policy algorithms does not complete child navigation.
 - **Feature consumers:** `Document.isAllowedToUse()` now checks and reports actual
   use. New feature owners must register definitions, call this boundary, and
   implement their specified failure behavior. Fullscreen must activate and test

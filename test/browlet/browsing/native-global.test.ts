@@ -206,7 +206,7 @@ function createNativeWindow(previous?: NativeWindow): NativeWindow {
   document.origin = origin;
   document.browsingContext = context;
   window.setAssociatedDocument(document);
-  proxy.setAssociatedWindow(window.env.realm.globalObject);
+  document.makeActive();
   return { agent, realm, window, platformWindow, document, context };
 }
 

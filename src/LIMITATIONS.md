@@ -187,8 +187,9 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   Window handlers and the six Window-reflecting names forward to the current
   active Document's Window, including after adoption. HTML's GlobalEventHandlers,
   the ordinary WindowEventHandlers, and Document-only handlers are connected.
-  Beforeunload's special callback conversion and return-value processing remain
-  unfinished, so its attribute is not exposed yet.
+  `onbeforeunload` is exposed, including nullable DOMString callback conversion,
+  cancellation, and preservation of an existing event return value. Navigation's
+  beforeunload dispatch, counters, and prompt admission/UI remain unfinished.
   Internal handler/listener erasure works for existing targets; `document.open()`
   still needs its §8.4 selection and lifecycle hookup.
   BiDi has no session overrides yet. See the
@@ -1266,19 +1267,33 @@ separately and do not wait for all load-delaying resources. XML parsing and
 previous-document unload timing capture remain missing; see the
 [loading-status audit](browlet/html/ROADMAP.md#section-315-document-loading-status).
 
-Nested/auxiliary creation stops at explicit missing creator-state inheritance and
-child lifecycle operations. Ancestor-origin calculation and referrer-policy masking accept
+Initial iframe and auxiliary contexts now inherit creator state. Automatic child
+creation still needs element and history lifecycles. Ancestor-origin calculation
+and referrer-policy masking accept
 the known parent document before activation; they do not complete those
 [child-navigation dependencies](browlet/html/ROADMAP.md#section-313-ancestor-origins).
+Browsing-context groups now hold agent clusters weakly while retaining each
+origin's historical keying decision. Automatic context removal remains an explicit
+`UserAgent.collectBrowsingContexts()` dependency: it needs destroyed-Document
+tracking and WindowProxy collection eligibility, which the current strong group
+membership does not supply. Weak cluster storage is not evidence that retired
+Windows or native realms are collectible. See the
+[grouping audit](browlet/browsing/navigation/ROADMAP.md#html-7323-groupings-of-browsing-contexts).
+Full activity follows the actual container Document through every ancestor,
+including retained inactive Documents; History, Location, and task gates use
+that predicate. Host input targeting/delivery and WebDriver input commands
+remain absent, so §7.3.3's user-interaction restriction still needs those
+[consumers](browlet/interaction/ROADMAP.md).
 `Window.open()` supports empty-URL calls to existing `_self`, `_parent`, and `_top`
 targets. The [existing named-target lookup](browlet/browsing/navigation/ROADMAP.md#html-7317-target-names-and-existing-target-lookup)
-now coordinates subtree/group searches, but still throws at its source-activation,
-sandbox-permission, and familiarity dependencies. New-target selection now applies
+now coordinates subtree/group searches and applies context familiarity, but still
+throws at its source-activation and sandbox-permission dependencies. New-target
+selection now applies
 browser policy, consumes activation, handles COOP/noopener, and retains sandbox
 state. The default popup blocker still needs activation notification/expiry;
-opener-linked creation still needs auxiliary-context inheritance. A null-opener
-target can use the existing factory when those earlier checks are supplied or
-popup blocking is disabled. Nonempty-URL navigation remains unfinished.
+both auxiliary and null-opener targets can use their context factories when those
+earlier checks are supplied or popup blocking is disabled. Nonempty-URL navigation
+remains unfinished.
 Feature processing and the new/existing
 opening branches are connected, but CSSOM View geometry and URL/history effects
 remain unfinished. `close()` and `stop()` also require their lifecycle operations;
@@ -1426,7 +1441,7 @@ Documents. See the [navigable audit](browlet/browsing/navigation/ROADMAP.md#html
 iframe/object/embed/frame associations. Those associations still require internal
 creation/destruction producers; appending a container alone creates no child.
 `UserAgent.createChildNavigable()` provides the element-to-navigation entry,
-but creator inheritance, non-iframe contexts, traversal queuing, and history
+but non-iframe contexts, traversal queuing, and history
 application still throw. Embed's `setup()` also throws explicitly for its missing
 Fetch/content-selection/navigation lifecycle; its retained child state and
 collection integration do not imply automatic loading. See the

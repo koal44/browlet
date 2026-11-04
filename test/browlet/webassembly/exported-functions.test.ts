@@ -298,6 +298,7 @@ describe('WebAssembly Exported Functions', () => {
     const foreign = getRelevantRealm(Reflect.get(browser.window, 'foreign') as typeof browser.window);
     const document = foreign.getAssociatedDocument();
     document.browsingContext = new BrowsingContext(foreign.windowProxy);
+    document.makeActive();
     new TopLevelTraversable(createDocumentState(document));
     expect(await browser.evaluate(async (source) => {
       const read = Reflect.get(globalThis, 'readCallbackState') as () => CallbackState;
@@ -501,6 +502,7 @@ describe('WebAssembly Exported Functions', () => {
     // Asynchronous instantiation queues an HTML task in C, requiring an active Document.
     const document = c.getAssociatedDocument();
     document.browsingContext = new BrowsingContext(c.windowProxy);
+    document.makeActive();
     new TopLevelTraversable(createDocumentState(document));
     const loop = a.env.responsibleEventLoop;
     Reflect.set(cWindow, 'readCallbackState', () => ({

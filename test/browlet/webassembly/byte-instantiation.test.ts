@@ -240,6 +240,7 @@ function fixture(): Browlet {
   const realm = getRelevantRealm(foreign);
   const document = realm.getAssociatedDocument();
   document.browsingContext = new BrowsingContext(realm.windowProxy);
+  document.makeActive();
   new TopLevelTraversable(createDocumentState(document));
   Reflect.set(browser.window, 'foreign', foreign);
   return browser;
