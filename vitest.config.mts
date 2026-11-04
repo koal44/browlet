@@ -1,3 +1,4 @@
+import { availableParallelism } from 'node:os';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
@@ -12,6 +13,8 @@ export default defineConfig({
           // Exercise stock Node's module backend as well as the addon implementation.
           execArgv: ['--experimental-vm-modules'],
           isolate: false,
+          // Realm-heavy files and subprocess fixtures need headroom under load.
+          maxWorkers: Math.min(4, availableParallelism()),
           include: [
             'test/lint/**/*.test.mjs',
             'test/support/**/*.test.ts',

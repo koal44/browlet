@@ -10,7 +10,8 @@ it('avoids export enumeration natively and reuses successful fallback checks', (
   // Resetting the shared worker's modules would lose HTML's installation guard
   // while its native host hooks remain installed, breaking subsequent imports.
   execFileSync(process.execPath, [
-    '--require', 'tsx/cjs', join(__dirname, 'fixtures/wasm-module-brand.cjs'),
+    '--require', join(__dirname, '../support/register-typescript.cjs'),
+    join(__dirname, 'fixtures/wasm-module-brand.cjs'),
   ], { encoding: 'utf8' });
 });
 

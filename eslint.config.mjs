@@ -385,7 +385,7 @@ export default defineConfig(
   },
 
   {
-    files: ['test/artifact/**/*.cjs', 'node-compat/**/*.cjs'],
+    files: ['test/artifact/**/*.cjs', 'test/support/**/*.cjs', 'node-compat/**/*.cjs'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'commonjs',

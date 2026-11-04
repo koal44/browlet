@@ -17,6 +17,7 @@ it.each([
   // Vitest cannot interrupt execFileSync with its own timeout.
   const entry = resolve(__dirname, `../../../../src/stylelet/cssom/${module}.ts`);
   expect(() => execFileSync(process.execPath, [
-    '--require', 'tsx/cjs', '-e', 'require(process.argv[1]);', entry,
+    '--require', resolve(__dirname, '../../../support/register-typescript.cjs'),
+    '-e', 'require(process.argv[1]);', entry,
   ], { stdio: 'pipe', timeout: 10_000 })).not.toThrow();
 });

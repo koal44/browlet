@@ -43,6 +43,18 @@ that kept discarded Window realms alive in reused workers; increasing
 the heap ceiling is unnecessary. The launcher preserves caller-supplied
 `NODE_OPTIONS` unchanged.
 
+Unit runs use up to four workers, bounded by available CPU parallelism. The
+realm-heavy files and subprocess fixtures otherwise compete for enough CPU and
+memory to cause intermittent timeouts. Use `--maxWorkers` for deliberate local
+comparisons; the ordinary test timeouts remain unchanged.
+
+TypeScript child fixtures preload `test/support/register-typescript.cjs`. It
+keeps TSX's transform cache under `node-compat/.cache/tsx-unit`, avoiding a linear
+lookup through the shared temporary cache from other projects/worktrees. The
+child's normal temp environment is restored before its fixture runs, and each
+fixture still gets a fresh process and module graph. `TSX_DISABLE_CACHE` remains
+available for cache-free comparisons; no Node compile cache is enabled here.
+
 ## Browser tests
 
 The Selectlet and Stylelet browser suites use Playwright's Chromium, Firefox, and

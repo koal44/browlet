@@ -170,7 +170,8 @@ describe('HTML Promise jobs', () => {
     // Unsupported engines report the uncaught job to Node. Isolate that outcome
     // from Vitest while retaining the required Window behavior as the assertion.
     const child = spawnSync(process.execPath, [
-      '--import', 'tsx', resolve('test/support/promise-job-error-child.ts'), kind,
+      '--require', resolve('test/support/register-typescript.cjs'),
+      resolve('test/support/promise-job-error-child.ts'), kind,
     ], { env: process.env, encoding: 'utf8', windowsHide: true, timeout: 20000 });
     expect(child.error).toBeUndefined();
     expect(child.status, child.stdout + child.stderr).toBe(0);
