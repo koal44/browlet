@@ -5,6 +5,7 @@ import type { TaskSourceKey } from '../../../src/infra/index';
 import { BindingWorld } from '../../../src/web-idl/index';
 import type { WebAssembly as WebAssemblyAPI } from '../../../src/browlet/platform';
 import { WasmImpl, wasmIDLDefinitions, type WasmEnvironment, type WebAssemblyCompileOptions } from '../../../src/browlet/webassembly/index';
+import { wasmStreamingIDL } from '../../../src/browlet/webassembly/webassembly';
 import { TestRealm } from '../../support/web-idl-realm';
 
 // Exercise Web IDL conversion with a standalone realm and controlled host task delivery.
@@ -89,7 +90,7 @@ function fixture() {
   const realm = new TestRealm();
   const tasks: { source: TaskSourceKey; steps: () => void; }[] = [];
   // This host tests the JS namespace without browser Fetch/Response integration.
-  const definitions = wasmIDLDefinitions;
+  const definitions = wasmIDLDefinitions.filter((definition) => definition !== wasmStreamingIDL);
   const world = new BindingWorld<WasmEnvironment & { realm: TestRealm; }>(definitions, {
     // This standalone host has no HTML caller environment to capture.
     getIncumbentEnvironment: () => undefined,

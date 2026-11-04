@@ -4630,6 +4630,8 @@ export interface WebAssembly {
   instantiate(bytes: ArrayBuffer | SharedArrayBuffer | Int8Array<ArrayBufferLike> | Int16Array<ArrayBufferLike> | Int32Array<ArrayBufferLike> | Uint8Array<ArrayBufferLike> | Uint16Array<ArrayBufferLike> | Uint32Array<ArrayBufferLike> | Uint8ClampedArray<ArrayBufferLike> | BigInt64Array<ArrayBufferLike> | BigUint64Array<ArrayBufferLike> | Float16Array<ArrayBufferLike> | Float32Array<ArrayBufferLike> | Float64Array<ArrayBufferLike> | DataView<ArrayBufferLike>, importObject?: object, options?: WebAssemblyCompileOptions): Promise<WebAssemblyInstantiatedSourceResult>;
   instantiate(moduleObject: WebAssembly.Module, importObject?: object): Promise<WebAssembly.Instance>;
   readonly JSTag: WebAssembly.Tag;
+  compileStreaming(source: Response | PromiseLike<Response>, options?: WebAssemblyCompileOptions): Promise<WebAssembly.Module>;
+  instantiateStreaming(source: Response | PromiseLike<Response>, importObject?: object, options?: WebAssemblyCompileOptions): Promise<WebAssemblyInstantiatedSourceResult>;
   Module: WebAssembly.ModuleConstructor;
   Instance: WebAssembly.InstanceConstructor;
   Memory: WebAssembly.MemoryConstructor;

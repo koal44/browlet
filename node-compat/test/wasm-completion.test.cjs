@@ -71,6 +71,24 @@ test('independent contexts select their own completion scheduler', { timeout: 50
   assert.ok(await pa instanceof first.globalProxy.WebAssembly.Module);
 });
 
+test('completion identifies its native Promise for per-operation scheduling', { timeout: 5000 }, async () => {
+  const context = compat.createContextHandle();
+  const scheduled = [];
+  const ready = Promise.withResolvers();
+  compat.setWasmAsyncCompletionCallback(context, (complete, promise) => {
+    scheduled.push({ complete, promise });
+    if (scheduled.length === 2) ready.resolve();
+  });
+  const success = compat.runInContext(`WebAssembly.compile(new Uint8Array(${emptyModule}))`, context);
+  const failure = compat.runInContext('WebAssembly.compile(new Uint8Array([0]))', context);
+  const rejected = assert.rejects(failure, context.globalProxy.WebAssembly.CompileError);
+  await ready.promise;
+  assert.deepEqual(new Set(scheduled.map(item => item.promise)), new Set([success, failure]));
+  for (const item of scheduled) item.complete();
+  assert.ok(await success instanceof context.globalProxy.WebAssembly.Module);
+  await rejected;
+});
+
 test('ordinary Node, vm, and unregistered addon contexts retain native completion', { timeout: 5000 }, async () => {
   const context = compat.createContextHandle();
   compat.setWasmAsyncCompletionCallback(context, () => assert.fail('removed callback ran'));

@@ -1,5 +1,5 @@
 import {
-  wasmCompileOptionsIDL, wasmIDL,
+  wasmCompileOptionsIDL, wasmIDL, wasmStreamingIDL,
   wasmInstanceIDL, wasmTagIDL, wasmInstantiatedSourceIDL,
   wasmAddressTypeIDL, wasmAddressValueIDL,
   wasmMemoryIDL, wasmMemoryDescriptorIDL, wasmSharedMemoryDescriptorIDL,
@@ -20,5 +20,5 @@ export const wasmIDLDefinitions = [
   wasmMemoryDescriptorIDL, wasmSharedMemoryDescriptorIDL,
   wasmTableKindIDL, wasmTableDescriptorIDL,
   wasmValueTypeIDL, wasmGlobalDescriptorIDL, wasmTagTypeIDL,
-  wasmCompileOptionsIDL, wasmInstantiatedSourceIDL, wasmIDL,
+  wasmCompileOptionsIDL, wasmInstantiatedSourceIDL, wasmIDL, wasmStreamingIDL,
 ];

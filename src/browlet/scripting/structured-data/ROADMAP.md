@@ -7,6 +7,15 @@ and the current Window API are implemented, including the October 2026
 same-agent-cluster contract. MessagePort transfer now supplies a concrete platform
 consumer; history and worker integrations remain unfinished.
 
+WebAssembly Web API §3 adds a native Module record to the same traversal.
+It snapshots compiled code without source-object expandos, rejects storage use,
+records the serializing cluster, and allocates a fresh destination-owned Module.
+Transfer preflight includes its interface name and cluster; Modules themselves
+are not transferable. Native immutable slots cannot use ordinary interface
+allocate-then-restore hooks. The existing Binding record still tracks the result;
+see [the WebAssembly review](../../webassembly/ROADMAP.md#3-implemented-module-serialization).
+The token currently stays within one runtime; worker transport remains open.
+
 ## October 2026 audit checkpoint
 
 The October 15 audit found the new §2.7.3, restricting to the same agent

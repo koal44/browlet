@@ -1,14 +1,15 @@
-import { type InternalPromise, type InternalPromiseWithResolvers, type TaskSourceKey } from '../../infra/index';
+import { asciiLower, type InternalPromise, type InternalPromiseWithResolvers, type TaskSourceKey } from '../../infra/index';
 import {
   getBufferSourceView,
   type JSBufferSource, type JSEnvironment, type JSWasmModule, type JSWasmInstance,
 } from '../../js-engine/index';
 import {
-  annotated, arg, atArg, attr, ctor, impl, invokeWith, defineDictionary, defineEnumeration, defineInterface, defineNamespace, definePartialDictionary,
+  annotated, arg, atArg, attr, ctor, impl, invokeWith, defineDictionary, defineEnumeration, defineInterface, defineNamespace, definePartialDictionary, definePartialNamespace,
   defineTypedef, dictMember, emptyDictionary, emptySequence,
   idlType, implementationType, nullable, op, promise, reference, roAttr, sequence, union, xattr,
   type WebIDLRealm,
 } from '../../web-idl/index';
+import { isOkStatus, type ResponseImpl } from '../../fetch/index';
 
 import { WasmModuleImpl } from './module';
 import { WasmExceptionImpl } from './exception';
@@ -45,6 +46,42 @@ export class WasmImpl {
     const result = env.InternalPromise.withResolvers(moduleType);
     this.#compile(bytes, options, 'engine', result, env);
     return result.promise;
+  }
+
+  /** Consume a converted Response Promise, then compile its bytes on the networking task source. */
+  // https://webassembly.github.io/spec/web-api/#compile-a-potential-webassembly-response
+  // Whole-body consumption is the specification's model; incremental compilation is optional.
+  compileStreaming(
+    source: InternalPromise<ResponseImpl>, options: WebAssemblyCompileOptions, env: JSEnvironment,
+  ): InternalPromise<WasmModuleImpl> {
+    const result = env.InternalPromise.withResolvers(moduleType);
+    source.observe((response) => {
+      const record = response.getResponse();
+      const mime = record.headerList.get('Content-Type');
+      if (mime === null || asciiLower(mime.replace(/^[\t ]+|[\t ]+$/g, '')) !== 'application/wasm') {
+        result.reject(new env.realm.TypeError('WebAssembly response Content-Type must be application/wasm without parameters'));
+        return;
+      }
+      if ((record.type !== 'default' && record.type !== 'basic' && record.type !== 'cors') || !isOkStatus(record.status)) {
+        result.reject(new env.realm.TypeError('WebAssembly response must be CORS-same-origin with an ok status'));
+        return;
+      }
+      const url = response.url;
+      response.arrayBuffer().observe((bytes) => {
+        // Resolve this API's Promise directly: adopting an intermediate public
+        // Module Promise would repeat the author's then getter.
+        try { this.#compile(bytes, options, 'network', result, env, url); }
+        catch (reason) { result.reject(reason); }
+      }, result.reject);
+    }, result.reject);
+    return result.promise;
+  }
+
+  /** Instantiate the Module compiled from a Response using the existing import/callback adapter. */
+  instantiateStreaming(
+    source: InternalPromise<ResponseImpl>, imports: object | undefined, options: WebAssemblyCompileOptions, call: WasmInvocation,
+  ): InternalPromise<WebAssemblyInstantiatedSource> {
+    return this.#instantiatePromiseOfModule(this.compileStreaming(source, options, call.env), imports, call);
   }
 
   /** Instantiate converted bytes through the native compiler and its Module Promise. */
@@ -538,5 +575,39 @@ export const wasmIDL = defineNamespace<WasmEnvironment>({
     ),
     // SPEC_CLASH(wasm-js-tag-descriptor): Install the draft's enumerable getter over V8's readonly data property.
     roAttr('JSTag', tagType),
+  ],
+});
+
+// Web API §2 contributes to the existing native namespace and its implementation.
+/*
+[Exposed=(Window,Worker)]
+partial namespace WebAssembly {
+  Promise<Module> compileStreaming(Promise<Response> source, optional WebAssemblyCompileOptions options = {});
+  Promise<WebAssemblyInstantiatedSource> instantiateStreaming(
+      Promise<Response> source, optional object importObject, optional WebAssemblyCompileOptions options = {});
+};
+*/
+export const wasmStreamingIDL = definePartialNamespace<WasmEnvironment>({
+  name: 'WebAssembly', exposed: ['Window', 'Worker'],
+  members: [
+    op('compileStreaming', promise(moduleType),
+      [
+        arg('source', promise(implementationType<ResponseImpl>(reference('Response')))),
+        arg('options', implementationType<WebAssemblyCompileOptions>(reference('WebAssemblyCompileOptions')), {
+          optional: true, default: emptyDictionary,
+        }),
+      ],
+      invokeWith(atArg<WasmEnvironment>(2, (env) => env)),
+    ),
+    op('instantiateStreaming', promise(instantiatedSourceType),
+      [
+        arg('source', promise(implementationType<ResponseImpl>(reference('Response')))),
+        arg('importObject', idlType.object, { optional: true }),
+        arg('options', implementationType<WebAssemblyCompileOptions>(reference('WebAssemblyCompileOptions')), {
+          optional: true, default: emptyDictionary,
+        }),
+      ],
+      { method: 'instantiateStreaming', ...invokeWith(atArg<WasmEnvironment>(3, (env, _callee, incumbent) => ({ env, incumbent }))) },
+    ),
   ],
 });

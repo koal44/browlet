@@ -69,6 +69,7 @@ export function structuredSerializeWithTransfer(
   // Our graph keeps separate placeholders; the holders above supply their metadata.
   for (const record of memory.values()) {
     if (record.type === 'platform-object') result.interfaceNames.add(record.interfaceName);
+    else if (record.type === 'WebAssembly.Module') result.interfaceNames.add('Module');
     if (record.cluster !== null) result.cluster = record.cluster;
   }
   return result;

@@ -7,6 +7,7 @@ import {
   DOMExceptionImpl, DOMExceptionNames, type BindingContext,
 } from '../../../web-idl/index';
 
+import { WasmModuleImpl } from '../../webassembly/index';
 import type { BrowletEnvironment } from '../../environment/index';
 
 import type {
@@ -87,6 +88,14 @@ class StructuredDeserializer {
         return this.#deserializeError(serialized);
       case 'platform-object':
         return this.#deserializePlatformObject(serialized);
+      case 'WebAssembly.Module': {
+        // Web API §3 permits reusing compiled code. The fresh native object is
+        // private implementation state; Binding projects a distinct platform object.
+        if (!this.#ctx.isInterfaceExposed('Module')) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
+        const module = realm.cloneWebAssemblyModule(serialized.module);
+        value = this.#ctx.project(WasmModuleImpl, new WasmModuleImpl(module));
+        break;
+      }
       case 'transfer-placeholder':
         throw new InternalError('Transfer placeholder has no received value');
     }

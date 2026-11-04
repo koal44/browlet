@@ -1,4 +1,5 @@
 import { InternalError } from '../../../infra/index';
+import type { JSWasmModule } from '../../../js-engine/index';
 import type { BufferViewTypeName, StructuredData } from '../../../web-idl/core/index';
 
 import type { AgentCluster } from '../agents';
@@ -12,6 +13,7 @@ export type SerializedRecord =
   | SerializedRegExp
   | SerializedArrayBuffer
   | SerializedSharedArrayBuffer
+  | SerializedWasmModule
   | SerializedArrayBufferView
   | SerializedMap
   | SerializedSet
@@ -76,6 +78,13 @@ export type SerializedArrayBufferView = {
   byteLength: number | 'auto';
   byteOffset: number;
   arrayLength?: number | 'auto';
+  cluster: AgentCluster | null;
+};
+
+/** Native compiled-code token; author properties and the original Module identity are not retained. */
+export type SerializedWasmModule = {
+  type: 'WebAssembly.Module';
+  module: JSWasmModule;
   cluster: AgentCluster | null;
 };
 

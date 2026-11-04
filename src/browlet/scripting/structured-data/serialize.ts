@@ -1,6 +1,6 @@
 import { InternalError } from '../../../infra/index';
 import {
-  type JSBufferView, copyMapData, copySetData, getArrayBufferMaxByteLength,
+  type JSBufferView, type JSWasmModule, copyMapData, copySetData, copyWebAssemblyModule, getArrayBufferMaxByteLength,
   getArrayBufferByteLength, getArrayBufferViewBuffer, getArrayBufferViewByteLength,
   getArrayBufferViewByteOffset, getBigIntData, getBooleanData, getBufferSourceCopy,
   getBufferViewTypeName, getDateValue, getNumberData, getRegExpData, getStringData,
@@ -12,7 +12,7 @@ import {
   isLengthTrackingArrayBufferView, isMapIteratorObject, isModuleNamespaceObject,
   isPromiseObject, isProxyObject, isRegExpStringIteratorObject,
   isSetIteratorObject, isSharedArrayBuffer, isStringIteratorObject, isWeakMapObject,
-  isWeakRefObject, isWeakSetObject, isWebAssemblyException, nativeCloneRejectsPropertylessObject,
+  isWeakRefObject, isWeakSetObject, isWebAssemblyModule, isWebAssemblyException, nativeCloneRejectsPropertylessObject,
   readErrorStack, toString,
 } from '../../../js-engine/index';
 import {
@@ -20,6 +20,7 @@ import {
   type BindingContext, type ImplementationClass, type PlatformRecord,
 } from '../../../web-idl/index';
 
+import { WasmModuleImpl } from '../../webassembly/index';
 import { DetachedTransferableStamper } from '../transferable';
 import type { BrowletEnvironment } from '../../environment/index';
 
@@ -87,7 +88,7 @@ class StructuredSerializer {
     return serialized;
   }
 
-  #serializeValue(value: unknown, record: Readonly<PlatformRecord> | undefined): SerializedRecord {
+  #serializeValue(value: unknown, record: PlatformRecord | undefined): SerializedRecord {
     if (isPrimitive(value)) return { type: 'primitive', value, cluster: null };
     if (typeof value === 'symbol') throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
     if (!record && isProxyObject(value)) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
@@ -143,6 +144,15 @@ class StructuredSerializer {
       return this.#serializeSet(value);
     } else if (hasErrorData(value) && !record) {
       return this.#serializeError(value);
+    } else if (record?.implInst instanceof WasmModuleImpl || isWebAssemblyModule(value)) {
+      // Web API §3: Modules cannot use allocate-then-restore interface steps;
+      // their engine slots are immutable. Retain a fresh compiled-code token,
+      // as the spec permits, including for Modules without a Binding record.
+      // https://webassembly.github.io/spec/web-api/#serialization
+      if (this.#forStorage) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
+      const module = record?.implInst instanceof WasmModuleImpl ? record.implInst.serialize() : copyWebAssemblyModule(value as JSWasmModule);
+      serialized = { type: 'WebAssembly.Module', module, cluster: null };
+      restrictToSameAgentCluster(serialized, this.#ctx.getEnvironment());
     } else if (record) {
       return this.#serializePlatformObject(record);
     } else if (Array.isArray(value)) {
@@ -276,7 +286,7 @@ class StructuredSerializer {
 
   // StructuredSerializeInternal: serializable platform objects.
   // https://html.spec.whatwg.org/multipage/structured-data.html#structuredserializeinternal
-  #serializePlatformObject(record: Readonly<PlatformRecord>): SerializedPlatformObject {
+  #serializePlatformObject(record: PlatformRecord): SerializedPlatformObject {
     const steps = record.assembled.serialSteps;
     if (!steps) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
     if (DetachedTransferableStamper.has(record.implInst)) {

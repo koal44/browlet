@@ -1,5 +1,5 @@
 import {
-  getBufferSourceView, isWebAssemblyModule, getWebAssemblyModuleImports, isCallable, isObject, isWebAssemblyFunction,
+  copyWebAssemblyModule, getBufferSourceView, isWebAssemblyModule, getWebAssemblyModuleImports, isCallable, isObject, isWebAssemblyFunction,
   type JSBufferSource, type JSEnvironment, type JSFunction, type JSWasmModule, type JSWasmInstance,
   type JSWasmModuleImport, type JSWasmImportExportKind,
 } from '../../js-engine/index';
@@ -54,6 +54,11 @@ export class WasmModuleImpl {
   // SPEC_CLASH(wasm-module-start-timing): V8 runs start synchronously while capturing imports.
   instantiate(imports: object | undefined, env: WasmEnvironment): Promise<unknown> {
     return Reflect.apply(env.realm.webAssemblyInstantiate, undefined, [this.#backing, this.#adaptImports(imports, env)]) as Promise<unknown>;
+  }
+
+  /** Snapshot compiled state for structured serialization without exposing the retained engine object. */
+  serialize(): JSWasmModule {
+    return copyWebAssemblyModule(this.#backing);
   }
 
   /** Adapt function callbacks and unwrap typed imports lazily, preserving the engine's lookup order. */
@@ -159,7 +164,7 @@ export const wasmModuleImportDescriptorIDL = defineDictionary({
 // the structured-data integration snapshots the implementation's private engine state.
 // https://webassembly.github.io/spec/js-api/#modules
 /*
-[LegacyNamespace=WebAssembly, Exposed=*]
+[LegacyNamespace=WebAssembly, Exposed=*, Serializable]
 interface Module {
   constructor([AllowResizable] AllowSharedBufferSource bytes, optional WebAssemblyCompileOptions options = {});
   static sequence<ModuleExportDescriptor> exports(Module moduleObject);
@@ -169,7 +174,7 @@ interface Module {
 */
 export const wasmModuleIDL = defineInterface<JSEnvironment>({
   name: 'Module', exposed: '*',
-  ...xattr(['LegacyNamespace', 'WebAssembly']),
+  ...xattr(['LegacyNamespace', 'WebAssembly'], 'Serializable'),
   implementation: impl(WasmModuleImpl, { constructWith: [atArg<JSEnvironment>(2, (env) => env)] }),
   members: [
     // SPEC_CLASH(wasm-module-constructor-order): Binding converts arguments before reading newTarget.prototype, unlike V8.
