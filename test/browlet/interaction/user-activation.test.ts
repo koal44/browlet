@@ -9,6 +9,20 @@ import type { HTMLFrameElementImpl } from '../../../src/browlet/dom/nodes/html/l
 import { createOpaqueOrigin } from '../../../src/url/index';
 import { unwrap } from '../../support/browlet-binding';
 
+describe('Sticky activation', () => {
+  it('compares the retained activation time with the Window clock and survives transient consumption', async () => {
+    const { window } = await fixture();
+    expect(window.hasStickyActivation()).toBe(false);
+    window.lastActivationTimestamp = window.env.timing.currentHighResolutionTime().milliseconds + 60_000;
+    expect(window.hasStickyActivation()).toBe(false);
+    window.lastActivationTimestamp = window.env.timing.currentHighResolutionTime().milliseconds;
+    expect(window.hasStickyActivation()).toBe(true);
+    window.consumeUserActivation();
+    expect(window.lastActivationTimestamp).toBe(-Infinity);
+    expect(window.hasStickyActivation()).toBe(true);
+  });
+});
+
 describe('Transient activation consumption', () => {
   it('consumes every active Window in the top-level tree while preserving never-activated and history timestamps', async () => {
     const { document, window } = await fixture();

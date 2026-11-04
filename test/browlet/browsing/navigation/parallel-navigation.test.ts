@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { Navigable, TopLevelTraversable, type NavigateOptions } from '../../../../src/browlet/browsing/navigation/navigable';
+import { Navigable, TopLevelTraversable, type NavigateOptions, type UnloadCancellationResult } from '../../../../src/browlet/browsing/navigation/navigable';
 import { DocumentState, type PostResource } from '../../../../src/browlet/browsing/navigation/state/index';
 import { CSPList, ContentSecurityPolicy } from '../../../../src/browlet/browsing/policy/csp/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
+import { internalType } from '../../../../src/infra/index';
 import { FetchResponse } from '../../../../src/fetch/index';
 import { obtainURLOrigin, parseURL, serializeURL } from '../../../../src/url/index';
 import { createManualUserAgent } from '../../../support/browlet-agent';
@@ -23,7 +24,7 @@ describe('parallel navigation cancellation and abortion', () => {
     expect(check).not.toHaveBeenCalled();
     expect(populate).not.toHaveBeenCalled();
     expect(abort).not.toHaveBeenCalled();
-    turns.shift()!();
+    await resumeNavigation(turns);
     expect(check).toHaveBeenCalledExactlyOnceWith([navigable]);
     expect(queueTask).toHaveBeenCalledExactlyOnceWith('navigation-and-traversal', expect.any(Function));
     expect(populate).toHaveBeenCalledOnce();
@@ -35,14 +36,14 @@ describe('parallel navigation cancellation and abortion', () => {
     expect(abort).toHaveBeenCalledOnce();
   });
 
-  it.each(['canceled-by-beforeunload', 'canceled-by-navigate'] as const)('stops for %s without abortion or population', (status) => {
+  it.each(['canceled-by-beforeunload', 'canceled-by-navigate'] as const)('stops for %s without abortion or population', async (status) => {
     const { document, navigable, env, turns, check, populate, abort, failed } = fixture();
     const queueTask = vi.spyOn(env, 'queueTask');
-    check.mockReturnValue(status);
+    check.mockReturnValue(env.userAgent.HostPromise.resolve(status, internalType<UnloadCancellationResult>()));
     const url = parseURL('https://example.test/next').url!;
     navigable.navigate(url, document, {}, env);
     const id = navigable.ongoingNavigation;
-    turns.shift()!();
+    await resumeNavigation(turns);
     expect(failed).toHaveBeenCalledExactlyOnceWith(navigable, { id, status: 'canceled', url });
     expect(queueTask).not.toHaveBeenCalled();
     expect(abort).not.toHaveBeenCalled();
@@ -50,15 +51,15 @@ describe('parallel navigation cancellation and abortion', () => {
     expect(navigable.activeDocument).toBe(document);
   });
 
-  it.each(['before-check', 'during-check'] as const)('reports the original ID when superseded %s', (when) => {
+  it.each(['before-check', 'during-check'] as const)('reports the original ID when superseded %s', async (when) => {
     const { document, navigable, env, turns, check, populate, failed } = fixture();
     const queueTask = vi.spyOn(env, 'queueTask');
     const url = parseURL('https://example.test/next').url!;
     navigable.navigate(url, document, {}, env);
     const id = navigable.ongoingNavigation;
     if (when === 'before-check') navigable.ongoingNavigation = 'newer';
-    else check.mockImplementation(() => { navigable.ongoingNavigation = 'newer'; return 'continue'; });
-    turns.shift()!();
+    else check.mockImplementation(() => { navigable.ongoingNavigation = 'newer'; return env.userAgent.HostPromise.resolve('continue', internalType<UnloadCancellationResult>()); });
+    await resumeNavigation(turns);
     expect(check).toHaveBeenCalledOnce();
     expect(failed).toHaveBeenCalledExactlyOnceWith(navigable, { id, status: 'canceled', url });
     expect(navigable.ongoingNavigation).toBe('newer');
@@ -66,21 +67,59 @@ describe('parallel navigation cancellation and abortion', () => {
     expect(queueTask).not.toHaveBeenCalled();
   });
 
-  it('collects live inclusive descendants when the parallel steps run', () => {
+  it('waits without population and rechecks the navigation ID when a delayed check finishes', async () => {
+    const { document, navigable, env, turns, check, populate, abort, failed } = fixture();
+    const pending = env.userAgent.HostPromise.withResolvers(internalType<UnloadCancellationResult>());
+    check.mockReturnValue(pending.promise);
+    navigable.navigate(parseURL('https://example.test/next').url!, document, {}, env);
+    const id = navigable.ongoingNavigation;
+    turns.shift()!();
+    expect(turns).toHaveLength(0);
+    expect(populate).not.toHaveBeenCalled();
+    expect(abort).not.toHaveBeenCalled();
+    navigable.ongoingNavigation = 'replacement';
+    pending.resolve('continue');
+    await expect.poll(() => turns.length).toBe(1);
+    turns.shift()!();
+    expect(failed).toHaveBeenCalledWith(navigable, expect.objectContaining({ id, status: 'canceled' }));
+    expect(navigable.ongoingNavigation).toBe('replacement');
+    expect(populate).not.toHaveBeenCalled();
+    expect(abort).not.toHaveBeenCalled();
+  });
+
+  it('reports an internal check rejection through the host without treating it as permission to navigate', async () => {
+    const { document, navigable, env, turns, check, populate, abort } = fixture();
+    const failure = new Error('prompt owner failure');
+    check.mockImplementation(() => env.userAgent.HostPromise.reject(failure, internalType<UnloadCancellationResult>()));
+    navigable.navigate(parseURL('https://example.test/next').url!, document, {}, env);
+    await expect(resumeNavigation(turns)).rejects.toBe(failure);
+    expect(populate).not.toHaveBeenCalled();
+    expect(abort).not.toHaveBeenCalled();
+  });
+
+  it('collects live inclusive descendants when the parallel steps run', async () => {
     const { document, navigable, env, turns, check } = fixture();
     navigable.navigate(parseURL('https://example.test/next').url!, document, {}, env);
     const nested = child(document);
     const grandchild = child(nested.document);
-    turns.shift()!();
+    await resumeNavigation(turns);
     expect(check).toHaveBeenCalledExactlyOnceWith([navigable, nested.navigable, grandchild.navigable]);
   });
 
-  it('retains the real unload check as the first unfinished parallel dependency', () => {
+  it('waits for real beforeunload delivery before population and abortion', async () => {
     const { document, navigable, env, turns, check, populate, abort } = fixture();
     check.mockRestore();
+    const beforeUnload = vi.spyOn(document, 'fireBeforeUnload');
     navigable.navigate(parseURL('https://example.test/next').url!, document, {}, env);
-    expect(turns.shift()!).toThrow('Unload cancellation checks are not implemented');
+    turns.shift()!();
+    expect(beforeUnload).not.toHaveBeenCalled();
     expect(populate).not.toHaveBeenCalled();
+    expect(abort).not.toHaveBeenCalled();
+    await runInHostTask(() => { expect(env.responsibleEventLoop.runTaskTurn()).toBe(true); });
+    expect(beforeUnload).toHaveBeenCalledExactlyOnceWith(false);
+    await expect.poll(() => turns.length).toBe(1);
+    turns.shift()!();
+    expect(populate).toHaveBeenCalledOnce();
     expect(abort).not.toHaveBeenCalled();
   });
 
@@ -89,7 +128,7 @@ describe('parallel navigation cancellation and abortion', () => {
     vi.mocked(env.userAgent.runInParallel).mockRestore();
     check.mockImplementation(() => {
       expect(env.responsibleEventLoop.currentlyRunningTask).toBeNull();
-      return 'canceled-by-beforeunload';
+      return env.userAgent.HostPromise.resolve('canceled-by-beforeunload', internalType<UnloadCancellationResult>());
     });
     navigable.navigate(parseURL('https://example.test/next').url!, document, {}, env);
     expect(check).not.toHaveBeenCalled();
@@ -110,7 +149,7 @@ describe('parallel navigation cancellation and abortion', () => {
     expect(check).not.toHaveBeenCalled();
     await runInHostTask(() => { expect(targetEnv.responsibleEventLoop.runTaskTurn()).toBe(true); });
     expect(turns).toHaveLength(1);
-    turns.shift()!();
+    await resumeNavigation(turns);
     expect(check).toHaveBeenCalledExactlyOnceWith([nested.navigable]);
     expect(populate).toHaveBeenCalledOnce();
     expect(targetAbort).not.toHaveBeenCalled();
@@ -122,13 +161,13 @@ describe('parallel navigation cancellation and abortion', () => {
 });
 
 describe('pending navigation history', () => {
-  it('initializes a fresh, unpopulated entry without modifying the current history', () => {
+  it('initializes a fresh, unpopulated entry without modifying the current history', async () => {
     const { document, navigable, env, turns, populate } = fixture();
     const oldEntry = navigable.activeSessionHistoryEntry;
     oldEntry.documentState.navigableTargetName = 'destination';
     const url = parseURL('https://example.test/next').url!;
     navigable.navigate(url, document, {}, env);
-    turns.shift()!();
+    await resumeNavigation(turns);
     const [entry, timing, sourceSnapshot, targetSnapshot, involvement, options] = populate.mock.calls[0]!;
     expect(entry.url).toBe(url);
     expect(entry.step).toBe('pending');
@@ -154,14 +193,14 @@ describe('pending navigation history', () => {
   });
 
   it.each(['about:blank', 'about:blank?query#fragment', 'about:srcdoc'])(
-    'retains the captured initiator origin and base for %s', (destination) => {
+    'retains the captured initiator origin and base for %s', async (destination) => {
       const { document, navigable, env, turns, populate } = fixture();
       const origin = document.origin;
       const baseURL = document.getBaseURL();
       navigable.navigate(parseURL(destination).url!, document, {}, env);
       document.origin = obtainURLOrigin(parseURL('https://changed.test/').url!);
       document.setURL(parseURL('https://changed.test/later').url!);
-      turns.shift()!();
+      await resumeNavigation(turns);
       const state = populate.mock.calls[0]![0].documentState;
       expect(state.origin).toBe(origin);
       expect(state.initiatorOrigin).toBe(origin);
@@ -170,10 +209,10 @@ describe('pending navigation history', () => {
   );
 
   it.each(['https://example.test/next', 'about:srcdoc?query', 'about:srcdoc#fragment', 'about:other'])(
-    'does not initialize a retained local origin or base for %s', (destination) => {
+    'does not initialize a retained local origin or base for %s', async (destination) => {
       const { document, navigable, env, turns, populate } = fixture();
       navigable.navigate(parseURL(destination).url!, document, {}, env);
-      turns.shift()!();
+      await resumeNavigation(turns);
       const state = populate.mock.calls[0]![0].documentState;
       expect(state.initiatorOrigin).toBe(document.origin);
       expect(state.origin).toBeNull();
@@ -181,7 +220,7 @@ describe('pending navigation history', () => {
     },
   );
 
-  it('retains POST inputs without reading the body and reads the live target name after the unload check', () => {
+  it('retains POST inputs without reading the body and reads the live target name after the unload check', async () => {
     const { document, navigable, env, turns, check, populate } = fixture();
     const body = vi.fn(() => { throw new Error('Body must not be read during history preparation'); });
     const resource: PostResource = { get requestBody() { return body(); }, requestContentType: 'text/plain' };
@@ -193,9 +232,9 @@ describe('pending navigation history', () => {
     options.documentResource = null;
     check.mockImplementation(() => {
       navigable.activeSessionHistoryEntry.documentState.navigableTargetName = 'after-prompt';
-      return 'continue';
+      return env.userAgent.HostPromise.resolve('continue', internalType<UnloadCancellationResult>());
     });
-    turns.shift()!();
+    await resumeNavigation(turns);
     const [entry, , , , involvement, population] = populate.mock.calls[0]!;
     expect(entry.documentState.resource).toBe(resource);
     expect(entry.documentState.requestReferrerPolicy).toBe('origin');
@@ -205,17 +244,17 @@ describe('pending navigation history', () => {
     expect(body).not.toHaveBeenCalled();
   });
 
-  it('retains an empty srcdoc resource rather than treating it as absent', () => {
+  it('retains an empty srcdoc resource rather than treating it as absent', async () => {
     const { document, navigable, env, turns, populate } = fixture();
     navigable.navigate(parseURL('about:srcdoc').url!, document, { documentResource: '' }, env);
-    turns.shift()!();
+    await resumeNavigation(turns);
     expect(populate.mock.calls[0]![0].documentState.resource).toBe('');
   });
 
-  it('supplies the browser-UI origin snapshot without inventing a source Document', () => {
+  it('supplies the browser-UI origin snapshot without inventing a source Document', async () => {
     const { navigable, env, turns, populate } = fixture();
     navigable.navigate(parseURL('about:blank').url!, null, { userInvolvement: 'browser UI' }, env);
-    turns.shift()!();
+    await resumeNavigation(turns);
     const [entry, , sourceSnapshot, , involvement] = populate.mock.calls[0]!;
     expect(entry.documentState.initiatorOrigin?.kind).toBe('opaque');
     expect(entry.documentState.origin).toBe(entry.documentState.initiatorOrigin);
@@ -224,12 +263,12 @@ describe('pending navigation history', () => {
     expect(involvement).toBe('browser UI');
   });
 
-  it('appends finalization only on population completion, preserving the selected entry and history behavior', () => {
+  it('appends finalization only on population completion, preserving the selected entry and history behavior', async () => {
     const { document, navigable, env, turns, populate } = fixture();
     const append = vi.spyOn(navigable.traversable, 'appendSessionHistoryTraversalSteps');
     const finalize = vi.spyOn(navigable, 'finalizeCrossDocumentNavigation').mockImplementation(() => {});
     navigable.navigate(parseURL('https://example.test/next').url!, document, { historyHandling: 'replace' }, env);
-    turns.shift()!();
+    await resumeNavigation(turns);
     const [entry, , , , , options] = populate.mock.calls[0]!;
     expect(append).not.toHaveBeenCalled();
     expect(finalize).not.toHaveBeenCalled();
@@ -241,18 +280,18 @@ describe('pending navigation history', () => {
     expect(finalize).toHaveBeenCalledExactlyOnceWith('replace', 'none', entry);
   });
 
-  it('keeps population and recursive abortion as explicit owner dependencies', () => {
+  it('keeps population and recursive abortion as explicit owner dependencies', async () => {
     const { document, navigable, env, turns, populate, abort } = fixture();
     populate.mockRestore();
     abort.mockRestore();
     navigable.navigate(parseURL('https://example.test/next').url!, document, {}, env);
-    expect(turns.shift()!).toThrow('Session-history entry Document population is not implemented');
+    await expect(resumeNavigation(turns)).rejects.toThrow('Session-history entry Document population is not implemented');
     expect(() => document.abortAndDescendants()).toThrow('Document and descendant abortion is not implemented');
   });
 });
 
 describe('supplied-response navigation preparation', () => {
-  it('uses response URL/origin and fresh policy/COOP state without running the provisional loader', () => {
+  it('uses response URL/origin and fresh policy/COOP state without running the provisional loader', async () => {
     const { document, turns } = fixture();
     const nested = child(document);
     const populate = vi.spyOn(nested.navigable, 'populateHistoryEntryDocument').mockImplementation(() => {});
@@ -263,7 +302,7 @@ describe('supplied-response navigation preparation', () => {
     response.headerList.append('Referrer-Policy', 'unsafe-url');
     const url = parseURL('https://requested.test/start').url!;
     nested.navigable.navigate(url, document, { response }, nested.document.env);
-    turns.shift()!();
+    await resumeNavigation(turns);
     const [entry, , , snapshot, , options] = populate.mock.calls[0]!;
     const params = options!.navigationParams!;
     expect(entry.url).toBe(url);
@@ -292,7 +331,7 @@ describe('supplied-response navigation preparation', () => {
     expect(loader).not.toHaveBeenCalled();
   });
 
-  it('clones live initiator policy and unions CSP restrictions with the earlier target snapshot', () => {
+  it('clones live initiator policy and unions CSP restrictions with the earlier target snapshot', async () => {
     const { document, turns } = fixture();
     const nested = child(document);
     const populate = vi.spyOn(nested.navigable, 'populateHistoryEntryDocument').mockImplementation(() => {});
@@ -305,7 +344,7 @@ describe('supplied-response navigation preparation', () => {
     document.policyContainer.cspList.policies.push(ContentSecurityPolicy.parse('sandbox allow-forms', 'header', 'enforce'));
     nested.frame.removeAttribute('sandbox');
     nested.frame.setAttribute('referrerpolicy', 'unsafe-url');
-    turns.shift()!();
+    await resumeNavigation(turns);
     const [entry, , sourceSnapshot, targetSnapshot, , options] = populate.mock.calls[0]!;
     const params = options!.navigationParams!;
     expect(sourceSnapshot.sourcePolicyContainer.referrerPolicy).toBe('strict-origin-when-cross-origin');
@@ -322,7 +361,7 @@ describe('supplied-response navigation preparation', () => {
     expect(params.aboutBaseURL).toBe(entry.documentState.aboutBaseURL);
   });
 
-  it('inherits srcdoc policy from the container rather than the source Document', () => {
+  it('inherits srcdoc policy from the container rather than the source Document', async () => {
     const { document, turns } = fixture();
     const nested = child(document);
     const source = child(document).document;
@@ -330,29 +369,29 @@ describe('supplied-response navigation preparation', () => {
     document.policyContainer.referrerPolicy = 'origin';
     source.policyContainer.referrerPolicy = 'no-referrer';
     nested.navigable.navigate(parseURL('about:srcdoc').url!, source, { response: suppliedResponse('about:srcdoc') }, nested.document.env);
-    turns.shift()!();
+    await resumeNavigation(turns);
     const params = populate.mock.calls[0]![5]!.navigationParams!;
     expect(params.policyContainer.referrerPolicy).toBe('origin');
     expect(params.policyContainer).not.toBe(document.policyContainer);
     expect(params.origin).toBe(source.origin);
   });
 
-  it('supports a top-level supplied response without inventing a parent policy container', () => {
+  it('supports a top-level supplied response without inventing a parent policy container', async () => {
     const { document, navigable, env, turns, populate } = fixture();
     const response = suppliedResponse('https://example.test/next');
     navigable.navigate(parseURL('https://example.test/next').url!, document, { response }, env);
-    turns.shift()!();
+    await resumeNavigation(turns);
     const params = populate.mock.calls[0]![5]!.navigationParams!;
     expect(params.response).toBe(response);
     expect(params.policyContainer).not.toBe(document.policyContainer);
     expect(params.policyContainer.referrerPolicy).toBe('strict-origin-when-cross-origin');
   });
 
-  it('requires a response URL before population', () => {
+  it('requires a response URL before population', async () => {
     const { document, navigable, env, turns, populate } = fixture();
     const response = new FetchResponse();
     navigable.navigate(parseURL('https://example.test/next').url!, document, { response }, env);
-    expect(turns.shift()!).toThrow('Navigation requires a response URL');
+    await expect(resumeNavigation(turns)).rejects.toThrow('Navigation requires a response URL');
     expect(populate).not.toHaveBeenCalled();
   });
 });
@@ -370,7 +409,8 @@ function fixture() {
   vi.spyOn(env.userAgent, 'runInParallel').mockImplementation((steps) => { turns.push(steps); });
   vi.spyOn(document.getRelevantGlobalObject()!, 'hasTransientActivation').mockReturnValue(false);
   vi.spyOn(navigable, 'isAllowedBySandboxingToNavigate').mockReturnValue(true);
-  const check = vi.spyOn(Navigable, 'checkIfUnloadingIsCanceled').mockReturnValue('continue');
+  const check = vi.spyOn(userAgent, 'checkIfUnloadingIsCanceled').mockImplementation(() =>
+    userAgent.HostPromise.resolve('continue', internalType<UnloadCancellationResult>()));
   const populate = vi.spyOn(navigable, 'populateHistoryEntryDocument').mockImplementation(() => {});
   const abort = vi.spyOn(document, 'abortAndDescendants').mockImplementation(() => {
     expect(env.responsibleEventLoop.currentlyRunningTask?.source.name).toBe('navigation and traversal');
@@ -395,4 +435,10 @@ function suppliedResponse(url: string): FetchResponse {
   const response = new FetchResponse();
   response.urlList.push(parseURL(url).url!);
   return response;
+}
+
+async function resumeNavigation(turns: (() => void)[]): Promise<void> {
+  turns.shift()!();
+  await expect.poll(() => turns.length).toBe(1);
+  turns.shift()!();
 }

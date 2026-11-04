@@ -138,7 +138,11 @@ export class NavigateEventImpl extends EventImpl {
         switch (this.navigationType) {
           case 'push':
           case 'replace':
-            document.updateURLAndHistory(this.destination.urlRecord, this.classicHistoryAPIState, this.navigationType);
+            // SPEC_CLASH(intercepted-navigation-classic-state): All three browsers clear classic state for Navigation API
+            // pushes/replacements; HTML passes null, which the URL/history update steps interpret as preserving old state.
+            document.updateURLAndHistory(
+              this.destination.urlRecord, this.classicHistoryAPIState ?? this.env.serializeForStorage(null), this.navigationType,
+            );
             break;
           case 'reload':
             navigation.updateEntriesForSameDocumentNavigation(navigable.activeSessionHistoryEntry, 'reload');

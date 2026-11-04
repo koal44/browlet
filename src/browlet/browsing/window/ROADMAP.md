@@ -119,7 +119,7 @@ navigable association, and stable proxy/defaultView identity.
 | Named getter | §7.2.2.3 now supplies child WindowProxy results, eligible name-bearing elements, IDs, live HTMLCollection results, and supported-name ordering; see the audit below. |
 | `top`, `opener`, `parent`, `frameElement` | Declared and implemented in §7.2.2.4 below; automatic child/opener lifecycle producers remain unfinished. |
 | Six BarProp attributes and `status` | Declared and implemented in §7.2.2.5 below, with one inactive-context specification gap. |
-| `location`, `history`, `navigation` | Respectively §§7.2.4, 7.2.5, and 7.2.6. Location, History attributes and method preparation, and the replaceable Window-owned Navigation identity are exposed. [History preparation](../navigation/ROADMAP.md#html-725-pushreplace-state-preparation) still requires Navigation event handling and URL/history effects; Navigation's remaining interface and lifecycle are unfinished. |
+| `location`, `history`, `navigation` | Respectively §§7.2.4, 7.2.5, and 7.2.6. Location, History attributes/methods, and the replaceable Window-owned Navigation API are exposed. [Synchronous URL/history updates](../navigation/ROADMAP.md#html-744-non-fragment-synchronous-navigations) now commit through real Navigation events; queued history application, automatic focus/scroll, and lifecycle integration remain unfinished. |
 | `customElements` | [Custom elements](../../dom/nodes/html/custom-elements/ROADMAP.md) owns the registry implementation and state; Window's getter/exposure is still missing. |
 | `focus`, `blur` | [Interaction](../../interaction/ROADMAP.md) owns focusing and user-activation dependencies; Window declarations are absent. |
 | `navigator`, `clientInformation` | [Navigator](../../navigator/ROADMAP.md), HTML §8.10; object creation, shared identity, and the Replaceable alias remain absent. |
@@ -152,7 +152,7 @@ private. Rehouse the algorithms as the navigation owners are completed.
 | Get noopener for window open | `getNoopenerForWindowOpen()` compares a resolved Blob registration's creator origin with the source environment's top-level origin using schemeful same-site. A cross-site Blob forces true even for `noopener=0`. Otherwise the parsed feature decides. Opaque identity is preserved. |
 | Window-open entry and URL handling | Binding supplies the modeled entry environment, using the operation environment for direct host calls, as Origin.from does. `openWindow()` returns null when termination nesting is nonzero and uses the entry Document's encoding/base for URL parsing; invalid URLs throw a realm-owned SyntaxError DOMException. The new EventLoop counter starts at zero; unloading must maintain it. |
 | Feature processing and target selection | Empty targets normalize to `_blank`; features are tokenized, `noreferrer` and noopener are parsed and removed, and noreferrer forces noopener and `no-referrer`. `Navigable.chooseNavigable()` supplies the target/window-type pair through existing lookup or [new-target selection](../navigation/ROADMAP.md#html-7317-new-target-selection). Policy, consumption, COOP/noopener, sandbox bookkeeping, auxiliary context creation, and familiarity are implemented; activation lookup and sandbox permission remain dependencies. A null result returns immediately without target effects. |
-| New/existing target branches | New targets receive popup classification, CSSOM View feature setup, default about:blank, and URL/history update versus navigation. Existing targets navigate for a nonempty URL and update their current browsing context's opener when permitted. Both branches supply exception/referrer inputs and apply the final window-type/noopener/special-target return rules. The owner methods `BrowsingContext.setUpFeatures()`, `DocumentImpl.updateURLAndHistory()`, and `Navigable.navigate()` explicitly throw until their effects exist. Creator inheritance remains unfinished; opener session-storage cloning is connected through the top-level factory. |
+| New/existing target branches | New targets receive popup classification, CSSOM View feature setup, default about:blank, and URL/history update versus navigation. Existing targets navigate for a nonempty URL and update their current browsing context's opener when permitted. Both branches supply exception/referrer inputs and apply the final window-type/noopener/special-target return rules. `BrowsingContext.setUpFeatures()` still throws; `DocumentImpl.updateURLAndHistory()` now commits synchronously before queued history application. `Navigable.navigate()` retains explicit population/abortion dependencies. Creator inheritance and opener session-storage cloning are connected through the context/top-level factories. |
 | Feature tokenizer and separators | `tokenizeWindowFeatures()` consumes ASCII whitespace, equals signs, and commas with the specified boundaries. It ASCII-lowercases names/values and normalizes aliases before updating an insertion-ordered Map; duplicate values replace without reordering. Non-ASCII whitespace is retained. |
 | Boolean features and popup classification | Empty/yes/true are true; all other values use HTML's exact integer-prefix parser, with errors/zero false. Missing features take the caller's default. Popup classification honors explicit `popup`, then location/toolbar, menubar, resizable, scrollbars, and status in specification order. Opening removes noopener/noreferrer before classification and feature setup. |
 | Legacy feature names | screenx/screeny/innerwidth/innerheight normalize to left/top/width/height. Other names survive, including unknown features that can affect popup classification. |
@@ -1606,12 +1606,12 @@ navigable throws an explicit lifecycle error.
 `Navigable.reload(options)` exposes all three optional inputs of
 [reloading a navigable](https://html.spec.whatwg.org/multipage/browsing-the-web.html#reload)
 in `ReloadOptions`, defined beside Navigable. The options-record translation is
-flagged for callable-shape review. The coordinator itself remains unfinished:
-Navigation API state and cancelable event delivery must precede `reloadPending`,
-then traversal processing must apply the reload history step. See the
-[navigation dependencies](../navigation/ROADMAP.md#missing). Calling the real
-coordinator currently throws `Navigable reload coordination is not implemented`;
-this slice does not fetch or reload a page, change history, or set `reloadPending`.
+reviewed and accepted. The §7.4.3 coordinator now selects Navigation
+state, dispatches the cancelable event, and sets `reloadPending` only if it may
+continue. It queues the explicitly unfinished `Traversable.applyReloadHistoryStep()`;
+actual Fetch/revalidation, unloading, replacement, and Navigation entry/activation
+updates remain later work. See the
+[reload coordination audit](../navigation/ROADMAP.md#html-743-reload-coordination).
 
 ### Browser disagreements
 

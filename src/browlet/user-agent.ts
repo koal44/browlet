@@ -36,11 +36,13 @@ import type { IntersectionObserverMargin } from './dom/intersection-observer/ind
 import type { DocumentImpl, ElementImpl } from './dom/nodes/index';
 import type { BroadcastChannelImpl } from './communication/index';
 import type { StorageImpl } from './storage/index';
+import type { WindowImpl } from './browsing/window/index';
 import type { BrowletEnvironment, BrowletEnvironmentBase } from './environment/index';
 import { WebDriver, type PageEvaluation } from './automation/index';
 import { HTTPAuthenticationStore } from './loader/index';
 import {
   BrowsingContextGroup, Navigable, TopLevelTraversable, type NavigableContainer, type PostResource,
+  type Traversable, type UnloadCancellationResult, type UserNavigationInvolvement,
 } from './browsing/navigation/index';
 import { ActivePointers, MouseInputProcessor } from './interaction/index';
 import { NodeHTTPTransport, createContentDecoder, supportedContentCodings } from './integration/host/network/index';
@@ -367,6 +369,28 @@ export class UserAgent implements
     throw new InternalError('External software confirmation and handoff are not implemented');
   }
 
+  /** Coordinate navigation/closing checks with browser-owned completion across the Documents' event loops. */
+  checkIfUnloadingIsCanceled(
+    navigables: Navigable[], traversable?: Traversable, targetStep?: number,
+    userInvolvementForNavigateEvent?: UserNavigationInvolvement,
+  ): InternalPromise<UnloadCancellationResult> {
+    return Navigable.checkIfUnloadingIsCanceled(navigables, traversable, targetStep, userInvolvementForNavigateEvent, this);
+  }
+
+  /** Whether an otherwise eligible unload prompt is unlikely to be annoying, deceptive, or pointless. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#steps-to-fire-beforeunload
+  shouldShowBeforeUnloadPrompt(_document: DocumentImpl): boolean {
+    // TODO(HTML §7.4.2.4): Supply the user-agent anti-abuse policy after sandbox, activation, and cancellation checks.
+    throw new InternalError('Beforeunload prompt admission policy is not implemented');
+  }
+
+  /** Synchronously ask the user to confirm unloading, from inside the owning event loop's pause. */
+  requestUnloadConfirmation(_document: DocumentImpl): boolean {
+    // TODO(HTML §7.4.2.4): Compose a UI host port with a user-agent-controlled message; ignore the event's returnValue text.
+    // The host wait must not run author code or depend on queued callbacks on this thread.
+    throw new InternalError('Beforeunload confirmation UI is not implemented');
+  }
+
   /** Generate a fresh canonical UUID for browser-owned registrations. */
   generateUUID(): string {
     return randomUUID();
@@ -633,6 +657,25 @@ export class UserAgent implements
     // PROVISIONAL: no BiDi sessions receive network events.
   }
 
+  /** Notify automation of a prompt and select its configured handling, or leave confirmation to the host. */
+  // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-user-prompt-opened
+  webDriverBiDiUserPromptOpened(
+    _window: WindowImpl, _type: string, _message: string, _defaultValue: string | null = null,
+  ): 'accept' | 'dismiss' | 'none' {
+    // TODO(WebDriver BiDi): Select the session/user-context prompt handler and emit subscribed userPromptOpened events.
+    // PROVISIONAL: no active BiDi sessions; the ordinary host must obtain the user's response.
+    return 'none';
+  }
+
+  /** Notify automation that a prompt was accepted or dismissed. */
+  // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-user-prompt-closed
+  webDriverBiDiUserPromptClosed(
+    _window: WindowImpl, _type: string, _accepted: boolean, _userText: string | null = null,
+  ): void {
+    // TODO(WebDriver BiDi): Emit subscribed userPromptClosed events, including prompt type and optional user input.
+    // PROVISIONAL: no active BiDi sessions receive prompt notifications.
+  }
+
   /** Notify automation after a new navigable has been initialized and registered. */
   // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-navigable-created
   // SPEC_CLASH(bidi-navigable-created-inputs): HTML omits BiDi's required has-planned-navigation input; resolve before delivery.
@@ -673,6 +716,13 @@ export class UserAgent implements
   ): void {
     // TODO(WebDriver BiDi): Resume fragment-navigated waiters and emit fragmentNavigated to subscribed sessions.
     // PROVISIONAL: live sessions and navigation event delivery are not implemented.
+  }
+
+  /** Notify automation after a synchronous URL/history update has been finalized. */
+  // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-history-updated
+  webDriverBiDiHistoryUpdated(_navigable: Navigable): void {
+    // TODO(WebDriver BiDi): Emit historyUpdated with the navigable's context and URL to subscribed sessions.
+    // PROVISIONAL: live sessions and history event delivery are not implemented.
   }
 
   /** Notify automation that an identified navigation was canceled. */

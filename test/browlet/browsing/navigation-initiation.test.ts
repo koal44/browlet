@@ -200,10 +200,16 @@ describe('Navigation.reload preparation', () => {
     expect(document.env.deserialize(reload.mock.calls[1]![0]!.navigationAPIState!)).toBeNull();
   });
 
-  it('retains the explicit reload dependency for a valid request', async () => {
-    const { browser, reload } = await fixture();
+  it('retains the explicit history-application dependency in the queued reload', async () => {
+    const { browser, document, reload } = await fixture();
+    const turns: (() => void)[] = [];
+    vi.spyOn(document.env.userAgent, 'runInParallel').mockImplementation((steps) => { turns.push(steps); });
     reload.mockRestore();
-    expect(() => browser.window.navigation.reload()).toThrow('Navigable reload coordination is not implemented');
+    const result = browser.window.navigation.reload();
+    expect(result.committed).toBeDefined();
+    expect(result.finished).toBeDefined();
+    expect(turns).toHaveLength(1);
+    expect(turns.shift()!).toThrow('Reload history-step application is not implemented');
   });
 });
 

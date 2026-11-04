@@ -176,6 +176,7 @@ describe('navigation quota integration', () => {
     vi.spyOn(document.env.userAgent, 'runInParallel').mockImplementation((steps) => { turns.push(steps); });
     const nested = child(document, 'https://a.example.test/child');
     const navigate = (source: DocumentImpl) => nested.navigable.navigate(parseURL('https://foreign.test/next').url!, source, {}, source.env);
+    const beforeUnload = vi.spyOn(nested.document, 'fireBeforeUnload').mockReturnValue([true, true]);
     const fire = vi.spyOn(nested.navigable.activeWindow!.navigation, 'firePushReplaceReloadNavigateEvent').mockReturnValue(false);
     navigate(document);
     expect(nested.frame.reservedDeferredFetchQuota).toBe(0);
@@ -185,7 +186,10 @@ describe('navigation quota integration', () => {
     navigate(document);
     expect(nested.frame.reservedDeferredFetchQuota).toBe(8192);
     expect(turns).toHaveLength(2);
-    expect(turns.shift()!).toThrow('Unload cancellation checks are not implemented');
+    for (const steps of turns.splice(0)) steps();
+    await expect.poll(() => beforeUnload.mock.calls.length).toBe(2);
+    await expect.poll(() => turns.length).toBe(2);
+    for (const steps of turns.splice(0)) steps();
   });
 
   it.each(['https://a.example.test/replaced', 'https://foreign.test/replaced'])(

@@ -307,7 +307,7 @@ async function fixture() {
   const document = unwrap<DocumentImpl>(browser.document);
   const env = document.env;
   const navigable = document.getNodeNavigable()!;
-  // Source activation and sandbox permission are earlier, still unfinished owner dependencies.
+  // Supply activation and isolate sandbox admission while testing javascript: navigation.
   vi.spyOn(document.getRelevantGlobalObject()!, 'hasTransientActivation').mockReturnValue(false);
   vi.spyOn(navigable, 'isAllowedBySandboxingToNavigate').mockReturnValue(true);
   const url = parseURL('javascript:document.title="executed"').url!;

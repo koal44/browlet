@@ -168,11 +168,13 @@ describe('Navigate-event commit coordination', () => {
     expect(event.signal.aborted).toBe(true);
   });
 
-  it('retains the history-update dependency and unwinds script preparation on failure', async () => {
-    const { navigation, event, tracker, loop } = await fixture('push');
+  it('unwinds script preparation when history update fails', async () => {
+    const { document, navigation, event, tracker, loop } = await fixture('push');
     const transition = navigation.transition!;
     const resolve = vi.spyOn(transition, 'resolveCommitted');
-    expect(() => event.commit(tracker)).toThrow('URL and history updates are not implemented');
+    const failure = new Error('history update failed');
+    vi.spyOn(document, 'updateURLAndHistory').mockImplementation(() => { throw failure; });
+    expect(() => event.commit(tracker)).toThrow(failure);
     expect(event.interceptionState).toBe('committed');
     expect(loop.executionContextStack).toEqual([]);
     expect(resolve).not.toHaveBeenCalled();

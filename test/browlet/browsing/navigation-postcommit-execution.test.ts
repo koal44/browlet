@@ -269,7 +269,7 @@ async function fixture() {
   const document = unwrap<DocumentImpl>(browser.document);
   const navigation = document.getRelevantGlobalObject()!.navigation;
   const navigable = document.getNodeNavigable()!;
-  // Supply the still-unfinished §7.4 URL/history effect; entry updates and callbacks remain real.
+  // Isolate §7.4 URL/history effects; entry updates and callbacks remain real.
   vi.spyOn(document, 'updateURLAndHistory').mockImplementation((url, _state, type = 'push') => {
     const entry = document.env.createSessionHistoryEntry(document.url, navigable.activeSessionHistoryEntry.documentState);
     entry.url = url;

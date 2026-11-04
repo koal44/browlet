@@ -264,6 +264,12 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
     this.lastMouseMove = { x: screenX, y: screenY };
   }
 
+  /** Whether this Window has ever been activated, including after transient activation is consumed. */
+  // https://html.spec.whatwg.org/multipage/interaction.html#sticky-activation
+  hasStickyActivation(): boolean {
+    return this.env.timing.currentHighResolutionTime().milliseconds >= this.lastActivationTimestamp;
+  }
+
   /** Whether this Window currently has unconsumed transient user activation. */
   // https://html.spec.whatwg.org/multipage/interaction.html#transient-activation
   hasTransientActivation(): boolean {

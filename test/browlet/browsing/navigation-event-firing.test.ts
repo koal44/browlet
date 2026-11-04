@@ -190,17 +190,20 @@ describe('Navigate-event dispatch and cancellation', () => {
     expect(navigation.transition!.to).toBe(unwrap(replacement.destination));
   });
 
-  it('creates an intercepted transition after dispatch and reaches the explicit history update boundary', async () => {
+  it('creates an intercepted transition after dispatch and commits before queued history application', async () => {
     const { browser, document, navigation } = await fixture();
+    let queued!: () => void;
+    vi.spyOn(document.env.userAgent, 'runInParallel').mockImplementation((steps) => { queued = steps; });
     let transitionDuringDispatch: unknown;
     let destination: unknown;
     browser.window.navigation.addEventListener('navigate', (baseEvent) => {
       const event = baseEvent as BrowletNavigateEvent;
       transitionDuringDispatch = browser.window.navigation.transition;
       destination = event.destination;
-      event.intercept();
+      event.intercept({ handler: () => new Promise<void>(() => {}) });
     });
-    expect(() => navigation.firePushReplaceReloadNavigateEvent('push', document.url, true)).toThrow('URL and history updates are not implemented');
+    const oldEntry = navigation.currentEntry;
+    expect(navigation.firePushReplaceReloadNavigateEvent('push', document.url, true)).toBe(false);
     expect(transitionDuringDispatch).toBeNull();
     const transition = browser.window.navigation.transition!;
     expect(transition).toBeInstanceOf(browser.window.NavigationTransition);
@@ -208,6 +211,8 @@ describe('Navigate-event dispatch and cancellation', () => {
     expect(transition.committed).toBeInstanceOf(getRelevantRealm(browser.window).NativePromise);
     expect(transition.finished).toBeInstanceOf(getRelevantRealm(browser.window).NativePromise);
     expect(navigation.ongoingNavigateEvent!.interceptionState).toBe('committed');
+    expect(navigation.currentEntry).not.toBe(oldEntry);
+    expect(queued).toThrow('Same-document history-step application is not implemented');
   });
 
   it('delivers the precommit controller after dispatch while a handler keeps commit pending', async () => {
@@ -225,7 +230,7 @@ describe('Navigate-event dispatch and cancellation', () => {
   it('aborts an ongoing navigation before a canceled download dispatches', async () => {
     const { browser, document, navigation } = await fixture();
     const order: string[] = [];
-    // Commit is still unfinished; exercise the real event producer and its retained intercepted event.
+    // Hold commit while exercising the real event producer and its retained intercepted event.
     const commit = vi.spyOn(NavigateEventImpl.prototype, 'commit').mockImplementation(() => {});
     browser.window.navigation.addEventListener('navigate', (baseEvent) => {
       const event = baseEvent as BrowletNavigateEvent;

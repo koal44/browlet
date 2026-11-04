@@ -401,10 +401,11 @@ describe('Ongoing navigation identity', () => {
     const { browser, document, navigable, navigate, start } = await fixture();
     const turns: (() => void)[] = [];
     vi.spyOn(document.env.userAgent, 'runInParallel').mockImplementation((steps) => { turns.push(steps); });
+    const beforeUnload = vi.spyOn(document, 'fireBeforeUnload').mockReturnValue([true, true]);
     navigable.setOngoingNavigation('original', document.env);
     const active = start();
     navigate.mockRestore();
-    // Only the earlier activation and sandbox owners are missing; navigation and abortion remain real.
+    // Isolate activation/sandbox admission; navigation and event abortion remain real.
     vi.spyOn(document.getRelevantGlobalObject()!, 'hasTransientActivation').mockReturnValue(false);
     vi.spyOn(navigable, 'isAllowedBySandboxingToNavigate').mockReturnValue(true);
     const sandbox = navigable.activeBrowsingContext!.popupSandboxingFlagSet;
@@ -414,7 +415,10 @@ describe('Ongoing navigation identity', () => {
 
     navigable.navigate(document.env.parseHTMLURL('/replacement')!, document, {}, document.env);
     expect(turns).toHaveLength(1);
-    expect(turns.shift()!).toThrow('Unload cancellation checks are not implemented');
+    turns.shift()!();
+    await expect.poll(() => beforeUnload.mock.calls.length).toBe(1);
+    await expect.poll(() => turns.length).toBe(1);
+    turns.shift()!();
 
     expect(navigable.ongoingNavigation).not.toBe('original');
     expect(navigable.ongoingNavigation).toEqual(expect.any(String));

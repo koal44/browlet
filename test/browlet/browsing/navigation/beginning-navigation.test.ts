@@ -83,13 +83,13 @@ describe('beginning navigation', () => {
     expect(browser.window.location.href).toBe('https://example.test/page#before');
   });
 
-  it('keeps transient activation and sandbox permission as explicit dependencies', async () => {
-    const { document, navigable, activation, permission, url } = await fixture();
+  it('keeps transient activation explicit and proceeds once it is supplied', async () => {
+    const { document, navigable, activation, fragment, url } = await fixture();
     activation.mockRestore();
     expect(() => navigable.navigate(url, document, {}, document.env)).toThrow('Window transient activation is not implemented');
     vi.spyOn(document.getRelevantGlobalObject()!, 'hasTransientActivation').mockReturnValue(false);
-    permission.mockRestore();
-    expect(() => navigable.navigate(url, document, {}, document.env)).toThrow('Sandbox navigation permission is not implemented');
+    navigable.navigate(url, document, {}, document.env);
+    expect(fragment).toHaveBeenCalledOnce();
   });
 
   it('uses Agent identity rather than requiring the same Window environment', async () => {
@@ -329,9 +329,9 @@ async function fixture() {
   const navigable = document.getNodeNavigable()!;
   const turns: (() => void)[] = [];
   vi.spyOn(document.env.userAgent, 'runInParallel').mockImplementation((steps) => { turns.push(steps); });
-  // Supply the two earlier owner dependencies; the navigation decisions and task delivery remain real.
+  // Supply activation notification/expiry; the navigation decisions and task delivery remain real.
   const activation = vi.spyOn(document.getRelevantGlobalObject()!, 'hasTransientActivation').mockReturnValue(false);
-  const permission = vi.spyOn(navigable, 'isAllowedBySandboxingToNavigate').mockReturnValue(true);
+  const permission = vi.spyOn(navigable, 'isAllowedBySandboxingToNavigate');
   const failed = vi.spyOn(document.env.userAgent, 'webDriverBiDiNavigationFailed');
   const fragment = vi.spyOn(navigable, 'navigateToFragment').mockImplementation(() => {});
   const url = parseURL('https://example.test/page#after').url!;

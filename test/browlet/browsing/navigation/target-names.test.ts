@@ -191,14 +191,12 @@ describe('existing navigable target selection', () => {
     expect(lookup).not.toHaveBeenCalled();
   });
 
-  it('keeps activation and sandbox permission explicit while using real familiarity', () => {
+  it('keeps activation explicit while using real familiarity and sandbox permission', () => {
     const { navigable: source } = createRoot();
     const other = createOtherTopLevel(source, 'needle');
 
     expect(() => source.findNavigableByTargetName('needle')).toThrow('Window transient activation is not implemented');
     vi.spyOn(source.activeWindow!, 'hasTransientActivation').mockReturnValue(false);
-    expect(() => source.findNavigableByTargetName('needle')).toThrow('Sandbox navigation permission is not implemented');
-    vi.spyOn(source, 'isAllowedBySandboxingToNavigate').mockReturnValue(true);
     expect(source.findNavigableByTargetName('needle')).toBe(other);
   });
 
@@ -267,7 +265,7 @@ function createOtherTopLevel(source: Navigable, name: string) {
 
 function supplyLookupDependencies(source: Navigable) {
   const activation = vi.spyOn(source.activeWindow!, 'hasTransientActivation').mockReturnValue(false);
-  const permission = vi.spyOn(source, 'isAllowedBySandboxingToNavigate').mockReturnValue(true);
+  const permission = vi.spyOn(source, 'isAllowedBySandboxingToNavigate');
   const familiarity = vi.spyOn(source.activeBrowsingContext!, 'isFamiliarForNamedLookup');
   return { activation, permission, familiarity };
 }

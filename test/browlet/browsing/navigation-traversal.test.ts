@@ -215,9 +215,9 @@ describe('queued Navigation traversal work', () => {
     steps[0]!();
     const [step, snapshot, initiator, involvement] = apply.mock.calls[0]!;
     expect(step).toBe(17);
-    expect(snapshot.hasTransientActivation).toBe(true);
-    expect(snapshot.fetchClient).toBe(document.env);
-    expect(snapshot.sourcePolicyContainer.referrerPolicy).toBe('no-referrer');
+    expect(snapshot?.hasTransientActivation).toBe(true);
+    expect(snapshot?.fetchClient).toBe(document.env);
+    expect(snapshot?.sourcePolicyContainer.referrerPolicy).toBe('no-referrer');
     expect(initiator).toBe(navigable);
     expect(involvement).toBe('none');
   });

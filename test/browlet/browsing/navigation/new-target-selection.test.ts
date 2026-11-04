@@ -53,12 +53,20 @@ describe('new navigable target selection', () => {
     expect(activation).not.toHaveBeenCalled();
   });
 
+  it('retains the sandboxed creator for a noopener destination', () => {
+    const { source, document } = fixture();
+    document.activeSandboxingFlagSet.add('sandboxed-navigation');
+
+    const [target] = source.chooseNavigable('_blank', true);
+
+    expect(target!.activeBrowsingContext!.openerBrowsingContext).toBeNull();
+    expect(target!.activeBrowsingContext!.onePermittedSandboxedNavigator).toBe(source.activeBrowsingContext);
+  });
+
   it('does not apply new-destination policy or consume activation for an existing named target', () => {
     const { userAgent, source, window, activation } = fixture();
     userAgent.newNavigablePolicy = 'none';
     activation.mockReturnValue(false);
-    // The snapshot still needs activation, but only sandbox permission is missing for this local match.
-    vi.spyOn(source, 'isAllowedBySandboxingToNavigate').mockReturnValue(true);
 
     expect(source.chooseNavigable('source', false)).toEqual([source, 'existing-or-none']);
     expect(window.lastActivationTimestamp).toBe(12);
@@ -67,7 +75,6 @@ describe('new navigable target selection', () => {
 
   it.each(['_bLaNk', 'named', '_private'] as const)('creates a noopener destination for %j and retains the automation opener', (name) => {
     const { userAgent, source, window } = fixture();
-    vi.spyOn(source, 'isAllowedBySandboxingToNavigate').mockReturnValue(true);
     const auxiliary = vi.spyOn(BrowsingContext, 'createAuxiliary');
     const created = vi.spyOn(userAgent, 'webDriverBiDiNavigableCreated').mockImplementation(() => {
       expect(window.lastActivationTimestamp).toBe(-Infinity);
@@ -130,7 +137,7 @@ describe('new navigable target selection', () => {
     const [target] = source.chooseNavigable('_blank', noopener);
     const context = target!.activeBrowsingContext!;
 
-    expect(context.onePermittedSandboxedNavigator).toBe(noopener ? null : source.activeBrowsingContext);
+    expect(context.onePermittedSandboxedNavigator).toBe(source.activeBrowsingContext);
     expect(context.popupSandboxingFlagSet).toEqual(flags);
     expect(context.popupSandboxingFlagSet).not.toBe(flags);
     context.popupSandboxingFlagSet.add('sandboxed-downloads');
@@ -154,7 +161,6 @@ describe('new navigable target selection', () => {
     const { source, document } = fixture();
     document.openerPolicy.value = policy;
     document.env.topLevelOrigin = crossOrigin ? createOpaqueOrigin() : document.origin;
-    vi.spyOn(source, 'isAllowedBySandboxingToNavigate').mockReturnValue(true);
     const auxiliary = vi.spyOn(BrowsingContext, 'createAuxiliary');
 
     const [target, type] = source.chooseNavigable('named', false);

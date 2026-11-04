@@ -1,4 +1,4 @@
-import { asciiLower, assertNever, InternalError } from '../../../infra/index';
+import { asciiLower, assertNever, InternalError, internalType, type InternalPromise } from '../../../infra/index';
 import { randomUUID } from '../../../js-engine/index';
 import { DOMExceptionImpl } from '../../../web-idl/core/index';
 import { utf8Decode, utf8Encode } from '../../../encoding/index';
@@ -150,15 +150,78 @@ export class Navigable {
     env.userAgent.webDriverBiDiNavigableDestroyed(navigable);
   }
 
-  /** Check beforeunload cancellation, optionally including the top-level traversal's navigate event. */
-  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#checking-if-unloading-is-canceled
+  /** Queue Document checks and resolve after cancellation or completion; the UserAgent owns the parallel wait. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#prompt-to-unload-a-document
   static checkIfUnloadingIsCanceled(
-    _navigablesThatNeedBeforeUnload: Navigable[], _traversable?: Traversable,
-    _targetStep?: number, _userInvolvementForNavigateEvent?: UserNavigationInvolvement,
-  ): 'canceled-by-beforeunload' | 'canceled-by-navigate' | 'continue' {
-    // TODO(HTML §7.4.2.4): Snapshot active Documents, queue beforeunload/navigate checks on their Windows,
-    // coordinate the shared prompt state, and wait for all results. The optional traversal needs all three inputs.
-    throw new InternalError('Unload cancellation checks are not implemented');
+    navigablesThatNeedBeforeUnload: Navigable[], traversable: Traversable | undefined,
+    targetStep: number | undefined, userInvolvementForNavigateEvent: UserNavigationInvolvement | undefined,
+    userAgent: UserAgent,
+  ): InternalPromise<UnloadCancellationResult> {
+    const P = userAgent.HostPromise;
+    const resultType = internalType<UnloadCancellationResult>();
+    return P.try(() => {
+      const documents = navigablesThatNeedBeforeUnload.map((navigable) => {
+        const document = navigable.activeDocument;
+        if (document === null) throw new InternalError('Unload cancellation requires active Documents');
+        return document;
+      });
+      let unloadPromptShown = false;
+      let finalStatus: UnloadCancellationResult = 'continue';
+      const fireBeforeUnload = (document: DocumentImpl) => {
+        const [shown, canceled] = document.fireBeforeUnload(unloadPromptShown);
+        if (shown) unloadPromptShown = true;
+        if (canceled) finalStatus = 'canceled-by-beforeunload';
+      };
+      const queueCheck = (document: DocumentImpl, steps: () => void) => {
+        const completion = P.withResolvers(internalType<void>());
+        // Tasks retain their global's activity gate. TODO(HTML lifecycle): Coordinate canceled waits if teardown discards a task.
+        document.env.queueTask('navigation-and-traversal', () => {
+          try { steps(); completion.resolve(); }
+          catch (error) { completion.reject(error); }
+        });
+        return completion.promise;
+      };
+      const checkRemainingDocuments = () => {
+        const checks = documents.map((document) => queueCheck(document, () => { fireBeforeUnload(document); }));
+        return P.all(checks, internalType<void[]>()).then(() => finalStatus, undefined, resultType);
+      };
+
+      if (traversable !== undefined) {
+        if (targetStep === undefined || userInvolvementForNavigateEvent === undefined) {
+          throw new InternalError('Traversal unload checks require a target step and user involvement');
+        }
+        const targetEntry = traversable.getTargetHistoryEntry(targetStep);
+        const currentEntry = traversable.currentSessionHistoryEntry;
+        if (targetEntry === currentEntry) return checkRemainingDocuments();
+        const targetOrigin = targetEntry.documentState.origin;
+        const currentOrigin = currentEntry.documentState.origin;
+        if (targetOrigin === null || currentOrigin === null) {
+          throw new InternalError('Traversal unload checks require recorded history origins');
+        }
+        if (areSameOrigin(targetOrigin, currentOrigin)) {
+          const document = traversable.activeDocument;
+          if (document === null) throw new InternalError('Traversal unload checks require an active Document');
+          const needsBeforeUnload = navigablesThatNeedBeforeUnload.includes(traversable);
+          if (needsBeforeUnload) documents.splice(documents.indexOf(document), 1);
+          return queueCheck(document, () => {
+            if (needsBeforeUnload) {
+              const activeDocument = traversable.activeDocument;
+              if (activeDocument === null) throw new InternalError('Traversal beforeunload requires an active Document');
+              fireBeforeUnload(activeDocument);
+            }
+            // SPEC_CLASH(unload-cancellation-completion): HTML aborts before setting eventsFired, stranding its wait.
+            // Complete cancellation without navigate/descendant checks, so a dismissed traversal can finish and be retried.
+            if (finalStatus === 'canceled-by-beforeunload') return;
+            const window = traversable.activeWindow;
+            if (window === null) throw new InternalError('Traversal navigate-event firing requires an active Window');
+            if (!window.navigation.fireTraverseNavigateEvent(targetEntry, userInvolvementForNavigateEvent)) {
+              finalStatus = 'canceled-by-navigate';
+            }
+          }).then(() => finalStatus === 'continue' ? checkRemainingDocuments() : finalStatus, undefined, resultType);
+        }
+      }
+      return checkRemainingDocuments();
+    }, resultType);
   }
 
   /** Check a target name's authoring syntax; this does not restrict runtime name assignment or lookup. */
@@ -297,6 +360,22 @@ export class Navigable {
     throw new InternalError('The navigable has no retained session history');
   }
 
+  /** Select this navigable's entry with the greatest committed step at or before the requested step. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#getting-the-target-history-entry
+  getTargetHistoryEntry(step: number): SessionHistoryEntry {
+    let target: SessionHistoryEntry | null = null;
+    let targetStep = -1;
+    for (const entry of this.getSessionHistoryEntries()) {
+      if (entry.step === 'pending') throw new InternalError('Target history lookup requires committed entries');
+      if (entry.step <= step && entry.step > targetStep) {
+        target = entry;
+        targetStep = entry.step;
+      }
+    }
+    if (target === null) throw new InternalError('The target history step has no entry');
+    return target;
+  }
+
   /** Select the contiguous same-origin entries around the greatest step at or before the target. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#getting-session-history-entries-for-the-navigation-api
   getSessionHistoryEntriesForNavigationAPI(targetStep: number): SessionHistoryEntry[] {
@@ -416,8 +495,9 @@ export class Navigable {
     const chosen = TopLevelTraversable.create(userAgent, opener, targetName, this);
     const browsingContext = chosen.activeBrowsingContext;
     if (browsingContext === null) throw new InternalError('A new target requires an active browsing context');
-    if (!noopener && sandboxingFlagSet.has('sandboxed-navigation')) {
-      browsingContext.onePermittedSandboxedNavigator = opener;
+    if (sandboxingFlagSet.has('sandboxed-navigation')) {
+      // SPEC_CLASH(sandbox-noopener-creator): Retain the creator even with noopener, as browsers do; HTML #12297 tracks the omitted assignment.
+      browsingContext.onePermittedSandboxedNavigator = this.activeBrowsingContext;
     }
     if (sandboxingFlagSet.has('sandbox-propagates-to-auxiliary-browsing-contexts')) {
       for (const flag of sandboxingFlagSet) browsingContext.popupSandboxingFlagSet.add(flag);
@@ -428,10 +508,30 @@ export class Navigable {
 
   /** Check navigation permission against the initiating Document's captured sandbox state. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#allowed-to-navigate
-  isAllowedBySandboxingToNavigate(_target: Navigable, _sourceSnapshotParams: SourceSnapshotParams): boolean {
-    // TODO(HTML §7.4.2.4): Apply self/ancestor relationships, activation-dependent top navigation,
-    // and the target browsing context's one permitted sandboxed navigator.
-    throw new InternalError('Sandbox navigation permission is not implemented');
+  isAllowedBySandboxingToNavigate(target: Navigable, sourceSnapshotParams: SourceSnapshotParams): boolean {
+    if (this === target) return true;
+    for (let ancestor = target.parent; ancestor !== null; ancestor = ancestor.parent) {
+      if (ancestor === this) return true;
+    }
+
+    const { sandboxingFlags, hasTransientActivation } = sourceSnapshotParams;
+    for (let ancestor = this.parent; ancestor !== null; ancestor = ancestor.parent) {
+      if (ancestor !== target) continue;
+      // SPEC_CLASH(sandbox-intermediate-ancestor): Apply sandboxed-navigation as browsers and HTML's target table do; this algorithm says true.
+      if (!target.isTopLevelTraversable) return !sandboxingFlags.has('sandboxed-navigation');
+      return !sandboxingFlags.has(hasTransientActivation
+        ? 'sandboxed-top-level-navigation-with-user-activation'
+        : 'sandboxed-top-level-navigation-without-user-activation');
+    }
+
+    if (target.isTopLevelTraversable) {
+      // HTML defines and populates this permission on browsing contexts; compare the navigables' active contexts.
+      // SPEC_CLASH(sandbox-disowned-creator): Retain HTML/Firefox's original creator permission; Chromium/WebKit consult the mutable opener.
+      const sourceContext = this.activeBrowsingContext;
+      if (sourceContext !== null && target.activeBrowsingContext?.onePermittedSandboxedNavigator === sourceContext) return true;
+    }
+    // SPEC_CLASH(sandbox-unrelated-popup-escape): Keep HTML/Firefox/WebKit's restriction; Chromium's allow-popups-to-escape-sandbox bypasses it.
+    return !sandboxingFlags.has('sandboxed-navigation');
   }
 
   /** Navigate from source admission through Document population and queued history finalization. */
@@ -552,40 +652,42 @@ export class Navigable {
       }
 
       // In parallel, check unloading and populate an entry before queued history finalization.
-      document.env.userAgent.runInParallel(() => {
+      userAgent.runInParallel(() => {
         const activeDocument = this.activeDocument;
         if (activeDocument === null) throw new InternalError('Navigation requires an active Document');
-        // TODO(HTML §7.4.2.4): This owner still throws; its eventual cross-loop wait must resume these parallel steps.
-        const unloadPromptCanceled = Navigable.checkIfUnloadingIsCanceled(activeDocument.getInclusiveDescendantNavigables());
-        if (unloadPromptCanceled !== 'continue' || this.ongoingNavigation !== navigationId) {
-          activeDocument.env.userAgent.webDriverBiDiNavigationFailed(this, { id: navigationId, status: 'canceled', url });
-          return;
-        }
-        const activeEnv = this.activeWindow?.env;
-        if (activeEnv === undefined) throw new InternalError('Navigation requires an active Window');
-        activeEnv.queueTask('navigation-and-traversal', () => {
-          const documentToAbort = this.activeDocument;
-          if (documentToAbort === null) throw new InternalError('Navigation abortion requires an active Document');
-          documentToAbort.abortAndDescendants();
-        });
-        const documentState = DocumentState.createForNavigation(
-          url, initiatorOriginSnapshot, initiatorBaseURLSnapshot,
-          options.referrerPolicy ?? '', documentResource, this.targetName,
-        );
-        const historyEntry = activeEnv.createSessionHistoryEntry(url, documentState);
-        const navigationParams = response === null ? null : NavigationParams.fromSuppliedResponse(
-          response, this, sourceDocument, targetSnapshotParams, documentState,
-          navigationId, userInvolvement, activeEnv,
-        );
-        this.populateHistoryEntryDocument(historyEntry, 'navigate', sourceSnapshotParams, targetSnapshotParams, userInvolvement, {
-          navigationId, navigationParams, cspNavigationType, allowPOST: true,
-          completionSteps: () => {
-            this.traversable.appendSessionHistoryTraversalSteps(() => {
-              // TODO(HTML §7.4.6): History application still needs unloading and updates for every affected navigable.
-              this.finalizeCrossDocumentNavigation(historyHandling, userInvolvement, historyEntry);
+        userAgent.checkIfUnloadingIsCanceled(activeDocument.getInclusiveDescendantNavigables()).observe((unloadStatus) => {
+          userAgent.runInParallel(() => {
+            if (unloadStatus !== 'continue' || this.ongoingNavigation !== navigationId) {
+              activeDocument.env.userAgent.webDriverBiDiNavigationFailed(this, { id: navigationId, status: 'canceled', url });
+              return;
+            }
+            const activeEnv = this.activeWindow?.env;
+            if (activeEnv === undefined) throw new InternalError('Navigation requires an active Window');
+            activeEnv.queueTask('navigation-and-traversal', () => {
+              const documentToAbort = this.activeDocument;
+              if (documentToAbort === null) throw new InternalError('Navigation abortion requires an active Document');
+              documentToAbort.abortAndDescendants();
             });
-          },
-        });
+            const documentState = DocumentState.createForNavigation(
+              url, initiatorOriginSnapshot, initiatorBaseURLSnapshot,
+              options.referrerPolicy ?? '', documentResource, this.targetName,
+            );
+            const historyEntry = activeEnv.createSessionHistoryEntry(url, documentState);
+            const navigationParams = response === null ? null : NavigationParams.fromSuppliedResponse(
+              response, this, sourceDocument, targetSnapshotParams, documentState,
+              navigationId, userInvolvement, activeEnv,
+            );
+            this.populateHistoryEntryDocument(historyEntry, 'navigate', sourceSnapshotParams, targetSnapshotParams, userInvolvement, {
+              navigationId, navigationParams, cspNavigationType, allowPOST: true,
+              completionSteps: () => {
+                this.traversable.appendSessionHistoryTraversalSteps(() => {
+                  // TODO(HTML §7.4.6): History application still needs unloading and updates for every affected navigable.
+                  this.finalizeCrossDocumentNavigation(historyHandling, userInvolvement, historyEntry);
+                });
+              },
+            });
+          });
+        }, (error) => { userAgent.runInParallel(() => { throw error; }); });
       });
     };
 
@@ -795,11 +897,23 @@ export class Navigable {
 
   /** Reload this destination after its cancelable navigate event and through the traversal queue. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#reload
-  // SPEC_MISMATCH: reload(navigable, navigationAPIState = null, userInvolvement = "none", apiMethodTracker = null)
-  reload(_options: ReloadOptions = {}): void {
-    // TODO(HTML 7.2.6, 7.4): Supply Navigation API state/event cancellation, then
-    // set reloadPending and queue the reload history step and tracker settlement.
-    throw new InternalError('Navigable reload coordination is not implemented');
+  reload(options: ReloadOptions = {}): void {
+    const userInvolvement = options.userInvolvement ?? 'none';
+    if (userInvolvement !== 'browser UI') {
+      const window = this.activeWindow;
+      if (window === null) throw new InternalError('Reload requires an active Window');
+      const entry = this.activeSessionHistoryEntry;
+      const navigationAPIState = options.navigationAPIState ?? entry.navigationAPIState;
+      // SPEC_CLASH(history-zero-delta-reload): Follow HTML/Chromium/Firefox for every reload caller.
+      // WebKit's history.go(0) instead exposes sameDocument true and undefined Navigation state.
+      if (!window.navigation.firePushReplaceReloadNavigateEvent('reload', entry.url, false, {
+        navigationAPIState, userInvolvement, apiMethodTracker: options.apiMethodTracker ?? null,
+      })) return;
+    }
+
+    this.activeSessionHistoryEntry.documentState.reloadPending = true;
+    const traversable = this.traversable;
+    traversable.appendSessionHistoryTraversalSteps(() => { traversable.applyReloadHistoryStep(userInvolvement); });
   }
 
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#nav-stop
@@ -1338,11 +1452,18 @@ export class Traversable extends Navigable implements FetchPromptTarget {
 
   /** Traverse joint history; an omitted source Document denotes a browser-UI request. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#traverse-the-history-by-a-delta
-  traverseHistoryByDelta(_delta: number, _sourceDocument?: DocumentImpl): void {
-    // TODO(HTML 7.4): Snapshot a supplied source and retain its initiator, then append traversal steps.
-    // Select the target from all used steps inside that queue, and apply it with sandbox permission,
-    // navigate-event cancellation, unloading, document/state restoration, and history notifications.
-    throw new InternalError('Session history delta traversal is not implemented');
+  traverseHistoryByDelta(delta: number, sourceDocument?: DocumentImpl): void {
+    const sourceSnapshotParams = sourceDocument === undefined ? null : new SourceSnapshotParams(sourceDocument);
+    const initiatorToCheck = sourceDocument?.getNodeNavigable() ?? null;
+    const userInvolvement = sourceDocument === undefined ? 'browser UI' : 'none';
+    this.appendSessionHistoryTraversalSteps(() => {
+      const allSteps = this.getAllUsedHistorySteps();
+      const currentStepIndex = allSteps.indexOf(this.currentSessionHistoryStep);
+      if (currentStepIndex < 0) throw new InternalError('The current history step is not present');
+      const targetStep = allSteps[currentStepIndex + delta];
+      if (targetStep === undefined) return;
+      this.applyTraverseHistoryStep(targetStep, sourceSnapshotParams, initiatorToCheck, userInvolvement);
+    });
   }
 
   /** Count distinct joint-history steps and locate the selected step within them. */
@@ -1371,11 +1492,23 @@ export class Traversable extends Navigable implements FetchPromptTarget {
     return [...usedSteps].sort((a, b) => a - b);
   }
 
+  /** Apply the current joint-history step as a reload, with cancellation checks and no external initiator. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#apply-the-reload-history-step
+  applyReloadHistoryStep(_userInvolvement: UserNavigationInvolvement): HistoryStepResult {
+    // TODO(HTML §7.4.6): Apply currentSessionHistoryStep with cancellation enabled, null source/initiator,
+    // the supplied user involvement, and navigation type 'reload'. Populate entries with reloadPending,
+    // including Fetch/revalidation, unloading, Document activation, and Navigation entry/activation updates.
+    // Successful cross-document reload clears the old event/tracker without settling its promises.
+    // Waiting for Document tasks must return completion through the traversal queue's caller.
+    throw new InternalError('Reload history-step application is not implemented');
+  }
+
   /** Apply a traversal with cancellation checks, its captured source, and initiating navigable. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#apply-the-traverse-history-step
+  // Browser-UI delta traversal supplies null source/initiator, as accepted by the underlying apply-history-step operation.
   applyTraverseHistoryStep(
-    _step: number, _sourceSnapshotParams: SourceSnapshotParams,
-    _initiatorToCheck: Navigable, _userInvolvement: UserNavigationInvolvement,
+    _step: number, _sourceSnapshotParams: SourceSnapshotParams | null,
+    _initiatorToCheck: Navigable | null, _userInvolvement: UserNavigationInvolvement,
   ): HistoryStepResult {
     // TODO(HTML 7.4.6): Apply the history step with cancellation enabled and navigation type 'traverse'.
     // Check sandbox permission, beforeunload/navigate cancellation, and restore Documents/history with event/tracker notifications.
@@ -1552,15 +1685,18 @@ export class TopLevelTraversable extends Traversable {
     const document = this.activeDocument;
     if (document === null) throw new InternalError('Closing requires an active Document');
     const toUnload = document.getInclusiveDescendantNavigables();
-    if (Navigable.checkIfUnloadingIsCanceled(toUnload) !== 'continue') return;
-    this.appendSessionHistoryTraversalSteps(() => {
-      const activeDocument = this.activeDocument;
-      if (activeDocument === null) throw new InternalError('Closing requires an active Document when unloading begins');
-      // SPEC_GAP(top-level-close-destroyed-document): HTML retrieves the context after unloading can clear it; retain it before unloading.
-      const browsingContext = activeDocument.browsingContext;
-      if (browsingContext === null) throw new InternalError('Closing requires a browsing context when unloading begins');
-      activeDocument.unloadAndDescendants(null, () => { this.destroy(browsingContext); });
-    });
+    const userAgent = document.env.userAgent;
+    userAgent.checkIfUnloadingIsCanceled(toUnload).observe((status) => {
+      if (status !== 'continue') return;
+      this.appendSessionHistoryTraversalSteps(() => {
+        const activeDocument = this.activeDocument;
+        if (activeDocument === null) throw new InternalError('Closing requires an active Document when unloading begins');
+        // SPEC_GAP(top-level-close-destroyed-document): HTML retrieves the context after unloading can clear it; retain it before unloading.
+        const browsingContext = activeDocument.browsingContext;
+        if (browsingContext === null) throw new InternalError('Closing requires a browsing context when unloading begins');
+        activeDocument.unloadAndDescendants(null, () => { this.destroy(browsingContext); });
+      });
+    }, (error) => { userAgent.runInParallel(() => { throw error; }); });
   }
 
   /** Collect the active document tree's diagnostics and mask cross-origin descendants before exposure. */
@@ -1577,3 +1713,6 @@ export class TopLevelTraversable extends Traversable {
 
 /** Outcome of applying a history step, including cancellation before or during navigate-event firing. */
 export type HistoryStepResult = 'initiator-disallowed' | 'canceled-by-beforeunload' | 'canceled-by-navigate' | 'applied';
+
+/** Result shared by navigation, closing, and history traversal's asynchronous unload checks. */
+export type UnloadCancellationResult = 'canceled-by-beforeunload' | 'canceled-by-navigate' | 'continue';

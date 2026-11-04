@@ -211,7 +211,7 @@ export class DocumentImpl extends NodeImpl {
   isInitialAboutBlank = false;
   /** Number of active unload operations that prohibit starting another navigation. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#unload-counter
-  // TODO: The unloading algorithms must increment and decrement this counter around their callbacks.
+  // Beforeunload maintains this counter; TODO(HTML §7.5.9): also bracket document unloading.
   unloadCounter = 0;
   /** Whether cross-origin redirects occurred while creating this document. */
   wasCreatedViaCrossOriginRedirects = false;
@@ -1146,13 +1146,48 @@ export class DocumentImpl extends NodeImpl {
   /** Update this Document's URL and same-document session history. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#url-and-history-update-steps
   updateURLAndHistory(
-    _newURL: URLRecord, _serializedData: SerializedRecord | null = null,
-    _historyHandling: HistoryHandlingBehavior = 'replace',
+    newURL: URLRecord, serializedData: SerializedRecord | null = null,
+    historyHandling: HistoryHandlingBehavior = 'replace',
   ): void {
-    // TODO(HTML §7.4.4): Store entry.classicHistoryAPIState, update History/Navigation state,
-    // and queue the shared same-document history steps; entry storage alone does not commit a push/replace.
-    // These steps must set this.latestEntry and share DocumentState across same-document entries.
-    throw new InternalError('URL and history updates are not implemented');
+    const navigable = this.getNodeNavigable();
+    if (navigable === null) throw new InternalError('URL and history updates require a node navigable');
+    const activeEntry = navigable.activeSessionHistoryEntry;
+    const newEntry = this.env.createSessionHistoryEntry(newURL, activeEntry.documentState);
+    newEntry.classicHistoryAPIState = serializedData ?? activeEntry.classicHistoryAPIState;
+    newEntry.scrollRestorationMode = activeEntry.scrollRestorationMode;
+    newEntry.persistedUserState = activeEntry.persistedUserState;
+
+    // SPEC_CLASH(initial-blank-history-update): HTML/Chromium/WebKit keep replacing the initial entry;
+    // Firefox adds an entry on the second pushState in the initial about:blank probe.
+    if (this.isInitialAboutBlank) historyHandling = 'replace';
+    const entryToReplace = historyHandling === 'replace' ? activeEntry : null;
+    if (entryToReplace !== null) newEntry.navigationAPIKey = entryToReplace.navigationAPIKey;
+    if (historyHandling === 'push') {
+      this.history.index++;
+      this.history.lengthValue = this.history.index + 1;
+    }
+    if (serializedData !== null) this.restoreHistoryObjectState(newEntry);
+    this.setURL(newURL);
+    this.latestEntry = newEntry;
+    navigable.activeSessionHistoryEntry = newEntry;
+
+    // SPEC_CLASH(synchronous-history-update-reentrancy): HTML queues after currententrychange/dispose callbacks.
+    // Reserve this entry's place first so reentrant updates preserve their predecessors, as all three browsers do.
+    // Keep HTML's immediate index/length above; WebKit can temporarily lag during nested pushes.
+    const traversable = navigable.traversable;
+    traversable.appendSessionHistorySynchronousNavigationSteps(navigable, () => {
+      traversable.finalizeSameDocumentNavigation(navigable, newEntry, entryToReplace, historyHandling, 'none');
+      this.env.userAgent.webDriverBiDiHistoryUpdated(navigable);
+    });
+    this.getRelevantGlobalObject()!.navigation.updateEntriesForSameDocumentNavigation(newEntry, historyHandling);
+  }
+
+  /** Deserialize the selected entry's classic state in this Document's realm, or retain null on failure. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#restore-the-history-object-state
+  restoreHistoryObjectState(entry: SessionHistoryEntry): void {
+    let state: unknown = null;
+    try { state = this.env.deserialize(entry.classicHistoryAPIState); } catch { /* Deserialization failure leaves null. */ }
+    this.history.stateValue = state;
   }
 
   /** Apply this Document's selected entry and script-visible history state on its event loop. */
@@ -1162,7 +1197,7 @@ export class DocumentImpl extends NodeImpl {
     _navigationType: NavigationType | null, _entriesForNavigationAPI?: SessionHistoryEntry[],
     _previousEntryForActivation?: SessionHistoryEntry,
   ): void {
-    // TODO(HTML §7.4.6.2): Update index/length/latestEntry, restore classic History state and persisted state,
+    // TODO(HTML §7.4.6.2): Update index/length/latestEntry, call restoreHistoryObjectState(), restore persisted state,
     // update Navigation entries/activation, fire popstate and queue hashchange, and handle reactivation/scrolling/BiDi.
     // Fragment navigation invokes this synchronously, then joint-history application reconciles it without duplicate events.
     throw new InternalError('Document history-step application is not implemented');
@@ -1277,6 +1312,55 @@ export class DocumentImpl extends NodeImpl {
   isRenderBlocked(): boolean {
     if (this.renderBlockingElements.size === 0 && !this.allowsAddingRenderBlockingElements()) return false;
     return this.env.timing.currentHighResolutionTime().milliseconds <= this.env.userAgent.renderBlockingTimeout;
+  }
+
+  /**
+   * Fire the unload check and return whether a prompt has been shown and whether it canceled unloading.
+   * Run on this Document's event loop; host confirmation pauses its current task.
+   */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#steps-to-fire-beforeunload
+  fireBeforeUnload(unloadPromptShown: boolean): [unloadPromptShown: boolean, unloadPromptCanceled: boolean] {
+    const window = this.getRelevantGlobalObject();
+    if (window === null) throw new InternalError('Beforeunload requires a Document with a Window');
+    const eventLoop = this.env.responsibleEventLoop;
+    const userAgent = this.env.userAgent;
+    let unloadPromptCanceled = false;
+
+    this.unloadCounter++;
+    try {
+      let event: BeforeUnloadEventImpl;
+      let eventFiringResult: boolean;
+      eventLoop.terminationNestingLevel++;
+      try {
+        // SPEC_GAP(beforeunload-event-reference): HTML later reads an undefined event variable; retain the dispatched event.
+        event = window.createTrustedEvent(BeforeUnloadEventImpl) as BeforeUnloadEventImpl;
+        event.type = 'beforeunload';
+        event.cancelable = true;
+        // SPEC_CLASH(beforeunload-document-target): All three browsers use Document as target while dispatching on Window;
+        // HTML omits the legacy target override. Follow browsers using the existing DOM dispatch machinery.
+        eventFiringResult = window.dispatch(event, true);
+      } finally {
+        eventLoop.terminationNestingLevel--;
+      }
+
+      if (
+        !unloadPromptShown && !this.activeSandboxingFlagSet.has('sandboxed-modals') && window.hasStickyActivation() &&
+        (!eventFiringResult || event.returnValue !== '') && userAgent.shouldShowBeforeUnloadPrompt(this)
+      ) {
+        unloadPromptShown = true;
+        const userPromptHandler = userAgent.webDriverBiDiUserPromptOpened(window, 'beforeunload', '');
+        if (userPromptHandler === 'dismiss') unloadPromptCanceled = true;
+        if (userPromptHandler === 'none') {
+          eventLoop.pauseUntil(() => {
+            unloadPromptCanceled = !userAgent.requestUnloadConfirmation(this);
+          }, this.env);
+        }
+        userAgent.webDriverBiDiUserPromptClosed(window, 'beforeunload', !unloadPromptCanceled);
+      }
+      return [unloadPromptShown, unloadPromptCanceled];
+    } finally {
+      this.unloadCounter--;
+    }
   }
 
   /** Start unloading from the traversal queue; complete after the descendants and this Document unload. */

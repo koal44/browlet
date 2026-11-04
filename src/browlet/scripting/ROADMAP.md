@@ -2528,11 +2528,16 @@ dispatching an ordinary `new Event('beforeunload', { cancelable: true })` invoke
 Eric approved following [HTML's declared return conversion and processing rules](https://html.spec.whatwg.org/multipage/webappapis.html#the-event-handler-processing-algorithm)
 and Chromium/Firefox; the focused regression retains the conversion assertion.
 
-Navigation still owns the [steps to fire beforeunload](https://html.spec.whatwg.org/multipage/browsing-the-web.html#steps-to-fire-beforeunload):
-unload/termination counters, trusted event production, prompt admission, BiDi
-notifications, confirmation UI, and the navigation decision. The event source
-retains that explicit TODO, and `Navigable.checkIfUnloadingIsCanceled()` remains
-the throwing §7.4.2.5 dependency. This handler connection does not show dialogs.
+Document now implements the [steps to fire beforeunload](https://html.spec.whatwg.org/multipage/browsing-the-web.html#steps-to-fire-beforeunload):
+trusted dispatch reuses this handler processing, maintains unload/termination
+counters, and applies the sandbox, sticky-activation, and request gates. Prompt
+admission policy and host confirmation remain throwing UserAgent dependencies;
+BiDi prompt hooks have no active sessions. `Navigable.checkIfUnloadingIsCanceled()`
+now queues the Document checks and optional traversal event pair with a
+UserAgent-owned completion promise; navigation and definite closing await it.
+Full history application and task-discard cancellation remain dependencies. See the
+[producer audit](../browsing/navigation/ROADMAP.md#html-7424-beforeunload-production).
+Synthetic event dispatch does not show dialogs.
 
 Validation: all 114 cases in the eight focused handler, BeforeUnloadEvent, and
 Web IDL callback suites pass on custom Node, Node 24.19.0, and Node 26.8.1, with

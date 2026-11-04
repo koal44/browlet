@@ -1120,8 +1120,13 @@ factory. BrowsingContext obtains the context for Document creation, associating 
 replacement with its existing Navigable before creation-time consumers need that
 relationship. These operations return their results to the coordinator without
 advancing history or activating the incoming Document. Fragment history application,
-unload cancellation, recursive abortion, population, and full history application remain
-explicit dependencies in the navigation roadmap.
+recursive abortion, population, and full history application remain explicit
+dependencies in the navigation roadmap. Unload cancellation now snapshots Documents,
+queues their checks on the owning globals, and returns a UserAgent-owned HostPromise.
+The UserAgent forwards to Navigable with its scheduling owner; no Document realm
+owns the cross-loop wait. Navigation resumes its parallel steps after completion,
+and definite closing queues teardown only after approval. Prompt policy/UI and
+cancellation of waits whose tasks are discarded by future teardown remain explicit.
 Cross-document finalization inserts into the destination's own retained history,
 including child lists, and preserves replacement keys only across the same origin.
 The provisional history application still receives that destination and entry

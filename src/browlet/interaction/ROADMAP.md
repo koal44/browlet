@@ -123,7 +123,7 @@ Window methods keep this foundation below the full interaction subsystem.
 The timestamps still have no input-event or automation producer. Activation
 notification must select ancestors and same-origin descendants, record current
 high-resolution time, and notify close watchers before dispatch. Transient
-duration/expiry, sticky activation, `UserActivation`/Navigator, and
+duration/expiry, `UserActivation`/Navigator, and
 the WebDriver notification hook remain §6.4 work. Tests supply activation times
 directly; this does not claim that a click or an automation request activates a Window.
 
@@ -135,6 +135,11 @@ Window without a navigable is unchanged. This does not implement the missing
 activation producer or expiry predicate; the
 [target-selection audit](../browsing/navigation/ROADMAP.md#html-7317-new-target-selection)
 records its caller and remaining dependencies.
+
+Beforeunload now uses `Window.hasStickyActivation()`: compare the Window's current
+high-resolution time with its last-activation timestamp. The initial +Infinity
+is inactive, while consumed -Infinity remains sticky. This small predicate uses
+the same retained state; it does not supply the missing activation producer.
 
 ## Focused-area dependency
 

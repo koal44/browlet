@@ -70,7 +70,7 @@ describe('Navigate-event precommit execution', () => {
     const { browser, realm } = await fixture();
     const order: string[] = [];
     Reflect.set(realm.globalObject, 'precommitOrder', order);
-    // Observe the real handoff while URL/history commit remains unfinished.
+    // Isolate commit while observing the real precommit handoff.
     const commit = vi.spyOn(NavigateEventImpl.prototype, 'commit').mockImplementation(() => { order.push('commit'); });
     await browser.evaluate(() => {
       const order = Reflect.get(globalThis, 'precommitOrder') as string[];

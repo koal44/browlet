@@ -35,7 +35,7 @@ export class BrowsingContext {
   openerOriginAtCreation: Origin | null = null;
   /** Creator allowed to navigate an auxiliary context despite its sandboxed-navigation restriction. */
   // https://html.spec.whatwg.org/multipage/browsers.html#one-permitted-sandboxed-navigator
-  // Target selection populates this; the sandbox-navigation permission algorithm must consult it.
+  // Target selection records the creator independently of the mutable opener; sandbox permission consumes it.
   onePermittedSandboxedNavigator: BrowsingContext | null = null;
   /** Whether this context was created as a popup. */
   isPopup = false;

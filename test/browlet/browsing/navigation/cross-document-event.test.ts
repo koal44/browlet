@@ -198,13 +198,17 @@ describe('ordinary navigation event inputs and cancellation', () => {
     expect(events).toHaveLength(1);
   });
 
-  it('hands accepted navigation to the explicit parallel unload dependency after its event', async () => {
+  it('hands accepted navigation to queued unload checks after its event', async () => {
     const { browser, document, navigable, navigation, env, route, turns } = await fixture();
     const events: BrowletNavigateEvent[] = [];
+    const beforeUnload = vi.spyOn(document, 'fireBeforeUnload').mockReturnValue([true, true]);
     browser.window.navigation.addEventListener('navigate', (event) => { events.push(event as BrowletNavigateEvent); });
     navigable.navigate(parseURL('https://example.test/next').url!, document, {}, env);
     expect(turns).toHaveLength(1);
-    expect(turns.shift()!).toThrow('Unload cancellation checks are not implemented');
+    turns.shift()!();
+    await expect.poll(() => beforeUnload.mock.calls.length).toBe(1);
+    await expect.poll(() => turns.length).toBe(1);
+    turns.shift()!();
     expect(events).toHaveLength(1);
     expect(events[0]!.signal.aborted).toBe(false);
     expect(navigation.ongoingNavigateEvent).not.toBeNull();
@@ -228,12 +232,17 @@ describe('ordinary navigation interception handoff', () => {
     expect(route).toHaveBeenCalledOnce();
   });
 
-  it('keeps interception commit dependent on the real URL/history update algorithm', async () => {
-    const { browser, document, navigable, env } = await fixture();
-    browser.window.navigation.addEventListener('navigate', (event) => { (event as BrowletNavigateEvent).intercept(); });
-    expect(() => navigable.navigate(parseURL('https://example.test/next').url!, document, {}, env))
-      .toThrow('URL and history updates are not implemented');
+  it('commits interception in the same Document without loading, then queues history application', async () => {
+    const { browser, document, navigable, env, route, turns } = await fixture();
+    browser.window.navigation.addEventListener('navigate', (event) => {
+      (event as BrowletNavigateEvent).intercept({ handler: () => new Promise<void>(() => {}) });
+    });
+    navigable.navigate(parseURL('https://example.test/next').url!, document, {}, env);
+    expect(navigable.activeDocument).toBe(document);
+    expect(browser.window.location.href).toBe('https://example.test/next');
+    expect(route).toHaveBeenCalledOnce();
     expect(env.responsibleEventLoop.executionContextStack).toEqual([]);
+    expect(() => turns.shift()!()).toThrow('Same-document history-step application is not implemented');
   });
 });
 

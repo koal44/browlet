@@ -1,12 +1,14 @@
 import { afterEach, assert, describe, expect, it, vi } from 'vitest';
 
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { Navigable, TopLevelTraversable, type UnloadCancellationResult } from '../../../../src/browlet/browsing/navigation/navigable';
 import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { SessionHistoryTraversalSteps } from '../../../../src/browlet/browsing/navigation/session-history-traversal-queue';
 import { navigationAndTraversalTaskSource } from '../../../../src/browlet/scripting/tasks';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { PointerEventStream } from '../../../../src/browlet/interaction/index';
+import { internalType } from '../../../../src/infra/index';
+import { runInHostTask } from '../../../support/tasks';
 import { StorageKey, StorageShelf } from '../../../../src/storage/index';
 import { obtainURLOrigin, parseURL } from '../../../../src/url/index';
 
@@ -103,24 +105,26 @@ describe('top-level traversable destruction', () => {
 });
 
 describe('top-level traversable closing', () => {
-  it('does nothing when script closing has already begun', () => {
+  it('does nothing when script closing has already begun', async () => {
     const { traversable } = fixture();
     const close = vi.spyOn(traversable, 'definitelyClose');
     traversable.isClosing = true;
 
     traversable.close();
+    await runInHostTask(() => {});
 
     expect(close).not.toHaveBeenCalled();
   });
 
-  it.each(['canceled-by-beforeunload', 'canceled-by-navigate'] as const)('preserves the destination after %s', (status) => {
+  it.each(['canceled-by-beforeunload', 'canceled-by-navigate'] as const)('preserves the destination after %s', async (status) => {
     const { userAgent, traversable, document } = fixture();
     const session = putSession(traversable);
-    const check = vi.spyOn(Navigable, 'checkIfUnloadingIsCanceled').mockReturnValue(status);
+    const check = vi.spyOn(userAgent, 'checkIfUnloadingIsCanceled').mockReturnValue(userAgent.HostPromise.resolve(status, internalType<UnloadCancellationResult>()));
     const queue = vi.spyOn(traversable, 'appendSessionHistoryTraversalSteps');
     const unload = vi.spyOn(document, 'unloadAndDescendants');
 
     traversable.close();
+    await runInHostTask(() => {});
 
     expect(check).toHaveBeenCalledExactlyOnceWith([traversable]);
     expect(queue).not.toHaveBeenCalled();
@@ -130,7 +134,7 @@ describe('top-level traversable closing', () => {
     expect(traversable.isClosing).toBe(false);
   });
 
-  it('checks inclusive descendants, including a shadow-tree child, before queuing unloading', () => {
+  it('checks inclusive descendants, including a shadow-tree child, before queuing unloading', async () => {
     const { userAgent, traversable, document } = fixture();
     const host = document.createElement('div');
     document.body!.appendChild(host);
@@ -142,27 +146,29 @@ describe('top-level traversable closing', () => {
     const [, childDocument] = BrowsingContext.createTopLevel(userAgent);
     const child = new Navigable(DocumentState.create(childDocument), traversable);
     container.contentNavigable = child;
-    const check = vi.spyOn(Navigable, 'checkIfUnloadingIsCanceled').mockReturnValue('continue');
+    const check = vi.spyOn(userAgent, 'checkIfUnloadingIsCanceled').mockReturnValue(userAgent.HostPromise.resolve('continue', internalType<UnloadCancellationResult>()));
     const queue = vi.spyOn(traversable, 'appendSessionHistoryTraversalSteps').mockImplementation(() => {
       expect(check).toHaveBeenCalledExactlyOnceWith([traversable, child]);
     });
 
     traversable.close();
+    await runInHostTask(() => {});
 
     expect(queue).toHaveBeenCalledOnce();
     expect(traversable.isClosing).toBe(false);
   });
 
-  it('definitely closes despite isClosing and unloads the active Document selected when the queue runs', () => {
+  it('definitely closes despite isClosing and unloads the active Document selected when the queue runs', async () => {
     const { userAgent, traversable, document, context, group } = fixture();
     traversable.isClosing = true;
-    vi.spyOn(Navigable, 'checkIfUnloadingIsCanceled').mockReturnValue('continue');
+    vi.spyOn(userAgent, 'checkIfUnloadingIsCanceled').mockReturnValue(userAgent.HostPromise.resolve('continue', internalType<UnloadCancellationResult>()));
     const queued: (() => void)[] = [];
     vi.spyOn(traversable, 'appendSessionHistoryTraversalSteps').mockImplementation((steps) => { queued.push(steps); });
     const originalUnload = vi.spyOn(document, 'unloadAndDescendants');
     const retired = vi.spyOn(document, 'destroyAndDescendants').mockImplementation(() => {});
 
     traversable.definitelyClose();
+    await runInHostTask(() => {});
 
     expect(queued).toHaveLength(1);
     expect(originalUnload).not.toHaveBeenCalled();
@@ -189,18 +195,19 @@ describe('top-level traversable closing', () => {
     expect(userAgent.topLevelTraversableSet.has(traversable)).toBe(false);
   });
 
-  it('finishes closing after unloading destroys the active Document', () => {
+  it('finishes closing after unloading destroys the active Document', async () => {
     const { userAgent, traversable, document, context, group } = fixture();
     const session = putSession(traversable);
     const ui = vi.spyOn(userAgent, 'removeTopLevelTraversableFromUI');
     const destroyed = vi.spyOn(userAgent, 'webDriverBiDiNavigableDestroyed');
-    vi.spyOn(Navigable, 'checkIfUnloadingIsCanceled').mockReturnValue('continue');
+    vi.spyOn(userAgent, 'checkIfUnloadingIsCanceled').mockReturnValue(userAgent.HostPromise.resolve('continue', internalType<UnloadCancellationResult>()));
     let queued: SessionHistoryTraversalSteps | undefined;
     vi.spyOn(traversable, 'appendSessionHistoryTraversalSteps').mockImplementation((steps) => { queued = steps; });
     let afterAllUnloads: (() => void) | undefined;
     vi.spyOn(document, 'unloadAndDescendants').mockImplementation((_newDocument, after) => { afterAllUnloads = after; });
 
     traversable.close();
+    await runInHostTask(() => {});
     queued!();
     // Supply unloading's destruction step on the real owning loop, then deliver its completion below.
     document.env.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { document.destroy(); });
@@ -224,13 +231,15 @@ describe('top-level traversable closing', () => {
     expect(destroyed).toHaveBeenCalledExactlyOnceWith(traversable);
   });
 
-  it('keeps cancellation and queued unloading as separate explicit dependencies', () => {
-    const { userAgent, traversable } = fixture();
-    expect(() => traversable.close()).toThrow('Unload cancellation checks are not implemented');
-    vi.spyOn(Navigable, 'checkIfUnloadingIsCanceled').mockReturnValue('continue');
+  it('reaches the explicit unloading dependency after real cancellation checks complete', async () => {
+    const { userAgent, traversable, document } = fixture();
+    const beforeUnload = vi.spyOn(document, 'fireBeforeUnload');
     let unload: (() => void) | undefined;
     vi.spyOn(userAgent, 'runInParallel').mockImplementation((steps) => { unload = steps; });
     traversable.close();
+    expect(unload).toBeUndefined();
+    await expect.poll(() => unload !== undefined).toBe(true);
+    expect(beforeUnload).toHaveBeenCalledExactlyOnceWith(false);
     expect(() => unload!()).toThrow('Document and descendant unloading is not implemented');
   });
 });

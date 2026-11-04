@@ -188,8 +188,12 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   active Document's Window, including after adoption. HTML's GlobalEventHandlers,
   the ordinary WindowEventHandlers, and Document-only handlers are connected.
   `onbeforeunload` is exposed, including nullable DOMString callback conversion,
-  cancellation, and preservation of an existing event return value. Navigation's
-  beforeunload dispatch, counters, and prompt admission/UI remain unfinished.
+  cancellation, and preservation of an existing event return value. Document's
+  beforeunload producer now dispatches the trusted event, maintains counters, and
+  applies the sandbox/sticky-activation/request gates. User-agent anti-abuse policy
+  and confirmation UI still throw at their explicit owners. Navigation's queued
+  multi-Document coordinator is connected, including the optional traversal event
+  pair; full history application and teardown's task-discard cancellation remain unfinished.
   Internal handler/listener erasure works for existing targets; `document.open()`
   still needs its §8.4 selection and lifecycle hookup.
   BiDi has no session overrides yet. See the
@@ -1070,9 +1074,10 @@ See the [Web Storage roadmap](browlet/storage/ROADMAP.md).
   from other specifications and native input/media/layout event producers retain
   their respective owners; exposing a handler does not implement its producer.
   `onbeforeunload` is connected on Window/body/frameset, including inline source
-  and nullable-string returns. Navigation still needs the beforeunload dispatch
-  counters, prompt admission/UI, and navigation decision; synthetic dispatch
-  alone does not show a prompt.
+  and nullable-string returns. Document's trusted beforeunload producer is implemented,
+  and navigation/top-level closing now queue it through the cancellation coordinator.
+  Anti-abuse prompt policy and host confirmation UI remain unfinished. BiDi prompt notification hooks
+  have no active sessions. Synthetic dispatch alone does not show a prompt.
   See the [handler inventory](browlet/scripting/ROADMAP.md#html-8181-event-handler-idl-invocation).
 
 - **Temporal's HTML clock requires custom Node with the addon.** Windows in every
@@ -1289,8 +1294,8 @@ remain absent, so §7.3.3's user-interaction restriction still needs those
 [consumers](browlet/interaction/ROADMAP.md).
 `Window.open()` supports empty-URL calls to existing `_self`, `_parent`, and `_top`
 targets. The [existing named-target lookup](browlet/browsing/navigation/ROADMAP.md#html-7317-target-names-and-existing-target-lookup)
-now coordinates subtree/group searches and applies context familiarity, but still
-throws at its source-activation and sandbox-permission dependencies. New-target
+now coordinates subtree/group searches and applies context familiarity and sandbox
+permission, but still throws at its source-activation dependency. New-target
 selection now applies
 browser policy, consumes activation, handles COOP/noopener, and retains sandbox
 state. The default popup blocker still needs activation notification/expiry;
@@ -1298,24 +1303,35 @@ both auxiliary and null-opener targets can use their context factories when thos
 earlier checks are supplied or popup blocking is disabled. Nonempty-URL navigation
 remains unfinished.
 Feature processing and the new/existing
-opening branches are connected, but CSSOM View geometry and URL/history effects
-remain unfinished. `close()` and `stop()` also require their lifecycle operations;
+opening branches are connected. Synchronous URL/history updates now work, while
+CSSOM View geometry and queued history application remain unfinished.
+`close()` and `stop()` also require their lifecycle operations;
 see the [Window audit](browlet/browsing/window/ROADMAP.md#html-7221-opening-and-closing-windows).
 `Window.history` exposes Document-owned length/state/scrollRestoration attributes.
 The existing top-level commit path updates stored length/index, and entries retain
 their scroll mode. `go/back/forward` perform conversion, activity checks, and
-request preparation, but reload and delta traversal still throw explicit
-unfinished-operation errors. `pushState/replaceState` now serialize for storage,
+request preparation. Reload now dispatches its cancelable navigate event and
+queues history application. Delta traversal captures the source and queues
+target selection against the then-current distinct joint-history steps; out-of-range
+requests do nothing. Script source capture still needs transient activation,
+and both reload/traverse history-application methods explicitly throw until §7.4.6.
+`pushState/replaceState` now serialize for storage,
 validate URL rewriting, and dispatch a trusted navigate event. Cancellation leaves
 the URL/state unchanged. Precommit handlers run and can reject the change.
 Commit coordinates script execution, interception state, owner operations, and
-transition settlement, but accepted History changes still reach the explicit
-unfinished URL/history application boundary.
+transition settlement. Accepted History changes synchronously update the URL,
+cached classic state, immediate length/index, and Navigation entries, then queue
+finalization. The queued same-document history application still explicitly throws;
+this does not yet support complete back/forward traversal. Reentrant callbacks
+retain the original update order. Intercepted Navigation pushes/replacements clear
+classic state as all three browsers do; ordinary helper calls with omitted state
+retain it. See the [§7.4.4 audit](browlet/browsing/navigation/ROADMAP.md#html-744-non-fragment-synchronous-navigations).
 Session history entries now retain separate serialized classic History and
 Navigation states, including entries whose Document has not loaded. Scroll data
 and optional persisted user state have explicit null-only fields. Capture and
 restoration remain throwing operations; adding the entry fields does not implement
-History-state commits, traversal/PopStateEvent delivery, or scrolling. See the
+traversal/PopStateEvent delivery or scrolling. Classic History-state commits and
+receiver-realm deserialization are now implemented. See the
 [entry audit](browlet/browsing/navigation/ROADMAP.md#html-7411-session-history-entries).
 `DocumentState` retains the recreation inputs and guards eviction of fully active
 Documents. Eviction still reaches unfinished recursive destruction; automatic
@@ -1391,14 +1407,15 @@ dependency for load flags, resource timing, and Permissions Policy reporting.
 These internal algorithms do not connect unfinished iframe insertion/loading.
 Ordinary navigation now fires the gated navigate event, forwards state/tracker
 and POST-only form entries, and stops for cancellation or interception. Immediate
-interception still reaches the unfinished URL/history update operation; a pending
+interception now updates URL/History/Navigation state before queued history application; a pending
 precommit handler can hold it without starting a load. Accepted non-intercepted
 navigation reserves deferred-fetch quota for container-initiated loads, then enters
-parallel work and stops at the explicit unload-cancellation dependency. After that
-check, the coordinator has cancellation-ID checks, queued recursive abortion,
+parallel work and waits for unload checks on the relevant Document loops. After that
+check, the coordinator rechecks the navigation ID before queued recursive abortion,
 pending history-entry and supplied-response preparation, and a population completion
 callback that queues finalization. Recursive abortion and population also still
-throw; the unload check needs a cross-loop completion contract when implemented.
+throw. Prompt policy/UI, full history application, and releasing waits whose tasks
+are discarded by future teardown remain explicit dependencies.
 Quota accounting and creation-time release exist;
 fetchLater(), body validation/buffering, activation, and deferred request delivery
 remain unavailable. Fragment processing also still throws. This is not end-to-end navigation. Traversal's own state writes, later ID
@@ -1471,8 +1488,9 @@ destinations; History reaches the preparation operation and aborts ongoing
 navigation before rechecking activity. Disabled Navigation entries skip dispatch;
 enabled entries initialize data, dispatch, cancel, or create an intercepted transition.
 History-action and transient activation consumption now cover the top-level traversable,
-including shadow trees and other origins; input/automation notification,
-transient expiry, and sticky activation remain missing. `hasUAVisualTransition` is false because
+including shadow trees and other origins. The sticky predicate uses the Window's
+activation timestamp; input/automation notification and transient expiry remain missing.
+`hasUAVisualTransition` is false because
 Browlet does not display cached history renderings; adding that UI must supply its
 presentation state. Commit selects URL/history update, same-document reload
 entry update, or queued traversal resumption. Navigation's same-document entry
@@ -1482,14 +1500,14 @@ manually managed intercepted completion work. Automatic focus reset still needs
 the shared §6.6 focus model and its focus-change producer. Scrolling selects
 active-entry restoration or beginning/fragment scrolling, but saved positions,
 indicated-part selection, and CSSOM View viewport effects remain explicit stubs.
-URL/history updates, traversal resumption, and the other navigation/child-
+Queued joint-history application, traversal resumption, and the other navigation/child-
 destruction lifecycle callers remain unfinished. Precommit
 completion has idle-progress coverage through the supported host bridge after
 integrating the scheduling repairs. Node-injected callbacks between independent
 Browlet Agents retain a separate failing Experimental probe; same-Agent
 cross-Window callbacks pass. See the [Navigation API inventory](./browlet/browsing/navigation/api/ROADMAP.md).
 History-step application,
-state restoration, navigation lifecycle cancellation, and
+persisted/scroll-state restoration, navigation lifecycle cancellation, and
 actual scrolling remain explicit dependencies. Inactive access follows HTML's SecurityError rule,
 including the recorded browser disagreement for retained `state`. See the
 [History audit](browlet/browsing/navigation/ROADMAP.md#html-725-history-foundations)
@@ -1549,8 +1567,9 @@ throws at recursive Document teardown after clearing the container and notifying
 Navigation. Automatic removal is not connected. Teardown scheduling for inactive
 Documents, queued abortion, history application, and BiDi delivery remain explicit
 [destruction dependencies](browlet/browsing/navigation/ROADMAP.md#html-7316-child-navigable-destruction).
-Top-level destruction and closing now have coordinators, but recursive teardown,
-unload cancellation, and descendant unloading still throw. The traversal queue
+Top-level destruction and closing now have coordinators; unload cancellation waits
+for queued Document checks. Prompt policy/UI, recursive teardown, and descendant
+unloading still throw. The traversal queue
 now executes definite closing's unload request on a later background turn.
 Window's script-closing authorization remains unfinished. UI removal and BiDi
 delivery are provisional hooks. See the
@@ -1615,8 +1634,10 @@ navigation. The specification gap and browser disagreement are recorded with
 Location. Actual navigation remains unfinished; writes before complete loading
 also require Window transient activation. Reload now returns for a null relevant
 Document, checks the entry origin, and calls the live Document's navigable.
-Its coordinator still throws explicitly: Navigation API cancellation and queued
-reload history processing remain unfinished. Stock Node still needs an explicit
+Its coordinator now supplies Navigation API cancellation, state/tracker inputs,
+reloadPending, and traversal queuing. The queued reload history application still
+throws explicitly; Fetch/revalidation, unloading, replacement, and Navigation
+entry/activation updates remain unfinished. Stock Node still needs an explicit
 modeled incumbent for calls through another realm's author function. The [navigation slice](browlet/browsing/window/ROADMAP.md#html-724-third-slice-href-assign-replace-and-navigation-handoff)
 records these dependencies; the [component setter audit](browlet/browsing/window/ROADMAP.md#html-724-fourth-slice-url-component-setters)
 records the accepted parsing/encoding clashes and browser evidence. The [decision review](browlet/browsing/window/ROADMAP.md#location-descriptor-decision-review)
@@ -1678,9 +1699,11 @@ Opaque Response Blocking remain absent; the
 records these dependencies without claiming physical isolation.
 
 Sandbox parsing, iframe attribute state, and creation-flag propagation exist,
-but complete sandbox enforcement does not. Navigation permission checks still
-allow provisionally; popup/target selection, forms, pointer lock, automatic
-features, dialogs, orientation, presentation, and downloads lack their consumers.
+but complete sandbox enforcement does not. Navigation admission and named lookup
+now enforce the [sandbox navigation predicate](browlet/browsing/navigation/ROADMAP.md#html-7424-sandbox-navigation-permission),
+including captured activation and permitted popup creators. Actual activation
+tracking, history-application and close callers, forms, pointer lock, automatic
+features, dialogs, orientation, presentation, and downloads remain incomplete.
 Policy-container response creation, inheritance selection, local history retention,
 and worker initialization are implemented independently of the missing full
 iframe/navigation/history/worker lifecycles. Unassociated containers still use

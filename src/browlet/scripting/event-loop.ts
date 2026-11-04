@@ -29,8 +29,9 @@ export class EventLoop {
   /** Incumbent environments retained across host callback entry. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#backup-incumbent-settings-object-stack
   backupIncumbentEnvironmentStack: BrowletEnvironment[] = [];
+  /** Nesting of beforeunload/unload dispatch, used to suppress Window.open(). */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#termination-nesting-level
-  // TODO(HTML unloading): Increment and restore this counter around document unloading.
+  // Beforeunload maintains this counter; TODO(HTML §7.5.9): also bracket document unloading.
   terminationNestingLevel = 0;
   // Task association belongs to each entry, not the retained context reused by nested entries.
   #scriptEntryTasks: (Task | null)[] = [];

@@ -5,8 +5,7 @@ import type { DOMEnvironment } from '../../../dom/environment';
 
 /** Legacy unload-prompt request, independent of Event's cancellation flag. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-beforeunloadevent-interface
-// TODO(HTML §7.4.2.5, steps to fire beforeunload): Produce and dispatch this event with the
-// unload/termination counters, then apply prompt admission and the navigation decision.
+// Document.fireBeforeUnload owns trusted lifecycle dispatch; event-handler return conversion lives in §8.1.8.
 export class BeforeUnloadEventImpl extends EventImpl {
   /** Last assigned string; nonempty values request an unload prompt from the lifecycle producer. */
   returnValue = '';
