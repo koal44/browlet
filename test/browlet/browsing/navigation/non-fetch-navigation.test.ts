@@ -38,7 +38,7 @@ describe('non-fetch navigation', () => {
 
     expect(select).toHaveBeenCalledExactlyOnceWith(params.url);
     if (allowed) {
-      expect(handoff).toHaveBeenCalledExactlyOnceWith(params.url, child, activated, params.initiatorOrigin);
+      expect(handoff).toHaveBeenCalledExactlyOnceWith(params.url, child, activated, params.initiatorOrigin, undefined);
     } else {
       expect(handoff).not.toHaveBeenCalled();
     }
@@ -53,7 +53,7 @@ describe('non-fetch navigation', () => {
 
     userAgent.handoffToExternalSoftware(params.url, top, SandboxingFlagSet.parse(''), activated, params.initiatorOrigin);
 
-    expect(handoff).toHaveBeenCalledExactlyOnceWith(params.url, top, activated, params.initiatorOrigin);
+    expect(handoff).toHaveBeenCalledExactlyOnceWith(params.url, top, activated, params.initiatorOrigin, undefined);
   });
 
   it.each([false, true])('uses captured source activation and target restrictions rather than live Document state (%s)', async (activated) => {
@@ -79,7 +79,7 @@ describe('non-fetch navigation', () => {
 
     userAgent.handoffToExternalSoftware(resource, child, new SandboxingFlagSet(), false, origin);
 
-    expect(handoff).toHaveBeenCalledExactlyOnceWith(resource, child, false, origin);
+    expect(handoff).toHaveBeenCalledExactlyOnceWith(resource, child, false, origin, undefined);
     handoff.mockClear();
     userAgent.handoffToExternalSoftware(resource, child, SandboxingFlagSet.parse(''), true, origin);
     expect(handoff).not.toHaveBeenCalled();

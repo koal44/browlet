@@ -1,7 +1,7 @@
 import { nonASCIIDigitPattern, surroundingTabOrSpacePattern } from '../infra/patterns';
 import { TextCursor } from '../infra/text-cursor';
 
-import { isHTTPTabOrSpace } from './syntax';
+import { isHTTPTabOrSpace, isHTTPToken } from './syntax';
 
 /** An entity tag's opaque value and explicit weakness indicator. */
 // https://www.rfc-editor.org/rfc/rfc9110.html#section-8.8.3
@@ -201,6 +201,16 @@ export function parseRetryAfter(input: string, now: number): RetryAfter | null {
   }
   const date = parseHTTPDate(value, now);
   return date === null ? null : { date };
+}
+
+/** Parse one disposition type without interpreting filename or extension parameters. */
+// https://www.rfc-editor.org/rfc/rfc6266.html#section-4.1
+export function parseContentDispositionType(value: string): string | null {
+  const delimiter = value.indexOf(';');
+  const type = (delimiter < 0 ? value : value.slice(0, delimiter)).replace(surroundingTabOrSpacePattern, '');
+  // SPEC_CLASH(content-disposition-invalid-type): Ignore malformed types as Chromium/WebKit do;
+  // Firefox recovers quoted or space-containing types as attachments. Parameters are handled separately.
+  return isHTTPToken(type) ? type.toLowerCase() : null;
 }
 
 export type EntityTagList = '*' | EntityTag[];

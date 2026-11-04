@@ -1,13 +1,16 @@
 import { InternalError } from '../../../../infra/index';
 import { randomUUID } from '../../../../js-engine/index';
-import type { URLRecord } from '../../../../url/index';
+import { createOpaqueOrigin, type URLRecord } from '../../../../url/index';
+import { FetchRequest } from '../../../../fetch/index';
 
 import type { ScrollRestoration } from '../../history/index';
 import type { DocumentImpl } from '../../../dom/nodes/index';
 import type { BrowletEnvironment } from '../../../environment/index';
 import type { SerializedRecord } from '../../../scripting/structured-data/index';
+import type { Navigable, NavigationRequest } from '../navigable';
 
 import type { DocumentState } from './document-state';
+import type { SourceSnapshotParams } from './source-snapshot';
 
 /** One URL and document state at a joint session-history step. */
 // https://html.spec.whatwg.org/multipage/browsing-the-web.html#session-history-entry
@@ -46,6 +49,53 @@ export class SessionHistoryEntry {
   /** The shared state's current Document, or null until populated or after destruction. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#she-document
   get document(): DocumentImpl | null { return this.documentState.document; }
+
+  /** Construct the navigation request from retained history and captured source inputs. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#create-navigation-params-by-fetching
+  // Steps 2–10; the supplied environment owns execution independently of the source client.
+  createNavigationRequest(navigable: Navigable, sourceSnapshotParams: SourceSnapshotParams, env: BrowletEnvironment): NavigationRequest {
+    const state = this.documentState;
+    const resource = state.resource;
+    if (typeof resource === 'string') throw new InternalError('Srcdoc resources do not create navigation requests');
+    const activeDocument = navigable.activeDocument;
+    if (activeDocument === null) throw new InternalError('Navigation requests require an active Document');
+    const request: NavigationRequest = Object.assign(new FetchRequest(this.url, env), {
+      client: sourceSnapshotParams.fetchClient, policyContainer: sourceSnapshotParams.sourcePolicyContainer,
+    });
+    request.destination = 'document';
+    request.credentialsMode = 'include';
+    request.useURLCredentials = true;
+    request.redirectMode = 'manual';
+    request.replacesClientId = activeDocument.env.id;
+    request.mode = 'navigate';
+    request.referrer = state.requestReferrer;
+    request.referrerPolicy = state.requestReferrerPolicy;
+    request.traversableForUserPrompts = navigable.topLevelTraversable;
+    if (navigable.isTopLevelTraversable) request.topLevelNavigationInitiatorOrigin = state.initiatorOrigin;
+    if (request.client === null) {
+      request.origin = createOpaqueOrigin();
+      request.allowServiceWorkerInterception = true;
+      request.referrer = null;
+    }
+    if (resource !== null) {
+      if (resource.requestBody === 'failure') throw new InternalError('Navigation requests require available POST bytes');
+      request.method = 'POST';
+      request.body = resource.requestBody;
+      request.headerList.set('Content-Type', resource.requestContentType);
+    }
+    if (state.reloadPending) request.reloadNavigation = true;
+    else if (state.everPopulated) request.historyNavigation = true;
+    request.userActivation = sourceSnapshotParams.hasTransientActivation;
+    const container = navigable.container;
+    if (container !== null) {
+      // SPEC_CLASH(navigation-container-origin): Follow browsers and retain the initiating origin; HTML may substitute the container's.
+      // https://github.com/whatwg/html/issues/4703
+      const destination = container.localName as 'iframe' | 'frame' | 'object' | 'embed';
+      request.destination = destination;
+      if (sourceSnapshotParams.fetchClient === container.nodeDocument.env) request.initiatorType = destination;
+    }
+    return request;
+  }
 
   /** Capture scroll positions and any optional user state for a later traversal. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#save-persisted-state

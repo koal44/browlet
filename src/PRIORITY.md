@@ -46,8 +46,9 @@ orchestration and shared worklet responses. §8.1.4.3 now creates compiled class
 scripts and real source-text/CSS/JSON/text engine modules. Supplied graphs link
 and evaluate, with CSS exports projected through Binding. §8.1.6.7.3 now connects
 static and dynamic graph loading to the resolver and fetchers. Wasm ESM parsing
-now uses the addon's retained records; source/deferred loading, module-specific
-context restoration, and creation timing retain explicit unfinished boundaries. Worker-imported scripts
+and source-phase URL imports now use the addon's retained records. Deferred loading,
+object-valued source imports, module-specific context restoration, and creation timing
+retain explicit unfinished boundaries. Worker-imported scripts
 still need a synchronous Fetch host wait; the event loop's pause guard alone
 cannot supply it. §8.1.3.4 now has settings/object scripting predicates;
 §8.1.4.4 has classic/module runners and the running-script lookup. Child Document
@@ -79,7 +80,9 @@ operations are implemented; its [remaining dependencies](browlet/scripting/ROADM
 retain their owner and engine boundaries. §8.1.8.1's existing IDL event handlers
 check target automation policy and callback Document activity. Window's
 `onerror` supplies its five arguments and return-true cancellation; beforeunload
-now converts nullable strings and preserves an existing returnValue. The
+now converts nullable strings and preserves an existing returnValue. Navigation
+produces beforeunload events and coordinates unload cancellation; native prompt UI
+and the remaining document-unloading steps retain explicit dependencies. The
 §8.1.8.2 declarations and Window/body/frameset targeting are connected through
 the shared [event-handler machinery](browlet/scripting/ROADMAP.md#html-8181-event-handler-idl-invocation).
 Window and HTML element content attributes now use CSP checks, raw storage, and

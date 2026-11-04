@@ -35,6 +35,25 @@ connecting it: provisional response preparation currently creates a reserved
 environment and reprocesses policy. Do not replace inherited synthetic params with
 ordinary response-derived policy.
 
+Navigation Fetch now receives 103 responses through
+`BrowletEnvironmentBase.processEarlyHintHeaders(response)`, an explicit throwing
+dependency for HTML §4.2.4. It must create the early policy container, extract Link
+headers, process preload/preconnect using the reserved environment, and return
+steps committing completed or pending hints to the incoming Document's preload map.
+Fetch's interim response also needs its URL retained for link base/origin selection.
+Only the first Early Hints response is processed; redirect handling must retain its
+commit steps across same-origin redirects and clear them across cross-origin redirects.
+
+History population now calls `Navigable.loadDocument(params, sourceSnapshotParams,
+initiatorOrigin)` for an admitted ordinary response and saves its nullable result,
+origin, and history-required policy. This general entry point explicitly throws
+until §7.4.5's MIME/handler dispatch is implemented. It must reuse ResourceReader's
+computed type and retained bytes, select the §7.5 loader or external handler, and
+preserve synthetic reservations/policy. Null initiators from openerless initial
+about:blank history or the provisional local loader, and synthetic
+history-referrer persistence remain separate specification gaps; see the
+[population handoff audit](../browsing/navigation/ROADMAP.md#document-loading-handoff-and-retained-history-state).
+
 `SPEC_CLASH(javascript-about-blank-body)` also remains unresolved at that boundary:
 HTML's blanket about:blank loader branch skips response parsing, while all three
 browsers parse a javascript: replacement body at that URL. The
@@ -198,8 +217,8 @@ overrides it. Stylesheet cases cover repeated and combined Link fields through
 Fetch, document creation, sheet association, and computed style on parsed elements.
 They supply navigation inputs, select Fetch's parallel callback queue and sandbox
 body owner, and commit before parser input tasks run. They do not implement
-HTML §7.4's state machine, general MIME handler selection, Refresh, or
-Speculation-Rules processing. These remain HTML work.
+HTML §7.4's whole state machine, Refresh, or Speculation-Rules processing.
+General MIME dispatch is now connected separately by navigation's §7.4.5 coordinator.
 
 The first element consumers should be `<link>`, `<script>`, `<img>`, and
 `<iframe>`, in that order of increasing lifecycle reach. That sequence proves
@@ -322,12 +341,15 @@ and Gecko's
 forward retained prefix bytes before subsequent input. This informs ownership,
 not Browlet's chosen byte limit or deadline.
 
-Two integration gates remain explicit. UserAgent's support predicate still
-returns false provisionally; the concrete document/image/media support policy
-must follow the handlers Browlet actually supplies. General handler selection
-still precedes `Navigable.loadHTMLDocument()`: the tests explicitly select known/sniffed
-HTML, while XML, text, media, and other handlers remain §7.5 work. Context-specific
-sniffers remain in MIME for their eventual element consumers. Reading a header
+UserAgent's support predicate still returns false provisionally; installed
+decoder/viewer capabilities must determine the support Browlet claims. History
+population now determines MIME after response admission, then queues synchronous
+`Navigable.loadDocument()` dispatch with the same ResourceReader. Its `mimeType`
+getter requires completed determination. Loader and external-handoff inputs retain
+that reader, including the sniffed prefix and any pending read. HTML's production
+script setup and the XML, text, multipart, media, and inline handlers remain §7.5 work.
+Configured type choices and unsupported-resource host policy belong to UserAgent.
+Context-specific sniffers remain in MIME for their eventual element consumers. Reading a header
 does not implement HTML encoding restart or retain the entire response for replay.
 
 The [MIME integration notes](../../mime/ROADMAP.md) remain until the support

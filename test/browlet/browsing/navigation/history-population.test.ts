@@ -6,16 +6,20 @@ import { Navigable, type PopulateHistoryEntryOptions } from '../../../../src/bro
 import { NavigationParams, type NonFetchSchemeNavigationParams } from '../../../../src/browlet/browsing/navigation/params';
 import { DocumentState, SourceSnapshotParams, type PostResource } from '../../../../src/browlet/browsing/navigation/state/index';
 import { PolicyContainer } from '../../../../src/browlet/browsing/policy/index';
-import { ContentSecurityPolicy, CSPList } from '../../../../src/browlet/browsing/policy/csp/index';
+import { ContentSecurityPolicy, CSPList, CSPViolation } from '../../../../src/browlet/browsing/policy/csp/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
 import { BrowletEnvironmentBase, type BrowletEnvironment } from '../../../../src/browlet/environment/index';
-import { FetchRequest, FetchResponse } from '../../../../src/fetch/index';
+import { ResourceReader } from '../../../../src/browlet/loader/resource-reader';
+import { FetchHeaders, FetchRequest, FetchResponse } from '../../../../src/fetch/index';
 import { internalType } from '../../../../src/infra/index';
 import { createOpaqueOrigin, obtainURLOrigin, parseURL, serializeURL } from '../../../../src/url/index';
+import { mockHTTPTransport } from '../../../fetch/transport-fixture';
 import { unwrap } from '../../../support/browlet-binding';
 
 afterEach(() => { vi.restoreAllMocks(); });
+
+const htmlLoaderDependency = 'HTML document loading requires response-reader setup and parser script preparation';
 
 describe('history-entry population selection and delivery', () => {
   it('uses a supplied response even when the retained resource would select srcdoc', async () => {
@@ -24,6 +28,7 @@ describe('history-entry population selection and delivery', () => {
     const params = suppliedParams(navigable);
     const srcdoc = vi.spyOn(NavigationParams, 'fromSrcdoc');
     const fetch = vi.spyOn(NavigationParams, 'fromFetch');
+    const load = vi.spyOn(navigable, 'loadDocument');
     const complete = vi.fn();
     navigable.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', { navigationParams: params, completionSteps: complete });
     expect(queue).toHaveBeenCalledExactlyOnceWith('navigation-and-traversal', expect.any(Function));
@@ -32,7 +37,8 @@ describe('history-entry population selection and delivery', () => {
     expect(complete).not.toHaveBeenCalled();
     expect(env.responsibleEventLoop.currentlyRunningTask).toBeNull();
     await expect.poll(() => failures.length).toBe(1);
-    expect(failures[0]).toEqual(expect.objectContaining({ message: 'Navigation download and document loading are not implemented' }));
+    expect(load).toHaveBeenCalledExactlyOnceWith(params, source, entry.documentState.initiatorOrigin, expect.any(ResourceReader));
+    expect(failures[0]).toEqual(expect.objectContaining({ message: htmlLoaderDependency }));
     expect(entry.document).toBeNull();
     expect(complete).not.toHaveBeenCalled();
   });
@@ -52,7 +58,7 @@ describe('history-entry population selection and delivery', () => {
     expect(fetch).not.toHaveBeenCalled();
     expect(external).not.toHaveBeenCalled();
     await expect.poll(() => failures.length).toBe(1);
-    expect(failures[0]).toEqual(expect.objectContaining({ message: 'Navigation download and document loading are not implemented' }));
+    expect(failures[0]).toEqual(expect.objectContaining({ message: htmlLoaderDependency }));
   });
 
   it.each([
@@ -129,7 +135,7 @@ describe('history-entry population selection and delivery', () => {
     pending.resolve(redirect);
     await expect.poll(() => complete.mock.calls.length).toBe(1);
     expect(select).toHaveBeenCalledExactlyOnceWith(redirect.url);
-    expect(handoff).toHaveBeenCalledExactlyOnceWith(redirect.url, navigable, true, redirect.initiatorOrigin);
+    expect(handoff).toHaveBeenCalledExactlyOnceWith(redirect.url, navigable, true, redirect.initiatorOrigin, undefined);
     expect(replacement).not.toHaveBeenCalled();
     expect(entry.document).toBeNull();
     expect(failures).toEqual([]);
@@ -220,14 +226,23 @@ describe('history-entry population selection and delivery', () => {
     expect(failures).toEqual([]);
   });
 
-  it('keeps Fetch, handler selection, and response processing as separate explicit boundaries', async () => {
-    const { navigable, entry, source, target, failures } = await fixture();
-    expect(() => navigable.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none'))
-      .toThrow('Navigation parameter creation by fetching is not implemented');
-    entry.url = parseURL('custom:destination').url!;
+  it('dispatches Fetch while Document loading and external handler selection remain explicit boundaries', async () => {
+    const { navigable, entry, source, target, env, failures } = await fixture();
+    mockHTTPTransport(env.userAgent, (_, listener) => {
+      listener.onHeaders(200, 'OK', new FetchHeaders([['Content-Type', 'text/html']]), true);
+      listener.onEnd();
+    });
+    const runInParallel = env.userAgent.runInParallel.bind(env.userAgent);
+    vi.spyOn(env.userAgent, 'runInParallel').mockImplementation((steps) => runInParallel(() => {
+      try { steps(); } catch (error) { failures.push(error); }
+    }));
     navigable.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none');
     await expect.poll(() => failures.length).toBe(1);
-    expect(failures[0]).toEqual(expect.objectContaining({ message: 'External URL handler selection is not implemented' }));
+    expect(failures[0]).toEqual(expect.objectContaining({ message: htmlLoaderDependency }));
+    entry.url = parseURL('custom:destination').url!;
+    navigable.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none');
+    await expect.poll(() => failures.length).toBe(2);
+    expect(failures[1]).toEqual(expect.objectContaining({ message: 'External URL handler selection is not implemented' }));
   });
 });
 
@@ -240,7 +255,7 @@ describe('history-entry response admission', () => {
     const check = vi.spyOn(list, 'isNavigationResponseBlocked');
     const coep = vi.spyOn(child, 'checkResponseEmbedderPolicy');
     const xfo = vi.spyOn(child, 'checkResponseFrameOptions');
-    const report = vi.spyOn(env.userAgent, 'queueReportingTask');
+    const report = vi.spyOn(CSPViolation.prototype, 'report');
     const inline = vi.spyOn(child, 'createDocumentForInlineContent');
     const complete = vi.fn();
     const options: PopulateHistoryEntryOptions = { navigationParams: params, cspNavigationType: 'form-submission', completionSteps: complete };
@@ -260,13 +275,13 @@ describe('history-entry response admission', () => {
   });
 
   it('continues through COEP and X-Frame-Options after a report-only CSP violation', async () => {
-    const { child, entry, source, target, env, failures, params } = await responseFixture();
+    const { child, entry, source, target, failures, params } = await responseFixture();
     const list = params.policyContainer.cspList!;
     list.policies.push(ContentSecurityPolicy.parse("frame-ancestors 'none'", 'header', 'report'));
     const check = vi.spyOn(list, 'isNavigationResponseBlocked');
     const coep = vi.spyOn(child, 'checkResponseEmbedderPolicy');
     const xfo = vi.spyOn(child, 'checkResponseFrameOptions');
-    const report = vi.spyOn(env.userAgent, 'queueReportingTask');
+    const report = vi.spyOn(CSPViolation.prototype, 'report');
     const inline = vi.spyOn(child, 'createDocumentForInlineContent');
     child.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', { navigationParams: params });
     await expect.poll(() => failures.length).toBe(1);
@@ -277,7 +292,7 @@ describe('history-entry response admission', () => {
     expect(check.mock.invocationCallOrder[0]).toBeLessThan(coep.mock.invocationCallOrder[0]!);
     expect(coep.mock.invocationCallOrder[0]).toBeLessThan(xfo.mock.invocationCallOrder[0]!);
     expect(inline).not.toHaveBeenCalled();
-    expect(failures[0]).toEqual(expect.objectContaining({ message: 'Navigation download and document loading are not implemented' }));
+    expect(failures[0]).toEqual(expect.objectContaining({ message: htmlLoaderDependency }));
     expect(params.reservedEnv!.discarded).toBe(false);
   });
 
@@ -290,7 +305,7 @@ describe('history-entry response admission', () => {
     await expect.poll(() => failures.length).toBe(1);
     expect(inline).toHaveBeenCalledTimes(disposition === 'enforce' ? 0 : 1);
     expect(failures[0]).toEqual(expect.objectContaining({
-      message: disposition === 'enforce' ? 'Navigation download and document loading are not implemented'
+      message: disposition === 'enforce' ? htmlLoaderDependency
         : 'Inline user-agent Document creation is not implemented',
     }));
   });
@@ -309,7 +324,7 @@ describe('history-entry response admission', () => {
     expect(inline).toHaveBeenCalledTimes(reserved ? 1 : 0);
     expect(failures[0]).toEqual(expect.objectContaining({
       message: reserved ? 'Inline user-agent Document creation is not implemented'
-        : 'Navigation download and document loading are not implemented',
+        : htmlLoaderDependency,
     }));
   });
 
@@ -413,6 +428,256 @@ describe('history-entry response admission', () => {
   });
 });
 
+describe('history-entry responses without a Document', () => {
+  it.each([204, 205])('completes %s on the target task without changing history or discarding the reservation', async (status) => {
+    const { child, entry, source, target, env, failures, params } = await responseFixture();
+    params.response.status = status;
+    const active = child.activeSessionHistoryEntry;
+    const state = { ...entry.documentState };
+    const policy = vi.spyOn(env.userAgent, 'isNavigationDownloadAllowed');
+    const download = vi.spyOn(env.userAgent, 'handleAsDownload');
+    const failed = vi.spyOn(env.userAgent, 'webDriverBiDiNavigationFailed');
+    const complete = vi.fn(() => {
+      expect(env.responsibleEventLoop.currentlyRunningTask).not.toBeNull();
+      expect(entry.document).toBeNull();
+    });
+    child.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', { navigationParams: params, completionSteps: complete });
+    expect(complete).not.toHaveBeenCalled();
+    await expect.poll(() => complete.mock.calls.length + failures.length).toBe(1);
+    expect(failures).toEqual([]);
+    expect(complete).toHaveBeenCalledOnce();
+    expect(policy).not.toHaveBeenCalled();
+    expect(download).not.toHaveBeenCalled();
+    expect(failed).not.toHaveBeenCalled();
+    expect(entry.documentState).toEqual(state);
+    expect(child.activeSessionHistoryEntry).toBe(active);
+    expect(child.currentSessionHistoryEntry).toBe(active);
+    expect(params.reservedEnv!.discarded).toBe(false);
+  });
+
+  it.each([
+    { sourceAllows: false, targetAllows: true },
+    { sourceAllows: true, targetAllows: false },
+    { sourceAllows: false, targetAllows: false },
+  ])('completes a sandbox-blocked attachment (source: $sourceAllows, target: $targetAllows)', async ({ sourceAllows, targetAllows }) => {
+    const { child, entry, source, target, env, failures, params } = await responseFixture();
+    params.response.headerList.append('Content-Disposition', 'attachment');
+    source.allowsDownloading = sourceAllows;
+    if (!targetAllows) params.finalSandboxingFlagSet.add('sandboxed-downloads');
+    const policy = vi.spyOn(env.userAgent, 'isNavigationDownloadAllowed');
+    const download = vi.spyOn(env.userAgent, 'handleAsDownload');
+    const complete = vi.fn();
+    child.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', { navigationParams: params, completionSteps: complete });
+    await expect.poll(() => complete.mock.calls.length).toBe(1);
+    expect(policy).not.toHaveBeenCalled();
+    expect(download).not.toHaveBeenCalled();
+    expect(entry.document).toBeNull();
+    expect(entry.documentState.everPopulated).toBe(false);
+    expect(failures).toEqual([]);
+  });
+
+  it('completes when browser download policy declines an attachment', async () => {
+    const { child, entry, source, target, env, failures, params } = await responseFixture();
+    params.response.headerList.append('Content-Disposition', 'attachment');
+    const policy = vi.spyOn(env.userAgent, 'isNavigationDownloadAllowed').mockReturnValue(false);
+    const download = vi.spyOn(env.userAgent, 'handleAsDownload');
+    const complete = vi.fn();
+    child.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', { navigationParams: params, completionSteps: complete });
+    await expect.poll(() => complete.mock.calls.length).toBe(1);
+    expect(policy).toHaveBeenCalledExactlyOnceWith(params.response, source);
+    expect(download).not.toHaveBeenCalled();
+    expect(entry.document).toBeNull();
+    expect(entry.documentState.everPopulated).toBe(false);
+    expect(failures).toEqual([]);
+  });
+
+  it.each([
+    { status: 200, id: null }, { status: 204, id: 'download' }, { status: 205, id: 'download' },
+  ])('hands off an allowed attachment before empty-response completion ($status, $id)', async ({ status, id }) => {
+    const { child, entry, source, target, env, failures, params } = await responseFixture();
+    params.response.status = status;
+    params.response.headerList.append('Content-Disposition', 'attachment; filename="a.html"');
+    params.id = 'different-params-id';
+    child.ongoingNavigation = id;
+    // Only the captured source permission and final target flags govern this branch.
+    source.sandboxingFlags.add('sandboxed-downloads');
+    child.activeDocument!.activeSandboxingFlagSet.add('sandboxed-downloads');
+    const state = { ...entry.documentState };
+    const policy = vi.spyOn(env.userAgent, 'isNavigationDownloadAllowed').mockReturnValue(true);
+    const download = vi.spyOn(env.userAgent, 'handleAsDownload').mockImplementation(() => {
+      expect(entry.document).toBeNull();
+    });
+    const complete = vi.fn();
+    child.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', {
+      navigationId: id, navigationParams: params, completionSteps: complete,
+    });
+    await expect.poll(() => complete.mock.calls.length).toBe(1);
+    expect(policy).toHaveBeenCalledExactlyOnceWith(params.response, source);
+    expect(download).toHaveBeenCalledExactlyOnceWith(params.response, child, id);
+    expect(download.mock.invocationCallOrder[0]).toBeLessThan(complete.mock.invocationCallOrder[0]!);
+    expect(entry.documentState).toEqual(state);
+    expect(params.reservedEnv!.discarded).toBe(false);
+    expect(failures).toEqual([]);
+  });
+
+  it.each(['attachment', 'example'])('keeps the actual download-admission owner explicit (%s)', async (disposition) => {
+    const { child, entry, source, target, env, failures, params } = await responseFixture();
+    params.response.headerList.append('Content-Disposition', disposition);
+    const download = vi.spyOn(env.userAgent, 'handleAsDownload');
+    const complete = vi.fn();
+    child.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', { navigationParams: params, completionSteps: complete });
+    await expect.poll(() => failures.length).toBe(1);
+    expect(failures[0]).toEqual(expect.objectContaining({ message: 'Navigation download admission policy is not implemented' }));
+    expect(download).not.toHaveBeenCalled();
+    expect(complete).not.toHaveBeenCalled();
+  });
+
+  it('keeps the actual download handler explicit after policy admission', async () => {
+    const { child, entry, source, target, env, failures, params } = await responseFixture();
+    params.response.headerList.append('Content-Disposition', 'attachment');
+    vi.spyOn(env.userAgent, 'isNavigationDownloadAllowed').mockReturnValue(true);
+    const complete = vi.fn();
+    child.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', { navigationParams: params, completionSteps: complete });
+    await expect.poll(() => failures.length).toBe(1);
+    expect(failures[0]).toEqual(expect.objectContaining({ message: 'Download handling is not implemented' }));
+    expect(complete).not.toHaveBeenCalled();
+    expect(entry.document).toBeNull();
+  });
+
+  it('checks response policies before considering an attachment or empty response', async () => {
+    const { child, entry, source, target, failures, params } = await responseFixture();
+    params.response.status = 204;
+    params.response.headerList.append('Content-Disposition', 'attachment');
+    params.response.headerList.append('X-Frame-Options', 'DENY');
+    const disposition = vi.spyOn(params.response, 'hasAttachmentDisposition');
+    const complete = vi.fn();
+    child.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', { navigationParams: params, completionSteps: complete });
+    await expect.poll(() => failures.length).toBe(1);
+    expect(disposition).not.toHaveBeenCalled();
+    expect(failures[0]).toEqual(expect.objectContaining({ message: 'Inline user-agent Document creation is not implemented' }));
+    expect(complete).not.toHaveBeenCalled();
+  });
+
+  it('leaves conflicting disposition rejection explicit before download admission', async () => {
+    const { child, entry, source, target, env, failures, params } = await responseFixture();
+    params.response.headerList.append('Content-Disposition', 'attachment');
+    params.response.headerList.append('Content-Disposition', 'inline');
+    const policy = vi.spyOn(env.userAgent, 'isNavigationDownloadAllowed');
+    const complete = vi.fn();
+    child.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', { navigationParams: params, completionSteps: complete });
+    await expect.poll(() => failures.length).toBe(1);
+    expect(failures[0]).toEqual(expect.objectContaining({ message: 'Conflicting Content-Disposition response rejection is not implemented' }));
+    expect(policy).not.toHaveBeenCalled();
+    expect(complete).not.toHaveBeenCalled();
+  });
+});
+
+describe('history-entry loaded Document state', () => {
+  it.each([
+    ['https://loaded.test/final', false], ['blob:https://loaded.test/resource', false],
+    ['about:blank', true], ['about:srcdoc', true], ['data:text/html,loaded', true],
+  ] as const)('retains the loaded origin and the required policy for %s', async (url, storesPolicy) => {
+    const { document, navigable, entry, source, target, env, failures } = await fixture();
+    const params = suppliedParams(navigable);
+    const [, loaded] = BrowsingContext.create(document, null, document.browsingContext!.group!);
+    loaded.url = parseURL(url).url!;
+    loaded.origin = createOpaqueOrigin();
+    // The loaded Document's URL selects storage, independently of the entry and response URLs.
+    entry.url = parseURL(storesPolicy ? 'https://entry.test/' : 'about:blank').url!;
+    const previousPolicy = entry.documentState.historyPolicyContainer = new PolicyContainer();
+    const request = params.request = new FetchRequest(params.url, env);
+    request.referrer = parseURL('https://source.test/submitted').url!;
+    const previousState = { ...entry.documentState };
+    const active = navigable.activeSessionHistoryEntry;
+    const load = vi.spyOn(navigable, 'loadDocument').mockImplementation(() => {
+      expect(env.responsibleEventLoop.currentlyRunningTask).not.toBeNull();
+      expect(entry.document).toBeNull();
+      return loaded;
+    });
+    const complete = vi.fn(() => {
+      expect(env.responsibleEventLoop.currentlyRunningTask).not.toBeNull();
+      expect(entry.documentState).toEqual({
+        ...previousState, document: loaded, everPopulated: true, origin: loaded.origin,
+        historyPolicyContainer: storesPolicy ? params.policyContainer : previousPolicy,
+        requestReferrer: request.referrer,
+      });
+    });
+    navigable.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', { navigationParams: params, completionSteps: complete });
+    expect(load).not.toHaveBeenCalled();
+    await expect.poll(() => complete.mock.calls.length + failures.length).toBe(1);
+    expect(failures).toEqual([]);
+    expect(complete).toHaveBeenCalledOnce();
+    expect(load).toHaveBeenCalledExactlyOnceWith(params, source, previousState.initiatorOrigin, expect.any(ResourceReader));
+    expect(entry.documentState.origin).toBe(loaded.origin);
+    expect(entry.documentState.origin).not.toBe(params.origin);
+    expect(entry.documentState.historyPolicyContainer).toBe(storesPolicy ? params.policyContainer : previousPolicy);
+    expect(entry.documentState.historyPolicyContainer).not.toBe(loaded.policyContainer);
+    expect(navigable.activeSessionHistoryEntry).toBe(active);
+    expect(navigable.currentSessionHistoryEntry).toBe(active);
+    // History retains the selected live container, rather than a clone.
+    if (storesPolicy) {
+      params.policyContainer.referrerPolicy = 'no-referrer';
+      expect(entry.documentState.historyPolicyContainer.referrerPolicy).toBe('no-referrer');
+    }
+  });
+
+  it.each([false, true])('completes a null loader result without changing retained state (previously populated: %s)', async (everPopulated) => {
+    const { child, entry, source, target, env, failures, params } = await responseFixture();
+    entry.documentState.initiatorOrigin = null;
+    entry.documentState.everPopulated = everPopulated;
+    entry.documentState.historyPolicyContainer = new PolicyContainer();
+    const previousState = { ...entry.documentState };
+    const load = vi.spyOn(child, 'loadDocument').mockReturnValue(null);
+    const discard = vi.spyOn(params.reservedEnv!, 'discard');
+    const failed = vi.spyOn(env.userAgent, 'webDriverBiDiNavigationFailed');
+    const complete = vi.fn();
+    child.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', { navigationParams: params, completionSteps: complete });
+    await expect.poll(() => complete.mock.calls.length + failures.length).toBe(1);
+    expect(failures).toEqual([]);
+    expect(complete).toHaveBeenCalledOnce();
+    expect(load).toHaveBeenCalledExactlyOnceWith(params, source, null, expect.any(ResourceReader));
+    expect(entry.documentState).toEqual(previousState);
+    expect(discard).not.toHaveBeenCalled();
+    expect(failed).not.toHaveBeenCalled();
+  });
+
+  it.each([null, 'https://retained.test/'])('preserves a concrete referrer %s and a synthetic null reservation', async (referrer) => {
+    const { document, navigable, entry, source, target, failures } = await fixture();
+    const params = suppliedParams(navigable);
+    const [, loaded] = BrowsingContext.create(document, null, document.browsingContext!.group!);
+    entry.documentState.requestReferrer = referrer === null ? null : parseURL(referrer).url!;
+    const retainedReferrer = entry.documentState.requestReferrer;
+    vi.spyOn(navigable, 'loadDocument').mockReturnValue(loaded);
+    const complete = vi.fn();
+    navigable.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', { navigationParams: params, completionSteps: complete });
+    await expect.poll(() => complete.mock.calls.length + failures.length).toBe(1);
+    expect(failures).toEqual([]);
+    expect(complete).toHaveBeenCalledOnce();
+    expect(entry.document).toBe(loaded);
+    expect(entry.documentState.requestReferrer).toBe(retainedReferrer);
+    expect(params.request).toBeNull();
+    expect(params.reservedEnv).toBeNull();
+  });
+
+  it('leaves synthetic referrer persistence explicit after saving a loaded Document', async () => {
+    const { document, navigable, entry, source, target, failures } = await fixture();
+    const params = suppliedParams(navigable);
+    const [, loaded] = BrowsingContext.create(document, null, document.browsingContext!.group!);
+    loaded.origin = createOpaqueOrigin();
+    vi.spyOn(navigable, 'loadDocument').mockReturnValue(loaded);
+    const complete = vi.fn();
+    navigable.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', { navigationParams: params, completionSteps: complete });
+    await expect.poll(() => failures.length).toBe(1);
+    expect(failures[0]).toEqual(expect.objectContaining({ message: 'Synthetic navigation history referrer capture is not implemented' }));
+    expect(entry.document).toBe(loaded);
+    expect(entry.documentState.everPopulated).toBe(true);
+    expect(entry.documentState.origin).toBe(loaded.origin);
+    expect(entry.documentState.historyPolicyContainer).toBe(params.policyContainer);
+    expect(entry.documentState.requestReferrer).toBeUndefined();
+    expect(complete).not.toHaveBeenCalled();
+  });
+});
+
 describe('srcdoc navigation parameters', () => {
   it('assembles the retained resource and hands it to the child Window task before the unfinished loader', async () => {
     const { child, entry, source, target, env, failures } = await childFixture();
@@ -427,7 +692,7 @@ describe('srcdoc navigation parameters', () => {
     expect(srcdoc.mock.results[0]).toMatchObject({ type: 'return', value: { url: { scheme: 'about', path: 'srcdoc' } } });
     expect(queue).toHaveBeenCalledExactlyOnceWith('navigation-and-traversal', expect.any(Function));
     await expect.poll(() => failures.length).toBe(1);
-    expect(failures[0]).toEqual(expect.objectContaining({ message: 'Navigation download and document loading are not implemented' }));
+    expect(failures[0]).toEqual(expect.objectContaining({ message: htmlLoaderDependency }));
     expect(entry.document).toBeNull();
     expect(complete).not.toHaveBeenCalled();
   });
@@ -545,6 +810,7 @@ async function childFixture() {
 
 function suppliedParams(navigable: Navigable): NavigationParams {
   const response = new FetchResponse();
+  response.headerList.append('Content-Type', 'text/html');
   response.urlList.push(parseURL('https://response.test/final').url!);
   return navigable.createNavigationParams(response);
 }

@@ -216,12 +216,72 @@ HTML types without changing Fetch's portable policy contract. Browser-UI navigat
 has a null source client and an
 empty source policy container. A nonempty list requires its source environment.
 
+HTML §7.4.5 step 21.3 also invokes this check from `NavigationParams.fromFetch()`.
+Request execution and the rejected result belong to the UserAgent, while policy
+and violation delivery remain with the captured source client. A blocked initial
+request resolves to null before Fetch; report-only violations still report and
+dispatch Fetch. The manual redirect loop repeats the check before each HTTP(S)
+continuation; admitted final responses produce params for the still-unfinished
+Document loader. The navigation suite covers this connection separately from the
+directive tests.
+
+`SPEC_CLASH(navigation-redirect-csp-url)`: HTML's loop calls the navigation CSP check
+before `processNextManualRedirect()` lets Fetch advance the request's current URL
+and redirect count. A literal connection checks the previous URL. Browlet passes
+the pending target explicitly and matches it with the upcoming count, before any
+redirect request is sent. Fetch remains responsible for advancing the request,
+changing methods, replaying bodies, and enforcing its redirect limit. The optional
+pending URL is a reviewed extra algorithm input; original URL violation reporting
+is unchanged.
+
+On 2026-11-03, the HTTP probe found Chromium 156.0.8078.4 and WebKit 27.2 block an
+off-policy redirect before sending it for GET/302 and POST/302, 303, 307, and 308.
+Firefox 157.0 follows all five: it changes POST to GET for 302/303 and preserves
+POST for 307/308. Eric approved checking every pending HTTP(S) redirect, following
+Chromium/WebKit. The still-open [CSP issue #8](https://github.com/w3c/webappsec-csp/issues/8)
+debates initial-target-only enforcement for OAuth/SAML interoperability against
+redirect restrictions, including method-preserving POST redirects and query-string
+exfiltration. It does not settle the disagreement. WebKit's
+`ContentSecurityPolicy::allowFormAction` also passes its redirect status and target
+to source matching. Experimental's `navigation-form-redirects.mjs` and
+`NAVIGATION-FORM-REDIRECTS.md` retain the reproducible probe and findings.
+
+The production regression covers first and later redirect blocking without a
+foreign transport call, report-only continuation, and redirect path matching using
+the upcoming count. An allowed initial form target cannot bypass the policy by
+returning a redirect.
+
+`SPEC_CLASH(csp-document-fetch-directive)`: CSP's
+[effective-directive algorithm](https://w3c.github.io/webappsec-csp/#effective-directive-for-a-request)
+omits `document`, sending it through connect-src and then default-src. Fetch's
+[destination table](https://fetch.spec.whatwg.org/#concept-request-destination)
+instead assigns no fetch directive to top-level navigation. Browlet follows Fetch
+and browsers: `document` returns null from directive selection. Form-action still
+uses the separate navigation check; frame/iframe/object/embed checks are unchanged.
+The first real-Fetch regression failed by returning a network error under
+`default-src 'none'` rather than reaching response processing.
+
+On 2026-11-03, Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2 all allowed
+top-level links and GET/POST forms under `default-src 'none'`, and links/POST forms
+under `connect-src 'none'`; all blocked POST under `form-action 'none'` before any
+target request. Experimental's `navigation-csp-document.mjs` retains the HTTP probe.
+Firefox's `dom/security/nsCSPService.cpp` also excludes `TYPE_DOCUMENT` from generic
+CSP enforcement. The mismatch is independently described in
+[the fetching-API audit](https://gist.github.com/zcorpan/3aa2e7127b3330964afd8731109a6962).
+
+Prefetch/prerender effective-directive selection still takes precedence over the
+destination. Prerender enforcement remains a separate audit dependency: CSP selects
+default-src but its fallback list is empty, while only prefetch enters its resource-hint
+algorithm. The new regression checks selection, without assuming those two enforcement
+paths are identical.
+
 The [CSP §4.2.4 check](https://w3c.github.io/webappsec-csp/#should-block-navigation-request)
 first applies `form-action` and Trusted Types pre-navigation checks. All rejected
 policies report; only enforcing policies block. A blocked pre-navigation phase
 skips inline checks but does not suppress the remaining pre-navigation checks.
-`form-action` applies only to form submissions, matches the current request URL
-with its redirect count and retained self origin, and reports the original URL.
+`form-action` applies only to form submissions, matches the current or pending
+request URL with its corresponding redirect count and retained self origin, and
+reports the original URL.
 It has no default-src fallback.
 
 Trusted Types may rewrite the first request URL. Its factory's
@@ -434,7 +494,8 @@ Window violation events and observers retain their existing tests.
 
 The factory is now connected to list-level aggregation, including null synthetic
 requests, and HTML's population task calls the aggregate checker. Remaining:
-HTML's error-page creation, downloads, empty responses, and Document loader. Worker
+HTML's error-page creation, download admission/handling, and Document loader. Empty
+204/205 responses now complete after these checks. Worker
 global violation construction remains explicitly unfinished; this slice does not
 substitute the sandbox for a Worker either.
 

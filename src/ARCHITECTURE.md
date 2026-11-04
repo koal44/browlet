@@ -1102,6 +1102,16 @@ becomes active. Document loading and parsing use that document's owner.
 BrowsingContext creates the initial about:blank document before the navigable
 is initialized.
 
+History population admits a response before asking ResourceReader to determine
+its MIME type. It resumes synchronous `loadDocument()` dispatch and retained-state
+updates on the captured destination's navigation-and-traversal task, rechecking
+the navigation ID after the wait. The dispatcher receives the prepared reader
+alongside the specification inputs, so a loader or external handler consumes the
+sniffed prefix and remaining bytes from one source. UserAgent owns configured
+inline/external type choices and decoder/PDF support. Actual §7.5 loaders and
+unsupported-resource host policy remain explicit dependencies; no handler or
+per-navigation service object is constructed by this dispatch.
+
 `Navigable.navigate()` receives the executing environment as `env` last; null denotes host
 or parallel work without a surrounding HTML Agent. Source and destination
 Documents do not identify the executing caller. The source-side admission and

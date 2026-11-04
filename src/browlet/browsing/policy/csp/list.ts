@@ -94,9 +94,15 @@ export class CSPList implements FetchCSPList {
 
   /** Check captured navigation policies; Trusted Types can rewrite the request before inline checks. */
   // https://w3c.github.io/webappsec-csp/#should-block-navigation-request
-  isNavigationRequestBlocked(request: FetchRequest, type: 'form-submission' | 'other', env: BrowletEnvironment | null): boolean {
+  isNavigationRequestBlocked(
+    request: FetchRequest, type: 'form-submission' | 'other', env: BrowletEnvironment | null, redirectURL?: URLRecord,
+  ): boolean {
     if (this.policies.length === 0) return false;
     if (env === null) throw new InternalError('Navigation CSP checks require the source client environment');
+    // SPEC_CLASH(navigation-redirect-csp-url): HTML checks before Fetch advances the request URL.
+    // Check the pending redirect as Chromium/WebKit do; Firefox only checks the initial form target (CSP #8).
+    const url = redirectURL ?? request.currentURL;
+    const redirectCount = request.redirectCount + (redirectURL === undefined ? 0 : 1);
     let blocked = false;
     let trustedTypesBlocked: boolean | undefined;
     let trustedTypesSample = '';
@@ -104,7 +110,7 @@ export class CSPList implements FetchCSPList {
       for (const [name, value] of policy.directives) {
         let violation: CSPViolation;
         if (name === 'form-action') {
-          if (type !== 'form-submission' || value.matchesURL(request.currentURL, this.selfOrigin, request.redirectCount)) continue;
+          if (type !== 'form-submission' || value.matchesURL(url, this.selfOrigin, redirectCount)) continue;
           violation = CSPViolation.fromGlobal(policy, name, request.url, env);
         } else if (name === 'require-trusted-types-for' && request.url.scheme === 'javascript') {
           // SPEC_CLASH(trusted-types-navigation-policies): Browsers require a valid 'script' token

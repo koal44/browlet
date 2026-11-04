@@ -791,7 +791,9 @@ function fetchFinale(params: FetchParams, response: FetchResponse): void {
   if (response.type !== 'error' && request.client?.isSecureContext) {
     timingInfo.serverTimingHeaders = internalResponse.headerList.getDecodeAndSplit('Server-Timing') ?? [];
   }
-  if (request.destination === 'document') params.controller.fullTimingInfo = timingInfo;
+  // SPEC_CLASH(navigation-fetch-full-timing): HTML needs timing for child navigations too, but Fetch
+  // only retains it for document. Retain all navigation destinations; see HTML #12890.
+  if (request.isNavigation) params.controller.fullTimingInfo = timingInfo;
   const endOfBody = () => endResponseBody(params, response);
   if (params.processResponse !== null) {
     const processResponse = params.processResponse;

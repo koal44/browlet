@@ -13,7 +13,7 @@ import { CookieStore } from '../http/index';
 import {
   StoragePersistence, StorageShed, PersistentStoragePermission, type StorageEnvironmentBase, type StorageUserAgent,
 } from '../storage/index';
-import type { MIMEType } from '../mime/index';
+import type { MIMEType, MIMETypeEssence } from '../mime/index';
 import type { BlobImpl } from '../file/index';
 import {
   ConnectionPool, HTTPCacheStore, CORSPreflightCache, fetch, FetchRequest,
@@ -36,10 +36,11 @@ import type { IntersectionObserverMargin } from './dom/intersection-observer/ind
 import type { DocumentImpl, ElementImpl } from './dom/nodes/index';
 import type { BroadcastChannelImpl } from './communication/index';
 import type { StorageImpl } from './storage/index';
+import type { SourceSnapshotParams } from './browsing/navigation/state/index';
 import type { WindowImpl } from './browsing/window/index';
 import type { BrowletEnvironment, BrowletEnvironmentBase } from './environment/index';
 import { WebDriver, type PageEvaluation } from './automation/index';
-import { HTTPAuthenticationStore } from './loader/index';
+import { HTTPAuthenticationStore, type ResourceReader } from './loader/index';
 import {
   BrowsingContextGroup, Navigable, TopLevelTraversable, type NavigableContainer, type PostResource,
   type Traversable, type UnloadCancellationResult, type UserNavigationInvolvement,
@@ -73,6 +74,13 @@ export class UserAgent implements
   /** Destination policy after popup and sandbox checks; existing named targets are unaffected. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#the-rules-for-choosing-a-navigable
   newNavigablePolicy: 'new' | 'current' | 'none' = 'new';
+  /** Configured document handling by MIME essence; XML/JSON entries count as explicitly supported types. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#loading-a-document
+  documentTypeHandlers = new Map<MIMETypeEssence, 'inline' | 'external'>();
+  /** Whether a PDF viewer is available; Browlet currently has no viewer. */
+  // https://html.spec.whatwg.org/multipage/system-state.html#pdf-viewer-supported
+  // TODO(HTML §8.10.1.6): Navigator's PDF/plugin compatibility objects must use this same support decision.
+  pdfViewerSupported = false;
   /** Discover live broadcast channels in creation order without retaining their globals. */
   broadcastChannels = new WeakOrderedSet<BroadcastChannelImpl>();
   /** Execution created with this user agent for work that can outlive pages. */
@@ -336,6 +344,24 @@ export class UserAgent implements
     // PROVISIONAL: no browser UI is attached; retain this notification for a future UI host.
   }
 
+  /** Apply browser download policy after the source and destination sandboxes allow it. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigation-as-a-download
+  // https://w3c.github.io/webappsec-mixed-content/#html
+  isNavigationDownloadAllowed(_response: FetchResponse, _sourceSnapshotParams: SourceSnapshotParams): boolean {
+    // SPEC_GAP(mixed-download-source-url): Mixed Content's old HTML hook reads a source Document absent from these inputs.
+    // TODO(Mixed Content §5.2): Select the source URL and capture time before connecting FetchResponse.isMixedDownload().
+    // TODO(HTML §7.4.5): Compose optional hostile-download policy; HTML otherwise allows the download.
+    throw new InternalError('Navigation download admission policy is not implemented');
+  }
+
+  /** Handle a permitted response as a download without creating a Document. */
+  // https://html.spec.whatwg.org/multipage/links.html#handle-as-a-download
+  handleAsDownload(_response: FetchResponse, _navigable: Navigable, _navigationId: string | null): void {
+    // TODO(HTML §4.6.5): Get a safe suggested filename, ask BiDi download-will-begin, and honor its decision/folder.
+    // Save the response through a host port in parallel, then report BiDi download-end for completion or cancellation.
+    throw new InternalError('Download handling is not implemented');
+  }
+
   /** Decide whether handling this URL leaves its destination navigable unchanged. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#attempt-to-create-a-non-fetch-scheme-document
   shouldHandleURLExternally(_url: URLRecord): boolean {
@@ -344,11 +370,18 @@ export class UserAgent implements
     throw new InternalError('External URL handler selection is not implemented');
   }
 
+  /** Choose inline error/native content or external handling when no built-in document loader matches. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigate-non-Document
+  shouldDisplayUnsupportedResourceInline(_type: MIMEType): boolean {
+    // TODO(HTML §7.4.5): Compose the host's unsupported-content policy, including external applications/downloads.
+    throw new InternalError('Unsupported navigation resource handling is not implemented');
+  }
+
   /** Apply the destination sandbox before requesting an external handoff of a URL or response. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#hand-off-to-external-software
   handoffToExternalSoftware(
     resource: URLRecord | FetchResponse, navigable: Navigable, sandboxFlags: SandboxingFlagSet,
-    hasTransientActivation: boolean, initiatorOrigin: Origin,
+    hasTransientActivation: boolean, initiatorOrigin: Origin, resourceReader?: ResourceReader,
   ): void {
     // SPEC_CLASH(external-protocol-sandbox-teams): Follow HTML's general gate; WebKit bypasses it for
     // msteams: from teams.live.com/teams.microsoft.com when site-specific quirks are enabled.
@@ -356,16 +389,18 @@ export class UserAgent implements
       !navigable.isTopLevelTraversable && sandboxFlags.has('sandboxed-custom-protocols-navigation') &&
       (sandboxFlags.has('sandboxed-top-level-navigation-with-user-activation') || !hasTransientActivation)
     ) return;
-    this.requestExternalSoftwareHandoff(resource, navigable, hasTransientActivation, initiatorOrigin);
+    this.requestExternalSoftwareHandoff(resource, navigable, hasTransientActivation, initiatorOrigin, resourceReader);
   }
 
   /** Ask the host to confirm and perform an allowed external handoff. */
   requestExternalSoftwareHandoff(
     _resource: URLRecord | FetchResponse, _navigable: Navigable, _hasTransientActivation: boolean, _initiatorOrigin: Origin,
+    _resourceReader?: ResourceReader,
   ): void {
     // TODO(HTML §7.4.2.3.4): Compose a host port for handler selection, confirmation, and safe resource delivery.
     // Without transient activation, prior user confirmation is required; activation alone need not bypass prompting.
     // Retain the initiating origin for that decision, including the last fetch origin after redirects.
+    // A supplied reader owns sniffed bytes and the remaining body; do not reread its locked response stream.
     throw new InternalError('External software confirmation and handoff are not implemented');
   }
 
@@ -483,9 +518,9 @@ export class UserAgent implements
     return { update() {} };
   }
 
-  /** Whether a MIME type can be exposed as supported in Resource Timing. */
+  /** Whether this browser supports a resource type, for media dispatch, sniffing, and Resource Timing. */
   supportsMIMEType(_type: MIMEType): boolean {
-    // PROVISIONAL: no browser-wide support policy exists yet. MIME Sniffing still
+    // TODO: Compose installed decoder/viewer capabilities; no media support is claimed yet. MIME Sniffing still
     // minimizes JavaScript, JSON, SVG, and XML independently; other types remain unexposed.
     return false;
   }

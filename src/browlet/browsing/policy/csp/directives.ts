@@ -24,6 +24,10 @@ export class CSPDirectives extends Map<string, CSPDirectiveValue> {
       case 'style': return 'style-src-elem';
       case 'script': case 'xslt': case 'audioworklet': case 'paintworklet': return 'script-src-elem';
       case 'serviceworker': case 'sharedworker': case 'worker': return 'worker-src';
+      // SPEC_CLASH(csp-document-fetch-directive): CSP omits document, falling back to connect-src.
+      // Follow Fetch's destination table and browsers: navigation has no fetch directive;
+      // form-action remains a separate navigation check. Prefetch/prerender are handled above.
+      case 'document': return null;
       case 'report': return null;
       default: return 'connect-src';
     }

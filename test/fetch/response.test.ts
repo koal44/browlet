@@ -9,6 +9,49 @@ import { createBodyFixture, readBodyBytes } from './body-fixture';
 import { createFetchFixture, createFetchRequest } from './fetch-fixture';
 import { createClientEnvironment } from './client-fixture';
 
+describe('Fetch response attachment disposition', () => {
+  it.each([
+    { name: 'absent', values: [], attachment: false },
+    { name: 'empty', values: [''], attachment: false },
+    { name: 'attachment', values: ['attachment'], attachment: true },
+    { name: 'case and whitespace', values: [' \tAtTaChMeNt \t; filename="a.html"'], attachment: true },
+    { name: 'inline', values: ['INLINE; filename="a.html"'], attachment: false },
+    { name: 'extension type', values: ['example; filename="a.html"'], attachment: true },
+    { name: 'quoted type', values: ['"attachment"'], attachment: false },
+    { name: 'invalid type', values: ['attachment extra'], attachment: false },
+    { name: 'non-ASCII type', values: ['attachmént'], attachment: false },
+    { name: 'filename without type', values: ['filename="a.html"'], attachment: false },
+    { name: 'empty type', values: ['; filename="a.html"'], attachment: false },
+    { name: 'malformed parameter', values: ['attachment; broken'], attachment: true },
+    { name: 'repeated filename', values: ['attachment; filename=a; filename=b'], attachment: true },
+    { name: 'quoted comma', values: ['attachment; filename="a,b.html"'], attachment: true },
+    { name: 'repeated field', values: ['attachment', 'attachment'], attachment: true },
+  ])('recognizes $name', ({ values, attachment }) => {
+    const response = new FetchResponse();
+    for (const value of values) response.headerList.append('Content-Disposition', value);
+    expect(response.hasAttachmentDisposition()).toBe(attachment);
+  });
+
+  it.each([
+    ['attachment', 'inline'], ['inline', 'attachment'],
+    ['attachment; filename=a', 'attachment; filename=b'],
+  ])('leaves conflicting fields explicit (%s, %s)', (first, second) => {
+    const response = new FetchResponse();
+    response.headerList.append('Content-Disposition', first);
+    response.headerList.append('content-disposition', second);
+    expect(() => response.hasAttachmentDisposition()).toThrow('Conflicting Content-Disposition response rejection is not implemented');
+  });
+
+  it('reads the current header list without rewriting its fields', () => {
+    const response = new FetchResponse();
+    response.headerList.append('Content-Disposition', 'Attachment; filename="a,b"');
+    expect(response.hasAttachmentDisposition()).toBe(true);
+    expect(response.headerList.get('Content-Disposition')).toBe('Attachment; filename="a,b"');
+    response.headerList.set('Content-Disposition', 'inline');
+    expect(response.hasAttachmentDisposition()).toBe(false);
+  });
+});
+
 describe('Fetch response state', () => {
   it('starts a response with §2.2.6 defaults and a URL derived from its list', () => {
     const response = new FetchResponse();

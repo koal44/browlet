@@ -49,6 +49,18 @@ failure, with eight `test/js-engine/runtime.test.ts` cases left pending. All eig
 pass in isolation. This remains an unresolved engine validation limit, not an
 expected-failure reclassification; no optimization or snapshot hook was disabled.
 
+The later 3 November navigation/input/Wasm consolidation reproduced the same
+stack twice, both while the reused worker was running
+`test/http/structured-fields-httpwg.test.ts`. The unrestricted run also had
+38 timeouts. With four workers, all 779 completed files passed (19,817 tests,
+25 expected failures, 18 skips), but the remaining worker still crashed. All
+2,862 HTTP fixture tests pass alone. Lowering concurrency removed the timeouts,
+not the native defect. Experimental's snapshot notes retain both commands and
+the custom engine revision; this consolidation does not repair it. The detailed
+handoff is [Scratch's snapshot report](../../scratch/OPTIMIZED-PROMISE-SNAPSHOT/README.md),
+including the executable hash, pre-existing Node source changes, process exit
+status, and the JSON reporter's incorrect success flag after a worker crash.
+
 Follow-up: the retained 2 November command specifies no shuffle seed, and the
 notes do not establish identical test order between the failing and passing runs.
 Record runner version, worker count and file assignment/order, shuffle settings

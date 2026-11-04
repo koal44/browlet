@@ -7,8 +7,9 @@ import { CSPList, ContentSecurityPolicy } from '../../../../src/browlet/browsing
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
 import { internalType } from '../../../../src/infra/index';
-import { FetchResponse } from '../../../../src/fetch/index';
+import { FetchHeaders, FetchResponse } from '../../../../src/fetch/index';
 import { obtainURLOrigin, parseURL, serializeURL } from '../../../../src/url/index';
+import { mockHTTPTransport } from '../../../fetch/transport-fixture';
 import { createManualUserAgent } from '../../../support/browlet-agent';
 import { runInHostTask } from '../../../support/tasks';
 
@@ -280,12 +281,30 @@ describe('pending navigation history', () => {
     expect(finalize).toHaveBeenCalledExactlyOnceWith('replace', 'none', entry);
   });
 
-  it('keeps population and recursive abortion as explicit owner dependencies', async () => {
+  it('starts population Fetch while Document loading and recursive abortion remain explicit dependencies', async () => {
     const { document, navigable, env, turns, populate, abort } = fixture();
     populate.mockRestore();
-    abort.mockRestore();
+    const queue = vi.spyOn(env, 'queueTask');
+    mockHTTPTransport(env.userAgent, (_, listener) => {
+      listener.onHeaders(200, 'OK', new FetchHeaders([['Content-Type', 'text/html']]), true);
+      listener.onEnd();
+    });
     navigable.navigate(parseURL('https://example.test/next').url!, document, {}, env);
-    await expect(resumeNavigation(turns)).rejects.toThrow('Navigation parameter creation by fetching is not implemented');
+    await resumeNavigation(turns);
+    await expect.poll(() => {
+      while (turns.length) turns.shift()!();
+      return queue.mock.calls.length;
+    }).toBe(2);
+    await runInHostTask(() => {
+      expect(env.responsibleEventLoop.runTaskTurn()).toBe(true);
+      expect(env.responsibleEventLoop.runTaskTurn()).toBe(true);
+    });
+    await expect.poll(() => queue.mock.calls.length).toBe(3);
+    await runInHostTask(() => {
+      expect(() => env.responsibleEventLoop.runTaskTurn())
+        .toThrow('HTML document loading requires response-reader setup and parser script preparation');
+    });
+    abort.mockRestore();
     expect(() => document.abortAndDescendants()).toThrow('Document and descendant abortion is not implemented');
   });
 });

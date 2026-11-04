@@ -61,7 +61,7 @@ import { OriginImpl } from '../browsing/index';
 import type {
   SerializedRecord, StructuredSerializeWithTransferResult, StructuredDeserializeWithTransferResult,
 } from '../scripting/structured-data/index';
-import type { BrowsingContext, Traversable } from '../browsing/navigation/index';
+import type { BrowsingContext, Navigable, Traversable } from '../browsing/navigation/index';
 import type { PermissionStatusImpl } from '../integration/permissions/index';
 import type { QuotaExceededError } from '../platform';
 import type { UserAgent } from '../user-agent';
@@ -108,6 +108,31 @@ export class BrowletEnvironmentBase implements FetchEnvironmentBase {
     this.#isSecureContext = initialization?.isSecureContext ?? false;
   }
 
+  /** Reserve the incoming client without creating a Window or execution realm. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#create-navigation-params-by-fetching
+  // Step 21.2; the Fetch loop owns reuse, cross-origin discard, and early-hint cleanup.
+  static createForNavigation(navigable: Navigable, currentURL: URLRecord): BrowletEnvironmentBase {
+    const document = navigable.activeDocument;
+    if (document === null) throw new InternalError('Navigation reservation requires an active Document');
+    const userAgent = document.env.userAgent;
+    let topLevelCreationURL: URLRecord | null = currentURL;
+    let topLevelOrigin: Origin | null = null;
+    let parentIsSecure = true;
+    if (!navigable.isTopLevelTraversable) {
+      const parentEnv = navigable.parent?.activeDocument?.env;
+      if (parentEnv === undefined) throw new InternalError('Child navigation reservation requires an active parent Document');
+      topLevelCreationURL = parentEnv.topLevelCreationURL;
+      topLevelOrigin = parentEnv.topLevelOrigin;
+      parentIsSecure = parentEnv.isSecureContext;
+    }
+    return new BrowletEnvironmentBase({
+      userAgent, creationURL: currentURL, topLevelCreationURL, topLevelOrigin,
+      targetBrowsingContext: navigable.activeBrowsingContext,
+      // SPEC_CLASH(secure-context-top-level-url): Preserve the approved origin-and-ancestry rule for Window reservations.
+      isSecureContext: userAgent.isOriginPotentiallyTrustworthy(obtainURLOrigin(currentURL)) && parentIsSecure,
+    });
+  }
+
   /** Browser owner; unavailable in standalone sandboxes without a supplied owner. */
   get userAgent(): UserAgent {
     if (this.#userAgent === null) throw new InternalError('Environment has no UserAgent');
@@ -150,9 +175,18 @@ export class BrowletEnvironmentBase implements FetchEnvironmentBase {
   // https://html.spec.whatwg.org/multipage/webappapis.html#environment-discarding-steps
   // https://w3c.github.io/ServiceWorker/#service-worker-client-concept
   discard(): void {
-    // TODO: Call from aborted navigation, redirect reservation replacement,
-    // and failed worker startup when those processing paths are implemented.
+    // Redirect reservation replacement and population failure call this operation.
+    // TODO: Connect remaining aborted-navigation and failed-worker-startup consumers.
     this.discarded = true;
+  }
+
+  /** Start early hinted resources and return the steps that attach them to the incoming Document. */
+  // https://html.spec.whatwg.org/multipage/semantics.html#process-early-hint-headers
+  processEarlyHintHeaders(_response: FetchResponse): (document: DocumentImpl) => void {
+    // TODO(HTML §4.2.4): Extract Link headers, apply the early policy container, process preload/preconnect
+    // options using this reserved environment, and commit their results to the Document's preload map.
+    // Fetch's interim response must first retain its URL for the link base and origin.
+    throw new InternalError('Early Hint Link-header processing is not implemented');
   }
 
   /** Determine this environment's partition before or after a realm exists. */

@@ -14,6 +14,19 @@ and upstream-test disagreements remain documented under retained decisions.
 
 ## Remaining Fetch work
 
+- **Early Hints URL metadata:** HTML's new reserved-environment callback explicitly
+  stops at Link-header/preload processing. Before implementing that owner, interim
+  responses need their URL retained for the hint's base URL and origin; the current
+  transport callback supplies status and headers only. See the
+  [navigation boundary](../browlet/browsing/navigation/ROADMAP.md#initial-fetch-parallel-response-delivery-and-cancellation).
+- **Content-Disposition rejection:** Navigation now uses Fetch's header-list
+  extraction and RFC 6266 attachment classification; HTTP owns single-value parsing.
+  Identical repeated values are accepted; conflicting values explicitly throw during classification. Producing
+  the network error seen in Chromium/Firefox still needs an HTTP response-processing
+  audit; ordinary Fetch traffic is not yet rejected by this consumer-side boundary.
+  WebKit selects the last value instead. The approved browser choices, malformed
+  type recovery, and missing download owners are in the
+  [navigation audit](../browlet/browsing/navigation/ROADMAP.md#downloads-and-responses-without-a-document).
 - **Policy-controlled request features:** `FetchRequest.isAllowedToUseFeature()`
   implements Permissions Policy §9.15 through the initiating client's Document.
   Client Hints and other request-feature owners still need their definitions and
@@ -115,6 +128,18 @@ Revisit these decisions when the specification or implementation evidence change
 
 ### Completion and execution
 
+- **`navigation-fetch-full-timing`:** [Fetch finale](https://fetch.spec.whatwg.org/#fetch-finale)
+  retains controller timing only for destination document, but HTML's child
+  navigation requests use iframe/frame/object/embed and need that timing when
+  creating their Document. Eric approved retaining the existing timing record for
+  all navigation destinations through `request.isNavigation`. The regression first
+  passed for document and failed for all four child destinations at
+  `extractFullTimingInfo()`. [HTML issue #12887](https://github.com/whatwg/html/issues/12887)
+  records the removed response timing field; the open [replacement PR #12890](https://github.com/whatwg/html/pull/12890)
+  also contains discussion of this child-destination conflict. The change supplies
+  the destination's timing handoff without changing TAO, parent resource timing,
+  or public entry delivery. `test/fetch/timing.test.ts` and the navigation parameter
+  tests cover it. Synthetic-response timing remains HTML's separate lifecycle work.
 - **`fetch-finale-byte-stream` / `fetch-body-completion`:** [Fetch finale](https://fetch.spec.whatwg.org/#fetch-finale)
   prescribes a generic transform, losing BYOB and observing only normal flush.
   Keep the original stream and finish bookkeeping on close, error, or cancel;

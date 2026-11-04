@@ -29,7 +29,7 @@ export class DocumentState {
   /** Session histories belonging to child navigables. */
   nestedHistories: NestedHistory[] = [];
   /** Stored srcdoc HTML or POST data used to recreate the document. */
-  // TODO(HTML §7.4.5): Fetch parameter creation must replay retained POST bytes; srcdoc parameter assembly is connected.
+  // Navigation request construction reuses retained POST bytes; srcdoc parameter assembly is connected.
   resource: string | PostResource | null = null;
   /** Whether a reload was requested for this state. */
   reloadPending = false;

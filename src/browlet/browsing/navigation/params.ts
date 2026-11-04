@@ -1,14 +1,17 @@
-import { InternalError, type InternalPromise } from '../../../infra/index';
+import { InternalError, internalType, type InternalPromise, type InternalPromiseWithResolvers } from '../../../infra/index';
 import { utf8Encode } from '../../../encoding/index';
-import { aboutBlankURL, copyURL, type Origin, obtainURLOrigin, type URLRecord } from '../../../url/index';
-import { FetchBody, FetchResponse, type FetchRequest, type FetchController, type ReferrerPolicy } from '../../../fetch/index';
+import { aboutBlankURL, areSameOrigin, copyURL, type Origin, obtainURLOrigin, type URLRecord } from '../../../url/index';
+import {
+  fetch, FetchBody, FetchResponse, isFetchScheme, isHTTPScheme, type FetchRequest, type FetchController, type ReferrerPolicy,
+} from '../../../fetch/index';
 
 import { coarsenedSharedCurrentTime, type DOMHighResTimeStamp } from '../../timing/index';
 import { PolicyContainer, OpenerPolicy, SandboxingFlagSet } from '../policy/index';
 import type { DocumentImpl } from '../../dom/nodes/index';
+import { HTMLIFrameElementImpl } from '../../dom/nodes/html/embedded/index';
 import type { NavigationTimingType } from '../../performance/index';
-import type { DocumentState, SessionHistoryEntry, SourceSnapshotParams } from './state/index';
-import type { BrowletEnvironment, BrowletEnvironmentBase } from '../../environment/index';
+import { DocumentState, type SessionHistoryEntry, type SourceSnapshotParams } from './state/index';
+import { BrowletEnvironmentBase, type BrowletEnvironment } from '../../environment/index';
 
 import { BrowsingContext } from './browsing-context';
 import type { Navigable, UserNavigationInvolvement } from './navigable';
@@ -22,7 +25,6 @@ import type { Navigable, UserNavigationInvolvement } from './navigable';
 // https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigation-params
 export class NavigationParams {
   /** Identifier supplied by the navigation algorithm, when present. */
-  // TODO(HTML §7.4.5): Fetch-created params must retain the ID; javascript:, srcdoc, and supplied responses already supply it.
   id: string | null = null;
   /** Fetch request that produced the response, or null for a synthetic response or Browlet's local route. */
   request: FetchRequest | null = null;
@@ -148,19 +150,162 @@ export class NavigationParams {
     return params;
   }
 
-  /** Obtain navigation parameters asynchronously; a redirect can instead select a non-fetch destination. */
+  /** Obtain navigation parameters; null is failure, while undefined ends a superseded navigation. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#create-navigation-params-by-fetching
   static fromFetch(
-    _entry: SessionHistoryEntry, _navigable: Navigable, _sourceSnapshotParams: SourceSnapshotParams,
-    _targetSnapshotParams: TargetSnapshotParams, _cspNavigationType: 'form-submission' | 'other',
-    _userInvolvement: UserNavigationInvolvement, _navigationId: string | null, _navigationTimingType: NavigationTimingType,
-    _env: BrowletEnvironment,
-  ): InternalPromise<NavigationParams | NonFetchSchemeNavigationParams | null> {
-    // TODO(HTML §7.4.5): Create the request, retain/replay POST bytes, apply source policy and referrer inputs,
-    // reserve environments, coordinate Fetch/redirects/COOP/early hints, and preserve cancellation and response timing.
-    // Non-fetch redirects carry the last fetch response's origin. Resolve on the UserAgent's HostPromise owner;
-    // fetching must continue independently of the departing Document's script readiness or activity.
-    throw new InternalError('Navigation parameter creation by fetching is not implemented');
+    entry: SessionHistoryEntry, navigable: Navigable, sourceSnapshotParams: SourceSnapshotParams,
+    targetSnapshotParams: TargetSnapshotParams, cspNavigationType: 'form-submission' | 'other',
+    userInvolvement: UserNavigationInvolvement, navigationId: string | null, navigationTimingType: NavigationTimingType,
+    env: BrowletEnvironment,
+  ): InternalPromise<NavigationParams | NonFetchSchemeNavigationParams | null | undefined> {
+    // TODO(HTML §7.4.5): Assert parallel execution once the UserAgent exposes that execution state.
+    const P = env.userAgent.HostPromise;
+    const resultType = internalType<NavigationParams | NonFetchSchemeNavigationParams | null | undefined>();
+    const fetchEnv = env.userAgent.sandbox;
+    const request = entry.createNavigationRequest(navigable, sourceSnapshotParams, fetchEnv);
+    request.isFormSubmission = cspNavigationType === 'form-submission';
+    request.webDriverNavigationId = navigationId;
+    const activeDocument = navigable.activeDocument!;
+    let coopEnforcementResult: OpenerPolicyEnforcementResult = {
+      url: activeDocument.url, origin: activeDocument.origin, openerPolicy: activeDocument.openerPolicy,
+      currentContextIsNavigationSource: entry.documentState.initiatorOrigin !== null &&
+        areSameOrigin(activeDocument.origin, entry.documentState.initiatorOrigin),
+      needsBrowsingContextGroupSwitch: false, wouldNeedBrowsingContextGroupSwitchDueToReportOnly: false,
+    };
+    let currentURL = request.currentURL;
+    let reservedEnv: BrowletEnvironmentBase | null = null;
+    let fetchController: FetchController | null = null;
+    let responseReady: InternalPromiseWithResolvers<FetchResponse | undefined> | null = null;
+    let commitEarlyHints: ((document: DocumentImpl) => void) | null = null;
+    let navigationChanged = false;
+    const checkNavigation = () => {
+      if (!navigationChanged && navigable.ongoingNavigation === navigationId) return;
+      navigationChanged = true;
+      responseReady?.resolve(undefined);
+    };
+    const removeNavigationChange = navigable.addNavigationChangeSteps(checkNavigation);
+    return P.try(fetchNextResponse, resultType).then((result) => {
+      removeNavigationChange();
+      // Successful params retain the live controller and response body for Document loading.
+      if (!(result instanceof NavigationParams)) fetchController?.abort(fetchEnv);
+      return result;
+    }, (error) => {
+      removeNavigationChange();
+      fetchController?.abort(fetchEnv);
+      throw error;
+    });
+
+    // One iteration of HTML's response loop. Fetch owns URL-list advancement and POST/body rewriting.
+    function fetchNextResponse(): InternalPromise<NavigationParams | NonFetchSchemeNavigationParams | null | undefined> {
+      if (reservedEnv !== null && !areSameOrigin(obtainURLOrigin(currentURL), obtainURLOrigin(reservedEnv.creationURL))) {
+        reservedEnv.discard();
+        reservedEnv = null;
+        request.reservedClient = null;
+        commitEarlyHints = null;
+      }
+      if (reservedEnv === null) {
+        reservedEnv = BrowletEnvironmentBase.createForNavigation(navigable, currentURL);
+        request.reservedClient = reservedEnv;
+      }
+      if (request.policyContainer.cspList?.isNavigationRequestBlocked(
+        request, cspNavigationType, request.client, fetchController === null ? undefined : currentURL,
+      )) return P.resolve(null, resultType);
+      const responseEnv = reservedEnv;
+      responseReady = P.withResolvers(internalType<FetchResponse | undefined>());
+      if (fetchController === null) {
+        fetchController = fetch(request, {
+          useParallelQueue: true,
+          processEarlyHintsResponse: (response) => {
+            if (navigationChanged || responseReady!.isResolved || commitEarlyHints !== null) return;
+            try { commitEarlyHints = reservedEnv!.processEarlyHintHeaders(response); }
+            catch (error) { responseReady!.reject(error); }
+          },
+          processResponse: (response) => { responseReady!.resolve(response); },
+        }, fetchEnv);
+      } else {
+        fetchController.processNextManualRedirect();
+      }
+      checkNavigation();
+      // Step 21.7 waits on browser-owned completion; neither Window's script readiness gates it.
+      return responseReady.promise.then((response) => {
+        if (navigationChanged || response === undefined) return undefined;
+        if (request.body === null) entry.documentState.resource = null;
+        if (response.type === 'error') return null;
+        const responsePolicyContainer = env.userAgent.createPolicyContainerFromResponse(response, responseEnv);
+        const finalSandboxFlags = new SandboxingFlagSet(targetSnapshotParams.sandboxingFlags);
+        for (const flag of responsePolicyContainer.cspList?.getSandboxingFlags() ?? []) finalSandboxFlags.add(flag);
+        const responseURL = response.url!;
+        const responseOrigin = BrowsingContext.determineOrigin(responseURL, finalSandboxFlags, entry.documentState.initiatorOrigin);
+        let responseCOOP = new OpenerPolicy();
+        if (navigable.isTopLevelTraversable) {
+          responseCOOP = OpenerPolicy.obtain(response, responseEnv);
+          coopEnforcementResult = navigable.activeBrowsingContext!.enforceResponseOpenerPolicy(
+            responseURL, responseOrigin, responseCOOP, coopEnforcementResult, request.referrer,
+          );
+          if (finalSandboxFlags.size !== 0 && responseCOOP.value !== 'unsafe-none') return null;
+        }
+        if (navigable.parent !== null && isHTTPScheme(responseURL.scheme)) {
+          const containerDocument = navigable.containerDocument;
+          if (containerDocument === null) throw new InternalError('Child navigation requires a container Document');
+          if (response.isBlockedByCORP(
+            containerDocument.origin, containerDocument.policyContainer.embedderPolicy,
+            request.destination, true, containerDocument.env,
+          )) return null;
+        }
+        const locationURL = response.getLocationURL(currentURL.fragment, env.userAgent);
+        // Fetch represents an invalid Location as null, and an absent Location as undefined.
+        if (locationURL === null) return null;
+        if (locationURL === undefined) {
+          const policyContainer = PolicyContainer.determineForNavigation(
+            responseURL, entry.documentState.historyPolicyContainer, sourceSnapshotParams.sourcePolicyContainer,
+            null, responsePolicyContainer,
+          );
+          const container = navigable.container;
+          if (container instanceof HTMLIFrameElementImpl && response.timingAllowPassed) {
+            container.pendingResourceTimingStartTime = null;
+          }
+          const params = new NavigationParams(response, finalSandboxFlags, fetchController!.extractFullTimingInfo().startTime);
+          params.id = navigationId;
+          params.request = request;
+          params.fetchController = fetchController;
+          params.commitEarlyHints = commitEarlyHints;
+          params.openerPolicy = responseCOOP;
+          params.reservedEnv = responseEnv;
+          params.origin = responseOrigin;
+          params.policyContainer = policyContainer;
+          params.coopEnforcementResult = coopEnforcementResult;
+          params.navigationTimingType = navigationTimingType;
+          params.aboutBaseURL = entry.documentState.aboutBaseURL;
+          params.userInvolvement = userInvolvement;
+          params.iframeReferrerPolicy = targetSnapshotParams.iframeReferrerPolicy;
+          return params;
+        }
+        entry.classicHistoryAPIState = env.serializeForStorage(null);
+        // A redirected traversal must detach this entry from the DocumentState shared by adjacent entries.
+        const oldState = entry.documentState;
+        const state = entry.documentState = new DocumentState();
+        state.historyPolicyContainer = oldState.historyPolicyContainer?.clone() ?? null;
+        state.requestReferrer = oldState.requestReferrer;
+        state.requestReferrerPolicy = oldState.requestReferrerPolicy;
+        state.initiatorOrigin = oldState.initiatorOrigin;
+        state.origin = oldState.origin;
+        state.aboutBaseURL = oldState.aboutBaseURL;
+        state.resource = oldState.resource;
+        state.everPopulated = oldState.everPopulated;
+        state.navigableTargetName = oldState.navigableTargetName;
+        if (!isHTTPScheme(locationURL.scheme)) {
+          state.resource = null;
+          if (isFetchScheme(locationURL.scheme)) return null;
+          return {
+            id: navigationId, url: locationURL, targetSnapshotSandboxingFlags: targetSnapshotParams.sandboxingFlags,
+            sourceSnapshotHasTransientActivation: sourceSnapshotParams.hasTransientActivation,
+            initiatorOrigin: responseOrigin, navigationTimingType, userInvolvement,
+          };
+        }
+        currentURL = entry.url = locationURL;
+        return fetchNextResponse();
+      }, undefined, resultType);
+    }
   }
 
   /** Final response URL, required when a response is selected for navigation. */

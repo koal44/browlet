@@ -39,6 +39,12 @@ export class ResourceReader {
     this.#userAgent = userAgent;
   }
 
+  /** Computed type retained alongside the sniffed bytes; determine it before dispatching a loader. */
+  get mimeType(): MIMEType {
+    if (this.#mimeType === undefined) throw new InternalError('Determine the MIME type before selecting a document loader');
+    return this.#mimeType;
+  }
+
   /** Determine the computed MIME type before consuming the body. Overlapping calls throw. */
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#content-type-sniffing
   // https://mimesniff.spec.whatwg.org/#mime-type-sniffing-algorithm

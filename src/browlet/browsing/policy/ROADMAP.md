@@ -50,7 +50,7 @@ were included as direct dependencies; the full §7.1.4 audit is recorded below.
 | COEP dependency | `EmbedderPolicy.obtain()` parses both dispositions. Enforced COOP promotion uses enforced COEP; report-only promotion accepts either COEP disposition. The internal same-origin-plus-COEP value is not accepted as a header token. |
 | Popup and ordinary navigation comparisons | Static policy operations implement each branch, including the unsafe-none popup allowances and matching report-only suppression. Initial auxiliary context creation now inherits creator/opener state; opening still needs activation, feature setup, and navigation. |
 | Response enforcement | `BrowsingContext.enforceResponseOpenerPolicy()` carries both accumulated switch flags, URL, origin, policy, and navigation-source state through repeated response checks. It retains the first initial URL and requests navigation reports only when another context shares the group. |
-| Navigation integration | The supplied-response path reserves the destination environment, parses its policies, and computes enforcement before creating the document. Existing prepared results are retained. The Fetch navigation loop must call enforcement at every redirect and supply its actual source state. |
+| Navigation integration | The supplied-response path reserves the destination environment, parses its policies, and computes enforcement before creating the document. Existing prepared results are retained. Fetch response processing captures departing state before the request, obtains/enforces COOP using the reservation, and rejects incompatible sandboxing on each response. Both switch results accumulate across redirects and are retained with the final response policy in NavigationParams. Actual Document loading remains unfinished. |
 | Group selection | Required switches create a new top-level context/group; report-only switches change only the virtual group identifier. Final sandbox flags are cloned. Old contexts remain available to history. Optional cross-site/browser-UI/singleton swaps are not taken. Nested destinations retain their context. |
 | Isolation capability | same-origin-plus-COEP selects logical isolation. Agent clusters become origin-keyed, but the host does not provide physical isolation. The WindowOrWorkerGlobalScope crossOriginIsolated member now forwards the existing environment capability; logical isolation reports false. |
 | Report URL sanitization | `sanitizeURLForReport()` copies the URL, removes credentials, and excludes the fragment without applying Fetch's different non-HTTP stripping rule. |
@@ -165,9 +165,11 @@ The checks are implemented; their remaining lifecycle consumers are explicit:
 - **Navigation:** iframe/object/frame content-navigable setters now retain the
   reverse container association; child creation/destruction must populate it. Use that element's
   current node document, including after adoption, rather than the parent's active
-  document or the element's creation environment. The Fetch-backed navigation loop
-  must perform its CORP/inheritance checks and turn rejection into a network error.
-  The supplied-response path currently throws at that unfinished error-document
+  document or the element's creation environment. Fetch response processing
+  checks HTTP(S) child CORP against that container Document's origin and policy,
+  reporting through its environment and returning null on rejection. Each redirect
+  repeats the check; population separately checks response COEP inheritance. The
+  supplied-response path currently throws at that unfinished error-document
   boundary. Child permissions policy and local/history policy selection remain
   separate navigation dependencies.
 - **Workers:** the abstract globals have no startup, settings construction, or
@@ -915,8 +917,8 @@ a new decision. Full iframe/popup, sandbox, worker, and worklet inheritance rema
 with those lifecycles.
 
 `SPEC_CLASH(secure-context-top-level-url)` was reviewed at HTML §8.1.3.5.
-Its written fallback tests only `topLevelCreationURL` using URL trustworthiness.
-That treats creatorless about:blank and top-level data URLs as secure, and does
+Its written fallback tests only `topLevelCreationURL` using URL trustworthiness,
+with an explicit data-URL rejection. That treats creatorless about:blank as secure, and does
 not account for an insecure intermediate ancestor beneath a secure top-level URL.
 Browlet instead preserves its selected-origin and parent-security checks by
 agreement. This also preserves classification before binding exposure and the

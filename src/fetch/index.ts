@@ -33,5 +33,5 @@ export {
   parseReferrerPolicyFromHeader, setRequestReferrerPolicyOnRedirect, determineRequestReferrer, stripURLForReferrer,
 } from './referrer-policy';
 export type { FetchIntegrityPolicy, IntegrityViolationReportBody } from './policy';
-export { isLocalScheme, isLocalURL, isFetchScheme } from './url';
+export { isLocalScheme, isLocalURL, isHTTPScheme, isFetchScheme } from './url';
 export { fetchIDLDefinitions } from './web-idl';

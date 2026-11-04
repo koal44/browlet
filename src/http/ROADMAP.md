@@ -6,6 +6,12 @@ authentication, and HTTP/1.1/HTTP/2 integration are also implemented. This is
 client-scoped work, not a claim of complete RFC conformance or server/proxy support.
 See [README.md](README.md) for current contracts and module ownership.
 
+`parseContentDispositionType()` owns the single-value RFC 6266 token parser.
+Fetch owns field-list extraction, repetition handling, and attachment classification;
+HTML owns download admission. Filename parameters remain separate unfinished work.
+The approved malformed-type recovery and browser evidence are in the
+[navigation audit](../browlet/browsing/navigation/ROADMAP.md#downloads-and-responses-without-a-document).
+
 ## Remaining work
 
 | Work | Owner and gate |

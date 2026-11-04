@@ -5,7 +5,7 @@ export type { HTTPStatus } from './status';
 export {
   EntityTag, parseHTTPDate, serializeHTTPDate, parseEntityTagList, serializeEntityTagList,
   isStrongLastModified, selectIfRangeValidator, parseIfRange, matchesIfRange,
-  parseContentRange, parseRetryAfter,
+  parseContentRange, parseRetryAfter, parseContentDispositionType,
   type EntityTagList, type IfRangeValidator, type ContentRange, type RetryAfter,
 } from './headers';
 export {

@@ -1,5 +1,32 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fetch } from '../../src/fetch/fetch';
+import { FetchHeaders } from '../../src/fetch/headers';
 import { ConnectionTimingInfo, FetchTimingInfo, ResponseBodyInfo } from '../../src/fetch/timing';
+import { createFetchRequest } from './fetch-fixture';
+import { mockHTTPTransport } from './transport-fixture';
+
+afterEach(() => { vi.restoreAllMocks(); });
+
+describe('navigation timing handoff', () => {
+  it.each(['document', 'iframe', 'frame', 'object', 'embed'] as const)(
+    'retains full timing for a %s navigation before handing over the response', async (destination) => {
+      const request = createFetchRequest();
+      request.client = request.env;
+      request.destination = destination;
+      request.mode = 'navigate';
+      mockHTTPTransport(request.env.userAgent, (_request, listener) => {
+        listener.onHeaders(200, 'OK', new FetchHeaders(), true);
+        listener.onEnd();
+      });
+      const received = Promise.withResolvers<void>();
+      const controller = fetch(request, { useParallelQueue: true, processResponse: () => received.resolve() }, request.env);
+      await received.promise;
+      const timing = controller.extractFullTimingInfo();
+      expect(timing.startTime).toBeGreaterThan(0);
+      expect(timing.postRedirectStartTime).toBe(timing.startTime);
+    },
+  );
+});
 
 describe('Fetch timing records', () => {
   it('keeps timing lists and protocol byte sequences independent between records', () => {

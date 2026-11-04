@@ -19,7 +19,7 @@ describe('CSP Fetch directive selection', () => {
     ['style', 'style-src-elem'], ['script', 'script-src-elem'], ['xslt', 'script-src-elem'],
     ['audioworklet', 'script-src-elem'], ['paintworklet', 'script-src-elem'],
     ['worker', 'worker-src'], ['sharedworker', 'worker-src'], ['serviceworker', 'worker-src'],
-    ['report', null], ['document', 'connect-src'],
+    ['report', null], ['document', null],
   ])('selects %s requests through %s', (destination, expected) => {
     expect(CSPDirectives.getRequestDirective(requestFor(destination))).toBe(expected);
   });
@@ -165,6 +165,12 @@ describe('CSP request and response checks', () => {
 });
 
 describe('CSP resource hints', () => {
+  it.each(['prefetch', 'prerender'] as const)('retains default-src for a document %s', (initiator) => {
+    const request = requestFor('document');
+    request.initiator = initiator;
+    expect(CSPDirectives.getRequestDirective(request)).toBe('default-src');
+  });
+
   it('leaves prefetch unrestricted without default-src', () => {
     const request = requestFor('');
     request.initiator = 'prefetch';

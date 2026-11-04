@@ -19,6 +19,12 @@ Document lifecycle.
   dispatch needs a narrow activation-behavior hook, while HTML elements own
   the action that hook invokes; neither should be encoded as a synthetic
   `click()` listener.
+- HTML §7.3.3 forbids user interaction with child navigables whose container
+  Documents are not fully active. The future input-targeting and delivery
+  pipeline must use `Document.isFullyActive()`; checking only the parent
+  navigable's current Document loses retained inactive ancestors. Task
+  runnability already checks full activity, but does not implement input
+  targeting. Programmatic DOM dispatch follows its own specified rules.
 - Focus is a chain through focusable areas, Documents, shadow trees, child
   navigables, and the top-level traversable. `activeElement`, `hasFocus()`,
   autofocus, and Window focus must derive from that shared model rather than
@@ -82,6 +88,11 @@ Element, backed by shared active-pointer state. Panning and zooming follow
 touch-action rules, not a general pointer-event cancellation shortcut. Keep these
 dependencies explicit at the algorithms that consume them; this audit does not
 claim that the CSS, layout, or input implementations are already available.
+
+The [§7.3.3 audit](../browsing/navigation/ROADMAP.md#html-733-fully-active-documents)
+covers the activity predicate and existing consumers. The normalized mouse input
+processor above is connected; physical input adapters and WebDriver input commands
+remain explicit consumer dependencies.
 
 ## Planned ownership
 

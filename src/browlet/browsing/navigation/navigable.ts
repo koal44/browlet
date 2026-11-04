@@ -7,6 +7,10 @@ import {
   percentDecodeString, serializeURL, urlsEqual, type Origin, type URLRecord,
 } from '../../../url/index';
 import { StorageShed } from '../../../storage/index';
+import {
+  getMIMETypeEssence, isAudioOrVideoMIMEType, isHTMLMIMEType, isImageMIMEType,
+  isJavaScriptMIMEType, isJSONMIMEType, isXMLMIMEType, type MIMEType,
+} from '../../../mime/index';
 import type { FormDataEntry } from '../../../xhr/index';
 import {
   FetchBody, FetchRequest, FetchResponse, isFetchScheme, type FetchPromptTarget, type fetchPromptTargetBrand, type ReferrerPolicy,
@@ -35,7 +39,7 @@ import type { WindowImpl, WindowProxyHandle } from '../window/index';
 import { BrowletEnvironmentBase, type BrowletEnvironment } from '../../environment/index';
 import { HTMLDocumentParser, type ScriptHandler } from '../../html/parser/index';
 import type { SerializedRecord } from '../../scripting/structured-data/index';
-import type { ResourceReader } from '../../loader/index';
+import { ResourceReader } from '../../loader/index';
 import type { PointerEventStream } from '../../interaction/index';
 import type { UserAgent } from '../../user-agent';
 
@@ -58,10 +62,9 @@ export class Navigable {
   /** Whether its navigation is delaying the container document's load event. */
   isDelayingLoadEvents = false;
   /** Navigation UUID, "traversal" while applying history, or null when no navigation is ongoing. */
-  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#concept-navigate-mature
-  // TODO(HTML §7.4.6): Connect history's direct assignments, distinct from setOngoingNavigation's abortion notification.
-  ongoingNavigation: string | null = null;
-
+  #ongoingNavigation: string | null = null;
+  /** Parallel waits observing changes to the ongoing navigation, without polling its Document. */
+  #navigationChangeSteps = new Set<() => void>();
   /** History entry supplying the active Document, independently of the current traversal entry. */
   // HTML permits mutation only on that Document's event loop; history application must preserve this ownership.
   #activeSessionHistoryEntry: SessionHistoryEntry;
@@ -243,6 +246,18 @@ export class Navigable {
 
   get isTopLevelTraversable(): boolean {
     return false;
+  }
+
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#concept-navigate-mature
+  get ongoingNavigation(): string | null {
+    return this.#ongoingNavigation;
+  }
+
+  set ongoingNavigation(value: string | null) {
+    if (this.#ongoingNavigation === value) return;
+    this.#ongoingNavigation = value;
+    // Direct history assignments wake waits without invoking the Navigation API abortion algorithm.
+    for (const steps of [...this.#navigationChangeSteps]) steps();
   }
 
   // https://html.spec.whatwg.org/multipage/document-sequences.html#nav-target
@@ -708,16 +723,39 @@ export class Navigable {
     const navigationId = options.navigationId ?? null;
     const cspNavigationType = options.cspNavigationType ?? 'other';
     const completionSteps = options.completionSteps;
-    const queueResponse = (params: NavigationParams | NonFetchSchemeNavigationParams | null) => {
+    const queueResponse = (params: NavigationParams | NonFetchSchemeNavigationParams | null | undefined) => {
       const window = this.activeWindow;
       if (window === null) throw new InternalError('History population requires an active Window');
       window.env.queueTask('navigation-and-traversal', () => {
-        if (this.ongoingNavigation !== navigationId) {
+        // Fetch's bare return is cancellation, even if another navigation reuses the null ID.
+        if (params === undefined || this.ongoingNavigation !== navigationId) {
           completionSteps?.();
           return;
         }
+        let saveExtraDocumentState = true;
+        const complete = () => {
+          // Non-fetch/error pages retain the entry's origin and history policies.
+          const document = entry.document;
+          if (document !== null) {
+            entry.documentState.everPopulated = true;
+            if (saveExtraDocumentState && params instanceof NavigationParams) {
+              entry.documentState.origin = document.origin;
+              if (PolicyContainer.requiresStorageInHistory(document.url)) {
+                entry.documentState.historyPolicyContainer = params.policyContainer;
+              }
+            }
+            if (entry.documentState.requestReferrer === undefined && params instanceof NavigationParams) {
+              // SPEC_GAP(navigation-history-null-request): HTML asserts a request exists, although synthetic params can omit it.
+              // TODO(HTML §7.4.5): Resolve synthetic referrer persistence before enabling the inline/Document loaders.
+              if (params.request === null) throw new InternalError('Synthetic navigation history referrer capture is not implemented');
+              entry.documentState.requestReferrer = params.request.referrer;
+            }
+          }
+          completionSteps?.();
+        };
         if (params !== null && !(params instanceof NavigationParams)) {
           entry.documentState.document = this.attemptToCreateNonFetchSchemeDocument(params);
+          saveExtraDocumentState = false;
         } else if (
           params === null ||
           params.policyContainer.cspList?.isNavigationResponseBlocked(
@@ -730,6 +768,7 @@ export class Navigable {
           const document = this.createDocumentForInlineContent(null, navigationTimingType, userInvolvement);
           entry.documentState.document = document;
           document.makeUnsalvageable('navigation-failure');
+          saveExtraDocumentState = false;
           if (params !== null) {
             // SPEC_GAP(navigation-failure-null-environment): HTML discards a nullable reservation; synthetic responses have none.
             params.reservedEnv?.discard();
@@ -737,22 +776,30 @@ export class Navigable {
               id: navigationId, status: 'canceled', url: params.url,
             });
           }
-        } else {
-          // TODO(HTML §7.4.5): Select downloads (source/target sandbox and UA policy), 204/205, or §7.5 document loading.
-          // Save a loaded Document's origin and history-required policy before completion; synthetic params must retain null reservations.
-          throw new InternalError('Navigation download and document loading are not implemented');
-        }
-        // Non-fetch/error pages retain the entry's origin and history policies.
-        if (entry.document !== null) {
-          entry.documentState.everPopulated = true;
-          if (entry.documentState.requestReferrer === undefined && params instanceof NavigationParams) {
-            // SPEC_GAP(navigation-history-null-request): HTML asserts a request exists, although synthetic params can omit it.
-            // TODO(HTML §7.4.5): Resolve synthetic referrer persistence before enabling the inline/Document loaders.
-            if (params.request === null) throw new InternalError('Synthetic navigation history referrer capture is not implemented');
-            entry.documentState.requestReferrer = params.request.referrer;
+        } else if (params.response.hasAttachmentDisposition()) {
+          if (sourceSnapshotParams.allowsDownloading && !params.finalSandboxingFlagSet.has('sandboxed-downloads') &&
+            window.env.userAgent.isNavigationDownloadAllowed(params.response, sourceSnapshotParams)) {
+            window.env.userAgent.handleAsDownload(params.response, this, navigationId);
           }
+          // SPEC_CLASH(navigation-empty-attachment): HTML/Chromium/WebKit select downloads before 204/205;
+          // Firefox ignores those statuses without downloading. Both branches leave the entry unpopulated.
+        } else if (params.response.status !== 204 && params.response.status !== 205) {
+          const resource = new ResourceReader(params.response, window.env.userAgent);
+          const fail = (error: unknown) => window.env.queueTask('navigation-and-traversal', () => { throw error; });
+          // Sniffing can wait for bytes. Resume Document creation and retained-state updates on the destination's task.
+          // TODO(HTML §7.5): Document teardown must cancel the retained reader if it discards this continuation task.
+          resource.determineMIMEType().observe(() => window.env.queueTask('navigation-and-traversal', () => {
+            if (this.ongoingNavigation !== navigationId) {
+              resource.cancel().observe(() => {}, fail);
+              completionSteps?.();
+              return;
+            }
+            entry.documentState.document = this.loadDocument(params, sourceSnapshotParams, entry.documentState.initiatorOrigin, resource);
+            complete();
+          }), fail);
+          return;
         }
-        completionSteps?.();
+        complete();
       });
     };
 
@@ -962,6 +1009,7 @@ export class Navigable {
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#navigate-ua-inline
   createDocumentForInlineContent(
     _navigationId: string | null, _navigationTimingType: NavigationTimingType, _userInvolvement: UserNavigationInvolvement,
+    _resource?: ResourceReader,
   ): DocumentImpl {
     // TODO(HTML §7.5.7): Opaque origin/COOP, context selection, Document creation, browser rendering,
     // and parser completion (including iframe load steps). A chosen registered handler instead navigates to its handler URL.
@@ -1004,6 +1052,12 @@ export class Navigable {
     if (this.ongoingNavigation === newValue) return;
     this.informNavigationAPIAboutAbortingNavigation(env?.responsibleEventLoop ?? null);
     this.ongoingNavigation = newValue;
+  }
+
+  /** Wake a parallel wait when the navigation changes; return its removal steps. */
+  addNavigationChangeSteps(steps: () => void): () => void {
+    this.#navigationChangeSteps.add(steps);
+    return () => { this.#navigationChangeSteps.delete(steps); };
   }
 
   /** Notify on the active Window's loop; null means the caller is running in parallel. */
@@ -1128,17 +1182,60 @@ export class Navigable {
     return this.createNavigationParams(response);
   }
 
+  /** Select a response's Document loader, or return null after handing the resource off externally. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#loading-a-document
+  // MIME preparation precedes this synchronous dispatch; the same reader retains the sniffed bytes for its consumer.
+  loadDocument(
+    params: NavigationParams, sourceSnapshotParams: SourceSnapshotParams, initiatorOrigin: Origin | null,
+    resource: ResourceReader,
+  ): DocumentImpl | null {
+    const type = resource.mimeType;
+    const essence = getMIMETypeEssence(type);
+    const userAgent = this.activeWindow!.env.userAgent;
+    const handler = userAgent.documentTypeHandlers.get(essence);
+    if (handler !== 'external') {
+      if (isHTMLMIMEType(type)) return this.loadHTMLDocument(params, undefined, resource);
+      if (isXMLMIMEType(type) && handler === undefined) return this.loadXMLDocument(params, type, resource);
+      if (isJavaScriptMIMEType(type) || isJSONMIMEType(type) && handler === undefined ||
+        essence === 'text/css' || essence === 'text/plain' || essence === 'text/vtt') {
+        return this.loadTextDocument(params, type, resource);
+      }
+      if (essence === 'multipart/x-mixed-replace') {
+        return this.loadMultipartDocument(params, sourceSnapshotParams, initiatorOrigin, resource);
+      }
+      if ((isImageMIMEType(type) || isAudioOrVideoMIMEType(type)) && userAgent.supportsMIMEType(type)) {
+        return this.loadMediaDocument(params, type, resource);
+      }
+      if ((essence === 'application/pdf' || essence === 'text/pdf') && userAgent.pdfViewerSupported) {
+        return this.createDocumentForInlineContent(params.id, params.navigationTimingType, params.userInvolvement, resource);
+      }
+    }
+    if (handler === 'inline' || handler === undefined && userAgent.shouldDisplayUnsupportedResourceInline(type)) {
+      return this.createDocumentForInlineContent(params.id, params.navigationTimingType, params.userInvolvement, resource);
+    }
+    if (initiatorOrigin === null) {
+      // SPEC_GAP(document-loading-null-initiator): Openerless initial about:blank history can retain null;
+      // our provisional createHistoryEntry() also writes null. Fresh navigate() supplies an origin.
+      // TODO: Resolve absent attribution at external handoff; null alone does not establish browser-UI authority.
+      throw new InternalError('External resource handoff without an initiator origin is not implemented');
+    }
+    userAgent.handoffToExternalSoftware(
+      params.response, this, params.finalSandboxingFlagSet, sourceSnapshotParams.hasTransientActivation, initiatorOrigin, resource,
+    );
+    return null;
+  }
+
   /**
    * Create an HTML document after handler selection and start consuming its response.
-   * The current byte-loading path requires the reader whose MIME type selected this handler
-   * and a script callback; production setup for the one-argument call remains unfinished.
+   * Navigation supplies the reader whose MIME type selected this handler; parser script
+   * preparation remains unfinished. Byte-loader callers currently supply that callback.
    */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-html
   loadHTMLDocument(
     params: NavigationParams, handleScript?: ScriptHandler, resource?: ResourceReader,
   ): DocumentImpl {
     if (handleScript === undefined || resource === undefined) {
-      // TODO(HTML §7.5.2/§4.12.1): Select/reuse the response reader, supply parser script preparation,
+      // TODO(HTML §7.5.2/§4.12.1): Supply parser script preparation alongside the prepared reader,
       // and honor scripts-may-run while history activation is pending. Synthetic params also need
       // the null reserved-environment path audited before creating a Window/Document.
       throw new InternalError('HTML document loading requires response-reader setup and parser script preparation');
@@ -1171,6 +1268,38 @@ export class Navigable {
       }),
     );
     return document;
+  }
+
+  /** Create and begin parsing an XML response after MIME dispatch. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-xml
+  // Keep the parsed MIME type and prepared reader at the loader boundary instead of serializing and parsing them again.
+  loadXMLDocument(_params: NavigationParams, _type: MIMEType, _resource: ResourceReader): DocumentImpl {
+    // TODO(HTML §7.5.3): Create the XML Document, connect its parser and scripts-may-run gate, then finish/abort loading.
+    throw new InternalError('XML document loading is not implemented');
+  }
+
+  /** Create a text presentation without interpreting the response as HTML. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-text
+  loadTextDocument(_params: NavigationParams, _type: MIMEType, _resource: ResourceReader): DocumentImpl {
+    // TODO(HTML §7.5.4): Select encoding, create the HTML/pre presentation, disable HTML tokenization, and finish loading.
+    throw new InternalError('Text document loading is not implemented');
+  }
+
+  /** Process successive replacement parts through the navigation owner. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-multipart-x-mixed-replace
+  loadMultipartDocument(
+    _params: NavigationParams, _sourceSnapshotParams: SourceSnapshotParams, _initiatorOrigin: Origin | null,
+    _resource: ResourceReader,
+  ): DocumentImpl | null {
+    // TODO(HTML §7.5.5): Parse MIME parts, navigate each supplied response, and coordinate replacement/completion.
+    throw new InternalError('Multipart document loading is not implemented');
+  }
+
+  /** Create the supported image/audio/video presentation for this response. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-media
+  loadMediaDocument(_params: NavigationParams, _type: MIMEType, _resource: ResourceReader): DocumentImpl {
+    // TODO(HTML §7.5.6): Create the media element/presentation, feed its decoder, and coordinate loading and rendering.
+    throw new InternalError('Media document loading is not implemented');
   }
 
   /** Select the Window and realm, then create the document for a navigation response. */

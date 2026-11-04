@@ -5,6 +5,7 @@ import {
 import { areSameOriginDomain, createOpaqueOrigin, obtainURLOrigin, type Origin } from '../../../../../url/index';
 import { DeferredFetchQuota, type ReferrerPolicy } from '../../../../../fetch/index';
 
+import type { DOMHighResTimeStamp } from '../../../../timing/index';
 import { ElementTag, ContentCategory } from '../../element-definitions/index';
 import { loadingAttribute, referrerPolicyAttribute } from '../attributes/index';
 import {
@@ -42,6 +43,10 @@ export class HTMLIFrameElementImpl extends HTMLElementImpl {
   /** Quota delegated to this container by its node Document's navigation. */
   // https://fetch.spec.whatwg.org/#reserved-deferred-fetch-quota
   reservedDeferredFetchQuota: number = DeferredFetchQuota.None;
+  /** Fallback resource-timing start, cleared when Fetch permits normal timing reporting. */
+  // https://html.spec.whatwg.org/multipage/iframe-embed-object.html#iframe-pending-resource-timing-start-time
+  // TODO(HTML §4.8.5): Iframe navigation must set this time; load-event steps must report the fallback.
+  pendingResourceTimingStartTime: DOMHighResTimeStamp | null = null;
   /** Retained child destination; the accessor keeps its reverse container link in sync. */
   #contentNavigable: Navigable | null = null;
   /** Stable inspection object associated with this element, including while detached or adopted. */

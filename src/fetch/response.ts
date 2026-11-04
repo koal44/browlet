@@ -213,6 +213,15 @@ export class FetchResponse {
     return isMixedDownload(this, sourceURL, env);
   }
 
+  /** Whether Content-Disposition requests downloading rather than inline presentation. */
+  // https://www.rfc-editor.org/rfc/rfc6266.html#section-4.2
+  hasAttachmentDisposition(): boolean {
+    const type = this.headerList.extractContentDispositionType();
+    // SPEC_CLASH(content-disposition-extension-type): Follow RFC 6266 and Chromium/Firefox for unknown
+    // valid types; HTML's literal attachment-only branch and WebKit do not select those for download.
+    return type !== null && type !== 'inline';
+  }
+
   /** Whether CORP blocks this response; report embedder-policy violations when a reporting environment exists. */
   // https://fetch.spec.whatwg.org/#cross-origin-resource-policy-check
   isBlockedByCORP(

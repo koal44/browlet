@@ -1,4 +1,5 @@
 import { TypeError } from '../infra/exceptions';
+import { InternalError } from '../infra/internal-error';
 import { TextCursor } from '../infra/text-cursor';
 import { nonASCIIDigitPattern, surroundingTabOrSpacePattern } from '../infra/patterns';
 import { isomorphicEncode } from '../js-engine/index';
@@ -8,8 +9,8 @@ import {
 } from '../web-idl/core/index';
 import { getEncoding, type Encoding } from '../encoding/index';
 import {
-  collectHTTPQuotedString, isHTTPTabOrSpace, isHTTPToken, parseStructuredField, serializeStructuredField,
-  type StructuredField,
+  collectHTTPQuotedString, isHTTPTabOrSpace, isHTTPToken, parseContentDispositionType,
+  parseStructuredField, serializeStructuredField, type StructuredField,
 } from '../http/index';
 import { getMIMETypeEssence, parseMIMEType, type MIMEType, type MIMETypeEssence } from '../mime/index';
 
@@ -144,6 +145,21 @@ export class FetchHeaders {
   getDecodeAndSplit(name: string): string[] | null {
     const value = this.get(name);
     return value === null ? null : getDecodeAndSplitHeaderValue(value);
+  }
+
+  /** Extract the disposition type without interpreting filename or extension parameters. */
+  // https://www.rfc-editor.org/rfc/rfc6266.html#section-4.1
+  extractContentDispositionType(): string | null {
+    const values = this.getDecodeAndSplit('Content-Disposition');
+    if (values === null) return null;
+    const value = values[0]!;
+    // SPEC_CLASH(content-disposition-conflicting-fields): Chromium/Firefox reject conflicting fields;
+    // WebKit selects the last. Keep response rejection unfinished instead of choosing a field here.
+    if (values.some((candidate) => candidate !== value)) {
+      // TODO(Fetch HTTP response processing): Reject conflicting Content-Disposition fields as a network error.
+      throw new InternalError('Conflicting Content-Disposition response rejection is not implemented');
+    }
+    return parseContentDispositionType(value);
   }
 
   /** Extract a length; undefined means absent/unusable, and null means conflicting values. */

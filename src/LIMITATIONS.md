@@ -1421,8 +1421,59 @@ stale/non-fetch results. Response admission runs CSP, COEP when a reservation
 exists, and X-Frame-Options in order. Failed responses call the unfinished inline
 Document owner; cleanup after that owner returns is implemented, including
 unsalvageability, reservation discard, BiDi notification, and retained history
-metadata. Fetch parameter creation, actual error-page creation, downloads/204/205,
-and ordinary Document loading remain explicit throwing boundaries. Resolving an
+metadata. Sandbox-blocked downloads and ordinary 204/205 responses now complete
+without creating a Document. Permitted attachments reach explicit UserAgent
+dependencies for download admission and handling: source-URL selection for mixed
+downloads, hostile-download policy, filename selection, BiDi decisions, and host
+saving remain unfinished. Conflicting Content-Disposition fields also stop at
+an explicit Fetch response-rejection dependency. Ordinary responses now call the
+general Document loader after MIME preparation, preserving the sniffed bytes and
+resuming on the destination task with a navigation-ID recheck. Population accepts
+its nullable result and saves a loaded Document's origin and history-required
+policy before completion. Dispatch selects HTML/XML/text/multipart, supported media,
+PDF, configured inline content, or external handling. The §7.5 loaders, actual
+error-page creation, unsupported-resource host policy, and external handoff remain
+throwing boundaries. Media decoder support is not claimed, and no PDF viewer exists.
+Document teardown still needs to cancel a reader whose continuation task it discards.
+Navigation request construction now retains the
+history/source inputs with UserAgent-owned execution. Child requests retain the
+initiating client's origin, following browsers instead of HTML's broken container
+override (`SPEC_CLASH(navigation-container-origin)`, HTML #4703).
+Initial reservation now creates a client identity, target context, top-level
+metadata, and security decision without allocating a realm. Cross-origin redirects
+discard and replace the reservation and clear its Early Hints callback; same-origin
+redirects retain both. Service Worker association and Early Hints processing remain
+unfinished. Navigation-request CSP checks
+captured source policies and reports to the source Document. Enforcing failure
+returns null through the browser-owned promise; its error-Document loader remains
+unfinished. Allowed requests now dispatch Fetch with parallel callbacks and abort
+when the ongoing navigation ID changes, including direct history assignments.
+Network failure returns null; cancellation returns no params and completes without
+an error Document. Received responses now parse policies, combine captured sandbox
+flags, determine origins, enforce top-level COOP, and check HTTP(S) child CORP against
+the container Document. Policy rejection returns null; configured COOP reporting
+endpoints still reach the unfinished URL-scoped Reporting queue. Controllers are
+released on rejection or an unfinished operation. Manual redirects reuse the Fetch
+controller, repeat request/response policy checks, replace only the redirected
+entry's DocumentState, and let Fetch handle method/body changes and redirect limits.
+Form-action checks the pending redirect target before Fetch sends it, following
+Chromium/WebKit rather than HTML's previous-URL ordering or Firefox's initial-target
+check (`SPEC_CLASH(navigation-redirect-csp-url)`). Non-fetch redirects retain the
+last response's origin and reach the existing external/inline handler dependencies;
+non-HTTP Fetch redirects fail. Admitted final responses return complete params with
+the live controller/body, selected policy, reservation, timing, and captured inputs.
+Fetch retains full timing for all navigation destinations, including children,
+following the approved correction to Fetch's document-only condition
+(`SPEC_CLASH(navigation-fetch-full-timing)`). Timing exposure checks remain unchanged.
+Allowed iframe timing clears the pending fallback start, but its iframe-navigation
+producer and fallback reporting still need §4.8.5 integration. Early Hints call an
+explicit reserved-environment dependency for Link processing/preloading, including
+the interim response's URL metadata.
+Top-level Document requests bypass generic connect-src/default-src checks, following
+Fetch and all three browsers instead of CSP's fallback; form-action remains separate
+(`SPEC_CLASH(csp-document-fetch-directive)`). The loader preserves null initiators from openerless
+initial about:blank history and the provisional local loader; external handoff
+still needs to distinguish absent attribution from verified browser-UI initiation. Resolving an
 unspecified history referrer from a synthetic null request also remains explicitly
 unfinished. X-Frame-Options uses the response URL's origin and Fetch's quoted
 header splitting. CSP's frame-ancestor matcher and reporting
