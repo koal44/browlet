@@ -2,7 +2,7 @@ import { InternalError } from '../../../infra/internal-error';
 import { addon } from '../../../js-engine/index';
 
 import type { AssembledInterface } from '../../assembly/index';
-import { getImplementationRecord } from '../../values/index';
+import { getPlatformRecord, PlatformRecordSource } from '../../values/index';
 
 import type { ImplementationBinding } from './implementation';
 import {
@@ -28,7 +28,8 @@ export class HTMLAllCollectionBinding extends LegacyPlatformObjectBinding {
     const object = binding.realm.createHTMLDDA((value: unknown) => {
       if (value === undefined) return null;
       const name = convertName(value);
-      return convertResult(memberBinding.operationSteps!(getImplementationRecord(implementation)!, [name]));
+      const record = getPlatformRecord(implementation, PlatformRecordSource.Implementation)!;
+      return convertResult(memberBinding.operationSteps!(record, [name]));
     });
     Object.setPrototypeOf(object, prototype);
     return this.createObject(object, implementation, implementationBinding.getLegacyPropertyMetadata());

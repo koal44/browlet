@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { getImplementationRecord, getPlatformRecord } from '../../../src/web-idl/values/platform';
+import { getPlatformRecord, PlatformRecordSource } from '../../../src/web-idl/values/platform';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { createSiblingWindow } from '../../support/windows';
 
@@ -193,9 +193,9 @@ describe('WebAssembly Instance construction', () => {
       Reflect.set(globalThis, 'nativeInstance', Object.freeze(instance));
     }, emptyModule);
     const instance = Reflect.get(browser.window, 'nativeInstance') as object;
-    const record = getPlatformRecord(instance);
+    const record = getPlatformRecord(instance, PlatformRecordSource.Platform);
     expect(record).toBeDefined();
-    expect(record).toBe(getImplementationRecord(instance));
+    expect(record).toBe(getPlatformRecord(instance, PlatformRecordSource.Implementation));
     expect(record!.implInst).toBe(instance);
     expect(record!.platformObject).toBe(instance);
     expect(record!.realm).toBe(foreignRealm);

@@ -5,7 +5,7 @@ import {
 
 import type { IDLUnionType, UnionInterfaceCandidate } from '../assembly/index';
 import {
-  getPlatformRecord, IDLAsyncSequence, IDLCallbackFunction, IDLCallbackInterface, IDLDictionary,
+  PlatformRecordSource, IDLAsyncSequence, IDLCallbackFunction, IDLCallbackInterface, IDLDictionary,
   CallbackFunctionStamper,
 } from '../values/index';
 
@@ -169,9 +169,7 @@ export class UnionConverter<Type extends IDLUnionType = IDLUnionType> extends Co
     if (candidate.kind === 'interface') {
       const isInstance = candidate.assembled.primary.interfaceOverride?.isInstance;
       if (isInstance) return isInstance(value);
-      const record = getPlatformRecord(value);
-      return record?.binding.world === this.binding.world &&
-        record.implements(candidate.assembled);
+      return this.binding.getPlatformRecord(value, PlatformRecordSource.PlatformOrProxy)?.implements(candidate.assembled) ?? false;
     }
     return candidate.assembled.is(value);
   }

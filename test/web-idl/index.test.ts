@@ -8,6 +8,7 @@ describe('Web IDL package surface', () => {
     expect(Object.keys(webIDL).sort()).toEqual([
       ...Object.keys(core),
       'BindingWorld',
+      'PlatformRecordSource',
       'getImplementationObject',
       'isArrayIndex',
       'isStampedImplInstance',

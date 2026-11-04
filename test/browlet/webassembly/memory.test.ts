@@ -4,7 +4,7 @@ import { itPassesWith } from '../../test-runtime';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import { isWebAssemblyMemory } from '../../../src/js-engine/index';
-import { getPlatformRecord } from '../../../src/web-idl/values/platform';
+import { getPlatformRecord, PlatformRecordSource } from '../../../src/web-idl/values/platform';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { createSiblingWindow } from '../../support/windows';
 
@@ -87,7 +87,7 @@ describe('WebAssembly Memory', () => {
       return { subclass: derived instanceof Derived && derived instanceof Memory, grown: derived.grow(1) };
     })).toEqual({ subclass: true, grown: 0 });
     const memory = Reflect.get(browser.window, 'nativeMemory') as object;
-    const record = getPlatformRecord(memory);
+    const record = getPlatformRecord(memory, PlatformRecordSource.Platform);
     expect(record).toBeDefined();
     expect(record!.realm).toBe(foreignRealm);
     expect(record!.implInst).toBe(memory);

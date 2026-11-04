@@ -1,6 +1,6 @@
 import { createEnvironment } from '../../support/environment';
 import { internalType, type InternalPromise } from '../../../src/infra/promises';
-import { idlType } from '../../../src/web-idl/index';
+import { PlatformRecordSource, idlType } from '../../../src/web-idl/index';
 import { endOfIteration } from '../../../src/infra/iteration';
 import { createWritableStream, observe } from './implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
@@ -409,7 +409,7 @@ describe('readable-stream projection', () => {
     ) as object;
     const signal = Reflect.get(controller, 'signal') as object;
     const realm = getRelevantRealm(window);
-    const resolved = getBindingContext(realm).getObjectRecord(signal);
+    const resolved = getBindingContext(realm).getPlatformRecord(signal, PlatformRecordSource.Platform);
     if (resolved?.assembled.name !== 'AbortSignal') {
       throw new Error('AbortSignal did not resolve to its implementation');
     }

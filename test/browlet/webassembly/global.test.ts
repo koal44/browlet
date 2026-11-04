@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { addon } from '../../../src/js-engine/index';
 import { reference } from '../../../src/web-idl/core/index';
-import { getPlatformRecord } from '../../../src/web-idl/values/platform';
+import { getPlatformRecord, PlatformRecordSource } from '../../../src/web-idl/values/platform';
 import { getBindingContext, getRelevantRealm } from '../../support/browlet-binding';
 import { createSiblingWindow } from '../../support/windows';
 
@@ -183,7 +183,7 @@ describe('WebAssembly Global', () => {
       };
     })).toEqual({ value: true, prototype: true, constructor: true, name: 'Global', length: 1, namespaceOnly: true });
     const global = Reflect.get(browser.window, 'nativeGlobal') as object;
-    const record = getPlatformRecord(global);
+    const record = getPlatformRecord(global, PlatformRecordSource.Platform);
     expect(record).toBeDefined();
     expect(record!.realm).toBe(foreignRealm);
     expect(record!.implInst).toBe(global);
@@ -204,10 +204,10 @@ describe('WebAssembly Global', () => {
       Reflect.set(globalThis, 'nativeGlobal', Object.freeze(global));
     }, { bytes: vectorBytes, mutable });
     const global = Reflect.get(browser.window, 'nativeGlobal') as object;
-    expect(getPlatformRecord(global)).toBeUndefined();
+    expect(getPlatformRecord(global, PlatformRecordSource.Platform)).toBeUndefined();
     expect(context.jsToImpl(global, reference('Global'))).toBe(global);
     expect(context.implToJS(global, reference('Global'))).toBe(global);
-    const record = context.getObjectRecord(global);
+    const record = context.getPlatformRecord(global, PlatformRecordSource.Platform);
     // Exact ownership still requires the addon for native objects created outside Binding.
     if (addon.getRealm) {
       expect(record).toBeDefined();
@@ -227,13 +227,13 @@ describe('WebAssembly Global', () => {
     const global = Object.freeze(new WebAssembly.Global({ value: 'externref' }, {}));
     expect(context.jsToImpl(global, reference('Global'))).toBe(global);
     expect(context.implToJS(global, reference('Global'))).toBe(global);
-    expect(context.getObjectRecord(global)).toBeUndefined();
+    expect(context.getPlatformRecord(global, PlatformRecordSource.Platform)).toBeUndefined();
     const fail = (): never => { throw new Error('Author code ran'); };
     const proxy = new Proxy(global, { get: fail, getPrototypeOf: fail });
     const revoked = Proxy.revocable(global, {});
     revoked.revoke();
     for (const value of [Object.create(WebAssembly.Global.prototype), proxy, revoked.proxy]) {
-      expect(context.getObjectRecord(value)).toBeUndefined();
+      expect(context.getPlatformRecord(value, PlatformRecordSource.Platform)).toBeUndefined();
       expect(() => context.jsToImpl(value, reference('Global'))).toThrow('Global');
     }
   });
@@ -293,7 +293,7 @@ describe('WebAssembly Global', () => {
     Reflect.set(browser.window, 'inspectGlobal', (global: object) => {
       expect(context.jsToImpl(global, reference('Global'))).toBe(global);
       expect(context.implToJS(global, reference('Global'))).toBe(global);
-      context.getObjectRecord(global);
+      context.getPlatformRecord(global, PlatformRecordSource.Platform);
     });
     expect(await browser.evaluate((bytes) => {
       const foreign = Reflect.get(globalThis, 'foreign') as typeof globalThis;

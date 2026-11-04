@@ -7,6 +7,7 @@ import { BindingWorld } from '../../../../src/web-idl/binding/world';
 
 import { installTestBindings } from '../../../support/web-idl-binding';
 import { TestRealm } from '../../../support/web-idl-realm';
+import { PlatformRecordSource } from '../../../../src/web-idl/index';
 
 describe('Sequence and record conversion through implementations', () => {
   it.each(['record', 'union', 'sequence'] as const)('returns an implementation %s with nested sequences', (kind) => {
@@ -98,7 +99,7 @@ describe('Sequence and record conversion through implementations', () => {
     expect(item).toBe(platform);
     expect(Object.getPrototypeOf(result)).toBe(kind === 'sequence'
       ? realm.Array.prototype : realm.objectPrototype);
-    expect(other.getObjectRecord(item)!.binding.realm).toBe(otherRealm);
+    expect(other.getPlatformRecord(item, PlatformRecordSource.Platform)!.binding.realm).toBe(otherRealm);
     expect(() => new Echo().echo(kind === 'sequence' ? [{}] : { item: {} })).toThrow(realm.TypeError);
   });
 

@@ -5,7 +5,7 @@ import {
   arg, atArg, attr, ctor, defineIncludes, defineInterface, defineInterfaceMixin, idlType, impl, iter,
   op, staticOp, roAttr, reference, unwrapArg, stringifier, invokeWith, type OverrideEnvironments,
 } from '../../../src/web-idl/core/index';
-import { getImplementationObject, getImplementationRecord } from '../../../src/web-idl/values/index';
+import { getImplementationObject, getPlatformRecord, PlatformRecordSource } from '../../../src/web-idl/values/index';
 import { BindingWorld } from '../../../src/web-idl/binding/world';
 import type { WebIDLEnvironment } from '../../../src/web-idl/environment';
 
@@ -529,9 +529,9 @@ describe('Web IDL implementation registration', () => {
     const ctx = world.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
     const instance = new ExampleImpl();
     expect(() => ctx.project(ExampleImpl, instance)).toThrow(failure);
-    expect(getImplementationRecord(instance) === undefined).toBe(true);
+    expect(getPlatformRecord(instance, PlatformRecordSource.Implementation) === undefined).toBe(true);
     ready = true;
-    expect(ctx.project(ExampleImpl, instance)).toBe(getImplementationRecord(instance)?.platformObject);
+    expect(ctx.project(ExampleImpl, instance)).toBe(getPlatformRecord(instance, PlatformRecordSource.Implementation)?.platformObject);
   });
 
   it('keeps binding contexts distinct within the same realm', () => {

@@ -4,7 +4,7 @@ import type { CallbackExceptionBehavior } from '../../core/index';
 
 import type { IDLOperation, AssembledCallbackFunction } from '../../assembly/index';
 import {
-  getImplementationRecord, IDLPromise, type IDLCallbackFunction, type IDLCallbackInterface,
+  getPlatformRecord, PlatformRecordSource, IDLPromise, type IDLCallbackFunction, type IDLCallbackInterface,
 } from '../../values/index';
 import type { ConversionSteps } from '../../converters/index';
 import type { WebIDLEnvironment, WebIDLRealm } from '../../environment';
@@ -210,7 +210,7 @@ export type CallbackCallable = AssembledCallbackFunction | IDLOperation;
 function projectCallbackReceiver(
   value: unknown,
 ): unknown {
-  const record = getImplementationRecord(value);
+  const record = getPlatformRecord(value, PlatformRecordSource.Implementation);
   return record === undefined ? value : record.project();
 }
 

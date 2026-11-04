@@ -4,7 +4,7 @@ import { itPassesWith } from '../../../test-runtime';
 
 import { getAssociatedRealm } from '../../../../src/js-engine/index';
 import {
-  BindingWorld, defineInterface, impl, xattr, StructuredData, type BindingContext,
+  PlatformRecordSource, BindingWorld, defineInterface, impl, xattr, StructuredData, type BindingContext,
 } from '../../../../src/web-idl/index';
 import {
   DOMExceptionImpl, isDOMException,
@@ -445,7 +445,7 @@ describe('HTML structured deserialization', () => {
     source.unwrap(original.platformObject, ContainerImpl)!.child = original.platformObject;
 
     const clone = cloneValue(original.platformObject, source, target);
-    const resolved = target.getObjectRecord(clone);
+    const resolved = target.getPlatformRecord(clone, PlatformRecordSource.Platform);
     expect(resolved?.assembled).toBe(original.assembled);
     expect(resolved?.realm).toBe(targetRealm);
     expect(target.unwrap(clone, ContainerImpl)?.child).toBe(clone);

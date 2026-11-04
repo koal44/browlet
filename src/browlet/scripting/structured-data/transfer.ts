@@ -124,7 +124,7 @@ function prepareTransfer(
   }
   if (isSharedArrayBuffer(value) || isArrayBufferView(value)) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
 
-  const record = ctx.getObjectRecord(value);
+  const record = ctx.getOrCreatePlatformRecord(value);
   if (!record) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
   const steps = record.assembled.transferSteps;
   if (!steps) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);

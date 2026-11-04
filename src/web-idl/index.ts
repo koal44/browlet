@@ -12,6 +12,6 @@ export type { WebIDLEnvironment, WebIDLRealm, CallbackHooks } from './environmen
 export type { GlobalObjectAllocation, SecurityCheckType } from './binding/realm';
 export { isArrayIndex } from './binding/realm/legacy';
 export {
-  isStampedImplInstance, isStampedPlatformObject, getImplementationObject,
+  isStampedImplInstance, isStampedPlatformObject, getImplementationObject, PlatformRecordSource,
   type StampedImplInstance, type StampedPlatformObject, type PlatformRecord,
 } from './values/index';

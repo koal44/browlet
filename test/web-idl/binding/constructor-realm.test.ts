@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { JSFunction } from '../../../src/js-engine/index';
 import { ctor, defineInterface, impl } from '../../../src/web-idl/core/index';
 import { BindingWorld } from '../../../src/web-idl/binding/world';
-import { getPlatformRecord } from '../../../src/web-idl/values/index';
+import { getPlatformRecord, PlatformRecordSource } from '../../../src/web-idl/values/index';
 
 import { itPassesWith } from '../../test-runtime';
 import { getInstalledInterface } from '../../support/web-idl-binding';
@@ -17,7 +17,7 @@ describe('interface constructor prototype fallback', () => {
       const object = Reflect.construct(Example, [], target) as object;
 
       expect(Reflect.getPrototypeOf(object)).toBe(second.getImplementationBinding(second.resolveInterface('Example')).getInterfacePrototypeObject());
-      expect(getPlatformRecord(object)?.realm).toBe(first.realm);
+      expect(getPlatformRecord(object, PlatformRecordSource.Platform)?.realm).toBe(first.realm);
     });
   }
 

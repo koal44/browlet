@@ -5,7 +5,7 @@ export {
 export { IDLDictionary } from './dictionary';
 export {
   PlatformRecord, stampImplementation, isStampedImplInstance, isStampedPlatformObject,
-  getPlatformRecord, getImplementationRecord, getImplementationObject, getPlatformObject,
+  getPlatformRecord, PlatformRecordSource, getImplementationObject, getPlatformObject,
   type StampedImplInstance, type StampedPlatformObject,
 } from './platform';
 export { IDLPromise, waitForAll, type PromiseReactionSteps } from './promise';

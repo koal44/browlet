@@ -2,7 +2,7 @@ import { InternalError } from '../../../infra/index';
 import { compileHostSteps, getBufferTypeName, getMethod, hasStringData, isCallable, isObject, type JSMethod } from '../../../js-engine/index';
 
 import type { IDLType, AssembledArgument, AssembledCallable, AssembledOverloads, OverloadGroup } from '../../assembly/index';
-import { getPlatformRecord, type PlatformRecord, IDLAsyncSequence } from '../../values/index';
+import { PlatformRecordSource, type PlatformRecord, IDLAsyncSequence } from '../../values/index';
 
 import type { RealmBinding } from '../realm';
 
@@ -174,8 +174,7 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
     if (matches.length > 0) return { candidates: matches };
   }
 
-  const record = getPlatformRecord(value);
-  const localRecord = record?.binding.world === binding.world ? record : undefined;
+  const localRecord = binding.getPlatformRecord(value, PlatformRecordSource.PlatformOrProxy);
   if (localRecord || binding.assembly.proxyObjects.is(value) || group.instanceChecks.some((isInstance) => isInstance(value))) {
     matches = localRecord && !group.hasProxyCandidates && group.instanceChecks.length === 0
       ? group.getInterfaceCandidates(localRecord.assembled)

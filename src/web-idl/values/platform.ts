@@ -17,6 +17,16 @@ export type StampedImplInstance<T extends object = object> = T & ImplementationS
 /** A platform object stamped with the same record as its implementation instance. */
 export type StampedPlatformObject<T extends object = object> = T & PlatformObjectStamper;
 
+/** Which identity a record lookup accepts; no mode creates an association. */
+export enum PlatformRecordSource {
+  Implementation,
+  Platform,
+  /** A platform object or a declared proxy's current platform target; requires a binding world. */
+  PlatformOrProxy,
+  /** Either direct stamp, for traversals that accept both implementation and platform objects. */
+  Stamped,
+}
+
 /** Recognize an implementation stamp, regardless of its owning binding world. */
 export function isStampedImplInstance(implInst: unknown): implInst is StampedImplInstance {
   return ImplementationStamper.get(implInst) !== undefined;
@@ -148,28 +158,31 @@ export function stampImplementation<T extends object>(
   return new PlatformRecord(implInst, assembled, binding).implInst;
 }
 
-/** Read the shared record through its platform-object stamp, without checking a world or associating it. */
-export function getPlatformRecord(platformObject: unknown): PlatformRecord | undefined {
-  return PlatformObjectStamper.get(platformObject);
-}
-
-/** Read the same shared record through its implementation stamp, without checking a world or associating it. */
-export function getImplementationRecord<T extends object>(implInst: T): PlatformRecord<T> | undefined;
-export function getImplementationRecord(implInst: unknown): PlatformRecord | undefined;
-export function getImplementationRecord(implInst: unknown): PlatformRecord | undefined {
-  return ImplementationStamper.get(implInst);
+/** Read an existing stamp without selecting a world. BindingWorld additionally supports declared proxies. */
+export function getPlatformRecord<T extends object>(implInst: T, source: PlatformRecordSource.Implementation): PlatformRecord<T> | undefined;
+export function getPlatformRecord(platformObjectOrImplInst: unknown, source: PlatformRecordSource.Implementation | PlatformRecordSource.Platform | PlatformRecordSource.Stamped): PlatformRecord | undefined;
+export function getPlatformRecord(
+  platformObjectOrImplInst: unknown,
+  source: PlatformRecordSource.Implementation | PlatformRecordSource.Platform | PlatformRecordSource.Stamped,
+): PlatformRecord | undefined {
+  switch (source) {
+    case PlatformRecordSource.Implementation: return ImplementationStamper.get(platformObjectOrImplInst);
+    case PlatformRecordSource.Platform: return PlatformObjectStamper.get(platformObjectOrImplInst);
+    case PlatformRecordSource.Stamped:
+      return PlatformObjectStamper.get(platformObjectOrImplInst) ?? ImplementationStamper.get(platformObjectOrImplInst);
+  }
 }
 
 /** Read an established platform association; unlike world.unwrap(), this does not select or check a world. */
 export function getImplementationObject(platformObject: StampedPlatformObject): StampedImplInstance;
 export function getImplementationObject(platformObject: unknown): StampedImplInstance | undefined;
 export function getImplementationObject(platformObject: unknown): StampedImplInstance | undefined {
-  return getPlatformRecord(platformObject)?.implInst;
+  return getPlatformRecord(platformObject, PlatformRecordSource.Platform)?.implInst;
 }
 
 // Project helper: retrieve the platform object paired with an implementation.
 export function getPlatformObject(implInst: unknown): StampedPlatformObject | undefined {
-  return getImplementationRecord(implInst)?.platformObject;
+  return getPlatformRecord(implInst, PlatformRecordSource.Implementation)?.platformObject;
 }
 
 class ImplementationStamper extends Stamper {

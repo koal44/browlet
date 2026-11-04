@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import { isWebAssemblyTable } from '../../../src/js-engine/index';
-import { getPlatformRecord } from '../../../src/web-idl/values/platform';
+import { getPlatformRecord, PlatformRecordSource } from '../../../src/web-idl/values/platform';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { createSiblingWindow } from '../../support/windows';
 
@@ -84,7 +84,7 @@ describe('WebAssembly Table', () => {
       return derived instanceof Derived && derived.get(0) === document;
     })).toBe(true);
     const table = Reflect.get(browser.window, 'nativeTable') as object;
-    const record = getPlatformRecord(table);
+    const record = getPlatformRecord(table, PlatformRecordSource.Platform);
     expect(record).toBeDefined();
     expect(record!.realm).toBe(foreignRealm);
     expect(record!.implInst).toBe(table);

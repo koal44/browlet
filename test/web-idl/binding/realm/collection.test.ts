@@ -7,7 +7,7 @@ import {
 import { DefinitionAssembly } from '../../../../src/web-idl/assembly/index';
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
 import { RealmBinding } from '../../../../src/web-idl/binding/realm';
-import { getImplementationRecord, PlatformRecord } from '../../../../src/web-idl/values/index';
+import { getPlatformRecord, PlatformRecordSource, PlatformRecord } from '../../../../src/web-idl/values/index';
 
 import { getInstalledInterface, getMemberBinding } from '../../../support/web-idl-binding';
 import { itPassesWith } from '../../../test-runtime';
@@ -215,9 +215,9 @@ describe('Web IDL maplike declarations', () => {
 
     // Map iteration converts both sides before selecting the yielded value.
     // https://webidl.spec.whatwg.org/#js-map-iterator
-    expect(getImplementationRecord(child)).toBeUndefined();
+    expect(getPlatformRecord(child, PlatformRecordSource.Implementation)).toBeUndefined();
     expect(callNext(iterator)).toEqual({ value: 'visible', done: false });
-    expect(getImplementationRecord(child)?.platformObject).toBeDefined();
+    expect(getPlatformRecord(child, PlatformRecordSource.Implementation)?.platformObject).toBeDefined();
   });
 
   it('keeps iteration and forEach live while preserving the entries object', () => {

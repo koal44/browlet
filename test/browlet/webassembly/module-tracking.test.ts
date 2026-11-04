@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { addon } from '../../../src/js-engine/index';
 import { reference } from '../../../src/web-idl/core/index';
-import { getImplementationRecord, getPlatformRecord } from '../../../src/web-idl/values/platform';
+import { getPlatformRecord, PlatformRecordSource } from '../../../src/web-idl/values/platform';
 import { Browlet } from '../../../src/browlet/browlet';
 import { browletBindingWorld } from '../../../src/browlet/integration/web-idl/index';
 import { BrowsingContext, createDocumentState, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
@@ -18,21 +18,21 @@ describe('native Module binding records', () => {
       Reflect.set(globalThis, 'nativeModule', Object.freeze(module));
     }, emptyModule);
     const module = Reflect.get(browser.window, 'nativeModule') as WebAssembly.Module;
-    const record = getPlatformRecord(module);
+    const record = getPlatformRecord(module, PlatformRecordSource.Platform);
     expect(record).toBeDefined();
-    expect(record).toBe(getImplementationRecord(module));
+    expect(record).toBe(getPlatformRecord(module, PlatformRecordSource.Implementation));
     expect(record!.realm).toBe(foreignRealm);
     expect(record!.implInst).toBe(module);
     expect(record!.platformObject).toBe(module);
     expect(record!.project()).toBe(module);
-    expect(context.getObjectRecord(module)).toBe(record);
+    expect(context.getPlatformRecord(module, PlatformRecordSource.Platform)).toBe(record);
     expect(browletBindingWorld.unwrap(module)).toBe(module);
     expect(browletBindingWorld.project(module)).toBe(module);
     expect(Reflect.ownKeys(module)).toEqual([]);
     expect(WebAssembly.Module.exports(module)).toEqual([]);
   });
 
-  it.each(['input', 'output', 'lookup', 'unwrap', 'project', 'realm'] as const)(
+  it.each(['input', 'output', 'association', 'unwrap', 'project'] as const)(
     'associates a frozen compiled Module on its first %s boundary', async (boundary) => {
       const { browser, context, foreignRealm } = fixture();
       await browser.evaluate(async (source) => {
@@ -42,29 +42,31 @@ describe('native Module binding records', () => {
         Reflect.set(globalThis, 'nativeModule', Object.freeze(module));
       }, emptyModule);
       const value = Reflect.get(browser.window, 'nativeModule') as WebAssembly.Module;
-      expect(getPlatformRecord(value)).toBeUndefined();
+      expect(getPlatformRecord(value, PlatformRecordSource.Platform)).toBeUndefined();
+      expect(context.getPlatformRecord(value, PlatformRecordSource.Stamped)).toBeUndefined();
+      expect(browletBindingWorld.getRealm(value)).toBeUndefined();
       switch (boundary) {
         case 'input': expect(context.jsToImpl(value, reference('Module'))).toBe(value); break;
         case 'output': expect(context.implToJS(value, reference('Module'))).toBe(value); break;
-        case 'lookup': context.getObjectRecord(value); break;
+        case 'association': context.getOrCreatePlatformRecord(value); break;
         case 'unwrap': expect(browletBindingWorld.unwrap(value)).toBe(addon.getRealm ? value : undefined); break;
         case 'project': expect(browletBindingWorld.project(value)).toBe(addon.getRealm ? value : undefined); break;
-        case 'realm': expect(browletBindingWorld.getRealm(value) === foreignRealm).toBe(Boolean(addon.getRealm)); break;
       }
-      const record = getPlatformRecord(value);
+      const record = getPlatformRecord(value, PlatformRecordSource.Platform);
       // Stock Node has no exact creation-realm lookup for an untracked native result.
       if (addon.getRealm) {
         expect(record).toBeDefined();
         expect(record!.realm).toBe(foreignRealm);
+        expect(browletBindingWorld.getRealm(value)).toBe(foreignRealm);
         expect(record!.implInst).toBe(value);
         expect(record!.platformObject).toBe(value);
         expect(record!.project()).toBe(value);
-        expect(context.getObjectRecord(value)).toBe(record);
-        expect(getBindingContext(foreignRealm).getObjectRecord(value)).toBe(record);
-        expect(getImplementationRecord(value)).toBe(record);
+        expect(context.getPlatformRecord(value, PlatformRecordSource.Platform)).toBe(record);
+        expect(getBindingContext(foreignRealm).getPlatformRecord(value, PlatformRecordSource.Platform)).toBe(record);
+        expect(getPlatformRecord(value, PlatformRecordSource.Implementation)).toBe(record);
       } else {
         expect(record).toBeUndefined();
-        expect(context.getObjectRecord(value)).toBeUndefined();
+        expect(context.getPlatformRecord(value, PlatformRecordSource.Platform)).toBeUndefined();
       }
       expect(Object.getPrototypeOf(value)).toBeNull();
       expect(Object.isFrozen(value)).toBe(true);
@@ -76,7 +78,7 @@ describe('native Module binding records', () => {
   it('never records the active caller as a compiled Module\'s owner', async () => {
     const { browser, context, foreignRealm } = fixture();
     Reflect.set(browser.window, 'inspectNative', (value: object) => {
-      const record = context.getObjectRecord(value);
+      const record = context.getOrCreatePlatformRecord(value);
       return record ? record.realm === foreignRealm ? 'original' : 'caller' : 'unknown';
     });
     expect(await browser.evaluate(async (source) => {
@@ -93,9 +95,9 @@ describe('native Module binding records', () => {
     const module = Object.freeze(new WebAssembly.Module(new Uint8Array(emptyModule)));
     expect(context.jsToImpl(module, reference('Module'))).toBe(module);
     expect(context.implToJS(module, reference('Module'))).toBe(module);
-    expect(context.getObjectRecord(module)).toBeUndefined();
-    expect(getPlatformRecord(module)).toBeUndefined();
-    expect(getImplementationRecord(module)).toBeUndefined();
+    expect(context.getPlatformRecord(module, PlatformRecordSource.Platform)).toBeUndefined();
+    expect(getPlatformRecord(module, PlatformRecordSource.Platform)).toBeUndefined();
+    expect(getPlatformRecord(module, PlatformRecordSource.Implementation)).toBeUndefined();
   });
 
   it('does not associate lookalikes or inspect author prototypes to find an owner', () => {
@@ -107,9 +109,10 @@ describe('native Module binding records', () => {
       get() { traps++; throw new Error('Do not inspect author properties'); },
     });
     for (const value of [lookalike, proxy]) {
-      expect(context.getObjectRecord(value)).toBeUndefined();
+      expect(context.getPlatformRecord(value, PlatformRecordSource.Platform)).toBeUndefined();
+      expect(context.getOrCreatePlatformRecord(value)).toBeUndefined();
       expect(() => context.jsToImpl(value, reference('Module'))).toThrow();
-      expect(getPlatformRecord(value)).toBeUndefined();
+      expect(getPlatformRecord(value, PlatformRecordSource.Platform)).toBeUndefined();
     }
     expect(traps).toBe(0);
   });

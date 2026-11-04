@@ -2,7 +2,7 @@ import type { DefinitionAssembly, AssembledInterface } from '../../../../src/web
 
 import { idlType, type StampedImplInstance, type StampedPlatformObject, type WebIDLType } from '../../../../src/web-idl/index';
 import {
-  getImplementationRecord, getPlatformRecord,
+  getPlatformRecord, PlatformRecordSource,
   stampImplementation, PlatformRecord,
 } from '../../../../src/web-idl/values/index';
 import type { RealmBinding } from '../../../../src/web-idl/binding/realm';
@@ -26,9 +26,11 @@ const global: PlatformRecord<typeof implInst> = binding.projectGlobalRecord(impl
 const paired: PlatformRecord<typeof implInst> = binding.initializePlatformObject(platformObject, assembled, implInst);
 // @ts-expect-error The implementation must be supplied separately from the platform object.
 binding.initializePlatformObject(platformObject, assembled);
-const found: StampedImplInstance<typeof implInst> | undefined = getImplementationRecord(implInst)?.implInst;
+const found: StampedImplInstance<typeof implInst> | undefined = getPlatformRecord(implInst, PlatformRecordSource.Implementation)?.implInst;
+const foundInWorld: StampedImplInstance<typeof implInst> | undefined = binding.world.getPlatformRecord(implInst, PlatformRecordSource.Implementation)?.implInst;
+const foundInBinding: StampedImplInstance<typeof implInst> | undefined = binding.getPlatformRecord(implInst, PlatformRecordSource.Implementation)?.implInst;
 const stamped = stampImplementation(implInst, assembled, binding);
-const foundStamped: StampedImplInstance<typeof implInst> | undefined = getImplementationRecord(stamped)?.implInst;
+const foundStamped: StampedImplInstance<typeof implInst> | undefined = getPlatformRecord(stamped, PlatformRecordSource.Implementation)?.implInst;
 // @ts-expect-error Name lookup accepts a name, not an already assembled definition.
 binding.resolveInterface(assembled);
 // @ts-expect-error Internal creation requires the already assembled primary interface.
@@ -42,9 +44,13 @@ record.implInst.count.toFixed();
 // @ts-expect-error The record retains the implementation shape, not the platform shape.
 paired.implInst.authorProperty;
 // @ts-expect-error An unknown incoming value does not identify a concrete implementation type.
-getImplementationRecord(authorValue)?.implInst.count;
+getPlatformRecord(authorValue, PlatformRecordSource.Implementation)?.implInst.count;
 // @ts-expect-error A platform-object lookup cannot infer the shape of its implementation from its key.
-getPlatformRecord(platformObject)?.implInst.authorProperty;
+getPlatformRecord(platformObject, PlatformRecordSource.Platform)?.implInst.authorProperty;
+// @ts-expect-error Declared proxy resolution requires a binding world, not just a stamp reader.
+getPlatformRecord(authorValue, PlatformRecordSource.PlatformOrProxy);
+// @ts-expect-error A record lookup must state which identity it accepts.
+binding.getPlatformRecord(authorValue);
 
 const buffer: ArrayBufferLike | ArrayBufferView = binding.getConverter(binding.assembly.getIDLType(idlType.Uint8Array)).jsToIDL(authorValue);
 const returnedBuffer: ArrayBufferLike | ArrayBufferView = binding.getConverter(binding.assembly.getIDLType(idlType.ArrayBuffer)).idlToJS(authorValue);

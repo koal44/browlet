@@ -4,7 +4,9 @@ import { isCallable, isObject } from '../../js-engine/index';
 import type {
   IDLCallbackFunctionType, IDLCallbackInterfaceType, AssembledCallbackFunction,
 } from '../assembly/index';
-import { getPlatformRecord, IDLCallbackFunction, IDLCallbackInterface, CallbackFunctionStamper } from '../values/index';
+import {
+  getPlatformRecord, PlatformRecordSource, IDLCallbackFunction, IDLCallbackInterface, CallbackFunctionStamper,
+} from '../values/index';
 import type { WebIDLRealm } from '../environment';
 
 import { Converter, type ConversionSteps } from './converter';
@@ -68,5 +70,5 @@ export class CallbackInterfaceConverter<Type extends IDLCallbackInterfaceType = 
 
 /** Select a callback object's realm without changing the conversion's allocation realm. */
 function getCallbackRealm(value: object, realm: WebIDLRealm): WebIDLRealm {
-  return getPlatformRecord(value)?.realm ?? realm.callbacks.getAssociatedRealm(value);
+  return getPlatformRecord(value, PlatformRecordSource.Platform)?.realm ?? realm.callbacks.getAssociatedRealm(value);
 }

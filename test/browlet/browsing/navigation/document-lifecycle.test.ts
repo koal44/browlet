@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { createManualEventLoop, createManualRealm } from '../../../support/browlet-agent';
 import { createTestDocument } from '../../../support/dom';
 
+import { PlatformRecordSource } from '../../../../src/web-idl/index';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { createWindowEnvironment } from '../../../../src/browlet/integration/web-idl/index';
 import { UserAgent } from '../../../../src/browlet/user-agent';
@@ -99,7 +100,7 @@ describe('browsing context groups', () => {
     expect(realm).toBeInstanceOf(WindowRealm);
     expect(realm.agent).toBe(agent);
     expect(realm.windowImplementation).toBe(window);
-    expect(realm.globalObject).toBe(getBindingContext(realm).getObjectRecord(window)?.platformObject);
+    expect(realm.globalObject).toBe(getBindingContext(realm).getPlatformRecord(window, PlatformRecordSource.Implementation)?.platformObject);
     context.windowProxy.setAssociatedWindow(realm.globalObject);
     expect(project(window)).toBe(context.windowProxy.platform);
     expect(realm.globalThis).toBe(context.windowProxy.platform);
@@ -138,7 +139,7 @@ describe('browsing context groups', () => {
     expect(() => { realm.windowImplementation = window; })
       .toThrow('Realm Window implementation is already initialized');
     expect(realm.windowImplementation).toBe(window);
-    expect(realm.globalObject).toBe(getBindingContext(realm).getObjectRecord(window)?.platformObject);
+    expect(realm.globalObject).toBe(getBindingContext(realm).getPlatformRecord(window, PlatformRecordSource.Implementation)?.platformObject);
     expect(project(window)).toBe(realm.globalThis);
   });
 

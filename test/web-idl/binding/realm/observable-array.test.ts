@@ -6,7 +6,7 @@ import {
 } from '../../../../src/web-idl/core/index';
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
 import type { RealmBinding } from '../../../../src/web-idl/binding/realm';
-import { getPlatformRecord } from '../../../../src/web-idl/values/index';
+import { getPlatformRecord, PlatformRecordSource } from '../../../../src/web-idl/values/index';
 
 import { TestRealm as Realm } from '../../../support/web-idl-realm';
 
@@ -82,7 +82,7 @@ describe('Web IDL observable arrays', () => {
       'set 0 2',
       'delete 0 2',
     ]);
-    const implInst = getPlatformRecord(fixture.object)!.implInst;
+    const implInst = getPlatformRecord(fixture.object, PlatformRecordSource.Platform)!.implInst;
     expect(receivers).toHaveLength(4);
     for (const receiver of receivers) expect(receiver).toBe(implInst);
   });

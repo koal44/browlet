@@ -2,7 +2,7 @@ import { types } from 'node:util';
 import { describe, expect, it } from 'vitest';
 
 import {
-  BindingWorld, DOMExceptionImpl, QuotaExceededErrorImpl,
+  PlatformRecordSource, BindingWorld, DOMExceptionImpl, QuotaExceededErrorImpl,
   defineInterface, impl, roAttr, reference, op, idlType,
 } from '../../../../src/web-idl/index';
 
@@ -38,7 +38,7 @@ describe('DOMException implementation projection', () => {
       expect(context.realizeException(platform)).toBe(platform);
     }
     expect(platform).toHaveProperty('message', 'author override');
-    expect(unrelated.getObjectRecord(value)).toBeUndefined();
+    expect(unrelated.getPlatformRecord(value, PlatformRecordSource.Platform)).toBeUndefined();
   });
 
   it('respects ownership associated before the first projection', () => {

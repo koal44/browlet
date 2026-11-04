@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { HTML_NAMESPACE } from '../../../../src/infra/index';
-import { getPlatformRecord } from '../../../../src/web-idl/values/index';
+import { getPlatformRecord, PlatformRecordSource } from '../../../../src/web-idl/values/index';
 import { createTestDocument } from '../../../support/dom';
 import { itPassesWith } from '../../../test-runtime';
 
@@ -81,7 +81,7 @@ describe('native document.all', () => {
     const all: unknown = browser.document.all;
     expect(Boolean(all)).toBe(false);
     expect(all === undefined).toBe(false);
-    const record = getPlatformRecord(all)!;
+    const record = getPlatformRecord(all, PlatformRecordSource.Platform)!;
 
     expect(record.project()).toBe(all);
     expect(() => record.attachPlatformObject({})).toThrow('already associated');

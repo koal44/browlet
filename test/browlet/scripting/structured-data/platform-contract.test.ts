@@ -8,7 +8,7 @@ import {
   DetachedTransferableStamper,
 } from '../../../../src/browlet/scripting/transferable';
 import {
-  BindingWorld, defineDictionary, defineInterface, defineInterfaceMixin, definePartialInterface,
+  PlatformRecordSource, BindingWorld, defineDictionary, defineInterface, defineInterfaceMixin, definePartialInterface,
   impl, xattr, StructuredData, type Definition, type StampedPlatformObject,
   type SerialSteps, type TransferSteps, type SerializationContext, type DeserializationContext,
 } from '../../../../src/web-idl/index';
@@ -33,7 +33,7 @@ describe('HTML structured-data platform contracts', () => {
     ) as typeof DOMException;
     const source = new FirstDOMException('some message', 'IndexSizeError');
     Reflect.set(source, 'custom', 'not serialized');
-    const sourceBinding = first.getObjectRecord(source);
+    const sourceBinding = first.getPlatformRecord(source, PlatformRecordSource.Platform);
     if (!sourceBinding) throw new Error('DOMException was not projected');
     const steps = sourceBinding.assembled.serialSteps;
     if (!steps) throw new Error('DOMException is not registered as serializable');
@@ -78,7 +78,7 @@ describe('HTML structured-data platform contracts', () => {
       quota: 12,
       requested: 20,
     });
-    const sourceBinding = registration.getObjectRecord(source);
+    const sourceBinding = registration.getPlatformRecord(source, PlatformRecordSource.Platform);
     if (!sourceBinding) throw new Error('QuotaExceededError was not projected');
     const steps = sourceBinding.assembled.serialSteps;
     if (!steps) {

@@ -2,7 +2,7 @@ import { createManualRealm } from '../../../support/browlet-agent';
 import { describe, expect, it } from 'vitest';
 
 import {
-  BindingWorld, defineInterface, impl, xattr, type BindingContext,
+  PlatformRecordSource, BindingWorld, defineInterface, impl, xattr, type BindingContext,
 } from '../../../../src/web-idl/index';
 import { DOMExceptionImpl } from '../../../../src/web-idl/core/dom-exception';
 import {
@@ -252,7 +252,7 @@ describe('HTML structured transfer', () => {
 
     const result = structuredDeserializeWithTransfer(serialized, target);
     const transferred = result.transferredValues[0];
-    const resolved = target.getObjectRecord(transferred);
+    const resolved = target.getPlatformRecord(transferred, PlatformRecordSource.Platform);
     const clone = result.deserialized as { first: object; second: object; };
     expect(clone.first).toBe(transferred);
     expect(clone.second).toBe(transferred);

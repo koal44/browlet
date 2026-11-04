@@ -2,7 +2,7 @@ import { InternalError } from '../../../infra/index';
 import { isDataDescriptor, ordinarySetWithOwnDescriptor } from '../../../js-engine/index';
 
 import type { IDLOperation, AssembledInterface } from '../../assembly/index';
-import { getPlatformRecord } from '../../values/index';
+import { getPlatformRecord, PlatformRecordSource } from '../../values/index';
 
 import type { RealmBinding } from '../realm';
 import type { NamedPropertySteps } from './legacy';
@@ -136,7 +136,7 @@ export class GlobalPlatformObjectBinding {
     property: string,
     properties: NamedProperties,
   ): PropertyDescriptor {
-    const record = getPlatformRecord(global);
+    const record = getPlatformRecord(global, PlatformRecordSource.Platform);
     if (!record) throw new InternalError('Global object is not a platform object');
 
     const steps = this.#binding.getMemberBinding(properties.assembled, properties.getter)?.operationSteps;
@@ -156,7 +156,7 @@ export class GlobalPlatformObjectBinding {
     property: string,
     properties: NamedProperties,
   ): boolean {
-    const record = getPlatformRecord(global);
+    const record = getPlatformRecord(global, PlatformRecordSource.Platform);
     const target = record?.implInst;
     if (!target || !this.#getSupportedNames(target, properties).has(property)) {
       return false;

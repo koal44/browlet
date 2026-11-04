@@ -8,7 +8,7 @@ import { DefinitionAssembly } from '../../../src/web-idl/assembly/index';
 import { BindingWorld } from '../../../src/web-idl/binding/world';
 import { RealmBinding } from '../../../src/web-idl/binding/realm';
 import {
-  getImplementationObject, getImplementationRecord, getPlatformObject, getPlatformRecord,
+  getImplementationObject, getPlatformObject, getPlatformRecord, PlatformRecordSource,
   stampImplementation, isStampedImplInstance, isStampedPlatformObject,
 } from '../../../src/web-idl/values/index';
 
@@ -20,15 +20,23 @@ describe('Web IDL platform-object identity and state', () => {
     const binding = new RealmBinding(assembly, new Realm(), new BindingWorld([]), (ctx) => ({ realm: ctx.realm }));
     const assembled = binding.resolveInterface('Example');
     const implInst = stampImplementation({}, assembled, binding);
-    const record = getImplementationRecord(implInst);
+    const record = getPlatformRecord(implInst, PlatformRecordSource.Implementation);
 
     expect(record?.implInst).toBe(implInst);
     expect(record?.binding).toBe(binding);
     expect(record?.platformObject).toBeUndefined();
+    expect(binding.getPlatformRecord(implInst, PlatformRecordSource.Implementation)).toBe(record);
+    expect(binding.getPlatformRecord(implInst, PlatformRecordSource.Stamped)).toBe(record);
+    expect(binding.getPlatformRecord(implInst, PlatformRecordSource.Platform)).toBeUndefined();
+    expect(binding.getPlatformRecord(implInst, PlatformRecordSource.PlatformOrProxy)).toBeUndefined();
+    expect(record?.platformObject).toBeUndefined();
 
     const platformObject = {};
     expect(binding.initializePlatformObject(platformObject, assembled, implInst)).toBe(record);
-    expect(getPlatformRecord(platformObject)).toBe(record);
+    expect(getPlatformRecord(platformObject, PlatformRecordSource.Platform)).toBe(record);
+    expect(binding.getPlatformRecord(platformObject, PlatformRecordSource.Platform)).toBe(record);
+    expect(binding.getPlatformRecord(platformObject, PlatformRecordSource.Stamped)).toBe(record);
+    expect(binding.getPlatformRecord(platformObject, PlatformRecordSource.Implementation)).toBeUndefined();
     expect(getImplementationObject(platformObject)).toBe(implInst);
     expect(getPlatformObject(implInst)).toBe(platformObject);
   });
@@ -74,7 +82,7 @@ describe('Web IDL platform-object identity and state', () => {
     expect(second.isPlatformObject(object)).toBe(true);
     expect(second.implements(object, secondDerivedAssembled)).toBe(true);
     expect(second.implements(object, baseAssembled)).toBe(true);
-    expect(getPlatformRecord(object)).toBe(record);
+    expect(getPlatformRecord(object, PlatformRecordSource.Platform)).toBe(record);
     expect(record.implInst).toBe(implInst);
     expect(record.platformObject).toBe(object);
     expect(record.assembled).toBe(derivedAssembled);
@@ -107,8 +115,8 @@ describe('Web IDL platform-object identity and state', () => {
 
     const platformObject = second.project(ExampleImpl, implInst);
 
-    expect(getPlatformRecord(platformObject)).toBe(record);
-    expect(getImplementationRecord(implInst)).toBe(record);
+    expect(getPlatformRecord(platformObject, PlatformRecordSource.Platform)).toBe(record);
+    expect(getPlatformRecord(implInst, PlatformRecordSource.Implementation)).toBe(record);
     expect(record.realm).toBe(first.realm);
     expect(Object.getPrototypeOf(platformObject)).toBe(
       world.getRealmBinding(first.realm)!.getImplementationBinding(record.assembled).getInterfacePrototypeObject(),
@@ -183,7 +191,7 @@ describe('Web IDL platform-object identity and state', () => {
     expect(isStampedImplInstance(1)).toBe(false);
     expect(Object.isFrozen(implInst)).toBe(true);
     expect(Reflect.ownKeys(implInst)).toEqual(['count']);
-    expect(getImplementationRecord(implInst)?.implInst).toBe(implInst);
+    expect(getPlatformRecord(implInst, PlatformRecordSource.Implementation)?.implInst).toBe(implInst);
     expect(getPlatformObject(implInst)).toBeUndefined();
 
     const platformObject = {};
@@ -204,14 +212,14 @@ describe('Web IDL platform-object identity and state', () => {
       get: trap, getPrototypeOf: trap, defineProperty: trap, has: trap,
     });
 
-    expect(getImplementationRecord(proxy)).toBeUndefined();
+    expect(getPlatformRecord(proxy, PlatformRecordSource.Implementation)).toBeUndefined();
     expect(isStampedImplInstance(proxy)).toBe(false);
     const record = binding.initializePlatformObject({}, assembled, proxy);
     expect(isStampedImplInstance(proxy)).toBe(true);
-    expect(getImplementationRecord(proxy)).toBe(record);
+    expect(getPlatformRecord(proxy, PlatformRecordSource.Implementation)).toBe(record);
     revoke();
     expect(isStampedImplInstance(proxy)).toBe(true);
-    expect(getImplementationRecord(proxy)).toBe(record);
+    expect(getPlatformRecord(proxy, PlatformRecordSource.Implementation)).toBe(record);
     expect(getPlatformObject(proxy)).toBe(record.platformObject);
   });
 
@@ -227,20 +235,20 @@ describe('Web IDL platform-object identity and state', () => {
     const descriptors = Object.getOwnPropertyDescriptors(platformObject);
     const prototype = Reflect.getPrototypeOf(platformObject);
     stampImplementation(implInst, assembled, binding);
-    const record = getImplementationRecord(implInst);
+    const record = getPlatformRecord(implInst, PlatformRecordSource.Implementation);
 
     expect(isStampedPlatformObject(platformObject)).toBe(false);
     expect(binding.initializePlatformObject(platformObject, assembled, implInst)).toBe(record);
     expect(isStampedPlatformObject(platformObject)).toBe(true);
-    expect(getPlatformRecord(platformObject)).toBe(record);
+    expect(getPlatformRecord(platformObject, PlatformRecordSource.Platform)).toBe(record);
     expect(getPlatformObject(implInst)).toBe(platformObject);
     expect(getImplementationObject(platformObject)).toBe(implInst);
     expect(Reflect.ownKeys(platformObject)).toEqual(keys);
     expect(Object.getOwnPropertyDescriptors(platformObject)).toEqual(descriptors);
     expect(Reflect.getPrototypeOf(platformObject)).toBe(prototype);
     expect(Object.isFrozen(platformObject)).toBe(true);
-    expect(getPlatformRecord(Object.create(platformObject))).toBeUndefined();
-    expect(getPlatformRecord(new Proxy(platformObject, {}))).toBeUndefined();
+    expect(getPlatformRecord(Object.create(platformObject), PlatformRecordSource.Platform)).toBeUndefined();
+    expect(getPlatformRecord(new Proxy(platformObject, {}), PlatformRecordSource.Platform)).toBeUndefined();
     expect(isStampedPlatformObject(Object.create(platformObject))).toBe(false);
     expect(isStampedPlatformObject(new Proxy(platformObject, {}))).toBe(false);
     expect(isStampedPlatformObject(null)).toBe(false);
@@ -276,12 +284,12 @@ describe('Web IDL platform-object identity and state', () => {
     const implInst = {};
     const record = binding.initializePlatformObject(proxy, assembled, implInst);
 
-    expect(getPlatformRecord(proxy)).toBe(record);
+    expect(getPlatformRecord(proxy, PlatformRecordSource.Platform)).toBe(record);
     expect(isStampedPlatformObject(proxy)).toBe(true);
-    expect(getPlatformRecord(target)).toBeUndefined();
-    expect(getPlatformRecord(new Proxy(proxy, {}))).toBeUndefined();
+    expect(getPlatformRecord(target, PlatformRecordSource.Platform)).toBeUndefined();
+    expect(getPlatformRecord(new Proxy(proxy, {}), PlatformRecordSource.Platform)).toBeUndefined();
     revoke();
-    expect(getPlatformRecord(proxy)).toBe(record);
+    expect(getPlatformRecord(proxy, PlatformRecordSource.Platform)).toBe(record);
     expect(isStampedPlatformObject(proxy)).toBe(true);
     expect(getImplementationObject(proxy)).toBe(implInst);
   });
@@ -304,7 +312,7 @@ describe('Web IDL platform-object identity and state', () => {
     expect(() => second.initializePlatformObject(platformObject, assembled, secondImplInst))
       .toThrow('Platform object is already associated');
     expect(isStampedImplInstance(secondImplInst)).toBe(false);
-    expect(getPlatformRecord(platformObject)).toBe(record);
+    expect(getPlatformRecord(platformObject, PlatformRecordSource.Platform)).toBe(record);
     expect(second.isPlatformObject(platformObject)).toBe(false);
     expect(() => stampImplementation(platformObject, assembled, second))
       .toThrow('Implementation object is already stamped or is a platform object');
@@ -331,7 +339,7 @@ describe('Web IDL platform-object identity and state', () => {
     });
     const { first, second } = createRealmBindings(interfaceIDL);
     const object = first.allocatePlatformRecord(first.resolveInterface('RealmMutable')).platformObject!;
-    const originalRecord = getPlatformRecord(object);
+    const originalRecord = getPlatformRecord(object, PlatformRecordSource.Platform);
     const array = Reflect.get(object, 'numbers') as unknown[];
     array.push(1);
     const set = Reflect.get(object, 'set') as unknown;
@@ -340,7 +348,7 @@ describe('Web IDL platform-object identity and state', () => {
 
     second.changePlatformObjectRealm(object);
 
-    const changedRecord = getPlatformRecord(object);
+    const changedRecord = getPlatformRecord(object, PlatformRecordSource.Platform);
     expect(changedRecord).toBe(originalRecord);
     expect(changedRecord?.assembled)
       .toBe(originalRecord?.assembled);
@@ -373,7 +381,7 @@ describe('Web IDL platform-object identity and state', () => {
 
     expect(Reflect.getPrototypeOf(object))
       .toBe(second.getImplementationBinding(second.resolveInterface('RealmPrototypeFallback')).getInterfacePrototypeObject());
-    expect(getPlatformRecord(object)?.realm).toBe(first.realm);
+    expect(getPlatformRecord(object, PlatformRecordSource.Platform)?.realm).toBe(first.realm);
   });
 });
 

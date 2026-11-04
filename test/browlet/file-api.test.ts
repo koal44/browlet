@@ -22,6 +22,7 @@ import { expectBytesEqual } from '../support/bytes';
 import {
   observeBrowletPromise, performTestMicrotaskCheckpoint,
 } from './test-runtime';
+import { PlatformRecordSource } from '../../src/web-idl/index';
 
 describe('File API Blob projection', () => {
   it('completes a text-only Blob read', async () => {
@@ -453,7 +454,7 @@ describe('File API File and FileList projection', () => {
 
     const clone = window.structuredClone(list) as FileList;
 
-    if (!accessed) expect(ctx.getObjectRecord(file)?.platformObject).toBeUndefined();
+    if (!accessed) expect(ctx.getPlatformRecord(file, PlatformRecordSource.Platform)?.platformObject).toBeUndefined();
     expect(clone).toBeInstanceOf(requireFunction(window, 'FileList'));
     expect(clone.length).toBe(1);
     expect(clone.item(0)).toBeInstanceOf(requireFunction(window, 'File'));
@@ -472,7 +473,7 @@ describe('File API File and FileList projection', () => {
 
     const clone = window.structuredClone(list) as FileList;
 
-    expect(ctx.getObjectRecord(file)?.platformObject).toBeUndefined();
+    expect(ctx.getPlatformRecord(file, PlatformRecordSource.Platform)?.platformObject).toBeUndefined();
     expect(clone.length).toBe(2);
     expect(clone.item(0)).toBe(clone.item(1));
     expect(clone.item(0)).toBeInstanceOf(requireFunction(window, 'File'));

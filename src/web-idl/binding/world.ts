@@ -4,7 +4,7 @@ import { webIDLCommonDefinitions, type Definition } from '../core/index';
 
 import { DefinitionAssembly, type AssembledInterface, type IDLAttribute } from '../assembly/index';
 import {
-  getImplementationRecord, getPlatformRecord, PlatformRecord, type StampedImplInstance,
+  getPlatformRecord, PlatformRecordSource, PlatformRecord, type StampedImplInstance,
 } from '../values/index';
 import type { WebIDLEnvironment, WebIDLRealm } from '../environment';
 
@@ -166,11 +166,29 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
     return this.#realmBindings.get(realm);
   }
 
-  /** Find the record for either side of a platform/implementation pair in this world, associating native objects when possible. */
-  getObjectRecord(platformObjectOrImplInst: unknown): PlatformRecord | undefined {
-    const existing = getPlatformRecord(platformObjectOrImplInst) ??
-      getImplementationRecord(platformObjectOrImplInst);
+  /** Read an existing record in this world, following declared proxies only when requested. */
+  getPlatformRecord<T extends object>(implInst: T, source: PlatformRecordSource.Implementation): PlatformRecord<T> | undefined;
+  getPlatformRecord(platformObjectOrImplInst: unknown, source: PlatformRecordSource): PlatformRecord | undefined;
+  getPlatformRecord(platformObjectOrImplInst: unknown, source: PlatformRecordSource): PlatformRecord | undefined {
+    const allowProxy = source === PlatformRecordSource.PlatformOrProxy;
+    const record = getPlatformRecord(platformObjectOrImplInst, allowProxy ? PlatformRecordSource.Platform : source);
     // Registration retains this same world with its environment type erased.
+    const world = this as unknown as BindingWorld;
+    if (record?.binding.world === world) return record;
+    if (allowProxy) {
+      for (const proxyTarget of this.#assembly.proxyObjects.resolveReceivers(platformObjectOrImplInst)) {
+        const targetRecord = getPlatformRecord(proxyTarget, PlatformRecordSource.Platform);
+        if (targetRecord?.binding.world === world) return targetRecord;
+      }
+    }
+  }
+
+  /**
+   * Read either direct stamp, or create a record for a declared engine-owned object with a known owner.
+   * Creation reuses that object as both implementation and platform; it does not allocate a platform object.
+   */
+  getOrCreatePlatformRecord(platformObjectOrImplInst: unknown): PlatformRecord | undefined {
+    const existing = getPlatformRecord(platformObjectOrImplInst, PlatformRecordSource.Stamped);
     if (existing) return existing.binding.world === (this as unknown as BindingWorld) ? existing : undefined;
     if (!isObject(platformObjectOrImplInst)) return;
     const platformObject = platformObjectOrImplInst;
@@ -185,19 +203,19 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
 
   /** Retrieve the implementation paired with a platform object in this world. */
   unwrap(platformObject: object): StampedImplInstance | undefined {
-    const record = this.getObjectRecord(platformObject);
+    const record = this.getOrCreatePlatformRecord(platformObject);
     return record?.platformObject === platformObject ? record.implInst : undefined;
   }
 
   /** Project an implementation, associating native objects when their creation realm belongs to this world. */
   project(implInst: object): object | null | undefined {
-    const record = this.getObjectRecord(implInst);
+    const record = this.getOrCreatePlatformRecord(implInst);
     return record?.implInst === implInst ? record.project() : undefined;
   }
 
   /** Find the owning realm from an implementation or platform object associated with this world. */
   getRealm(platformObjectOrImplInst: object): WebIDLRealm | undefined {
-    return this.getObjectRecord(platformObjectOrImplInst)?.realm;
+    return this.getPlatformRecord(platformObjectOrImplInst, PlatformRecordSource.Stamped)?.realm;
   }
 }
 
@@ -213,6 +231,6 @@ export type BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> = 
   | 'realm' | 'InternalPromise' | 'DOMException' | 'getEnvironment' | 'getBindingContext'
   | 'install' | 'projectGlobalObject' | 'createPlatformRecord' | 'isInterfaceExposed'
   | 'jsToImpl' | 'implToJS' | 'createCallbackFunction' | 'createFrozenArray' | 'realizeException'
-  | 'construct' | 'resolveArguments' | 'getObjectRecord' | 'associate' | 'project' | 'unwrap'
+  | 'construct' | 'resolveArguments' | 'getPlatformRecord' | 'getOrCreatePlatformRecord' | 'associate' | 'project' | 'unwrap'
   | 'getPlatformObjectPrototype' | 'createMemberFunction' | 'resolveInterface' | 'performSecurityCheck'
 >;

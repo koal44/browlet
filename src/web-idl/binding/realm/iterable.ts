@@ -3,7 +3,7 @@ import { defineDataProperty, defineMethod, isObject, type JSFunction, type JSIte
 
 import type { IDLIterable, AssembledInterface } from '../../assembly/index';
 import {
-  getImplementationRecord, getPlatformRecord, type StampedImplInstance, IDLCallbackFunction,
+  getPlatformRecord, PlatformRecordSource, type StampedImplInstance, IDLCallbackFunction,
 } from '../../values/index';
 
 import type { RealmBinding } from '../realm';
@@ -172,7 +172,7 @@ export class SynchronousIterableBinding {
     thisArgument: unknown,
   ): JSIteratorResult {
     if (!isObject(thisArgument)) this.#throwTypeError('Illegal invocation');
-    if (getPlatformRecord(thisArgument)?.binding.world === this.#binding.world) {
+    if (getPlatformRecord(thisArgument, PlatformRecordSource.Platform)?.binding.world === this.#binding.world) {
       this.#binding.performSecurityCheck(
         thisArgument,
         'next',
@@ -180,7 +180,7 @@ export class SynchronousIterableBinding {
       );
     }
     const iterator = DefaultIteratorStamper.get(thisArgument);
-    const receiver = iterator && getImplementationRecord(iterator.target);
+    const receiver = iterator && getPlatformRecord(iterator.target, PlatformRecordSource.Implementation);
     if (!iterator || iterator.assembled !== assembled ||
       receiver?.binding.world !== this.#binding.world) {
       this.#throwTypeError('Illegal invocation');

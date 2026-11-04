@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { TypeError as InternalTypeError } from '../../../src/infra/exceptions';
 import {
-  arg, atArg, attr, BindingWorld, ctor,
+  PlatformRecordSource, arg, atArg, attr, BindingWorld, ctor,
   defineProxyObject, defineInterface, idlType, impl, invokeWith, op, promise,
   reference, roAttr, xattr, type BindingContext, type WebIDLEnvironment,
 } from '../../../src/web-idl/index';
@@ -530,12 +530,12 @@ describe('Web IDL binding worlds and realm registration', () => {
 
     expect(second.project(implementation)).toBeUndefined();
     expect(second.getRealm(implementation)).toBeUndefined();
-    expect(secondContext.getObjectRecord(implementation)).toBeUndefined();
+    expect(secondContext.getPlatformRecord(implementation, PlatformRecordSource.Implementation)).toBeUndefined();
     if (object) {
       expect(second.unwrap(object)).toBeUndefined();
       expect(second.getRealm(object)).toBeUndefined();
       expect(secondContext.unwrap(object, ExampleImpl)).toBeUndefined();
-      expect(secondContext.getObjectRecord(object)).toBeUndefined();
+      expect(secondContext.getPlatformRecord(object, PlatformRecordSource.Platform)).toBeUndefined();
     }
     expect(() => secondContext.project(ExampleImpl, implementation))
       .toThrow('Implementation instance belongs to another binding world');
@@ -686,7 +686,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     };
     const constructed = new Constructor();
 
-    expect(registration.getObjectRecord(constructed)
+    expect(registration.getPlatformRecord(constructed, PlatformRecordSource.Platform)
       ?.assembled)
       .toBe(internal.assembled);
     expect(allocations).toBe(2);

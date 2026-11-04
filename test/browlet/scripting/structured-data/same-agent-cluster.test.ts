@@ -11,7 +11,7 @@ import {
   structuredSerializeWithTransfer, structuredDeserializeWithTransfer,
 } from '../../../../src/browlet/scripting/structured-data/transfer';
 import {
-  BindingWorld, defineInterface, impl, xattr, type SerialSteps, type TransferSteps,
+  PlatformRecordSource, BindingWorld, defineInterface, impl, xattr, type SerialSteps, type TransferSteps,
 } from '../../../../src/web-idl/index';
 
 describe('HTML same-agent-cluster structured data', () => {
@@ -24,7 +24,7 @@ describe('HTML same-agent-cluster structured data', () => {
     expect(source.realm.agent).not.toBe(peer.realm.agent);
     expect(source.realm.agent.agentCluster).toBe(peer.realm.agent.agentCluster);
     expect(clone).not.toBe(value);
-    expect(peer.getObjectRecord(clone)?.realm).toBe(peer.realm);
+    expect(peer.getPlatformRecord(clone, PlatformRecordSource.Platform)?.realm).toBe(peer.realm);
     expect(peer.unwrap(clone, ResourceImpl)?.value).toBe(42);
   });
 

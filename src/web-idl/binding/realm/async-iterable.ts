@@ -4,7 +4,7 @@ import { defineDataProperty, defineMethod, isObject, type JSFunction } from '../
 import {
   anyType, type IDLAsyncIterable, type AssembledArgument, type AssembledInterface,
 } from '../../assembly/index';
-import { getPlatformRecord, type StampedImplInstance, IDLPromise } from '../../values/index';
+import { getPlatformRecord, PlatformRecordSource, type StampedImplInstance, IDLPromise } from '../../values/index';
 
 import type { RealmBinding } from '../realm';
 
@@ -137,7 +137,7 @@ export class AsyncIterableBinding {
   // https://webidl.spec.whatwg.org/#dfn-asynchronous-iterator-prototype-object
   #getIteratorState(value: unknown, assembled: AssembledInterface, identifier: string): AsyncIteratorRecord {
     if (!isObject(value)) this.#throwTypeError('Illegal invocation');
-    if (getPlatformRecord(value)?.binding.world === this.#binding.world) {
+    if (getPlatformRecord(value, PlatformRecordSource.Platform)?.binding.world === this.#binding.world) {
       this.#binding.performSecurityCheck(value, identifier, 'method');
     }
     const state = AsyncIteratorStamper.get(value);

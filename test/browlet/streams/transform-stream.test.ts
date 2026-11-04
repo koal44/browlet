@@ -1,4 +1,4 @@
-import { idlType, type StampedPlatformObject } from '../../../src/web-idl/index';
+import { PlatformRecordSource, idlType, type StampedPlatformObject } from '../../../src/web-idl/index';
 import { internalType } from '../../../src/infra/promises';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { createPromiseConstructor, createTransformStream, observe } from './implementation-fixture';
@@ -231,9 +231,9 @@ describe('transform-stream projection', () => {
     const stream = createTransformStream(null);
     stream.setUp(() => undefined);
 
-    expect(bindings.getObjectRecord(stream)).toBeUndefined();
+    expect(bindings.getPlatformRecord(stream, PlatformRecordSource.Platform)).toBeUndefined();
     const object = bindings.project(TransformStreamImpl, stream);
-    const projectedStream = bindings.getObjectRecord(object);
+    const projectedStream = bindings.getPlatformRecord(object, PlatformRecordSource.Platform);
     expect(projectedStream?.assembled.name)
       .toBe('TransformStream');
     expect(projectedStream?.implInst).toBe(stream);

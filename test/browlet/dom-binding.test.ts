@@ -1,6 +1,7 @@
 import { createManualRealm } from '../support/browlet-agent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { PlatformRecordSource } from '../../src/web-idl/index';
 import { browletBindingWorld, createBrowletEnvironmentInit } from '../../src/browlet/integration/web-idl/index';
 import { getBindingContext, getRelevantRealm, unwrap } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
@@ -760,8 +761,8 @@ describe('Browlet DOM binding', () => {
 
     expect(event.timeStamp).toBe(123);
     expect(event.isTrusted).toBe(true);
-    expect(ctx.getObjectRecord(event)?.realm).toBe(realm);
-    expect(ctx.getObjectRecord(target)?.platformObject).toBeUndefined();
+    expect(ctx.getPlatformRecord(event, PlatformRecordSource.Implementation)?.realm).toBe(realm);
+    expect(ctx.getPlatformRecord(target, PlatformRecordSource.Implementation)?.platformObject).toBeUndefined();
   });
 
   it('creates an initialized Document without allocating its platform object', () => {
@@ -773,8 +774,8 @@ describe('Browlet DOM binding', () => {
     const event = document.createTrustedEvent();
 
     expect(event.timeStamp).toBe(456);
-    expect(ctx.getObjectRecord(event)?.realm).toBe(realm);
-    expect(ctx.getObjectRecord(document)?.platformObject === undefined).toBe(true);
+    expect(ctx.getPlatformRecord(event, PlatformRecordSource.Implementation)?.realm).toBe(realm);
+    expect(ctx.getPlatformRecord(document, PlatformRecordSource.Implementation)?.platformObject === undefined).toBe(true);
   });
 
   it.each(['element', 'text', 'fragment'] as const)(
@@ -791,11 +792,11 @@ describe('Browlet DOM binding', () => {
       const event = node.createTrustedEvent();
 
       expect(event.timeStamp).toBe(789);
-      expect(ctx.getObjectRecord(node)?.platformObject === undefined).toBe(true);
-      expect(ctx.getObjectRecord(event)?.realm).toBe(realm);
+      expect(ctx.getPlatformRecord(node, PlatformRecordSource.Implementation)?.platformObject === undefined).toBe(true);
+      expect(ctx.getPlatformRecord(event, PlatformRecordSource.Implementation)?.realm).toBe(realm);
       const platformEvent = other.project(EventImpl, event);
       expect(platformEvent).toBeInstanceOf(getConstructor(first, 'Event'));
-      expect(ctx.getObjectRecord(event)?.realm).toBe(realm);
+      expect(ctx.getPlatformRecord(event, PlatformRecordSource.Implementation)?.realm).toBe(realm);
     },
   );
 
@@ -808,7 +809,7 @@ describe('Browlet DOM binding', () => {
     const event = window.createTrustedEvent();
 
     expect(event.timeStamp).toBe(321);
-    expect(ctx.getObjectRecord(event)?.realm).toBe(realm);
+    expect(ctx.getPlatformRecord(event, PlatformRecordSource.Implementation)?.realm).toBe(realm);
   });
 
   it('applies inherited event invocation to internally created nodes', () => {

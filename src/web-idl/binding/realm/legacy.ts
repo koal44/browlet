@@ -2,7 +2,7 @@ import { InternalError } from '../../../infra/index';
 import { isAccessorDescriptor, isDataDescriptor, ordinarySetWithOwnDescriptor } from '../../../js-engine/index';
 
 import type { IDLOperation, AssembledInterface } from '../../assembly/index';
-import { getImplementationObject, getImplementationRecord, type PlatformRecord } from '../../values/index';
+import { getImplementationObject, getPlatformRecord, PlatformRecordSource, type PlatformRecord } from '../../values/index';
 import type { ConversionSteps } from '../../converters/index';
 
 import type { RealmBinding } from '../realm';
@@ -621,7 +621,7 @@ export class LegacyPlatformObjectBinding {
 
   // Proxy traps run after their implementation has been associated with the platform object.
   #getReceiverRecord(implInst: object): PlatformRecord {
-    const record = getImplementationRecord(implInst);
+    const record = getPlatformRecord(implInst, PlatformRecordSource.Implementation);
     if (!record) throw new InternalError('Legacy object implementation is not associated');
     return record;
   }

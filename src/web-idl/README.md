@@ -213,12 +213,12 @@ The reviewed native `Instance.exports` getter remains intact. It accepts genuine
 Instances even without a binding record; its generated member type is still a
 [documented dependency](../browlet/webassembly/ROADMAP.md#52-reviewed-instance-constructor-and-exports).
 Memory, Table, and Global likewise retain their native instance members while Binding adapts their constructors.
-Conversion and overload checks use their declared types. Generic record lookup
+Conversion and overload checks use their declared types. Native association
 checks the world's assembled native declarations without an ambient object registry.
 
 Native records bypass ordinary implementation initialization and platform-object
-allocation. Conversion, projection, unwrapping, and record/realm lookup share
-`BindingWorld.getObjectRecord()`: an existing stamp keeps its owner; an untracked
+allocation. Conversion, projection, unwrapping, and serialization explicitly call
+`getOrCreatePlatformRecord()`: an existing stamp keeps its owner; an untracked
 native object gets both stamps when JS Engine can recover its registered creation
 realm exactly. Frozen objects remain usable and acquire no observable properties.
 The native Promise from `compile()` stays untouched; its Module is associated only
@@ -227,11 +227,22 @@ reliably, so native values created outside our constructor adapter remain usable
 but unassociated. Values from unregistered realms or another world likewise never
 acquire a fabricated or replacement owner in the receiving world.
 
-There is one record type, `PlatformRecord`. The free `getPlatformRecord(platformObject)`
-and `getImplementationRecord(implInst)` functions read that same record through the
-two private stamps. They neither check the world nor associate an untracked object.
-The world/context `getObjectRecord(platformObjectOrImplInst)` accepts either identity,
-checks ownership, and can establish the native association described above.
+There is one record type, `PlatformRecord`, and one lookup name:
+`getPlatformRecord(input, PlatformRecordSource)`. The required source selects
+`Implementation`, `Platform`, `PlatformOrProxy`, or `Stamped` (either direct stamp).
+Known-side callers read only that stamp. `getOrCreatePlatformRecord(input)` reads
+either direct stamp before attempting the creation described above. Structured
+serialization uses it because its graph includes author platform objects,
+implementation values supplied by interface serialization steps, and untracked
+engine-owned objects; it does not need a second traversal contract.
+
+The world/context method checks world ownership. `PlatformOrProxy` also follows
+declared proxy receivers, selecting their current target on every call. It does
+not accept implementation-only objects or cache a WindowProxy's changing target.
+The free function in `values/` reads direct stamps without checking a world; its
+type excludes `PlatformOrProxy`, which needs the world's declarations. Neither
+lookup nor `getRealm()` creates a record. Native association remains the explicit
+operation described above; ordinary allocation remains deferred until projection.
 
 Consumers use the `assembly/`, `converters/`, `values/`, and `binding/realm/` indexes;
 modules within those folders import their siblings directly. Infra also offers
@@ -883,8 +894,11 @@ stable public identity. Both return `undefined` for values they do not recognize
 Declared proxy values retain their handles through dictionaries, sequences,
 and unions; `any` and `object` values retain their JavaScript representation.
 An optional `resolveReceiver(handle)` selects the current platform object
-supplying interface members, so navigation can replace a Window while retaining
-its WindowProxy handle and public identity. These definitions install no global
+supplying interface members. Interface-typed input conversion, union selection,
+and overload selection use that same association, checking the binding world and
+expected interface. Conversion retains that selected implementation; it does not
+turn an interface-typed argument into a live proxy handle. Navigation can replace
+a Window while retaining its WindowProxy handle and public identity. These definitions install no global
 or prototype and emit no IDL declaration text. Using JavaScript's `Proxy` alone
 does not need this declaration: legacy indexed/named objects and observable arrays
 keep their existing binding machinery.

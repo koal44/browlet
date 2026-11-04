@@ -3,7 +3,7 @@ import { EOL } from 'node:os';
 import { InternalError } from '../../../infra/index';
 import { isObject } from '../../../js-engine/index';
 import {
-  BindingWorld, QuotaExceededErrorImpl, reference, type BindingContext, type ImplementationClass,
+  PlatformRecordSource, BindingWorld, QuotaExceededErrorImpl, reference, type BindingContext, type ImplementationClass,
   type StampedPlatformObject,
 } from '../../../web-idl/index';
 import { type PermissionDescriptor } from '../../../permissions/index';
@@ -225,7 +225,8 @@ export function createBrowletEnvironmentInit(context: BindingContext<BrowletEnvi
     deserializeWithTransfer: (record) => {
       const result = structuredDeserializeWithTransfer(record, context);
       // Keep the message graph projected; internal delivery consumes implementation ports.
-      result.transferredValues = result.transferredValues.map((value) => context.getObjectRecord(value)?.implInst ?? value);
+      result.transferredValues = result.transferredValues.map((value) =>
+        context.getPlatformRecord(value, PlatformRecordSource.Platform)?.implInst ?? value);
       return result;
     },
     getMessagePorts: (transfer) => {

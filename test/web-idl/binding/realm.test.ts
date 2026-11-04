@@ -10,7 +10,7 @@ import {
 import { DefinitionAssembly } from '../../../src/web-idl/assembly/index';
 import { BindingWorld } from '../../../src/web-idl/binding/world';
 import { RealmBinding, type SecurityCheckType } from '../../../src/web-idl/binding/realm';
-import { getPlatformRecord, PlatformRecord } from '../../../src/web-idl/values/index';
+import { getPlatformRecord, PlatformRecordSource, PlatformRecord } from '../../../src/web-idl/values/index';
 
 import { getInstalledInterface, getMemberBinding } from '../../support/web-idl-binding';
 import { TestRealm as Realm } from '../../support/web-idl-realm';
@@ -575,7 +575,7 @@ describe('Web IDL realm interface bindings', () => {
     const pointObject = projected
       ? local.allocatePlatformRecord(local.resolveInterface('JSONPoint')).platformObject!
       : undefined;
-    const pointImpl = pointObject ? getPlatformRecord(pointObject)!.implInst : new JSONPointImpl();
+    const pointImpl = pointObject ? getPlatformRecord(pointObject, PlatformRecordSource.Platform)!.implInst : new JSONPointImpl();
     getMemberBinding(local.getImplementationBinding(local.resolveInterface(holder.name)), pointAttribute).attributeSteps = {
       get() { return pointImpl; },
     };
@@ -592,7 +592,7 @@ describe('Web IDL realm interface bindings', () => {
 
     expect(json).toBeInstanceOf(foreign.realm.Object);
     const child = Reflect.get(json as object, 'point') as object;
-    expect(getPlatformRecord(child)?.binding).toBe(local);
+    expect(getPlatformRecord(child, PlatformRecordSource.Platform)?.binding).toBe(local);
     if (pointObject) expect(child).toBe(pointObject);
   });
 

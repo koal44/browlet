@@ -1,7 +1,7 @@
 import { InternalError } from '../../../../infra/index';
 import { isCallable, isDataDescriptor } from '../../../../js-engine/index';
 import {
-  isArrayIndex, type AssembledInterface, type BindingContext, type ExtendedAttribute,
+  PlatformRecordSource, isArrayIndex, type AssembledInterface, type BindingContext, type ExtendedAttribute,
   type PlatformRecord, type SecurityCheckBinding, type SecurityCheckType,
 } from '../../../../web-idl/index';
 import { areSameOrigin, areSameOriginDomain, type Origin } from '../../../../url/index';
@@ -288,7 +288,7 @@ export class CrossOriginObjectBinding {
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#isplatformobjectsameorigin-(-o-)
   isPlatformObjectSameOrigin(object: object): boolean {
     const record = this.#requireRecord(object);
-    // getObjectRecord checks world identity; Browlet composes this world with Browlet environments.
+    // getPlatformRecord checks world identity; Browlet composes this world with Browlet environments.
     const targetEnv = record.binding.getEnvironment() as BrowletEnvironment;
     return areSameOriginDomain(this.#context.getEnvironment().origin, targetEnv.origin);
   }
@@ -375,7 +375,7 @@ export class CrossOriginObjectBinding {
   }
 
   #getRecord(object: object): Readonly<PlatformRecord> | undefined {
-    const record = this.#context.getObjectRecord(object);
+    const record = this.#context.getPlatformRecord(object, PlatformRecordSource.Platform);
     if (record?.platformObject !== object) return undefined;
     return prepareCrossOriginObject(record.assembled) === null ? undefined : record;
   }

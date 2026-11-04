@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { endOfIteration, TypeError as InternalTypeError } from '../../../src/infra/index';
 import {
-  arg, asyncIter, atArg, attr, BindingWorld, ctor, defineInterface, idlType, impl, invokeWith, iter, op,
+  PlatformRecordSource, arg, asyncIter, atArg, attr, BindingWorld, ctor, defineInterface, idlType, impl, invokeWith, iter, op,
   reference, serializeDefinitions, staticOp, stringifier,
 } from '../../../src/web-idl/index';
 import { DefinitionAssembly, validateDefinitions } from '../../../src/web-idl/assembly/index';
@@ -151,7 +151,7 @@ describe('Implementation arrays', () => {
     expect(world.getRealm(block)).toBe(second.realm);
     expect(() => q.quote.call({})).toThrow(first.realm.TypeError);
     // Lookup failures still cross the invoking member's exception boundary.
-    Object.defineProperty(second.getObjectRecord(block)!.implInst, 'quote', {
+    Object.defineProperty(second.getPlatformRecord(block, PlatformRecordSource.Platform)!.implInst, 'quote', {
       get() { throw new InternalTypeError('implementation lookup failed'); },
     });
     expect(() => q.quote.call(block)).toThrow(first.realm.TypeError);

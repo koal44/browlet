@@ -33,8 +33,10 @@ Binding adapts constructor calls through a Proxy, applies argument conversion an
 realm before applying that prototype. The native prototype and undeclared static members remain intact.
 Instance members, inheritance, and partial interfaces remain outside that integration.
 
-Binding associates other native values on first conversion or record lookup when
-JS Engine can identify their registered creation realm exactly. Existing records
+Binding explicitly associates other native values at conversion, projection,
+unwrapping, and serialization boundaries when JS Engine can identify their
+registered creation realm exactly. Record and realm getters only read existing
+associations. Existing records
 retain their owner. Stock Node's prototype/evaluation guesses are insufficient for
 permanent native ownership, so untracked native values remain usable without a
 record there. Native Promise results, including `WebAssembly.compile()`, need no
@@ -1115,10 +1117,14 @@ components do not import it.
 
 Browlet's [timing foundation](browlet/timing/README.md) supplies shared clocks,
 precision, and time origins without importing DOM or Performance. The Performance
-API consumes timing and DOM events. Event, EventTarget, and the UI Events
-specializations form one component in `browlet/dom/events`, below HTML scripting;
-its implementation modules import each other directly. HTML handler activation
-uses its `EventListenerCallback` with Binding-supplied callback-realm metadata, so DOM
+API consumes timing and DOM events. Event and EventTarget form the shared
+component in `browlet/dom/events`, below HTML scripting; its implementation
+modules import each other directly. The [UI Events hierarchy](browlet/interaction/events/ROADMAP.md)
+lives in `interaction/events/` as a foundation below DOM nodes,
+separate from the higher interaction producers, following the navigation/storage
+event pattern. DOM dispatch uses Event's `isMouseEvent()` predicate and retains
+only a type reference to MouseEventImpl. HTML handler activation
+uses DOM's `EventListenerCallback` with Binding-supplied callback-realm metadata, so DOM
 owns current-event bookkeeping for handlers and ordinary listeners alike. The
 event component retains only type references to HTML/node owners. XHR's
 ProgressEvent lives in browser integration and reuses that event machinery.

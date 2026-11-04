@@ -4,7 +4,7 @@ import {
   asyncIter, defineInterface, defineProxyObject, idlType, impl, iter, maplike, op, setlike,
 } from '../../../../src/web-idl/core/index';
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
-import { getPlatformRecord } from '../../../../src/web-idl/values/index';
+import { getPlatformRecord, PlatformRecordSource } from '../../../../src/web-idl/values/index';
 
 import { TestRealm } from '../../../support/web-idl-realm';
 
@@ -52,7 +52,7 @@ describe('Web IDL direct collection and iterable receivers', () => {
       const methodBinding = world.getRealmBinding(methodRealm)!;
       // Ordinary operations accept both aliases and the global fallback. These
       // collection/iterable entry points deliberately require a direct receiver.
-      methodBinding.globalObject = getPlatformRecord(methodOwner);
+      methodBinding.globalObject = getPlatformRecord(methodOwner, PlatformRecordSource.Platform);
       const ping = Reflect.get(methodOwner, 'ping') as () => boolean;
       expect(Reflect.apply(ping, alias, [])).toBe(true);
       expect(Reflect.apply(ping, undefined, [])).toBe(true);

@@ -76,7 +76,7 @@ class StructuredSerializer {
   }
 
   serialize(value: unknown): SerializedRecord {
-    const record = this.#ctx.getObjectRecord(value);
+    const record = this.#ctx.getOrCreatePlatformRecord(value);
     const remembered = this.#memory.get(record?.implInst ?? value);
     if (remembered !== undefined) return remembered;
 

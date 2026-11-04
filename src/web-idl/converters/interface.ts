@@ -2,7 +2,7 @@ import { InternalError } from '../../infra/index';
 import { isObject } from '../../js-engine/index';
 
 import type { IDLInterfaceType, IDLProxyType } from '../assembly/index';
-import { getPlatformRecord } from '../values/index';
+import { PlatformRecordSource } from '../values/index';
 
 import { Converter, type ConversionSteps } from './converter';
 
@@ -15,16 +15,13 @@ export class InterfaceConverter<Type extends IDLInterfaceType = IDLInterfaceType
     if (isInstance) {
       return (value) => {
         if (!isInstance(value)) this.throwTypeError(`Value does not implement ${assembled.name}`);
-        this.binding.getObjectRecord(value);
+        this.binding.getOrCreatePlatformRecord(value);
         return value as object;
       };
     }
     return (value) => {
-      const record = getPlatformRecord(value);
-      if (
-          record?.binding.world === this.binding.world &&
-          record.implements(assembled)
-      ) return record.implInst;
+      const record = this.binding.getPlatformRecord(value, PlatformRecordSource.PlatformOrProxy);
+      if (record?.implements(assembled)) return record.implInst;
       return this.throwTypeError(`Value does not implement ${assembled.name}`);
     };
   }

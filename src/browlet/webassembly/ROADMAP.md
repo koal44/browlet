@@ -512,8 +512,8 @@ original constructor identity. No new declaration hook, addon, Node, or V8 patch
 is needed.
 
 **Native tracking:** Constructed Modules are associated immediately on every
-backend. Compiled Modules and other native values are associated on their first
-Binding conversion or record lookup when the existing addon can recover their
+backend. Binding explicitly associates compiled Modules and other native values
+when the existing addon can recover their
 registered creation realm. The record keeps the native identity and owner across
 realms, prototype changes, and freezing. No additional Promise reaction or
 resolution is inserted into `compile()`. Without the addon, exact ownership of

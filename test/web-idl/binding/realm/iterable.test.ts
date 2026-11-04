@@ -7,7 +7,7 @@ import {
   BindingWorld, defineInterface, idlType, impl, iter, reference, type IterableMember,
 } from '../../../../src/web-idl/index';
 import type { ValuePair } from '../../../../src/web-idl/binding/realm/iterable';
-import { getPlatformRecord } from '../../../../src/web-idl/values/index';
+import { getPlatformRecord, PlatformRecordSource } from '../../../../src/web-idl/values/index';
 
 import { getMemberBinding } from '../../../support/web-idl-binding';
 import { TestRealm as Realm } from '../../../support/web-idl-realm';
@@ -56,7 +56,7 @@ describe('Web IDL synchronous iterable declarations', () => {
       return pairs.get(this) ?? [];
     };
     const object = binding.allocatePlatformRecord(binding.resolveInterface('PairCollection')).platformObject!;
-    pairs.set(getPlatformRecord(object)!.implInst, [
+    pairs.set(getPlatformRecord(object, PlatformRecordSource.Platform)!.implInst, [
       ['one', 1],
       ['two', 2],
     ]);

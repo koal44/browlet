@@ -6,7 +6,7 @@ import {
   arg, ctor, defineDictionary, defineInterface, defineNamespace, idlType, op, reference, sequence, staticOp, union, xattr,
 } from '../../../src/web-idl/core/index';
 import { BindingWorld } from '../../../src/web-idl/binding/world';
-import { getPlatformRecord } from '../../../src/web-idl/values/platform';
+import { getPlatformRecord, PlatformRecordSource } from '../../../src/web-idl/values/platform';
 import { createBinding, installTestBindings } from '../../support/web-idl-binding';
 import { createConversionSteps, expectRealmTypeError } from '../../support/web-idl-conversion';
 import { TestRealm } from '../../support/web-idl-realm';
@@ -15,6 +15,14 @@ import { TestRealm } from '../../support/web-idl-realm';
 const nativeMap = defineInterface({
   name: 'NativeMap', members: [],
   interfaceOverride: { isInstance: hasMapData },
+});
+
+it('does not associate an untracked native object during record or realm lookup', () => {
+  const { binding, realm } = createBinding([nativeMap]);
+  const map = new realm.Map();
+  expect(binding.getPlatformRecord(map, PlatformRecordSource.Platform)).toBeUndefined();
+  expect(binding.world.getRealm(map)).toBeUndefined();
+  expect(getPlatformRecord(map, PlatformRecordSource.Platform)).toBeUndefined();
 });
 
 it('installs converted static operations while preserving each native constructor and prototype', () => {
@@ -108,7 +116,7 @@ it('returns and records the native constructor result without an extra platform 
   expect(Reflect.get(value, 'constructor')).toBe(constructor);
   expect(constructor.length).toBe(1);
   expect(constructor.name).toBe('Map');
-  const record = getPlatformRecord(value);
+  const record = getPlatformRecord(value, PlatformRecordSource.Platform);
   expect(record).toBeDefined();
   expect(record!.implInst).toBe(value);
   expect(record!.platformObject).toBe(value);
@@ -124,10 +132,10 @@ it('returns and records the native constructor result without an extra platform 
   // Native conversion remains usable across worlds without moving its established owner.
   expect(other.jsToImpl(value, reference('NativeMap'))).toBe(value);
   expect(other.implToJS(value, reference('NativeMap'))).toBe(value);
-  expect(other.getObjectRecord(value)).toBeUndefined();
+  expect(other.getPlatformRecord(value, PlatformRecordSource.Platform)).toBeUndefined();
   expect(otherWorld.project(value)).toBeUndefined();
   expect(otherWorld.unwrap(value)).toBeUndefined();
-  expect(getPlatformRecord(value)).toBe(record);
+  expect(getPlatformRecord(value, PlatformRecordSource.Platform)).toBe(record);
 });
 
 describe.each(['direct', 'prepared'] as const)('native interface conversion (%s)', (mode) => {
