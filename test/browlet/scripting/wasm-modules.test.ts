@@ -335,6 +335,30 @@ describe('HTML WebAssembly module records', () => {
     });
   });
 
+  // The private binding lookup is deliberately absent on unreviewed engines.
+  // Keep the required result there as the existing, approved re-export gap.
+  const native = createRequire(__filename)('../../../node-compat/test/support/native-vm.cjs') as {
+    haveSameModuleBinding?: unknown;
+  };
+  const reexportTest = typeof native.haveSameModuleBinding === 'function' ? it : it.fails;
+  reexportTest('preserves a Global through JavaScript re-exports and HTML Wasm instantiation', async () => {
+    await runInHostTask(() => {
+      const f = fixture();
+      const original = f.wasm(mutableGlobal());
+      const renamed = f.js('export {value as renamed, bump} from "./original";');
+      const barrel = f.js('export {renamed as value, bump} from "./renamed";');
+      const consumer = f.wasm(importGlobal('./barrel'));
+      link(consumer, [[consumer, [barrel]], [barrel, [renamed]], [renamed, [original]]]);
+      const namespace = evaluate(consumer) as { read(): number; };
+      const source = f.env.realm.getModuleNamespace(barrel.record!.code) as { bump(): void; };
+      expect(namespace.read()).toBe(1);
+      source.bump();
+      expect(namespace.read()).toBe(2);
+      expect(Reflect.get(consumer.record!.instance.exports, 'value'))
+        .toBe(Reflect.get(original.record!.instance.exports, 'value'));
+    });
+  });
+
   it('rejects an uninstantiated Wasm dependency in a cycle with LinkError', async () => {
     await runInHostTask(() => {
       const f = fixture();

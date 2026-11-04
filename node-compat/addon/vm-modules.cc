@@ -1,5 +1,6 @@
 #include <node.h>
 #include "vm-modules.h"
+#include "vm-module-bindings.h"
 #include "vm.h"
 #include "vm-imports.h"
 
@@ -467,6 +468,7 @@ void InitializeVmModules(v8::Local<v8::Object> exports,
     if (!Function::New(context, method.callback, external).ToLocal(&function) ||
         exports->Set(context, Text(isolate, method.name), function).IsNothing()) return;
   }
+  InitializeVmModuleBindings(exports, context);
 }
 
 }  // namespace node_compat

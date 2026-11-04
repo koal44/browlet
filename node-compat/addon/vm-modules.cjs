@@ -1,6 +1,7 @@
 'use strict';
 
 const { isModuleNamespaceObject } = require('node:util').types;
+const createWasmGlobalResolver = require('./vm-module-bindings.cjs');
 
 // Node's module object model over the addon's context handles. Loading remains
 // the host's responsibility; these objects retain supplied dependencies only.
@@ -97,6 +98,7 @@ module.exports = (native, registerCompilation) => {
       super(context, identifier, () => native.compileModule(compiled.sourceText, context, identifier, 0));
       const record = recordFor(this);
       record.wasm = compiled;
+      compiled.resolveGlobal = createWasmGlobalResolver(native, record);
       record.getSource = getSource;
       record.requests = Object.freeze(compiled.specifiers.map(specifier => Object.freeze({
         __proto__: null, specifier, attributes: Object.freeze({ __proto__: null }), phase: 'evaluation',
@@ -150,24 +152,26 @@ module.exports = (native, registerCompilation) => {
         throw new TypeError('A source-phase dependency must be a WebAssemblyModule');
       }
     }
-    record.dependencies = modules.slice();
+    // Retain records after linking: a later Wasm consumer can recover the
+    // original Global through an already-linked JavaScript re-export. These
+    // are GC-traced records, not native roots or a context-wide registry.
+    record.dependencies = modules.map(recordFor);
   }
 
   function instantiate(module) {
     if (module.status !== 'unlinked') throw new Error('Module must be unlinked');
     const graph = new Map();
     const linkedRecords = [];
-    const visit = module => {
-      const record = recordFor(module);
-      if (graph.has(record.handle) || module.status !== 'unlinked') return;
+    const visit = record => {
+      if (graph.has(record.handle) || native.moduleStatus(record.handle) !== 'unlinked') return;
       const dependencies = record.dependencies ?? [];
       if (dependencies.length !== record.requests.length) {
         throw new Error('Supply module dependencies with linkRequests() before instantiation');
       }
       const supplied = dependencies.map((dependency, i) => record.requests[i].phase === 'source'
-        ? sourceForImport(recordFor(dependency)) : recordFor(dependency).handle);
+        ? sourceForImport(dependency) : dependency.handle);
       if (record.wasm !== undefined) {
-        record.wasm.dependencies = dependencies.map(dependency => recordFor(dependency).wasm);
+        record.wasm.dependencies = dependencies.map(dependency => dependency.wasm);
         supplied.push(recordFor(record.helper).handle);
       }
       graph.set(record.handle, supplied);
@@ -176,7 +180,7 @@ module.exports = (native, registerCompilation) => {
         if (record.requests[i].phase === 'evaluation') visit(dependency);
       });
     };
-    visit(module);
+    visit(recordFor(module));
     try {
       native.linkModule(recordFor(module).handle, graph);
     } finally {
@@ -196,7 +200,6 @@ module.exports = (native, registerCompilation) => {
         native.setImportMetaInitializer(record.handle, record.initializeImportMeta);
         record.initializeImportMeta = undefined;
       }
-      record.dependencies = undefined;
     }
   }
 

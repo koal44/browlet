@@ -28,9 +28,9 @@ const supported = {
   // V8 omits compilation kind, original Function arguments and boundaries,
   // and reports Function()'s implicit empty body as CodeLike.
   fullStringCompilation: false,
-  // Public module bindings cannot preserve mutable Wasm globals, v128 TDZ,
-  // or the original Wasm binding through a JavaScript re-export.
+  // Public module bindings cannot preserve mutable Wasm globals or v128 TDZ.
   completeWasmBindings: false,
+  wasmGlobalReexports: typeof native.haveSameModuleBinding === 'function',
   // Node 26/custom reuse the first Function body's import metadata; Node 24
   // passes the control. Keep the assertion strict so an engine fix is noticed.
   functionImportReferrer: Number(process.versions.node.split('.')[0]) < 26,

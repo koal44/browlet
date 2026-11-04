@@ -44,7 +44,8 @@ module.exports = native => {
       `const $values = $instantiate([${specifiers.map((_, i) => `$n${i}`).join(',')}]);`);
     exports.forEach((entry, i) => lines.push(
       `const $e${i} = $values[${quote(entry.name)}]; export { $e${i} as ${quote(entry.name)} };`));
-    const record = { source, specifiers, sourceText: lines.join('\n'), dependencies: [], instance: undefined };
+    const record = { source, specifiers, sourceText: lines.join('\n'), dependencies: [], instance: undefined,
+      globalExports: exports.filter(entry => entry.kind === 'global').map(entry => entry.name) };
 
     record.instantiate = namespaces => {
       const importObject = Object.create(null);
@@ -54,7 +55,7 @@ module.exports = native => {
           if (dependency.instance === undefined) throw new intrinsics.LinkError('Wasm dependency has not executed');
           importObject[specifiers[i]] = dependency.exports;
         } else {
-          importObject[specifiers[i]] = namespaces[i];
+          importObject[specifiers[i]] = namespaceImports(specifiers[i], namespaces[i]);
         }
       }
       // Browser hosts supply their existing import/callback adapter here. The
@@ -82,6 +83,32 @@ module.exports = native => {
       return values;
     };
     return record;
+
+    function namespaceImports(specifier, namespace) {
+      // The optional resolver is supplied by vm-module-bindings.cjs. Removing
+      // it leaves this ordinary namespace-value path intact.
+      if (record.resolveGlobal === undefined) return namespace;
+      const entries = imports.filter(entry => entry.module === specifier);
+      const globals = new Map();
+      for (const entry of entries) {
+        if (entry.kind !== 'global') continue;
+        const origin = record.resolveGlobal(namespace, entry.name);
+        if (origin === undefined) continue;
+        if (origin.module.instance === undefined) throw new intrinsics.LinkError('Wasm dependency has not executed');
+        globals.set(entry.name, origin.module.exports[origin.name]);
+      }
+      if (globals.size === 0) return namespace;
+      const values = Object.create(null);
+      for (const entry of entries) {
+        // Preserve V8's order of ordinary binding reads, including TDZ errors;
+        // inspect identity above without reading any unrelated export values.
+        Object.defineProperty(values, entry.name, {
+          get: globals.has(entry.name) ? () => globals.get(entry.name) : () => namespace[entry.name],
+          enumerable: true, configurable: true,
+        });
+      }
+      return values;
+    }
   }
 
   return { captureIntrinsics, compile };

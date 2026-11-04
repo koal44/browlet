@@ -1,7 +1,8 @@
 'use strict';
 
-// Eric approved these three draft gaps during adoption. Keep the specification
-// expectations: an unexpected pass means this classification needs reviewing.
+// Eric approved these draft gaps during adoption. Re-exports now pass on the
+// reviewed addon builds; the other two retain their specification expectations
+// and unexpected-pass detection. Unknown builds still exercise all three gaps.
 const assert = require('node:assert/strict');
 const { itPassesWith } = require('./support/test-runtime.cjs');
 const { fixture } = require('./support/wasm.cjs');
@@ -31,7 +32,7 @@ test('a v128 export stays in TDZ while other exports remain usable', () => {
   assert.throws(() => ns.vector, error => Object.getPrototypeOf(error) === f.run('ReferenceError.prototype'));
 });
 
-test('a Wasm global re-exported through JavaScript resolves to the original Wasm global', () => {
+itPassesWith('wasmGlobalReexports')('a Wasm global re-exported through JavaScript resolves to the original Wasm global', () => {
   const f = fixture();
   const original = f.compileWasm(mutableGlobal());
   const barrel = f.compile('export { value } from "./original";');
