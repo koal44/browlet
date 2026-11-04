@@ -33,40 +33,21 @@ Agent semantics are not implied by native queue/context support.
 
 ### Optimized Promise-job snapshots
 
-During the 2 November 2026 consolidation, one full custom/addon unit run crashed
-in `GetCurrentHostDefinedOptions(true)`, called by the existing Promise enqueue
-snapshot. V8 reported missing deoptimization information in
-`OptimizedJSFrame::Summarize`. That addon path is unchanged by this consolidation.
-The affected Stylelet test passes in isolation, as do forced-optimization Promise
-controls. A second full run passes, so no minimal reproducer is established yet.
-The native failure remains open; no optimization, metadata, or assertion was
-disabled. Experimental's `optimized-job-snapshot/README.md` retains the stack,
-engine revision, full-run command, and passing controls for a focused follow-up.
+The intermittent native crash reproduced during the 2-3 November consolidations
+was reduced to a standalone async completion and repaired on 4 November in
+`f9a21bb8`. Promise enqueue now captures the context identities and job kind it
+uses, without requesting unused script metadata. Callback registration retains
+its metadata capture. No engine patch or expected-failure classification was
+needed for this repair.
 
-The 3 November Wasm implementation/platform migration reproduced the same native
-stack in a full custom/addon run: 19,068 tests passed before reporting the worker
-failure, with eight `test/js-engine/runtime.test.ts` cases left pending. All eight
-pass in isolation. This remains an unresolved engine validation limit, not an
-expected-failure reclassification; no optimization or snapshot hook was disabled.
-
-The later 3 November navigation/input/Wasm consolidation reproduced the same
-stack twice, both while the reused worker was running
-`test/http/structured-fields-httpwg.test.ts`. The unrestricted run also had
-38 timeouts. With four workers, all 779 completed files passed (19,817 tests,
-25 expected failures, 18 skips), but the remaining worker still crashed. All
-2,862 HTTP fixture tests pass alone. Lowering concurrency removed the timeouts,
-not the native defect. Experimental's snapshot notes retain both commands and
-the custom engine revision; this consolidation does not repair it. The detailed
-handoff is [Scratch's snapshot report](../../scratch/OPTIMIZED-PROMISE-SNAPSHOT/README.md),
-including the executable hash, pre-existing Node source changes, process exit
-status, and the JSON reporter's incorrect success flag after a worker crash.
-
-Follow-up: the retained 2 November command specifies no shuffle seed, and the
-notes do not establish identical test order between the failing and passing runs.
-Record runner version, worker count and file assignment/order, shuffle settings
-(including seed when enabled), and the exact Node/V8 revision on reproduction.
-Compare runner changes and the patched stack-inspection boundary separately;
-neither the repeated stack nor the Vitest upgrade establishes the cause.
+The [Experimental report](../../node-compat/experimental/optimized-job-snapshot/README.md)
+links the reproducer, old/new results on the same engine, focused six-runtime
+validation, three native suites, and passing rejection/registration follow-ups.
+The [evidence archive](../../node-compat/experimental/optimized-job-snapshot/evidence/2026-11-04/README.md)
+retains exact commands, binary identities, terminal captures, and the original
+JSON reporter's misleading success flag after a worker crash. The precise
+engine-internal cause remains unproven; the bounded repair removes our unused
+query rather than establishing that all stack inspection is safe.
 
 ### Classic scripts and host entry
 

@@ -1239,7 +1239,7 @@ listener. A `reportError()` control reached that Window listener correctly. The
 maintained [Window regression](../../../test/browlet/scripting/finalization-errors.test.ts)
 first failed at the missing event, then passed with the context reporter.
 
-The [browser-only probe](../../../scratch/FINALIZATION-BROWSER-PROBE.cjs), enabled
+The [browser-only probe](../../../node-compat/experimental/finalization-cleanup/browser-reporting.cjs), enabled
 explicitly with `--run`, passes on Chromium 156.0.8078.4, Firefox 157.0, and
 Playwright WebKit 27.2. Each runs cleanup and dispatches a cancelable Window
 `error` event containing the same thrown Error. With `preventDefault()`, the
