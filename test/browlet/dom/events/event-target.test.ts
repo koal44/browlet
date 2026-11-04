@@ -7,7 +7,7 @@ import {
 import {
   AbortSignalImpl,
 } from '../../../../src/browlet/dom/abort/abort-signal';
-import { EventImpl, EventPhase } from '../../../../src/browlet/dom/events/event';
+import { EventImpl, EventPhase, type EventPathItem } from '../../../../src/browlet/dom/events/event';
 import { MouseEventImpl, UIEventImpl } from '../../../../src/browlet/interaction/events/index';
 import { ShadowRootImpl } from '../../../../src/browlet/dom/nodes/shadow-root';
 
@@ -199,6 +199,32 @@ describe('EventTargetImpl', () => {
     }));
 
     expect(targets).toEqual([target, target, host, host]);
+  });
+
+  it('lets an internal consumer retain the actual path before listeners mutate a closed shadow tree', () => {
+    const document = parseTestDocument('<main id="host"></main>');
+    const host = document.getElementById('host')!;
+    const root = new ShadowRootImpl(host, 'closed');
+    const target = document.createElement('button');
+    root.appendChild(target);
+    const event = new EventImpl('ready', { bubbles: true, composed: true });
+    const order: string[] = [];
+    let captured: EventPathItem[] = [];
+    target.addEventListener('ready', () => {
+      order.push('listener');
+      target.remove();
+    });
+
+    expect(target.dispatch(event, false, (path) => {
+      order.push('path');
+      captured = path;
+    })).toBe(true);
+    expect(order).toEqual(['path', 'listener']);
+    expect(captured.map((item) => item.invocationTarget)).toEqual([
+      target, root, host, document.body, document.documentElement, document,
+    ]);
+    expect(event.path).toEqual([]);
+    expect(target.isConnected).toBe(false);
   });
 
   it('does not propagate non-composed events beyond their shadow root', () => {

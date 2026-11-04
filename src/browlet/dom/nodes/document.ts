@@ -38,7 +38,7 @@ import {
 import { StorageEventImpl } from '../../storage/events/index';
 import { BeforeUnloadEventImpl, HashChangeEventImpl } from '../../browsing/navigation/events/index';
 import {
-  UIEventImpl, FocusEventImpl, KeyboardEventImpl, CompositionEventImpl, TextEventImpl, MouseEventImpl,
+  UIEventImpl, FocusEventImpl, KeyboardEventImpl, CompositionEventImpl, TextEventImpl, MouseEventImpl, pointerEventHandlers,
 } from '../../interaction/events/index';
 import {
   InsecureRequestsPolicy, PolicyContainer, OpenerPolicy, PermissionsPolicy, PermissionsPolicyImpl, SandboxingFlagSet,
@@ -107,6 +107,7 @@ export class DocumentImpl extends NodeImpl {
   /** General and Document-only handler definitions, composed once for all Documents. */
   static #handlerDefinitions = new Map([
     ...globalEventHandlers,
+    ...pointerEventHandlers,
     ['onreadystatechange', 'readystatechange'], ['onvisibilitychange', 'visibilitychange'],
   ]);
 

@@ -90,9 +90,9 @@ describe('HTML global content-attribute permissions', () => {
     for (const name of ['role', 'aria-label']) {
       expect(() => element.allowsContentAttribute(name)).toThrow('ARIA content-attribute permissions are not implemented');
     }
-    for (const name of ['onpointerdown', 'onbeforeunload']) {
-      expect(() => element.allowsContentAttribute(name)).toThrow(`Event-handler content-attribute permissions for ${name} are not implemented`);
-    }
+    expect(() => element.allowsContentAttribute('onbeforeunload')).toThrow(
+      'Event-handler content-attribute permissions for onbeforeunload are not implemented',
+    );
   });
 
   it('preserves XML whitespace attributes and text without treating a namespace-less lookalike as global', () => {

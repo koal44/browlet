@@ -12,6 +12,7 @@ import {
   mouseEventIDL, mouseEventInitIDL, mouseEventInitializersIDL, mouseEventMovementIDL, mouseEventMovementInitIDL,
 } from './mouse-event';
 import { pointerEventIDL, pointerEventInitIDL } from './pointer-event';
+import { pointerGlobalEventHandlersIDL } from './pointer-event-handlers';
 
 /** User-interface event declarations, independent of native input and higher-level producers. */
 export const interactionEventIDLDefinitions = [
@@ -24,4 +25,5 @@ export const interactionEventIDLDefinitions = [
   textEventIDL,
   mouseEventIDL, mouseEventInitIDL, mouseEventInitializersIDL, mouseEventMovementIDL, mouseEventMovementInitIDL,
   pointerEventIDL, pointerEventInitIDL,
+  pointerGlobalEventHandlersIDL,
 ];

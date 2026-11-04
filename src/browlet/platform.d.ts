@@ -989,6 +989,17 @@ export interface HTMLElement extends Element {
   onwebkitanimationstart: EventHandlerNonNull | null;
   onwebkittransitionend: EventHandlerNonNull | null;
   onwheel: EventHandlerNonNull | null;
+  onpointerover: EventHandlerNonNull | null;
+  onpointerenter: EventHandlerNonNull | null;
+  onpointerdown: EventHandlerNonNull | null;
+  onpointermove: EventHandlerNonNull | null;
+  onpointerrawupdate: EventHandlerNonNull | null;
+  onpointerup: EventHandlerNonNull | null;
+  onpointercancel: EventHandlerNonNull | null;
+  onpointerout: EventHandlerNonNull | null;
+  onpointerleave: EventHandlerNonNull | null;
+  ongotpointercapture: EventHandlerNonNull | null;
+  onlostpointercapture: EventHandlerNonNull | null;
   nonce: string;
   autofocus: boolean;
 }
@@ -1886,6 +1897,17 @@ export interface SVGElement extends Element {
   onwebkitanimationstart: EventHandlerNonNull | null;
   onwebkittransitionend: EventHandlerNonNull | null;
   onwheel: EventHandlerNonNull | null;
+  onpointerover: EventHandlerNonNull | null;
+  onpointerenter: EventHandlerNonNull | null;
+  onpointerdown: EventHandlerNonNull | null;
+  onpointermove: EventHandlerNonNull | null;
+  onpointerrawupdate: EventHandlerNonNull | null;
+  onpointerup: EventHandlerNonNull | null;
+  onpointercancel: EventHandlerNonNull | null;
+  onpointerout: EventHandlerNonNull | null;
+  onpointerleave: EventHandlerNonNull | null;
+  ongotpointercapture: EventHandlerNonNull | null;
+  onlostpointercapture: EventHandlerNonNull | null;
   get style(): CSSStyleProperties;
   set style(value: string);
   nonce: string;
@@ -2019,6 +2041,17 @@ export interface MathMLElement extends Element {
   onwebkitanimationstart: EventHandlerNonNull | null;
   onwebkittransitionend: EventHandlerNonNull | null;
   onwheel: EventHandlerNonNull | null;
+  onpointerover: EventHandlerNonNull | null;
+  onpointerenter: EventHandlerNonNull | null;
+  onpointerdown: EventHandlerNonNull | null;
+  onpointermove: EventHandlerNonNull | null;
+  onpointerrawupdate: EventHandlerNonNull | null;
+  onpointerup: EventHandlerNonNull | null;
+  onpointercancel: EventHandlerNonNull | null;
+  onpointerout: EventHandlerNonNull | null;
+  onpointerleave: EventHandlerNonNull | null;
+  ongotpointercapture: EventHandlerNonNull | null;
+  onlostpointercapture: EventHandlerNonNull | null;
   get style(): CSSStyleProperties;
   set style(value: string);
   nonce: string;
@@ -2585,6 +2618,7 @@ export interface PerformanceConstructor extends Ctor<EventTargetConstructor> {
 
 export interface Navigator {
   readonly permissions: Permissions;
+  readonly maxTouchPoints: number;
   readonly storage: StorageManager;
 }
 
@@ -2840,6 +2874,17 @@ export interface Window extends EventTarget {
   onwebkitanimationstart: EventHandlerNonNull | null;
   onwebkittransitionend: EventHandlerNonNull | null;
   onwheel: EventHandlerNonNull | null;
+  onpointerover: EventHandlerNonNull | null;
+  onpointerenter: EventHandlerNonNull | null;
+  onpointerdown: EventHandlerNonNull | null;
+  onpointermove: EventHandlerNonNull | null;
+  onpointerrawupdate: EventHandlerNonNull | null;
+  onpointerup: EventHandlerNonNull | null;
+  onpointercancel: EventHandlerNonNull | null;
+  onpointerout: EventHandlerNonNull | null;
+  onpointerleave: EventHandlerNonNull | null;
+  ongotpointercapture: EventHandlerNonNull | null;
+  onlostpointercapture: EventHandlerNonNull | null;
   onafterprint: EventHandlerNonNull | null;
   onbeforeprint: EventHandlerNonNull | null;
   onbeforeunload: OnBeforeUnloadEventHandlerNonNull | null;
@@ -3741,6 +3786,17 @@ export interface Document extends Node {
   onwebkitanimationstart: EventHandlerNonNull | null;
   onwebkittransitionend: EventHandlerNonNull | null;
   onwheel: EventHandlerNonNull | null;
+  onpointerover: EventHandlerNonNull | null;
+  onpointerenter: EventHandlerNonNull | null;
+  onpointerdown: EventHandlerNonNull | null;
+  onpointermove: EventHandlerNonNull | null;
+  onpointerrawupdate: EventHandlerNonNull | null;
+  onpointerup: EventHandlerNonNull | null;
+  onpointercancel: EventHandlerNonNull | null;
+  onpointerout: EventHandlerNonNull | null;
+  onpointerleave: EventHandlerNonNull | null;
+  ongotpointercapture: EventHandlerNonNull | null;
+  onlostpointercapture: EventHandlerNonNull | null;
   readonly children: HTMLCollection;
   readonly firstElementChild: Element | null;
   readonly lastElementChild: Element | null;
@@ -3822,6 +3878,9 @@ export interface Element extends Node {
   getElementsByClassName(classNames: string): HTMLCollection;
   insertAdjacentElement(where: string, element: Element): Element | null;
   insertAdjacentText(where: string, data: string): void;
+  setPointerCapture(pointerId: number): void;
+  releasePointerCapture(pointerId: number): void;
+  hasPointerCapture(pointerId: number): boolean;
   readonly children: HTMLCollection;
   readonly firstElementChild: Element | null;
   readonly lastElementChild: Element | null;

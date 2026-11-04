@@ -215,6 +215,34 @@ export class ElementImpl extends NodeImpl {
     this.env.realm.queueGlobalTask(source, steps);
   }
 
+  /** Request capture of an active context-local pointer, without delivering notifications yet. */
+  // https://w3c.github.io/pointerevents/#setting-pointer-capture
+  setPointerCapture(pointerId: number): void {
+    const navigable = this.getNodeNavigable();
+    // SPEC_CLASH(pointer-capture-no-context): Follow Chromium/WebKit's no-op without a browsing context; the draft has no exception and Firefox rejects an unknown ID.
+    if (navigable === null) return;
+    const stream = navigable.topLevelTraversable.pointerEventStreams.get(pointerId);
+    if (stream === undefined) throw new DOMExceptionImpl('', DOMExceptionNames.notFound);
+    stream.setPointerCapture(this, stream.buttons);
+  }
+
+  /** Release only this element's pending capture for an active context-local pointer. */
+  // https://w3c.github.io/pointerevents/#releasing-pointer-capture
+  releasePointerCapture(pointerId: number): void {
+    const navigable = this.getNodeNavigable();
+    // Keep the same no-context behavior as setPointerCapture().
+    if (navigable === null) return;
+    const stream = navigable.topLevelTraversable.pointerEventStreams.get(pointerId);
+    if (stream === undefined) throw new DOMExceptionImpl('', DOMExceptionNames.notFound);
+    stream.releasePointerCapture(this);
+  }
+
+  /** Whether the pending capture target for this context-local ID is this element. */
+  // https://w3c.github.io/pointerevents/#dom-element-haspointercapture
+  hasPointerCapture(pointerId: number): boolean {
+    return this.getNodeNavigable()?.topLevelTraversable.pointerEventStreams.get(pointerId)?.capture.pendingTargetOverride === this;
+  }
+
   /** Whether localization may translate this element's translatable attributes and direct text children. */
   // https://html.spec.whatwg.org/multipage/dom.html#translation-mode
   isTranslationEnabled(): boolean {

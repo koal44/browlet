@@ -19,16 +19,17 @@ import { itPassesWith } from '../test-runtime';
 
 afterEach(() => vi.restoreAllMocks());
 
-// HTML's GlobalEventHandlers mixin, shared by the Document and HTMLElement inventories below.
+// GlobalEventHandlers in this insecure realm, including Pointer Events' partial mixin.
 const globalEventHandlerNames = [
   'onabort', 'onauxclick', 'onbeforeinput', 'onbeforematch', 'onbeforetoggle', 'onblur', 'oncancel',
   'oncanplay', 'oncanplaythrough', 'onchange', 'onclick', 'onclose', 'oncommand', 'oncontextlost',
   'oncontextmenu', 'oncontextrestored', 'oncopy', 'oncuechange', 'oncut', 'ondblclick', 'ondrag',
   'ondragend', 'ondragenter', 'ondragleave', 'ondragover', 'ondragstart', 'ondrop', 'ondurationchange',
-  'onemptied', 'onended', 'onerror', 'onfocus', 'onformdata', 'oninput', 'oninvalid', 'onkeydown',
-  'onkeypress', 'onkeyup', 'onload', 'onloadeddata', 'onloadedmetadata', 'onloadstart', 'onmousedown',
+  'onemptied', 'onended', 'onerror', 'onfocus', 'onformdata', 'ongotpointercapture', 'oninput', 'oninvalid', 'onkeydown',
+  'onkeypress', 'onkeyup', 'onload', 'onloadeddata', 'onloadedmetadata', 'onloadstart', 'onlostpointercapture', 'onmousedown',
   'onmouseenter', 'onmouseleave', 'onmousemove', 'onmouseout', 'onmouseover', 'onmouseup', 'onpaste',
-  'onpause', 'onplay', 'onplaying', 'onprogress', 'onratechange', 'onreset', 'onresize', 'onscroll',
+  'onpause', 'onplay', 'onplaying', 'onpointercancel', 'onpointerdown', 'onpointerenter', 'onpointerleave',
+  'onpointermove', 'onpointerout', 'onpointerover', 'onpointerup', 'onprogress', 'onratechange', 'onreset', 'onresize', 'onscroll',
   'onscrollend', 'onsecuritypolicyviolation', 'onseeked', 'onseeking', 'onselect', 'onslotchange',
   'onstalled', 'onsubmit', 'onsuspend', 'ontimeupdate', 'ontoggle', 'onvolumechange', 'onwaiting',
   'onwebkitanimationend', 'onwebkitanimationiteration', 'onwebkitanimationstart', 'onwebkittransitionend', 'onwheel',
@@ -442,6 +443,7 @@ describe('Browlet DOM binding', () => {
       'hasAttribute',
       'hasAttributeNS',
       'hasAttributes',
+      'hasPointerCapture',
       'id',
       'insertAdjacentElement',
       'insertAdjacentText',
@@ -456,6 +458,7 @@ describe('Browlet DOM binding', () => {
       'previousElementSibling',
       'querySelector',
       'querySelectorAll',
+      'releasePointerCapture',
       'remove',
       'removeAttribute',
       'removeAttributeNode',
@@ -466,6 +469,7 @@ describe('Browlet DOM binding', () => {
       'setAttributeNode',
       'setAttributeNodeNS',
       'setAttributeNS',
+      'setPointerCapture',
       'shadowRoot',
       'slot',
       Symbol.unscopables,

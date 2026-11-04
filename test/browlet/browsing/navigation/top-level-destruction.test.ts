@@ -5,6 +5,7 @@ import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing
 import { createDocumentState, createSessionHistoryEntry } from '../../../../src/browlet/browsing/navigation/state/index';
 import { navigationAndTraversalTaskSource } from '../../../../src/browlet/scripting/tasks';
 import { UserAgent } from '../../../../src/browlet/user-agent';
+import { PointerEventStream } from '../../../../src/browlet/interaction/index';
 import { StorageKey, StorageShelf } from '../../../../src/storage/index';
 import { obtainURLOrigin, parseURL } from '../../../../src/url/index';
 
@@ -14,6 +15,8 @@ describe('top-level traversable destruction', () => {
   it('requests each retained Document before removing its context, UI, registration, and session storage', () => {
     const { userAgent, traversable, document, context, group } = fixture();
     const other = TopLevelTraversable.create(userAgent, null, 'other');
+    traversable.pointerEventStreams.set(7, new PointerEventStream(7, false, () => false));
+    other.pointerEventStreams.set(7, new PointerEventStream(7, false, () => false));
     const session = putSession(traversable);
     const otherSession = putSession(other);
     const retiredDocument = document.env.createDocument();
@@ -29,6 +32,8 @@ describe('top-level traversable destruction', () => {
       expect(retired).toHaveBeenCalledExactlyOnceWith();
       expect(active).toHaveBeenCalledTimes(2);
       expect(context.group).toBeNull();
+      expect(traversable.pointerEventStreams.size).toBe(0);
+      expect(other.pointerEventStreams.size).toBe(1);
       expect(group.browsingContextSet.size).toBe(0);
       expect(userAgent.browsingContextGroupSet.has(group)).toBe(false);
       expect(userAgent.topLevelTraversableSet.has(traversable)).toBe(true);

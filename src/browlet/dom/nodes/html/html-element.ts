@@ -11,6 +11,7 @@ import { ElementCSSInlineStyleMixin } from '../../../style/index';
 import { dirAttribute, getMicrodataURLAttribute, isGlobalContentAttribute, translateAttribute } from './attributes/index';
 import type { EventTargetImpl } from '../../events/index';
 import { EventHandlerMap, globalEventHandlers } from '../../../scripting/index';
+import { pointerEventHandlers } from '../../../interaction/events/index';
 
 import { ElementImpl } from '../element';
 import type { NodeImpl } from '../node';
@@ -22,6 +23,9 @@ import type { HTMLFormElementImpl } from './forms/index';
 /** Base implementation for elements in the HTML namespace. */
 // https://html.spec.whatwg.org/multipage/dom.html#htmlelement
 export class HTMLElementImpl extends ElementImpl {
+  /** Complete supported-name table shared by all HTML elements. */
+  static #handlerDefinitions = new Map([...globalEventHandlers, ...pointerEventHandlers]);
+
   // WindowEventHandlers names and the Window-reflecting body element event handler set.
   // onbeforeunload remains in this target set while its special invocation rules await integration.
   static #windowHandlerNames = new Set([
@@ -53,7 +57,7 @@ export class HTMLElementImpl extends ElementImpl {
   /** Shared names whose rendered values determine their own direction when dir is auto. */
   declare directionalityAttributes: string[];
 
-  override eventHandlers: EventHandlerMap = new EventHandlerMap(this, globalEventHandlers);
+  override eventHandlers: EventHandlerMap = new EventHandlerMap(this, HTMLElementImpl.#handlerDefinitions);
 
   /** Whether an ancestor's auto-direction scan always skips this element and its descendants. */
   declare protected excludeFromAutoDirection: boolean;
@@ -265,7 +269,7 @@ export class HTMLElementImpl extends ElementImpl {
    */
   // https://html.spec.whatwg.org/multipage/dom.html#concept-element-attributes
   allowsContentAttribute(name: string): boolean {
-    if (isGlobalContentAttribute(name)) return true;
+    if (isGlobalContentAttribute(name) || pointerEventHandlers.has(name)) return true;
     // HTML compatibility spellings; required values and companion attributes are separate checks.
     if (name === 'xmlns' || name === 'xml:lang') return this.nodeDocument.type === 'html';
     if (name === 'role' || name.startsWith('aria-')) {

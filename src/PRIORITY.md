@@ -97,9 +97,43 @@ UI Events audit now covers §§1–12, with producer dependencies and ordering
 conflicts retained. Pointer Events §§1–2 are reviewed, and §3's MouseEvent
 prerequisite now exposes construction, modifiers, related targets, movement,
 and legacy initialization/factory names. Layer coordinates remain explicit
-CSS layout/painting dependencies. Continue §3 with PointerEvent itself.
+CSS layout/painting dependencies. PointerEvent construction now supplies pointer
+data, orientation conversion, and copied coalesced/predicted lists. §§3.1.1–3.1.2
+now provide UserAgent-owned active sources, button transitions, and primary-pointer
+selection. §3.1.3.1's internal attribute initialization now supplies the event table's
+flags, detail, and related-target rules. §3.1.3.2 now supplies pending capture
+transitions and copied notifications as an internal per-stream primitive.
+§3.1.3 target preparation now connects that processing to capture-or-hit-test
+selection, active-document tracking, and implicit direct-manipulation capture
+through `PointerEventStream`. Capture requests require the Pointer Lock owner's
+query and validate connectivity, buttons, and active Document. Its dispatch step
+now orders boundary notifications, delivers the prepared event, and repairs the
+previous target using DOM's actual dispatch path. §3.1.3.3 suppression now copies
+the retained input into cancellation, releases capture, and exits. §8.5 releases
+capture after up, then uses the producer's explicit hover-target query to restore
+boundaries. §3.1.4 now has an explicit stationary-pointer layout refresh, retaining
+capture and removal rules without generating a move. §3.1.5's orientation
+conversion is already implemented. §§3.2.1–3.2.2 now initialize/create pointer events
+from a required normalized input snapshot through the target's event allocation.
+§3.2.3 now creates pointer events from targeted mouse events with explicit flags,
+fresh realm allocation, and independent pointer/dispatch state. §§3.3.1–3.3.3's
+entry/down triggers, propagation, and cancellation are audited against the
+existing source/dispatch machinery. §§3.3.4–3.3.11 now include raw-update security
+gating and zero pressure on native up events; raw/move scheduling and §9 sample
+production remain explicit input-owner dependencies. §3.3.12 now supplies
+click/auxclick/contextmenu creation, pointer defaults, and live/captured target
+selection from private down/up snapshots. Gesture recognition, click counting,
+and non-pointer input remain producer responsibilities. §4's Element capture
+methods now resolve context-local IDs through the top-level traversable's stream
+map and expose pending capture through ordinary Binding. §5's GlobalEventHandlers
+contribution now connects all eleven pointer handlers, including secure-context
+raw-update property exposure and ordinary content-attribute handling. Continue
+with §6's Navigator.maxTouchPoints and its device/BiDi inputs.
+Device-to-context ID assignment, stream
+registration/retirement, actual hit testing, individual Document teardown, removal
+hookup, and input/default-action producers remain explicit dependencies.
 HTML §8.1.8.3's synthetic
-pointer-event operation depends on those event interfaces. Input producers retain
+pointer-event operation still needs its hookup. Input producers retain
 their HTML, editing, and layout owners.
 Source/deferred imports and the HTML Wasm parser remain explicit boundaries.
 Later host-hook algorithms must be connected before judging

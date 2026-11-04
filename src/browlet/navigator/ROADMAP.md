@@ -6,7 +6,12 @@ cookies, permissions, or host platform; those subsystems supply its answers.
 
 The current slice supplies Window's stable Navigator identity, its
 `clientInformation` alias, a forwarding `storage` getter, and its retained
-`permissions` object. The capabilities
+`permissions` object. Pointer Events §6 also contributes `maxTouchPoints`, whose
+getter selects an environment-scoped BiDi override before querying its UserAgent
+for device capacity. The hardware query explicitly throws until the native input
+host exists; the BiDi selector returns null while there are no active sessions.
+The [Pointer Events audit](../interaction/events/ROADMAP.md#pointer-events-6-navigator-touch-capacity)
+records the required host result and pending automation algorithm. The HTML capabilities
 listed below remain pending except for this identity and its IDL composition.
 
 | Planned source | Contract | Specification |

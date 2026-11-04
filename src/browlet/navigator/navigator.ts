@@ -26,6 +26,13 @@ export class NavigatorImpl {
   get storage(): StorageManagerImpl {
     return this.env.storageManager;
   }
+
+  /** Device touch capacity, unless automation supplies an override for this Navigator's environment. */
+  // https://w3c.github.io/pointerevents/#dom-navigator-maxtouchpoints
+  get maxTouchPoints(): number {
+    const userAgent = this.env.userAgent;
+    return userAgent.webDriverBiDiEmulatedMaxTouchPoints(this.env) ?? userAgent.getMaxTouchPoints();
+  }
 }
 
 // [Exposed=Window] interface Navigator { };

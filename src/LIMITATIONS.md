@@ -739,9 +739,117 @@ targets, legacy initialization/factory names, and movement fields. Its layerX
 and layerY getters throw explicitly because CSS layout/painting geometry is
 missing; CSSOM View's page/offset coordinates and x/y aliases are not exposed.
 Native mouse production, input-gap notification, locked/raw deltas, and Pointer
-Lock APIs remain unfinished. PointerEvent itself is the next slice. The
+Lock APIs remain unfinished. The
 [MouseEvent prerequisite](browlet/interaction/events/ROADMAP.md#pointer-events-12-and-the-3-mouseevent-prerequisite)
 records the approved coordinate/legacy choices without claiming device input.
+
+PointerEvent now exposes constructor data, orientation conversion, and copied
+coalesced/predicted lists. Its constructor does not register devices, manage active
+pointers/capture, generate trusted samples, or perform hit testing. Native stream
+delivery now prepares trusted sample lists from supplied input; the device adapter,
+HTML's synthetic-pointer-event hookup, and inherited CSS geometry remain unfinished.
+The [PointerEvent object slice](browlet/interaction/events/ROADMAP.md#pointer-events-31-pointerevent-objects-and-orientation)
+records the approved rounding, orientation, and returned-array realm choices.
+UserAgent now retains active input sources with per-type primary selection and
+chorded button transitions. This is an internal state foundation, not native event
+delivery: adapter/automation lifecycle calls, context-local pointer IDs, targeting,
+capture, and task delivery still need their producer. Author construction and
+dispatch do not mutate that state.
+
+Pointer Events §6 exposes `Navigator.maxTouchPoints` and selects BiDi emulation
+before hardware capacity. The native digitizer query is an explicit throwing
+dependency, so ordinary reads still fail until an input host supplies it. Active
+BiDi sessions and scoped touch overrides are also unfinished; the selector returns
+null in their absence. Tests supply these narrow queries through real bindings;
+they do not establish hardware discovery. See the
+[§6 audit](browlet/interaction/events/ROADMAP.md#pointer-events-6-navigator-touch-capacity).
+
+Stylelet now parses and computes `touch-action`, including directional keywords
+and `pinch-zoom`, through the normal cascade and CSSOM paths. `DirectManipulation`
+now computes and freezes per-contact permissions with required layout inputs;
+the pointer stream guards suppression before viewport takeover. There is still no
+native gesture producer or scrolling/zooming implementation. Box applicability,
+scroll-container classification, and local-coordinate direction mapping must be
+supplied by layout; the property's own applicability query still throws. Shadow-tree
+queries reach Stylelet's explicit unfinished scope-selection path, retained as one
+approved expected failure. See the
+[§7.2–§7.3 audit](browlet/interaction/events/ROADMAP.md#pointer-events-7273-direct-manipulation-decisions).
+
+PointerEvent's internal attribute initializer applies the §3.1.3.1 table before
+dispatch. `PointerCapture` now implements pending-target transitions and trusted
+capture notifications with copied input data. `PointerEventStream.prepareTarget()`
+now combines attribute/ID preparation, capture processing, target selection,
+active-document tracking, and implicit capture for direct-manipulation down events.
+Hit testing and the Document's Pointer Lock query are required callables supplied
+by their future owners, not implemented layout/Pointer Lock operations. Device
+capability is supplied explicitly rather than inferred from pointerType. Internal
+capture requests validate connectivity, lock state, buttons, and active Document;
+Element's public capture methods now resolve the active ID from the receiver's
+top-level traversable and report unknown IDs with NotFoundError. They expose
+pending capture immediately. Documents without an active browsing context ignore
+set/release requests and report no capture, following the approved Chromium/WebKit
+behavior; requests during pointerup use current zero buttons, following the draft.
+The context's stream map is shared with child documents and cleared on top-level
+teardown. No producer yet registers or retires IDs, so these APIs alone do not
+make device pointers available. Author-created PointerEvents cannot register IDs.
+DOM removal immediately releases disconnected pending capture through that map;
+reinsertion does not restore it. Effective loss waits for capture processing and
+targets the reconnected element or its Document if still detached. State-preserving
+moves retain capture. Pointer Lock success still needs to invoke the existing
+release operation; the source identifies that unfinished owner dependency.
+Pointer Events §5's eleven handler attributes are connected on every
+GlobalEventHandlers includer. The raw-update property is exposed only in secure
+contexts; its content attribute can still handle author-dispatched events on an
+insecure page, following the draft/Chromium/Firefox choice. WebKit's missing
+raw-update handler is recorded in the event roadmap. This adds no native input
+producer and does not change the trusted raw-delivery restriction.
+`dispatchToTarget()` sends boundary notifications, dispatches a prepared input,
+and retains its actual DOM path for previous-target repair. It releases capture
+after up/cancel; after up, a required producer callback supplies the uncaptured
+hover target or null. `suppress()` cancels from a private last-input snapshot and
+exits the stream. `updateAfterLayout()` refreshes stationary-pointer boundaries
+without a move event; actual layout invalidation, scheduling, and hit testing
+remain unconnected owner dependencies. The input owner must supply the prepared
+event in its target's realm. Device-to-context ID assignment, stream registration
+and retirement, individual Document teardown, suppression
+triggers (device loss, modal UI, pan/zoom, HTML drag), and compatibility mouse default
+actions still need their producer. Previous-boundary-target disconnection
+cleanup must be called by the future removal/input integration before reinsertion;
+checking connectivity during processing cannot detect a missed remove/reinsert.
+Author construction and dispatch keep their supplied attributes and do not change
+capture state. No device input or sample generation is connected.
+
+Native raw dispatch rejects insecure target documents before boundary delivery
+or input retention; author dispatch remains available. Native up preparation
+zeros pressure before capture processing. Raw-before-move scheduling, detection
+of non-position input changes, and collection/prediction of §9's input samples still
+need their input owner. Trusted delivery now creates chronological coalesced/predicted
+lists from supplied snapshots, including one coalesced sample for an unbatched
+move/raw event. Samples retain measurements, use the parent's pointer identity, and
+follow trusted retargeting and shadow cleanup. Their flags, empty nested lists, and
+independent identities are established before delivery. This does not accumulate
+hardware inputs, predict motion, flush pending moves before later down/up events,
+or schedule raw updates before corresponding moves. Author constructor lists and
+redispatch remain unchanged; the source identifies the remaining producer work.
+
+§3.3.12 now supplies internal click/auxclick/contextmenu creation and pointer-based
+target selection. The stream retains down/up facts across capture release and
+author reinitialization; a producer explicitly requests activation and supplies
+its click count. Non-pointer creation keeps the supplied target and uses ID -1
+with an empty pointer type. This does not detect clicks, choose context-menu timing,
+or implement default actions. HTML's synthetic-pointer-event operation and
+HTMLElement.click()/keyboard activation still need current modifier input and
+their calling algorithms; the factory's required input makes that dependency
+explicit. CSSOM View's unimplemented page/offset coordinates remain unexposed.
+
+Pointer Events §3.2 now provides internal event initialization and creation.
+The reached MouseEvent initializer requires mapped coordinates and a button/modifier
+snapshot from the input owner; no adapter supplies them yet. Creation retains
+target-environment allocation, while initialization follows DOM's trust reset;
+the producer must establish trust before dispatch. MouseEvent conversion requires
+an already-selected Node or Window target and explicit bubbles/cancelable flags;
+it copies input data into a fresh event with default pointer data and empty samples.
+It does not register a source or dispatch input.
 
 Element attribute setters, Attr attachment, and attached `Attr.value`,
 `nodeValue`, and `textContent` writes enforce Trusted Types. Their common change

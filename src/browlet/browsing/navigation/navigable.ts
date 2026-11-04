@@ -25,6 +25,7 @@ import { BrowletEnvironmentBase } from '../../environment/index';
 import { HTMLDocumentParser, type ScriptHandler } from '../../html/parser/index';
 import type { SerializedRecord } from '../../scripting/structured-data/index';
 import type { ResourceReader } from '../../loader/index';
+import type { PointerEventStream } from '../../interaction/index';
 import type { UserAgent } from '../../user-agent';
 
 import { BrowsingContext } from './browsing-context';
@@ -1008,6 +1009,14 @@ export class Traversable extends Navigable implements FetchPromptTarget {
 /** Traversable representing a top-level browser window or tab. */
 // https://html.spec.whatwg.org/multipage/document-sequences.html#top-level-traversable
 export class TopLevelTraversable extends Traversable {
+  /** Live input streams indexed by IDs local to this top-level context and its descendants. */
+  // https://w3c.github.io/pointerevents/#dom-pointerevent-pointerid
+  // TODO(Pointer Events §3.1 / input producer): assign IDs and register streams
+  // before delivery; remove retired streams after final notifications. Author
+  // construction/dispatch must never populate this map. Device/source identity
+  // remains with UserAgent.activePointers, independently of these local IDs.
+  pointerEventStreams = new Map<number, PointerEventStream>();
+
   constructor(documentState: DocumentBackedState) {
     super(documentState);
   }
@@ -1058,6 +1067,17 @@ export class TopLevelTraversable extends Traversable {
     return true;
   }
 
+  /** Release pending capture after a DOM subtree is unlinked, without dispatching during removal. */
+  // https://w3c.github.io/pointerevents/#implicit-release-of-pointer-capture
+  // Scan the existing streams once per removal, rather than retaining a reverse
+  // target registry or walking every node in the removed subtree.
+  releaseDisconnectedPointerCaptures(): void {
+    for (const stream of this.pointerEventStreams.values()) {
+      const pending = stream.capture.pendingTargetOverride;
+      if (pending && !pending.isConnected) stream.releasePointerCapture(pending);
+    }
+  }
+
   /**
    * Request teardown of retained Documents, then remove this destination from browser ownership.
    * Closing supplies the browsing context captured before unloading.
@@ -1070,6 +1090,7 @@ export class TopLevelTraversable extends Traversable {
     const userAgent = group.userAgent;
     // SPEC_GAP(top-level-destruction-order): HTML leaves entry order open; request teardown in retained-list order.
     for (const entry of this.sessionHistoryEntries) entry.documentState.document?.destroyAndDescendants();
+    this.pointerEventStreams.clear();
     group.remove(browsingContext);
     userAgent.removeTopLevelTraversableFromUI(this);
     userAgent.removeTopLevelTraversable(this);

@@ -65,6 +65,7 @@ import {
 import { structuredSerializeOptionsIDL } from '../../scripting/structured-data/index';
 import { serviceWorkerIDL } from '../../workers/index';
 import { notRestoredReasonDetailsIDL, notRestoredReasonsIDL } from '../../browsing/navigation/index';
+import { elementPointerCaptureIDL, navigatorPointerEventsIDL } from '../../interaction/index';
 import { renderingIDLDefinitions } from '../../rendering/index';
 import { progressEventIDL, progressEventInitIDL } from '../xhr/index';
 import { permissionStatusIDL } from '../permissions/index';
@@ -102,6 +103,7 @@ export const browletDefinitions = [
   epochTimeStampIDL,
   performanceIDL,
   ...navigatorIDLDefinitions,
+  navigatorPointerEventsIDL,
   eventHandlerNonNullIDL,
   eventHandlerIDL,
   onErrorEventHandlerNonNullIDL,
@@ -139,6 +141,7 @@ export const browletDefinitions = [
   windowIncludesGlobalEventHandlersIDL,
   windowIncludesWindowEventHandlersIDL,
   ...domIDLDefinitions,
+  elementPointerCaptureIDL,
   ...styleletIDLDefinitions,
   ...streamsIDLDefinitions,
   ...encodingIDLDefinitions,

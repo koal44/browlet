@@ -5,6 +5,7 @@ import type { CSSDeclarationBlock, CSSStylePropertiesImpl } from '../../../../st
 import { ElementTag, ContentCategory } from '../element-definitions/index';
 import { ElementCSSInlineStyleMixin } from '../../../style/index';
 import { EventHandlerMap, globalEventHandlers } from '../../../scripting/index';
+import { pointerEventHandlers } from '../../../interaction/events/index';
 
 import { ElementImpl } from '../element';
 import { HTMLOrSVGOrMathMLElementMixin, htmlOrSVGOrMathMLElementIDL } from '../html-or-svg-or-mathml-element';
@@ -12,7 +13,10 @@ import { HTMLOrSVGOrMathMLElementMixin, htmlOrSVGOrMathMLElementIDL } from '../h
 /** Base implementation for elements in the MathML namespace. */
 // https://w3c.github.io/mathml-core/#dom-mathmlelement
 export class MathMLElementImpl extends ElementImpl {
-  override eventHandlers: EventHandlerMap = new EventHandlerMap(this, globalEventHandlers);
+  /** Complete supported-name table shared by all MathML elements. */
+  static #handlerDefinitions = new Map([...globalEventHandlers, ...pointerEventHandlers]);
+
+  override eventHandlers: EventHandlerMap = new EventHandlerMap(this, MathMLElementImpl.#handlerDefinitions);
 
   /** Common HTML, SVG, and MathML state and attribute behavior. */
   #htmlOrSVGOrMathMLElementMixin = new HTMLOrSVGOrMathMLElementMixin(this);

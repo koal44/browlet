@@ -235,11 +235,15 @@ export class EventTargetImpl {
 
   runLegacyCanceledActivationBehavior(): void {}
 
-  /** Dispatch an internally created event without changing its trusted flag. */
+  /**
+   * Dispatch an internally created event without changing its trusted flag.
+   * Internal consumers may capture the completed path before listeners; they must not mutate it.
+   */
   // https://dom.spec.whatwg.org/#concept-event-dispatch
   dispatch(
     event: EventImpl,
     legacyTargetOverride = false,
+    capturePath?: (path: EventPathItem[]) => void,
   ): boolean {
     event.dispatching = true;
 
@@ -347,6 +351,8 @@ export class EventTargetImpl {
           clearTargetsItem.relatedTarget?.isNodeInShadowTree() ||
           clearTargetsItem.touchTargetList.some((target) => target?.isNodeInShadowTree());
       }
+
+      capturePath?.(event.path);
 
       if (
         activationTarget !== null &&

@@ -2491,10 +2491,11 @@ reclassified or skipped.
 
 §8.1.8.2's declarations and inclusions are connected. §8.1.8.3 defines synthetic
 pointer/click firing; DOM's generic `fireEvent()` is already implemented, but it
-does not supply that algorithm. The current UIEvent/MouseEvent classes are
-abstract placeholders, PointerEvent is absent, and modifier-state input needs
-its host owner. Keep those UI Events/Pointer Events dependencies explicit when
-implementing the event-firing algorithm.
+does not supply that algorithm. UIEvent, MouseEvent, and PointerEvent objects
+are now implemented in interaction/events; live modifier-state input still needs
+its host owner. The synthetic-pointer-event hookup remains unfinished. See the
+[interaction event roadmap](../interaction/events/ROADMAP.md) for the completed
+constructor boundaries and remaining input dependencies.
 
 ### HTML §8.1.8.1: beforeunload handler processing
 

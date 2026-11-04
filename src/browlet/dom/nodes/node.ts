@@ -809,6 +809,10 @@ export abstract class NodeImpl extends EventTargetImpl {
     const nextSibling = this.nextSibling;
     this.#removeTreeNode();
 
+    // Pointer Events §8.5: release disconnected pending capture before removal
+    // steps can reinsert the subtree. DOM's state-preserving move bypasses this.
+    this.getNodeNavigable()?.topLevelTraversable.releaseDisconnectedPointerCaptures();
+
     const slottable: ElementImpl | TextImpl | null = this.isElement() || this.isText() ? this : null;
     const slot = slottable?.getAssignedSlot() ?? null;
     if (slot !== null) slot.assignSlottables();

@@ -501,6 +501,18 @@ export class UserAgent implements
     return result.promise;
   }
 
+  /**
+   * Maximum simultaneous contacts supported by any individual digitizer, not their sum
+   * or the number of active pointers. A known non-touch device reports zero; when the
+   * exact capacity is unavailable, report the minimum guaranteed by the input host.
+   */
+  // https://w3c.github.io/pointerevents/#dom-navigator-maxtouchpoints
+  getMaxTouchPoints(): number {
+    // TODO(Pointer Events §6): The native-input host must query digitizer capacities.
+    // Node supplies no such query; an absent host must not silently mean zero capacity.
+    throw new InternalError('Touch-device capacity query is not implemented');
+  }
+
   /** Whether automation permits scripting for the given environment. */
   // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-scripting-is-enabled
   webDriverBiDiScriptingIsEnabled(_env: BrowletEnvironment): boolean {
@@ -526,6 +538,14 @@ export class UserAgent implements
   // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-emulated-language
   webDriverBiDiEmulatedLanguage(_env: BrowletEnvironment): string | null {
     // PROVISIONAL: no BiDi sessions; select scoped language emulation when implemented.
+    return null;
+  }
+
+  /** Touch-capacity override selected for the given environment, or null when absent. */
+  // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-emulated-max-touch-points
+  webDriverBiDiEmulatedMaxTouchPoints(_env: BrowletEnvironment): number | null {
+    // TODO(WebDriver BiDi §7.4.2.14): Once active sessions exist, select top-level
+    // traversable, user-context, then session-default touch overrides in that order.
     return null;
   }
 

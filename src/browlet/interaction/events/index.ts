@@ -10,4 +10,5 @@ export {
   type PointerActivationEventType, type PointerEventSamples,
 } from './pointer-event';
 export { TextEventImpl } from './text-event';
+export { pointerEventHandlers } from './pointer-event-handlers';
 export { interactionEventIDLDefinitions } from './web-idl';
