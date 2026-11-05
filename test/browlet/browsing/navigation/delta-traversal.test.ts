@@ -2,10 +2,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { Navigable, type HistoryStepResult } from '../../../../src/browlet/browsing/navigation/navigable';
 import { DocumentState, SourceSnapshotParams } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
+import { internalType } from '../../../../src/infra/index';
 import { getRelevantRealm, unwrap } from '../../../support/browlet-binding';
 
 afterEach(() => { vi.restoreAllMocks(); });
@@ -80,11 +81,17 @@ describe('joint history delta traversal', () => {
   });
 
   it('lets sequential requests observe the history step reached by earlier application', async () => {
-    const { traversable, apply, turns } = await fixture();
+    const { document, traversable, apply, turns } = await fixture();
     traversable.currentSessionHistoryStep = 9;
-    apply.mockImplementation((step) => { traversable.currentSessionHistoryStep = step; return 'applied'; });
+    apply.mockImplementation((step) => {
+      traversable.currentSessionHistoryStep = step;
+      return document.env.userAgent.HostPromise.resolve('applied', internalType<HistoryStepResult>());
+    });
     traversable.traverseHistoryByDelta(-1);
     traversable.traverseHistoryByDelta(-1);
+    turns.shift()!();
+    expect(apply).toHaveBeenCalledTimes(1);
+    await expect.poll(() => turns.length).toBe(1);
     turns.shift()!();
     expect(apply.mock.calls).toEqual([[4, null, null, 'browser UI'], [0, null, null, 'browser UI']]);
   });
@@ -143,11 +150,13 @@ describe('joint history delta traversal', () => {
     expect(apply).not.toHaveBeenCalled();
   });
 
-  it('reaches the explicit history-application dependency on the queued turn', async () => {
+  it('reaches the explicit population dependency after the queued cancellation checks', async () => {
     const { traversable, apply, turns } = await fixture();
     apply.mockRestore();
     expect(traversable.traverseHistoryByDelta(-1)).toBeUndefined();
-    expect(turns.shift()!).toThrow('Traverse history-step application is not implemented');
+    turns.shift()!();
+    await expect.poll(() => turns.length).toBe(1);
+    expect(turns.shift()!).toThrow('History-step population and activation is not implemented');
   });
 
   it('rejects an inconsistent current step instead of traversing from index minus one', async () => {
@@ -168,11 +177,12 @@ async function fixture() {
   active.step = 4;
   traversable.currentSessionHistoryStep = 4;
   const entry = (step: number) => Object.assign(
-    document.env.createSessionHistoryEntry(document.url, new DocumentState()), { step },
+    document.env.createSessionHistoryEntry(document.url, Object.assign(new DocumentState(), { origin: document.origin })), { step },
   );
   traversable.sessionHistoryEntries = [entry(0), active, entry(9)];
   const activation = vi.spyOn(document.getRelevantGlobalObject()!, 'hasTransientActivation').mockReturnValue(false);
-  const apply = vi.spyOn(traversable, 'applyTraverseHistoryStep').mockReturnValue('applied');
+  const apply = vi.spyOn(traversable, 'applyTraverseHistoryStep')
+    .mockReturnValue(document.env.userAgent.HostPromise.resolve('applied', internalType<HistoryStepResult>()));
   const turns: (() => void)[] = [];
   vi.spyOn(document.env.userAgent, 'runInParallel').mockImplementation((steps) => { turns.push(steps); });
   return { browser, document, traversable, entry, activation, apply, turns };

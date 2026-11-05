@@ -2,11 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { Navigable, type HistoryStepResult } from '../../../../src/browlet/browsing/navigation/navigable';
 import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
 import type { NavigateEvent as BrowletNavigateEvent } from '../../../../src/browlet/platform';
+import { internalType } from '../../../../src/infra/index';
 import { createOpaqueOrigin, parseURL } from '../../../../src/url/index';
 import { unwrap } from '../../../support/browlet-binding';
 
@@ -182,12 +183,14 @@ describe('reload coordination', () => {
     expect(apply).toHaveBeenCalledExactlyOnceWith('none');
   });
 
-  it('reaches the explicit history-application dependency only in the queued continuation', async () => {
+  it('reaches the explicit population dependency after queued cancellation checks', async () => {
     const { browser, navigable, apply, turns } = await fixture();
     apply.mockRestore();
     expect(await browser.evaluate(() => location.reload())).toBeUndefined();
     expect(navigable.activeSessionHistoryEntry.documentState.reloadPending).toBe(true);
-    expect(turns.shift()!).toThrow('Reload history-step application is not implemented');
+    turns.shift()!();
+    await expect.poll(() => turns.length).toBe(1);
+    expect(turns.shift()!).toThrow('History-step population and activation is not implemented');
   });
 });
 
@@ -198,7 +201,8 @@ async function fixture() {
   const navigable = document.getNodeNavigable()!;
   const traversable = navigable.traversable;
   const navigation = document.getRelevantGlobalObject()!.navigation;
-  const apply = vi.spyOn(traversable, 'applyReloadHistoryStep').mockReturnValue('applied');
+  const apply = vi.spyOn(traversable, 'applyReloadHistoryStep')
+    .mockReturnValue(document.env.userAgent.HostPromise.resolve('applied', internalType<HistoryStepResult>()));
   const turns: (() => void)[] = [];
   vi.spyOn(document.env.userAgent, 'runInParallel').mockImplementation((steps) => { turns.push(steps); });
   return { browser, document, navigable, traversable, navigation, apply, turns };

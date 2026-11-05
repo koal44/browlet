@@ -7,9 +7,11 @@ import { NavigationCurrentEntryChangeEventImpl } from '../../../src/browlet/brow
 import { NavigateEventImpl } from '../../../src/browlet/browsing/navigation/api/navigate-event';
 import { NavigationHistoryEntryImpl } from '../../../src/browlet/browsing/navigation/api/navigation-history-entry';
 import type { NavigationType } from '../../../src/browlet/browsing/navigation/api/navigation';
+import type { HistoryStepResult } from '../../../src/browlet/browsing/navigation/navigable';
 import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import type { SessionHistoryTraversalSteps } from '../../../src/browlet/browsing/navigation/session-history-traversal-queue';
 import { idlType } from '../../../src/web-idl/core/index';
+import { internalType } from '../../../src/infra/index';
 import { getRelevantRealm, unwrap } from '../../support/browlet-binding';
 import { runInHostTask } from '../../support/tasks';
 
@@ -63,11 +65,12 @@ describe('Navigate-event commit coordination', () => {
     });
     const resume = vi.spyOn(navigable.traversable, 'resumeTraverseHistoryStep').mockImplementation(() => {
       expect(loop.executionContextStack).toEqual([]);
+      return event.env.userAgent.HostPromise.resolve('applied', internalType<HistoryStepResult>());
     });
     event.commit(tracker);
     expect(enqueue).toHaveBeenCalledOnce();
     expect(resume).not.toHaveBeenCalled();
-    queued();
+    expect(queued()).toBe(resume.mock.results[0]!.value);
     expect(resume).toHaveBeenCalledExactlyOnceWith(7, userInitiated ? 'activation' : 'none');
   });
 
@@ -181,13 +184,15 @@ describe('Navigate-event commit coordination', () => {
 
   it('queues traversal resumption after unwinding script preparation and reaches its unfinished owner', async () => {
     const { document, event, tracker, loop } = await fixture('traverse');
-    let queued!: () => void;
-    vi.spyOn(document.env.userAgent, 'runInParallel').mockImplementation((steps) => { queued = steps; });
+    const turns: (() => void)[] = [];
+    vi.spyOn(document.env.userAgent, 'runInParallel').mockImplementation((steps) => { turns.push(steps); });
     event.commit(tracker);
     expect(event.interceptionState).toBe('committed');
     expect(loop.executionContextStack).toEqual([]);
-    expect(queued).toBeTypeOf('function');
-    expect(queued).toThrow('Resuming an intercepted history traversal is not implemented');
+    expect(turns).toHaveLength(1);
+    turns.shift()!();
+    await expect.poll(() => turns.length).toBe(1);
+    expect(turns.shift()!).toThrow('History-step population and activation is not implemented');
   });
 
   it('connects reload to real entry updates and handlers while intercepted finishing remains explicit', async () => {

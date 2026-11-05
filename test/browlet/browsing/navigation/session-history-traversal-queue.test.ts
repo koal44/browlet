@@ -69,6 +69,29 @@ describe('session history traversal parallel queue', () => {
     expect(turns).toHaveLength(0);
   });
 
+  it('distinguishes entry from a suspended algorithm and ignores its returned status', async () => {
+    const { userAgent, traversable, turns } = fixture();
+    const queue = traversable.sessionHistoryTraversalQueue;
+    const pending = userAgent.HostPromise.withResolvers(internalType<string>());
+    const later = vi.fn();
+    expect(queue.userAgent).toBe(userAgent);
+    expect(queue.isExecuting).toBe(false);
+    traversable.appendSessionHistoryTraversalSteps(() => {
+      expect(queue.isExecuting).toBe(true);
+      return pending.promise;
+    });
+    traversable.appendSessionHistoryTraversalSteps(later);
+    turns.shift()!();
+    expect(queue.isExecuting).toBe(false);
+    expect(later).not.toHaveBeenCalled();
+
+    pending.resolve('canceled');
+    await expect.poll(() => turns.length).toBe(1);
+    turns.shift()!();
+    expect(later).toHaveBeenCalledOnce();
+    expect(queue.isExecuting).toBe(false);
+  });
+
   it('tags synchronous navigation per append without changing the supplied callback', () => {
     const { userAgent, traversable, turns } = fixture();
     const [, document] = BrowsingContext.createTopLevel(userAgent);
@@ -92,7 +115,7 @@ describe('session history traversal parallel queue', () => {
     traversable.appendSessionHistorySynchronousNavigationSteps(traversable, steps);
     const queue = traversable.sessionHistoryTraversalQueue;
     const pending = queue.algorithmSet.values().next().value!;
-    // §7.4.6.2 will supply eligibility, waiting, and nested-application checks.
+    // Selective history application removes the chosen item before invoking it.
     queue.algorithmSet.delete(pending);
     pending();
     turns.shift()!();

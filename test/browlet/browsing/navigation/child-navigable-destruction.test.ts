@@ -2,11 +2,12 @@ import { afterEach, assert, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { Navigable, type HistoryStepResult } from '../../../../src/browlet/browsing/navigation/navigable';
 import { NavigateEventImpl } from '../../../../src/browlet/browsing/navigation/api/navigate-event';
 import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { navigationAndTraversalTaskSource } from '../../../../src/browlet/scripting/tasks';
+import { internalType } from '../../../../src/infra/index';
 import { getRelevantRealm, unwrap } from '../../../support/browlet-binding';
 import { createSiblingWindow } from '../../../support/windows';
 
@@ -37,6 +38,7 @@ describe('child navigable destruction', () => {
       expect(container.contentNavigable).toBeNull();
       expect(child.container).toBeNull();
       expect(document.containerDocument).toBeNull();
+      expect(parent.childNavigables.has(child)).toBe(true);
       expect(histories).toHaveLength(2);
       expect(teardown).not.toHaveBeenCalled();
     });
@@ -49,7 +51,8 @@ describe('child navigable destruction', () => {
       expect(histories).toEqual([sibling]);
       expect(queued).toHaveLength(1);
     });
-    const update = vi.spyOn(parent, 'updateForNavigableCreationOrDestruction').mockReturnValue('applied');
+    const update = vi.spyOn(parent, 'updateForNavigableCreationOrDestruction')
+      .mockReturnValue(owner.env.userAgent.HostPromise.resolve('applied', internalType<HistoryStepResult>()));
 
     owner.env.userAgent.destroyChildNavigable(container);
 
@@ -57,6 +60,7 @@ describe('child navigable destruction', () => {
     expect(parent.activeSessionHistoryEntry.documentState.nestedHistories).toBe(histories);
     expect(child.activeWindowProxy).toBe(retainedProxy);
     expect(child.parent).toBe(parent);
+    expect(parent.childNavigables.has(child)).toBe(false);
     expect(update).not.toHaveBeenCalled();
     expect(destroyed).toHaveBeenCalledExactlyOnceWith(child);
     queued.shift()!();
@@ -131,6 +135,7 @@ describe('child navigable destruction', () => {
 
     expect(container.contentNavigable).toBeNull();
     expect(parent.activeSessionHistoryEntry.documentState.nestedHistories.map((history) => history.id)).toEqual([child.id]);
+    expect(parent.childNavigables.has(child)).toBe(true);
     expect(queued).toEqual([]);
     expect(destroyed).not.toHaveBeenCalled();
   });

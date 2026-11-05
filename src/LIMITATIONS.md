@@ -193,7 +193,8 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   applies the sandbox/sticky-activation/request gates. User-agent anti-abuse policy
   and confirmation UI still throw at their explicit owners. Navigation's queued
   multi-Document coordinator is connected, including the optional traversal event
-  pair; full history application and teardown's task-discard cancellation remain unfinished.
+  pair. Removed check tasks reject their internal wait; full history application
+  and cancellation of in-flight population still need their lifecycle integration.
   Internal handler/listener erasure works for existing targets; `document.open()`
   still needs its §8.4 selection and lifecycle hookup.
   BiDi has no session overrides yet. See the
@@ -1487,8 +1488,41 @@ their scroll mode. `go/back/forward` perform conversion, activity checks, and
 request preparation. Reload now dispatches its cancelable navigate event and
 queues history application. Delta traversal captures the source and queues
 target selection against the then-current distinct joint-history steps; out-of-range
-requests do nothing. Script source capture still needs transient activation,
-and both reload/traverse history-application methods explicitly throw until §7.4.6.
+requests do nothing. Script source capture still needs transient activation.
+Reload/traverse history application now checks sandbox permission and waits for
+beforeunload/navigate cancellation, retaining the traversal queue until completion.
+After admission it reselects affected navigables, advances their current entries,
+and queues cross-document Navigation event/tracker cleanup without aborting or
+settling those requests. Creation/destruction bookkeeping leaves pending navigation
+and reload work to its owner (`history-bookkeeping-navigation`, HTML issue #12724).
+Population and Fetch now recognize retained `traversal` ownership separately from
+the null navigation ID (`history-population-navigation-id`); metadata keeps that
+null ID, and superseding ownership still cancels pending work. Per-navigable
+preparation now queues the Window task, validates the target, fires applicable
+child traverse events, populates in parallel, and delivers retained continuation
+state. It preserves reload inputs until request construction and treats null
+Document results as update-only. The coordinator does not yet dispatch or consume
+these jobs: ready continuations, synchronous queue jumping, and failure/discard
+completion must be connected together. Eligible-step selection and nested
+completion are implemented separately on Traversable; the coordinator still
+needs to maintain the waiting set and wake when new eligible work arrives.
+Preparation/population forward asynchronous failures and queued-task removal to
+a waiting operation without duplicate reporting. Removed unload-check tasks also
+reject their internal wait. In-flight Fetch/body reads, periods with no queued task,
+and late callbacks after destruction still need teardown integration. The full
+coordinator is not yet connected to these completion paths.
+The separate history-entry activation operation connects the active entry,
+Document/Window, and initial visibility, but its persisted-state capture still
+throws before those changes. The provisional loader retains its existing path;
+the full coordinator must call activation after any required unloading.
+Admitted requests still reject explicitly before Document population and activation;
+active entries and the final joint-history step remain unchanged. No successful
+back/forward or cross-document reload is implied by these checks.
+Ordinary reload request construction selects Fetch's `no-cache` mode, so fresh
+cached Documents are revalidated and connection failures do not silently reuse
+them. Explicit host forced reloads remain missing, including their cache-bypass,
+subresource, and service-worker policies; setting the reload flag alone does not
+implement those effects.
 `pushState/replaceState` now serialize for storage,
 validate URL rewriting, and dispatch a trusted navigate event. Cancellation leaves
 the URL/state unchanged. Precommit handlers run and can reject the change.
@@ -1526,6 +1560,11 @@ retained descendant histories. Their traversal-queue precondition is still
 unenforced while initial creation and provisional local commits call them
 synchronously; full finalization/history application must establish those paths.
 See the [low-level audit](browlet/browsing/navigation/ROADMAP.md#html-7414-low-level-operations-on-session-history).
+History-step selection now resolves gaps and selects changing/reloading,
+possible cross-document, and length/index-only navigables. These are foundations
+for the still-unfinished history coordinator; recursive teardown and restoration
+must also maintain the new parent-owned child collection. See the
+[selection audit](browlet/browsing/navigation/ROADMAP.md#html-7461-history-step-selection).
 Cross-document finalization now inserts into child and grandchild history lists
 and retains a replacement's Navigation API key only for the same origin. History
 application still activates only the supplied entry: it does not unload old
@@ -1882,8 +1921,9 @@ also require Window transient activation. Reload now returns for a null relevant
 Document, checks the entry origin, and calls the live Document's navigable.
 Its coordinator now supplies Navigation API cancellation, state/tracker inputs,
 reloadPending, and traversal queuing. The queued reload history application still
-throws explicitly; Fetch/revalidation, unloading, replacement, and Navigation
-entry/activation updates remain unfinished. Stock Node still needs an explicit
+throws explicitly; dispatching population, unloading, replacement, and Navigation
+entry/activation updates remain unfinished. Reload request construction already
+selects Fetch revalidation. Stock Node still needs an explicit
 modeled incumbent for calls through another realm's author function. The [navigation slice](browlet/browsing/window/ROADMAP.md#html-724-third-slice-href-assign-replace-and-navigation-handoff)
 records these dependencies; the [component setter audit](browlet/browsing/window/ROADMAP.md#html-724-fourth-slice-url-component-setters)
 records the accepted parsing/encoding clashes and browser evidence. The [decision review](browlet/browsing/window/ROADMAP.md#location-descriptor-decision-review)

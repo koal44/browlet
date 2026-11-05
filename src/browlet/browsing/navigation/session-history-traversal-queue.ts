@@ -1,4 +1,4 @@
-import type { InternalPromise } from '../../../infra/index';
+import { InternalError, type InternalPromise } from '../../../infra/index';
 
 import type { UserAgent } from '../../user-agent';
 
@@ -13,6 +13,8 @@ export class SessionHistoryTraversalQueue {
   #userAgent: UserAgent;
   /** Whether the current algorithm is executing or waiting for its completion. */
   #running = false;
+  /** Whether a dequeued algorithm is currently entering its steps, rather than waiting. */
+  #executing = false;
   /** Whether a later host turn has already been requested. */
   #drainScheduled = false;
 
@@ -23,10 +25,25 @@ export class SessionHistoryTraversalQueue {
     this.#userAgent = userAgent;
   }
 
+  /** Browser owner of queued work, including work whose former Document has been destroyed. */
+  get userAgent(): UserAgent { return this.#userAgent; }
+
+  /** Whether an algorithm can enter history application from this queue's current invocation. */
+  get isExecuting(): boolean { return this.#executing; }
+
   /** Append an algorithm and wake this queue, preserving ordered-set identity. */
   append(steps: SessionHistoryTraversalSteps): void {
     this.algorithmSet.add(steps);
     this.#requestDrain();
+  }
+
+  /** Enter steps in the occupied queue, restoring any enclosing invocation after nested history work. */
+  runSteps<T>(steps: () => T): T {
+    if (!this.#running) throw new InternalError('History steps require an occupied session history traversal queue');
+    const wasExecuting = this.#executing;
+    this.#executing = true;
+    try { return steps(); }
+    finally { this.#executing = wasExecuting; }
   }
 
   /** Request one later turn without polling an idle queue or interrupting an unfinished algorithm. */
@@ -49,7 +66,7 @@ export class SessionHistoryTraversalQueue {
       while (this.algorithmSet.size !== 0) {
         const steps = this.algorithmSet.values().next().value!;
         this.algorithmSet.delete(steps);
-        const completion = steps();
+        const completion = this.runSteps(steps);
         if (completion !== undefined) {
           this.#userAgent.HostPromise.fromInternal(completion).observe(
             () => { this.#finish(); },
@@ -76,7 +93,7 @@ export class SessionHistoryTraversalQueue {
 }
 
 /** Steps may return their completion when waiting; only synchronous navigation steps have a target tag. */
-export type SessionHistoryTraversalSteps = (() => void | InternalPromise<void>) & {
+export type SessionHistoryTraversalSteps = (() => void | InternalPromise<unknown>) & {
   /** Present only for synchronous navigation steps that history application may run ahead of other work. */
   targetNavigable?: Navigable;
 };

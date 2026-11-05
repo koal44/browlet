@@ -21,6 +21,8 @@ export type TaskSourceKey =
 export type TaskCreationOptions = {
   /** Additional readiness condition, such as a MessagePort queue being enabled. */
   isRunnable?: () => boolean;
+  /** Internal owner notification when pending work is removed, without executing the task or entering author script. */
+  discardSteps?: () => void;
   /** Nesting level inherited by timers created inside this task; absent for other work. */
   timerNestingLevel?: number;
 };

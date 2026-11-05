@@ -1054,6 +1054,13 @@ reviewed dependency layers, not the number of `..` segments in an import.
 navigables, document creation, and session-history state. Window owns Window,
 WindowProxy, and Location. Their consumers use the corresponding component's
 index; cooperating modules within navigation import each other directly.
+
+Navigable owns its direct child collection alongside the parent link. Construction
+and parent reassignment keep those links paired; child destruction removes the
+child from the collection while retaining its historical parent reference. History
+selection uses this graph, independently of Document's DOM-based child/descendant
+collections. Recursive teardown and restoration must reconcile retained children
+before full history application can rely on that lifecycle.
 There is no umbrella browsing barrel.
 
 `navigation/state/` owns source snapshots, document state, and session-history
@@ -1136,7 +1143,36 @@ queues their checks on the owning globals, and returns a UserAgent-owned HostPro
 The UserAgent forwards to Navigable with its scheduling owner; no Document realm
 owns the cross-loop wait. Navigation resumes its parallel steps after completion,
 and definite closing queues teardown only after approval. Prompt policy/UI and
-cancellation of waits whose tasks are discarded by future teardown remain explicit.
+full teardown remain explicit. Removed unload-check tasks reject their internal
+wait without firing author events or fabricating a cancellation result.
+History-step admission also uses that browser-owned completion: the traversable
+normalizes the joint step and checks sandbox permission before waiting for
+Document cancellation tasks. Its queued caller returns completion so later history
+requests wait, while other traversables remain free to run. Navigation interprets
+failure results only after that wait. Admitted requests advance current entries
+but still stop explicitly before dispatching population/activation jobs.
+Synchronous navigation queue jumping shares the queue's execution admission;
+selected completions retain the nested-operation flag without giving suspended
+code execution admission. The coordinator's wake-ups and continuation processing
+remain unfinished, and provisional push/replace activation stays separate until
+full history application replaces it.
+History preparation and population accept optional failure steps for a waiting
+operation. Those steps take responsibility for asynchronous errors; without them,
+the existing task/parallel owner reports the exception. Synchronous setup errors
+still propagate to the direct caller. Late response-cancellation cleanup stays
+with its task owner after population has completed. Queued tasks can supply internal
+`discardSteps` through their environment; removal detaches the work before notifying
+its owner, without entering the removed task or author script. Document-wide removal
+detaches all matching tasks before notification and releases every waiter even if
+one notification throws. Preparation/population reuse their failure callback for
+this path. Inactive Documents retain their tasks; execution never invokes discard
+steps. Connecting these completions to the full history coordinator, canceling
+in-flight population, and rejecting late work for destroyed Documents remain unfinished.
+`Navigable.activateHistoryEntry()` owns the active-entry switch, Document/Window
+activation, and initial visibility after persisted-state capture. It does not
+advance the current entry or joint step, or restore script-visible history state.
+Persisted-state capture still throws; the full coordinator must supply its caller
+after any required unloading, preserving the displayed Document through population.
 Cross-document finalization inserts into the destination's own retained history,
 including child lists, and preserves replacement keys only across the same origin.
 The provisional history application still receives that destination and entry

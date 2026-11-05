@@ -34,7 +34,7 @@ import {
   DocumentState, SourceSnapshotParams, type SessionHistoryEntry,
   type DocumentBackedState, type PostResource,
 } from './state/index';
-import type { NavigationAPIMethodTracker } from './api/index';
+import type { NavigationAPIMethodTracker, NavigationType } from './api/index';
 import type { WindowImpl, WindowProxyHandle } from '../window/index';
 import { BrowletEnvironmentBase, type BrowletEnvironment } from '../../environment/index';
 import { HTMLDocumentParser, type ScriptHandler } from '../../html/parser/index';
@@ -52,8 +52,6 @@ import { SessionHistoryTraversalQueue, type SessionHistoryTraversalSteps } from 
 export class Navigable {
   /** Stable identity across this navigable's documents and browsing contexts. */
   id = Symbol('Navigable');
-  /** Containing navigable, or null at the top level. */
-  parent: Navigable | null;
   /** History entry selected by the latest navigation or traversal. */
   // TODO(HTML §7.4.1): Restrict mutation to the traversable's session history traversal queue.
   currentSessionHistoryEntry: SessionHistoryEntry;
@@ -68,6 +66,11 @@ export class Navigable {
   /** History entry supplying the active Document, independently of the current traversal entry. */
   // HTML permits mutation only on that Document's event loop; history application must preserve this ownership.
   #activeSessionHistoryEntry: SessionHistoryEntry;
+  /** Containing navigable, retained after destruction for existing references. */
+  #parent: Navigable | null = null;
+  /** Direct children in parent-association order, independent of Document tree order. */
+  // TODO(HTML §7.4.6.1/§7.5.10): Reconcile retained child associations during restoration and recursive Document teardown.
+  #childNavigables = new Set<Navigable>();
   /** Element whose content navigable is this destination, or null while unassociated. */
   #container: NavigableContainer | null = null;
 
@@ -81,9 +84,9 @@ export class Navigable {
     const browsingContext = document.browsingContext;
     if (browsingContext === null) throw new InternalError('An active Document needs a browsing context');
 
-    this.parent = parent;
     this.currentSessionHistoryEntry = document.env.createSessionHistoryEntry(document.url, documentState);
     this.#activeSessionHistoryEntry = this.currentSessionHistoryEntry;
+    this.parent = parent;
     browsingContext.setNavigable(this);
     // Traversables finish this after their own system visibility state is initialized.
     if (!(this instanceof Traversable)) {
@@ -125,7 +128,7 @@ export class Navigable {
       }
       historyEntry.step = targetStepEntry.step;
       parentDocState.nestedHistories.push({ id: navigable.id, entries: [historyEntry] });
-      traversable.updateForNavigableCreationOrDestruction();
+      return traversable.updateForNavigableCreationOrDestruction();
     });
     // SPEC_CLASH(bidi-child-created-target): HTML names traversable; notify for the new child, as BiDi's event and iframe tests require.
     creator.env.userAgent.webDriverBiDiNavigableCreated(navigable);
@@ -144,13 +147,14 @@ export class Navigable {
     if (document === null) throw new InternalError('Child destruction requires an active Document');
     // TODO(HTML §7.5.10): Recursive teardown currently stops at its explicit dependency.
     document.destroyAndDescendants();
+    if (navigable.parent !== null) navigable.parent.#childNavigables.delete(navigable);
     const parentNavigable = container.getNodeNavigable();
     if (parentNavigable === null) throw new InternalError('Child destruction requires the container\'s node navigable');
     const histories = parentNavigable.activeSessionHistoryEntry.documentState.nestedHistories;
     const index = histories.findIndex((history) => history.id === navigable.id);
     if (index !== -1) histories.splice(index, 1);
     const traversable = parentNavigable.traversable;
-    traversable.appendSessionHistoryTraversalSteps(() => { traversable.updateForNavigableCreationOrDestruction(); });
+    traversable.appendSessionHistoryTraversalSteps(() => traversable.updateForNavigableCreationOrDestruction());
     env.userAgent.webDriverBiDiNavigableDestroyed(navigable);
   }
 
@@ -178,11 +182,11 @@ export class Navigable {
       };
       const queueCheck = (document: DocumentImpl, steps: () => void) => {
         const completion = P.withResolvers(internalType<void>());
-        // Tasks retain their global's activity gate. TODO(HTML lifecycle): Coordinate canceled waits if teardown discards a task.
+        // Tasks retain their global's activity gate; removal rejects the internal wait without firing author events.
         document.env.queueTask('navigation-and-traversal', () => {
           try { steps(); completion.resolve(); }
           catch (error) { completion.reject(error); }
-        });
+        }, { discardSteps: () => { completion.reject(new InternalError('Unload check task was discarded')); } });
         return completion.promise;
       };
       const checkRemainingDocuments = () => {
@@ -293,6 +297,24 @@ export class Navigable {
       previousDocument?.notifyFullyActiveStateChanged();
       document?.notifyFullyActiveStateChanged();
     }
+  }
+
+  /** Containing navigable, or null at the top level; changing it keeps the child collections paired. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#nav-parent
+  get parent(): Navigable | null {
+    return this.#parent;
+  }
+  set parent(parent: Navigable | null) {
+    if (this.#parent === parent) return;
+    if (this.#parent !== null) this.#parent.#childNavigables.delete(this);
+    this.#parent = parent;
+    if (parent !== null) parent.#childNavigables.add(this);
+  }
+
+  /** Direct children for history traversal, including children in shadow trees. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#child-navigable
+  get childNavigables(): ReadonlySet<Navigable> {
+    return this.#childNavigables;
   }
 
   get activeDocument(): DocumentImpl | null {
@@ -711,6 +733,131 @@ export class Navigable {
     else targetEnv.queueTask('navigation-and-traversal', steps);
   }
 
+  /** Queue preparation before unloading/activation; supplied failure steps take responsibility for asynchronous errors. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#apply-the-history-step
+  // Extracted step 12: completionSteps supplies the coordinator's continuation-queue insertion.
+  prepareHistoryStep(
+    traversable: Traversable, sourceSnapshotParams: SourceSnapshotParams | null,
+    userInvolvement: UserNavigationInvolvement, navigationType: NavigationType | null,
+    completionSteps: (continuation: ChangingNavigableContinuationState) => void,
+    failureSteps?: (error: unknown) => void,
+  ): void {
+    const runSteps = (steps: () => void) => {
+      try { steps(); }
+      catch (error) {
+        if (failureSteps === undefined) throw error;
+        failureSteps(error);
+      }
+    };
+    const window = this.activeWindow;
+    if (window === null) throw new InternalError('History preparation requires an active Window');
+    const taskOptions = {
+      discardSteps: failureSteps === undefined ? undefined : () => { failureSteps(new InternalError('History preparation task was discarded')); },
+    };
+    window.env.queueTask('navigation-and-traversal', () => runSteps(() => {
+      const displayedEntry = this.activeSessionHistoryEntry;
+      const targetEntry = this.currentSessionHistoryEntry;
+      const displayedDocument = displayedEntry.document;
+      if (displayedDocument === null) throw new InternalError('History preparation requires a displayed Document');
+      const continuation: ChangingNavigableContinuationState = {
+        displayedDocument, targetEntry, navigable: this, updateOnly: false,
+      };
+      if (displayedEntry === targetEntry && !targetEntry.documentState.reloadPending) {
+        continuation.updateOnly = true;
+        completionSteps(continuation);
+        return;
+      }
+
+      switch (navigationType) {
+        case 'reload':
+          if (!targetEntry.documentState.reloadPending) throw new InternalError('History reload requires a pending reload');
+          break;
+        case 'traverse':
+          if (!targetEntry.documentState.everPopulated) throw new InternalError('History traversal requires a previously populated entry');
+          break;
+        case 'replace':
+          if (targetEntry.step !== displayedEntry.step || targetEntry.documentState.everPopulated) {
+            throw new InternalError('History replacement requires a new Document at the displayed step');
+          }
+          break;
+        case 'push':
+          if (displayedEntry.step === 'pending' || targetEntry.step !== displayedEntry.step + 1 || targetEntry.documentState.everPopulated) {
+            throw new InternalError('History push requires a new Document at the next step');
+          }
+          break;
+        case null: break;
+        default: assertNever(navigationType);
+      }
+
+      const oldOrigin = targetEntry.documentState.origin;
+      const displayedOrigin = displayedEntry.documentState.origin;
+      if (navigationType === 'traverse' && this !== (traversable as Navigable) && targetEntry !== displayedEntry &&
+        oldOrigin !== null && displayedOrigin !== null && areSameOrigin(oldOrigin, displayedOrigin)) {
+        this.activeWindow!.navigation.fireTraverseNavigateEvent(targetEntry, userInvolvement);
+      }
+
+      const afterDocumentPopulated = () => {
+        const document = targetEntry.document;
+        if (document === null) {
+          // SPEC_GAP(history-population-null-document): HTML marks update-only, then dereferences the null Document.
+          // Keep the displayed page, as browsers do, without resetting retained origin-dependent state.
+          continuation.updateOnly = true;
+        } else if (oldOrigin === null || !areSameOrigin(document.origin, oldOrigin)) {
+          targetEntry.classicHistoryAPIState = displayedDocument.env.serializeForStorage(null);
+          const context = document.browsingContext;
+          if (this.parent === null && !(context?.isAuxiliary && context.openerBrowsingContext !== null)) {
+            targetEntry.documentState.navigableTargetName = '';
+          }
+        }
+        completionSteps(continuation);
+      };
+      if (targetEntry.document === null || targetEntry.documentState.reloadPending) {
+        const navigationTimingType = targetEntry.document === null ? 'back_forward' : 'reload';
+        const targetSnapshotParams = this.snapshotTargetParams();
+        let source = sourceSnapshotParams;
+        if (source === null) {
+          const activeDocument = this.activeDocument;
+          if (activeDocument === null) throw new InternalError('History source snapshot requires an active Document');
+          source = new SourceSnapshotParams(activeDocument);
+        }
+        // Optional user-agent repost confirmation has no host integration yet.
+        const allowPOST = targetEntry.documentState.reloadPending;
+        window.env.userAgent.runInParallel(() => runSteps(() => {
+          try {
+            // SPEC_GAP(history-population-timing-input): HTML computes navTimingType but omits it from this call.
+            this.populateHistoryEntryDocument(targetEntry, navigationTimingType, source, targetSnapshotParams, userInvolvement, {
+              allowPOST, failureSteps,
+              completionSteps: () => {
+                const activeWindow = this.activeWindow;
+                if (activeWindow === null) throw new InternalError('History population completion requires an active Window');
+                activeWindow.env.queueTask('navigation-and-traversal', () => runSteps(afterDocumentPopulated), taskOptions);
+              },
+            });
+          } finally {
+            // SPEC_CLASH(history-reload-pending-inputs): HTML clears this before both POST admission and request flags (#12760).
+            // Preserve it until synchronous request construction has captured reloadNavigation; no response wait is needed.
+            targetEntry.documentState.reloadPending = false;
+          }
+        }));
+      } else {
+        afterDocumentPopulated();
+      }
+    }), taskOptions);
+  }
+
+  /** Save the displayed entry's state, then activate a populated entry and initialize its Document's visibility. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#activate-history-entry
+  activateHistoryEntry(entry: SessionHistoryEntry): void {
+    // TODO(HTML §7.4.6.3): The persisted-state owner must capture scroll positions before activation can complete.
+    this.activeSessionHistoryEntry.savePersistedState();
+    const document = entry.document;
+    if (document === null) throw new InternalError('History activation requires a populated Document');
+    if (document.isInitialAboutBlank) throw new InternalError('History activation cannot restore the initial about:blank Document');
+    this.activeSessionHistoryEntry = entry;
+    document.makeActive();
+    document.setInitialVisibilityState(this.traversable.systemVisibilityState);
+  }
+
   /** Populate a pending entry in parallel, then run its completion steps without committing it here. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#attempt-to-populate-the-history-entry's-document
   // SPEC_MISMATCH: attempt to populate the history entry's document(entry, navigable, navTimingType, sourceSnapshotParams, targetSnapshotParams, userInvolvement, navigationId = null, navigationParams = null, cspNavigationType = "other", allowPOST = false, completionSteps = empty)
@@ -721,14 +868,30 @@ export class Navigable {
   ): void {
     // TODO(HTML §7.4.5): Enforce parallel execution alongside the navigation/history queue assertions.
     const navigationId = options.navigationId ?? null;
+    // SPEC_CLASH(history-population-navigation-id): HTML's history caller leaves the ID null while owning "traversal".
+    // Capture that ownership for cancellation without exposing the sentinel as a navigation/BiDi ID.
+    const expectedNavigation = navigationId === null && this.ongoingNavigation === 'traversal' ? 'traversal' : navigationId;
     const cspNavigationType = options.cspNavigationType ?? 'other';
     const completionSteps = options.completionSteps;
+    const failureSteps = options.failureSteps;
+    // TODO(HTML §7.5.10): Teardown must also cancel in-flight Fetch/body reads and settle their waiting owner
+    // when there is no queued task to discard; later callbacks must not enqueue work for a destroyed Document.
+    const taskOptions = {
+      discardSteps: failureSteps === undefined ? undefined : () => { failureSteps(new InternalError('History population task was discarded')); },
+    };
+    const runSteps = (steps: () => void) => {
+      try { steps(); }
+      catch (error) {
+        if (failureSteps === undefined) throw error;
+        failureSteps(error);
+      }
+    };
     const queueResponse = (params: NavigationParams | NonFetchSchemeNavigationParams | null | undefined) => {
       const window = this.activeWindow;
       if (window === null) throw new InternalError('History population requires an active Window');
-      window.env.queueTask('navigation-and-traversal', () => {
+      window.env.queueTask('navigation-and-traversal', () => runSteps(() => {
         // Fetch's bare return is cancellation, even if another navigation reuses the null ID.
-        if (params === undefined || this.ongoingNavigation !== navigationId) {
+        if (params === undefined || this.ongoingNavigation !== expectedNavigation) {
           completionSteps?.();
           return;
         }
@@ -785,22 +948,25 @@ export class Navigable {
           // Firefox ignores those statuses without downloading. Both branches leave the entry unpopulated.
         } else if (params.response.status !== 204 && params.response.status !== 205) {
           const resource = new ResourceReader(params.response, window.env.userAgent);
-          const fail = (error: unknown) => window.env.queueTask('navigation-and-traversal', () => { throw error; });
+          const fail = (error: unknown) => window.env.queueTask('navigation-and-traversal', () => runSteps(() => { throw error; }), taskOptions);
           // Sniffing can wait for bytes. Resume Document creation and retained-state updates on the destination's task.
           // TODO(HTML §7.5): Document teardown must cancel the retained reader if it discards this continuation task.
-          resource.determineMIMEType().observe(() => window.env.queueTask('navigation-and-traversal', () => {
-            if (this.ongoingNavigation !== navigationId) {
-              resource.cancel().observe(() => {}, fail);
+          resource.determineMIMEType().observe(() => window.env.queueTask('navigation-and-traversal', () => runSteps(() => {
+            if (this.ongoingNavigation !== expectedNavigation) {
+              // Cleanup can fail after completion; report it separately rather than failing the completed job.
+              resource.cancel().observe(() => {}, (error) => {
+                window.env.queueTask('navigation-and-traversal', () => { throw error; });
+              });
               completionSteps?.();
               return;
             }
             entry.documentState.document = this.loadDocument(params, sourceSnapshotParams, entry.documentState.initiatorOrigin, resource);
             complete();
-          }), fail);
+          }), taskOptions), fail);
           return;
         }
         complete();
-      });
+      }), taskOptions);
     };
 
     let params: NavigationParams | NonFetchSchemeNavigationParams | null = options.navigationParams ?? null;
@@ -816,10 +982,14 @@ export class Navigable {
       } else if (fetchScheme && (documentResource === null || options.allowPOST === true && documentResource.requestBody !== 'failure')) {
         const env = this.activeWindow?.env;
         if (env === undefined) throw new InternalError('Fetching navigation parameters requires an active Window');
+        const fail = (error: unknown) => env.userAgent.runInParallel(() => runSteps(() => { throw error; }));
         NavigationParams.fromFetch(
           entry, this, sourceSnapshotParams, targetSnapshotParams, cspNavigationType,
           userInvolvement, navigationId, navigationTimingType, env,
-        ).observe(queueResponse, (error) => { env.userAgent.runInParallel(() => { throw error; }); });
+        ).observe((response) => {
+          try { queueResponse(response); }
+          catch (error) { fail(error); }
+        }, fail);
         return;
       } else if (!fetchScheme) {
         const initiatorOrigin = entry.documentState.initiatorOrigin;
@@ -1021,6 +1191,7 @@ export class Navigable {
   /** Reload this destination after its cancelable navigate event and through the traversal queue. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#reload
   reload(options: ReloadOptions = {}): void {
+    // TODO: Explicit host forced reloads need cache bypass, subresource policy, and service-worker bypass.
     const userInvolvement = options.userInvolvement ?? 'none';
     if (userInvolvement !== 'browser UI') {
       const window = this.activeWindow;
@@ -1036,7 +1207,7 @@ export class Navigable {
 
     this.activeSessionHistoryEntry.documentState.reloadPending = true;
     const traversable = this.traversable;
-    traversable.appendSessionHistoryTraversalSteps(() => { traversable.applyReloadHistoryStep(userInvolvement); });
+    traversable.appendSessionHistoryTraversalSteps(() => traversable.applyReloadHistoryStep(userInvolvement));
   }
 
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#nav-stop
@@ -1570,6 +1741,8 @@ export type PopulateHistoryEntryOptions = {
   cspNavigationType?: 'form-submission' | 'other';
   allowPOST?: boolean;
   completionSteps?: () => void;
+  /** Take responsibility for an asynchronous failure; absent these steps, report on the existing task/parallel owner. */
+  failureSteps?: (error: unknown) => void;
 };
 
 /** A navigation request retains HTML's concrete source client and captured policy container. */
@@ -1612,7 +1785,6 @@ export class Traversable extends Navigable implements FetchPromptTarget {
   /** Browser-owned queue serializing history traversal across Documents and descendant Agents. */
   sessionHistoryTraversalQueue: SessionHistoryTraversalQueue;
   /** Whether apply-history-step is already running a nested operation. */
-  // TODO(HTML §7.4.6.2): Set and clear this around synchronous-navigation steps that jump the queue.
   runningNestedApplyHistoryStep = false;
   /** Visibility reported by the host for this traversable. */
   systemVisibilityState: DocumentVisibilityState = 'visible';
@@ -1650,6 +1822,7 @@ export class Traversable extends Navigable implements FetchPromptTarget {
     historyHandling: HistoryHandlingBehavior, userInvolvement: UserNavigationInvolvement,
   ): void {
     // TODO(HTML §7.4.1.4/§7.4.6): Enforce traversal-queue ownership alongside the other history operations.
+    // Return joint-history completion once applyPushOrReplaceHistoryStep() uses the coordinator, retaining nested queue ownership.
     // SPEC_CLASH(same-document-finalization-active-entry): HTML's exact-entry check drops earlier queued pushes/replacements.
     // Preserve updates within the active DocumentState; discard work from a replaced or destroyed Document.
     // https://github.com/whatwg/html/issues/10232 and https://github.com/whatwg/html/issues/10274
@@ -1674,10 +1847,8 @@ export class Traversable extends Navigable implements FetchPromptTarget {
 
   /** Reapply the current joint-history step after adding or removing a child. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#update-for-navigable-creation/destruction
-  updateForNavigableCreationOrDestruction(): HistoryStepResult {
-    // TODO(HTML §7.4.6.1): Apply currentSessionHistoryStep with checkForCancelation false,
-    // null source/initiator, user involvement 'none', and null navigation type.
-    throw new InternalError('History update for navigable creation/destruction is not implemented');
+  updateForNavigableCreationOrDestruction(): InternalPromise<HistoryStepResult> {
+    return this.applyHistoryStep(this.currentSessionHistoryStep, false, null, null, 'none', null);
   }
 
   /** Traverse joint history; an omitted source Document denotes a browser-UI request. */
@@ -1692,8 +1863,18 @@ export class Traversable extends Navigable implements FetchPromptTarget {
       if (currentStepIndex < 0) throw new InternalError('The current history step is not present');
       const targetStep = allSteps[currentStepIndex + delta];
       if (targetStep === undefined) return;
-      this.applyTraverseHistoryStep(targetStep, sourceSnapshotParams, initiatorToCheck, userInvolvement);
+      return this.applyTraverseHistoryStep(targetStep, sourceSnapshotParams, initiatorToCheck, userInvolvement);
     });
+  }
+
+  /** Select the greatest retained step at or before the request, including gaps left by removed children. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#getting-the-used-step
+  getUsedStep(step: number): number {
+    const steps = this.getAllUsedHistorySteps();
+    for (let index = steps.length - 1; index >= 0; index--) {
+      if (steps[index]! <= step) return steps[index]!;
+    }
+    throw new InternalError('The requested history step has no retained predecessor');
   }
 
   /** Count distinct joint-history steps and locate the selected step within them. */
@@ -1724,38 +1905,24 @@ export class Traversable extends Navigable implements FetchPromptTarget {
 
   /** Apply the current joint-history step as a reload, with cancellation checks and no external initiator. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#apply-the-reload-history-step
-  applyReloadHistoryStep(_userInvolvement: UserNavigationInvolvement): HistoryStepResult {
-    // TODO(HTML §7.4.6): Apply currentSessionHistoryStep with cancellation enabled, null source/initiator,
-    // the supplied user involvement, and navigation type 'reload'. Populate entries with reloadPending,
-    // including Fetch/revalidation, unloading, Document activation, and Navigation entry/activation updates.
-    // Successful cross-document reload clears the old event/tracker without settling its promises.
-    // Waiting for Document tasks must return completion through the traversal queue's caller.
-    throw new InternalError('Reload history-step application is not implemented');
+  applyReloadHistoryStep(userInvolvement: UserNavigationInvolvement): InternalPromise<HistoryStepResult> {
+    return this.applyHistoryStep(this.currentSessionHistoryStep, true, null, null, userInvolvement, 'reload');
   }
 
   /** Apply a traversal with cancellation checks, its captured source, and initiating navigable. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#apply-the-traverse-history-step
   // Browser-UI delta traversal supplies null source/initiator, as accepted by the underlying apply-history-step operation.
   applyTraverseHistoryStep(
-    _step: number, _sourceSnapshotParams: SourceSnapshotParams | null,
-    _initiatorToCheck: Navigable | null, _userInvolvement: UserNavigationInvolvement,
-  ): HistoryStepResult {
-    // TODO(HTML 7.4.6): Apply the history step with cancellation enabled and navigation type 'traverse'.
-    // Check sandbox permission, beforeunload/navigate cancellation, and restore Documents/history with event/tracker notifications.
-    // Restore entry.classicHistoryAPIState through structured deserialization and the specified History/popstate updates.
-    // Repopulate or reactivate the shared DocumentState, then update each affected Document's latestEntry.
-    // While waiting for population, run eligible tagged steps from the queue's algorithmSet with
-    // runningNestedApplyHistoryStep set, excluding navigables already advanced by this traversal.
-    // Return completion through the queued caller, and wake this operation when tagged steps or population continuations arrive.
-    throw new InternalError('Traverse history-step application is not implemented');
+    step: number, sourceSnapshotParams: SourceSnapshotParams | null,
+    initiatorToCheck: Navigable | null, userInvolvement: UserNavigationInvolvement,
+  ): InternalPromise<HistoryStepResult> {
+    return this.applyHistoryStep(step, true, sourceSnapshotParams, initiatorToCheck, userInvolvement, 'traverse');
   }
 
   /** Resume an intercepted same-document traversal after its cancellation checks have passed. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#resume-applying-the-traverse-history-step
-  resumeTraverseHistoryStep(_step: number, _userInvolvement: UserNavigationInvolvement): void {
-    // TODO(HTML 7.4.6): Apply the history step with checkForCancelation false, null source/initiator,
-    // the supplied user involvement, and navigation type 'traverse', within the traversal queue.
-    throw new InternalError('Resuming an intercepted history traversal is not implemented');
+  resumeTraverseHistoryStep(step: number, userInvolvement: UserNavigationInvolvement): InternalPromise<HistoryStepResult> {
+    return this.applyHistoryStep(step, false, null, null, userInvolvement, 'traverse');
   }
 
   /** Activate the selected entry and retarget its browsing context's WindowProxy. */
@@ -1784,7 +1951,8 @@ export class Traversable extends Navigable implements FetchPromptTarget {
     navigable.activeSessionHistoryEntry = historyEntry;
     this.currentSessionHistoryStep = targetStep;
     document.makeActive();
-    // https://html.spec.whatwg.org/multipage/browsing-the-web.html#activate-history-entry
+    // TODO(HTML §7.4.6.1): Replace this provisional activation with activateHistoryEntry() through the full coordinator,
+    // once savePersistedState() can capture the departing entry rather than throwing at its §7.4.6.3 boundary.
     document.setInitialVisibilityState(navigable.traversable.systemVisibilityState);
     // This provisional caller only commits newly-created Documents. Reactivation and same-document
     // updates need their separate §7.2.6.4 algorithms, events, and tracker settlement.
@@ -1792,6 +1960,166 @@ export class Traversable extends Navigable implements FetchPromptTarget {
       navigable.getSessionHistoryEntriesForNavigationAPI(targetStep), historyEntry,
     );
     document.getRelevantGlobalObject()!.navigation.updateActivation(historyHandling, previousEntryForActivation);
+  }
+
+  /** Begin applying joint history, waiting for cancellation before advancing current entries. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#apply-the-history-step
+  // The UserAgent-owned completion carries the result while keeping the traversal queue occupied.
+  applyHistoryStep(
+    step: number, checkForCancelation: boolean, sourceSnapshotParams: SourceSnapshotParams | null,
+    initiatorToCheck: Navigable | null, userInvolvement: UserNavigationInvolvement, navigationType: NavigationType | null,
+  ): InternalPromise<HistoryStepResult> {
+    const queue = this.sessionHistoryTraversalQueue;
+    const userAgent = queue.userAgent;
+    const P = userAgent.HostPromise;
+    const resultType = internalType<HistoryStepResult>();
+    return P.try(() => {
+      if (!queue.isExecuting) throw new InternalError('History application must begin in its session history traversal queue');
+      const targetStep = this.getUsedStep(step);
+      if (initiatorToCheck !== null) {
+        if (sourceSnapshotParams === null) throw new InternalError('History traversal with an initiator requires a source snapshot');
+        for (const navigable of this.getNavigablesThatWillChangeOrReload(targetStep)) {
+          if (!initiatorToCheck.isAllowedBySandboxingToNavigate(navigable, sourceSnapshotParams)) return 'initiator-disallowed';
+        }
+      }
+
+      const crossing = this.getNavigablesThatMightCrossDocuments(targetStep);
+      const check = checkForCancelation
+        ? userAgent.checkIfUnloadingIsCanceled(crossing, this, targetStep, userInvolvement)
+        : P.resolve('continue', internalType<UnloadCancellationResult>());
+      return check.then((result) => {
+        if (result !== 'continue') return result;
+        // Cancellation callbacks can change entries and child navigables. Select both lists before writing current entries.
+        let changingNavigables = this.getNavigablesThatWillChangeOrReload(targetStep);
+        if (navigationType === null) {
+          // SPEC_CLASH(history-bookkeeping-navigation): HTML lets creation/destruction take over pending navigations (#12724).
+          // Follow browser isolation and Ladybird's guard: leave reload/document changes to their owning navigation.
+          changingNavigables = changingNavigables.filter((navigable) => {
+            const ongoing = navigable.ongoingNavigation;
+            if (ongoing !== null && ongoing !== 'traversal') return false;
+            const targetEntry = navigable.getTargetHistoryEntry(targetStep);
+            return ongoing === 'traversal' ||
+              (targetEntry.document === navigable.activeDocument && !targetEntry.documentState.reloadPending);
+          });
+        }
+        const nonchangingNavigables = this.getNavigablesThatOnlyNeedHistoryLengthAndIndexUpdate(targetStep);
+        for (const navigable of changingNavigables) {
+          const targetEntry = navigable.getTargetHistoryEntry(targetStep);
+          navigable.currentSessionHistoryEntry = targetEntry;
+          if (targetEntry.document !== navigable.activeDocument) {
+            const window = navigable.activeWindow;
+            if (window === null) throw new InternalError('History-step Navigation cleanup requires an active Window');
+            window.env.queueTask('navigation-and-traversal', () => {
+              const navigation = navigable.activeWindow?.navigation;
+              if (navigation === undefined) throw new InternalError('History-step Navigation cleanup requires an active Window');
+              navigation.ongoingNavigateEvent = null;
+              navigation.ongoingAPIMethodTracker = null;
+            });
+          }
+          // Assignment wakes parallel waits without aborting the successful navigation's event or tracker.
+          navigable.ongoingNavigation = 'traversal';
+        }
+
+        // TODO(HTML §7.4.6.1, step 9 onward): Connect Navigable.prepareHistoryStep() to a continuation queue,
+        // processing ready jobs alongside runSynchronousNavigationSteps() and wake-ups for new tagged appends.
+        // Add each dequeued continuation's navigable to the waiting set before dispatching its activation/update job.
+        // Retain displayed-Document ownership through deactivation (HTML #12668); population can replace its shared state.
+        // Call activateHistoryEntry() for non-update-only continuations after any required unloading.
+        // Connect failureSteps to completion so rejected jobs release the wait without duplicate reporting.
+        // Run Document.updateForHistoryStepApplication() on each Document's loop, including classic
+        // state, latestEntry, Navigation notifications, visibility, scrolling, and persisted state.
+        // Update nonchangingNavigables on their loops and finish the joint step only after all jobs complete.
+        // Connect task-discard notifications to coordinator cleanup; in-flight population still needs teardown cancellation.
+        void nonchangingNavigables;
+        throw new InternalError('History-step population and activation is not implemented');
+      }, undefined, resultType);
+    }, resultType);
+  }
+
+  /** Run eligible synchronous navigations before taking the next ready history continuation. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#sync-navigations-jump-queue
+  runSynchronousNavigationSteps(waitingNavigables: Set<Navigable>): InternalPromise<void> {
+    const queue = this.sessionHistoryTraversalQueue;
+    const P = queue.userAgent.HostPromise;
+    const runNext = (): void | InternalPromise<void> => {
+      if (this.runningNestedApplyHistoryStep) return;
+      while (true) {
+        let steps: SessionHistoryTraversalSteps | undefined;
+        for (const candidate of queue.algorithmSet) {
+          if (candidate.targetNavigable !== undefined && !waitingNavigables.has(candidate.targetNavigable)) {
+            steps = candidate;
+            break;
+          }
+        }
+        if (steps === undefined) return;
+        queue.algorithmSet.delete(steps);
+        this.runningNestedApplyHistoryStep = true;
+        try {
+          const completion = queue.runSteps(steps);
+          if (completion !== undefined) {
+            return P.fromInternal(completion).then(() => {
+              this.runningNestedApplyHistoryStep = false;
+              return runNext();
+            }, (error) => {
+              this.runningNestedApplyHistoryStep = false;
+              throw error;
+            }, internalType<void>());
+          }
+        } catch (error) {
+          this.runningNestedApplyHistoryStep = false;
+          throw error;
+        }
+        this.runningNestedApplyHistoryStep = false;
+      }
+    };
+    return P.try(() => queue.runSteps(runNext), internalType<void>());
+  }
+
+  /** Select entries that differ from the current entry or have a pending reload. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#get-all-navigables-whose-current-session-history-entry-will-change-or-reload
+  getNavigablesThatWillChangeOrReload(targetStep: number): Navigable[] {
+    const results: Navigable[] = [];
+    const navigablesToCheck: Navigable[] = [this];
+    for (const navigable of navigablesToCheck) {
+      const targetEntry = navigable.getTargetHistoryEntry(targetStep);
+      const reloadPending = targetEntry.documentState.reloadPending;
+      if (targetEntry !== navigable.currentSessionHistoryEntry || reloadPending) results.push(navigable);
+      if (targetEntry.document === navigable.activeDocument && !reloadPending) {
+        for (const child of navigable.childNavigables) navigablesToCheck.push(child);
+      }
+    }
+    return results;
+  }
+
+  /** Select unchanged branches whose Documents only need the joint-history length and index. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#getting-all-navigables-that-only-need-history-object-length/index-update
+  getNavigablesThatOnlyNeedHistoryLengthAndIndexUpdate(targetStep: number): Navigable[] {
+    const results: Navigable[] = [];
+    const navigablesToCheck: Navigable[] = [this];
+    for (const navigable of navigablesToCheck) {
+      const targetEntry = navigable.getTargetHistoryEntry(targetStep);
+      if (targetEntry === navigable.currentSessionHistoryEntry && !targetEntry.documentState.reloadPending) {
+        results.push(navigable);
+        for (const child of navigable.childNavigables) navigablesToCheck.push(child);
+      }
+    }
+    return results;
+  }
+
+  /** Select possible cross-document traversals; descendants of a selected navigable unload with it. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#getting-all-navigables-that-might-experience-a-cross-document-traversal
+  getNavigablesThatMightCrossDocuments(targetStep: number): Navigable[] {
+    const results: Navigable[] = [];
+    const navigablesToCheck: Navigable[] = [this];
+    for (const navigable of navigablesToCheck) {
+      const targetEntry = navigable.getTargetHistoryEntry(targetStep);
+      if (targetEntry.document !== navigable.activeDocument || targetEntry.documentState.reloadPending) {
+        results.push(navigable);
+      } else {
+        for (const child of navigable.childNavigables) navigablesToCheck.push(child);
+      }
+    }
+    return results;
   }
 
   /** Discard forward entries in this traversable and the child histories retained after pruning. */
@@ -1946,6 +2274,19 @@ export class TopLevelTraversable extends Traversable {
     // SPEC_CLASH(not-restored-reasons-collection): HTML adds "masked" after copying the root's reasons. Resolve before publishing diagnostics.
     throw new InternalError('Cross-origin restoration-diagnostic masking is not implemented');
   }
+}
+
+/** Retained first-half history-job state, consumed later when synchronous navigations permit activation. */
+// https://html.spec.whatwg.org/multipage/browsing-the-web.html#changing-navigable-continuation-state
+export interface ChangingNavigableContinuationState {
+  /** Document displayed before population can replace the target entry's shared state. */
+  displayedDocument: DocumentImpl;
+  /** Entry selected when the preparation task runs. */
+  targetEntry: SessionHistoryEntry;
+  /** Destination retained independently of the displayed Document's later activity. */
+  navigable: Navigable;
+  /** Whether the later job only updates history rather than unloading and activating a Document. */
+  updateOnly: boolean;
 }
 
 /** Outcome of applying a history step, including cancellation before or during navigate-event firing. */

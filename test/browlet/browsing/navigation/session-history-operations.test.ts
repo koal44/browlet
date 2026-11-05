@@ -109,12 +109,38 @@ describe('low-level session history operations', () => {
     expect(children.map((item) => item.step)).toEqual([2, 6]);
   });
 
+  it('selects the nearest retained step after child removal leaves a gap', async () => {
+    const { traversable, entry } = fixture();
+    const state = traversable.activeSessionHistoryEntry.documentState;
+    const nested = { id: Symbol('child'), entries: [entry(2), entry(4)] };
+    state.nestedHistories.push(nested);
+    traversable.sessionHistoryEntries.push(entry(7, state));
+
+    expect(await withinTraversal(traversable, () => traversable.getUsedStep(4))).toBe(4);
+    expect(await withinTraversal(traversable, () => traversable.getUsedStep(3))).toBe(2);
+    state.nestedHistories.splice(0, 1);
+    expect(await withinTraversal(traversable, () => traversable.getUsedStep(4))).toBe(0);
+    expect(await withinTraversal(traversable, () => traversable.getUsedStep(7))).toBe(7);
+    expect(await withinTraversal(traversable, () => traversable.getUsedStep(10))).toBe(7);
+    expect(traversable.currentSessionHistoryStep).toBe(0);
+  });
+
+  it('rejects an internal history request with no retained predecessor', async () => {
+    const { traversable } = fixture();
+    traversable.activeSessionHistoryEntry.step = 3;
+
+    await expect(withinTraversal(traversable, () => traversable.getUsedStep(2)))
+      .rejects.toThrow('The requested history step has no retained predecessor');
+  });
+
   it('rejects pending entries in retained history instead of treating them as numeric steps', async () => {
     const { traversable, document } = fixture();
     const pending = document.env.createSessionHistoryEntry(document.url, new DocumentState());
     traversable.activeSessionHistoryEntry.documentState.nestedHistories.push({ id: Symbol('child'), entries: [pending] });
 
     await expect(withinTraversal(traversable, () => traversable.getAllUsedHistorySteps()))
+      .rejects.toThrow('Used history steps require committed entries');
+    await expect(withinTraversal(traversable, () => traversable.getUsedStep(0)))
       .rejects.toThrow('Used history steps require committed entries');
     await expect(withinTraversal(traversable, () => traversable.clearForwardSessionHistory()))
       .rejects.toThrow('Forward history clearing requires committed entries');

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { Navigable, TopLevelTraversable, type HistoryStepResult } from '../../../../src/browlet/browsing/navigation/navigable';
 import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type {
@@ -11,7 +11,7 @@ import type {
 import type { HTMLFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/legacy/frame';
 import type { HTMLIFrameElement, HTMLObjectElement, HTMLFrameElement, Window } from '../../../../src/browlet/platform';
 import { UserAgent } from '../../../../src/browlet/user-agent';
-import { InternalError } from '../../../../src/infra/index';
+import { InternalError, internalType } from '../../../../src/infra/index';
 import { createOpaqueOrigin, parseURL, type TupleOrigin } from '../../../../src/url/index';
 import { getRelevantRealm, project, unwrap } from '../../../support/browlet-binding';
 
@@ -193,7 +193,7 @@ describe('embed child-navigation state', () => {
 });
 
 describe('child navigable creation', () => {
-  it('creates the inherited iframe context, then reaches the unfinished history application on the queue', () => {
+  it('creates the inherited iframe context, then reaches the unfinished history population on the queue', async () => {
     const userAgent = new UserAgent();
     const turns: (() => void)[] = [];
     vi.spyOn(userAgent, 'runInParallel').mockImplementation((steps) => { turns.push(steps); });
@@ -215,7 +215,9 @@ describe('child navigable creation', () => {
     expect(child.activeSessionHistoryEntry.step).toBe('pending');
     expect(parent.activeSessionHistoryEntry.documentState.nestedHistories).toEqual([]);
     expect(turns).toHaveLength(1);
-    expect(() => turns.shift()!()).toThrow('History update for navigable creation/destruction is not implemented');
+    turns.shift()!();
+    await expect.poll(() => turns.length).toBe(1);
+    expect(turns.shift()!).toThrow('History-step population and activation is not implemented');
     expect(child.activeSessionHistoryEntry.step).toBe(0);
     expect(parent.activeSessionHistoryEntry.documentState.nestedHistories)
       .toEqual([{ id: child.id, entries: [child.activeSessionHistoryEntry] }]);
@@ -270,7 +272,7 @@ describe('child navigable creation', () => {
     const update = vi.spyOn(parent, 'updateForNavigableCreationOrDestruction').mockImplementation(() => {
       expect(child.activeSessionHistoryEntry.step).toBe(2);
       expect(child.getSessionHistoryEntries()).toEqual([child.activeSessionHistoryEntry]);
-      return 'applied';
+      return env.userAgent.HostPromise.resolve('applied', internalType<HistoryStepResult>());
     });
 
     queued[0]!();
@@ -293,7 +295,8 @@ describe('child navigable creation', () => {
 
   it('uses the top-level group and traversable queue for a grandchild', () => {
     const { parent, container, document, createContext, queued, created } = prepareChildCreation();
-    const update = vi.spyOn(parent, 'updateForNavigableCreationOrDestruction').mockReturnValue('applied');
+    const update = vi.spyOn(parent, 'updateForNavigableCreationOrDestruction')
+      .mockReturnValue(document.env.userAgent.HostPromise.resolve('applied', internalType<HistoryStepResult>()));
     container.nodeDocument.env.userAgent.createChildNavigable(container);
     queued.shift()!();
     createContext.mockRestore();

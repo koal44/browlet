@@ -1427,6 +1427,7 @@ export class DocumentImpl extends NodeImpl {
   destroyAndDescendants(_afterAllDestruction?: () => void): void {
     // TODO(HTML §7.5.10): Run in parallel, mark inactive documents unsalvageable and collect diagnostics,
     // select child navigables, then wait for recursive child teardown before queuing destroy() and the continuation.
+    // Release the destroyed children's parent-owned navigable associations without discarding children of other retained Documents.
     // Inactive-document ownership, repeated requests for shared Documents, and runnable teardown tasks need their lifecycle audit.
     throw new InternalError('Recursive Document destruction is not implemented');
   }

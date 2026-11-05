@@ -160,8 +160,97 @@ describe('navigation Document dispatch', () => {
 });
 
 describe('population MIME preparation', () => {
-  it.each([false, true])('resumes on the destination task and rechecks the navigation (superseded: %s)', async (superseded) => {
+  it.each(['ready', 'failed'] as const)('notifies the waiting operation when teardown discards the %s MIME continuation', async (outcome) => {
     const { navigable, params, source, userAgent } = fixture();
+    navigable.ongoingNavigation = 'dispatch';
+    const document = navigable.activeDocument!;
+    const env = document.env;
+    const stream = ReadableStreamImpl.createDefault(undefined, undefined, 0, () => 1, userAgent.sandbox);
+    params.response.body = new FetchBody(stream, userAgent.sandbox);
+    const entry = env.createSessionHistoryEntry(params.url, new DocumentState());
+    const load = vi.spyOn(navigable, 'loadDocument');
+    const complete = vi.fn();
+    const failed = vi.fn();
+    const queue = vi.spyOn(env, 'queueTask');
+    navigable.populateHistoryEntryDocument(entry, 'navigate', source, navigable.snapshotTargetParams(), 'none', {
+      navigationId: 'dispatch', navigationParams: params, completionSteps: complete, failureSteps: failed,
+    });
+    expect(env.responsibleEventLoop.runTaskTurn()).toBe(true);
+    env.queueTask('navigation-and-traversal', () => { document.destroy(); });
+    if (outcome === 'failed') stream.error(new Error('response body failed'));
+    else stream.close();
+    await expect.poll(() => queue.mock.calls.length).toBe(3);
+    expect(env.responsibleEventLoop.runTaskTurn()).toBe(true);
+    expect(document.browsingContext).toBeNull();
+    expect(failed).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ message: 'History population task was discarded' }));
+    expect(complete).not.toHaveBeenCalled();
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it('delivers a body-read failure to the waiting operation without a duplicate task error', async () => {
+    const { navigable, params, source, userAgent } = fixture();
+    navigable.ongoingNavigation = 'dispatch';
+    const env = navigable.activeWindow!.env;
+    const stream = ReadableStreamImpl.createDefault(undefined, undefined, 0, () => 1, userAgent.sandbox);
+    params.response.body = new FetchBody(stream, userAgent.sandbox);
+    const entry = env.createSessionHistoryEntry(params.url, new DocumentState());
+    const load = vi.spyOn(navigable, 'loadDocument');
+    const complete = vi.fn();
+    const failed = vi.fn();
+    const queue = vi.spyOn(env, 'queueTask');
+    navigable.populateHistoryEntryDocument(entry, 'navigate', source, navigable.snapshotTargetParams(), 'none', {
+      navigationId: 'dispatch', navigationParams: params, completionSteps: complete, failureSteps: failed,
+    });
+    expect(env.responsibleEventLoop.runTaskTurn()).toBe(true);
+    const failure = new Error('response body failed');
+    stream.error(failure);
+    await expect.poll(() => queue.mock.calls.length).toBe(2);
+    expect(env.responsibleEventLoop.runTaskTurn()).toBe(true);
+    expect(failed).toHaveBeenCalledExactlyOnceWith(failure);
+    expect(complete).not.toHaveBeenCalled();
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('keeps late cancellation cleanup separate from completed population (discard: %s)', async (discard) => {
+    const { navigable, params, source, userAgent } = fixture();
+    navigable.ongoingNavigation = 'dispatch';
+    const env = navigable.activeWindow!.env;
+    const failure = new Error('response cancellation failed');
+    const stream = ReadableStreamImpl.createDefault(undefined, () => { throw failure; }, 0, () => 1, userAgent.sandbox);
+    params.response.body = new FetchBody(stream, userAgent.sandbox);
+    const entry = env.createSessionHistoryEntry(params.url, new DocumentState());
+    const complete = vi.fn();
+    const failed = vi.fn();
+    const queue = vi.spyOn(env, 'queueTask');
+    navigable.populateHistoryEntryDocument(entry, 'navigate', source, navigable.snapshotTargetParams(), 'none', {
+      navigationId: 'dispatch', navigationParams: params, completionSteps: complete, failureSteps: failed,
+    });
+    expect(env.responsibleEventLoop.runTaskTurn()).toBe(true);
+    stream.enqueueChunk(new Uint8Array(1450).fill(32));
+    await expect.poll(() => queue.mock.calls.length).toBe(2);
+    navigable.ongoingNavigation = 'replacement';
+    expect(env.responsibleEventLoop.runTaskTurn()).toBe(true);
+    expect(complete).toHaveBeenCalledOnce();
+    await expect.poll(() => queue.mock.calls.length).toBe(3);
+    if (discard) {
+      env.responsibleEventLoop.removeTasksForDocument(navigable.activeDocument!);
+      expect(env.responsibleEventLoop.runTaskTurn()).toBe(false);
+    } else {
+      expect(() => env.responsibleEventLoop.runTaskTurn()).toThrow(failure);
+    }
+    expect(failed).not.toHaveBeenCalled();
+    expect(complete).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    { owner: null, next: null }, { owner: null, next: 'replacement' },
+    { owner: 'traversal', next: 'traversal' }, { owner: 'traversal', next: 'replacement' },
+    { owner: 'traversal', next: null },
+  ])('resumes on the destination task and rechecks ownership ($owner → $next)', async ({ owner, next }) => {
+    const superseded = owner !== next;
+    const { navigable, params, source, userAgent } = fixture();
+    params.id = null;
+    navigable.ongoingNavigation = owner;
     const env = navigable.activeWindow!.env;
     const canceled = vi.fn();
     const stream = ReadableStreamImpl.createDefault(undefined, canceled, 0, () => 1, userAgent.sandbox);
@@ -185,7 +274,7 @@ describe('population MIME preparation', () => {
     bytes.set(new TextEncoder().encode('<!doctype html>'));
     stream.enqueueChunk(bytes);
     await expect.poll(() => queue.mock.calls.length).toBe(2);
-    if (superseded) navigable.ongoingNavigation = 'replacement';
+    navigable.ongoingNavigation = next;
     expect(env.responsibleEventLoop.runTaskTurn()).toBe(true);
     expect(complete).toHaveBeenCalledOnce();
     expect(load).toHaveBeenCalledTimes(superseded ? 0 : 1);

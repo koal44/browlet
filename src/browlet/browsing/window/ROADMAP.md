@@ -1608,7 +1608,7 @@ navigable throws an explicit lifecycle error.
 in `ReloadOptions`, defined beside Navigable. The options-record translation is
 reviewed and accepted. The §7.4.3 coordinator now selects Navigation
 state, dispatches the cancelable event, and sets `reloadPending` only if it may
-continue. It queues the explicitly unfinished `Traversable.applyReloadHistoryStep()`;
+continue. It queues `Traversable.applyReloadHistoryStep()` and waits for its unload-cancellation result;
 actual Fetch/revalidation, unloading, replacement, and Navigation entry/activation
 updates remain later work. See the
 [reload coordination audit](../navigation/ROADMAP.md#html-743-reload-coordination).

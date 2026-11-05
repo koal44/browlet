@@ -118,13 +118,58 @@ describe('Fetch navigation request CSP', () => {
     const queue = vi.spyOn(env, 'queueTask');
     navigable.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', { cspNavigationType: 'form-submission' });
     await expect.poll(() => queue.mock.calls.length).toBe(1);
-    expect(queue).toHaveBeenCalledWith('navigation-and-traversal', expect.any(Function));
+    expect(queue).toHaveBeenCalledWith('navigation-and-traversal', expect.any(Function), { discardSteps: undefined });
     expect(() => env.responsibleEventLoop.runTaskTurn()).toThrow('Inline user-agent Document creation is not implemented');
     expect(entry.document).toBeNull();
   });
 });
 
 describe('parallel navigation Fetch delivery and cancellation', () => {
+  it.each(['reload', 'back_forward'] as const)('fetches a %s owned by traversal without inventing a navigation ID', async (timing) => {
+    const { entry, navigable, source, target, env, transport } = fixture('');
+    navigable.ongoingNavigation = 'traversal';
+    const result = await NavigationParams.fromFetch(entry, navigable, source, target, 'other', 'none', null, timing, env);
+    expect(result).toBeInstanceOf(NavigationParams);
+    expect(result).toMatchObject({ id: null, navigationTimingType: timing, request: { webDriverNavigationId: null } });
+    expect(transport).toHaveBeenCalledOnce();
+    expect(navigable.ongoingNavigation).toBe('traversal');
+  });
+
+  it.each([
+    { id: null, ongoing: 'different-request' },
+    { id: 'original', ongoing: 'traversal' },
+  ])('does not adopt unrelated ownership ($id, $ongoing)', async ({ id, ongoing }) => {
+    const { entry, navigable, source, target, env } = fixture('');
+    navigable.ongoingNavigation = ongoing;
+    await expect(NavigationParams.fromFetch(entry, navigable, source, target, 'other', 'none', id, 'back_forward', env))
+      .resolves.toBeUndefined();
+    expect(navigable.ongoingNavigation).toBe(ongoing);
+  });
+
+  it.each([
+    { next: null, restore: false }, { next: 'replacement', restore: false }, { next: 'replacement', restore: true },
+  ])('cancels pending traversal Fetch on $next, including later traversal reuse: $restore', async ({ next, restore }) => {
+    const { entry, navigable, source, target, env, transport } = fixture('');
+    const connected = Promise.withResolvers<HTTPTransportListener>();
+    const abort = vi.fn();
+    transport.mockImplementation((_request, listener) => {
+      connected.resolve(listener);
+      return { pause() {}, resume() {}, abort };
+    });
+    navigable.ongoingNavigation = 'traversal';
+    const result = NavigationParams.fromFetch(entry, navigable, source, target, 'other', 'none', null, 'back_forward', env);
+    const listener = await connected.promise;
+    navigable.ongoingNavigation = 'traversal';
+    expect(abort).not.toHaveBeenCalled();
+    navigable.ongoingNavigation = next;
+    if (restore) navigable.ongoingNavigation = 'traversal';
+    await expect(result).resolves.toBeUndefined();
+    expect(abort).toHaveBeenCalledOnce();
+    listener.onHeaders(200, 'OK', new FetchHeaders(), true);
+    listener.onEnd();
+    expect(entry.document).toBeNull();
+  });
+
   it('delivers completed parameters without either Window task loop and retains the live controller', async () => {
     const { entry, navigable, source, target, env, sourceDocument, transport } = fixture('');
     const construct = vi.spyOn(entry, 'createNavigationRequest');

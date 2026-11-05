@@ -121,6 +121,7 @@ describe('Fetch navigation request construction', () => {
     const request = entry.createNavigationRequest(navigable, source, env.userAgent.sandbox);
     expect(request.reloadNavigation).toBe(reload);
     expect(request.historyNavigation).toBe(history);
+    expect(request.cacheMode).toBe(reload ? 'no-cache' : 'default');
     expect(entry.documentState.reloadPending).toBe(reloadPending);
     expect(entry.documentState.everPopulated).toBe(everPopulated);
   });
@@ -157,6 +158,13 @@ describe('Fetch navigation request construction', () => {
     expect(request.traversableForUserPrompts).toBe(parent);
     request.populateFromClient();
     expect(request.origin).toBe(parent.activeDocument!.origin);
+    expect(request.cacheMode).toBe('default');
+
+    entry.documentState.reloadPending = true;
+    const reload = entry.createNavigationRequest(navigable, source, env.userAgent.sandbox);
+    expect(reload.destination).toBe(tag);
+    expect(reload.reloadNavigation).toBe(true);
+    expect(reload.cacheMode).toBe('no-cache');
   });
 
   it('does not label another source as container-initiated or replace its client', () => {

@@ -514,17 +514,31 @@ export class EventLoop {
   }
 
   removeTask(task: Task): boolean {
-    return this.#getTaskQueue(task.source).delete(task);
+    if (!this.#getTaskQueue(task.source).delete(task)) return false;
+    task.discardSteps?.();
+    return true;
   }
 
   /** Discard queued tasks associated with a document, across all task sources. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#destroy-a-document
   removeTasksForDocument(document: DocumentImpl): void {
+    const discarded: Task[] = [];
     for (const queue of this.#taskQueues) {
       for (const task of queue) {
-        if (task.document === document) queue.delete(task);
+        if (task.document === document) {
+          queue.delete(task);
+          discarded.push(task);
+        }
       }
     }
+    // Detach the whole batch before notifying waiting owners, including reentrant removal.
+    // A failed notification must not leave another removed task's owner waiting forever.
+    let failure: { error: unknown; } | undefined;
+    for (const task of discarded) {
+      try { task.discardSteps?.(); }
+      catch (error) { failure ??= { error }; }
+    }
+    if (failure !== undefined) throw failure.error;
   }
 
   notifyTaskRunnabilityChanged(): void {
@@ -703,8 +717,11 @@ export class Task {
   source: TaskSource;
   /** Algorithm steps executed when this task is selected. */
   steps: () => void;
+  /** Implementation-only completion for an owner whose queued task is removed. */
+  discardSteps?: () => void;
   /** Nesting level inherited by timer initialization inside this task. */
   timerNestingLevel?: number;
+  /** Additional readiness condition supplied by the task's owner. */
   #isRunnable?: () => boolean;
 
   constructor(
@@ -716,6 +733,7 @@ export class Task {
     this.document = document;
     this.source = source;
     this.steps = steps;
+    this.discardSteps = options.discardSteps;
     this.timerNestingLevel = options.timerNestingLevel;
     this.#isRunnable = options.isRunnable;
   }

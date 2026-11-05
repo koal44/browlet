@@ -106,6 +106,56 @@ describe('task queues', () => {
     expect(canceled).not.toHaveBeenCalled();
   });
 
+  it('notifies a removed task once, after detaching it and without running its steps', () => {
+    const eventLoop = createEventLoop();
+    const steps = vi.fn();
+    const discarded = vi.fn(() => {
+      expect(eventLoop.getTaskQueue(networkingTaskSource).has(task)).toBe(false);
+      expect(eventLoop.removeTask(task)).toBe(false);
+      expect(eventLoop.currentlyRunningTask).toBeNull();
+    });
+    const task = eventLoop.queueTask(networkingTaskSource, null, steps, { discardSteps: discarded });
+    expect(eventLoop.removeTask(task)).toBe(true);
+    expect(eventLoop.removeTask(task)).toBe(false);
+    expect(discarded).toHaveBeenCalledOnce();
+    expect(steps).not.toHaveBeenCalled();
+  });
+
+  it('does not notify discard steps when executing a task or removing it after execution', () => {
+    const eventLoop = createEventLoop();
+    const discarded = vi.fn();
+    const steps = vi.fn();
+    const task = eventLoop.queueTask(networkingTaskSource, null, steps, { discardSteps: discarded });
+    expect(eventLoop.runTaskTurn()).toBe(true);
+    expect(eventLoop.removeTask(task)).toBe(false);
+    expect(steps).toHaveBeenCalledOnce();
+    expect(discarded).not.toHaveBeenCalled();
+  });
+
+  it('detaches all Document tasks before notification and releases every waiter even if a callback throws', () => {
+    const eventLoop = createEventLoop();
+    const document = createTestDocument();
+    const otherDocument = createTestDocument();
+    const failure = new Error('discard notification failed');
+    const first = vi.fn(() => {
+      expect(eventLoop.removeTask(secondTask)).toBe(false);
+      eventLoop.removeTasksForDocument(document);
+      throw failure;
+    });
+    const second = vi.fn();
+    const other = vi.fn();
+    eventLoop.queueTask(networkingTaskSource, document, vi.fn(), { discardSteps: first });
+    const secondTask = eventLoop.queueTask(domManipulationTaskSource, document, vi.fn(), { discardSteps: second });
+    const otherTask = eventLoop.queueTask(networkingTaskSource, otherDocument, vi.fn(), { discardSteps: other });
+    expect(() => eventLoop.removeTasksForDocument(document)).toThrow(failure);
+    eventLoop.removeTasksForDocument(document);
+    expect(first).toHaveBeenCalledOnce();
+    expect(second).toHaveBeenCalledOnce();
+    expect(other).not.toHaveBeenCalled();
+    expect([...eventLoop.getTaskQueue(networkingTaskSource)]).toEqual([otherTask]);
+    expect(eventLoop.getTaskQueue(domManipulationTaskSource).size).toBe(0);
+  });
+
   it('associates sources independently on each event loop', () => {
     const firstLoop = createEventLoop();
     const secondLoop = createEventLoop();

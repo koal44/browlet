@@ -2537,7 +2537,8 @@ admission policy and host confirmation remain throwing UserAgent dependencies;
 BiDi prompt hooks have no active sessions. `Navigable.checkIfUnloadingIsCanceled()`
 now queues the Document checks and optional traversal event pair with a
 UserAgent-owned completion promise; navigation and definite closing await it.
-Full history application and task-discard cancellation remain dependencies. See the
+Removed check tasks now reject that internal completion without firing events;
+full history application and cancellation of in-flight population remain dependencies. See the
 [producer audit](../browsing/navigation/ROADMAP.md#html-7424-beforeunload-production).
 Synthetic event dispatch does not show dialogs.
 

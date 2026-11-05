@@ -73,7 +73,7 @@ describe('unload cancellation coordination', () => {
     const replacement = vi.spyOn(other.activeDocument!, 'fireBeforeUnload');
     list.push(other);
 
-    expect(queued).toHaveBeenCalledExactlyOnceWith('navigation-and-traversal', expect.any(Function));
+    expect(queued).toHaveBeenCalledExactlyOnceWith('navigation-and-traversal', expect.any(Function), expect.any(Object));
     await runCheck(document);
 
     await expect(result).resolves.toBe('continue');
@@ -103,6 +103,18 @@ describe('unload cancellation coordination', () => {
     await runCheck(document);
 
     await rejected;
+  });
+
+  it('rejects the internal wait when teardown discards an unload check without firing beforeunload', async () => {
+    const { userAgent, top, document } = fixture();
+    const check = vi.spyOn(document, 'fireBeforeUnload');
+    document.env.queueTask('navigation-and-traversal', () => { document.destroy(); });
+    const result = read(userAgent.checkIfUnloadingIsCanceled([top]));
+    const rejected = expect(result).rejects.toThrow('Unload check task was discarded');
+    await runCheck(document);
+    await rejected;
+    expect(document.browsingContext).toBeNull();
+    expect(check).not.toHaveBeenCalled();
   });
 });
 

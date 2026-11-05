@@ -320,13 +320,12 @@ Ordinary requests to a different entry currently stop at Window's explicit
 timestamps, expiry, notification, and consumption are not. Once that input exists,
 `Traversable.appendSessionHistoryTraversalSteps()` now runs through the browser-owned
 §7.4.1.3 parallel queue. Its serial drain waits for a returned internal completion
-promise; synchronous-navigation queue jumping still needs §7.4.6.2 history application.
+promise; synchronous-navigation queue jumping still needs §7.4.6.1 history application.
 `Traversable.applyTraverseHistoryStep()` separately declares all inputs and all four
-outcomes but throws until §7.4.6 supplies permission/cancellation checks, Document
-restoration, history application, and event/tracker notifications. The existing
-queue now reaches that application dependency on a later background turn, after
-request acceptance; its commit/finish settlement still requires the unfinished
-history algorithm. Tests control these
+outcomes through internal completion. It now checks permission/cancellation and
+then rejects at the unfinished population/activation boundary. Navigation waits
+for this result before queuing its existing failure handling; commit/finish still
+requires restoration, history updates, and event/tracker notifications. Tests control these
 three owner boundaries and execute the prepared callback; they do not establish
 working traversal. Navigation startup and delta traversal now consume source
 snapshots too; Window closing authorization remains unfinished. The shared
@@ -1088,7 +1087,7 @@ Interception advances to committed before selecting its effect:
 | --- | --- |
 | push / replace | `DocumentImpl.updateURLAndHistory()` receives the current destination URL, classic History serialized state, and navigation type. §7.4.4 commits synchronous effects and queues finalization. Absent classic state is serialized null here, clearing it as all three browsers do (`SPEC_CLASH(intercepted-navigation-classic-state)`); the helper's omitted-state behavior remains unchanged for other callers. |
 | reload | `NavigationImpl.updateEntriesForSameDocumentNavigation()` receives the navigable's active entry. The subsequent slices implement entry/tracker/currententrychange/disposal/handlers and finishing policy. Automatic focus/scroll effects remain dependencies. |
-| traverse | Suppress normal scroll restoration, map user initiation to activation/none, and append traversal work. The callback invokes `Traversable.resumeTraverseHistoryStep()` with the destination step. The §7.4.1.3 queue and §7.4.6 resumed history application remain explicit throwing operations. Resumption must apply history with cancellation checks disabled and null source/initiator; it must not repeat the original traversal's cancellation checks. |
+| traverse | Suppress normal scroll restoration, map user initiation to activation/none, and append traversal work. The callback returns `Traversable.resumeTraverseHistoryStep()` completion with the destination step. The queue waits; resumption disables cancellation and uses null source/initiator. Population/activation remain explicit dependencies, and the original traversal's cancellation checks are not repeated. |
 
 After the effect returns, commit resolves the original transition's committed
 promise. A nonintercepted cross-document request releases its method tracker

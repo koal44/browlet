@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
+import type { HistoryStepResult } from '../../../src/browlet/browsing/navigation/navigable';
+import type { SessionHistoryTraversalSteps } from '../../../src/browlet/browsing/navigation/session-history-traversal-queue';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import type { BrowletEnvironment } from '../../../src/browlet/environment/index';
 import type { NavigationResultResult } from '../../../src/browlet/platform';
 import { navigationAndTraversalTaskSource } from '../../../src/browlet/scripting/tasks';
+import { internalType } from '../../../src/infra/index';
 import { getRelevantRealm, unwrap } from '../../support/browlet-binding';
 import { runInHostTask } from '../../support/tasks';
 
@@ -179,25 +183,53 @@ describe('Navigation traversal preparation', () => {
 });
 
 describe('queued Navigation traversal work', () => {
-  it('reaches the unfinished history application through the real queue', async () => {
+  it('reaches the unfinished population after real queued cancellation checks', async () => {
     const { browser, document, queue, apply } = await fixture();
-    let queued!: () => void;
-    vi.spyOn(document.env.userAgent, 'runInParallel').mockImplementation((steps) => { queued = steps; });
+    const turns: (() => void)[] = [];
+    vi.spyOn(document.env.userAgent, 'runInParallel').mockImplementation((steps) => { turns.push(steps); });
     queue.mockRestore();
     apply.mockRestore();
     browser.window.navigation.back();
-    expect(queued).toBeTypeOf('function');
-    expect(queued).toThrow('Traverse history-step application is not implemented');
+    expect(turns).toHaveLength(1);
+    turns.shift()!();
+    await expect.poll(() => turns.length).toBe(1);
+    expect(turns.shift()!).toThrow('History-step population and activation is not implemented');
   });
 
   it('delivers cancellation from actual parallel queue execution to the Navigation owner', async () => {
     const { browser, document, queue, apply, navigation } = await fixture();
     queue.mockRestore();
-    apply.mockReturnValue('canceled-by-beforeunload');
+    apply.mockReturnValue(document.env.userAgent.HostPromise.resolve('canceled-by-beforeunload', internalType<HistoryStepResult>()));
     const errors = await rejections(browser.window.navigation.back(), document.env);
     expect(apply).toHaveBeenCalledOnce();
     expect(errors).toHaveLength(2);
     for (const error of errors) expect(error).toMatchObject({ name: 'AbortError' });
+    expect(navigation.upcomingTraverseAPIMethodTrackers.size).toBe(0);
+  });
+
+  it('rejects both public promises after a real beforeunload dismissal', async () => {
+    const { browser, document, queue, apply, navigation, entries } = await fixture();
+    queue.mockRestore();
+    apply.mockRestore();
+    const state = new DocumentState();
+    state.origin = document.origin;
+    state.everPopulated = true;
+    entries[0]!.documentState = state;
+    const userAgent = document.env.userAgent;
+    document.getRelevantGlobalObject()!.lastActivationTimestamp = -Infinity;
+    browser.window.addEventListener('beforeunload', (event) => { event.preventDefault(); });
+    const navigate = vi.fn();
+    browser.window.navigation.addEventListener('navigate', navigate);
+    vi.spyOn(userAgent, 'shouldShowBeforeUnloadPrompt').mockReturnValue(true);
+    vi.spyOn(userAgent, 'webDriverBiDiUserPromptOpened').mockReturnValue('dismiss');
+
+    const errors = await rejections(browser.window.navigation.back(), document.env);
+
+    expect(errors).toHaveLength(2);
+    expect(errors[0]).toBeInstanceOf(browser.window.DOMException);
+    expect(errors[0]).toMatchObject({ name: 'AbortError' });
+    expect(errors[0]).toBe(errors[1]);
+    expect(navigate).not.toHaveBeenCalled();
     expect(navigation.upcomingTraverseAPIMethodTrackers.size).toBe(0);
   });
 
@@ -231,7 +263,7 @@ describe('queued Navigation traversal work', () => {
     const result = Reflect.apply(other.window.Navigation.prototype.back, browser.window.navigation, []);
     const settled = rejections(result, document.env);
     setFailure(fixtureState, cause);
-    steps[0]!();
+    await steps[0]!()?.backing;
     expect(navigation.upcomingTraverseAPIMethodTrackers.size).toBe(1);
     expect(document.env.responsibleEventLoop.getTaskQueue(navigationAndTraversalTaskSource).size).toBe(1);
     await drain(document.env);
@@ -246,21 +278,21 @@ describe('queued Navigation traversal work', () => {
   it.each(['applied', 'canceled-by-navigate'] as const)('leaves %s settlement to the navigation/event owner', async (outcome) => {
     const { browser, navigation, document, entries, steps, apply } = await fixture();
     const result = browser.window.navigation.back();
-    apply.mockReturnValue(outcome);
+    apply.mockReturnValue(document.env.userAgent.HostPromise.resolve(outcome, internalType<HistoryStepResult>()));
     let settled = false;
     void result.committed!.then(() => { settled = true; });
     void result.finished!.then(() => { settled = true; });
-    steps[0]!();
+    await steps[0]!()?.backing;
     await drain(document.env);
     expect(settled).toBe(false);
     expect(navigation.upcomingTraverseAPIMethodTrackers.has(entries[0]!.navigationAPIKey)).toBe(true);
   });
 
-  it('retains the explicit history-step application dependency', async () => {
+  it('requires history application to enter through the owning traversal queue', async () => {
     const { browser, steps, apply } = await fixture();
     apply.mockRestore();
     browser.window.navigation.back();
-    expect(() => steps[0]!()).toThrow('Traverse history-step application is not implemented');
+    await expect(steps[0]!()?.backing).rejects.toThrow('History application must begin in its session history traversal queue');
   });
 
   it.each(['missing', 'already-active', 'beforeunload', 'disallowed'] as const)('does not let a delayed %s rejection remove a newer tracker for the same key', async (cause) => {
@@ -270,7 +302,7 @@ describe('queued Navigation traversal work', () => {
     const result = browser.window.navigation.back();
     const errors = rejections(result, document.env);
     setFailure(fixtureState, cause);
-    steps[0]!();
+    await steps[0]!()?.backing;
     const original = navigation.upcomingTraverseAPIMethodTrackers.get(key)!;
     const reason = new Error('earlier cancellation');
     original.rejectFinished(reason);
@@ -288,7 +320,7 @@ describe('queued Navigation traversal work', () => {
     const errors = rejections(result, document.env);
     const tracker = navigation.upcomingTraverseAPIMethodTrackers.get(key)!;
     setFailure(fixtureState, 'beforeunload');
-    steps[0]!();
+    await steps[0]!()?.backing;
     if (ongoing) {
       navigation.upcomingTraverseAPIMethodTrackers.delete(key);
       navigation.ongoingAPIMethodTracker = tracker;
@@ -321,16 +353,23 @@ async function fixture() {
   navigation.currentEntryIndex = -1;
   navigation.initializeEntriesForNewDocument(entries, current);
   const activation = vi.spyOn(window, 'hasTransientActivation').mockReturnValue(false);
-  const steps: (() => void)[] = [];
+  const steps: SessionHistoryTraversalSteps[] = [];
   const queue = vi.spyOn(traversable, 'appendSessionHistoryTraversalSteps').mockImplementation((step) => { steps.push(step); });
-  const apply = vi.spyOn(traversable, 'applyTraverseHistoryStep').mockReturnValue('applied');
+  const apply = vi.spyOn(traversable, 'applyTraverseHistoryStep')
+    .mockReturnValue(document.env.userAgent.HostPromise.resolve('applied', internalType<HistoryStepResult>()));
   return { browser, document, navigation, navigable, traversable, entries, activation, steps, queue, apply };
 }
 
 function setFailure(state: Awaited<ReturnType<typeof fixture>>, cause: 'missing' | 'already-active' | 'beforeunload' | 'disallowed'): void {
-  if (cause === 'missing') state.traversable.sessionHistoryEntries.shift();
-  else if (cause === 'already-active') state.navigable.activeSessionHistoryEntry = state.entries[0]!;
-  else state.apply.mockReturnValue(cause === 'beforeunload' ? 'canceled-by-beforeunload' : 'initiator-disallowed');
+  if (cause === 'missing') {
+    state.traversable.sessionHistoryEntries.shift();
+  } else if (cause === 'already-active') {
+    state.navigable.activeSessionHistoryEntry = state.entries[0]!;
+  } else {
+    state.apply.mockReturnValue(state.document.env.userAgent.HostPromise.resolve(
+      cause === 'beforeunload' ? 'canceled-by-beforeunload' : 'initiator-disallowed', internalType<HistoryStepResult>(),
+    ));
+  }
 }
 
 function drain(env: BrowletEnvironment): Promise<void> {

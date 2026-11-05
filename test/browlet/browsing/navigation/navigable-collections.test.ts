@@ -8,6 +8,24 @@ import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { unwrap } from '../../../support/browlet-binding';
 
 describe('related navigable collections', () => {
+  it('pairs parent and child links without deriving them from DOM order or connection', () => {
+    const root = createRoot();
+    const first = createChild(root.document, 'iframe');
+    const second = createChild(root.document, 'object');
+    const children = root.navigable.childNavigables;
+    root.document.body!.insertBefore(second.container, first.container);
+
+    expect([...children]).toEqual([first.navigable, second.navigable]);
+    expect(root.document.getDocumentTreeChildNavigables()).toEqual([second.navigable, first.navigable]);
+    first.navigable.parent = root.navigable;
+    expect([...children]).toEqual([first.navigable, second.navigable]);
+    first.navigable.parent = second.navigable;
+    expect([...children]).toEqual([second.navigable]);
+    expect([...second.navigable.childNavigables]).toEqual([first.navigable]);
+    first.navigable.parent = null;
+    expect([...second.navigable.childNavigables]).toEqual([]);
+  });
+
   it('orders ancestors from the outermost parent and includes self only in the inclusive list', () => {
     const root = createRoot();
     const child = createChild(root.document, 'iframe');
@@ -78,6 +96,8 @@ describe('related navigable collections', () => {
     expect(child.document.getInclusiveAncestorNavigables()).toEqual([root.navigable, child.navigable]);
     expect(child.document.getInclusiveDescendantNavigables()).toEqual([child.navigable, grandchild.navigable]);
     expect(root.document.getDescendantNavigables()).toEqual([child.navigable, grandchild.navigable]);
+    // Retained children remain discoverable independently of the parent's active Document.
+    expect([...root.navigable.childNavigables]).toEqual([child.navigable]);
     expect(root.document.getDocumentTreeChildNavigables()).toEqual([]);
     expect(() => root.document.getAncestorNavigables()).toThrow('Ancestor collection requires a node navigable');
     expect(() => root.document.getInclusiveAncestorNavigables()).toThrow('Ancestor collection requires a node navigable');

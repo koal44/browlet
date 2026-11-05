@@ -36,6 +36,10 @@ outside consumers use its index, while its modules import each other directly.
 - Document owns the ancestor, inclusive-ancestor, descendant, inclusive-descendant,
   and document-tree child collections. History-action activation consumption and
   COOP access-reporting ancestry use these shared algorithms.
+- Navigable owns the direct child collection used by history selection, separately
+  from Document's DOM walks. Traversable resolves a requested step to a retained
+  step and selects changing/reloading, possible cross-document, and length/index-only
+  navigables; applying their work remains the next coordinator boundary.
 - `Navigable.findNavigableByTargetName()` searches the source subtree, its
   traversable, and then familiar contexts in the same group. `chooseNavigable()`
   uses it for existing named targets and coordinates new-target policy, activation
@@ -347,8 +351,8 @@ case. The non-null source still requires Window's unfinished transient activatio
 Navigation API traversal, navigation startup, and delta traversal now use it;
 Window closing authorization remains a later consumer. `Traversable.appendSessionHistoryTraversalSteps()` now
 executes through the §7.4.1.3 queue. `applyTraverseHistoryStep()` exposes the §7.4.6
-application contract, including all four history-step outcomes, but still throws
-when that queued work runs. The Navigation API roadmap records
+application contract, including all four history-step outcomes. It now checks
+permission and cancellation, then stops before population/activation. The Navigation API roadmap records
 its prepared callback, queued rejection rules, and approved obsolete-tracker guard.
 
 Location's [href/assign/replace handoff](../window/ROADMAP.md#html-724-third-slice-href-assign-replace-and-navigation-handoff)
@@ -373,8 +377,9 @@ consumes those inputs: it selects the active entry's state unless supplied state
 is non-null, fires the cancelable reload navigate event except for browser UI,
 and forwards the tracker to existing event machinery. Cancellation or interception
 returns before marking `reloadPending` or appending traversal work. Otherwise the
-active state is marked and the traversable's queue calls the explicit
-`applyReloadHistoryStep()` dependency. Fetch/revalidation, unloading, replacement,
+active state is marked and the traversable's queue calls
+`applyReloadHistoryStep()` for unload cancellation. Request construction supplies
+ordinary reload revalidation; dispatching population, unloading, replacement,
 restoration, and Navigation entry/activation updates remain §7.4.6 work. The
 [reload audit](#html-743-reload-coordination) records coverage and browser evidence.
 
@@ -911,9 +916,9 @@ The complete path is **not executable yet**:
 - `appendSessionHistoryTraversalSteps()` now queues the child insertion. It assigns
   the parent's history step and appends the nested history before reaching the
   unfinished joint-history application on that later background turn.
-- The new `updateForNavigableCreationOrDestruction()` is a throwing §7.4.6.1
-  dependency. It must apply the current joint-history step without cancellation,
-  with null source/initiator/navigation type and user involvement `none`;
+- `updateForNavigableCreationOrDestruction()` now enters §7.4.6.1 with the
+  current joint-history step without cancellation, null source/initiator/navigation
+  type, and user involvement `none`. Population/activation still rejects explicitly;
   history lengths, Navigation API entries, and affected Documents must all be
   updated by that application.
 - Element insertion, removal, `src`/`srcdoc` processing, object/embed resource
@@ -1058,7 +1063,7 @@ are not cleared by this coordinator.
 | --- | --- |
 | [Recursive Document destruction](https://html.spec.whatwg.org/multipage/document-lifecycle.html#destroy-a-document-and-its-descendants), §7.5.10 | New `Document.destroyAndDescendants(afterAllDestruction?)` throws. Its full contract requires parallel execution, inactive-document unsalvageability/NotRestoredReasons, child selection and recursive completion, then a task invoking `destroy()` and the optional continuation. Existing `destroy()` requires an owning task and handles only an active Document; retained inactive history ownership is still missing. |
 | Teardown scheduling | Clearing the container makes its child Document not fully active. Existing global-task activity gating therefore blocks queued off-loop abortion and ordinary teardown tasks. Resolve the destruction-task lifecycle and notification ordering during §7.5.10; do not silently bypass activity checks here. |
-| Session-history traversal | The queue now executes appended work; `updateForNavigableCreationOrDestruction()` still throws. It must reapply the current joint history step without cancellation checks. |
+| Session-history traversal | The queue executes appended work and waits for `updateForNavigableCreationOrDestruction()`. It selects the current joint-history step without cancellation, then rejects at the unfinished population/activation boundary. |
 | [BiDi destruction](https://w3c.github.io/webdriver-bidi/#webdriver-bidi-navigable-destroyed) | New `UserAgent.webDriverBiDiNavigableDestroyed()` is an explicit provisional hook. Live sessions, navigable-info serialization, parent-related event subscriptions, event delivery, and subscription pruning remain unfinished. |
 | Element lifecycle | Iframe/legacy-frame removal, object fallback/resource changes, and embed removal/display-no-plugin must call their node Document's UserAgent. Source TODOs name the route and the missing startup/teardown/history work. DOM removal does not automatically invoke this unfinished coordinator. |
 
@@ -1104,7 +1109,7 @@ subsection's audit and coordinators, not functional window closing.
 | `TopLevelTraversable.destroy()` | Capture the active browsing context, request recursive destruction for each non-null history Document, remove the captured context from its group, notify UI removal, unregister the traversable/clear its session storage, then notify BiDi. `UserAgent.destroyTopLevelTraversable()` is the browser-owned entry; it does not apply script-closing permission checks. Recursive Document destruction still throws before removal can proceed. |
 | `TopLevelTraversable.close()` | Return if `isClosing`; otherwise invoke definite closing. It does not itself set `isClosing`. |
 | `TopLevelTraversable.definitelyClose()` | Check unloading cancellation for inclusive descendants, return on either cancellation result, then append traversal steps. Those steps select the then-active Document and browsing context, then unload with null replacement and destruction as the completion callback. The callback retains that context even if unloading destroys the Document. It deliberately does not repeat the `isClosing` guard. |
-| `Navigable.checkIfUnloadingIsCanceled()` | §7.4.2.4 now returns a browser-owned completion promise. It snapshots Documents, queues the optional top-level event pair before other checks, and shares prompt state across their Window tasks. Prompt policy/UI and teardown's task-discard cancellation remain explicit dependencies. |
+| `Navigable.checkIfUnloadingIsCanceled()` | §7.4.2.4 returns a browser-owned completion promise. It snapshots Documents, queues the optional top-level event pair before other checks, and shares prompt state across their Window tasks. Removed check tasks reject the internal wait. Prompt policy/UI and full teardown remain explicit dependencies. |
 | `Document.unloadAndDescendants()` | Explicit §7.5.9 dependency with replacement Document, completion steps, and page-swap steps. Traversal-queue ownership, recursive child tasks/waits, page-swap delivery, and single-document unloading must be implemented together. |
 
 `BrowsingContextGroup.remove()` already removes the UserAgent's empty group while
@@ -1884,8 +1889,8 @@ environment or enter an HTML event-loop task to perform background work.
 | Append traversal steps | Traversable forwards to the queue, which appends and requests a drain. Appends during execution follow existing pending work. |
 | Append synchronous navigation steps | Each append creates a callable tagged with its target navigable without modifying the supplied callback. Tagged steps run in normal queue order unless history application explicitly selects them. |
 | Start and run in parallel | Uses `UserAgent.runInParallel()`, sleeping when empty rather than implementing the specification's conceptual busy loop. Idle queues schedule no recurring work; a subsequent append wakes them. |
-| Run one algorithm before the next | Synchronous steps run directly. A step can return `InternalPromise<void>` to retain queue ownership while waiting; the UserAgent's `HostPromise` observes completion and schedules resumption. This adaptation and the browser-owned queue were reviewed and accepted. History application and its queued callers must propagate that completion when their waits are implemented. |
-| Queue jumping | The target tag and mutable pending set are present. §7.4.6.2 must provide the navigables-that-must-wait set, population/continuation coordination, eligible-step selection, and the `runningNestedApplyHistoryStep` guard. Tagged appends and population continuations must also wake the suspended history operation; its completion promise alone does not provide that notification. These remain explicit at the history-application boundary. |
+| Run one algorithm before the next | Synchronous steps run directly. A step can return an `InternalPromise` to retain queue ownership while waiting; the UserAgent's `HostPromise` observes completion and schedules resumption without interpreting its result. This queue adaptation and browser ownership were reviewed and accepted. History application and its queued callers now propagate their completion. |
+| Queue jumping | §7.4.6.1's `runSynchronousNavigationSteps()` selects eligible tagged steps and retains `runningNestedApplyHistoryStep` through their completion. Its coordinator must still maintain the navigables-that-must-wait set and connect population/continuation processing. Tagged appends and population continuations must wake the suspended operation; its completion promise alone does not provide that notification. These remain explicit at the history-application boundary. |
 
 Internal algorithm exceptions are surfaced on the executing background turn;
 rejected completions are reported through the browser's parallel scheduler.
@@ -1898,12 +1903,13 @@ the child's step and inserts its nested history before reaching
 `updateForNavigableCreationOrDestruction()`. Definite closing reaches
 `Document.unloadAndDescendants()`. Navigation API traversal and intercepted
 traversal reach `applyTraverseHistoryStep()` and `resumeTraverseHistoryStep()`.
-Those operations still throw, now when their queued steps run. With the activation
+The history operations now return completion after permission/cancellation checks;
+admitted requests reject before population/activation. With the activation
 dependency supplied, a Navigation request can therefore be accepted before its
 unfinished history owner fails; the queue does not supply the missing tracker
 commit/finish settlement. Tests retain each actual boundary and also exercise
 real parallel delivery of an existing cancellation outcome to the Navigation
-owner. Automatic element loading/removal and beforeunload remain unfinished.
+owner. Automatic element loading/removal and prompt policy/UI remain unfinished.
 
 The two specification examples require later history application:
 
@@ -2466,7 +2472,7 @@ Dependencies remain executable boundaries:
 - **§7.4.2.4 unload cancellation:** the coordinator now snapshots Documents,
   queues beforeunload/navigate checks, shares prompt state, and resumes navigation
   and top-level closing through browser-owned completion. Prompt policy/UI and
-  teardown's task-discard cancellation remain unfinished. No event loop is blocked
+  full teardown remain unfinished. Removed check tasks reject their internal wait. No event loop is blocked
   while waiting for another Document's check.
 - **§7.5.11 recursive abortion:** Document.abortAndDescendants explicitly throws.
   The existing single-Document abort operation is insufficient: descendants need
@@ -3048,8 +3054,8 @@ this coordinator does not choose a new rule for that separate owner.
   its Document is inactive; teardown that discards such a task must release or
   cancel its waiting coordinator. That lifecycle connection is an explicit TODO
   at task creation, not an automatic success or an activity-bypass workaround.
-- Full §7.4.6 history application must call the optional traversal form. Navigation
-  and definite closing are connected now; Window.close authorization, recursive
+- §7.4.6 history admission now calls the optional traversal form. Navigation
+  and definite closing are also connected; Window.close authorization, recursive
   abortion/unloading, population, and final history application remain their
   explicit owner dependencies. This is not end-to-end navigation or closing.
 
@@ -3092,7 +3098,7 @@ and Navigation.reload all reach this same owner.
 | Fire the reload navigate event | Reuse the existing event operation with sameDocument false, the active entry URL, selected state, involvement, and tracker. Browser UI skips this early event. |
 | Stop on cancellation/interception | Return without changing reloadPending or queuing history work. Real event machinery rejects canceled API trackers and retains pending precommit interception. |
 | Mark and queue | After author callbacks return, mark the live active entry's DocumentState reloadPending and append ordinary traversal steps to this navigable's traversable. Child reloads mark only the child state but use the shared top-level queue. |
-| Apply the reload history step | `Traversable.applyReloadHistoryStep(userInvolvement)` explicitly throws. §7.4.6 must apply the then-current joint step with cancellation enabled, null source/initiator, and navigation type reload. It must populate reloadPending entries, perform Fetch/revalidation and unloading, activate Documents, and update Navigation entries/activation. Successful cross-document reload clears the old event/tracker without settling its promises; intercepted reload completion belongs to the existing interception path. |
+| Apply the reload history step | `Traversable.applyReloadHistoryStep(userInvolvement)` now checks the then-current joint step with cancellation enabled, null source/initiator, and navigation type reload. It returns internal completion to the queue. Request construction supplies ordinary reload revalidation; dispatching population of reloadPending entries, unloading, Document activation, and Navigation entry/activation updates remain unfinished. Successful cross-document reload must clear the old event/tracker without settling its promises; intercepted reload completion belongs to the existing interception path. |
 
 ### Browser evidence and chosen rule
 
@@ -3142,7 +3148,7 @@ routing. Nonzero requests now reach `Traversable.traverseHistoryByDelta()`.
 | Append traversal steps | Use the existing serial traversal queue with an ordinary, untagged algorithm. Request preparation does not read or prefilter against History.length. |
 | Select the target | Read all distinct sorted steps, including retained nested histories, and the current joint step when the queued algorithm runs. Add delta to that step's index, not to its numeric step value. Earlier queued changes therefore affect selection. |
 | Out-of-range target | Return from the queued algorithm without applying a step or changing any history entry. |
-| Apply the step | Forward the selected step and captured inputs to the existing throwing applyTraverseHistoryStep owner. Delta requests do not interpret its status result or synthesize History events. |
+| Apply the step | Forward the selected step and captured inputs to applyTraverseHistoryStep and return its completion to keep the queue occupied. Delta requests do not interpret the status or synthesize History events. Permission and cancellation are implemented; population/activation remain explicit dependencies. |
 
 The `applyTraverseHistoryStep()` snapshot and initiator parameters now allow null.
 Its §7.4.6 prose signature omits those null alternatives, but §7.4.3 explicitly
@@ -3167,10 +3173,10 @@ Typechecking (including platform type contracts), focused lint, import hierarchy
 and whitespace checks also pass. No failures were reclassified.
 
 Remaining dependencies are Window transient activation for script snapshots and
-§7.4.6 history application: sandbox permission, beforeunload/navigate cancellation,
-Document population/reactivation/unloading, entry/History state updates, Navigation
-trackers, history events, and scrolling. Waiting application must retain the
-traversal queue until its Document tasks and population continuations complete.
+§7.4.6 Document population/reactivation/unloading, entry/History state updates,
+Navigation trackers, history events, and scrolling. Sandbox permission and
+beforeunload/navigate cancellation now run while retaining the traversal queue;
+population continuations must retain that ownership too.
 No new scheduler, native API, or browser-behavior choice is introduced here.
 
 ## HTML §7.4.4: Non-fragment synchronous navigations
@@ -3988,8 +3994,558 @@ existing owners. This slice adds no native or Node/V8 work.
 
 **Consolidation boundary:** §7.4.5's algorithms are now audited through the final
 dispatcher, with unfinished dependencies enumerated and represented in code.
-Stop here for Eric/Vin's consolidation. Resume at §7.4.6 (applying the history step),
-not §7.5, after integration and worktree validation.
+Vin's integration was verified at `c822141b`; §7.4.6 work resumes below.
+
+## HTML §7.4.6.1: history-step selection
+
+Read the [applying-history overview and traversable update](https://html.spec.whatwg.org/multipage/browsing-the-web.html#updating-the-traversable)
+against refreshed HTML `a7f6aed` on 4 November 2026. This first slice implements
+the selection helpers used by the coordinator; it does not yet replace the
+provisional push/replace activation path. Traversal/reload admission is connected
+in the following slice.
+
+| Selection | Behavior |
+| --- | --- |
+| `getUsedStep()` | Greatest retained joint-history step at or before the request, including gaps left by removed child histories. Invalid internal requests with no predecessor throw instead of inventing a step. |
+| `getTargetHistoryEntry()` | Existing per-navigable greatest-step lookup is reused. Pending entries remain an internal error. |
+| `getNavigablesThatWillChangeOrReload()` | Compares the target with the **current** entry and checks the target state's reload flag. Descends while the target Document remains active and is not reloading. |
+| `getNavigablesThatOnlyNeedHistoryLengthAndIndexUpdate()` | Selects unchanged, non-reloading current entries and descends only through those branches, as written. |
+| `getNavigablesThatMightCrossDocuments()` | Compares the target Document with the **active** Document, including null targets and reloads. Stops below each possible cross-document traversal; those descendants unload rather than traverse separately. |
+
+The three lists are independent. After a non-displayable response, the current
+entry can have a null Document while the previous entry remains active. Selection
+must not collapse the current and active comparisons into a single classification.
+The walks preserve the specification's breadth-first order and return fresh lists
+without mutating history, clearing reload flags, or dispatching tasks.
+
+Eric approved a parent-owned child collection. `parent` is now an accessor that
+keeps its inverse collection paired; consumers receive a read-only Set view.
+Children are visited in parent-association order, including shadow-tree children,
+without sorting or depending on Document tree order. `destroyChild()` removes the
+child after crossing the existing recursive-teardown boundary, leaving the old
+parent reference intact. Automatic element startup/removal and recursive Document
+destruction still require their existing owners; restoration must reconcile
+retained child associations. A retained child is not silently discarded merely
+because the parent's active Document changes through the provisional loader.
+
+Ladybird's source independently expresses the same three selection predicates and
+uses its canonical navigable children (`Libraries/LibWebView/SessionHistory.cpp`,
+`874f491`). This is implementation-source corroboration, not a live-browser claim
+about complete traversal. No browser disagreement was established by this slice.
+
+The rest of the read algorithms remains explicit:
+
+| Next dependency | Existing owner and boundary |
+| --- | --- |
+| Entry-point wrappers and cancellation | Implemented in the following admission slice; the current-entry slice also recomputes its work lists after callbacks. The push/replace path still only applies its supplied entry. |
+| Current-entry writes and successful cross-document Navigation cleanup | Implemented by the current-entry slice below. Selection remains side-effect-free; the coordinator advances current entries, queues cleanup on each Window's loop, and marks traversal ownership. |
+| Population continuations | `populateHistoryEntryDocument()` exists. The history coordinator must supply snapshots/reload inputs, dispatch child traverse events, wait for population, handle non-displayable results, compare origins, and reset classic state/target names where required. |
+| Synchronous queue jumping | `runSynchronousNavigationSteps()` selects eligible pending work, suppresses recursive selection, and propagates selected completion. Coordinator wake-ups, maintenance of the waiting set, and continuation processing remain unfinished. |
+| Deactivation and activation | `Navigable.activateHistoryEntry()` switches the active entry/Window and initializes visibility after saving persisted state. `Document.unloadAndDescendants()` and `SessionHistoryEntry.savePersistedState()` still throw. The coordinator must produce PageSwapEvent, coordinate optional view transitions, and call activation after any required unloading. |
+| Document updates and final completion | `Document.updateForHistoryStepApplication()` throws. Changing and nonchanging Documents must run on their own loops; joint-step completion must wait for the specified jobs. Revealing, scrolling, and persisted-state restoration remain later §7.4.6 subsections. |
+
+Two details need close attention when connecting those continuations: HTML's
+length/index-only selector stops even below a same-document parent entry change,
+so test descendant history updates across that case; and its population continuation
+marks a null target Document update-only but then dereferences that Document. Keep
+these audit questions visible rather than copying the later coordination unchecked.
+
+Tests cover step gaps/removal, shadow children, breadth-first ordering, reloads,
+branch pruning, target-versus-current flags, synchronous active-entry advancement,
+non-displayable current entries, and side-effect-free repeated selection. Parent
+reassignment and child destruction retain separate relationship tests.
+
+Validation: all 1,233 tests in the 64 navigation suites passed on Node 26.8.1 with
+the addon; the 70 cases in the five focused suites also passed on stock Node.
+Typechecking, changed-file ESLint, import hierarchy, and diff whitespace checks
+passed. This slice changes selection and ownership bookkeeping, not scheduling
+or native facilities, so it reuses the validated addon without a rebuild or a
+six-runtime sweep. The next bounded slice is the common apply-history-step
+admission/cancellation coordinator, before population and continuation handling.
+
+## HTML §7.4.6.1: history-step admission and cancellation
+
+Implemented [apply the history step](https://html.spec.whatwg.org/multipage/browsing-the-web.html#apply-the-history-step)
+steps 1–5 against HTML `a7f6aed`. `Traversable.applyHistoryStep()` requires entry
+from its own traversal queue, normalizes the requested step, checks the captured
+sandbox permission for every changing/reloading navigable, and awaits unload and
+navigate-event cancellation for the possible cross-document list.
+
+Creation/destruction, reload, traversal, and intercepted-traversal resumption now
+forward their specified inputs. Creation/destruction and resumption disable
+cancellation; reload selects the then-current joint step; ordinary traversal
+retains its source snapshot and initiator. Browser-UI traversal retains null
+source/initiator. The provisional local-loader push/replace path is deliberately
+unchanged until full application can replace its existing activation behavior.
+
+The callable adaptation is an `InternalPromise<HistoryStepResult>` instead of the
+specification's result returned after a parallel wait. This arrangement is reviewed
+and accepted; its `SPEC_MISMATCH` is removed. The queue's retained UserAgent owns that completion, independently
+of any Document's lifetime. Queued callers return it; Navigation API traversal
+waits before dispatching its existing AbortError/SecurityError failure handling.
+Canceled navigate events retain their own abortion/settlement handling. The queue
+ignores the result value and resumes only when completion settles, including on
+failure. Its entry check distinguishes executing an algorithm from merely waiting
+for one; it is not an ambient Agent or realm lookup. Later selective queue jumping
+must enter through this same queue ownership when it is implemented.
+
+This admission slice stopped before current-entry writes and Navigation cleanup;
+the following slice connects those steps. Requests still reject at an explicit
+population/activation boundary and never report `applied` while those effects are
+missing. Full application must coordinate population and synchronous queue jumping,
+unload and activate Documents, run each Document's history update on its own event
+loop, and wait before committing the final joint step. Existing throwing owners and the
+selection slice's null-Document/descendant-update audit questions remain in place.
+Prompt admission/UI, transient-activation production, and cancellation of waits
+whose Document tasks are discarded also remain explicit dependencies.
+
+Tests exercise sandbox rejection before dispatch, requested-step gaps, real bound
+beforeunload dismissal and navigate cancellation, reload flags, disabled cancellation,
+owner lifetime, failures, and queue release. A public `navigation.back()` test checks
+both rejected promises after actual beforeunload dismissal. Other traversables can
+run while one waits; unrelated calls cannot borrow its suspended queue ownership.
+Earlier caller tests now observe returned completion rather than a synchronous stub.
+No browser rule or expected-failure classification changes in this slice.
+
+Validation: all 1,247 tests in 65 navigation suites pass on Node 26.8.1 with the
+addon. The 214 focused cases in 12 suites pass on Node 24.19.0, 26.8.1, and custom
+27, with the addon both disabled and enabled. Typechecking, changed-file ESLint,
+import hierarchy, and whitespace checks pass. Existing synchronous-stub assertions
+now wait for the explicit population boundary; no required behavior was weakened
+or reclassified. Existing matching addon artifacts were reused without rebuilds.
+
+## HTML §7.4.6.1: current entries and cross-document Navigation cleanup
+
+Implemented [apply the history step](https://html.spec.whatwg.org/multipage/browsing-the-web.html#apply-the-history-step)
+steps 6–8 against HTML `a7f6aed`. After cancellation callbacks, the coordinator
+recomputes changing and length/index-only lists before writing any current entries.
+Each admitted changing navigable receives its target current entry and `traversal`
+ownership. The direct assignment wakes existing parallel navigation waits without
+invoking the aborting setter. Active entries, displayed Documents, and the final
+joint-history step do not change yet.
+
+When the target Document differs from the active Document, cleanup is queued on
+that active Window's navigation-and-traversal task source. The task selects the
+then-active Window's Navigation and clears only its ongoing event and method
+tracker. It neither aborts the event's signal nor rejects/resolves the tracker's
+promises. Same-Document targets, including a pending reload whose replacement has
+not been populated, do not take this cleanup branch. Later population must arrange
+the replacement's lifecycle; this is not an alternate reload implementation.
+
+### Creation/destruction must not take over navigation
+
+`SPEC_CLASH(history-bookkeeping-navigation)` records
+[HTML issue #12724](https://github.com/whatwg/html/issues/12724). Reload sets
+`reloadPending` before appending its own queue work; creation/destruction already
+in that queue can therefore select it as changing despite having no navigation
+type. Literal application takes over its ownership and eventually reaches a
+cross-document assertion requiring a non-null navigation type. Pending document
+changes have the same broader ownership problem.
+
+Eric approved leaving those changes to their navigation. For null navigation type,
+the changing list excludes a navigable with a pending navigation ID, and excludes
+cross-document/reload work unless that navigable is already marked `traversal`.
+Same-Document bookkeeping without a competing navigation remains eligible. Ordinary
+reload/traverse application retains its normal selection. This follows Ladybird's
+[ApplyHistoryStep safeguard](https://github.com/LadybirdBrowser/ladybird/blob/master/Libraries/LibWebView/ApplyHistoryStep.cpp)
+([repair #10900](https://github.com/LadybirdBrowser/ladybird/pull/10900)), rather than
+moving the reload flag's existing specified write or adding another navigation owner.
+
+On 4 November 2026, the retained Experimental `history-bookkeeping.mjs` probe passed
+all nine cases on Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2:
+
+- Inserting or removing a sibling iframe immediately before another frame reloads
+  produces exactly one reload, with no page error.
+- Repeated frame insertion/removal while a different frame's response is held
+  leaves its old Document displayed, then completes the requested navigation once
+  when the response is released; there is no extra request.
+
+These observations establish the desired isolation, not identical internal guard
+code. The engines use different machinery: Chromium's
+[FrameTree](https://github.com/chromium/chromium/blob/main/content/browser/renderer_host/frame_tree.cc)
+updates/prunes frame history; WebKit's
+[HistoryController](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/loader/HistoryController.cpp)
+separates provisional-item bookkeeping from recursive navigation; Gecko's
+[nsSHistory](https://github.com/mozilla-firefox/firefox/blob/main/docshell/shistory/nsSHistory.cpp)
+removes child history entries separately from reload handling. The issue records
+the fuller source comparison. Our focused regression first observed the literal
+sequence replacing pending ownership with `traversal` and advancing entries; the
+approved guard makes those cases preserve the existing request and current entry.
+
+### Remaining coordinator work
+
+The next bounded slice starts at steps 9–12: retain per-navigable continuation
+state and dispatch population preparation. The current boundary still throws; it
+does not claim that an entry advanced here has been populated or applied. The
+length/index-only list is captured before writes but awaits its later jobs.
+
+Population snapshots, reload/POST inputs, child traverse-event cancellation,
+origin changes, non-displayable results, and target-name/classic-state resets
+remain coordinator work. In addition to the existing null-Document and descendant
+selector questions, audit HTML's population steps that clear `reloadPending`
+before using it for `allowPOST`. Do not silently copy that ordering.
+
+Selective queue jumping and wake-ups, continuation processing, unloading,
+activation, per-Document updates, and final joint-step completion remain explicit.
+Document destruction must discard its queued cleanup/population tasks and release
+coordinator waits; automatic teardown/restoration is still unfinished. The existing
+provisional push/replace loader is unchanged by this slice.
+
+Tests cover post-callback reselection, reload-induced child pruning, current versus
+active entry identity, child-loop cleanup, pending signals/promises, traversal
+ownership notifications, and the approved bookkeeping exclusions and exceptions.
+
+Validation: all 1,259 tests in 65 navigation suites passed on Node 26.8.1 with the
+addon. The 226 focused cases in 12 suites passed on Node 24.19.0, 26.8.1, and custom
+27, with the addon disabled and enabled. Typechecking, changed-file ESLint, import
+hierarchy, and whitespace checks passed. The nine browser-only probes passed
+separately; they do not substitute for the production regressions. No failures were
+reclassified, and the existing matching addon artifacts were reused without rebuilds.
+
+## HTML §7.4.6.1: history population ownership prerequisite
+
+Before connecting step 12's population jobs, fixed the cancellation contract
+shared with [history-entry population](https://html.spec.whatwg.org/multipage/browsing-the-web.html#attempt-to-populate-the-history-entry's-document)
+and [Fetch navigation parameters](https://html.spec.whatwg.org/multipage/browsing-the-web.html#create-navigation-params-by-fetching).
+HTML `a7f6aed` marks a history operation's ongoing navigation `traversal`, but its
+population call omits the navigation ID, leaving it null. Both later algorithms
+compare ongoing navigation against that null ID and incorrectly cancel the work.
+The initial regressions observed undefined Fetch results for both reload and
+back/forward, plus a supplied response completing without invoking its loader.
+
+`SPEC_CLASH(history-population-navigation-id)` records Eric's approved correction:
+each operation captures `traversal` as its expected cancellation owner when its
+navigation ID is null and traversal owns the navigable at entry. Otherwise it
+keeps the original ID comparison. The request, response parameters, and BiDi
+metadata retain null; the sentinel is not a navigation ID. A change to null or
+another request still cancels. Fetch's existing change observer latches that
+cancellation even if ownership later returns to `traversal`. Response-delivery
+and MIME continuations compare their captured owner before loading a Document.
+This introduces no new persistent navigable state or navigation object.
+
+The retained browser probe described above completes reloads normally on all
+three engines; the null-ID contradiction is in HTML's internal algorithm, not an
+observed browser failure. Tests separately cover the Fetch result, queued response
+delivery, delayed MIME sniffing, cancellation, and actual Fetch-to-population
+delivery through a controlled Document loader. Successful population still does
+not activate the entry or advance the joint-history step.
+
+The coordinator still throws before dispatching population. The next bounded
+slice remains continuation preparation; its dependencies are now more precise:
+
+- [HTML #12760](https://github.com/whatwg/html/issues/12760): clearing
+  `reloadPending` before its two consumers disables POST replay and makes Fetch
+  select the history flag instead of the reload flag. Preserve the intended
+  reload inputs when connecting the caller; no correction is implemented here.
+- Step 12 computes `navTimingType` but omits that required input from its
+  population call. Forwarding it must be explicit in that caller.
+- [HTML #12668](https://github.com/whatwg/html/issues/12668): reload population
+  replaces the Document in a shared active/current DocumentState before the old
+  Document is deactivated. Retain the displayed Document and its navigable for
+  lifecycle work; do not rediscover ownership from the replaced state.
+- Null-Document continuations, child traverse-event handling, origin and target
+  name/classic-state changes still need their audit and implementation.
+- Population failures and discarded Document tasks must release coordinator
+  waits. Ready continuations and eligible synchronous queue jumps must be
+  processed while other population jobs are still waiting; an all-jobs barrier
+  would change the algorithm. Nested applications must preserve job ownership
+  even though all traversals use the same sentinel.
+
+Validation: all 1,273 tests in 65 navigation suites passed on Node 26.8.1 with
+the addon. The 252 focused cases in seven suites passed on Node 24.19.0, 26.8.1,
+and custom 27, with the addon disabled and enabled. Typechecking, changed-file
+ESLint, import hierarchy, and whitespace checks passed. No failures were
+reclassified; existing matching addon artifacts were reused without rebuilds.
+
+## HTML §7.4.6.1: per-navigable history preparation
+
+Implemented the changing-navigable task in [apply the history step](https://html.spec.whatwg.org/multipage/browsing-the-web.html#apply-the-history-step),
+step 12, against HTML `a7f6aed`. `Navigable.prepareHistoryStep()` queues its work on
+the active Window's navigation-and-traversal task source. It reads the live
+displayed and current entries inside that task, retains the displayed Document,
+and produces the specified four-field changing-navigable continuation state.
+An already advanced entry needs only updates; otherwise the task checks the
+navigation-type preconditions and fires the specified same-origin child traverse
+event. The old origin is captured before author listeners run.
+
+Retained Documents proceed directly to continuation preparation. Missing or
+reloading Documents receive target/source snapshots and parallel population,
+followed by a task on the then-active Window. A changed origin clears classic
+History state, leaving Navigation state separate. It clears a top-level target
+name unless that Document's context is auxiliary with a retained opener; child
+names survive. The displayed Document remains in the continuation even if reload
+population replaced it in the shared DocumentState (the ownership hazard in
+[HTML #12668](https://github.com/whatwg/html/issues/12668)). Deactivation must use
+that retained Document and navigable instead of rediscovering the former owner.
+
+The extracted callable takes the traversable, source snapshot, user involvement,
+navigation type, and completion steps that insert a ready continuation. Its
+`SPEC_MISMATCH` marks this extraction from the larger algorithm for review. It
+returns no application result and performs no unloading, activation, or final
+joint-step update. Errors still use their existing task/parallel owner.
+
+### Population inputs and non-displayable responses
+
+- `SPEC_CLASH(history-reload-pending-inputs)` records Eric's approved correction
+  for [HTML #12760](https://github.com/whatwg/html/issues/12760). Capture `allowPOST`
+  before clearing `reloadPending`, then keep the flag until the synchronous start
+  of population has constructed its Fetch request. Clear it in `finally`, without
+  waiting for the response. This preserves both POST admission and the request's
+  reload-navigation flag, without adding another parameter through the Fetch
+  factories. The upstream issue identifies both consumers; browser implementations
+  generally derive them from their separate load types. Ordinary reload requests
+  now select `no-cache` as described below; optional repost UI remains missing.
+- `SPEC_GAP(history-population-timing-input)` supplies the `navTimingType` computed
+  by step 12 but omitted from its population call. A missing Document selects
+  `back_forward`; an existing Document being reloaded selects `reload`.
+- `SPEC_GAP(history-population-null-document)` records the approved null-result
+  branch. HTML marks a non-displayable target update-only, then dereferences its
+  null Document. Browlet delivers the update-only continuation without changing
+  retained classic state or the target name. The later update job remains missing.
+
+The 4 November 2026 HTTP probe, retained in Experimental as
+`history-population-inputs.mjs`, found that Chromium 156.0.8078.4 and Firefox 157.0
+resend the original POST body through `location.reload()`. WebKit 27.2 sends GET
+instead. All three report reload timing and retain the displayed Document when
+the next response is 204. Eric approved retaining the POST requirement and marking
+only WebKit's browser assertion as an expected failure. The probe uses a real
+loopback HTTP server; earlier Playwright-intercepted responses are not its oracle.
+
+### Ordinary reload cache policy
+
+`SessionHistoryEntry.createNavigationRequest()` now sets Fetch's `no-cache` mode
+when `reloadPending` is true, alongside the independent reload-navigation flag.
+Ordinary new/history navigation retains `default`. The existing Fetch cache
+implementation handles conditional requests, 304 body reuse, replacement after a
+changed response, and network errors. This selects policy in HTML without making
+generic Fetch infer it from a navigation flag.
+
+- `SPEC_GAP(reload-navigation-cache-mode)` records the missing HTML/Fetch mapping
+  in [Fetch #1899](https://github.com/whatwg/fetch/issues/1899). The older
+  [Fetch #524](https://github.com/whatwg/fetch/issues/524) discussion separated
+  navigation identity from cache policy and closed after navigation flags were
+  added; it did not define which cache mode ordinary reload must select.
+- `SPEC_CLASH(reload-cache-revalidation)` records Eric's approved Chromium/Firefox
+  policy: revalidate even a fresh cached Document, using available validators.
+  WebKit refetches it without validators. Browlet follows Fetch's `no-cache`
+  header generation (`Cache-Control: max-age=0`), matching Chromium. Firefox's
+  tested build sent validators without that header. WebKit's long-standing
+  [main-resource revalidation issue](https://bugs.webkit.org/show_bug.cgi?id=17998)
+  and `FrameLoader::reload` FIXME explain the different implementation path.
+
+The 4 November HTTP probe exercised 51 cases in Chromium 156.0.8078.4, Firefox
+157.0, and WebKit 27.2. Fresh persistent profiles verified cache hits before each
+reload; no response interception or cache disabling was used. Location and
+Navigation reloads revalidated in Chromium/Firefox and refetched in WebKit.
+Chromium/Firefox reused fresh subresources, consistent with
+[Chromium's stated policy](https://blog.chromium.org/2017/01/reload-reloaded-faster-and-leaner-page_26.html).
+WebKit's `history.go(0)` instead reused the fresh cached Document and retained old
+content after a server change; Browlet retains its shared reload path, consistent
+with `SPEC_CLASH(history-zero-delta-reload)` above. Browser-only probes and detailed
+observations remain in Experimental's `RELOAD-CACHE-POLICY.md`.
+
+Explicit forced reloads are unfinished host work. The tested forced paths used
+unconditional document/subresource requests with `Cache-Control: no-cache` and
+`Pragma: no-cache`; Fetch's `reload` mode supplies cache bypass while allowing the
+replacement response to be stored. That is distinct from `no-store`. Browlet
+still needs an explicit host input, subresource propagation, and service-worker
+bypass before exposing that operation. HTML's `Location.reload()` has no force
+argument, so this slice adds none. Normal reloads do not gain a global cache-mode
+override for later resource fetches.
+
+Production regressions exercise request construction through real Fetch/HTTP,
+including ETag, Last-Modified, both validators, no validators, changed content,
+and connection failure. Request-level coverage checks all navigation destinations
+and keeps ordinary/history request modes unchanged. These test the implemented
+request/Fetch boundary; complete reload lifecycle delivery still requires the
+coordinator described below.
+
+Validation: the six new HTTP regressions and expanded request assertions failed
+before the correction. All 135 tests across the six focused navigation/Fetch
+suites now pass on Node 24.19.0, 26.8.1, and custom 27, with and without the addon.
+Typechecking, changed-file ESLint, import hierarchy, and whitespace checks pass.
+No failures were reclassified and no native artifacts were rebuilt.
+
+### Deliberate integration boundary
+
+`Traversable.applyHistoryStep()` still throws before starting these jobs. Connecting
+only their producer would strand error/discard waits or imply an incorrect barrier
+waiting for all loads. The next coordinator slice must accept each ready
+continuation while other jobs wait, process eligible synchronous queue jumps, and
+retain the traversal queue until the entire application finishes. It must also
+route population failures and discarded tasks into that completion with one
+reporting owner, and protect nested job/reload ownership. No
+successful public back/forward or reload completion is claimed by this producer.
+
+Transient-activation capture, Document loader/parser work, optional repost UI,
+deactivation/unloading, activation, per-Document updates, and task teardown remain
+explicit dependencies at their existing owners. The provisional push/replace
+loader is unchanged. Tests drive the new producer through real Window task loops,
+real bound child events and Fetch; controlled population results isolate lifecycle
+branches that the Document loaders do not yet implement.
+
+Validation: all 1,295 tests in 66 navigation suites pass on Node 26.8.1 with the
+addon. The 250 focused cases in seven suites pass on Node 24.19.0, 26.8.1, and
+custom 27, with the addon disabled and enabled. Typechecking, changed-file ESLint,
+import hierarchy, and whitespace checks pass. The HTTP browser probe retains
+the approved WebKit POST expected failure; no production failures were
+reclassified. Existing matching addon artifacts were reused without rebuilds.
+
+## HTML §7.4.6.1: Synchronous navigation queue jumping
+
+Audited the [queue-jumping loop](https://html.spec.whatwg.org/multipage/browsing-the-web.html#sync-navigations-jump-queue)
+against HTML `a7f6aed` (2026-11-04). `Traversable.runSynchronousNavigationSteps()`
+extracts step 14.1. It receives the coordinator's live set of navigables that
+must wait and returns browser-owned completion. This reviewed extraction is
+part of history application, not a separate specification algorithm.
+
+The method repeatedly selects the first eligible tagged item, removes it before
+invocation, and preserves ordinary and blocked work in the ordered set. Selection
+starts from the beginning after each job, accounting for newly appended items and
+changes to eligibility. A nested application does not itself select more work.
+The nested flag remains set until a selected job's `InternalPromise` settles;
+neither subsequent selected work nor the suspended outer operation continues
+early. Fulfillment payloads do not affect selection, and rejection or a synchronous
+throw clears the flag and propagates the original failure.
+
+`SessionHistoryTraversalQueue.runSteps()` supplies the same execution admission
+for ordinary and selected callbacks, restoring an enclosing invocation afterward.
+It requires an occupied queue. Awaiting completion does not retain execution
+admission, so an unrelated call to `applyHistoryStep()` still fails while a job
+waits. The UserAgent's `HostPromise` observes completion even after the original
+Document retires; another traversable remains free to progress.
+
+This is a bounded extraction, not yet connected to the incomplete coordinator.
+`applyHistoryStep()` continues to reject before starting population. Its next
+integration must wake for tagged appends and prepared continuations, add each
+dequeued continuation's navigable to the waiting set before dispatching its later
+job, and propagate population failures/discarded tasks. Deactivation, activation,
+per-Document updates, and the final joint-step barrier remain explicit dependencies.
+The provisional push/replace operation must eventually return its completion to
+the selected callback, as the already-connected traverse/reload wrappers do.
+No successful public traversal or new browser-policy choice is claimed here.
+
+Validation: 12 new queue-jumping tests cover selection order, live eligibility,
+reentrant appends, nested suppression, execution admission after waiting, retired
+Document completion, independent traversables, and failure cleanup. All 1,313
+navigation cases in 68 suites pass on Node 26.8.1 with the addon. The 92 cases in
+six focused history suites pass on Node 24.19.0, 26.8.1, and custom 27, each with
+and without the addon. Typechecking, changed-file ESLint, import hierarchy, and
+whitespace checks pass. No failure classifications changed or native builds ran.
+
+## HTML §7.4.6.1: Preparation failure completion
+
+The next coordinator dependency is an error result from the existing producer.
+`prepareHistoryStep()` now accepts optional implementation-only `failureSteps`
+after its continuation callback and forwards them through population. Supplying
+these steps transfers asynchronous error reporting to the waiting operation;
+callers without them retain the previous task/parallel exception. Initial
+synchronous setup errors still throw to the direct caller. The failure callback
+is an accepted implementation completion path, following the existing unload-check
+arrangement; it adds no author-facing API or browser-policy choice.
+
+Preparation-task validation and snapshot errors, parallel request construction,
+Fetch rejection, response-task delivery, MIME/body-reading failure, Document-loader
+and retained-state failures, and the post-population continuation now have a route
+back to their waiting owner. The original exception is preserved. Completion is
+not fabricated on those paths, and reload inputs still clear after request
+construction even if it throws. Fetch response delivery after loss of the active
+Window now reports through its captured UserAgent, rather than escaping an
+unobserved Promise reaction.
+
+Resource cancellation is a separate cleanup after superseded population reports
+completion. Its late failure remains a task error; it cannot send a second,
+contradictory job result to the waiting operation. Real stream regressions cover
+both reading failure and rejecting cancellation.
+
+The coordinator remains deliberately disconnected. It must supply the failure
+callback, settle/clean up outstanding jobs, wake for prepared continuations and
+tagged appends, and consume the ready queue. The following slice supplies queued-task
+removal notification; the §7.5 teardown owner still needs cancellation while
+population has no queued continuation. Deactivation, activation, Document updates, and the final joint-step
+barrier are unchanged dependencies. This slice does not complete a public reload
+or traversal.
+
+Validation: five regression expectations first demonstrated missing failure
+notification. Eight additional cases cover reporting ownership, parallel and
+Fetch failures, loss of the active Window, post-population errors, queue release,
+body-read failure, and late cancellation cleanup. All 1,321 navigation cases in
+68 suites pass on Node 26.8.1 with the addon. The 179 focused cases in five suites
+pass on Node 24.19.0, 26.8.1, and custom 27, with and without the addon.
+Typechecking, changed-file ESLint, import hierarchy, and whitespace checks pass.
+No failures were reclassified and no native artifacts were rebuilt.
+
+## HTML §7.4.6.1: Completion when queued work is discarded
+
+`TaskCreationOptions.discardSteps` is internal completion bookkeeping, not an
+additional HTML task execution. `EventLoop.removeTask()` and
+`removeTasksForDocument()` remove pending work before notifying its owner. The
+Document-wide operation detaches the entire batch first, notifies every waiting
+owner even if one callback throws, and then propagates the first notification
+error. Repeated or reentrant removal cannot notify a removed task twice. Running
+or completed tasks are not discarded, and retained inactive Documents continue
+to wait for reactivation.
+
+History preparation uses its accepted failure callback when removal discards the
+initial or post-population task. Population does the same for response delivery
+and queued MIME success/failure continuations. Removed unload-check tasks reject
+their existing browser-owned completion. These paths use an internal error, without
+inventing a successful history result or a beforeunload/navigate cancellation.
+Late resource-cancellation cleanup remains separate after population completion;
+discarding its error-reporting task cannot fail an already completed job.
+
+This covers tasks already queued when removal happens. Teardown during in-flight
+Fetch/body reading or the parallel interval before a task exists still needs an
+operation-lifetime cancellation path and protection against late callbacks. The
+retained reader also needs cancellation if teardown removes its continuation.
+Both dependencies remain explicit beside population's queueing and resource
+ownership. Full continuation coordination, deactivation/activation, Document
+updates, and the final history barrier remain unfinished. No public traversal or
+reload completion is claimed.
+
+Two regressions first failed because real Document destruction never notified
+the preparation waiter. Further coverage exercises response and MIME-task removal,
+unload-check rejection, reactivation, traversal-queue release, late cleanup, and
+single/batch removal with reentrant or throwing notifications.
+
+Validation: all 240 focused cases in nine suites pass on Node 24.19.0, 26.8.1,
+and custom 27, with and without the addon. The wider navigation/scripting run on
+Node 26.8.1 with the addon has 2,050 passes, 83 existing expected failures, and
+seven existing skipped/TODO cases. Typechecking, changed-file ESLint, import
+hierarchy, and whitespace checks pass. No failure classifications changed or
+native artifacts were rebuilt.
+
+## HTML §7.4.6.1: Activate a history entry
+
+`Navigable.activateHistoryEntry()` follows
+[activate a history entry](https://html.spec.whatwg.org/multipage/browsing-the-web.html#activate-history-entry):
+save the displayed entry's persisted state, require a populated non-initial
+Document, switch the active entry, make its Document active, and initialize its
+visibility from the containing traversable. Existing Document activation connects
+the browsing context and WindowProxy and marks the environment execution-ready.
+Initial visibility does not dispatch `visibilitychange`.
+
+The operation leaves the current entry and joint history step alone. Classic
+History state, Navigation notifications, and later Document updates belong to
+the surrounding history application. `SessionHistoryEntry.savePersistedState()`
+remains an explicit throwing §7.4.6.3 dependency, before any activation mutation.
+VisibilityStateEntry reporting retains its existing Document-owned dependency.
+The provisional loader is not routed through this operation while that capture
+is missing. Full coordination must also retain the displayed Document through
+reload population and deactivation, as already recorded for HTML issue #12668.
+
+Tests substitute only the missing persisted-state capture and exercise real
+Document/Window activation. They cover capture ordering, failed capture, invalid
+targets, same-Document entries, parent visibility, and the state reserved for
+later history application. No new browser-policy choice is introduced.
+
+Validation: all 1,337 navigation tests in 69 suites pass on Node 26.8.1 with
+the addon. The 101 focused cases in five suites pass on Node 24.19.0, 26.8.1,
+and custom 27 with the addon; stock runs have 98 passes and the same three
+existing native-global expected failures. The seven new activation cases pass
+in all six configurations. Typechecking, type contracts, changed-file ESLint,
+import hierarchy, and whitespace checks pass. No failure classifications changed
+or native artifacts were rebuilt.
 
 ## Removal condition
 

@@ -200,7 +200,7 @@ describe('Navigation.reload preparation', () => {
     expect(document.env.deserialize(reload.mock.calls[1]![0]!.navigationAPIState!)).toBeNull();
   });
 
-  it('retains the explicit history-application dependency in the queued reload', async () => {
+  it('retains the explicit population dependency after the queued reload checks', async () => {
     const { browser, document, reload } = await fixture();
     const turns: (() => void)[] = [];
     vi.spyOn(document.env.userAgent, 'runInParallel').mockImplementation((steps) => { turns.push(steps); });
@@ -209,7 +209,9 @@ describe('Navigation.reload preparation', () => {
     expect(result.committed).toBeDefined();
     expect(result.finished).toBeDefined();
     expect(turns).toHaveLength(1);
-    expect(turns.shift()!).toThrow('Reload history-step application is not implemented');
+    turns.shift()!();
+    await expect.poll(() => turns.length).toBe(1);
+    expect(turns.shift()!).toThrow('History-step population and activation is not implemented');
   });
 });
 

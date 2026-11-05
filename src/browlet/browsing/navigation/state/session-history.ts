@@ -83,8 +83,15 @@ export class SessionHistoryEntry {
       request.body = resource.requestBody;
       request.headerList.set('Content-Type', resource.requestContentType);
     }
-    if (state.reloadPending) request.reloadNavigation = true;
-    else if (state.everPopulated) request.historyNavigation = true;
+    if (state.reloadPending) {
+      request.reloadNavigation = true;
+      // SPEC_GAP(reload-navigation-cache-mode): HTML/Fetch do not map the reload flag to a cache mode.
+      // https://github.com/whatwg/fetch/issues/1899
+      // SPEC_CLASH(reload-cache-revalidation): Revalidate like Chromium/Firefox; WebKit refetches the Document.
+      request.cacheMode = 'no-cache';
+    } else if (state.everPopulated) {
+      request.historyNavigation = true;
+    }
     request.userActivation = sourceSnapshotParams.hasTransientActivation;
     const container = navigable.container;
     if (container !== null) {

@@ -147,7 +147,12 @@ and the timer-clock specification conflict.
 `env.queueTask(source, steps, options?)` queues work for the execution owner
 using the shared source keys in Infra. `scripting/tasks.ts` maps those keys to
 source identities. `BrowletRealm.queueGlobalTask()` captures the global's associated
-Document and routes through its Agent. Options carry timer nesting metadata.
+Document and routes through its Agent. Options carry timer nesting metadata,
+additional readiness, and optional internal `discardSteps`. Removing pending work
+notifies its owner after detaching the task; Document-wide removal detaches the
+whole batch before notifying each owner. These callbacks settle internal waits
+without executing the removed task or entering author script. Inactivity alone
+retains queued work and does not invoke them.
 Low-level queueing can instead select an explicit loop and Document.
 Element tasks route through the element's relevant global, not its current node
 document after adoption. Avoid implied-loop/Document calls.

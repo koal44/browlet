@@ -1,4 +1,4 @@
-import { InternalError, type InternalPromise } from '../../../../infra/index';
+import { InternalError, internalType, type InternalPromise } from '../../../../infra/index';
 import {
   arg, atArg, defineDictionary, defineEnumeration, defineInterface, dictMember, DOMExceptionImpl, emptyDictionary,
   idlType, impl, invokeWith, nullable, op, promise, reference, roAttr, sequence, type DOMException,
@@ -562,10 +562,11 @@ export class NavigationImpl extends EventTargetImpl {
           return;
         }
         if (target.step === 'pending') throw new InternalError('Navigation traversal requires a committed history step');
-        const result = traversable.applyTraverseHistoryStep(target.step, sourceSnapshotParams, navigable, 'none');
-        if (result === 'canceled-by-beforeunload') this.#queueTraversalFailure(tracker, 'AbortError');
-        else if (result === 'initiator-disallowed') this.#queueTraversalFailure(tracker, 'SecurityError');
-        // A canceled navigate event owns abortion and navigateerror; successful application owns commit/finish.
+        return traversable.applyTraverseHistoryStep(target.step, sourceSnapshotParams, navigable, 'none').then((result) => {
+          if (result === 'canceled-by-beforeunload') this.#queueTraversalFailure(tracker, 'AbortError');
+          else if (result === 'initiator-disallowed') this.#queueTraversalFailure(tracker, 'SecurityError');
+          // A canceled navigate event owns abortion and navigateerror; successful application owns commit/finish.
+        }, undefined, internalType<void>());
       });
     } catch (error) {
       // An unfinished owner must not leave a reusable tracker for work that was never queued.

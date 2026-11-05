@@ -404,10 +404,7 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     return this.realm.agent.eventLoop;
   }
 
-  /** Queue timer work with the nesting level inherited by timers created inside it. */
-  queueTask(source: 'timer', steps: () => void, options: TaskCreationOptions): TaskHandle;
-  /** Queue a later task on this environment's selected HTML task source. */
-  queueTask(source: TaskSourceKey, steps: () => void): TaskHandle;
+  /** Queue work on this environment's HTML task source, retaining optional readiness, timer, and discard steps. */
   queueTask(source: TaskSourceKey, steps: () => void, options?: TaskCreationOptions): TaskHandle {
     return this.realm.queueGlobalTask(taskSources[source], steps, options);
   }

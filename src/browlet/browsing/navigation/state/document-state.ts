@@ -22,7 +22,7 @@ export class DocumentState {
   /** Origin of the document that initiated this navigation. */
   initiatorOrigin: Origin | null = null;
   /** Retained origin for local about: Documents and comparison after repopulation. */
-  // TODO(HTML §7.4.2/§7.4.6): Repopulation must compare origins and clear the target name if it changes.
+  // History preparation compares this snapshot with the populated origin before resetting state/target names.
   origin: Origin | null = null;
   /** Inherited base URL used by about:blank and srcdoc documents. */
   aboutBaseURL: URLRecord | null = null;

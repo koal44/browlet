@@ -153,7 +153,7 @@ export class NavigateEventImpl extends EventImpl {
             navigable.traversable.appendSessionHistoryTraversalSteps(() => {
               const step = this.destination.entry?.sessionHistoryEntry.step;
               if (step === undefined || step === 'pending') throw new InternalError('Traversal requires a committed destination entry');
-              navigable.traversable.resumeTraverseHistoryStep(step, userInvolvement);
+              return navigable.traversable.resumeTraverseHistoryStep(step, userInvolvement);
             });
             break;
           }

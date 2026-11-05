@@ -159,6 +159,9 @@ export class NavigationParams {
     env: BrowletEnvironment,
   ): InternalPromise<NavigationParams | NonFetchSchemeNavigationParams | null | undefined> {
     // TODO(HTML §7.4.5): Assert parallel execution once the UserAgent exposes that execution state.
+    // SPEC_CLASH(history-population-navigation-id): History owns "traversal" but supplies a null navigation ID.
+    // Keep the captured cancellation owner separate from the ID retained in request/response/BiDi metadata.
+    const expectedNavigation = navigationId === null && navigable.ongoingNavigation === 'traversal' ? 'traversal' : navigationId;
     const P = env.userAgent.HostPromise;
     const resultType = internalType<NavigationParams | NonFetchSchemeNavigationParams | null | undefined>();
     const fetchEnv = env.userAgent.sandbox;
@@ -179,7 +182,7 @@ export class NavigationParams {
     let commitEarlyHints: ((document: DocumentImpl) => void) | null = null;
     let navigationChanged = false;
     const checkNavigation = () => {
-      if (!navigationChanged && navigable.ongoingNavigation === navigationId) return;
+      if (!navigationChanged && navigable.ongoingNavigation === expectedNavigation) return;
       navigationChanged = true;
       responseReady?.resolve(undefined);
     };
