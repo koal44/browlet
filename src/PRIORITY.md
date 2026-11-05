@@ -159,8 +159,14 @@ activation remain explicit throwing dependencies. §§6–7 connect locked relat
 input and fixed mouse/wheel coordinates. §8 now handles disconnection, queued-request
 validity, and adoption-safe notifications; native unlock/focus-loss signals and
 HTML teardown remain explicit dependencies. The closing §§9–12 audit adds no
-further runtime algorithms; the native feature remains incomplete. Selection API
-is next, followed by Clipboard API; their references are prepared. CSSOM View remains deferred.
+further runtime algorithms; the native feature remains incomplete. The adjacent
+[Selection API slice](browlet/interaction/selection/ROADMAP.md) implements shared
+Document/Window state, live Range attachment, composed snapshots, collapse methods,
+and Document selectionchange tasks. §3 now adds extend and composed endpoint state
+for cross-root setBaseAndExtent, including live mutation, move ordering, and explicit
+replacement/detachment. The former expected failure now passes normally. Next are
+the remaining §3 operations and §4.3 handler attributes. Clipboard API follows;
+CSSOM View remains deferred.
 HTML §8.1.8.3's synthetic pointer-event operation still needs its hookup. Input producers retain
 their HTML, editing, and layout owners.
 Source/deferred imports and the HTML Wasm parser remain explicit boundaries.

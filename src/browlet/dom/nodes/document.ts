@@ -33,7 +33,7 @@ import { ElementTag } from './element-definitions/index';
 import type { DOMStringListImpl } from '../lists/index';
 import { EventImpl, CustomEventImpl, type EventTargetImpl } from '../events/index';
 import {
-  EventHandlerMap, eventHandlerMapAttr, globalEventHandlers, ModuleMap, SpeculationRulesParseResult,
+  EventHandlerMap, eventHandlerMapAttr, globalEventHandlers, ModuleMap, SpeculationRulesParseResult, userInteractionTaskSource,
   type EventHandlerCallback, type SpeculationRuleSet,
 } from '../../scripting/index';
 import { StorageEventImpl } from '../../storage/events/index';
@@ -52,6 +52,7 @@ import { RangeImpl } from '../ranges/index';
 import { NodeIteratorImpl, TreeWalkerImpl, SHOW_ALL, type NodeFilterCallback } from '../traversal/index';
 // The observer retains registrations; rendering input and scheduled notification remain provisional.
 import { IntersectionObserverImpl, type IntersectionObserverEntryImpl } from '../intersection-observer/index';
+import { SelectionImpl } from '../../interaction/selection/index';
 import { HistoryImpl } from '../../browsing/history/index';
 import type { NavigationTimingRecord } from '../../performance/index';
 // eslint-disable-next-line browlet/dependency-direction -- DOM's legacy event factory includes HTML-defined event interfaces.
@@ -278,6 +279,10 @@ export class DocumentImpl extends NodeImpl {
   #legacyMouse?: LegacyMouseProcessor;
   /** Wheel gesture target and queued input, allocated only for native/automation delivery. */
   #wheelInput?: WheelInputProcessor;
+  /** Shared author-visible Selection, created only when requested in a browsing context. */
+  #selection?: SelectionImpl;
+  /** Selection API §2's per-Document notification flag. */
+  #selectionChangeScheduled = false;
   /** Lazily created style engine for this document. */
   #stylelet?: Stylelet;
   /** Stylesheet collections and matching context, retained independently of the engine. */
@@ -994,6 +999,36 @@ export class DocumentImpl extends NodeImpl {
     return new RangeImpl(this, this.env);
   }
 
+  /** Return this Document's selection, or null without a browsing context. */
+  // https://w3c.github.io/selection-api/#dom-document-getselection
+  getSelection(): SelectionImpl | null {
+    if (this.browsingContext === null) return null;
+    return this.#selection ??= new SelectionImpl(this);
+  }
+
+  /** Coalesce selection changes; a listener may schedule a later notification. */
+  // https://w3c.github.io/selection-api/#scheduling-selectionchange-event
+  scheduleSelectionChange(): void {
+    if (this.#selectionChangeScheduled) return;
+    this.#selectionChangeScheduled = true;
+    this.env.responsibleEventLoop.queueTask(userInteractionTaskSource, this, () => {
+      // https://w3c.github.io/selection-api/#firing-selectionchange-event
+      this.#selectionChangeScheduled = false;
+      this.fireEvent('selectionchange');
+    });
+  }
+
+  /** Notify only an existing Selection after a state-preserving DOM move. */
+  notifySelectionMove(): void {
+    this.#selection?.updateAfterMove();
+  }
+
+  // TODO(HTML document.open / Selection API §2): before replacing this Document's
+  // Selection, call this.#selection?.removeAllRanges() to detach the public Range
+  // and any internal composed endpoints. Overwriting #selection alone leaves those
+  // Range-to-Selection references intact.
+  // Ordinary tree mutations keep the same Selection.
+
   /** Legacy author event construction; the result must be initialized before dispatch. */
   // https://dom.spec.whatwg.org/#dom-document-createevent
   createEvent(name: string): EventImpl {
@@ -1496,6 +1531,9 @@ export class DocumentImpl extends NodeImpl {
   notifyInputTargetRemoval(node: NodeImpl, parent: NodeImpl): void {
     this.#legacyMouse?.removedFrom(node, parent);
     this.#wheelInput?.removedFrom(node);
+    // SPEC_CLASH(selection-shadow-removal): Clear disconnected shadow endpoints like Firefox; Chromium retains inconsistent state and WebKit can retain an earlier snapshot.
+    // Ordinary-tree endpoints were already repaired by Range's pre-removal steps.
+    this.#selection?.checkDocument();
     // Pointer Lock §8: disconnection releases lock before removal callbacks can reinsert/adopt the target.
     this.env.userAgent.releaseDisconnectedPointerLock();
   }

@@ -44,6 +44,13 @@ extensions are implemented.
 - `Range` extraction, cloning, deletion, insertion, and surrounding depend on
   complete node cloning, CharacterData replacement, and the normative mutation
   spine in `../nodes/ROADMAP.md`.
+- A selected Range directly references its SelectionImpl through a type-only
+  import. Selection removal clears both directions, including when the Range
+  leaves its Document. Future document.open reset must detach the old association
+  before replacing Selection. Boundary adjustments use the existing live mutation
+  paths; Selection owns endpoint-change detection and Document notification
+  scheduling. See the
+  [Selection roadmap](../../interaction/selection/ROADMAP.md).
 - HTML's future `createContextualFragment()` integration consumes
   `../../html/parser/fragment.ts`; Range must not grow a second HTML fragment parser.
 - CSSOM View later contributes range geometry. `getClientRects()` and

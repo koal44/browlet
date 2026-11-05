@@ -34,6 +34,7 @@ import {
   securityPolicyViolationEventDispositionIDL,
 } from '../../browsing/policy/csp/index';
 import { trustedTypesIDLDefinitions } from '../../browsing/policy/trusted-types/index';
+import { selectionIDLDefinitions } from '../../interaction/selection/index';
 import { historyIDL, scrollRestorationIDL } from '../../browsing/history/index';
 import {
   htmlDocumentIDL, documentReadyStateIDL, documentVisibilityStateIDL, htmlOrSVGScriptElementIDL,
@@ -90,6 +91,7 @@ export const browletDefinitions = [
   ...navigationEventIDLDefinitions,
   ...interactionEventIDLDefinitions,
   ...pointerLockIDLDefinitions,
+  ...selectionIDLDefinitions,
   notRestoredReasonDetailsIDL, notRestoredReasonsIDL,
   ...renderingIDLDefinitions,
   barPropIDL,

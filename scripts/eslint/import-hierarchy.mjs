@@ -56,6 +56,8 @@ export const layers = [
   ['browlet/browsing/policy/trusted-types/'],
   // Mutation participants retain typed nodes without loading their implementation classes.
   ['browlet/dom/ranges/', 'browlet/dom/traversal/', 'browlet/dom/intersection-observer/'],
+  // Selection owns a live Range and retains only typed Document/node references.
+  ['browlet/interaction/selection/'],
   // HTML reflection reuses DOM operations through supplied nodes, without loading their classes.
   ['browlet/html/reflection/'],
   // Documents own History state; History queries Document/navigation through retained types.

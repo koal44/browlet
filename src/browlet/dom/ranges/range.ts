@@ -4,6 +4,7 @@ import {
   DOMExceptionImpl, DOMExceptionNames,
 } from '../../../web-idl/core/index';
 
+import type { SelectionImpl } from '../../interaction/selection/index';
 import type { CharacterDataImpl, DocumentFragmentImpl, DocumentImpl, NodeImpl, TextImpl } from '../nodes/index';
 import type { DOMEnvironment } from '../environment';
 
@@ -18,6 +19,8 @@ export class RangeImpl extends AbstractRangeImpl {
   #reference = new WeakRef(this);
   /** Ordinary tree root used by live mutation registration. */
   #root: NodeImpl;
+  /** Associated Selection, explicitly cleared when that Selection releases this Range. */
+  #selection: SelectionImpl | null = null;
 
   constructor(document: DocumentImpl, env: DOMEnvironment) {
     super(document, 0, document, 0, env);
@@ -33,6 +36,7 @@ export class RangeImpl extends AbstractRangeImpl {
     for (const range of ranges.values()) {
       if (range.startContainer === parent && range.startOffset > index) range.startOffset += count;
       if (range.endContainer === parent && range.endOffset > index) range.endOffset += count;
+      range.#notifySelection(true);
     }
   }
 
@@ -56,6 +60,7 @@ export class RangeImpl extends AbstractRangeImpl {
       } else if (range.endContainer === parent && range.endOffset > index) {
         range.endOffset--;
       }
+      range.#notifySelection(true);
     }
   }
 
@@ -72,6 +77,7 @@ export class RangeImpl extends AbstractRangeImpl {
       if (range.endContainer === node && range.endOffset > offset) {
         range.endOffset = range.endOffset <= end ? offset : range.endOffset + dataLength - count;
       }
+      range.#notifySelection(true);
     }
   }
 
@@ -95,6 +101,7 @@ export class RangeImpl extends AbstractRangeImpl {
       } else if (range.endContainer === parent && range.endOffset === index) {
         range.endOffset++;
       }
+      range.#notifySelection(true);
     }
   }
 
@@ -121,6 +128,7 @@ export class RangeImpl extends AbstractRangeImpl {
           range.endContainer = node;
           range.endOffset = length;
         }
+        range.#notifySelection(true);
       }
       length += current.length;
       index++;
@@ -150,6 +158,11 @@ export class RangeImpl extends AbstractRangeImpl {
     return container;
   }
 
+  /** Attach or detach the Selection that receives this Range's boundary changes. */
+  setSelection(selection: SelectionImpl | null): void {
+    this.#selection = selection;
+  }
+
   /** Set the start, moving the end too if necessary to keep an ordered range in one tree. */
   // https://dom.spec.whatwg.org/#concept-range-bp-set
   setStart(node: NodeImpl, offset: number): void {
@@ -162,6 +175,7 @@ export class RangeImpl extends AbstractRangeImpl {
     this.startContainer = node;
     this.startOffset = offset;
     this.#updateRoot();
+    this.#notifySelection();
   }
 
   /** Set the end, moving the start too if necessary to keep an ordered range in one tree. */
@@ -176,6 +190,7 @@ export class RangeImpl extends AbstractRangeImpl {
     this.endContainer = node;
     this.endOffset = offset;
     this.#updateRoot();
+    this.#notifySelection();
   }
 
   /** Set the start immediately before a node with a parent. */
@@ -216,6 +231,7 @@ export class RangeImpl extends AbstractRangeImpl {
       this.startContainer = this.endContainer;
       this.startOffset = this.endOffset;
     }
+    this.#notifySelection();
   }
 
   /** Select a node using positions in its parent. */
@@ -227,6 +243,7 @@ export class RangeImpl extends AbstractRangeImpl {
     this.startOffset = node.getIndex();
     this.endOffset = this.startOffset + 1;
     this.#updateRoot();
+    this.#notifySelection();
   }
 
   /** Select all child nodes or UTF-16 data within a node. */
@@ -237,6 +254,7 @@ export class RangeImpl extends AbstractRangeImpl {
     this.startOffset = 0;
     this.endOffset = node.getLength();
     this.#updateRoot();
+    this.#notifySelection();
   }
 
   /** Compare the endpoints selected by a Range comparison constant. */
@@ -291,6 +309,7 @@ export class RangeImpl extends AbstractRangeImpl {
     }
     this.startContainer = this.endContainer = newNode;
     this.startOffset = this.endOffset = newOffset;
+    this.#notifySelection();
     if (start.isCharacterData()) start.replaceData(startOffset, start.length - startOffset, '');
     for (const node of nodesToRemove) node.removeNode();
     if (end.isCharacterData()) end.replaceData(0, endOffset, '');
@@ -332,6 +351,7 @@ export class RangeImpl extends AbstractRangeImpl {
     if (this.collapsed) {
       this.endContainer = parent;
       this.endOffset = newOffset;
+      this.#notifySelection();
     }
   }
 
@@ -462,6 +482,7 @@ export class RangeImpl extends AbstractRangeImpl {
       // Collapse before mutation; later removals adjust this point through the ordinary live hooks.
       this.startContainer = this.endContainer = commonAncestor;
       this.startOffset = this.endOffset = firstPartial === null ? startOffset : firstPartial.getIndex() + 1;
+      this.#notifySelection();
     }
     if (firstPartial?.isCharacterData()) {
       const clone = firstPartial.clone() as CharacterDataImpl;
@@ -491,6 +512,11 @@ export class RangeImpl extends AbstractRangeImpl {
       clone.appendChild(subrange.#copyContents(extract));
     }
     return fragment;
+  }
+
+  /** Notify only an existing selection; ordinary live ranges allocate no observer state. */
+  #notifySelection(fromMutation = false): void {
+    this.#selection?.rangeChanged(this, fromMutation);
   }
 
   #updateRoot(): void {

@@ -426,6 +426,10 @@ export interface PointerLockOptions {
   unadjustedMovement?: boolean;
 }
 
+export interface GetComposedRangesOptions {
+  shadowRoots?: Iterable<ShadowRoot>;
+}
+
 export interface SecurityPolicyViolationEventInit {
   bubbles?: boolean;
   cancelable?: boolean;
@@ -2492,6 +2496,34 @@ export interface WheelEventConstructor extends Ctor<MouseEventConstructor> {
   readonly DOM_DELTA_PAGE: 2;
 }
 
+export interface Selection {
+  readonly anchorNode: Node | null;
+  readonly anchorOffset: number;
+  readonly focusNode: Node | null;
+  readonly focusOffset: number;
+  readonly isCollapsed: boolean;
+  readonly rangeCount: number;
+  readonly type: string;
+  readonly direction: string;
+  getRangeAt(index: number): Range;
+  addRange(range: Range): void;
+  removeRange(range: Range): void;
+  removeAllRanges(): void;
+  empty(): void;
+  getComposedRanges(options?: GetComposedRangesOptions): Array<StaticRange>;
+  collapse(node: Node | null, offset?: number): void;
+  setPosition(node: Node | null, offset?: number): void;
+  collapseToStart(): void;
+  collapseToEnd(): void;
+  extend(node: Node, offset?: number): void;
+  setBaseAndExtent(anchorNode: Node, anchorOffset: number, focusNode: Node, focusOffset: number): void;
+}
+
+export interface SelectionConstructor {
+  readonly prototype: Selection;
+  [Symbol.hasInstance](value: unknown): value is Selection;
+}
+
 export interface NotRestoredReasonDetails {
   readonly reason: string;
   toJSON(): object;
@@ -2840,6 +2872,7 @@ export interface Window extends EventTarget {
   readonly originAgentCluster: boolean;
   postMessage(message: any, targetOrigin: string, transfer?: Iterable<object>): void;
   postMessage(message: any, options?: WindowPostMessageOptions): void;
+  getSelection(): Selection | null;
   get event(): Event | undefined;
   set event(value: unknown);
   requestIdleCallback(callback: IdleRequestCallback, options?: IdleRequestOptions): number;
@@ -3078,6 +3111,7 @@ export interface Window extends EventTarget {
   MouseEvent: MouseEventConstructor;
   PointerEvent: PointerEventConstructor;
   WheelEvent: WheelEventConstructor;
+  Selection: SelectionConstructor;
   NotRestoredReasonDetails: NotRestoredReasonDetailsConstructor;
   NotRestoredReasons: NotRestoredReasonsConstructor;
   ViewTransition: ViewTransitionConstructor;
@@ -3774,6 +3808,7 @@ export interface Document extends Node {
   onpointerlockchange: EventHandlerNonNull | null;
   onpointerlockerror: EventHandlerNonNull | null;
   exitPointerLock(): void;
+  getSelection(): Selection | null;
   readonly permissionsPolicy: PermissionsPolicy;
   onabort: EventHandlerNonNull | null;
   onauxclick: EventHandlerNonNull | null;

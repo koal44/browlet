@@ -918,6 +918,9 @@ export abstract class NodeImpl extends EventTargetImpl {
       this.signalSlotChange();
     }
     node.getRoot().assignSlottablesForTree();
+    // Composed Selection endpoints can reverse order when a shadow host moves.
+    // Refresh after reinsertion and Range adjustments, before moving callbacks.
+    node.nodeDocument.notifySelectionMove();
     oldParent.childrenMoved();
     // Validation narrows this to a parent union; access the protected hook through Node.
     if (this !== oldParent) (this as NodeImpl).childrenMoved();

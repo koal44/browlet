@@ -18,6 +18,7 @@ import {
 import { PageTransitionEventImpl } from '../navigation/events/index';
 import { pointerEventHandlers, type MouseEventImpl, type ScreenPosition } from '../../interaction/events/index';
 import type { TrustedTypePolicyFactoryImpl } from '../policy/trusted-types/index';
+import type { SelectionImpl } from '../../interaction/selection/index';
 import type { HistoryImpl } from '../history/index';
 import { HTMLCollectionImpl, type DocumentImpl, type ElementImpl } from '../../dom/nodes/index';
 import type { PerformanceImpl } from '../../performance/index';
@@ -313,6 +314,10 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
       window.lastHistoryActionActivationTimestamp = window.lastActivationTimestamp;
     }
   }
+
+  /** Window and Document expose the same Selection. */
+  // https://w3c.github.io/selection-api/#dom-window-getselection
+  getSelection(): SelectionImpl | null { return this.document.getSelection(); }
 
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-window-close
   close(): void {

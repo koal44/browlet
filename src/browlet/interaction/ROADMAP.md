@@ -206,8 +206,11 @@ cross-Document routing remain adapter duties. §8 now releases disconnected lock
 rechecks queued requests, and retains notification Documents across adoption.
 Native unlock/focus-loss signals and HTML teardown remain explicit owner dependencies.
 The closing §§9–12 audit found no additional runtime algorithm. Native Pointer Lock
-remains blocked on those owners; the next adjacent specification is Selection API,
-followed by Clipboard API. CSSOM View remains deferred.
+remains blocked on those owners. [Selection API](selection/ROADMAP.md) now supplies
+the shared Document/Window Selection, range attachment and live updates, and
+coalesced Document selectionchange events. Continue §3 at getComposedRanges and
+the remaining selection operations, then §4.3 handler attributes and the input/
+editing dependencies. Clipboard API follows; CSSOM View remains deferred.
 
 ## Removal condition
 

@@ -908,6 +908,21 @@ follows unsigned-long IDL conversion, including values outside the three native
 units, as all three browsers do. Negative zero is preserved like Firefox; momentum
 is exposed like the draft and Chromium, while Firefox/WebKit do not yet implement it.
 
+The [Selection API slice](browlet/interaction/selection/ROADMAP.md) exposes the
+single Document/Window selection, its getters, range attachment/removal, live DOM
+updates, composed StaticRange snapshots, collapse methods, and coalesced Document
+selectionchange events. extend and setBaseAndExtent support directed selection,
+including a separate composed span across shadow roots. The public Range remains
+ordinary and collapsed at the later point; getComposedRanges exposes the full span.
+Explicit public Range edits replace that extra span, while automatic DOM mutations
+retain it. State-preserving moves retain and reorder the span; extend and collapse
+replace it using the ordinary Range. These cross-root choices differ from some
+browser behavior, as recorded in the owning roadmap. Later §3 methods, §4.3 handler attributes,
+document.open reset, user selection/editing, control notifications and
+caret/highlight rendering remain unfinished. Source TODOs identify these owners;
+this slice supplies programmatic state without claiming user-input or
+rendered-selection support.
+
 The Pointer Lock draft audit covers §§1–12; §§9–12 add no runtime algorithms.
 Pointer Lock §§2–5 supply ordered request/release, Document handlers and shadow
 retargeting. A real native lock cannot yet be acquired: HTML focus/transient

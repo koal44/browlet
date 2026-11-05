@@ -1214,6 +1214,32 @@ owns current-event bookkeeping for handlers and ordinary listeners alike. The
 event component retains only type references to HTML/node owners. XHR's
 ProgressEvent lives in browser integration and reuses that event machinery.
 
+Document lazily owns `SelectionImpl` in `interaction/selection/`, below DOM nodes.
+Selection retains one public live Range and, only for cross-root spans, two internal
+collapsed Ranges tracking its composed endpoints. Range directly references Selection through
+a type-only import and reports boundary adjustments through its existing mutation
+paths. Clearing Selection explicitly detaches every Range association. Future document.open
+reset must detach those old associations before replacing the Selection.
+Selection compares its prior endpoints; Document owns the coalescing flag and queues
+selectionchange with its explicit Document/task-source association. The post-unlink
+notification also clears selected shadow endpoints when their host is disconnected.
+Binding preserves the Selection receiver's realm and the selected Range's identity.
+Selection's collapse operations replace its Range and explicitly detach the old
+notification link. Composed snapshots use DOM's StaticRange in the Selection's
+realm, rescoping shadow endpoints according to the supplied roots. extend and
+setBaseAndExtent use the same replacement path and retain anchor/focus direction
+separately from ordered endpoints. Cross-root state reuses live DOM Ranges without
+a second mutation registry or relaxing Range's single-root invariant. A notification
+flag distinguishes automatic DOM adjustment, which preserves the composed span,
+from explicit public Range edits, which replace it. Hidden endpoint changes also
+schedule selectionchange. A completed state-preserving DOM move notifies the existing
+Selection once before moving callbacks, so it can reorder the retained endpoints,
+reverse direction, and refresh the same public Range without discarding the span.
+Selection's extend and collapse operations retain their ordinary-Range rules and
+replace the composed span; every replacement/clear detaches its hidden trackers.
+Input/editing, rendering, and document.open reset remain separate owners in the
+[Selection roadmap](browlet/interaction/selection/ROADMAP.md).
+
 Document lazily owns `LegacyMouseProcessor` in `interaction/mouse/`, a foundation
 that uses event machinery and type-only node references without loading higher
 input producers. All primary pointer types share its effective mouse position.
