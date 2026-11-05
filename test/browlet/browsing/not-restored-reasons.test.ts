@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import {
@@ -230,24 +230,14 @@ describe('HTML §7.2.8: NotRestoredReasons', () => {
     expect(document.notRestoredReasons).toBe(nextState.notRestoredReasons);
   });
 
-  it('requires both collection and origin filtering before a top-level builder can succeed', () => {
+  it('replaces a previous diagnostic record through the complete top-level builder', () => {
     const { document } = fixture();
     const traversable = document.getNodeNavigable() as TopLevelTraversable;
     const state = traversable.activeSessionHistoryEntry.documentState;
     const previous = state.notRestoredReasons = record({ id: 'previous' });
-    expect(() => document.buildNotRestoredReasonsForDocumentState())
-      .toThrow('Document restoration-diagnostic collection is not implemented');
-    expect(() => traversable.buildNotRestoredReasons())
-      .toThrow('Document restoration-diagnostic collection is not implemented');
-
-    // Even once Document collection is supplied, the missing privacy step must not report success.
-    const collect = vi.spyOn(document, 'buildNotRestoredReasonsForDocumentState').mockImplementation(() => {});
-    try {
-      expect(() => traversable.buildNotRestoredReasons())
-        .toThrow('Cross-origin restoration-diagnostic masking is not implemented');
-      expect(collect).toHaveBeenCalledExactlyOnceWith();
-      expect(state.notRestoredReasons).toBe(previous);
-    } finally { collect.mockRestore(); }
+    expect(traversable.buildNotRestoredReasons()).toBeUndefined();
+    expect(state.notRestoredReasons).not.toBe(previous);
+    expect(state.notRestoredReasons).toEqual(record({ url: document.url, reasons: [], children: [] }));
   });
 
   it('returns no Document diagnostics for child navigables or detached Documents', () => {

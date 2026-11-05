@@ -117,19 +117,17 @@ export class BrowletEnvironmentBase implements FetchEnvironmentBase {
     const userAgent = document.env.userAgent;
     let topLevelCreationURL: URLRecord | null = currentURL;
     let topLevelOrigin: Origin | null = null;
-    let parentIsSecure = true;
+    let embeddingWindowEnv: WindowEnvironment | undefined;
     if (!navigable.isTopLevelTraversable) {
-      const parentEnv = navigable.parent?.activeDocument?.env;
-      if (parentEnv === undefined) throw new InternalError('Child navigation reservation requires an active parent Document');
-      topLevelCreationURL = parentEnv.topLevelCreationURL;
-      topLevelOrigin = parentEnv.topLevelOrigin;
-      parentIsSecure = parentEnv.isSecureContext;
+      embeddingWindowEnv = navigable.parent?.activeDocument?.getRelevantGlobalObject()?.env;
+      if (embeddingWindowEnv === undefined) throw new InternalError('Child navigation reservation requires an active parent Window');
+      topLevelCreationURL = embeddingWindowEnv.topLevelCreationURL;
+      topLevelOrigin = embeddingWindowEnv.topLevelOrigin;
     }
     return new BrowletEnvironmentBase({
       userAgent, creationURL: currentURL, topLevelCreationURL, topLevelOrigin,
       targetBrowsingContext: navigable.activeBrowsingContext,
-      // SPEC_CLASH(secure-context-top-level-url): Preserve the approved origin-and-ancestry rule for Window reservations.
-      isSecureContext: userAgent.isOriginPotentiallyTrustworthy(obtainURLOrigin(currentURL)) && parentIsSecure,
+      isSecureContext: userAgent.computeWindowSecureContext(obtainURLOrigin(currentURL), embeddingWindowEnv),
     });
   }
 

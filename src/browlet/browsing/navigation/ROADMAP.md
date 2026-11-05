@@ -407,7 +407,7 @@ requires comparing a parameter-free handoff through their existing Documents/env
 | existing `events/navigation-current-entry-change-event.ts` | Implemented for state and same-document entry updates; full history-application caller remains | HTML §7.2.7.1 |
 | existing `api/navigate-event.ts` | Event dispatch, interception, precommit/commit/postcommit execution, synchronous URL/history effects, success/error, and finish policy are implemented; queued history application, automatic focus/scroll, and lifecycle producers remain | HTML §7.2.6 |
 | `events/` | Interfaces through BeforeUnloadEvent, the legacy factory entries, and Window's page-transition firing method are implemented. Lifecycle callers and handler processing remain separate. | HTML §7.2.7 |
-| existing `not-restored-reasons.ts` | Diagnostic interfaces, recursive creation, and the Document/history-record accessor are implemented; collection, masking, and Navigation Timing remain | HTML §7.2.8 |
+| existing `not-restored-reasons.ts` | Diagnostic interfaces, recursive creation, Document-tree collection/masking, and the Document/history-record accessor are implemented; lifecycle callers and Navigation Timing remain | HTML §7.2.8 and §7.4.6.2 |
 | `traversal.ts` | Traversal queue, apply history step, back/forward/reload | HTML §§7.4.1, 7.4.3, and 7.4.6 |
 | `state/` | Complete document/session-history state and persisted user state | HTML §§7.4.1–7.4.2 |
 
@@ -578,29 +578,28 @@ Blink's [implementation](https://chromium.googlesource.com/chromium/src/+/main/t
 and [IDL](https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/core/timing/not_restored_reasons.idl)
 explain those differences: vector-returning getters and a custom `toJSON` method.
 Its IDL also uses DOMString for `src`/`url`, where HTML uses USVString. Browlet
-keeps HTML's declarations; the backing contract already requires a scalar source
-string and a URL record. Producer conversion of invalid raw iframe source text
-must be checked when collection is implemented, not invented at this read boundary.
+keeps HTML's declarations; the backing contract requires a scalar source
+string and a URL record. The §7.4.6.2 collector now enforces that scalar-string
+contract on raw iframe source text when URL parsing fails; ID/name remain DOMStrings.
 
 ### Remaining producers and consumers
 
 | Dependency | Current boundary and later work |
 | --- | --- |
 | Document blocking details | `makeUnsalvageable()` already records individual details and clears salvageability. Existing abort/destroy paths supply `fetch`, `parser-aborted`, and `websocket`; this slice does not change their triggers. |
-| Mandatory reason producers | `navigation-failure` needs the failed-navigation path; `lock` needs Web Locks lifecycle integration; `masked` needs privacy filtering and cache-policy producers. Having a string field does not implement those features. |
-| Tree collection | `Document.buildNotRestoredReasonsForDocumentState()` is an explicit throwing stub for HTML's [document-state builder](https://html.spec.whatwg.org/multipage/document-lifecycle.html#build-not-restored-reasons-for-document-state). It must capture the URL, iframe source/ID/name (including absent attributes and URL-parse failure), clone blocking details, recurse through child navigables, and assign each active history state. |
-| Cross-origin filtering | `TopLevelTraversable.buildNotRestoredReasons()` calls Document collection, then throws at the unfinished masking step. This [top-level builder](https://html.spec.whatwg.org/multipage/document-lifecycle.html#build-not-restored-reasons-for-a-top-level-traversable-and-its-descendants) must compare descendant origins, hide foreign URL/reasons/children, and report a masked blockage before platform creation. |
+| Mandatory reason producers | Failed history population records `navigation-failure`, and the top-level diagnostic builder records `masked` for hidden blockers. `lock` still needs Web Locks lifecycle integration; optional UA cache-policy producers remain separate. Having a string field does not implement those features. |
+| Tree collection | `Document.buildNotRestoredReasonsForDocumentState()` implements HTML's [document-state builder](https://html.spec.whatwg.org/multipage/browsing-the-web.html#build-not-restored-reasons-for-document-state): capture URL and iframe metadata, clone blocking-detail membership, recurse through shadow-including child containers, and assign each active history state. See the §7.4.6.2 audits below for the approved collection, metadata, and shadow-tree corrections. |
+| Cross-origin filtering | `TopLevelTraversable.buildNotRestoredReasons()` implements the [top-level builder](https://html.spec.whatwg.org/multipage/browsing-the-web.html#build-not-restored-reasons-for-a-top-level-traversable-and-its-descendants): collect, compare strict Document origins, hide foreign URL/reasons/children, and retain a generic masked blockage in the root report. Blockers anywhere behind a foreign ancestor count; same-origin descendants behind it remain unreachable through the filtered tree. |
 | Cache lifecycle | Admission, eviction, unloading, restoration, and failed-history navigation must retain or replace diagnostic records at their specified steps. Interface creation does not provide a back/forward cache. |
 | Navigation Timing | `PerformanceNavigationTiming` and its PerformanceEntry/ResourceTiming foundation are absent. The existing provisional `Document.createNavigationTimingEntry()` and `NavigationTimingRecord` mark the exact missing step: create and retain the diagnostic object when constructing the real entry, then return it from the getter. The [Performance roadmap](../../performance/ROADMAP.md#restoration-diagnostics-dependency) records the consumer contract and null/realm gap. This slice exposes no public diagnostic-producing accessor. |
 
-`SPEC_CLASH(not-restored-reasons-collection)` records three unresolved producer
-problems in the later HTML algorithms: the document-state builder appends to
-`children` without replacing its initial null with a list; it appends a child
-Document's accessor even though §7.2.8 defines that accessor as null outside a
-top-level traversable; and the top-level builder records `masked` only after
-cloning the root's blocking-detail list. Resolve these against browser behavior
-with Eric when implementing collection. The current interfaces consume supplied
-records and do not choose a workaround for those later algorithms.
+`SPEC_CLASH(not-restored-reasons-collection)` records three producer problems.
+The §7.4.6.2 builders resolve all three as approved: initialize children as a list,
+read each recursively collected history-state record instead of the child's
+top-level-only accessor, and refresh the root snapshot after adding `masked`.
+HTML adds that detail only after copying the root's blocking-detail list.
+The following masking audit also records the hidden-subtree and shadow-tree
+corrections needed to make collection and filtering agree.
 
 The section's user-agent-specific reasons are optional cache-policy choices,
 not additional conditions that this slice may silently impose. The entire
@@ -1778,12 +1777,13 @@ state directly, without inferring either input from a nonexistent Document.
 Its initializer retains a supplied Document without extracting navigation metadata.
 `DocumentBackedState` remains the live-Document requirement for Navigable construction.
 
-`entry.savePersistedState()` and `entry.restorePersistedState()` are explicit
-throwing §7.4.6.3 dependencies alongside `entry.restoreScrollPositionData()`.
-They are not yet called by the provisional commit path. Capture needs restorable
-region identity and position measurements; restoration needs auto/manual and
-Navigation suppression checks, user-scroll state, optional retries as content
-loads, and scroll anchoring. Child navigable containers are excluded because
+`entry.savePersistedState()` retains its throwing capture boundary. The
+[§7.4.6.5 audit](#html-7465-persisted-history-entry-state) implements the
+auto/manual and Navigation suppression gates in `restorePersistedState()` and
+the user-scroll guard in `restoreScrollPositionData()`. Position capture and
+actual restore attempts still throw. Capture needs restorable region identity
+and measurements; restoration needs layout, input-produced user-scroll state,
+optional retries as content loads, and scroll anchoring. Child navigable containers are excluded because
 children restore through their own entries. The [rendering roadmap](../../rendering/ROADMAP.md#measured-dom-apis)
 records that dependency. Optional form-state persistence should retain directionality;
 restoring values must not dispatch input/change and must eventually respect
@@ -1826,7 +1826,7 @@ Document destruction; the live Document owns its environment.
 | Reload pending | Initially false. Reload preparation and the traversal/population consumers remain unfinished at their existing boundaries. |
 | Ever populated | Initially false, including when construction receives a live Document. The existing local history-entry creation path sets it after Document initialization; full population must manage it too. |
 | Navigable target name | Initially empty. Creation, target lookup, and Window name updates already use it. Origin-changing repopulation must clear it. |
-| Not restored reasons | Initially null. Existing diagnostic types and platform projection are available; `Document.buildNotRestoredReasonsForDocumentState()` still throws pending lifecycle reason collection and tree masking. |
+| Not restored reasons | Initially null. Document-tree collection, top-level origin masking, and platform projection are available; lifecycle callers and Navigation Timing remain unfinished. |
 
 `state.evictDocument()` represents the optional cache-eviction request in this
 section: no Document is a no-op, a fully active Document is rejected, and an
@@ -2533,7 +2533,9 @@ incoming Document's node navigable to remain null until activation.
 `createAndInitializeDocument()`, including the current `Browlet.navigate()` local
 source route and the supplied-reader HTML loader. It fills the reserved environment,
 COEP, policy container, and COOP result before those callers consume them. Deleting
-it now would remove work those paths still require.
+it now would remove work those paths still require. It now returns before any
+allocation or policy work when the caller supplies the final COOP enforcement
+result. In particular, final synthetic params retain their null reservation.
 
 Its replacement boundary is explicit:
 
@@ -2544,10 +2546,11 @@ Its replacement boundary is explicit:
   The local source route must likewise supply completed inputs before Document
   creation, rather than depend on a late generic preparation call.
 - [§7.5.1 Document creation](https://html.spec.whatwg.org/multipage/document-lifecycle.html#create-and-initialize-a-document-object)
-  must consume the selected inputs and handle the intentional null reserved
-  environments in javascript: and HTML supplied-response params. It currently
-  depends on this fallback and non-null environment reads; that consumer audit
-  is still required before enabling those paths end to end.
+  now consumes final params without replacing intentional null reserved
+  environments. Without a reservation, OAC uses the shared incoming-Window
+  security calculation; synthetic responses no longer depend on the fallback.
+  The remaining Document initialization audit and actual loaders are still
+  required before enabling those paths end to end.
 - Once the producers and consumer meet that contract, remove the call and helper,
   keeping local-route, policy/group-switch, and inherited-policy/null-environment
   regressions. The policy checks remain at their producers; full history
@@ -2642,7 +2645,7 @@ same-document-finalization boundaries. It does not complete hash navigation end 
 | Construct the entry | After callbacks, select the live active entry's DocumentState and scroll-restoration mode. Keep Navigation state captured before callbacks, create fresh classic History state (serialized null), and retain the predecessor's key only for replacement. The new entry keeps its fresh ID and pending step. |
 | Synchronous script-visible updates | Push clears History state and computes index + 1 / length = index + 1; replace keeps the current index and length. Publish the Document URL and active entry, then call Document history application with length before index. Neither currentSessionHistoryEntry nor the joint step changes here. |
 | Apply Document history state | `Document.updateForHistoryStepApplication()` has the complete §7.4.6.2 inputs. Its [existing-Document branch](#html-7462-existing-document-history-updates) now maintains latest entry, restores classic state, and produces Navigation/popstate/hashchange notifications. The [new-Document branch](#html-7462-new-document-history-initialization) initializes Navigation and permits parser scripts after its remaining persistence/scroll dependencies. Reactivation and actual BiDi delivery remain unfinished. |
-| Scroll | Call `scrollToFragment()` on the live active Document after history callbacks. Its existing §7.4.6.4 dependency still throws; target selection, ancestor revealing, viewport geometry, focus, and retrying a not-yet-parsed fragment remain unfinished. |
+| Scroll | Call `scrollToFragment()` on the live active Document after history callbacks. HTML target selection and retained `:target` state are implemented; ancestor revealing, viewport geometry, focus, and MIME-specific fragment rules remain explicit dependencies. Loading retries have their own scheduler and unfinished user-interest policy. |
 | Queue reconciliation | Append tagged synchronous-navigation steps to the real traversal queue. `Traversable.finalizeSameDocumentNavigation()` now inserts/replaces entries and discards work from a replaced/destroyed DocumentState; see the following audit. Joint same-document history application still throws explicitly instead of resetting Navigation through the provisional new-Document path. |
 | Automation | Call the new `UserAgent.webDriverBiDiFragmentNavigated()` only after finalization returns. The status carries the same navigation ID and URL with `complete`; subscribed sessions, waiters, and delivery remain a source-marked no-op dependency. |
 
@@ -3922,7 +3925,8 @@ it does not bypass Timing-Allow-Origin or add public timing entries. See the
 `HTMLIFrameElementImpl.pendingResourceTimingStartTime` starts null. Its §4.8.5
 navigation producer and fallback load-event reporting remain explicit TODOs.
 The provisional response-policy loader also remains: Browlet's local route still
-needs late preparation, and §7.5.1 must preserve intentionally null reservations.
+needs late preparation; §7.5.1 now preserves intentionally null reservations in
+completed params rather than sending them through that adapter.
 Service Worker association, actual Early Hints processing (including interim URL
 metadata), URL-scoped COOP reporting, local cookie-URL inheritance, synthetic
 null-request referrer persistence, error pages, and actual Document loaders remain
@@ -4045,7 +4049,7 @@ The rest of the read algorithms remains explicit:
 | Population continuations | `populateHistoryEntryDocument()` exists. The history coordinator must supply snapshots/reload inputs, dispatch child traverse events, wait for population, handle non-displayable results, compare origins, and reset classic state/target names where required. |
 | Synchronous queue jumping | `runSynchronousNavigationSteps()` selects eligible pending work, suppresses recursive selection, and propagates selected completion. Coordinator wake-ups, maintenance of the waiting set, and continuation processing remain unfinished. |
 | Deactivation and activation | `Navigable.activateHistoryEntry()` switches the active entry/Window and initializes visibility after saving persisted state. `Window.firePageSwapEvent()` supplies the outgoing event and filtered activation. `Document.unloadAndDescendants()` and `SessionHistoryEntry.savePersistedState()` still throw. Deactivation must coordinate CSS capture and event delivery before unloading, then the coordinator must activate the destination. |
-| Document updates and final completion | `Document.updateForHistoryStepApplication()` handles existing/new Documents and retained-Document reactivation. Persistence and scroll scheduling still throw before new-Document script permission; form reset and visibility transitions block full reactivation. The coordinator must run changing and nonchanging Document jobs on their own loops and wait for completion. Revealing, scrolling, and persisted-state restoration remain later §7.4.6 subsections. |
+| Document updates and final completion | `Document.updateForHistoryStepApplication()` handles existing/new Documents and retained-Document reactivation. Automatic scroll restoration still throws before new-Document script permission; manual and suppressed restoration can continue. Fragment-scroll attempts are scheduled without blocking scripts. Form reset and visibility transitions block full reactivation. The coordinator must run changing and nonchanging Document jobs on their own loops and wait for completion. The later §7.4.6 audits cover revealing and scroll-restoration policy; physical scrolling remains unfinished. |
 
 Two details need close attention when connecting those continuations: HTML's
 length/index-only selector stops even below a same-document parent entry change,
@@ -4699,9 +4703,10 @@ and [Ladybird Document](https://github.com/LadybirdBrowser/ladybird/blob/874f491
 
 Remaining owners and stopping points:
 
-- `SessionHistoryEntry.restorePersistedState()` still throws (§7.4.6.5). At this
-  boundary popstate has already fired and hashchange is queued. No successful
-  restoration or completed navigation is implied by those events.
+- `SessionHistoryEntry.restorePersistedState()` now applies §7.4.6.5's gates.
+  Automatic restoration still throws at the layout boundary after popstate and
+  after hashchange is queued. Manual/suppressed restoration can finish without
+  scrolling; those events alone still do not imply completed navigation.
 - The following new-Document slice installs latestEntry, restores classic state,
   initializes Navigation/activation, and orders the script permit after the
   remaining persistence, BiDi, and fragment-scroll owners. Initial about:blank
@@ -4762,14 +4767,15 @@ browser policy decision.
 
 Remaining owners and stopping points:
 
-- `SessionHistoryEntry.restorePersistedState()` (§7.4.6.5) still throws. It follows
-  latestEntry/classic state installation and precedes Navigation initialization;
-  the operation is not an atomic transaction that can be retried after that throw.
-- `Document.tryToScrollToFragment()` explicitly throws. Its later implementation
-  must delay in parallel, queue a navigation task, test parser state and user-agent
-  interest, call §7.4.6.4 scrolling, and retry while the indicated part is absent.
-  Both this dependency and persisted-state restoration prevent script permission
-  through the full new-Document branch today. Tests replace those owners explicitly.
+- `SessionHistoryEntry.restorePersistedState()` (§7.4.6.5) now applies restoration
+  policy, but its automatic scroll operation still throws. It follows latestEntry/
+  classic state installation and precedes Navigation initialization; the operation
+  is not an atomic transaction that can be retried after that throw.
+- `Document.tryToScrollToFragment()` now schedules its delayed navigation task
+  and returns immediately, as detailed in the fragment-scroll scheduling slice
+  below. Its user-interest, indicated-part, and actual scrolling dependencies
+  execute later; they no longer prevent parser-script permission. Automatic scroll
+  restoration still blocks the full new-Document branch before scheduling.
 - Real BiDi delivery, full traversal coordination, bfcache restoration, and
   XML/script-preparation callers remain unfinished. The retained-Document slice
   below implements reactivation around explicit form and visibility dependencies.
@@ -4852,12 +4858,12 @@ successful browser probes.
   reveal flags already change before this dependency is reached; a throw is not
   a completed restoration or an automatically retryable transaction.
 - `pageShowing` and `hasBeenRevealed` now exist and are maintained here. Initial
-  loading/unloading must also maintain showing state; §7.4.6.3's reveal producer
-  must set the reveal flag before inbound-transition work and `pagereveal`.
+  loading/unloading must also maintain showing state; §7.4.6.3's `Document.reveal()`
+  sets the reveal flag before inbound-transition work and `pagereveal`.
 - Full history coordination, retention/eviction policy, unloading and activation
   scheduling must supply the retained Document and correct history inputs. The
   provisional loader does not thereby gain end-to-end bfcache/back-forward support.
-  Fragment-scroll scheduling remains the next bounded §7.4.6.2 operation.
+  Fragment-scroll scheduling is implemented in the following §7.4.6.2 slice.
 
 The tests use real Window bindings and Agent tasks, retaining handlers installed
 before navigation. They substitute only the explicit unfinished owners when
@@ -4866,6 +4872,684 @@ Validation: all 92 cases in seven focused suites pass on Node 24.19.0, 26.8.1, a
 custom 27, each with and without the addon, including 12 retained-Document cases.
 Typechecking, type contracts, changed-file ESLint, import hierarchy, and whitespace
 checks pass. No failure classifications changed or native artifacts were rebuilt.
+
+## HTML §7.4.6.2: Fragment-scroll scheduling during loading
+
+Audited [trying to scroll to the fragment](https://html.spec.whatwg.org/multipage/browsing-the-web.html#try-to-scroll-to-the-fragment)
+against HTML `a7f6aed` and the live specification on 4 November 2026.
+`Document.tryToScrollToFragment()` uses the existing UserAgent `TimerHost` for
+the parallel wait, then the Document environment's navigation-and-traversal task
+source. The task checks the current parser and user-interest policy, calls
+`scrollToFragment()`, and schedules another delayed attempt only if the current
+indicated part is still null. It reads that part after scrolling, preserving
+changes caused by the operation. No new task queue, promise, or timer registry
+is introduced, and the Document remains the algorithm's receiver.
+
+HTML leaves the delay implementation-defined. Browlet waits 50 ms per attempt
+so a missing target cannot busy-loop while parsing awaits input. This is a local
+scheduling choice, not a measured browser constant or an implemented rendering
+cadence. The normal HTML task queue holds work for inactive Documents; its existing
+teardown discards queued work. A wake-up after the browsing context has been cleared
+does not enqueue a new task. That wake-up itself is bounded by the delay rather
+than retained as a second Document timer state.
+
+New-Document history initialization now returns from scheduling and permits
+parser scripts immediately afterward. The regression exercises the real scheduler
+and script gate: scripts resume before the host wake-up and before the later
+navigation task attempts scrolling. Persisted-state restoration remains an earlier
+throwing dependency. This does not connect the provisional loader to full traversal.
+
+The browser sources tie the broader behavior to unfinished rendering/input owners:
+[Blink's element fragment anchor](https://github.com/chromium/chromium/blob/1136757f47c7e2b6cc593f871a5d79fc0e9834b4/third_party/blink/renderer/core/page/scrolling/element_fragment_anchor.cc)
+waits for rendering resources and stops competing with explicit scrolling;
+[WebKit's FrameLoader](https://github.com/WebKit/WebKit/blob/713192fabebfdd2955aa596c262c33bfbf3d50be/Source/WebCore/loader/FrameLoader.cpp)
+defers fragment scrolling for pending stylesheets;
+[Gecko's PresShell](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622782fe62529bb3a4809780da01d6c/layout/base/PresShell.cpp)
+checks whether the viewport has moved since its earlier anchor scroll.
+These are source references, not live browser timing measurements. This slice
+implements HTML's scheduling flow without choosing those rendering policies.
+
+The remaining calls stay explicit:
+
+- `UserAgent.isUserInterestedInFragmentScrolling(document)` throws until input
+  and scrolling integration can supply that decision. It does not equate a
+  synthetic `scroll` event with user intent or silently assume continued interest.
+- `Document.indicatedPart` now implements HTML selection. `scrollToFragment()`
+  updates retained target state, then still throws for actual viewport/element
+  scrolling, ancestor revealing, and focus; non-HTML MIME fragment rules also throw.
+  No selector shortcut or synthetic scroll/focus event substitutes for those owners.
+- Rendering/layout readiness and producer-specific cancellation belong with that
+  integration. Parser absence/completion/abortion already stops this operation;
+  XML parsing still lacks its implementation behind the shared parser contract.
+
+Tests control host wake-ups and unfinished owners, while using real HTML parsers,
+Document activity, event-loop task sources, and script-permission promises. They
+cover delayed execution/retry, live parser and interest checks, post-scroll target
+selection, inactive-Document gating, discarded work, and explicit owner failures.
+
+Validation: seven focused suites contain 123 cases, including 14 scheduling cases
+and the updated script-permission integration. All 123 pass with the addon on
+Node 24.19.0, 26.8.1, and custom 27. Each stock run has 120 passes and the same
+three existing native-global expected failures. Typechecking, type contracts,
+changed-file ESLint, import hierarchy, and whitespace checks pass. No failure
+classifications changed or native artifacts were rebuilt. The next bounded work
+in document order is the not-restored-reasons collection still in §7.4.6.2;
+§7.4.6.3 revealing follows those builders.
+
+## HTML §7.4.6.2: Collecting not-restored reasons
+
+Audited the [Document-state collector](https://html.spec.whatwg.org/multipage/browsing-the-web.html#build-not-restored-reasons-for-document-state)
+against HTML `a7f6aed` and the live specification on 4 November 2026.
+`Document.buildNotRestoredReasonsForDocumentState()` keeps its void contract and
+stores each newly collected record in the active session history entry's state.
+It copies blocking-detail membership and retains each detail and URL record.
+Following the masking audit below, it traverses shadow-including container order
+so the collector and filter visit the same Documents. Window's light-tree lookup
+is unchanged. A missing node navigable or active child Document is an internal
+precondition failure, not an empty report.
+
+The browser-only `node-compat/experimental/not-restored-reasons-collection.mjs`
+probe uses WPT's RTC cache blocker and verifies a reload rather than bfcache
+restoration. Chromium 156.0.8078.4 produced a nonempty nested tree, empty lists
+for same-origin leaves, and null URL/reasons/children for a foreign child.
+Firefox 157 and WebKit 27.2 did not expose the Navigation Timing attribute.
+Unlike the older unload probe above, this establishes actual child-tree behavior.
+Blink's [recursive timing builder](https://github.com/chromium/chromium/blob/1136757f47c7e2b6cc593f871a5d79fc0e9834b4/third_party/blink/renderer/core/timing/performance_navigation_timing.cc)
+also asserts that recursively created child records are non-null.
+
+Approved choices:
+
+- `SPEC_CLASH(not-restored-reasons-collection)`: initialize children as an empty
+  list and append the child's collected history-state record. HTML instead
+  appends to initially null children and reads a Document accessor specified
+  to return null for children. The existing accessor remains top-level-only.
+- `SPEC_CLASH(not-restored-reasons-container-metadata)`: follow HTML's resolved,
+  encoding-aware iframe `src` and empty strings for absent src/id/name.
+  Chromium returns the raw source attribute and null for absent attributes;
+  its live results distinguish missing attributes from explicitly empty ones,
+  matching the [WPT metadata expectations](https://github.com/web-platform-tests/wpt/blob/master/performance-timeline/not-restored-reasons/performance-navigation-timing-iframes-without-attributes.tentative.window.js).
+  Parsing uses the container's node Document base and encoding. On failure the
+  source text is retained subject to the struct's scalar-string constraint;
+  ID/name preserve lone surrogates. Non-iframe containers retain null metadata.
+
+Document collection remains internal and unfiltered. The next audit completes
+`TopLevelTraversable.buildNotRestoredReasons()` and its `masked`-reason ordering
+correction; no public timing accessor is introduced. Unloading and cache eviction
+must call that complete builder before destruction. Those lifecycle hooks, Web
+Locks/optional cache-policy producers, and the real Navigation Timing consumer
+remain explicit dependencies; the existing `navigation-failure` producer is retained.
+
+Validation: the diagnostic-interface and collection suites contain 36 cases,
+including 19 new collection cases. All pass on Node 24.19.0, 26.8.1, and custom
+27 with and without the addon. Typechecking, type contracts, changed-file ESLint,
+import hierarchy, and whitespace checks pass. No failure classifications changed
+or native artifacts were rebuilt.
+
+## HTML §7.4.6.2: Masking not-restored reasons
+
+Audited the [top-level builder](https://html.spec.whatwg.org/multipage/browsing-the-web.html#build-not-restored-reasons-for-a-top-level-traversable-and-its-descendants)
+against HTML `a7f6aed` and the live specification on 4 November 2026.
+`TopLevelTraversable.buildNotRestoredReasons()` forwards to its active Document's
+`buildNotRestoredReasons()`, which owns collection and filtering. The separate
+recursive collector leaves records unfiltered until the top-level pass. This
+reviewed ownership arrangement keeps the traversable's void entry point and
+requires an active top-level Document at the Document entry point. Strict origins
+determine which records lose their URL, reasons, and children; container metadata remains.
+URL origin alone and `document.domain` relaxation do not grant visibility.
+The parent-first descendant walk tracks Documents behind foreign ancestors so
+blockers in their hidden subtrees still produce the generic root indication.
+It updates active history state, independently of a pending traversal entry.
+
+The browser-only `node-compat/experimental/not-restored-reasons-masking.mjs`
+probe checks real navigation/back sequences with WPT's RTC cache blocker, recording
+reload identity and `pageshow.persisted` to distinguish restoration. Chromium
+156.0.8078.4 retains visible same-origin child reasons; a blocker in a foreign
+child, deeper foreign child, same-origin grandchild behind a foreign parent, or
+foreign shadow-tree iframe instead produces root `masked` and null foreign
+URL/reasons/children. Firefox 157 and WebKit 27.2 do not expose this API, so they
+provide no diagnostic-tree oracle here.
+
+Approved corrections, each marked in source:
+
+- `SPEC_CLASH(not-restored-reasons-collection)`: refresh the root's copied list
+  after `makeUnsalvageable('masked')`. HTML otherwise omits its newly added detail
+  from the collected report. Existing root reasons remain and later additions
+  do not mutate that snapshot.
+- `SPEC_CLASH(not-restored-reasons-hidden-blocker)`: count blockers anywhere in
+  a subtree hidden by a foreign ancestor, including a descendant that returns
+  to the root origin. HTML's foreign-Document-only check misses the latter.
+  Only foreign records themselves are nulled, following HTML; same-origin
+  records behind them cannot be reached through the filtered tree.
+- `SPEC_CLASH(not-restored-reasons-shadow-tree)`: collect shadow-tree containers
+  as well as light-tree containers. HTML collection uses document-tree children
+  while masking uses shadow-including descendants, otherwise reading a missing
+  or stale record. This revises the prior collection slice as approved; the
+  Window child-lookup algorithm remains unchanged.
+
+Chromium's [cache-tree implementation](https://github.com/chromium/chromium/blob/1136757f47c7e2b6cc593f871a5d79fc0e9834b4/content/browser/back_forward_cache/back_forward_cache_impl.cc)
+checks a foreign subtree through `FlattenTree().CanRestore()` and adds a root
+`masked` detail. It also contains flag-gated randomized foreign-frame attribution;
+that is not HTML's rule or the behavior observed in the tested default build,
+and Browlet does not introduce it. The existing
+[WPT foreign-frame case](https://github.com/web-platform-tests/wpt/blob/master/performance-timeline/not-restored-reasons/performance-navigation-timing-cross-origin-bfcache.tentative.window.js)
+expects a generic root reason with the foreign tree hidden.
+
+The remaining dependency is delivery: unloading/cache eviction must invoke the
+complete builder before destroying the active tree. Their existing throwing
+lifecycle boundaries remain; this slice does not supply bfcache eligibility,
+retention/eviction policy, or additional optional reason producers. Navigation
+Timing must create and retain a platform diagnostic from the filtered record,
+including its unresolved null-input rule documented in the Performance roadmap.
+No public accessor or provisional loader shortcut has been added.
+
+The builders at the end of §7.4.6.2 are now implemented. Previously recorded
+owner dependencies in that section remain open; the next document-order slice
+is **§7.4.6.3, revealing the document**.
+
+Validation: all 48 cases across the diagnostic-interface, collection, and masking
+suites pass on Node 24.19.0, 26.8.1, and custom 27, with and without the addon.
+The new shadow-collection regression failed before the correction. Typechecking,
+type contracts, changed-file ESLint, import hierarchy, and whitespace checks pass.
+No failure classifications changed or native artifacts were rebuilt.
+
+The reviewed ownership move was rechecked with the same 48 cases, typechecking,
+and changed-file lint. Collection and masking now live together on Document;
+the forwarding entry point keeps the specification's top-level owner explicit.
+
+## HTML §7.4.6.3: Revealing the document
+
+Audited HTML's [reveal](https://html.spec.whatwg.org/multipage/browsing-the-web.html#reveal)
+algorithm at `a7f6aed` and the live specification on 4 November 2026.
+`Document.reveal()` keeps the specified void contract. It returns immediately
+when already revealed, sets the guard before inbound resolution, fires
+PageRevealEvent at its relevant Window, and activates the resolved transition
+after dispatch.
+
+For a non-null transition, activation runs inside the Document environment's
+existing EventLoop prepare/cleanup-script boundary. Cleanup is guaranteed even
+when the explicit unfinished CSS operation throws. No new scheduler, native
+hook, or Promise adapter is introduced. The real rendering-producer regression
+supplies only its host opportunity and missing CSS results: activation's
+InternalPromise reactions complete before the animation-frame phase, and a
+second rendering opportunity does not repeat the event. Reactivation's existing
+flag reset permits the next activation's revelation. Shared Window/body handlers
+use their existing binding and dispatch machinery.
+
+`SPEC_CLASH(pagereveal-target-and-trust)` follows HTML/Chromium: a trusted event
+whose target is Window, with bubbles/cancelable/composed false. The browser-only
+`node-compat/experimental/document-reveal.mjs` probe checked real page entry and
+same-origin CSS-opted-in navigation on Chromium 156.0.8078.4 and WebKit 27.2.
+Each emits one event with the appropriate null/non-null transition; WebKit's
+event is untrusted and targets Document. Both observed transition runs place
+updateCallbackDone reactions and handler microtasks before ready reactions,
+and ready before the following animation frame. Firefox 157's default build
+does not expose the event. Its feature-gated implementation agrees with HTML's
+target/trust and uses a microtask boundary around activation.
+
+Source evidence: Blink's
+[rendering sequence](https://github.com/chromium/chromium/blob/1136757f47c7e2b6cc593f871a5d79fc0e9834b4/third_party/blink/renderer/core/page/page_animator.cc),
+Gecko's [Document::Reveal](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622782fe62529bb3a4809780da01d6c/dom/base/Document.cpp),
+and WebKit's [Document::reveal](https://github.com/WebKit/WebKit/blob/713192fabebfdd2955aa596c262c33bfbf3d50be/Source/WebCore/dom/Document.cpp).
+WebKit also suppresses revelation while a replacement loader is provisional;
+the future rendering caller must audit that additional selection policy. This
+slice implements HTML's callable algorithm without adding a pending-load gate.
+
+Explicit remaining dependencies:
+
+- `Document.resolveInboundCrossDocumentViewTransition()` throws until CSS
+  implements outbound opt-in updates, transferred parameters, active-transition
+  checks, @view-transition rule/type resolution, and incoming transition/promise
+  allocation. CSS updates opt-in even with no incoming parameters; returning
+  null unconditionally would silently omit required work.
+- `ViewTransitionImpl.activate()` throws until CSS supplies skipped/done state,
+  rendering suppression, geometry/capture, pseudo-elements/styles, animation,
+  and ready settlement. Event listeners may skip or modify the transition;
+  that state belongs to the future CSS implementation, not to HTML's caller.
+- WindowRenderingProducer already has the ordered `reveal` phase, but production
+  composition must connect it after the CSS prerequisite. Real rendering
+  opportunities, visibility/suppression filters, layout/display, and cached-frame
+  presentation remain with rendering. The provisional loader does not fire this
+  event as a substitute for that first rendering update.
+
+The reveal flag changes before the explicit resolution failure, following the
+written order; a throw is not successful revelation or a retry mechanism.
+No callable-shape change needs review. Next is **§7.4.6.4, scrolling to a fragment**.
+
+Validation: the reveal, PageRevealEvent, and retained-Document reactivation
+suites pass all 30 cases on Node 24.19.0, 26.8.1, and custom 27, with and without
+the addon. The existing rendering-producer suite passes its 12 cases on Node 24
+with the addon. Typechecking, type contracts, changed-file ESLint, import
+hierarchy, and whitespace checks pass. No failure classifications changed and
+no native artifacts were rebuilt. Stale persisted-state references to §7.4.6.3
+were corrected to §7.4.6.5; that work is still explicitly unfinished.
+
+## HTML §7.4.6.4: fragment selection and target state
+
+The [fragment algorithms](https://html.spec.whatwg.org/multipage/browsing-the-web.html#scrolling-to-a-fragment)
+were audited against HTML `a7f6aed` on 4 November 2026. This bounded slice
+implements the HTML selector and the target-state portion of scrolling:
+
+- `Document.selectIndicatedPart(url)` first checks URL equality excluding the
+  fragment. Empty fragments select the top sentinel; otherwise raw ID/name
+  matching precedes percent-decoding and UTF-8 decoding without BOM removal.
+  A decoded ASCII-case-insensitive `top` is special only after element lookup.
+- The private potential-element lookup prefers the first ID in tree order,
+  then the first HTML `a` with the matching unnamespaced `name`. Ordinary
+  Document traversal excludes shadow trees and template contents. IDs on SVG
+  elements in an HTML Document remain eligible; SVG anchor names do not.
+- `Document.indicatedPart` uses that operation for HTML Documents. An absent
+  fragment identifies no part; non-HTML fragment rules remain a throwing owner.
+- `scrollToFragment()` clears the target for no match. For the top sentinel it
+  clears the target before calling the existing viewport-scroll operation.
+  For an element it retains the selected identity before the explicit remaining
+  revealing/scroll/focus boundary. A throw is not successful scrolling.
+
+`Document.targetElement` starts null and supplies Selectlet and Stylelet through the existing
+DOM adapter's optional `targetElement` operation. The regression first failed
+with **two matches instead of zero** for duplicate IDs before fragment processing
+had selected a target. The old URL comparison also could not preserve selection
+after History or ID changes, match a named anchor, or select just the first duplicate.
+The new integration reads the retained identity in both matchers; providers without that operation
+keep their existing URL approximation, explicitly documented as incomplete.
+The follow-up Stylelet regression reproduced the same two incorrect matches
+before selection. It reuses a compiled selector through selection, URL/ID changes,
+and clearing, while checking the stylesheet specificity and DOM-query result.
+
+### Browser evidence and choices
+
+`node-compat/experimental/fragment-selection.mjs` runs real HTTP Document loads
+on Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2. All three agree on raw
+matching before decoding, IDs before names, the first duplicate, decoded UTF-8
+replacement characters and a preserved BOM, real `top` elements, and excluding
+shadow/template contents. All retain `:target` after `history.replaceState()`
+and after changing the target's ID. An absent fragment selects no CSS target.
+
+`SPEC_CLASH(fragment-quirks-anchor-name)` follows Eric's approved HTML/Firefox
+choice: legacy names remain case-sensitive in quirks mode. Chromium/WebKit
+accept case-insensitive names there. Blink's source records legacy compatibility
+and usage measurement in its comments; WebKit explicitly notes the absent spec
+rule. Standards mode agrees in all three.
+
+`SPEC_GAP(fragment-null-selection)` records HTML's missing null branch: its URL
+fragment is nullable, but selection passes it to string-only lookup/decoding.
+Returning null agrees with the preceding indicated-part definition and the
+browser probe; null is not the empty fragment's top sentinel.
+
+Sources: Blink's [TreeScope lookup](https://github.com/chromium/chromium/blob/1136757f47c7e2b6cc593f871a5d79fc0e9834b4/third_party/blink/renderer/core/dom/tree_scope.cc)
+and [fragment anchor](https://github.com/chromium/chromium/blob/1136757f47c7e2b6cc593f871a5d79fc0e9834b4/third_party/blink/renderer/core/page/scrolling/element_fragment_anchor.cc),
+Gecko's [target lookup](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622782fe62529bb3a4809780da01d6c/dom/base/nsContentUtils.cpp)
+and [PresShell](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622782fe62529bb3a4809780da01d6c/layout/base/PresShell.cpp),
+and WebKit's [TreeScope](https://github.com/WebKit/WebKit/blob/713192fabebfdd2955aa596c262c33bfbf3d50be/Source/WebCore/dom/TreeScope.cpp).
+
+### Remaining owners
+
+- HTML §6.9.2 ancestor revealing: closed details and hidden-until-found ancestors,
+  `beforematch`, and reentrant mutation checks. The element branch stops before
+  this work rather than pretending the DOM is already revealed.
+- CSSOM View: scroll to the beginning, or scroll the target into view with
+  `auto`, `start`, and `nearest`. Viewport/scroll-box geometry, ongoing smooth
+  scrolling, and scroll events remain absent.
+- HTML §6.6: focusing steps with the Document viewport fallback, then moving
+  the sequential focus navigation starting point. No fragment-specific focus
+  approximation is added. Gecko's source notes the unresolved ordering question
+  in [HTML #7759](https://github.com/whatwg/html/issues/7759); revisit it when
+  these shared owners exist.
+- MIME-specific fragments, including RFC 7303 XML rules and SVG view syntax,
+  remain separate from HTML selection. Text-fragment directives also require
+  their navigation/MIME integration; this slice does not implement them.
+- Rendering must invalidate styles/layout when target selection changes. Queries
+  already observe the retained target. Loading retries retain the explicit
+  `isUserInterestedInFragmentScrolling()` dependency.
+
+No callable-shape change needs review. The next document-order subsection is
+**§7.4.6.5, persisted history entry state**; fragment scrolling is not complete
+until the cross-section owners above are supplied.
+
+Validation: 105 cases across the fragment-target, loading-retry, fragment-navigation,
+NavigateEvent interception, and finishing suites pass on Node 24.19.0, 26.8.1,
+and custom 27, with and without the addon. The existing Selectlet host suite
+passes 12 cases on Node 24 with the addon. Typechecking, type contracts,
+changed-file ESLint, import hierarchy, and whitespace checks pass. No failure
+classifications changed and no native artifacts were rebuilt.
+
+Follow-up: the Stylelet consumer regression and existing stylesheet/DOM matcher
+suites pass all 60 cases on Node 24 with the addon. The new case uses the
+Document's actual Stylelet context; no extra target state or matching cache is introduced.
+
+## HTML §7.4.6.5: persisted history entry state
+
+Audited [persisted history entry state](https://html.spec.whatwg.org/multipage/browsing-the-web.html#persisted-user-state-restoration)
+against HTML `a7f6aed` on 4 November 2026. This slice supplies restoration policy
+without inventing scroll boxes or a saved-position format:
+
+| Algorithm/state | Current implementation and boundary |
+| --- | --- |
+| Save persisted state | `SessionHistoryEntry.savePersistedState()` still throws before capture. Both auto and manual entries must save positions: the restoration mode does not waive capture. Viewport and other region identity/positions need layout; navigable containers are excluded because children have their own entries. |
+| Restore persisted state | Check the entry's mode first. In auto mode, use the entry's current Document and that Document's relevant Window/Navigation. Restore only when normal restoration is not suppressed. Manual mode and suppressed restoration return without pretending to move anything. |
+| Optional persisted user state | Remains null. Browlet does not currently select the optional form-value/directionality capture policy. Future restoration must avoid input/change events and honor form-associated custom elements' formStateRestoreCallback. Those form owners remain explicit source dependencies. |
+| User scrolling | `Document.hasBeenScrolledByUser` starts false. The lower-level restoration operation returns when it is true, leaving the flag unchanged. Actual user input must produce it; synthetic scroll events and scripted scrolling do not establish that input. |
+| Restore scroll position data | Require the entry's populated Document, check the user-scroll guard, then retain the throwing layout dependency. The null placeholder is not interpreted as an empty successfully restored snapshot. Optional retries and scroll anchoring remain with layout/input integration. |
+
+The entry follows DocumentState replacement rather than retaining its construction
+environment or another Window's Navigation. Missing Documents/Windows are internal
+precondition errors when the auto path actually needs them. Manual mode does not
+consult that unused state. No callable shape changed.
+
+The focused tests first failed because the old blanket stub threw even for manual
+or suppressed restoration. Real Document history-update tests now complete in
+manual, suppressed, and user-scrolled cases, while the ordinary automatic case
+still reaches the explicit missing scroll operation after its history events.
+The existing NavigateEvent path continues to call the lower-level scroll operation
+directly; it does not reapply the automatic-restoration gates.
+
+### Browser evidence and approved choices
+
+The HTTP probe `node-compat/experimental/history-scroll-restoration.mjs` saves
+the first entry at y=250, pushes a second entry at y=650, then traverses back.
+For interception it holds the handler pending with manual scroll/focus behavior,
+reads the position after commit, and finally calls `NavigateEvent.scroll()`.
+
+| Observation | Chromium 156.0.8078.4 | Firefox 157.0 | WebKit 27.2 |
+| --- | --- | --- | --- |
+| Ordinary auto traversal | 250 | 250 | 250 |
+| Ordinary manual traversal | 650 | 650 | 650 |
+| Intercepted auto entry, before explicit scroll | 650 | 250 | 650 |
+| Intercepted manual entry, before explicit scroll | 650 | 650 | 650 |
+| Explicit scroll, auto entry | 0 | 250 | 250 |
+| Explicit scroll, manual entry | 0 | 0 | 650 |
+
+`SPEC_CLASH(history-scroll-interception)` follows the approved HTML rule and
+Chromium/WebKit's delayed restoration. Firefox restores its auto entry before
+the held handler finishes. Gecko sets the suppression flag in
+[Navigation.cpp](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622782fe62529bb3a4809780da01d6c/dom/navigation/Navigation.cpp),
+but the inspected same-document position-update path in
+[nsDocShell.cpp](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622782fe62529bb3a4809780da01d6c/docshell/base/nsDocShell.cpp)
+checks History's mode without that flag.
+
+`SPEC_CLASH(history-explicit-scroll-manual)` preserves the approved HTML/Blink
+separation: explicit NavigateEvent scrolling bypasses History's manual mode and
+normal-restoration suppression, while still respecting user scrolling.
+[Blink's explicit path](https://github.com/chromium/chromium/blob/1136757f47c7e2b6cc593f871a5d79fc0e9834b4/third_party/blink/renderer/core/navigation_api/navigate_event.cc)
+deliberately requests auto restoration. WebKit's
+[NavigateEvent](https://github.com/WebKit/WebKit/blob/713192fabebfdd2955aa596c262c33bfbf3d50be/Source/WebCore/page/NavigateEvent.cpp)
+instead enters [HistoryController](https://github.com/WebKit/WebKit/blob/713192fabebfdd2955aa596c262c33bfbf3d50be/Source/WebCore/loader/HistoryController.cpp),
+which still honors manual mode. The zero positions in Chromium and Firefox's
+manual case are observed results, not adopted saved-position behavior; actual
+position capture/restoration needs its own integration tests once layout exists.
+
+### Remaining dependencies and stopping point
+
+Scroll-position data remains the existing null-only placeholder. There is no
+region identifier/coordinate format, viewport or element measurement, restore
+attempt, retry scheduler, or scroll-anchoring integration. A fresh zero offset
+or empty list would conceal those dependencies. Form persistence also remains
+unimplemented, as the optional capture policy has not been selected.
+
+The input/scroll producer must set the user-scroll flag only for actual user
+scrolling. HTML §7.5.9 resets it during unloading, before unload cleanup; that
+reset is now named in the unloading stub. Same-document lifetime still needs
+the input/layout audit: Blink resets its initial-scroll marker on non-pushState/
+replaceState same-document navigation, while HTML names its reset in unloading.
+Do not connect a permanent input latch or clear the flag on every restoration
+attempt. The guard is implemented, but its producer/reset lifecycle is not.
+
+This reaches the document-order boundary before **§7.5, Document lifecycle**.
+It does not complete physical scroll restoration or end-to-end history traversal.
+
+Validation: the seven focused suites pass all 123 cases on Node 24.19.0,
+26.8.1, and custom 27, each with and without the addon. TypeScript and generated
+platform checks, declaration contracts, changed-file ESLint, import hierarchy,
+and whitespace checks pass. No failure classifications changed and no native
+artifacts were rebuilt.
+
+## HTML §7.5.1: Window selection and environment inputs
+
+The first Document-lifecycle slice audits shared creation steps 1–7 against
+[HTML's creation algorithm](https://html.spec.whatwg.org/multipage/document-lifecycle.html#initialise-the-document-object),
+source `a7f6aed` (4 November 2026). This algorithm creates incoming Documents;
+initial about:blank creation remains the separate §7.3.2.1 operation.
+
+`Navigable.createAndInitializeDocument()` retains its existing ownership and
+signature. It obtains the response's browsing context, creates enforced and
+report-only Permissions Policies, selects request-current-URL or response URL,
+then reuses only the eligible initial Window or allocates a new Window/realm.
+The existing group lookup accounts for Browlet registering top-level contexts
+in the group while child contexts reach it through their containing traversable.
+
+The regressions exposed two incorrect inputs to that existing machinery:
+
+- A child or grandchild Window received its own creation URL/origin as its
+  top-level metadata, overriding the correct inherited reservation fields.
+  New Windows now take those fields from the container's relevant environment;
+  top-level Windows still use the incoming creation URL and origin. The tests
+  also check the resulting network-partition key.
+- Late local-route preparation allocated a reserved environment even when
+  final synthetic params deliberately supplied null. Completed params now
+  bypass that adapter before allocation. Window setup handles null itself;
+  there is no synthetic reservation or transfer of a fabricated client ID.
+
+Existing reservations still transfer ID, service worker, target browsing context,
+and security classification through Window setup. Initial Window reuse neither
+creates a Window nor consumes a reservation. A later same-origin Document gets
+a new Window while retaining the browsing context's WindowProxy handle. Creation
+does not activate the new Document. Tests include the real srcdoc params producer.
+
+Browser source corroborates the retained initial-Window rule:
+[Blink's ShouldReuseDOMWindow](https://github.com/chromium/chromium/blob/1136757f47c7e2b6cc593f871a5d79fc0e9834b4/third_party/blink/renderer/core/loader/document_loader.cc),
+[Gecko's WouldReuseInnerWindow](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622782fe62529bb3a4809780da01d6c/dom/base/nsGlobalWindowOuter.cpp),
+and [WebKit's FrameLoader](https://github.com/WebKit/WebKit/blob/713192fabebfdd2955aa596c262c33bfbf3d50be/Source/WebCore/loader/FrameLoader.cpp)
+limit ordinary reuse to the initial Document and an origin-access check.
+Their extra isolation/credentialless conditions are not new choices in this slice;
+COOP group changes keep their existing owner. This is source evidence, not a new
+live-browser probe or a claim that their complete reuse rules coincide.
+
+### OAC without a reservation
+
+`SPEC_GAP(document-oac-null-reservation)`: step 7 reads the reserved environment's
+security classification, but supplied-response navigation permits null. HTML's
+security definition requires an environment and supplies no replacement input.
+The approved correction uses `UserAgent.computeWindowSecureContext()` with the
+incoming selected origin and optional embedding `WindowEnvironment`. That is the
+environment of the Document containing the child navigable's container, such as
+an iframe; a top-level Window has no embedding environment, even with an opener.
+UserAgent owns the trust calculation; the environment base stores its fixed result.
+Window initialization, Fetch reservations, and provisional local response
+preparation now share that same calculation. An existing reservation's fixed
+decision takes precedence, even if current origin or ancestry checks disagree.
+
+The result gates the OAC request before the browsing context group's historical
+origin-keying decision is consulted. It neither creates a Fetch reservation nor
+inherits the departing Window's security flag. The chosen origin matters for
+inherited about:blank; the parent's fixed classification carries the complete
+ancestry check, including an insecure intermediate ancestor. The separate,
+previously approved `secure-context-top-level-url` choice remains unchanged.
+
+`SPEC_CLASH(document-oac-insecure-ancestor)`: retain HTML's secure-context gate.
+Live probes on 4 November 2026 found Chromium 156.0.8078.4 and Firefox 157.0
+honor `Origin-Agent-Cluster: ?1` for an HTTPS child beneath an insecure HTTP
+parent, although both report `isSecureContext === false`. WebKit 27.2 rejects
+the request, matching HTML. All three honor it on ordinary HTTPS pages and
+reject it on non-loopback HTTP pages. WebKit's
+[September 30 correction](https://github.com/WebKit/WebKit/commit/cd3abe0e663eff9880a5d076737d6ed797754488)
+identifies origin-only gating as the bug; [WPT #63109](https://github.com/web-platform-tests/wpt/pull/63109)
+adds insecure-parent coverage. Its
+[October 6 follow-up](https://github.com/WebKit/WebKit/commit/d0aabe7a8b228b18ad5b8e2005e705e9db2302ca)
+passes an explicit security decision into OAC/COEP/DIP parsing. That supports
+sharing the calculation rather than having each header infer trust separately.
+
+Normal srcdoc and javascript: synthetic responses carry no OAC header. Later
+multipart parts are a specified supplied-response caller with null reservation;
+the multipart loader itself remains unfinished. WebKit's streamed two-part probe
+retains the outer response's cluster decision despite conflicting part headers.
+Chromium/Firefox produced no part observations in this probe, so their multipart
+behavior is inconclusive. Independent Browlet regressions retain the group's
+existing decision when a later same-origin response requests the opposite value.
+
+Before the correction, all 11 added cases failed at the explicit null-reservation
+guard. They cover the actual supplied-response producer, secure/insecure/local
+origins, parent and intermediate-ancestor security, inherited origins, configured
+trust, departing-Window separation, and historical cluster choice. The existing
+reservation cases now also make their captured decision disagree with a fresh
+origin check in both directions.
+
+### Remaining shared-creation work
+
+| Steps/owner | State and next boundary |
+| --- | --- |
+| Local response preparation | `#prepareResponsePolicy()` still completes unfinished local-route params. Move that work into the local producer before removing the adapter; final Fetch/srcdoc/supplied-response params already bypass it. |
+| 8–10: Document fields and Window association | Audited below: incoming state is fresh even when the initial Window is reused, and association precedes loader callbacks without activating the Document. Cookie-URL producer/history inputs and the public registry API remain separate dependencies. |
+| 11–14: ancestry, CSP, referrer | Audited below: captured iframe policy and known container initialize ancestry before activation; CSP applies to the incoming Document; referrer consumes Fetch's resolved value. Existing masking/null-request choices remain. CSP's unspecified style-src initialization and Console output remain explicit dependencies. |
+| 15–16: Navigation Timing | Audited below: controller-backed timing now selects redirect counts using HTML's taint/client/referrer/TAO rule and retains available consumer inputs once. No-controller fallback, public entry construction/filtering, and Timeline buffering remain explicit dependencies; the raw record is not a finished timing entry. |
+| 17–20: response headers | Refresh and Speculation-Rules throw when present. Early Hints producer processing throws; its retained commit callback is invoked. HTML pre-media Link processing remains a marked no-op, distinct from the implemented CSSOM stylesheet-Link consumer. Each needs its own header/ordering audit. |
+| 21: deferred Fetch quota | The existing `potentiallyFreeDeferredFetchQuota()` consumer is connected; full deferred-fetch request/lifetime integration retains its Fetch owner. |
+| §§7.5.2–7.5.11 | HTML production parser/script setup, other Document loaders, finish/unload/destruction/abort coordination remain separate bounded slices. Window allocation does not complete those operations. |
+
+Validation: eight creation, reservation, lifecycle, and policy suites contain
+334 cases, including 22 focused Window-selection/OAC cases. All 334 pass with
+the addon on Node 24.19.0, 26.8.1, and custom 27. Each stock run has 331 passes
+and the same three existing native-global expected failures. TypeScript/generated
+platform checks, declaration contracts, changed-file ESLint, import hierarchy,
+and whitespace checks pass. No failure classification or native artifact changed.
+
+## HTML §7.5.1: Document initialization and association
+
+Creation steps 8–10 already initialize the incoming Document at the correct
+owner, so this slice adds audit coverage without changing the algorithm.
+The selected origin, policies, sandbox flags, request/response URL, redirect
+taint, navigation ID, about-base URL, and timing inputs enter the new Document
+before its Window association and the later header-processing callbacks.
+The operation creates an unparsed, loading Document; history activation and
+WindowProxy retargeting remain the later commit's responsibility.
+
+Four added cases cover HTML/XML creation with both a reused initial Window and
+a new Window. They check projected Document state from the Early Hints commit
+callback, fresh timing and registry identities, type-dependent element naming,
+and the unchanged state of a retained old Document. Existing creation/lifecycle
+and policy tests cover the other navigation inputs. No new browser disagreement
+or callable-shape change was introduced.
+
+The remaining dependencies are explicit at their owners:
+
+- `NavigationParams.startTime` retains the approved
+  `SPEC_CLASH(html-navigation-response-timing)` correction: Fetch's controller
+  owns full timing; supplied responses retain their supplied start time.
+  Initializing the Document's load-timing record does not implement the public
+  Navigation Timing entry or its filtering/buffering dependencies.
+- `NavigationParams.cookieURL` selects the value copied into the Document.
+  Blank/srcdoc producer inheritance and retained history inputs still need
+  implementation; the existing javascript: producer captures its replacement
+  source. This audit does not claim to complete [HTML issue #332](https://github.com/whatwg/html/issues/332).
+- `CustomElementRegistryImpl` supplies a fresh identity and definition state.
+  Public registry methods, Window exposure, upgrade and reaction processing
+  remain in the [custom-elements roadmap](../../dom/nodes/html/custom-elements/ROADMAP.md).
+
+Shared creation steps 11–14, ancestry lists, CSP initialization, and referrer
+initialization, are audited in the following slice. Header processing,
+Navigation Timing, and loading/activation consumers remain outside this slice.
+
+Validation: the same eight creation, reservation, lifecycle, and policy suites
+now contain 338 cases, including 26 focused creation cases. All 338 pass with
+the addon on Node 24.19.0, 26.8.1, and custom 27; each stock run has 335 passes
+and the same three existing native-global expected failures. TypeScript/generated
+platform checks, declaration contracts, changed-file ESLint, import hierarchy,
+and whitespace checks pass. No failure classification or native artifact changed.
+
+## HTML §7.5.1: Document ancestry, CSP, and referrer initialization
+
+Shared creation steps 11–14 already invoke the correct Document operations in
+order. The audit uses HTML source `a7f6aed` and refreshed CSP source `251d288`
+(4 November 2026); it adds integration coverage and dependency notes without
+changing runtime behavior or introducing a new callable shape.
+
+| Step | Verified contract |
+| --- | --- |
+| 11–12: ancestor lists | Use the destination container's node Document and the captured iframe referrer policy, even when the attribute later changes. Create fresh nearest-first lists before activation while retaining the old Document's snapshot. The reviewed `ancestor-origins-before-activation` and `ancestor-origin-policy-masking` choices remain. |
+| 13: CSP | Window association already selects the incoming policy container. Insecure-request inheritance runs first; enforcing response directives add their targets without changing the context's inherited policy. Report-only/absent directives do not retain the departing Document's own upgrade policy when the initial Window is reused. An inherited CSP self origin survives a sandboxed srcdoc Document's opaque origin. |
+| 14: referrer | Consume the request's already-resolved URL or no-referrer value, without applying the response's policy to it again. A null request leaves the fresh Document's default empty string. An unresolved client referrer remains an explicit input error, and later request mutations do not alter the retained string. |
+
+Fifteen new creation cases reach these operations through the real navigation
+parameter/Document owners. Early Hints commit callbacks verify the incoming
+state before activation; no parser or network wait is simulated to establish
+that ordering. Existing ancestor-origin, CSP initialization, upgrade inheritance,
+target-snapshot, and Fetch referrer tests retain the detailed owner coverage.
+
+Dependencies remain explicit:
+
+- `SPEC_GAP(csp-style-src-initialization)` is now marked in `CSPList` and its
+  [roadmap](../policy/csp/ROADMAP.md#current-implementation). CSP's style-src
+  initialization has no executable CSSOM steps yet. Its separate prose gates
+  CSSOM string parsing on `unsafe-eval`, unlike all three browsers in the live
+  probe; `SPEC_CLASH(csp-style-src-cssom-eval)` records that distinction.
+  Existing CSSOM writes stay available, while Fetch and inline-input checks
+  remain. This audit does not install a restriction from the unfinished hook.
+- CSP parser warnings reach `env.reportConsoleWarning()`, whose Console Printer
+  and output sink are still provisional. Initialization does not fabricate
+  author-console or Node-console output.
+- Automatic iframe/frame/object/embed lifecycle callers remain unfinished.
+  The existing container links and initialized ancestor lists do not complete
+  their insertion/loading/removal algorithms. Stale HTML audit notes describing
+  the container getter as a throwing stub have been corrected.
+- Fetch owns incoming referrer selection; initial about:blank's creator referrer
+  is a separate creation algorithm. The approved empty referrer for a synthetic
+  javascript: replacement remains unchanged.
+
+Next: steps 15–16, Navigation Timing input selection and the explicit entry
+creation/filtering dependencies, before the remaining response-header steps.
+
+Validation: seven focused creation/lifecycle, ancestry, CSP, upgrade, target
+snapshot, and referrer suites contain 202 cases, including 41 creation cases.
+All 202 pass with the addon on Node 24.19.0, 26.8.1, and custom 27; each stock
+run has 199 passes and the same three existing native-global expected failures.
+TypeScript/generated platform checks, declaration contracts, changed-file
+ESLint, import hierarchy, and whitespace checks pass. No failure classification
+or native artifact changed.
+
+## HTML §7.5.1: Navigation Timing input selection
+
+Steps 15–16 now select controller-backed inputs in
+`Document.createNavigationTimingEntry()`. The operation captures HTML's permitted
+redirect count, delegates the destination-origin TAO check to Fetch, and retains
+response-selected service-worker timing and cache classification alongside the
+existing live Fetch/body/Document records. It also retains the previous-Document
+unload record, whose producer is still unfinished. A supplied controller requires
+the request that produced it. No extra timing extraction or second entry is
+created, and filtering the count does not mutate shared Fetch timestamps.
+
+The approved `SPEC_CLASH(navigation-redirect-count)` follows HTML rather than
+Firefox's blanket cross-origin suppression, WebKit's same-origin no-referrer
+suppression, or Chromium's missing clientless exception. The
+[Performance roadmap](../../performance/ROADMAP.md#html-751-timing-input-selection)
+records live browser versions/results, source evidence, and the reproducible
+probe. Tests independently cover those privacy branches and retain the selected
+count before Early Hints callbacks, without allowing later request changes to
+rewrite it. A real Fetch path through a controlled HTTP transport verifies an
+out-and-back redirect chain with and without the second hop's authorization.
+
+This is the bounded controller-input slice, not completion of Navigation Timing.
+HTML source `a7f6aed` still duplicates the entry-creation call, uses removed
+response timing and out-of-scope variables, and omits required consumer arguments.
+`SPEC_CLASH(html-navigation-response-timing)` and open
+[PR #12890](https://github.com/whatwg/html/pull/12890) record those corrections.
+The refreshed Navigation Timing source `48c0048` still requires the absent
+Performance Timeline/Resource Timing entry foundation. Realm-owned entry
+construction, public timestamp/status/body filtering, cache-mode conversion,
+Critical-CH restart measurement, NotRestoredReasons allocation, buffering and
+load-event queuing remain explicit consumer dependencies. Synthetic and
+supplied-response navigation still need a separate fallback decision; the source
+marks this return before retaining inputs. The srcdoc browser probe exposes
+different entry/end-time behavior, so this slice invents neither a public entry
+nor unavailable network measurements.
+
+Validation: 18 added cases cover count selection, retained inputs and callback
+ordering, the required request, and the real Fetch redirect handoff. Four
+focused Document-creation, navigation-params, loader, and Fetch-TAO suites contain
+81 cases, all passing on Node 24.19.0, 26.8.1, and custom 27.0.0-pre, with and
+without the addon. TypeScript/generated declarations, declaration contracts,
+changed-file ESLint, import hierarchy, and whitespace checks pass. No new
+expected failures, skips, or native artifacts were introduced.
+
+Next: §7.5.1 steps 17–20, the remaining response-header and callback ordering
+audit, beginning with Refresh. The timing consumer remains with Performance.
 
 ## Removal condition
 

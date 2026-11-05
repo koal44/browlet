@@ -910,10 +910,15 @@ trustworthiness is implemented on UserAgent, including secure schemes,
 localhost/loopback, opaque/file/Blob origins, and configured trust exceptions.
 A potentially trustworthy origin is not by itself a secure environment.
 
-BrowletEnvironmentBase owns the fixed decision before realm creation; BrowletRealm reads
-it for exposure and full settings retain it. Window initialization uses an
-existing reserved decision or derives one from the selected origin and parent
-Window, including insecure intermediate ancestors. New Window creation computes
+BrowletEnvironmentBase stores the fixed decision before realm creation; BrowletRealm
+reads it for exposure and full settings retain it. UserAgent's
+`computeWindowSecureContext(incomingOrigin, embeddingWindowEnv?)` calculation takes
+the incoming Document's origin and the embedding Document's `WindowEnvironment`.
+The latter is absent for a top-level Window; an opener is not an embedding Window.
+Window initialization, navigation reservations, provisional local response preparation,
+and the OAC gate without a reservation share this calculation. Window initialization
+uses an existing reserved decision or derives one from the selected origin and
+embedding Window, including insecure intermediate ancestors. New Window creation computes
 a new decision. Full iframe/popup, sandbox, worker, and worklet inheritance remain
 with those lifecycles.
 
@@ -924,6 +929,14 @@ not account for an insecure intermediate ancestor beneath a secure top-level URL
 Browlet instead preserves its selected-origin and parent-security checks by
 agreement. This also preserves classification before binding exposure and the
 reserved environment's decision when full settings are created.
+
+The [§7.5.1 OAC audit](../navigation/ROADMAP.md#oac-without-a-reservation) records
+the missing null-reservation input and the separate OAC gate disagreement:
+HTML/WebKit reject an OAC request in an insecure context; Chromium/Firefox can
+honor it for a trustworthy child beneath an insecure parent. Browlet keeps HTML's
+gate and the existing origin-and-ancestry rule, without allocating a substitute
+Fetch client. Worker/cluster transport identifiers do not confer trust or replace
+this security decision.
 
 Evidence: HTML `webappapis.html#secure-context`; Secure Contexts'
 [ancestral-risk discussion](https://w3c.github.io/webappsec-secure-contexts/#ancestors);

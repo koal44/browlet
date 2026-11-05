@@ -1,6 +1,6 @@
 import {
   type InternalPromise, type InternalPromiseWithResolvers, asciiLower, HTML_NAMESPACE, SVG_NAMESPACE,
-  stripAndCollapseASCIIWhitespace, InternalError,
+  stripAndCollapseASCIIWhitespace, toScalarValueString, InternalError,
 } from '../../../infra/index';
 import { addon, isomorphicDecode, isomorphicEncode } from '../../../js-engine/index';
 import {
@@ -12,7 +12,8 @@ import { createSelectlet, type Selectlet } from '../../../selectlet/index';
 import { decode, getEncoding, utf8DecodeWithoutBOM, utf8Encode, type Encoding } from '../../../encoding/index';
 import {
   aboutBlankURL, areSameOrigin, areSameSite, copyURL, createOpaqueOrigin, effectiveDomain, obtainURLOrigin,
-  hostsEqual, isRegistrableDomainSuffixOfOrEqualTo, parseHost, serializeHost, serializeOrigin, serializeURL, urlsEqual,
+  hostsEqual, isRegistrableDomainSuffixOfOrEqualTo, parseHost, percentDecodeString,
+  serializeHost, serializeOrigin, serializeURL, urlsEqual,
   type Origin, type URLRecord,
 } from '../../../url/index';
 import { HTTPCookie, parseHTTPDate, parseLinkHeader, type CookieHost, type HTTPStatus } from '../../../http/index';
@@ -37,7 +38,7 @@ import {
   type EventHandlerCallback, type SpeculationRuleSet,
 } from '../../scripting/index';
 import { StorageEventImpl } from '../../storage/events/index';
-import { BeforeUnloadEventImpl, HashChangeEventImpl, PopStateEventImpl } from '../../browsing/navigation/events/index';
+import { BeforeUnloadEventImpl, HashChangeEventImpl, PageRevealEventImpl, PopStateEventImpl } from '../../browsing/navigation/events/index';
 import {
   UIEventImpl, FocusEventImpl, KeyboardEventImpl, CompositionEventImpl, TextEventImpl, MouseEventImpl, pointerGlobalEventHandlers,
 } from '../../interaction/events/index';
@@ -251,8 +252,16 @@ export class DocumentImpl extends NodeImpl {
   pageShowing = false;
   /** Whether the rendering reveal step has run for this activation. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#has-been-revealed
-  // TODO(HTML §7.4.6.3): The reveal producer must set this before transition resolution and pagereveal.
   hasBeenRevealed = false;
+  /** Element selected by fragment scrolling, retained independently of later URL or ID changes. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#target-element
+  // TODO(Rendering): Invalidate affected styles/layout when this selection changes; selector queries read it live.
+  targetElement: ElementImpl | null = null;
+  /** Whether user scrolling should stop attempts to restore this Document's saved scroll positions. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#has-been-scrolled-by-the-user
+  // TODO(Input/CSSOM View): Set on actual user scrolling, not from script or synthetic scroll events.
+  // TODO(HTML §7.5.9): Reset during unloading; same-document restoration needs the scroll producer's lifecycle audit.
+  hasBeenScrolledByUser = false;
   /** Elements whose pending work delays rendering, independently of script-blocking stylesheets. */
   // https://html.spec.whatwg.org/multipage/dom.html#render-blocking-element-set
   renderBlockingElements = new Set<ElementImpl>();
@@ -394,8 +403,11 @@ export class DocumentImpl extends NodeImpl {
   /** Part identified by the current URL fragment, including the special top-of-document value. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#the-indicated-part-of-the-document
   get indicatedPart(): ElementImpl | 'top' | null {
-    // TODO(HTML §7.4.6.3): HTML fragment selection; non-HTML Documents require their MIME type's fragment rules.
-    throw new InternalError('Document indicated-part selection is not implemented');
+    if (this.url.fragment === null) return null;
+    if (this.type === 'html') return this.selectIndicatedPart(this.url);
+    // TODO(HTML §7.4.6.4 / RFC 7303): Non-HTML Documents require their MIME type's fragment rules,
+    // including XML fragment identifiers and SVG view specifications, rather than HTML anchor lookup.
+    throw new InternalError('Non-HTML Document fragment selection is not implemented');
   }
 
   // https://dom.spec.whatwg.org/#dom-document-characterset
@@ -1340,17 +1352,53 @@ export class DocumentImpl extends NodeImpl {
   /** Reveal, scroll to, and focus the current fragment target. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#scroll-to-the-fragment-identifier
   scrollToFragment(): void {
-    // TODO(HTML §7.4.6.4): Update target element, reveal ancestors, scroll into view, focus with a viewport fallback,
-    // and move the sequential focus navigation starting point; null/top have separate target-reset behavior.
-    throw new InternalError('Document fragment scrolling is not implemented');
+    const target = this.indicatedPart;
+    this.targetElement = target === 'top' ? null : target;
+    if (target === null) return;
+    if (target === 'top') {
+      this.scrollToBeginning();
+      return;
+    }
+    // TODO(HTML §6.9.2 / CSSOM View / HTML §6.6): Run ancestor revealing on target, including closed
+    // details and hidden-until-found/beforematch; scroll it into view with auto/start/nearest; run focusing
+    // steps with this Document's viewport fallback; then move the sequential focus starting point to target.
+    // Those owners need rendering/scrolling boxes and the shared focus-area model. Selection and :target
+    // already change before this boundary, but no scrolling or focus completion is implied.
+    throw new InternalError('Fragment target revealing, scrolling, and focusing are not implemented');
+  }
+
+  /** Select an HTML fragment target only when the supplied URL identifies this Document. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#select-the-indicated-part
+  selectIndicatedPart(url: URLRecord): ElementImpl | 'top' | null {
+    if (!urlsEqual(this.url, url, true)) return null;
+    const fragment = url.fragment;
+    // SPEC_GAP(fragment-null-selection): HTML passes a nullable URL fragment to string-only steps.
+    // Its indicated-part definition and browsers give an absent fragment no target.
+    if (fragment === null) return null;
+    if (fragment === '') return 'top';
+    const rawTarget = this.#findPotentialIndicatedElement(fragment);
+    if (rawTarget !== null) return rawTarget;
+    const decodedFragment = utf8DecodeWithoutBOM(Uint8Array.from(percentDecodeString(fragment)));
+    const decodedTarget = this.#findPotentialIndicatedElement(decodedFragment);
+    if (decodedTarget !== null) return decodedTarget;
+    return asciiLower(decodedFragment) === 'top' ? 'top' : null;
   }
 
   /** Schedule fragment scrolling while this Document's parser may still discover its target. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#try-to-scroll-to-the-fragment
   tryToScrollToFragment(): void {
-    // TODO(HTML §7.4.6.2): Delay in parallel, queue a navigation task, check parser/user interest, scroll,
-    // and retry while the indicated part is missing. §7.4.6.4's fragment selection/scrolling remains unfinished.
-    throw new InternalError('Fragment scrolling during document loading is not implemented');
+    const { env } = this;
+    // Implementation-defined: wait 50 ms between attempts, yielding while the parser awaits more input.
+    // The host wake-up supplies the parallel wait; DOM work returns to the Document's navigation task.
+    env.userAgent.timerHost.scheduleTimeout(50, () => {
+      // Destruction removes Document tasks; do not enqueue a new one after its browsing context was cleared.
+      if (this.browsingContext === null) return;
+      env.queueTask('navigation-and-traversal', () => {
+        if (this.activeParser === null || !env.userAgent.isUserInterestedInFragmentScrolling(this)) return;
+        this.scrollToFragment();
+        if (this.indicatedPart === null) this.tryToScrollToFragment();
+      });
+    });
   }
 
   /** Initialize page visibility without dispatching a visibilitychange event. */
@@ -1420,6 +1468,28 @@ export class DocumentImpl extends NodeImpl {
     // current values, dirty flags, checkedness, and selectedness remain with the form owners.
     // A raw [autocomplete=off] query or form.reset() does not implement this selective control reset.
     throw new InternalError('Autocomplete-off control reset is not implemented');
+  }
+
+  /** Reveal this Document once per activation, before subsequent rendering work. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#reveal
+  reveal(): void {
+    if (this.hasBeenRevealed) return;
+    this.hasBeenRevealed = true;
+    const transition = this.resolveInboundCrossDocumentViewTransition();
+    const window = this.getRelevantGlobalObject();
+    if (window === null) throw new InternalError('Document revelation requires a Window');
+    // SPEC_CLASH(pagereveal-target-and-trust): Follow HTML/Chromium's trusted Window target; WebKit emits an untrusted Document-targeted event.
+    window.fireEvent('pagereveal', PageRevealEventImpl, (event) => {
+      (event as PageRevealEventImpl).viewTransition = transition;
+    });
+    if (transition !== null) {
+      const { env } = this;
+      const loop = env.responsibleEventLoop;
+      loop.prepareToRunScript(env);
+      try { transition.activate(); }
+      finally { loop.cleanUpAfterRunningScript(env); }
+    }
+    // TODO(HTML rendering): Connect the rendering producer's reveal phase after its CSS prerequisite is implemented.
   }
 
   /** Change readiness, record the first HTML parsing milestones, and notify listeners synchronously. */
@@ -1608,6 +1678,15 @@ export class DocumentImpl extends NodeImpl {
     throw new InternalError('Cross-document view transition setup is not implemented');
   }
 
+  /** Consume incoming transition state and resolve the transition to expose during revelation. */
+  // https://drafts.csswg.org/css-view-transitions-2/#resolve-inbound-cross-document-view-transition
+  resolveInboundCrossDocumentViewTransition(): ViewTransitionImpl | null {
+    // TODO(CSS View Transitions 2 §12.5.2): Update outbound opt-in even without inbound params;
+    // consume transferred state, check an active transition, resolve @view-transition, and create
+    // the transition with its realm-owned promises, captured elements, phase, and active types.
+    throw new InternalError('Inbound cross-document view transition resolution is not implemented');
+  }
+
   /** Start unloading from the traversal queue; complete after the descendants and this Document unload. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#unload-a-document-and-its-descendants
   unloadAndDescendants(
@@ -1615,7 +1694,8 @@ export class DocumentImpl extends NodeImpl {
   ): void {
     // TODO(HTML §7.5.9): Require traversal-queue ownership, queue recursive child unloading, wait for completion,
     // then queue page-swap steps, single-document unloading, and the continuation on this Document's Window.
-    // Single-document unloading still needs pagehide/unload/visibility events, timing, and bfcache decisions.
+    // Single-document unloading still needs pagehide/unload/visibility events, timing, bfcache decisions,
+    // and resetting hasBeenScrolledByUser before unload cleanup.
     throw new InternalError('Document and descendant unloading is not implemented');
   }
 
@@ -1752,13 +1832,14 @@ export class DocumentImpl extends NodeImpl {
     // An inherited list already carries its creator's origin. An empty new
     // list also needs an origin before later meta policies can be added.
     this.policyContainer.cspList ??= new CSPList(this.origin);
-    this.policyContainer.cspList.initializeDocument(this);
+    this.policyContainer.cspList.applyDocumentInitializationDirectives(this);
   }
 
   /** Record the referrer selected by the request that created this document. */
   // Response-referrer steps extracted from document creation.
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#create-and-initialize-a-document-object
   initializeReferrer(request: FetchRequest | null): void {
+    // Fetch has already resolved this value. The response's Referrer-Policy governs later requests.
     if (request === null) return;
     if (request.referrer === undefined) throw new InternalError('Navigation request referrer has not been resolved');
     this.referrer = request.referrer === null ? '' : serializeURL(request.referrer);
@@ -1772,21 +1853,47 @@ export class DocumentImpl extends NodeImpl {
     };
   }
 
-  /** Retain navigation timing inputs for this document. */
+  /** Select and retain navigation timing inputs pending the public Performance entry foundation. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#create-and-initialize-a-document-object
   // https://w3c.github.io/navigation-timing/#dfn-create-the-navigation-timing-entry
   createNavigationTimingEntry(navigationParams: NavigationParams): void {
     const controller = navigationParams.fetchController;
-    if (controller === null) return;
+    if (controller === null) {
+      // TODO(HTML §7.5.1): Synthetic and supplied-response navigations need their own timing entry.
+      // HTML PR #12890 proposes fallback timing; source startTime alone cannot reconstruct an earlier network fetch.
+      return;
+    }
+    const fetchTimingInfo = controller.extractFullTimingInfo();
+    const request = navigationParams.request;
+    if (request === null) throw new InternalError('Navigation timing requires the Fetch request');
+    const response = navigationParams.response;
+    let redirectCount = 0;
+    // SPEC_CLASH(navigation-redirect-count): Follow HTML's same-origin bypass and client/referrer-aware TAO check.
+    // Firefox hides foreign chains even with TAO; WebKit also hides same-origin no-referrer chains;
+    // Chromium's cross-origin check requires a referrer even without an initiating client.
+    if (response.redirectTaint === 'same-origin' || (request.client === null || request.referrer !== null) &&
+      !response.isNavigationTimingBlocked(navigationParams.origin)) {
+      redirectCount = request.redirectCount;
+    }
     // PROVISIONAL(Navigation Timing): retain live inputs without exposing a
     // PerformanceNavigationTiming object before its Timeline foundation exists.
+    // SPEC_CLASH(html-navigation-response-timing): Use controller timing and the params' navigation type once;
+    // HTML's second creation call reads removed response timing and an out-of-scope redirectCount (HTML PR #12890).
+    // TODO(Navigation Timing): Create/buffer the entry and apply Resource Timing's relative-time and exposure rules.
+    // HTML also omits the consumer's cacheMode and Critical-CH restart arguments; cacheUsage is retained raw below,
+    // while a Critical-CH restart producer and the response's public status/body filtering remain unfinished.
     // TODO(Navigation Timing): Entry creation must capture this.notRestoredReasons as a realm-owned
     // NotRestoredReasonsImpl; its public getter retains that value. PerformanceEntry/ResourceTiming and buffering are missing.
     this.navigationTimingEntry = {
       type: navigationParams.navigationTimingType,
-      fetchTimingInfo: controller.extractFullTimingInfo(),
-      bodyInfo: navigationParams.response.bodyInfo,
+      redirectCount,
+      fetchTimingInfo,
+      bodyInfo: response.bodyInfo,
       documentTimingInfo: this.loadTimingInfo,
-      responseStatus: navigationParams.response.status,
+      previousDocumentUnloadTiming: this.previousDocumentUnloadTiming,
+      serviceWorkerTimingInfo: response.serviceWorkerTimingInfo,
+      cacheUsage: response.cacheUsage,
+      responseStatus: response.status,
     };
   }
 
@@ -2262,13 +2369,68 @@ export class DocumentImpl extends NodeImpl {
     this.salvageable = false;
   }
 
-  /** Collect this Document's restoration diagnostics into its active history state. */
-  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#build-not-restored-reasons-for-document-state
+  /** Collect and mask diagnostics for this active top-level Document and its descendants. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#build-not-restored-reasons-for-a-top-level-traversable-and-its-descendants
+  buildNotRestoredReasons(): void {
+    const navigable = this.getNodeNavigable();
+    if (!navigable?.isTopLevelTraversable) throw new InternalError('Restoration diagnostics require an active top-level Document');
+    this.buildNotRestoredReasonsForDocumentState();
+    const hiddenDocuments = new Set<DocumentImpl>();
+    let hiddenBlocker = false;
+    // Descendants are visited parent-first. Origin comparison is strict, not same-origin-domain.
+    for (const child of this.getDescendantNavigables()) {
+      const childDocument = child.activeDocument!;
+      const crossOrigin = !areSameOrigin(childDocument.origin, this.origin);
+      const parentDocument = child.containerDocument;
+      if (!crossOrigin && (parentDocument === null || !hiddenDocuments.has(parentDocument))) continue;
+      hiddenDocuments.add(childDocument);
+      const reasons = child.activeSessionHistoryEntry.documentState.notRestoredReasons!;
+      // SPEC_CLASH(not-restored-reasons-hidden-blocker): Count blockers throughout hidden subtrees, like Chromium; HTML misses a same-origin descendant behind a foreign ancestor.
+      if (reasons.reasons!.length > 0) hiddenBlocker = true;
+      if (crossOrigin) {
+        reasons.url = null;
+        reasons.reasons = null;
+        reasons.children = null;
+      }
+    }
+    if (hiddenBlocker) {
+      this.makeUnsalvageable('masked');
+      // SPEC_CLASH(not-restored-reasons-collection): Include masked in the collected root report, like Chromium; HTML adds it only after copying that list.
+      navigable.activeSessionHistoryEntry.documentState.notRestoredReasons!.reasons = [...this.bfcacheBlockingDetails];
+    }
+  }
+
+  /** Collect raw diagnostics recursively; the top-level Document masks the complete tree before exposure. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#build-not-restored-reasons-for-document-state
   buildNotRestoredReasonsForDocumentState(): void {
-    // TODO(HTML lifecycle): Capture URL/container metadata and blocking details, recurse through child navigables,
-    // and store the resulting record. Unloading and cache eviction must call the top-level builder before destruction.
-    // SPEC_CLASH(not-restored-reasons-collection): HTML appends to initially null children and reads a child accessor that returns null outside top-level traversables. Resolve before implementing collection.
-    throw new InternalError('Document restoration-diagnostic collection is not implemented');
+    const navigable = this.getNodeNavigable();
+    if (navigable === null) throw new InternalError('Restoration-diagnostic collection requires a node navigable');
+    const children: NotRestoredReasons[] = [];
+    // SPEC_CLASH(not-restored-reasons-collection): Initialize children as a list and read collected child history records, like Chromium; HTML appends to null and reads a top-level-only accessor.
+    const reasons: NotRestoredReasons = {
+      src: null, id: null, name: null, url: this.url, reasons: null, children,
+    };
+    const container = navigable.container;
+    if (container?.tag === ElementTag.HTMLIframe) {
+      // SPEC_CLASH(not-restored-reasons-container-metadata): Follow HTML's resolved src and empty missing attributes; Chromium retains raw src and null for missing attributes.
+      const src = container.getAttributeNS(null, 'src');
+      // The diagnostic struct requires scalar src text even when URL parsing fails.
+      reasons.src = src === null ? '' : container.nodeDocument.encodingParseAndSerializeURL(src) ?? toScalarValueString(src);
+      reasons.id = container.getAttributeNS(null, 'id') ?? '';
+      reasons.name = container.getAttributeNS(null, 'name') ?? '';
+    }
+    reasons.reasons = [...this.bfcacheBlockingDetails];
+    // SPEC_CLASH(not-restored-reasons-shadow-tree): Include shadow-tree frames, like Chromium and HTML's masking walk; HTML's collection walk omits them.
+    for (let node = this.firstChild; node !== null; node = node.nextShadowIncludingDescendant(this)) {
+      if (!node.isNavigableContainer() || node.contentNavigable === null) continue;
+      const child = node.contentNavigable;
+      const document = child.activeDocument;
+      if (document === null) throw new InternalError('Restoration-diagnostic collection requires active child Documents');
+      document.buildNotRestoredReasonsForDocumentState();
+      // Recursive collection has initialized this state; Document.notRestoredReasons is null for children.
+      children.push(child.activeSessionHistoryEntry.documentState.notRestoredReasons!);
+    }
+    navigable.activeSessionHistoryEntry.documentState.notRestoredReasons = reasons;
   }
 
   /** Copy the selected restrictions into the document's existing flag set. */
@@ -2542,6 +2704,16 @@ export class DocumentImpl extends NodeImpl {
     this.#updateStyleSheetProlog();
   }
 
+  /** Prefer the first ID match, then the first legacy HTML anchor name, excluding shadow trees. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#find-a-potential-indicated-element
+  #findPotentialIndicatedElement(fragment: string): ElementImpl | null {
+    // SPEC_CLASH(fragment-quirks-anchor-name): HTML/Firefox match exactly in both modes;
+    // Chromium/WebKit also allow case-insensitive legacy names in quirks mode.
+    return this.getElementById(fragment) ?? findElement(this,
+      (element) => element.tag === ElementTag.HTMLA && element.getAttributeNS(null, 'name') === fragment,
+    );
+  }
+
   /** Classify document children once, including instructions that have left the prolog. */
   #updateStyleSheetProlog(): void {
     let inProlog = true;
@@ -2567,7 +2739,6 @@ export class DocumentImpl extends NodeImpl {
     // Assert: the parent document is fully active and its ancestry was initialized.
     const ancestorOrigins = parentDocument.internalAncestorOriginObjectsList;
     if (ancestorOrigins === null) throw new InternalError('Parent Document ancestry has not been initialized');
-    // The specification also reads the navigable's container here, but never uses that local.
     // SPEC_CLASH(ancestor-origin-policy-masking): follow HTML's masking, also implemented by Gecko; Blink and WebKit expose the unmasked origins.
     let masked = referrerPolicy === 'no-referrer' ||
       (referrerPolicy === 'same-origin' && !areSameOrigin(parentDocument.origin, this.origin));

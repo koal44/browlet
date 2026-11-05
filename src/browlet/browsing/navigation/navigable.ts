@@ -1407,8 +1407,8 @@ export class Navigable {
   ): DocumentImpl {
     if (handleScript === undefined || resource === undefined) {
       // TODO(HTML §7.5.2/§4.12.1): Supply parser script preparation alongside the prepared reader,
-      // and honor scripts-may-run while history activation is pending. Synthetic params also need
-      // the null reserved-environment path audited before creating a Window/Document.
+      // and honor scripts-may-run while history activation is pending. Document creation preserves
+      // synthetic params' null reservation; the about:blank body and cookie-URL rules remain below/at their owners.
       throw new InternalError('HTML document loading requires response-reader setup and parser script preparation');
     }
     const document = this.createAndInitializeDocument('html', 'text/html', params);
@@ -1502,22 +1502,37 @@ export class Navigable {
       const group = this.parent === null ? browsingContext.group : this.topLevelTraversable.activeBrowsingContext?.group;
       if (group === undefined || group === null) throw new InternalError('Navigation browsing context has no group');
       const parent = this.parent?.activeWindow ?? null;
-      const isSecureContext = params.reservedEnv!.isSecureContext;
-      const agent = group.obtainSimilarOriginWindowAgent(
-        params.origin, params.requestsOriginAgentCluster() && isSecureContext,
-      );
+      let requestsOAC = params.requestsOriginAgentCluster();
+      if (requestsOAC) {
+        // SPEC_GAP(document-oac-null-reservation): HTML's security check requires an environment,
+        // but supplied-response navigation permits null. Use the incoming Window's
+        // security inputs in that case, without inventing a Fetch reservation.
+        const isSecureContext = params.reservedEnv?.isSecureContext ??
+          group.userAgent.computeWindowSecureContext(params.origin, parent?.env);
+        // SPEC_CLASH(document-oac-insecure-ancestor): Keep HTML/WebKit's secure-context gate;
+        // Chromium/Firefox honor an HTTPS child's OAC header even beneath an insecure HTTP parent.
+        if (!isSecureContext) requestsOAC = false;
+      }
+      const agent = group.obtainSimilarOriginWindowAgent(params.origin, requestsOAC);
+      const parentEnv = this.container?.env;
+      const topLevelCreationURL = parentEnv === undefined ? creationURL : parentEnv.topLevelCreationURL;
+      const topLevelOrigin = parentEnv === undefined ? params.origin : parentEnv.topLevelOrigin;
+      if (topLevelCreationURL === null || topLevelOrigin === null) {
+        throw new InternalError('Document creation requires initialized parent Window settings');
+      }
       window = group.userAgent.createWindowEnvironment({
         agent, userAgent: group.userAgent,
         creationURL,
         origin: params.origin,
         parent,
-        topLevelCreationURL: creationURL,
-        topLevelOrigin: params.origin,
+        topLevelCreationURL,
+        topLevelOrigin,
         reservedEnv: params.reservedEnv,
         previousRealm: browsingContext.activeWindow.env.realm,
       }).window;
     }
 
+    // Steps 8–9 create fresh Document state even when the initial Window is reused.
     const document = window.env.createDocument();
     document.type = type;
     document.contentType = contentType;
@@ -1534,10 +1549,13 @@ export class Navigable {
     document.url = creationURL;
     document.currentDocumentReadiness = 'loading';
     document.aboutBaseURL = params.aboutBaseURL;
+    // Consume the selected cookie URL; local-URL producer/history capture remains a NavigationParams dependency.
     document.cookieURL = copyURL(params.cookieURL);
     document.allowDeclarativeShadowRoots = true;
+    // TODO(HTML §4.13.4): Registry identity is available; public members and Window exposure remain at its owner.
     document.customElementRegistry = new CustomElementRegistryImpl();
 
+    // Step 10 associates the Window without performing the later history activation of this Document.
     window.setAssociatedDocument(document);
     document.initializeAncestry(params.iframeReferrerPolicy, this.containerDocument);
     document.initializeInsecureRequestsPolicy();
@@ -1667,8 +1685,9 @@ export class Navigable {
 
   /** Complete the provisional local loader's reserved environment and response policies. */
   // TODO(HTML §7.4.5/§7.5.1): Remove this late preparation once params producers, including Browlet's local route,
-  // supply complete inputs and Document creation preserves intentionally null reserved environments.
+  // supply complete inputs. Final params, including intentionally null reservations, bypass this adapter.
   #prepareResponsePolicy(params: NavigationParams): void {
+    if (params.coopEnforcementResult !== null) return;
     const browsingContext = this.activeBrowsingContext;
     if (browsingContext === null) throw new InternalError('Navigation requires an active browsing context');
     const activeDocument = browsingContext.activeDocument;
@@ -1681,9 +1700,8 @@ export class Navigable {
       topLevelCreationURL: parent?.env.topLevelCreationURL ?? params.url,
       topLevelOrigin: parent?.env.topLevelOrigin ?? params.origin,
       targetBrowsingContext: browsingContext,
-      isSecureContext: userAgent.isOriginPotentiallyTrustworthy(params.origin) && (parent === null || parent.isSecureContext),
+      isSecureContext: userAgent.computeWindowSecureContext(params.origin, parent?.env),
     });
-    if (params.coopEnforcementResult !== null) return;
     if (params.url.scheme !== 'blob') {
       params.policyContainer.embedderPolicy = EmbedderPolicy.obtain(params.response, params.reservedEnv);
     }
@@ -2273,14 +2291,12 @@ export class TopLevelTraversable extends Traversable {
   }
 
   /** Collect the active document tree's diagnostics and mask cross-origin descendants before exposure. */
-  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#build-not-restored-reasons-for-a-top-level-traversable-and-its-descendants
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#build-not-restored-reasons-for-a-top-level-traversable-and-its-descendants
   buildNotRestoredReasons(): void {
     const document = this.activeDocument;
     if (document === null) throw new InternalError('Restoration diagnostics require an active Document');
-    document.buildNotRestoredReasonsForDocumentState();
-    // TODO(HTML lifecycle): Compare descendant origins and hide foreign URL/reasons/children.
-    // SPEC_CLASH(not-restored-reasons-collection): HTML adds "masked" after copying the root's reasons. Resolve before publishing diagnostics.
-    throw new InternalError('Cross-origin restoration-diagnostic masking is not implemented');
+    document.buildNotRestoredReasons();
+    // TODO(HTML lifecycle): Unloading/cache eviction must call this before destruction; Navigation Timing must consume the filtered record.
   }
 }
 

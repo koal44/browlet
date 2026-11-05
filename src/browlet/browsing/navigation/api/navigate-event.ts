@@ -233,6 +233,8 @@ export class NavigateEventImpl extends EventImpl {
     this.interceptionState = 'scrolled';
     const document = this.env.getAssociatedDocument()!;
     if (this.navigationType === 'traverse') {
+      // SPEC_CLASH(history-explicit-scroll-manual): HTML/Blink's explicit path bypasses History's manual mode
+      // and normal-restoration suppression. WebKit reuses its automatic path, which still honors manual mode.
       document.getNodeNavigable()!.activeSessionHistoryEntry.restoreScrollPositionData();
     } else if (document.indicatedPart === null) {
       document.scrollToBeginning();

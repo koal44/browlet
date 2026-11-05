@@ -110,6 +110,35 @@ describe('completed Fetch navigation parameters', () => {
     expect(params.startTime).toBe(params.fetchController!.extractFullTimingInfo().startTime);
   });
 
+  it.each([false, true])('carries the real redirect chain into Document timing (all hops authorize: %s)', async (allowed) => {
+    const { begin, navigable, transport } = fixture();
+    transport.mockImplementation((request, listener) => {
+      const url = serializeURL(request.url);
+      const headers = new FetchHeaders();
+      if (url === 'https://incoming.test/page') {
+        headers.append('Location', 'https://other.test/hop');
+        headers.append('Timing-Allow-Origin', '*');
+      } else if (url === 'https://other.test/hop') {
+        headers.append('Location', 'https://incoming.test/final');
+        if (allowed) headers.append('Timing-Allow-Origin', 'https://incoming.test');
+      }
+      listener.onHeaders(headers.has('Location') ? 302 : 200, 'OK', headers, true);
+      listener.onEnd();
+      return { pause() {}, resume() {}, abort() {} };
+    });
+
+    const params = await begin();
+    if (!(params instanceof NavigationParams)) throw new Error('Expected navigation params');
+    const document = navigable.createAndInitializeDocument('html', 'text/html', params);
+
+    expect(transport).toHaveBeenCalledTimes(3);
+    expect(params.request!.redirectCount).toBe(2);
+    expect(params.request!.referrer).not.toBeNull();
+    expect(params.response.redirectTaint).toBe('cross-site');
+    expect(document.navigationTimingEntry?.redirectCount).toBe(allowed ? 2 : 0);
+    expect(document.navigationTimingEntry?.fetchTimingInfo).toBe(params.fetchController!.extractFullTimingInfo());
+  });
+
   it('delivers the completed parameters on the target task before saving a returned Document', async () => {
     const { entry, navigable, source, target, env } = fixture();
     const loaded = env.createDocument();

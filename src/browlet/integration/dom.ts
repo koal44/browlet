@@ -42,6 +42,7 @@ export const browletDOM: DOMOperations<
   documentElement: (document) => document.documentElement,
   body: (document) => document.body,
   URL: (document) => document.URL,
+  targetElement: (document) => document.targetElement,
   baseURI: (node) => node.baseURI,
 
   getId: (element) => element.getAttribute('id') ?? '',

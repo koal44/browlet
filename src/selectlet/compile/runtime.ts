@@ -531,6 +531,9 @@ export function isAnyLink(e: Element, ctx: SelectletContext): boolean {
 
 // :target
 export function isTarget(e: Element, ctx: SelectletContext): boolean {
+  if (ctx.dom.targetElement) return ctx.dom.targetElement(ctx.doc) === e;
+  // TODO(Selectlet): Hosts without a retained navigation target still use the legacy URL approximation.
+  // It cannot reproduce named/decoded targets or preserve selection across history and attribute changes.
   const url = ctx.dom.URL(ctx.doc);
   const hashIndex = url.indexOf('#');
   const hash = hashIndex < 0 ? '' : url.slice(hashIndex);

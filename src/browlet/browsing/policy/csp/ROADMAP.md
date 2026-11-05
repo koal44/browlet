@@ -38,6 +38,43 @@ body bytes; complete navigation/policy inheritance remains with the loader.
 `base-uri` is connected to HTMLBaseElement. Only enforced
 `upgrade-insecure-requests` enables the existing upgrade policy.
 
+`CSPList.applyDocumentInitializationDirectives()` applies policy effects to an
+already-created Document. It reports parsing warnings and applies enforced
+`upgrade-insecure-requests`; `enableFor(document.url)` sets the upgrade flag and
+adds that URL's host/port tuple to the opted-in navigation targets.
+
+`SPEC_GAP(csp-style-src-initialization)`: CSP's
+[`style-src` initialization](https://w3c.github.io/webappsec-csp/#directive-style-src)
+still contains an issue asking for CSSOM execution-context hooks rather than
+an algorithm (source `251d288`, refreshed 4 November 2026). That missing hook
+does not mean the draft says nothing about CSSOM restrictions: nearby prose
+requires `style-src 'unsafe-eval'` for string parsing, naming `cssText` and
+`insertRule()` as examples.
+
+`SPEC_CLASH(csp-style-src-cssom-eval)`: Browlet's existing behavior leaves CSSOM
+writes available without that keyword, matching the browsers. The 4 November
+2026 HTTP-header probe used Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2.
+All three applied `style.color`, `style.cssText`, `style.setProperty()`,
+`insertRule()` on a nonce-authorized sheet, and constructed-sheet
+`replaceSync()` without `unsafe-eval`; adding it changed none of those results.
+Unauthorized style attributes and style elements remained blocked, with CSP
+violation events. Under `style-src 'none'`, the style element had no sheet to
+mutate, but CSSOM declaration writes and constructed sheets still worked.
+The reproducible browser-only probe is
+`node-compat/experimental/document-csp-cssom.mjs`.
+
+[CSP issue #212](https://github.com/w3c/webappsec-csp/issues/212), which the draft
+links from its CSSOM prose, remains open. Its
+[rationale for allowing CSSOM mutations](https://github.com/w3c/webappsec-csp/issues/212#issuecomment-303829004)
+distinguishes injected style markup from styling performed by script and also
+discusses compatibility. It is not a completed replacement algorithm. Eric
+approved retaining the browser behavior; this audit changes no enforcement and
+installs no CSSOM restriction. Existing stylesheet Fetch and inline-input
+checks are unaffected. Revisit both markers when CSP/CSSOM specify the hook
+and reconcile the prose with implementations. The
+[shared Document creation audit](../../navigation/ROADMAP.md#html-751-document-ancestry-csp-and-referrer-initialization)
+tests the specified initialization effects before loader callbacks.
+
 ## Violations and hash reporting
 
 `CSPViolation` captures the protected Document URL/status/referrer and original

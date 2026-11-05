@@ -1,3 +1,4 @@
+import { InternalError } from '../../infra/index';
 import { defineInterface, impl } from '../../web-idl/core/index';
 
 import type { DocumentImpl } from '../dom/nodes/index';
@@ -15,6 +16,15 @@ export class ViewTransitionImpl {
   constructor(document: DocumentImpl, env: BrowletEnvironment) {
     this.document = document;
     this.env = env;
+  }
+
+  /** Activate a prepared transition and settle its readiness. */
+  // https://drafts.csswg.org/css-view-transitions-2/#activate-view-transition
+  activate(): void {
+    // TODO(CSS View Transitions): Honor a skipped/done transition, release rendering suppression,
+    // validate snapshot size, capture the new state, set up pseudo-elements/styles, enter the
+    // animating phase, and settle ready. Skipping, capture failure, and promise state are unfinished.
+    throw new InternalError('View transition activation is not implemented');
   }
 }
 

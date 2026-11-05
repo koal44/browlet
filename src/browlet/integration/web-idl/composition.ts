@@ -48,17 +48,12 @@ export function createWindowEnvironment(
     agent, userAgent, creationURL, origin, parent, topLevelCreationURL, topLevelOrigin,
     reservedEnv = null, previousRealm,
   } = initialization;
-  // SPEC_CLASH(secure-context-top-level-url): HTML checks the top-level creation URL; retain origin-and-ancestry checks.
-  // Approved for Window creation: preserve the selected origin and parent's full
-  // security chain. A reserved environment already carries that fixed decision.
-  // See ../../browsing/policy/ROADMAP.md#trustworthiness for the differing results.
-  // https://html.spec.whatwg.org/multipage/webappapis.html#secure-context
-  // https://w3c.github.io/webappsec-secure-contexts/#ancestors
+  // An existing reservation carries the fixed security decision; without one,
+  // share the incoming-Window calculation used before agent selection.
   const baseEnv = reservedEnv ?? new BrowletEnvironmentBase({
     userAgent, creationURL, topLevelCreationURL, topLevelOrigin,
     targetBrowsingContext: null,
-    isSecureContext: userAgent.isOriginPotentiallyTrustworthy(origin) &&
-      (parent === null || parent.isSecureContext),
+    isSecureContext: userAgent.computeWindowSecureContext(origin, parent?.env),
   });
   // This new realm is registered exactly once; composition runs synchronously.
   let env!: WindowEnvironment;

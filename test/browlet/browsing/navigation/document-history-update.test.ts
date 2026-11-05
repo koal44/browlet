@@ -152,12 +152,24 @@ describe('existing-Document history-step updates', () => {
     expect(order).toEqual(['entry', 'popstate', 'persisted', 'activation']);
   });
 
-  it('does not treat omitted persisted-state restoration as successful completion', async () => {
+  it.each(['manual', 'intercepted', 'user-scrolled'] as const)('completes history updates when scrolling is %s', async (reason) => {
+    const { document, window, target, restore, pops, order } = fixture();
+    restore.mockRestore();
+    if (reason === 'manual') target.scrollRestorationMode = 'manual';
+    else if (reason === 'intercepted') window.navigation.suppressNormalScrollRestorationDuringOngoingNavigation = true;
+    else document.hasBeenScrolledByUser = true;
+    await inTask(document, () => document.updateForHistoryStepApplication(target, true, 2, 1, 'traverse'));
+    expect(document.latestEntry).toBe(target);
+    expect(pops).toHaveLength(1);
+    expect(order).toEqual(['entry', 'popstate']);
+  });
+
+  it('does not treat missing automatic scroll restoration as successful completion', async () => {
     const { document, window, target, restore, pops } = fixture();
     restore.mockRestore();
     const activation = vi.spyOn(window.navigation, 'updateActivation');
     await expect(inTask(document, () => document.updateForHistoryStepApplication(target, true, 2, 1, 'traverse')))
-      .rejects.toThrow('Persisted history state restoration is not implemented');
+      .rejects.toThrow('Session-history scroll restoration is not implemented');
     expect(pops).toHaveLength(1);
     expect(activation).not.toHaveBeenCalled();
   });

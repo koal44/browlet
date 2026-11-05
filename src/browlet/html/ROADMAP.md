@@ -602,12 +602,11 @@ elsewhere. Same-origin comparisons ignore `document.domain` relaxation.
 
 `Document.containerDocument` and `Navigable.containerDocument` follow the
 specified lookups through the embedding element, rather than substituting the
-parent navigable's current document. Child navigable/container association is
-still an explicit throwing dependency in `Navigable.container`; child creation,
-iframe policy selection, and fully-active ancestry remain navigation work.
-The algorithm's fully-active-parent assertion is a caller precondition.
-HTML also reads an unused `container` local; the implementation notes that
-step rather than performing a redundant lookup.
+parent navigable's current document. Child containers now maintain reciprocal
+links with their navigables; creation and iframe policy selection use those
+links. Automatic element insertion/removal and resource-loading callers remain
+unfinished. The algorithm's fully-active-parent assertion is a caller precondition.
+The current HTML source no longer contains the earlier unused `container` local.
 
 SPEC_CLASH(ancestor-origins-before-activation): the
 [document creation steps](https://html.spec.whatwg.org/multipage/document-lifecycle.html#create-and-initialize-a-document-object)
@@ -621,7 +620,7 @@ browsing-context creation uses the embedder's node document. This reviewed
 signature adjustment preserves creation and activation order. The conflict is
 our reading of those definitions, not a confirmed upstream issue or evidence of
 deliberately different behavior. Revisit the comment when the specification
-clarifies the lookup; child-container association remains unfinished separately.
+clarifies the lookup; automatic element lifecycle callers remain unfinished separately.
 
 SPEC_CLASH(ancestor-origin-policy-masking): Browlet follows HTML's referrer-policy
 masking. Local source inspection on 2026-10-16 found that
@@ -637,8 +636,8 @@ These are source observations, not a live-browser interoperability run.
 The focused tests cover all four specification examples, every referrer-policy
 value, opaque identity, origin-domain distinctions, snapshots, container
 ownership after parent navigation, and creation before activation or navigable
-initialization. They supply only the missing container
-association and fully-active child state. Public `Location.ancestorOrigins` is now
+initialization. The fixtures supply container association and fully-active child
+state without invoking the unfinished element lifecycle. Public `Location.ancestorOrigins` is now
 covered by the [§7.2.4 integration](../browsing/window/ROADMAP.md#html-724-first-slice-document-association-and-reads),
 including live Document selection and entry-origin checks. Working iframe
 navigation remains a separate dependency.

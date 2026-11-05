@@ -1555,8 +1555,10 @@ cache selection and complete history restoration remain unfinished. Retained-Doc
 reactivation now has its Navigation/event sequence, with selective form reset and
 visibility transitions still throwing. `Document.latestEntry` is maintained by the local commit path and both
 Document history-update branches; full traversal coordination remains unfinished.
-New-Document initialization still stops at persisted-state restoration and
-fragment-scroll scheduling before releasing parser scripts. HTML also leaves child
+New-Document initialization still stops at persisted-state restoration before
+releasing parser scripts. Fragment-scroll scheduling now returns immediately;
+its later task reaches explicit user-interest, target-selection, and scrolling
+dependencies. HTML also leaves child
 history identification across reloads unspecified. See the
 [Document state audit](browlet/browsing/navigation/ROADMAP.md#html-7412-document-state).
 Session-history traversal queues now execute ordinary and target-tagged steps in
@@ -1631,6 +1633,23 @@ Document creation/activation and finalization remain unfinished. Initial about:b
 fires load at non-iframe containers; iframes reach a throwing runLoadEventSteps()
 dependency for load flags, resource timing, and Permissions Policy reporting.
 These internal algorithms do not connect unfinished iframe insertion/loading.
+Shared Document creation now preserves final params' null reservation and inherits
+child Window top-level metadata from the container's environment. Initial Window
+reuse and existing reservation transfer retain their separate paths. Without a
+reservation, Origin-Agent-Cluster now uses the shared incoming-Window security
+calculation; existing reservations retain their fixed decision. Browlet keeps
+HTML/WebKit's secure-context gate where Chromium/Firefox honor an HTTPS child's
+header beneath an insecure parent. The null-reservation input remains a documented
+specification gap, not an unfinished implementation. The local-route response-policy
+adapter remains until that producer supplies complete params. Navigation Timing
+now retains controller-backed inputs and the redirect count selected by HTML's
+taint/client/referrer/TAO rules. It still exposes no PerformanceNavigationTiming
+entry: Performance Timeline/Resource Timing construction, exposure filtering,
+restoration diagnostics, and buffering are absent. Synthetic and supplied-response
+navigations without a controller still need fallback timing; retained start time
+does not reconstruct prior network measurements. Response-header processing and
+the remaining Document lifecycle steps still need their §7.5 audits; see the
+[shared-creation slice](browlet/browsing/navigation/ROADMAP.md#html-751-window-selection-and-environment-inputs).
 Ordinary navigation now fires the gated navigate event, forwards state/tracker
 and POST-only form entries, and stops for cancellation or interception. Immediate
 interception now updates URL/History/Navigation state before queued history application; a pending
@@ -1714,7 +1733,7 @@ Prompt policy/UI, full history application, and releasing waits whose tasks
 are discarded by future teardown remain explicit dependencies.
 Quota accounting and creation-time release exist;
 fetchLater(), body validation/buffering, activation, and deferred request delivery
-remain unavailable. Fragment processing also still throws. This is not end-to-end navigation. Traversal's own state writes, later ID
+remain unavailable. Actual fragment scrolling still throws after target selection. This is not end-to-end navigation. Traversal's own state writes, later ID
 checks, and complete history application/load-delay cleanup remain
 unfinished. The generated UUID reaches provisional BiDi started/failed hooks,
 which emit no protocol events.
@@ -1796,7 +1815,14 @@ handler coordinator and finishing policy are implemented. Nonintercepted and
 manually managed intercepted completion work. Automatic focus reset still needs
 the shared §6.6 focus model and its focus-change producer. Scrolling selects
 active-entry restoration or beginning/fragment scrolling, but saved positions,
-indicated-part selection, and CSSOM View viewport effects remain explicit stubs.
+non-HTML MIME fragment rules, and CSSOM View viewport effects remain explicit stubs.
+HTML fragment selection and retained `:target` state now work, including legacy
+anchor names and raw-before-decoded matching. Missing fragments clear the target;
+top fragments clear it before the viewport-scrolling dependency. Element targets
+are retained before the explicit ancestor-revealing/scroll/focus boundary. This
+does not supply hidden-until-found/details revelation, layout scrolling, focus
+chains, or automatic rendering invalidation. Selectlet and Stylelet hosts without the optional
+retained-target DOM operation still use their previous URL approximation.
 Queued joint-history application, traversal resumption, and the other navigation/child-
 destruction lifecycle callers remain unfinished. Precommit
 completion has idle-progress coverage through the supported host bridge after
@@ -1812,12 +1838,19 @@ and [method preparation](browlet/browsing/navigation/ROADMAP.md#html-725-pushrep
 `PopStateEvent` and `HashChangeEvent` expose their constructors and payloads;
 DOM's legacy event factory also creates HashChangeEvent. Existing-Document history
 updates now restore classic state, update the URL, notify Navigation, fire trusted
-popstate, and queue trusted hashchange. Persisted-state restoration still throws
-after popstate and after the hashchange task is queued. New-Document initialization
+popstate, and queue trusted hashchange. Persisted-state restoration now respects
+History's manual mode and Navigation's suppression, and scroll restoration stops
+when the Document's user-scroll flag is set. Actual position capture/restoration
+still throws after popstate and after hashchange is queued. Input production and
+the flag's unload/same-document reset lifecycle remain unconnected; synthetic
+scroll events do not supply that state. Optional form persistence remains absent.
+New-Document initialization
 now orders classic state, persistence, Navigation entries/activation, a provisional
 BiDi committed notification, fragment-scroll scheduling, and parser-script permission.
-Persistence and scroll scheduling still throw; BiDi sessions and protocol attribution
-remain absent. The local loader releases the same script gate through its existing
+Automatic position restoration still throws; scroll scheduling queues a delayed navigation task without
+blocking script permission. User-interest policy, non-HTML target selection, and actual
+scrolling remain throwing owners inside that task. BiDi sessions and protocol
+attribution remain absent. The local loader releases the same script gate through its existing
 provisional commit path. Retained-Document reactivation refreshes Navigation entries
 and activation before persisted pageshow, but selective form reset and visibility
 transitions still throw. Full traversal coordination, cache retention, and scrolling
@@ -1826,11 +1859,15 @@ work. Browlet has no cached
 rendering UI, so hasUAVisualTransition remains false. The Window handler attributes
 are supplied by §8.1.8. See the
 [event-interface audit](browlet/browsing/navigation/events/ROADMAP.md).
-`PageSwapEvent` exposes its nullable activation/transition payloads, but outgoing
-history application does not yet produce it. `PageRevealEvent` exposes its nullable
-transition payload; the rendering `reveal` hook, inbound transition resolution,
-and activation after dispatch remain unconnected. Document now retains the reveal
-flag and clears it during reactivation; the rendering producer must set it.
+`PageSwapEvent` exposes its nullable activation/transition payloads; its outgoing
+producer is implemented around unfinished CSS/unloading dependencies.
+`Document.reveal()` now guards once-per-activation delivery, fires PageRevealEvent,
+and wraps transition activation in the existing script/checkpoint boundary.
+The rendering caller remains unconnected. Inbound CSS resolution and transition
+activation explicitly throw, so this does not yet provide automatic pagereveal.
+The Document sets its reveal flag before resolution and clears it on reactivation.
+The approved [target/trust conflict](browlet/browsing/navigation/ROADMAP.md#html-7463-revealing-the-document)
+follows HTML/Chromium's trusted Window event rather than WebKit's untrusted Document target.
 ViewTransition currently supplies
 interface identity only: its promises, methods, and rendering lifecycle remain
 unfinished. See the [rendering dependency](browlet/rendering/ROADMAP.md#viewtransition-dependency-identity).
@@ -1848,12 +1885,13 @@ the runtime still converts and stores a string.
 `NotRestoredReasons` and `NotRestoredReasonDetails` expose their nonconstructible
 interfaces and support recursive creation from retained records, including
 realm-owned frozen arrays and default JSON behavior. No public accessor produces
-these diagnostics yet: Navigation Timing, history-lifecycle collection,
-cross-origin masking, and back/forward-cache decisions remain unfinished.
-Document and TopLevelTraversable expose throwing collection/masking stubs; the
-provisional navigation-timing factory marks its missing entry-creation step.
-HTML's later collection algorithm also has unresolved conflicts recorded in the
-[diagnostic audit](browlet/browsing/navigation/ROADMAP.md#html-728-notrestoredreasons).
+these diagnostics yet: Navigation Timing, history-lifecycle callers,
+and back/forward-cache decisions remain unfinished. Document collects tree
+records into active history state, including shadow-tree frames;
+TopLevelTraversable masks foreign subtrees and retains a generic root reason
+for hidden blockers. The provisional navigation-timing factory still marks its
+missing entry-creation step. Approved collection/masking corrections are in the
+[masking audit](browlet/browsing/navigation/ROADMAP.md#html-7462-masking-not-restored-reasons).
 Document `hidden` and `visibilityState` expose retained state, initially hidden
 for newly constructed Documents. Navigable initialization and the existing
 cross-document history commit select the traversable's system visibility.

@@ -9,7 +9,7 @@ import type { ViewTransitionImpl } from '../../../rendering/index';
 
 /** The incoming Document's optional cross-document view transition. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-pagerevealevent-interface
-// TODO(HTML reveal): Document revelation must resolve the inbound transition, fire pagereveal, and then activate the transition.
+// Document.reveal() supplies trusted delivery; CSS transition resolution/activation and the rendering caller remain unfinished.
 export class PageRevealEventImpl extends EventImpl {
   /** Inbound transition supplied by CSS View Transitions, or null without one. */
   viewTransition: ViewTransitionImpl | null;

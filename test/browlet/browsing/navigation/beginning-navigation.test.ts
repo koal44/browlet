@@ -219,7 +219,7 @@ describe('beginning navigation', () => {
   it('reaches persisted-state restoration after fragment dispatch and Document updates', async () => {
     const { document, navigable, fragment, url } = await fixture();
     fragment.mockRestore();
-    expect(() => navigable.navigate(url, document, {}, document.env)).toThrow('Persisted history state restoration is not implemented');
+    expect(() => navigable.navigate(url, document, {}, document.env)).toThrow('Session-history scroll restoration is not implemented');
   });
 
   it('reports the generated ID before making it ongoing, without changing the active Document', async () => {

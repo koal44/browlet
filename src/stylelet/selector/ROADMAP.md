@@ -36,6 +36,11 @@ proposal needs its own status and consumer review before implementation.
   state, media/timeline state, interest, heading levels, and grid relationships
   have different owners; a present attribute or guessed layout result is not
   a substitute. Some DOMOperations hooks already exist and should be reused.
+  `:target` now reads the optional retained `targetElement` operation, shared
+  with Selectlet. Browlet supplies its Document-owned selection, preserving
+  identity across URL/ID changes and matching only the selected duplicate.
+  Hosts without that operation retain the old URL approximation. This is
+  matching support, not automatic style invalidation or rendering.
 - [ ] Keep script-visible visited-link privacy separate from any future
   history-sensitive styling and CSSOM disclosure restrictions.
 

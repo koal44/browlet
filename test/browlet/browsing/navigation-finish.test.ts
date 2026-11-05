@@ -108,7 +108,7 @@ describe('Navigate-event finishing', () => {
     const { event } = await fixture();
     event.interceptionState = 'committed';
     event.focusResetBehavior = 'manual';
-    expect(() => event.finish(true)).toThrow('Document indicated-part selection is not implemented');
+    expect(() => event.finish(true)).toThrow('Document viewport scrolling is not implemented');
     expect(event.interceptionState).toBe('scrolled');
   });
 });
@@ -141,12 +141,23 @@ describe('Navigate-event scroll effects', () => {
     const navigable = document.getNodeNavigable()!;
     const active = navigable.activeSessionHistoryEntry;
     active.scrollRestorationMode = 'manual';
+    document.getRelevantGlobalObject()!.navigation.suppressNormalScrollRestorationDuringOngoingNavigation = true;
     navigable.currentSessionHistoryEntry = document.env.createSessionHistoryEntry(active.url, active.documentState);
     const restore = vi.spyOn(active, 'restoreScrollPositionData').mockImplementation(() => {
       expect(event.interceptionState).toBe('scrolled');
     });
     event.processScrollBehavior();
     expect(restore).toHaveBeenCalledExactlyOnceWith();
+  });
+
+  it('finishes explicit traversal scrolling without layout after the user has scrolled', async () => {
+    const { event, document } = await fixture();
+    event.navigationType = 'traverse';
+    event.interceptionState = 'committed';
+    document.hasBeenScrolledByUser = true;
+    expect(event.scroll()).toBeUndefined();
+    expect(event.interceptionState).toBe('scrolled');
+    expect(document.hasBeenScrolledByUser).toBe(true);
   });
 
   it('retains the scroll restoration dependency on an unimplemented saved history position', async () => {

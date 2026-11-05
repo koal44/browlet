@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FetchResponse } from '../../../../src/fetch/index';
 import { createOpaqueOrigin, obtainURLOrigin, parseURL } from '../../../../src/url/index';
 import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { HTMLDocumentParser } from '../../../../src/browlet/html/parser/html-document-parser';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/index';
 import type { Window } from '../../../../src/browlet/platform';
 import { createManualUserAgent } from '../../../support/browlet-agent';
@@ -130,7 +131,7 @@ describe('new-Document history initialization', () => {
     let resumed = false;
     document.waitForScriptsMayRun().observe(() => { resumed = true; }, rejectScriptWait);
     expect(() => document.updateForHistoryStepApplication(target, false, 1, 0, 'push', [target]))
-      .toThrow('Persisted history state restoration is not implemented');
+      .toThrow('Session-history scroll restoration is not implemented');
     await checkpoint(document);
     expect(document.latestEntry).toBe(target);
     expect(initialize).not.toHaveBeenCalled();
@@ -139,18 +140,33 @@ describe('new-Document history initialization', () => {
     expect(resumed).toBe(false);
   });
 
-  it('keeps scripts blocked at the explicit fragment-scroll scheduling boundary', async () => {
+  it('releases scripts after scheduling the fragment attempt, without waiting for scrolling', async () => {
     const { document, target, userAgent } = fixture();
+    const wakeups: (() => void)[] = [];
+    userAgent.timerHost = {
+      scheduleTimeout(_delay, steps) {
+        wakeups.push(steps);
+        return { remove: () => {} };
+      },
+    };
+    new HTMLDocumentParser(document, () => {});
     vi.spyOn(target, 'restorePersistedState').mockImplementation(() => {});
+    vi.spyOn(userAgent, 'isUserInterestedInFragmentScrolling').mockReturnValue(true);
+    const scroll = vi.spyOn(document, 'scrollToFragment').mockImplementation(() => {});
+    vi.spyOn(document, 'indicatedPart', 'get').mockReturnValue('top');
     const committed = vi.spyOn(userAgent, 'webDriverBiDiNavigationCommitted');
     let resumed = false;
     document.waitForScriptsMayRun().observe(() => { resumed = true; }, rejectScriptWait);
-    expect(() => document.updateForHistoryStepApplication(target, false, 1, 0, 'push', [target]))
-      .toThrow('Fragment scrolling during document loading is not implemented');
-    await checkpoint(document);
+    await inTask(document, () => document.updateForHistoryStepApplication(target, false, 1, 0, 'push', [target]));
     expect(committed).toHaveBeenCalledOnce();
     expect(document.getRelevantGlobalObject()!.navigation.currentEntry!.sessionHistoryEntry).toBe(target);
-    expect(resumed).toBe(false);
+    expect(resumed).toBe(true);
+    expect(wakeups).toHaveLength(1);
+    expect(scroll).not.toHaveBeenCalled();
+    wakeups[0]!();
+    expect(scroll).not.toHaveBeenCalled();
+    await runInHostTask(() => { expect(document.env.responsibleEventLoop.runTaskTurn()).toBe(true); });
+    expect(scroll).toHaveBeenCalledOnce();
   });
 
   it('requires supplied Navigation entries instead of fabricating them for an initial Document', () => {

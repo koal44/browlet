@@ -32,7 +32,7 @@ export class SessionHistoryEntry {
   /** Whether traversal restores this entry's saved scroll position automatically. */
   scrollRestorationMode: ScrollRestoration = 'auto';
   /** Saved scroll positions; null until scroll-region capture is implemented. */
-  // TODO(HTML §7.4.6.3): supply viewport/region identity and position data without retaining a destroyed Document.
+  // TODO(HTML §7.4.6.5): supply viewport/region identity and position data without retaining a destroyed Document.
   // SPEC_MISMATCH: session history entry's scroll position data
   scrollPositionData: null = null;
   /** Optional user-agent state; Browlet does not yet persist form values or directionality. */
@@ -115,16 +115,29 @@ export class SessionHistoryEntry {
   /** Apply automatic scroll restoration and any user-agent state retained in this entry. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#restore-persisted-state
   restorePersistedState(): void {
-    // TODO(HTML §7.4.6.5): respect auto/manual and Navigation's scroll-restoration suppression before scrolling.
-    // Optional control restoration does not fire input/change; form-associated custom elements have their own callback.
-    throw new InternalError('Persisted history state restoration is not implemented');
+    if (this.scrollRestorationMode === 'auto') {
+      const document = this.document;
+      if (document === null) throw new InternalError('History restoration requires a populated entry');
+      const window = document.getRelevantGlobalObject();
+      if (window === null) throw new InternalError('History restoration requires the Document Window');
+      // SPEC_CLASH(history-scroll-interception): Follow HTML/Chromium/WebKit's automatic-restoration suppression;
+      // Firefox's same-document traversal restores early even while the intercepted handler remains pending.
+      if (!window.navigation.suppressNormalScrollRestorationDuringOngoingNavigation) this.restoreScrollPositionData();
+    }
+    // Optional persistedUserState remains null: Browlet does not yet capture or restore control values/directionality.
+    // TODO(HTML form state): Restore retained values without input/change events, invoking the form-associated
+    // custom element's formStateRestoreCallback where required, once that optional capture policy is implemented.
   }
 
   /** Attempt restoration of the saved scrollable regions, unless the user has scrolled. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#restore-scroll-position-data
   restoreScrollPositionData(): void {
-    // TODO(HTML §7.4.6.5): Capture scrollPositionData, restorable regions, and has-been-scrolled-by-the-user state.
-    // Restoration can retry while content loads; scroll anchoring and CSSOM View supply the resulting positions.
+    const document = this.document;
+    if (document === null) throw new InternalError('Scroll restoration requires a populated history entry');
+    if (document.hasBeenScrolledByUser) return;
+    // TODO(HTML §7.4.6.5 / CSSOM View): Capture scrollPositionData and identify the viewport/other restorable
+    // regions, excluding navigable containers. Null is still an unimplemented format, not an empty saved snapshot.
+    // Attempt restoration using layout; optional retries must stop on user scrolling and account for scroll anchoring.
     throw new InternalError('Session-history scroll restoration is not implemented');
   }
 }

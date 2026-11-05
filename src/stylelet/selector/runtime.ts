@@ -534,6 +534,9 @@ export function isAnyLink(e: Element, context: StyleletContext): boolean {
 
 // :target
 export function isTarget(e: Element, context: StyleletContext): boolean {
+  if (context.dom.targetElement) return context.dom.targetElement(context.document) === e;
+  // TODO(Stylelet): Hosts without retained navigation state still use the legacy URL approximation,
+  // which cannot preserve a named/decoded target across later URL or attribute changes.
   const url = context.dom.URL(context.document);
   const hash = url.indexOf('#');
   return hash !== -1 && hash + 1 < url.length && context.dom.getId(e) === url.slice(hash + 1) && !!(context.dom.compareDocumentPosition(context.document, e) & 16);

@@ -264,7 +264,7 @@ describe('fragment navigation', () => {
     update.mockRestore();
 
     expect(() => navigable.navigateToFragment(url, 'push', 'none', null, null, 'fragment'))
-      .toThrow('Persisted history state restoration is not implemented');
+      .toThrow('Session-history scroll restoration is not implemented');
     expect(scroll).not.toHaveBeenCalled();
     expect(turns).toHaveLength(0);
   });
@@ -302,11 +302,15 @@ describe('fragment navigation', () => {
   });
 
   it('stops at the existing scrolling dependency before queueing completion', async () => {
-    const { navigable, scroll, turns, url } = await fixture();
+    const { document, navigable, scroll, turns, url } = await fixture();
+    const target = document.createElement('div');
+    target.id = 'target';
+    document.body!.appendChild(target);
     scroll.mockRestore();
 
     expect(() => navigable.navigateToFragment(url, 'push', 'none', null, null, 'fragment'))
-      .toThrow('Document fragment scrolling is not implemented');
+      .toThrow('Fragment target revealing, scrolling, and focusing are not implemented');
+    expect(document.targetElement).toBe(target);
     expect(turns).toHaveLength(0);
   });
 });

@@ -160,13 +160,12 @@ Window. Synthetic construction accepts any real ViewTransition, including one
 from another realm; the constructor does not resolve or activate a transition.
 DOM's legacy `createEvent()` table does not include PageRevealEvent.
 
-Automatic delivery belongs to HTML's [reveal algorithm](https://html.spec.whatwg.org/multipage/browsing-the-web.html#reveal),
-not to the event constructor. The remaining connections are:
+HTML's [reveal algorithm](https://html.spec.whatwg.org/multipage/browsing-the-web.html#reveal)
+is now implemented as `Document.reveal()`. The remaining connections are:
 
-- Document's `has been revealed` state now exists, initially false and reset on
-  history reactivation. The reveal producer must set it before resolving the
-  inbound transition or dispatching,
-  so revelation runs once per activation even across reentrant author callbacks.
+- Document's `has been revealed` state is initially false and reset on history
+  reactivation. `reveal()` sets it before inbound resolution or dispatch, so
+  reentrant callbacks cannot reveal the Document again during that activation.
 - The existing rendering pipeline's `reveal` phase must call that algorithm on
   the first update displaying the current page. It is currently an unconnected
   hook. A cached frame may be shown before this event; the event is not a generic
@@ -174,13 +173,21 @@ not to the event constructor. The remaining connections are:
 - CSS [inbound transition resolution](https://drafts.csswg.org/css-view-transitions-2/#resolve-inbound-cross-document-view-transition)
   must consume transferred parameters, respect an already-active transition,
   resolve opt-in/type rules, and allocate the incoming transition and its promises
-  in the incoming Document's realm. These remain [rendering work](../../../rendering/ROADMAP.md#viewtransition-dependency-identity).
-- Fire the trusted event at the incoming Window, even when the resolved
-  transition is null. Then activate a non-null transition inside HTML's
-  prepare/cleanup-script steps so its promise reactions precede subsequent
-  rendering work. The event interface supplies neither activation nor that checkpoint.
-- `onpagereveal` and body/frameset forwarding remain §8.1.8 integration work;
-  `addEventListener()` and internal `fireEvent()` delivery work now.
+  in the incoming Document's realm. `resolveInboundCrossDocumentViewTransition()`
+  explicitly throws at this [rendering dependency](../../../rendering/ROADMAP.md#viewtransition-dependency-identity).
+- Once resolution completes, `reveal()` fires the trusted event at the incoming
+  Window, even for a null transition. It then calls a non-null transition's
+  `activate()` inside the existing prepare/cleanup-script boundary, including
+  cleanup on failure. CSS activation remains an explicit throwing operation.
+- `onpagereveal` and body/frameset forwarding are supplied by §8.1.8's shared
+  event-handler machinery; the producer uses the same event dispatch path.
+
+`SPEC_CLASH(pagereveal-target-and-trust)` follows HTML/Chromium's trusted Window
+target. The 4 November `document-reveal.mjs` production-event probe finds that
+WebKit instead emits an untrusted Document-targeted event, for both null and
+non-null transitions. Gecko's source sets trust and dispatches at Window, behind
+its disabled feature flag. The [revelation audit](../ROADMAP.md#html-7463-revealing-the-document)
+records this approved choice and the rendering/CSS stopping point.
 
 `node-compat/experimental/page-reveal-event.mjs` was run on 1 November with
 Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2. Chromium/WebKit agree on

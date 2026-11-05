@@ -630,6 +630,12 @@ provider uses platform DOM APIs; [Browlet's provider](browlet/integration/dom.ts
 uses implementations, including class checks for HTML elements. There are no
 per-node adapters or required fields on host nodes.
 
+The optional `targetElement` DOM operation supplies retained navigation selection.
+Browlet's Selectlet and Stylelet matchers read Document's HTML-owned target directly, so `:target` does not change
+merely because History changes the URL or an element changes its ID. Providers
+without this operation retain the matchers' older URL approximations; completing
+their navigation-state integration is separate from Browlet's fragment algorithm.
+
 Browlet's Document lazily retains its TreeScope and StyleletContext before any
 style query needs a Stylelet engine. That engine consumes the existing scope.
 ShadowRoot retains its own scope and uses its current node document's context;
@@ -1202,7 +1208,11 @@ script. Retained-Document reactivation refreshes Navigation entries before activ
 and persisted pageshow, with Document-owned showing/reveal flags. Existing timers
 resume when full activity returns; reactivation does not adjust them a second time.
 Selective form reset and visibility transitions remain throwing dependencies, as do
-persisted-state restoration, fragment-scroll scheduling, and joint history application.
+persisted-state restoration and joint history application. Fragment-scroll scheduling
+uses a delayed host wake-up followed by a navigation task, rechecking parser state
+and user interest before attempting scroll/retry. It returns before parser scripts
+are permitted; user-interest policy, target selection, and actual scrolling remain
+explicit dependencies reached by that later task.
 The provisional local loader releases the same gate at its existing synchronous commit point;
 it rejects same-document changes before it can reinitialize Navigation's entries.
 

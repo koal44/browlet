@@ -39,7 +39,7 @@ import type { BroadcastChannelImpl } from './communication/index';
 import type { StorageImpl } from './storage/index';
 import type { SourceSnapshotParams } from './browsing/navigation/state/index';
 import type { WindowImpl } from './browsing/window/index';
-import type { BrowletEnvironment, BrowletEnvironmentBase } from './environment/index';
+import type { BrowletEnvironment, BrowletEnvironmentBase, WindowEnvironment } from './environment/index';
 import { WebDriver, type PageEvaluation } from './automation/index';
 import { HTTPAuthenticationStore, type ResourceReader } from './loader/index';
 import {
@@ -372,6 +372,14 @@ export class UserAgent implements
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#respond-to-base-url-changes
   updateURLDisplays(_document: DocumentImpl): void {
     // PROVISIONAL: no browser UI is attached; retain this notification for a future UI host.
+  }
+
+  /** Whether initial fragment scrolling still serves the user's intent for this Document. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#try-to-scroll-to-the-fragment
+  isUserInterestedInFragmentScrolling(_document: DocumentImpl): boolean {
+    // TODO(HTML §7.4.6.2 / CSSOM View): Connect input and viewport scrolling state to the user-agent decision.
+    // Browsers stop competing with explicit scrolling; synthetic scroll events alone do not establish user intent.
+    throw new InternalError('Fragment scrolling user-interest policy is not implemented');
   }
 
   /** Apply browser download policy after the source and destination sandboxes allow it. */
@@ -807,6 +815,22 @@ export class UserAgent implements
     _status: { id: string; status: 'canceled'; url: URLRecord; },
   ): void {
     // Connect the BiDi navigation-aborted algorithm when sessions are implemented.
+  }
+
+  /**
+   * Classify a new Window using the incoming Document's origin.
+   * For a child navigable, supply the Window environment of the Document containing
+   * its navigable container (such as an iframe). Omit it for a top-level Window;
+   * an opener does not count as an embedding Window.
+   */
+  // SPEC_CLASH(secure-context-top-level-url): HTML checks the top-level creation URL; retain origin-and-ancestry checks.
+  // The embedding Window's fixed decision includes its whole security chain. Reservations
+  // capture this result; Window setup must preserve an existing reservation's decision.
+  // See ./browsing/policy/ROADMAP.md#trustworthiness.
+  // https://html.spec.whatwg.org/multipage/webappapis.html#secure-context
+  // https://w3c.github.io/webappsec-secure-contexts/#ancestors
+  computeWindowSecureContext(incomingOrigin: Origin, embeddingWindowEnv?: WindowEnvironment): boolean {
+    return this.isOriginPotentiallyTrustworthy(incomingOrigin) && embeddingWindowEnv?.isSecureContext !== false;
   }
 
   // Secure Contexts: Is origin potentially trustworthy?

@@ -63,6 +63,8 @@ export interface DOMOperations<
   documentElement(document: D): E | null;
   body(document: D): E | null;
   URL(document: D): string;
+  /** Retained navigation target, independent of later URL/attribute changes; null means no selection. */
+  targetElement?(document: D): E | null;
   /** Current document encoding, read when the consuming algorithm needs it. */
   baseURI(node: N): string;
 

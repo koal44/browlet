@@ -221,10 +221,10 @@ describe('NavigateEvent scrolling boundary', () => {
     expect(process).toHaveBeenCalledOnce();
   });
 
-  it('marks scroll processing before reaching the explicit missing fragment-selection dependency', async () => {
+  it('marks scroll processing before reaching the explicit viewport-scrolling dependency', async () => {
     const { event, platform } = await fixture();
     event.interceptionState = 'committed';
-    expect(() => platform.scroll()).toThrow('Document indicated-part selection is not implemented');
+    expect(() => platform.scroll()).toThrow('Document viewport scrolling is not implemented');
     expect(event.interceptionState).toBe('scrolled');
   });
 });

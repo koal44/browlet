@@ -27,7 +27,8 @@ that timing alongside browser events and lifecycle observations.
   realm gets one stable, replaceable `Performance` platform object.
 - `navigation.ts` provisionally defines `NavigationTimingRecord`.
   `Document.createNavigationTimingEntry()` retains live Fetch timing, body
-  information, and Document load milestones for network navigation. This is
+  information, selected redirect counts, response worker/cache inputs, and
+  Document load/unload milestones for network navigation. This is
   internal input storage, not a projected PerformanceNavigationTiming entry.
   Source-only navigation without a FetchController creates no placeholder entry.
 
@@ -46,6 +47,53 @@ The inspected jsdom checkout implements High Resolution Time's
 [Performance surface](https://github.com/jsdom/jsdom/blob/main/lib/jsdom/living/hr-time/Performance-impl.js)
 but no navigation timing entry.
 
+### HTML §7.5.1 timing input selection
+
+The controller-backed path now applies HTML's redirect-count selection before
+loader callbacks. Same-origin redirect chains retain the request count. Other
+chains require every redirect's Timing-Allow-Origin values to authorize the
+destination origin, plus either a null request client or a referrer other than
+no-referrer. It uses Fetch's existing `isNavigationTimingBlocked()` operation;
+the separate Resource Timing `timingAllowPassed` flag does not select this count.
+The count is captured once, while Fetch timing, body sizes, service-worker
+timing, and Document milestones retain their live records. Raw HTTP status and
+cache classification are inputs, not exposure-filtered public values.
+
+`SPEC_CLASH(navigation-redirect-count)` follows HTML, as approved by Eric. Live
+Chromium 156.0.8078.4 and WebKit 27.2 expose cross-origin redirect counts when
+all redirect responses opt in and a referrer exists; Firefox 157.0 retains zero.
+WebKit also returns zero for same-origin no-referrer chains, unlike HTML,
+Chromium, and Firefox. Chromium's
+`PerformanceNavigationTiming::ComputeExposeCrossOriginRedirectTiming()` requires
+a referrer even when there is no initiating client; HTML explicitly exempts
+that case. Host-initiated Playwright navigation returned zero in all three
+engines, but that probe alone does not establish their internal request-client
+state. Missing TAO at any hop and foreign no-referrer author navigation remain
+hidden in all three. The browser-only probe is
+`node-compat/experimental/document-navigation-timing.mjs`.
+
+`SPEC_CLASH(html-navigation-response-timing)` also covers the duplicate entry
+creation in current HTML, its out-of-scope locals, and the removed response
+timing field. Browlet selects controller timing and the params' navigation type
+once. [HTML PR #12890](https://github.com/whatwg/html/pull/12890) proposes that
+correction, supplies the omitted cache/restart arguments, and adds a
+no-controller fallback, but remains open. This slice preserves the existing
+no-controller boundary: Chromium/Firefox exposed one srcdoc entry in the probe
+(with differing name/end-time data), while WebKit exposed none. The fallback
+and any recovery of prior network timing for supplied responses need a separate
+choice; no public entry or synthetic Fetch timestamps are introduced here.
+
+The remaining consumer dependencies are explicit in
+`Document.createNavigationTimingEntry()`: PerformanceEntry/ResourceTiming
+construction and realm ownership, relative timestamps and exposure filtering,
+Timeline buffers/observers and load-event queuing, and retained restoration
+diagnostics. HTML does not pass Navigation Timing's cacheMode or Critical-CH
+restart arguments. The raw Fetch cache classification is retained for that
+consumer; Critical-CH restart measurement has no producer yet. Previous-Document
+unload timestamps likewise retain their unfinished lifecycle producer. The
+current input record is deliberately not an implementation of the Navigation
+Timing §5 callable signature.
+
 Worker exposure is already declared. It becomes observable when Browlet gains
 `WorkerGlobalScope`; no second clock or Worker-specific `Performance`
 implementation should be introduced then.
@@ -63,13 +111,15 @@ The existing `Document.createNavigationTimingEntry()` is still a provisional
 input recorder. Its source and `NavigationTimingRecord` explicitly mark this
 missing creation step. There is no projected PerformanceNavigationTiming entry
 on which to install a getter stub until PerformanceEntry, ResourceTiming, and
-the Timeline entry foundation exist. HTML's callable collection/masking stubs
-are `Document.buildNotRestoredReasonsForDocumentState()` and
-`TopLevelTraversable.buildNotRestoredReasons()`. Unloading/cache eviction must
-invoke the latter before destroying the documents whose diagnostics are needed.
+the Timeline entry foundation exist. `Document.buildNotRestoredReasonsForDocumentState()`
+now collects the unfiltered Document tree, including shadow-tree containers.
+`TopLevelTraversable.buildNotRestoredReasons()` completes origin masking and
+retains the root's generic `masked` detail for hidden blockers. Unloading/cache
+eviction must invoke that builder before destroying the documents whose
+diagnostics are needed; raw collected records are not public timing data.
 
 `SPEC_GAP(navigation-timing-null-reasons)`: the refreshed Navigation Timing source
-at `245fee2` invokes HTML's creation operation with nullable Document diagnostics,
+at `48c0048` (refreshed 4 November 2026) invokes HTML's creation operation with nullable Document diagnostics,
 although that operation requires a non-null backing record and a realm. It
 does not describe the null case or pass that realm. Resolve the null case with
 browser evidence when implementing this consumer; allocation belongs to the

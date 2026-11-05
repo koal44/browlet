@@ -172,9 +172,14 @@ export class CSPList implements FetchCSPList {
     return blocked;
   }
 
-  /** Apply document initialization directives after the loader has selected its policy container. */
+  /** Apply this list's initialization directives to an already-created Document. */
   // https://w3c.github.io/webappsec-csp/#run-document-csp-initialization
-  initializeDocument(document: DocumentImpl): void {
+  applyDocumentInitializationDirectives(document: DocumentImpl): void {
+    // SPEC_GAP(csp-style-src-initialization): CSP leaves style-src's CSSOM initialization as an unresolved issue.
+    // SPEC_CLASH(csp-style-src-cssom-eval): The draft gates CSSOM string parsing on style-src 'unsafe-eval';
+    // Browlet's existing behavior leaves CSSOM writes available, as Chromium, Firefox, and WebKit do.
+    // No initialization hook is installed; stylesheet Fetch and inline-input checks remain separate.
+    // https://github.com/w3c/webappsec-csp/issues/212
     for (const policy of this.policies) {
       for (const warning of policy.parsingWarnings) {
         document.env.reportConsoleWarning(warning);

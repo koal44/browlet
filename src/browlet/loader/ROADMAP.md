@@ -30,10 +30,14 @@ with a synthetic UTF-8 response, inherited policy, null request/controller/reser
 environment, and the original target snapshot's iframe policy. That call explicitly
 throws until the loader supplies response-reader setup and parser-script preparation;
 the existing path with a supplied reader and callback still works. Audit
-scripts-may-run gating and document creation's null reserved-environment path before
-connecting it: provisional response preparation currently creates a reserved
-environment and reprocesses policy. Do not replace inherited synthetic params with
-ordinary response-derived policy.
+scripts-may-run gating before connecting it. Document creation now preserves final
+synthetic params' null reservation and inherited policy; an Origin-Agent-Cluster
+request with no reservation uses the shared incoming-Window security calculation.
+The [OAC audit](../browsing/navigation/ROADMAP.md#oac-without-a-reservation) records
+the specification gap and retained HTML secure-context gate. Full multipart
+loading, including its later supplied-response parts, remains unfinished.
+The provisional local route still needs late response preparation. Do not replace
+inherited synthetic params with ordinary response-derived policy.
 
 Navigation Fetch now receives 103 responses through
 `BrowletEnvironmentBase.processEarlyHintHeaders(response)`, an explicit throwing
@@ -201,8 +205,10 @@ byte retention for restart, and parser lifecycle remain in the
 to permit scripts. The provisional local loader releases the same gate at its
 existing synchronous commit point. The streamed parser checks that it has not
 stopped when the wait resolves, so a late permit cannot run an aborted script.
-Full history application still reaches explicit persisted-state and fragment-scroll
-dependencies before granting permission; see the
+Full history application still reaches persisted-state restoration before granting
+permission. Fragment-scroll scheduling now returns without waiting; its later
+navigation task reaches explicit user-interest, target-selection, and scrolling
+dependencies. See the
 [new-Document audit](../browsing/navigation/ROADMAP.md#html-7462-new-document-history-initialization).
 `processLinkHeaders()` is a marked no-op in the pre-media and media phases; preload/link processing and
 media selection remain here. CSSOM stylesheet Link relations have a separate

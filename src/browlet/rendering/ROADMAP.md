@@ -72,6 +72,12 @@ entries). The capture format must support Document recreation without retaining
 old layout boxes or Documents. Position measurement, restore attempts as content
 loads, user-scroll cancellation, and scroll anchoring remain missing inputs to
 the throwing [history-state operations](../browsing/navigation/state/session-history.ts).
+The restoration policy now checks History's auto/manual mode and Navigation's
+normal-restoration suppression before requesting scroll restoration. Explicit
+NavigateEvent scrolling bypasses those two gates. Both paths honor Document's
+`hasBeenScrolledByUser` flag; real input production, unloading's reset, and the
+same-document restoration lifecycle still need this owner. These guards do not
+provide scroll measurements or successful restore attempts.
 
 Coordinate explicit update/flush behavior with the document lifecycle. CSSOM
 resolved values and container queries need particular facts at particular
@@ -141,10 +147,21 @@ completion when the coordinator is connected.
 There is no production ViewTransition creator yet. The PageSwapEvent and
 PageRevealEvent tests supply internal identities only to exercise actual
 interface conversion and projection. PageRevealEvent's [producer inventory](../browsing/navigation/events/ROADMAP.md#pagerevealevent-7275)
-records the unconnected rendering `reveal` hook, Document revelation state,
-inbound transition resolution, and activation after event dispatch. That
-activation needs HTML's prepare/cleanup-script boundary; an event object alone
-does not provide the required promise checkpoint before subsequent rendering.
+records the unconnected rendering `reveal` hook. `Document.reveal()` now sets
+the once-per-activation guard, calls inbound resolution, fires the event, and
+activates the result inside HTML's existing prepare/cleanup-script boundary.
+Its scheduler regression verifies Promise completion before the next phase.
+
+Two CSS dependencies remain explicit throwing methods:
+`Document.resolveInboundCrossDocumentViewTransition()` must update outbound
+opt-in even when inbound params are null, consume transferred state, resolve
+the rule/active types, and allocate the incoming transition and its promises.
+`ViewTransitionImpl.activate()` must honor an already skipped transition,
+release rendering suppression, validate geometry, capture the new state,
+construct/style pseudo-elements, enter the animating phase, and settle ready.
+Neither operation can be supplied by the identity-only event payload. These
+contracts were checked against CSSWG `909869d6b` and the live spec on 4 November;
+their implementation and the full rendering caller remain future CSS/HTML work.
 Keep these browser/document responsibilities here; Stylelet remains host-neutral.
 
 ## Title advisory presentation
