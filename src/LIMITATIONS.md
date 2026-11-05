@@ -1644,8 +1644,16 @@ specification gap, not an unfinished implementation. The local-route response-po
 adapter remains until that producer supplies complete params. Navigation Timing
 now retains controller-backed inputs and the redirect count selected by HTML's
 taint/client/referrer/TAO rules. It still exposes no PerformanceNavigationTiming
-entry: Performance Timeline/Resource Timing construction, exposure filtering,
-restoration diagnostics, and buffering are absent. Synthetic and supplied-response
+entry: Resource Timing construction, exposure filtering, diagnostic capture,
+and producer integration are absent. Performance Timeline now supplies
+the base entry, per-global buffers, synchronous `getEntries*()` queries, observer
+registration/record retrieval, buffered replay, observer-list queries, and shared
+task delivery, entry insertion, and initial navigation-ID association. The withdrawn
+numeric PerformanceEntry.id is omitted, following upstream issue #218 and browsers;
+navigationId follows the newer Soft Navigations model. Early producer capture and
+soft-navigation ID advancement remain explicit dependencies. No timing producer
+populates those buffers yet, and supportedEntryTypes remains empty.
+Synthetic and supplied-response
 navigations without a controller still need fallback timing; retained start time
 does not reconstruct prior network measurements. Response-header processing and
 the remaining Document lifecycle steps still need their §7.5 audits; see the
@@ -1896,8 +1904,8 @@ Document `hidden` and `visibilityState` expose retained state, initially hidden
 for newly constructed Documents. Navigable initialization and the existing
 cross-document history commit select the traversable's system visibility.
 This implements the state-assignment part of initial visibility setup only:
-the timestamp-zero `VisibilityStateEntry`, Performance Timeline buffering and
-observation, host-driven visibility updates, their cross-specification hooks,
+the timestamp-zero `VisibilityStateEntry` and its insertion into Performance
+Timeline, host-driven visibility updates, their cross-specification hooks,
 and `visibilitychange` delivery remain unfinished. The existing traversable
 default is visible; assigning its internal system state does not update current
 Documents. See the [navigable audit](browlet/browsing/navigation/ROADMAP.md#html-73-and-731-navigable-foundations).

@@ -22,6 +22,13 @@ that timing alongside browser events and lifecycle observations.
   The `WindowOrWorkerGlobalScope` mixin in
   [`global-scope.ts`](../environment/global-scope.ts) owns its retained
   instance and the `performance` declaration contribution (High Resolution Time §§5–8).
+- `timeline.ts` supplies the PerformanceEntry implementation/declaration and
+  per-type buffer tuples. Performance owns its global's buffer map and implements
+  the three synchronous queries and shared observer-delivery task. `observer.ts`
+  owns registration, buffered replay, and record retrieval; `observer-entry-list.ts`
+  owns queries over a delivered batch. Entry queueing and initial navigation-ID
+  association are present. Timing producers remain unfinished; registry rows do
+  not advertise producer support.
 - Realm-created Events, navigation timing records, and Document load timing
   use this shared clock and the relevant Window's time origin. Each new Window
   realm gets one stable, replaceable `Performance` platform object.
@@ -98,6 +105,329 @@ Worker exposure is already declared. It becomes observable when Browlet gains
 `WorkerGlobalScope`; no second clock or Worker-specific `Performance`
 implementation should be introduced then.
 
+## Performance Timeline: entries, buffers, and synchronous queries
+
+The first detour slice supplies the entry/query pieces of §§2–3 and implements §§5.4–5.6 of the
+[Performance Timeline draft](https://w3c.github.io/performance-timeline/).
+The clean local source was fast-forwarded to `65cbbeb` on 5 November 2026.
+The [Timing Entry Names Registry](https://w3c.github.io/timing-entrytypes-registry/#registry)
+supplies each buffer's capacity and synchronous-query visibility. These are
+metadata for known types, not a supported-producer list.
+
+`PerformanceEntryImpl` retains name/type/start/end fields and computes duration
+from the producer's end time, including the specified zero sentinel. Binding
+supplies readonly platform getters, interface checks, stable identity, and default
+toJSON. The queueing audit below removes the draft's incorrectly added `id` and
+uses the newer Soft Navigations amendment for `navigationId`: entries start at
+zero, and queueing supplies the Window association unless a producer captured it
+earlier. No production timing producer creates these base entries yet.
+
+Each global's existing retained `PerformanceImpl` owns its buffer map. Tuples
+are `PerformanceEntryBuffer` instances, initialized on first internal use.
+Unallocated buffers are empty; queries never allocate them. Eric approved this
+ownership and lazy tuple lookup. Replacing the public
+`window.performance` value does not replace the retained owner or its buffers.
+
+Queries return fresh arrays, preserve each entry's identity, sort by startTime,
+match names/types exactly, and exclude registry-hidden types. Filtering never
+reorders stored entries. `isFull()` implements §5.6 and increments the dropped
+count only when called for a full buffer; queueing first applies the producer's
+admission algorithm, as required by the refreshed draft.
+
+Browser-only observations are reproducible in
+`node-compat/experimental/performance-timeline-foundation.mjs`. Chromium
+156.0.8078.4, Firefox 157.0, and WebKit 27.2 agree on ordinary filtering,
+chronological sorting, fresh arrays, repeated entry identity, and unknown-type
+empty results. Their borrowed default toJSON methods all allocate in the method's
+realm, matching Web IDL and Browlet's existing implementation.
+
+- `SPEC_CLASH(performance-query-result-realm)`: Eric approved retaining the
+  existing Binding result convention. Borrowed query methods return arrays in
+  the receiver's realm, matching Chromium/WebKit; Firefox uses the method realm.
+  The entries themselves retain their owning realm.
+- `SPEC_GAP(performance-timeline-unknown-type)`: §5.4 dereferences the absent tuple
+  for an unknown type without specifying a missing-key case. All three engines
+  return an empty result. Browlet does likewise; this also handles known but
+  unpopulated buffers.
+- The initial identifier audit found unset IDs, a null Worker ID conflicting
+  with nonnullable IDL, and a dependency on a completed navigation entry. The
+  queueing audit below resolves this through the upstream correction and newer
+  Soft Navigations model, replacing that pending gap with the approved clashes.
+
+Explicit remaining dependencies:
+
+- The slices below supply queueEntry(), registration, buffered replay, and task
+  delivery. Event Timing's admission algorithm and actual producer integrations
+  remain unfinished. The obsolete per-entry counter/most-recent-entry link in
+  §§5.1–5.2 and 5.7 is superseded as described below.
+- Resource/Navigation Timing: real producer subclasses, time conversion and
+  privacy filtering, insertion/completion hooks, and Resource Timing's secondary
+  buffer/full-buffer event. Existing raw Fetch/navigation records are unchanged.
+- User Timing and other producers remain absent. Test fixtures supply completed
+  internal entry fields and retained buffers through real Browlet bindings;
+  they do not simulate observer delivery or claim producer acceptance coverage.
+
+The slices below supply observer construction, observation options, record
+retrieval, buffered replay, task delivery, and generic entry queueing. Actual
+producer integration remains separate.
+
+Validation: 14 new binding/implementation cases plus the existing Performance
+and clock suites give 35 passing tests in each of six configurations: Node
+24.19.0, 26.8.1, and custom 27.0.0-pre, with and without the addon. Generated
+platform declarations, TypeScript, declaration contracts, changed-file ESLint,
+import hierarchy, and whitespace checks pass. No expected failures or skips
+were added. The first run caught an incorrect test assumption about borrowed
+default toJSON; Web IDL and all three browser probes confirmed the existing
+method-realm result, so only that expectation changed.
+
+## PerformanceObserver registration and record retrieval
+
+This slice implements the non-delivery parts of Performance Timeline §4:
+construction, option validation, persistent single/multiple observation mode,
+registration replacement/accumulation, disconnect(), takeRecords(), and the
+PerformanceObserverEntryList interface. The global's retained Performance owns
+an ordered Set of observers alongside its buffers. Each observer retains its
+callback, options list, and pending entries. The options start empty and come
+from observe(), not construction; disconnect() clears them and removes the
+observer from the Set. A later registration appends that observer at the end.
+This replaces the specification's separate { observer, options list } record,
+as reviewed and accepted by Eric. Gecko also stores its
+options directly on PerformanceObserver, while Blink/WebKit store their type
+filters there. Binding handles callback conversion, result projection, errors,
+and the static supportedEntryTypes getter's realm.
+
+All these implementations retain their actual BrowletEnvironment owner.
+PerformanceObserverType names the lifetime single/multiple choice. The converted
+PerformanceObserverInit dictionary accepts arbitrary DOMStrings because
+unsupported names must be ignored. observe() retains that converted dictionary
+after filtering its entryTypes or checking its type against supportedEntryTypes;
+the author-supplied object and array are unaffected. PerformanceEntryType still
+constrains entries, buffer creation, and the supported-types list, without making
+the input dictionary generic.
+
+Global queries and observer batches share one matching operation. Global queries
+append matches directly into one result array and sort once, avoiding the
+specification's redundant per-buffer sorts and intermediate result arrays.
+Observer-list queries also sort only their final result. Stable ordering of
+equal timestamps, fresh result arrays, and stored buffer order are preserved.
+Observer batches include observer-only types;
+takeRecords() transfers the pending list without sorting and Binding returns a
+fresh author array. Entry identity and ownership remain unchanged.
+
+`supportedEntryTypes` is deliberately empty in production: knowing a registry
+name does not supply its producer. The internal tests provide completed producer
+metadata and pending entries to exercise registration and projection, without
+simulating entry queueing. The delivery slice below implements supported buffered
+subscriptions over retained records. Unsupported buffered subscriptions return normally.
+
+Eric approved these choices after the browser-only
+`node-compat/experimental/performance-observer.mjs` probe on Chromium 156.0.8078.4,
+Firefox 157.0, and WebKit 27.2:
+
+- `SPEC_CLASH(performance-observer-mixed-options)`: Follow the specified TypeError
+  when entryTypes is combined with buffered, including false. All three browsers
+  ignore buffered in this form. [PR #164's discussion](https://github.com/w3c/performance-timeline/pull/164#discussion_r406503907)
+  explicitly identifies Chromium's behavior as needing correction; its follow-up
+  added a compatibility counter. Blink still warns instead of throwing.
+- `SPEC_CLASH(performance-observer-mode)`: Keep the observation mode after an
+  unsupported request and disconnect(), matching the algorithm and Chromium/Firefox.
+  WebKit's `PerformanceObserver::observe()` gates its mode check on `m_registered`,
+  which disconnect clears and an unsupported request never sets.
+- `SPEC_CLASH(performance-observer-empty-types)`: Follow observe() and all three
+  browsers: an empty type list returns without registration. The dictionary prose's
+  MUST NOT be empty conflicts with that explicit algorithm. The request still
+  chooses multiple mode and sets requires-dropped-entries.
+- `SPEC_CLASH(performance-observer-supported-types)`: Retain the specified per-global
+  frozen array using existing FrozenArray projection. Chromium retains its frozen
+  value; Firefox returns fresh mutable arrays, and WebKit returns fresh frozen
+  arrays. [Issue #212](https://github.com/w3c/performance-timeline/issues/212)
+  identifies `[SameObject]` as invalid for this attribute. Omit that annotation
+  from the executable declaration while preserving the source IDL snippet and
+  the processing model's identity guarantee. No Binding change is needed.
+- The previously approved `SPEC_CLASH(performance-query-result-realm)` also applies
+  to takeRecords() and observer-list queries: Chromium/WebKit use the receiver's
+  realm, Firefox the borrowed method's realm. The static getter uses its own realm.
+
+Remaining dependencies are explicit in source:
+
+- The queueing slice below inserts into both kinds of buffers and supplies
+  initial navigation association. Event Timing's should-add-entry operation
+  still throws; other registry rows return true.
+- Recommended developer warnings for unsupported or empty requests remain TODOs.
+- No type is added to supportedEntryTypes until its real producer and delivery
+  integration work. Resource/Navigation Timing and other producer specifications
+  retain their existing boundaries.
+
+Buffered replay and §5.3 observer-task delivery are covered by the slice below.
+
+Validation: all 43 Performance tests (19 new observer cases) pass on Node 24.19.0,
+26.8.1, and custom 27.0.0-pre, each with and without the addon. Generated declarations,
+TypeScript, declaration contracts, changed-file ESLint, import hierarchy, and
+whitespace checks pass. No new expected failures or skips were introduced.
+The later dictionary simplification was rechecked with all 43 tests on Node
+24.19.0, with and without the addon, plus TypeScript and changed-file ESLint.
+
+## Buffered replay and observer delivery
+
+Performance Timeline §4.2 now appends eligible retained entries to an observer's
+pending buffer. §5.3 uses one coalesced `performance-timeline` task per global,
+owned by its retained Performance. The task clears its queued flag and snapshots
+observer membership, then drains each live batch before invoking that observer.
+An empty batch skips only that observer, matching all three browsers. Reentrant
+observation can queue the next task; disconnect/re-observe can replace a later
+observer's pending batch without adding duplicate registrations. Discarding the
+Document-associated task also releases the queued flag.
+
+Binding already supplies the observer callback's receiver/argument projection,
+exception reporting, and HTML callback microtask checkpoints. Delivery uses those
+facilities directly. The entry list retains the observer's environment; its
+entries preserve their original identity. The callback options dictionary is
+converted in the callback's realm.
+
+Eric approved these choices after the browser-only
+`node-compat/experimental/performance-observer-delivery.mjs` probe on 5 November
+2026, using Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2:
+
+- `SPEC_CLASH(performance-observer-callback-options)`: Supply the specified third
+  argument, including the cumulative dropped count on the first nonempty delivery
+  after observe(), as Chromium does. Firefox/WebKit omit the argument. Later
+  deliveries receive an empty dictionary until observe() requests the count again.
+- `SPEC_GAP(performance-observer-duplicate-counts)`: Count each observed type once,
+  matching Chromium's repeated-resource-type probe and its type-mask implementation.
+  The specification does not say whether duplicate names repeat the count. An
+  unallocated lazy buffer contributes zero; reporting does not reset its count.
+- `SPEC_CLASH(performance-observer-buffered-order)`: Follow the specified append
+  order, leaving chronological sorting to getEntries*(). With backdated marks and
+  two replays, takeRecords() retains `late, early, late, early`. Firefox appends
+  sorted batches; Chromium/WebKit also merge those batches chronologically.
+- `SPEC_GAP(performance-observer-list-realm)`: Keep the list in the observer's realm,
+  matching Firefox/WebKit. The allocation step omits its realm; Chromium uses the
+  callback's realm. Existing entry identity is unaffected.
+
+The probe also confirmed `SPEC_CLASH(performance-observer-disconnect-records)`:
+the already implemented, specified clearing of pending records agrees with
+Chromium/WebKit. Gecko clears the options but retains pending records, so
+disconnect followed by buffered re-observation duplicates those pending entries.
+No behavior change was needed for that case.
+
+Sources: [task algorithm](https://w3c.github.io/performance-timeline/#queue-the-performanceobserver-task),
+[entry-type registry](https://w3c.github.io/timing-entrytypes-registry/#registry),
+[Blink delivery](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/timing/performance_observer.cc),
+[Blink drop counts](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/timing/performance.cc),
+[Gecko](https://github.com/mozilla-firefox/firefox/blob/main/dom/performance/PerformanceObserver.cpp),
+and [WebKit](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/page/PerformanceObserver.cpp).
+
+Remaining dependencies are explicit in source:
+
+- The queueing slice below completes buffer insertion and resolves the old ID
+  conflict. Producer creation and capture of navigation IDs before queueing remain
+  separate work.
+- The current registry specifies unconditional admission except for event and
+  first-input. Their Event Timing admission operation still throws, including its
+  durationThreshold and global-buffer rules.
+- The task uses the HTML event loop. Its recommended low-priority/idle preference
+  awaits the event loop's queue-selection policy; the task-source declaration names it.
+- Developer warnings and actual producer integrations remain unfinished. No type
+  is advertised in supportedEntryTypes until its producer and queueing work exist.
+
+Validation: 11 new delivery cases bring the Performance suite to 54 tests. Coverage
+includes real HTML-loop delivery, callback checkpoints/exceptions, cross-Window
+realms, repeated replay, empty batches, cumulative counts, reentrancy, and discarded
+tasks. Fixtures supply completed records while exercising real bindings and scheduling;
+they do not claim producer coverage. Initial failures were incorrect fixture access
+to the environment's event loop and Document, corrected to their actual owners.
+All 54 tests pass on Node 24.19.0, 26.8.1, and custom 27.0.0-pre, with and without
+the addon. Generated declarations, TypeScript, declaration contracts, changed-file
+ESLint, import hierarchy, and whitespace checks pass. No new expected failures or
+skips were introduced.
+
+## Entry queueing and navigation-ID foundation
+
+Performance Timeline §5.1 now selects each interested observer once, applies its
+producer-specific admission rule, appends accepted pending records, and retains
+eligible entries subject to the global buffer limit. A full global buffer counts
+a drop without suppressing observer delivery. Ineligible entries do not count as
+drops. The algorithm then uses the existing coalesced delivery task, including
+when there are no registered observers. Queries retain their existing sorting
+and entry-identity behavior. A mismatched internal Performance/entry owner throws
+before either entry state or buffers change.
+
+The identifier audit changed the planned §§5.2/5.7 implementation. In
+[issue #218](https://github.com/w3c/performance-timeline/issues/218#issuecomment-2733441685),
+the original editor confirms `PerformanceEntry.id` was added incorrectly; it
+also conflicts with Element Timing's string-valued id. [PR #219](https://github.com/w3c/performance-timeline/pull/219)
+proposes removal. Its later discussion points to the newer, separate
+[WICG Soft Navigations draft](https://wicg.github.io/soft-navigations/), which
+defines navigation IDs without the completed-navigation-entry dependency.
+
+As of 5 November 2026, the Soft Navigations document remains a Draft Community
+Group Report, not a W3C Standard or Standards Track document. Chrome's
+[implementation guide](https://developer.chrome.com/docs/web-platform/soft-navigations)
+reports default support from Chrome 151. Shipping support does not establish
+cross-browser agreement or a schedule for incorporating its HTML integration hooks.
+The numeric-id removal remains a proposed correction to the Timeline draft;
+Browlet deliberately removes its recently added declaration now.
+
+Eric approved both corrections:
+
+- `SPEC_CLASH(performance-entry-id)`: Remove the numeric id from the implementation,
+  executable IDL, generated platform types, and default JSON. All three browser
+  probes omit it. The original primary IDL excerpt remains verbatim as evidence
+  of the continuing draft conflict; no per-entry counter is implemented.
+- `SPEC_CLASH(performance-entry-navigation-id)`: Use Soft Navigations §§2.1–2.3.
+  The retained Performance owns one initial random integer from 100 through 10000
+  for its Window; non-Window owners use zero. Entries initially carry zero and
+  queueing fills that value without replacing an earlier producer association.
+  The navigationId declaration is a separate partial interface beside the primary.
+  The old special navigation-entry queue and Document most-recent-entry link are
+  not needed for this model. This numeric ID is separate from HTML's string
+  navigation ID and Navigation API entry identifiers.
+
+The browser-only `node-compat/experimental/performance-entry-queueing.mjs` probe
+ran on 5 November 2026 with Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2.
+None exposes id. Chromium exposes the same nonzero navigationId during parsing,
+after load, and on a directly constructed PerformanceMark; a fresh about:blank
+Window also has an ID, and Worker marks use zero. Firefox/WebKit do not expose
+navigationId. All three deliver a resource entry when the global resource buffer
+has capacity zero; Chromium also reports one dropped entry. Blink's
+[base Performance](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/timing/performance.h)
+returns zero outside Window, and its
+[ID generator](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/timing/performance_timeline_entry_id_generator.h)
+uses independently initialized Window values. These observations do not establish
+interoperability for soft-navigation detection or ID advancement.
+
+Explicit remaining dependencies:
+
+- Soft Navigations detection, interaction/paint attribution, emission, navigation
+  counts, and ID advancement remain unfinished. The currentNavigationId field
+  names that boundary. A URL update alone must not advance it.
+- Producers that expose entries before queueing, including Navigation Timing and
+  directly constructed User Timing marks, must capture the ID earlier. Delayed
+  measurements may also need an earlier ID; queueing preserves those captured
+  values. The entry field names this integration dependency.
+- Resource/Navigation/User/Visibility and other timing producers remain absent;
+  supportedEntryTypes stays empty. Event Timing admission still throws. Resource
+  Timing's secondary buffer and buffer-full event remain its owner's work.
+- Worker construction/exposure needs integration with Pip's Worker machinery;
+  the non-Window regression uses a real sandbox, not a pretend Worker global.
+  Developer warnings and the recommended scheduling priority remain open.
+
+Next bounded slice: Resource Timing's entry foundation, then its Fetch inputs,
+privacy filtering, and buffering, before returning to Navigation Timing/HTML §7.5.1.
+
+Validation: 11 new queueing cases bring the Performance suite to 65 tests. The
+numeric-id regression failed on `'id' in entry` before the fix. Coverage includes
+matching/deduplication, capacity-independent delivery, admission before drop counting,
+captured IDs, zero outside Window, and retained-Window ownership. Tests supply
+completed measurements and only substitute Event Timing's missing admission rule;
+queueing, bindings, and scheduling are real. The sandbox deliberately lacks exposed
+interfaces, so its JSON check borrows the real Window binding. No production Worker
+exposure is claimed by that test.
+All 65 tests pass on Node 24.19.0, 26.8.1, and custom 27.0.0-pre, with and without
+the addon. Generated declarations, TypeScript, declaration contracts, changed-file
+ESLint, import hierarchy, and whitespace checks pass. No new expected failures or
+skips were introduced.
+
 ## Restoration diagnostics dependency
 
 HTML §7.2.8 now supplies `NotRestoredReasonsImpl` and its recursive creation from
@@ -110,8 +440,8 @@ It must not re-read the current Document/history entry on every getter call.
 The existing `Document.createNavigationTimingEntry()` is still a provisional
 input recorder. Its source and `NavigationTimingRecord` explicitly mark this
 missing creation step. There is no projected PerformanceNavigationTiming entry
-on which to install a getter stub until PerformanceEntry, ResourceTiming, and
-the Timeline entry foundation exist. `Document.buildNotRestoredReasonsForDocumentState()`
+on which to install a getter stub until Resource Timing and navigation-entry
+creation exist. Generic entry queueing is available. `Document.buildNotRestoredReasonsForDocumentState()`
 now collects the unfiltered Document tree, including shadow-tree containers.
 `TopLevelTraversable.buildNotRestoredReasons()` completes origin masking and
 retains the root's generic `masked` detail for hidden blockers. Unloading/cache
@@ -136,9 +466,9 @@ queue a `VisibilityStateEntry` with that state and timestamp **0**, even if the
 state did not change. Its source explicitly marks this missing step. Initial
 assignment does not fire `visibilitychange`.
 
-`VisibilityStateEntry`, `PerformanceEntry`, the Timeline buffer, and observer
-delivery are still absent. Do not replace the required timestamp with the
-current clock or treat the Document's stored state as a delivered entry.
+`VisibilityStateEntry` creation and its lifecycle caller are still absent; the base
+entry, queueing, buffers/queries, and observer delivery now exist. Do not replace the required
+timestamp with the current clock or treat the Document's stored state as a delivered entry.
 Subsequent visibility changes need a separate entry with the Document's current
 high-resolution time. The [navigable audit](../browsing/navigation/ROADMAP.md#html-73-and-731-navigable-foundations)
 records the remaining visibility producers.
@@ -157,7 +487,7 @@ clock alone would not implement those hooks.
 
 | Planned source | Contract | Specification |
 | --- | --- | --- |
-| `timeline.ts` | `PerformanceEntry`, buffers, observers, and entry delivery | Performance Timeline |
+| `timeline.ts`, `observer.ts`, `observer-entry-list.ts` | Entries, buffers, queries, queueing, and observer delivery present; actual producers remain | Performance Timeline |
 | `navigation.ts` | Document navigation and unload timing entries sourced from lifecycle records | Navigation Timing and HTML §3.1.5 |
 | `resource.ts` | Fetch/loader timing info and resource entries | Resource Timing and Fetch |
 | `server.ts` | Server-Timing parsing and PerformanceServerTiming values exposed through resource entries | Server Timing |
@@ -214,14 +544,14 @@ Reference specifications and their local checkout paths:
 | [Server Timing](https://w3c.github.io/server-timing/) | `w3c-server-timing/index.bs` | Header metrics and PerformanceServerTiming |
 | Fetch / HTML | `whatwg-fetch/fetch.bs`, `whatwg-html/source` | Timing production, filtering, response completion, and navigation lifecycle |
 
-1. Implement the Performance Timeline entry/buffer/observer foundation used
-   by the first timing producer, with Web IDL projection and the existing
-   event-loop task delivery.
+1. Performance Timeline entry queueing, initial navigation association, Web IDL
+   projection, and observer task delivery are present. Connect actual producers
+   without exposing registry names as implemented features prematurely.
 2. Connect Fetch's timing/body information and `mark resource timing` to
    Resource Timing. Preserve time-origin conversion, timing-allow filtering,
    redirect/cache information, protocol data, and encoded/decoded sizes.
    Fetch 8A now calls `BrowletEnvironment.markResourceTiming()`; it is explicitly
-   provisional until this entry/buffer machinery exists. The environment's
+   provisional until Resource Timing's entry creation/filtering exists. The environment's
    `relativeHighResolutionTime()` already uses the real High Resolution Time
    implementation. Replace the recording no-op when implementing this step.
 3. Implement Server-Timing parsing and its resource-entry projection when

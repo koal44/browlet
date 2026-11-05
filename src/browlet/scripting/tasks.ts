@@ -38,6 +38,11 @@ export const clipboardTaskSource = createTaskSource('clipboard');
 // Reporting leaves the task source unnamed; WebKit likewise gives it a distinct source.
 export const reportingTaskSource = createTaskSource('reporting');
 
+// https://w3c.github.io/performance-timeline/#dfn-performance-timeline-task-source
+// TODO(Performance Timeline §5.3): Add the recommended low-priority/idle preference
+// when the event loop's queue-selection policy supports task-source priorities.
+export const performanceTimelineTaskSource = createTaskSource('performance timeline');
+
 // Automation entry is embedder work; HTML still owns task execution and checkpoints.
 export const automationTaskSource = createTaskSource('automation');
 
@@ -55,6 +60,7 @@ export const taskSources: Record<TaskSourceKey, TaskSource> = {
   permissions: permissionsTaskSource,
   clipboard: clipboardTaskSource,
   report: reportingTaskSource,
+  'performance-timeline': performanceTimelineTaskSource,
   automation: automationTaskSource,
   engine: jsEngineTaskSource,
 };

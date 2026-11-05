@@ -6,11 +6,12 @@ import {
 
 import { assembleMember } from './member';
 import { DefinitionAssembly } from './assembly';
+import type { AssembledInterface, AssembledInterfaceMember } from './interface';
 
 /**
  * Check a complete declaration set during development or tests; normal assembly trusts its inputs.
- * Checks composition, cycles, injection placement and positions, serialization markers, and type references,
- * including unused aliases and mixins.
+ * Checks composition, member collisions, cycles, injection placement and positions, serialization markers,
+ * and type references, including unused aliases and mixins.
  */
 export function validateDefinitions<Env>(definitions: Definition<Env>[]): void {
   // Validation inspects declarations without invoking their environment-specific binding hooks.
@@ -113,6 +114,7 @@ export function validateDefinitions<Env>(definitions: Definition<Env>[]): void {
   // Reuse compilation for type checks after structural validation has ruled out cycles.
   const assembly = new DefinitionAssembly(declarations);
   for (const assembled of assembly.interfaces.values()) {
+    validateInterfaceMembers(assembled);
     if (!assembled.implementations.some(({ constructWith }) => constructWith !== undefined)) continue;
     if (assembled.members.some(({ member }) => member.kind === 'constructor' && member.constructWith !== undefined)) {
       throw new InternalError(`${assembled.name} declares constructWith on both its implementation and a constructor`);
@@ -122,6 +124,38 @@ export function validateDefinitions<Env>(definitions: Definition<Env>[]): void {
     if (definition.kind === 'typedef') assembly.getNamedType(definition.name);
     if (definition.kind === 'interface-mixin' || definition.kind === 'partial-interface-mixin') {
       for (const member of definition.members) assembleMember(member, assembly);
+    }
+  }
+}
+
+/** Reject colliding declarations after composing an interface's own members, partials, and mixins. */
+// https://webidl.spec.whatwg.org/#idl-attributes
+// https://webidl.spec.whatwg.org/#idl-constants
+// https://webidl.spec.whatwg.org/#idl-overloading
+function validateInterfaceMembers(assembled: AssembledInterface): void {
+  const instanceMembers = new Map<string, AssembledInterfaceMember>();
+  const staticMembers = new Map<string, AssembledInterfaceMember>();
+  // Inherited members belong to another interface; redeclaration is not a partial override.
+  for (const entry of assembled.members) {
+    const { member, source } = entry;
+    if (member.kind !== 'attribute' && member.kind !== 'constant' && member.kind !== 'operation') continue;
+    if (member.name === undefined) continue;
+    // Static and instance operations may share a name. Attributes and constants may not
+    // share their name with any other explicit member, even at the other placement.
+    const placements = member.kind === 'operation'
+      ? [member.static ? staticMembers : instanceMembers] : [instanceMembers, staticMembers];
+    for (const members of placements) {
+      const previous = members.get(member.name);
+      if (previous) {
+        if (previous.member.kind !== 'operation' || member.kind !== 'operation') {
+          throw new InternalError(`Duplicate Web IDL member ${assembled.name}.${member.name} ` +
+            `in ${previous.source.kind} ${previous.source.name} and ${source.kind} ${source.name}`);
+        }
+        if (previous.source !== source) {
+          throw new InternalError(`Web IDL operation ${assembled.name}.${member.name} is overloaded across declarations`);
+        }
+      }
+      members.set(member.name, entry);
     }
   }
 }

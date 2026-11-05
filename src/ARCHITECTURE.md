@@ -1420,6 +1420,22 @@ resolved bidi direction; that dependency currently throws without changing state
 Input/editing, rendering, and document.open reset remain separate owners in the
 [Selection roadmap](browlet/interaction/selection/ROADMAP.md).
 
+The global's retained `PerformanceImpl` owns its per-type Timeline buffers and
+an ordered Set of registered observers; replacing the public `performance` value does
+not replace that internal owner.
+Buffers retain entry implementations. Binding projects query results and keeps
+each entry's platform identity. Observers own their callbacks, options lists, and pending batches;
+Binding supplies conversion and projects the static supported-types array in its
+getter's realm. Buffered replay feeds the observer's pending batch. Performance
+owns one coalesced delivery task per global; it snapshots observer membership and
+drains each live batch before invoking its converted callback. Binding supplies
+callback projection, exception reporting, and checkpoints. Entry queueing applies
+producer admission independently to observer batches and capacity-limited global
+storage. The same retained Performance owns its Window's current navigation ID;
+entries preserve captured IDs, and non-Window owners use zero. Timing producers,
+early ID capture, and soft-navigation advancement remain separate work in the
+[Performance roadmap](browlet/performance/ROADMAP.md).
+
 Document lazily owns `LegacyMouseProcessor` in `interaction/mouse/legacy/`, a foundation
 that uses event machinery and type-only node references without loading higher
 input producers. All primary pointer types share its effective mouse position.

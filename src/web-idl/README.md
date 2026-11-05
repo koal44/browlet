@@ -249,14 +249,22 @@ BindingWorld; generic assembly and binding do not interpret element names.
 
 Normal assembly trusts declarations. Call `validateDefinitions()` from
 `assembly/index.ts` during development or tests to check duplicate primary names,
-orphan partials or includes, inheritance and typedef cycles, serialization markers,
-empty or duplicate implementation registrations, conflicting `constructWith`
+interface member collisions, orphan partials or includes, inheritance and typedef
+cycles, serialization markers, empty or duplicate implementation registrations, conflicting `constructWith`
 locations, repeated injected argument positions, and unresolved types, including
 unused aliases and mixins. Browlet's complete declaration set has a dedicated
 validation test. Required type resolution still
 throws when assembly cannot produce a valid IDL type. Forward references and
 recursive dictionary values remain valid; an unimplemented conversion for a
 recognized type is a separate runtime limitation.
+
+Interface member checks compose the primary, partials, and included mixins without
+including inherited members. Duplicate attributes and constants are rejected even
+when identical; partials never override earlier declarations. Operation overloads
+must stay within one declaration. Static and instance operations may share a name,
+and derived interfaces may redeclare inherited attributes. These checks run only
+during validation, without adding work to ordinary binding assembly.
+
 Automatic member lookup trusts implementation members; test audits use
 `validateImplementationMembers()` with supplied instances to catch missing fields
 and methods without repeating internal validation on author calls.

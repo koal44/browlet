@@ -675,7 +675,8 @@ Full history activation/restoration remains unfinished.
 
 This is only the state-assignment part of HTML §6.2 initial visibility setup.
 The method's TODO names the required `VisibilityStateEntry` with timestamp 0;
-PerformanceEntry, Timeline buffering, and observer delivery do not exist yet.
+PerformanceEntry, Timeline buffers, and observer delivery now exist; the visibility
+entry producer and its insertion into the Timeline remain unfinished.
 The [Performance roadmap](../../performance/ROADMAP.md#initial-visibility-dependency)
 owns that dependency. Initialization deliberately emits no visibilitychange event.
 
@@ -5530,8 +5531,8 @@ HTML source `a7f6aed` still duplicates the entry-creation call, uses removed
 response timing and out-of-scope variables, and omits required consumer arguments.
 `SPEC_CLASH(html-navigation-response-timing)` and open
 [PR #12890](https://github.com/whatwg/html/pull/12890) record those corrections.
-The refreshed Navigation Timing source `48c0048` still requires the absent
-Performance Timeline/Resource Timing entry foundation. Realm-owned entry
+The refreshed Navigation Timing source `48c0048` requires the remaining
+Resource Timing and Timeline queueing foundation. Realm-owned navigation entry
 construction, public timestamp/status/body filtering, cache-mode conversion,
 Critical-CH restart measurement, NotRestoredReasons allocation, buffering and
 load-event queuing remain explicit consumer dependencies. Synthetic and
@@ -5548,8 +5549,12 @@ without the addon. TypeScript/generated declarations, declaration contracts,
 changed-file ESLint, import hierarchy, and whitespace checks pass. No new
 expected failures, skips, or native artifacts were introduced.
 
-Next: §7.5.1 steps 17–20, the remaining response-header and callback ordering
-audit, beginning with Refresh. The timing consumer remains with Performance.
+The current detour implements [Performance Timeline](../../performance/ROADMAP.md#performance-timeline-entries-buffers-and-synchronous-queries)
+before continuing the timing consumers. Its base entry, per-global buffers, and
+synchronous queries now exist, as do observer registration and record retrieval.
+Buffered replay, queueing/delivery, and real timing producers remain explicit.
+Resume HTML at §7.5.1 steps 17–20, the remaining response-header
+and callback ordering audit, beginning with Refresh, after that detour.
 
 ## Removal condition
 

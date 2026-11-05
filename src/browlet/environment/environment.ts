@@ -624,8 +624,9 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     _timingInfo: FetchTimingInfo, _requestedURL: URLRecord, _initiatorType: string,
     _cacheUsage: CacheUsage | undefined, _bodyInfo: ResponseBodyInfo, _responseStatus: number,
   ): void {
-    // PROVISIONAL: Resource Timing entries need the Performance Timeline buffer
-    // and observer machinery. The performance roadmap owns that integration.
+    // PROVISIONAL: Timeline queueing/delivery exist, but Resource Timing still needs
+    // entry construction, exposure filtering, and its secondary buffer/full-buffer event.
+    // The performance roadmap owns that integration.
   }
 
   /** Select a Document preload; environments without a Document cannot consume one. */

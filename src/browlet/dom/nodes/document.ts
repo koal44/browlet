@@ -1406,7 +1406,7 @@ export class DocumentImpl extends NodeImpl {
   setInitialVisibilityState(visibilityState: DocumentVisibilityState): void {
     this.#visibilityState = visibilityState;
     // TODO(HTML §6.2 / Performance Timeline): Queue a VisibilityStateEntry with this state and timestamp 0.
-    // PerformanceEntry, the timeline buffer, and observer delivery are not implemented yet.
+    // Timeline queueing and delivery exist; the VisibilityStateEntry producer remains unfinished.
   }
 
   /** Change page visibility and perform the associated cross-specification notifications. */
@@ -1876,14 +1876,14 @@ export class DocumentImpl extends NodeImpl {
       redirectCount = request.redirectCount;
     }
     // PROVISIONAL(Navigation Timing): retain live inputs without exposing a
-    // PerformanceNavigationTiming object before its Timeline foundation exists.
+    // PerformanceNavigationTiming object before Resource Timing and entry queueing exist.
     // SPEC_CLASH(html-navigation-response-timing): Use controller timing and the params' navigation type once;
     // HTML's second creation call reads removed response timing and an out-of-scope redirectCount (HTML PR #12890).
     // TODO(Navigation Timing): Create/buffer the entry and apply Resource Timing's relative-time and exposure rules.
     // HTML also omits the consumer's cacheMode and Critical-CH restart arguments; cacheUsage is retained raw below,
     // while a Critical-CH restart producer and the response's public status/body filtering remain unfinished.
     // TODO(Navigation Timing): Entry creation must capture this.notRestoredReasons as a realm-owned
-    // NotRestoredReasonsImpl; its public getter retains that value. PerformanceEntry/ResourceTiming and buffering are missing.
+    // NotRestoredReasonsImpl; its public getter retains that value. Resource Timing construction and Timeline delivery are missing.
     this.navigationTimingEntry = {
       type: navigationParams.navigationTimingType,
       redirectCount,

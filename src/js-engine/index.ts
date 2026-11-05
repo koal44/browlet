@@ -12,7 +12,7 @@ export * from './abstract-operations';
 export * from './built-in-primitives';
 export * from './buffers';
 export { codeUnitsToString, isomorphicDecode, isomorphicEncode } from './byte-string';
-export { computeHash, randomUUID } from './crypto';
+export { computeHash, randomUUID, randomInteger } from './crypto';
 export type {
   ExoticObjectHandlers, GlobalAccessHandlers, GlobalAccessSelector, GlobalAllocation, GlobalIndexedProperties,
   GlobalObject, GlobalPrototypeKind, GlobalProxy, GlobalThis,

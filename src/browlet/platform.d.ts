@@ -79,6 +79,8 @@ export type DOMHighResTimeStamp = number;
 
 export type EpochTimeStamp = number;
 
+export type PerformanceEntryList = Iterable<PerformanceEntry>;
+
 export type EventHandler = EventHandlerNonNull | null;
 
 export type OnErrorEventHandler = OnErrorEventHandlerNonNull | null;
@@ -487,6 +489,16 @@ export interface ReportingObserverOptions {
   types?: Iterable<string>;
 }
 
+export interface PerformanceObserverInit {
+  buffered?: boolean;
+  entryTypes?: Iterable<string>;
+  type?: string;
+}
+
+export interface PerformanceObserverCallbackOptions {
+  droppedEntriesCount?: number;
+}
+
 export interface ErrorEventInit {
   bubbles?: boolean;
   cancelable?: boolean;
@@ -810,6 +822,8 @@ export type NavigationPrecommitHandler = (controller: NavigationPrecommitControl
 export type FunctionStringCallback = (data: string) => void;
 
 export type ReportingObserverCallback = (reports: Array<Report>, observer: ReportingObserver) => void;
+
+export type PerformanceObserverCallback = (entries: PerformanceObserverEntryList, observer: PerformanceObserver, options?: PerformanceObserverCallbackOptionsResult) => void;
 
 export type EventHandlerNonNull = (event: Event) => any;
 
@@ -2839,11 +2853,52 @@ export interface Performance extends EventTarget {
   now(): number;
   readonly timeOrigin: number;
   toJSON(): object;
+  getEntries(): Array<PerformanceEntry>;
+  getEntriesByType(type: string): Array<PerformanceEntry>;
+  getEntriesByName(name: string, type?: string): Array<PerformanceEntry>;
 }
 
 export interface PerformanceConstructor extends Ctor<EventTargetConstructor> {
   readonly prototype: Performance;
   [Symbol.hasInstance](value: unknown): value is Performance;
+}
+
+export interface PerformanceEntry {
+  readonly name: string;
+  readonly entryType: string;
+  readonly startTime: number;
+  readonly duration: number;
+  toJSON(): object;
+  readonly navigationId: number;
+}
+
+export interface PerformanceEntryConstructor {
+  readonly prototype: PerformanceEntry;
+  [Symbol.hasInstance](value: unknown): value is PerformanceEntry;
+}
+
+export interface PerformanceObserver {
+  observe(options?: PerformanceObserverInit): void;
+  disconnect(): void;
+  takeRecords(): Array<PerformanceEntry>;
+}
+
+export interface PerformanceObserverConstructor {
+  readonly prototype: PerformanceObserver;
+  [Symbol.hasInstance](value: unknown): value is PerformanceObserver;
+  new (callback: PerformanceObserverCallback): PerformanceObserver;
+  readonly supportedEntryTypes: ReadonlyArray<string>;
+}
+
+export interface PerformanceObserverEntryList {
+  getEntries(): Array<PerformanceEntry>;
+  getEntriesByType(type: string): Array<PerformanceEntry>;
+  getEntriesByName(name: string, type?: string): Array<PerformanceEntry>;
+}
+
+export interface PerformanceObserverEntryListConstructor {
+  readonly prototype: PerformanceObserverEntryList;
+  [Symbol.hasInstance](value: unknown): value is PerformanceObserverEntryList;
 }
 
 export interface Navigator {
@@ -3272,6 +3327,9 @@ export interface Window extends EventTarget {
   SecurityPolicyViolationEvent: SecurityPolicyViolationEventConstructor;
   ReportingObserver: ReportingObserverConstructor;
   Performance: PerformanceConstructor;
+  PerformanceEntry: PerformanceEntryConstructor;
+  PerformanceObserver: PerformanceObserverConstructor;
+  PerformanceObserverEntryList: PerformanceObserverEntryListConstructor;
   Navigator: NavigatorConstructor;
   ErrorEvent: ErrorEventConstructor;
   MessageEvent: MessageEventConstructor;
@@ -5111,6 +5169,10 @@ export namespace WebAssembly {
     [Symbol.hasInstance](value: unknown): value is WebAssembly.Exception;
     new (exceptionTag: WebAssembly.Tag, payload: Iterable<any>, options?: ExceptionOptions): WebAssembly.Exception;
   }
+}
+
+export interface PerformanceObserverCallbackOptionsResult {
+  droppedEntriesCount?: number;
 }
 
 export interface NavigationResultResult {

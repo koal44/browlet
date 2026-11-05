@@ -46,7 +46,7 @@ import { htmlIDLDefinitions } from '../../dom/nodes/html/index';
 import { mathMLIDLDefinitions } from '../../dom/nodes/mathml/index';
 import { svgIDLDefinitions } from '../../dom/nodes/svg/index';
 import { domIDLDefinitions } from '../../dom/index';
-import { performanceIDL } from '../../performance/index';
+import { performanceIDLDefinitions } from '../../performance/index';
 import { navigatorIDLDefinitions } from '../../navigator/index';
 import {
   messageEventIDL, messageEventInitIDL, messageEventSourceIDL, messagePortIDL, eventSourceIDL, eventSourceInitIDL,
@@ -108,7 +108,7 @@ export const browletDefinitions = [
   reportingObserverIDL, reportingObserverCallbackIDL, reportingObserverOptionsIDL, reportListIDL,
   domHighResTimeStampIDL,
   epochTimeStampIDL,
-  performanceIDL,
+  ...performanceIDLDefinitions,
   ...navigatorIDLDefinitions,
   navigatorPointerEventsIDL,
   eventHandlerNonNullIDL,

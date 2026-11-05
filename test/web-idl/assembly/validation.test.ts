@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import { InternalError } from '../../../src/infra/internal-error';
 import {
-  arg, atArg, cbDict, ctor, defineCallbackFunction, defineCallbackInterface, defineDictionary, defineEnumeration,
+  arg, atArg, cbDict, constant, ctor, defineCallbackFunction, defineCallbackInterface, defineDictionary, defineEnumeration,
   defineIncludes, defineInterface, defineInterfaceMixin, defineNamespace, definePartialDictionary,
   definePartialInterface, definePartialInterfaceMixin, definePartialNamespace, defineTypedef,
-  idlType, impl, invokeWith, nullable, observableArray, op, reference, roAttr, sequence,
+  idlType, impl, integer, invokeWith, nullable, observableArray, op, reference, roAttr, sequence, staticOp,
   type Definition, type InjectedArgument,
 } from '../../../src/web-idl/core/index';
 import { DefinitionAssembly, validateDefinitions } from '../../../src/web-idl/assembly/index';
@@ -25,6 +25,86 @@ describe('Web IDL declaration validation', () => {
     const definitions = [definePartialInterface({ name: 'Missing', members: [] })];
     expect(() => new DefinitionAssembly(definitions)).not.toThrow();
     expect(() => validateDefinitions(definitions)).toThrowError(InternalError);
+  });
+
+  it.each([
+    ['identical', idlType.unsignedLongLong],
+    ['conflicting', idlType.DOMString],
+  ] as const)('rejects %s attributes repeated across a primary and partial interface', (_description, type) => {
+    const definitions = [
+      defineInterface({ name: 'Example', members: [roAttr('navigationId', idlType.unsignedLongLong)] }),
+      definePartialInterface({ name: 'Example', members: [roAttr('navigationId', type)] }),
+    ];
+    for (const declarations of [definitions, definitions.toReversed()]) {
+      expect(() => new DefinitionAssembly(declarations)).not.toThrow();
+      expect(() => validateDefinitions(declarations)).toThrowError(/Duplicate Web IDL member Example.navigationId/);
+    }
+  });
+
+  it('rejects attributes repeated within a primary or between partials', () => {
+    const member = roAttr('value', idlType.long);
+    expect(() => validateDefinitions([
+      defineInterface({ name: 'Example', members: [member, member] }),
+    ])).toThrowError(/Duplicate Web IDL member Example.value/);
+    expect(() => validateDefinitions([
+      defineInterface({ name: 'Example', members: [] }),
+      definePartialInterface({ name: 'Example', members: [member] }),
+      definePartialInterface({ name: 'Example', members: [member] }),
+    ])).toThrowError(/Duplicate Web IDL member Example.value/);
+  });
+
+  it.each([
+    roAttr('value', idlType.long, { static: true }),
+    constant('value', idlType.long, integer(1)),
+    op('value', idlType.undefined),
+    staticOp('value', idlType.undefined),
+  ])('rejects an attribute colliding with another $kind regardless of member order', (member) => {
+    const members = [roAttr('value', idlType.long), member];
+    for (const ordered of [members, members.toReversed()]) {
+      expect(() => validateDefinitions([
+        defineInterface({ name: 'Example', members: ordered }),
+      ])).toThrowError(/Duplicate Web IDL member Example.value/);
+    }
+  });
+
+  it('rejects attribute collisions contributed through a partial mixin', () => {
+    expect(() => validateDefinitions([
+      defineInterface({ name: 'Example', members: [roAttr('value', idlType.long)] }),
+      defineInterfaceMixin({ name: 'Extra', members: [] }),
+      definePartialInterfaceMixin({ name: 'Extra', members: [roAttr('value', idlType.long)] }),
+      defineIncludes({ interface: 'Example', mixin: 'Extra' }),
+    ])).toThrowError(/Duplicate Web IDL member Example.value/);
+  });
+
+  it('rejects operation overloads split between interface fragments', () => {
+    expect(() => validateDefinitions([
+      defineInterface({ name: 'Example', members: [op('run', idlType.undefined)] }),
+      definePartialInterface({ name: 'Example', members: [staticOp('run', idlType.undefined)] }),
+      definePartialInterface({ name: 'Example', members: [op('run', idlType.undefined, [arg('value', idlType.long)])] }),
+    ])).toThrowError(/Web IDL operation Example.run is overloaded across declarations/);
+  });
+
+  it('preserves overloads within a fragment and separate static operations with the same name', () => {
+    expect(() => validateDefinitions([
+      defineInterface({
+        name: 'Example', members: [
+          ctor(), ctor([arg('value', idlType.long)]),
+          op('run', idlType.undefined), op('run', idlType.undefined, [arg('value', idlType.long)]),
+        ],
+      }),
+      definePartialInterface({
+        name: 'Example', members: [
+          staticOp('run', idlType.undefined), staticOp('run', idlType.undefined, [arg('value', idlType.long)]),
+        ],
+      }),
+    ])).not.toThrow();
+  });
+
+  it('keeps inheritance separate from composition when a derived interface redeclares an attribute', () => {
+    expect(() => validateDefinitions([
+      defineInterface({ name: 'Base', members: [roAttr('value', idlType.boolean)] }),
+      defineInterface({ name: 'Derived', inherits: 'Base', members: [roAttr('value', idlType.DOMString)] }),
+    ])).not.toThrow();
   });
 
   it.each([
