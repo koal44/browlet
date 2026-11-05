@@ -74,8 +74,9 @@ outside consumers use its index, while its modules import each other directly.
   component supplies Window-owned identity, entry initialization and read access,
   and NavigationActivation. The top-level commit retains its previous active
   entry and initializes activation after the destination entry list, before
-  parser scripts. Full history/reload/reactivation and pageswap producers remain
-  unfinished; its [audit](./api/ROADMAP.md) records the remaining dependencies.
+  parser scripts. Document history updates, retained-Document reactivation, and
+  outgoing pageswap now have bounded producers, with form, visibility, unloading,
+  and traversal completion dependencies recorded below and in the [API audit](./api/ROADMAP.md).
 - `Traversable` owns its session-storage shed across Document replacements.
   Top-level creation clones the opener's top-level shed through the
   [Storage substrate](../../../storage/ROADMAP.md#storage-sheds), including
@@ -337,7 +338,8 @@ navigate-event entry point. Its [entry work](./api/ROADMAP.md) connects new-Docu
 initialization to the existing top-level commit, with shared session-history
 keys/IDs/state and the contiguous same-origin selector. State updates now fire
 current-entry-change events, and reactivation reconciliation queues disposal;
-the §7.4.6 reactivation caller must still supply inputs before `pageshow`.
+the §7.4.6.2 Document reactivation caller now supplies inputs before `pageshow`,
+with form reset, visibility transitions, and the bfcache coordinator still explicit below.
 `Navigation.navigate()`/`reload()` now prepare requests with serialized state and
 real trackers. Its traversal methods also select/deduplicate destinations and
 prepare queued history work and failure delivery. §7.2.6 supplies same-document
@@ -1741,7 +1743,7 @@ separate executable algorithm.
 | Synchronize multiple navigables, event loops, and clusters | The serial queue can wait for an algorithm's completion; the intercepted-traversal resume boundary still throws. Document-population waits, synchronization, and queue jumping remain §7.4.6 work. |
 | 204/205 and attachment responses preserve the active Document | Navigation response selection must handle these outcomes before creating or committing a Document. The `navigate()` stub now names them explicitly. Download navigate-event dispatch alone does not implement download response handling. |
 | Location/Refresh/X-Frame-Options/CSP/COOP headers | Fetch redirect processing and policy components are available, but HTML navigation must coordinate redirects, snapshots, response selection, and X-Frame-Options enforcement. Document creation already applies CSP/COOP and context-group changes; Refresh processing has its own explicit throwing boundary. |
-| Synchronous fragment and single-page navigation | §7.4.4 now connects `Document.updateURLAndHistory()` for History/interception. Fragment navigation still needs the §7.4.6.2 Document update; both paths queue finalization and retain unfinished history application. |
+| Synchronous fragment and single-page navigation | §7.4.4 connects `Document.updateURLAndHistory()` for History/interception. Fragment navigation uses §7.4.6.2's existing-Document update, reaching the explicit persisted-state restoration boundary. Scrolling and queued joint-history application remain unfinished. |
 | javascript: URLs, srcdoc, and beforeunload | URL/origin and inherited-state foundations exist, but special navigation paths remain unfinished. `checkIfUnloadingIsCanceled()` now coordinates queued beforeunload/navigate checks; prompt policy/UI, history application, and teardown still need their owners. |
 
 ## HTML §7.4.1.1: Session history entries
@@ -1756,7 +1758,7 @@ persistence operations as a class; capture, traversal, and History commits remai
 | Step | `number | 'pending'`, initialized to `pending`. Committing algorithms assign nonnegative steps; traversal-queue ownership is still pending. |
 | URL | Required `URLRecord`, independent of the shared Document state. Construction takes the URL explicitly for entries created before loading and same-document entries with different URLs. |
 | Document state / entry's Document | Retains the `DocumentState` object. The `document` getter reads `documentState.document`, including null after destruction; there is no duplicate cached Document field. |
-| Classic History API state | `classicHistoryAPIState` starts with `env.serializeForStorage(null)`. §7.4.4 commits it and calls `Document.restoreHistoryObjectState()`; the traversal producer still needs §7.4.6.2. |
+| Classic History API state | `classicHistoryAPIState` starts with `env.serializeForStorage(null)`. §7.4.4 and both §7.4.6.2 Document-update branches call `Document.restoreHistoryObjectState()`; persisted-state restoration and the full traversal caller remain unfinished. |
 | Navigation API state | Existing separate `navigationAPIState`, initialized with `env.serializeForStorage(undefined)`. Navigation entry/state consumers continue using this field rather than classic History state. |
 | Navigation key and ID | Each new entry gets two fresh UUIDs. Replacement/key reuse remains the committing algorithm's responsibility. |
 | Scroll-restoration mode | Existing `auto` default and `manual` alternative, exposed by History. The mode controls normal restoration; it does not itself measure or change scroll positions. Navigation's explicit scroll operation has its separate rules. |
@@ -1854,13 +1856,14 @@ Contiguous same-document entries retain the same `DocumentState` object rather
 than copying its fields. The shared-state entry tests cover clearing/repopulation,
 and same-document fixtures now preserve that identity. History/interception's
 §7.4.4 producer shares that state and maintains latestEntry. Fragment navigation
-uses the separate, unfinished §7.4.6.2 Document update.
+uses the separate §7.4.6.2 existing-Document update, with persisted-state restoration
+and scrolling still unfinished.
 
 `Document.latestEntry` now starts null. The existing provisional local commit
 path sets it to the committed entry, and an inactive Document retains its own
 pointer after replacement. Creating an entry alone does not change the pointer.
-Synchronous URL/history updates now maintain it; §7.4.6.2 history-step application
-must do the same. The active entry of a Navigable is not a substitute for
+Synchronous URL/history updates and both §7.4.6.2 Document-update branches maintain it.
+The active entry of a Navigable is not a substitute for
 this Document-owned state. The new regression first failed because the field
 was absent, then passed for two successive real local commits.
 
@@ -2638,7 +2641,7 @@ same-document-finalization boundaries. It does not complete hash navigation end 
 | Stop on cancellation/interception | Return without preparing an entry. A surviving intercepted event records the navigation ID directly, preserving its signal and tracker for later abortion. `window.stop()` and browser-UI cancellation remain unfinished callers. |
 | Construct the entry | After callbacks, select the live active entry's DocumentState and scroll-restoration mode. Keep Navigation state captured before callbacks, create fresh classic History state (serialized null), and retain the predecessor's key only for replacement. The new entry keeps its fresh ID and pending step. |
 | Synchronous script-visible updates | Push clears History state and computes index + 1 / length = index + 1; replace keeps the current index and length. Publish the Document URL and active entry, then call Document history application with length before index. Neither currentSessionHistoryEntry nor the joint step changes here. |
-| Apply Document history state | New `Document.updateForHistoryStepApplication()` has the complete §7.4.6.2 inputs and throws explicitly. Latest-entry maintenance, classic-state restoration, Navigation notifications, popstate/hashchange, persisted state, reactivation, and initial-load/BiDi behavior belong there. |
+| Apply Document history state | `Document.updateForHistoryStepApplication()` has the complete §7.4.6.2 inputs. Its [existing-Document branch](#html-7462-existing-document-history-updates) now maintains latest entry, restores classic state, and produces Navigation/popstate/hashchange notifications. The [new-Document branch](#html-7462-new-document-history-initialization) initializes Navigation and permits parser scripts after its remaining persistence/scroll dependencies. Reactivation and actual BiDi delivery remain unfinished. |
 | Scroll | Call `scrollToFragment()` on the live active Document after history callbacks. Its existing §7.4.6.4 dependency still throws; target selection, ancestor revealing, viewport geometry, focus, and retrying a not-yet-parsed fragment remain unfinished. |
 | Queue reconciliation | Append tagged synchronous-navigation steps to the real traversal queue. `Traversable.finalizeSameDocumentNavigation()` now inserts/replaces entries and discards work from a replaced/destroyed DocumentState; see the following audit. Joint same-document history application still throws explicitly instead of resetting Navigation through the provisional new-Document path. |
 | Automation | Call the new `UserAgent.webDriverBiDiFragmentNavigated()` only after finalization returns. The status carries the same navigation ID and URL with `complete`; subscribed sessions, waiters, and delivery remain a source-marked no-op dependency. |
@@ -4041,8 +4044,8 @@ The rest of the read algorithms remains explicit:
 | Current-entry writes and successful cross-document Navigation cleanup | Implemented by the current-entry slice below. Selection remains side-effect-free; the coordinator advances current entries, queues cleanup on each Window's loop, and marks traversal ownership. |
 | Population continuations | `populateHistoryEntryDocument()` exists. The history coordinator must supply snapshots/reload inputs, dispatch child traverse events, wait for population, handle non-displayable results, compare origins, and reset classic state/target names where required. |
 | Synchronous queue jumping | `runSynchronousNavigationSteps()` selects eligible pending work, suppresses recursive selection, and propagates selected completion. Coordinator wake-ups, maintenance of the waiting set, and continuation processing remain unfinished. |
-| Deactivation and activation | `Navigable.activateHistoryEntry()` switches the active entry/Window and initializes visibility after saving persisted state. `Document.unloadAndDescendants()` and `SessionHistoryEntry.savePersistedState()` still throw. The coordinator must produce PageSwapEvent, coordinate optional view transitions, and call activation after any required unloading. |
-| Document updates and final completion | `Document.updateForHistoryStepApplication()` throws. Changing and nonchanging Documents must run on their own loops; joint-step completion must wait for the specified jobs. Revealing, scrolling, and persisted-state restoration remain later §7.4.6 subsections. |
+| Deactivation and activation | `Navigable.activateHistoryEntry()` switches the active entry/Window and initializes visibility after saving persisted state. `Window.firePageSwapEvent()` supplies the outgoing event and filtered activation. `Document.unloadAndDescendants()` and `SessionHistoryEntry.savePersistedState()` still throw. Deactivation must coordinate CSS capture and event delivery before unloading, then the coordinator must activate the destination. |
+| Document updates and final completion | `Document.updateForHistoryStepApplication()` handles existing/new Documents and retained-Document reactivation. Persistence and scroll scheduling still throw before new-Document script permission; form reset and visibility transitions block full reactivation. The coordinator must run changing and nonchanging Document jobs on their own loops and wait for completion. Revealing, scrolling, and persisted-state restoration remain later §7.4.6 subsections. |
 
 Two details need close attention when connecting those continuations: HTML's
 length/index-only selector stops even below a same-document parent entry change,
@@ -4528,7 +4531,7 @@ Initial visibility does not dispatch `visibilitychange`.
 The operation leaves the current entry and joint history step alone. Classic
 History state, Navigation notifications, and later Document updates belong to
 the surrounding history application. `SessionHistoryEntry.savePersistedState()`
-remains an explicit throwing §7.4.6.3 dependency, before any activation mutation.
+remains an explicit throwing §7.4.6.5 dependency, before any activation mutation.
 VisibilityStateEntry reporting retains its existing Document-owned dependency.
 The provisional loader is not routed through this operation while that capture
 is missing. Full coordination must also retain the displayed Document through
@@ -4546,6 +4549,323 @@ existing native-global expected failures. The seven new activation cases pass
 in all six configurations. Typechecking, type contracts, changed-file ESLint,
 import hierarchy, and whitespace checks pass. No failure classifications changed
 or native artifacts were rebuilt.
+
+## HTML §7.4.6.1: Outgoing pageswap production
+
+`Window.firePageSwapEvent()` implements
+[fire the pageswap event](https://html.spec.whatwg.org/multipage/browsing-the-web.html#fire-the-pageswap-event).
+The Window supplies its associated displayed Document and realm instead of
+receiving that Document separately. The operation requires a task on that Document's Agent
+loop and a populated target Document. It creates a separate NavigationActivation
+without modifying `navigation.activation` or either Navigation entry list.
+Reload reuses the outgoing current entry; traversal selects the existing entry
+by session-history identity; push/replace create a new outgoing-realm view of
+the actual destination entry. A missing initial about:blank predecessor is
+allowed; a missing reload/traversal destination remains an internal error.
+
+Only same-origin targets receive activation. A new Document reached through a
+cross-origin redirect is filtered even when the final URL returns to the source
+origin. A previously activated same-origin Document retains HTML's restoration
+exception. The supplied ViewTransition reference is independent of that filtering.
+The trusted event targets Window, with its ordinary false EventInit flags.
+
+The browser-only `node-compat/experimental/pageswap-production.mjs` probe ran on
+4 November with Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2. Eric approved
+following HTML for these continuing conflicts:
+
+| Marker | Evidence and chosen behavior |
+| --- | --- |
+| `pageswap-trust-target` | Chromium follows HTML's trusted Window event. WebKit supplies an untrusted event targeting Document; its `dispatchPageswapEvent()` calls the ordinary constructor and explicitly supplies Document as target. Browlet follows HTML. |
+| `pageswap-traversal-entry` | Chromium reuses the existing Navigation entry and its stored state. WebKit returns a detached substitute with index -1 and different key/ID; its source has a FIXME to reuse the existing entry. Browlet selects by session-history identity. |
+| `pageswap-redirect-origin` | Chromium suppresses activation across the probe's different-port redirect and return. WebKit exposes activation, checking request same-site status rather than cross-origin redirect history. Browlet follows HTML/Chromium's stricter origin rule. |
+| `pageswap-destination-entry` | Push/replace use temporary entries in Chromium/WebKit, with key/ID different from the eventual committed entry. Blink explicitly constructs its substitute without state; WebKit describes its detached history item as provisional. Browlet retains the actual destination record's key, ID, and state, as HTML specifies. |
+
+Source evidence: [Blink PageSwapEvent](https://github.com/chromium/chromium/blob/1136757f47c7e2b6cc593f871a5d79fc0e9834b4/third_party/blink/renderer/core/view_transition/page_swap_event.cc),
+[WebKit Navigation](https://github.com/WebKit/WebKit/blob/713192fabebfdd2955aa596c262c33bfbf3d50be/Source/WebCore/page/Navigation.cpp),
+[WebKit Document](https://github.com/WebKit/WebKit/blob/713192fabebfdd2955aa596c262c33bfbf3d50be/Source/WebCore/dom/Document.cpp),
+and [WebKit FrameLoader](https://github.com/WebKit/WebKit/blob/713192fabebfdd2955aa596c262c33bfbf3d50be/Source/WebCore/loader/FrameLoader.cpp).
+Firefox exposes the interface with `dom.viewTransitions.cross-document.enabled`
+but delivered no pageswap in these runs. The probe retains these browser
+disagreements and missing delivery as ordinary failing expectations; it is not a
+Browlet acceptance suite. The new production tests exercise actual bindings,
+outgoing realms, Window dispatch, `onpageswap`, and the Agent task precondition.
+
+The Document-deactivation operation below now supplies the producer's caller.
+The ViewTransition identity exists; CSS eligibility, capture, transfer, promises,
+and invocation of the continuation after capture do not. Recursive unloading,
+coordinator completion, and later incoming Document updates remain their
+explicit boundaries. The provisional loader is unchanged.
+
+Validation: all 68 focused tests in five suites pass on Node 24.19.0, 26.8.1,
+and custom 27, with and without the addon. This includes 15 new producer tests.
+The broader navigation/event run on Node 26.8.1 with the addon passes all 1,388
+tests in 73 suites. Typechecking, type contracts, changed-file ESLint, import
+hierarchy, and whitespace checks pass. No failures were reclassified and no
+native artifacts were rebuilt.
+
+## HTML §7.4.6.1: Deactivate a Document for cross-document navigation
+
+`Document.deactivateForCrossDocumentNavigation()` implements the
+[deactivation handoff](https://html.spec.whatwg.org/multipage/browsing-the-web.html#deactivate-a-document-for-a-cross-document-navigation).
+The displayed Document owns the operation and retains its outgoing Window and
+the populated destination. User involvement becomes the browser-UI boolean for
+CSS eligibility; navigation type remains a separate input.
+
+When CSS declines a transition, deactivation releases ongoing traversal ownership
+and passes the pageswap producer to recursive unloading. That owner must dispatch
+pageswap on the outgoing Window's task before unloading the Document and invoking
+the supplied completion. Deactivation does not itself report completion early.
+
+When a transition is possible, setup and pageswap run in a navigation-and-traversal
+task on the active Window. A null setup result immediately appends unloading to
+the traversal queue. A transition retains that same continuation until CSS capture
+completes or is skipped. Both paths then release ownership and unload without a
+second pageswap. These ownership changes run in parallel: they do not borrow the
+displayed Document's Agent as a caller, and Navigation abortion remains queued.
+
+`SPEC_CLASH(cross-document-transition-setup-inputs)` records that HTML passes four
+inputs to CSS setup, including navigation type, while
+[CSS setup](https://drafts.csswg.org/css-view-transitions-2/#setup-outbound-transition)
+takes only the two Documents and the continuation. Eric approved following CSS;
+its preceding [eligibility check](https://drafts.csswg.org/css-view-transitions-2/#check-eligibility)
+already receives navigation type. Both live specifications were checked on
+4 November 2026; local references were HTML `a7f6aed` and CSSWG `909869d6b`.
+
+Dependencies remain callable and explicit:
+
+- `Document.canTriggerCrossDocumentViewTransition()` throws until CSS's UA opt-out,
+  outbound opt-in, and navigation gates are audited. Opt-in depends on rule
+  resolution and reveal/visibility updates; missing state is not treated as false.
+- `Document.setupCrossDocumentViewTransition()` throws until CSS supplies the
+  existing-transition cleanup, outgoing allocation/types, capture, transfer,
+  rendering suppression, and post-capture continuation lifecycle.
+- `Document.unloadAndDescendants()` still throws. Its descendant ordering,
+  pageswap task, pagehide/unload/visibility events, timing, bfcache decisions, and
+  completion remain §7.5.9 work.
+- The full history coordinator still needs the deactivation caller and all its
+  completion/failure/discard paths. Errors currently propagate from direct work,
+  queued setup, or traversal steps; no waiting coordinator is connected yet.
+  Destruction during capture and late capture callbacks need the CSS/unloading
+  lifecycle contracts before they can release that future wait safely.
+
+Tests control only the unfinished CSS and unloading owners, using actual Window
+bindings, Agent tasks, and the traversal queue. They cover all four navigation
+types, browser-UI input, release/event/unload order, delayed capture, declined
+setup, queue ordering, outgoing-realm event identity, and explicit dependency
+failures. These are orchestration tests, not an implementation of CSS capture or
+recursive unloading. No provisional-loader path was redirected to this operation.
+
+Validation: all 82 focused tests in five suites pass on Node 24.19.0, 26.8.1,
+and custom 27 with and without the addon, including 15 new deactivation cases.
+Typechecking, type contracts, changed-file ESLint, import hierarchy, and whitespace
+checks pass. No failure classifications changed or native artifacts were rebuilt.
+
+## HTML §7.4.6.2: Existing-Document history updates
+
+Audited [updating the document](https://html.spec.whatwg.org/multipage/browsing-the-web.html#update-document-for-history-step-application)
+against HTML `a7f6aed` and the live specification on 4 November 2026.
+`Document.updateForHistoryStepApplication()` now implements the existing-Document
+branch. It reconciles History length/index, maintains latestEntry, restores classic
+state in the Document's realm, publishes the URL, notifies Navigation, dispatches
+trusted popstate, and queues trusted hashchange when appropriate. It calls the
+existing activation updater after persisted-state restoration. It does not advance
+the Navigable's current entry or the traversable's joint history step.
+
+Unchanged entries retain their cached History state and do not deserialize or
+repeat events. With reactivation permitted, they instead reach the new explicit
+`Document.reactivate()` boundary. This preserves the distinction between a
+same-Document entry change and restoring a retained Document.
+
+The browser-only `node-compat/experimental/document-history-update.mjs` probe ran
+on 4 November with Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2. It covers
+same/different-path traversal and replaceState from currententrychange/popstate.
+Eric approved these choices, also marked beside the implementation:
+
+| Marker | Evidence and chosen behavior |
+| --- | --- |
+| `history-document-url` (`SPEC_GAP`) | HTML never assigns the selected entry's URL to the existing Document. All three browsers expose the restored URL before currententrychange/popstate. Browlet updates it through `setURL()`, including base-URL consumers. Ladybird independently documents the same missing assignment. |
+| `history-hashchange-url` | HTML compares fragments alone. All three browsers suppress hashchange when the non-fragment URL also changes. Browlet requires equal URLs excluding fragments and unequal fragments. |
+| `history-popstate-reentrant-state` | A currententrychange listener can replace the entry before popstate. Browlet follows HTML/Firefox by reading the current History state after that listener. Chromium/WebKit preserve the traversal's earlier state for the event. All retain the listener's later URL/state on History. |
+| `history-hashchange-queue-order` | HTML queues hashchange after popstate. Blink/Gecko explicitly queue first; WebKit queues afterward but delivers it ahead of the probe's popstate-created timer. Browlet queues first, retaining asynchronous delivery and the original URLs across reentrant History changes. |
+
+[HTML issue #12190](https://github.com/whatwg/html/issues/12190) records the event/timer
+ordering disagreement, the earlier popstate timing change, and interaction with
+scroll restoration. Early queueing does not establish a universal priority between
+task sources; this slice does not change the event loop's scheduling policy.
+Source evidence: [Blink DocumentLoader](https://github.com/chromium/chromium/blob/1136757f47c7e2b6cc593f871a5d79fc0e9834b4/third_party/blink/renderer/core/loader/document_loader.cc),
+[Gecko nsDocShell](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622782fe62529bb3a4809780da01d6c/docshell/base/nsDocShell.cpp),
+[WebKit FrameLoader](https://github.com/WebKit/WebKit/blob/713192fabebfdd2955aa596c262c33bfbf3d50be/Source/WebCore/loader/FrameLoader.cpp),
+and [Ladybird Document](https://github.com/LadybirdBrowser/ladybird/blob/874f491af9b0675281d3caddb93982523f374f3e/Libraries/LibWeb/DOM/Document.cpp).
+
+Remaining owners and stopping points:
+
+- `SessionHistoryEntry.restorePersistedState()` still throws (§7.4.6.5). At this
+  boundary popstate has already fired and hashchange is queued. No successful
+  restoration or completed navigation is implied by those events.
+- The following new-Document slice installs latestEntry, restores classic state,
+  initializes Navigation/activation, and orders the script permit after the
+  remaining persistence, BiDi, and fragment-scroll owners. Initial about:blank
+  fragment callers still have a separate missing initialization described in
+  [HTML issue #13041](https://github.com/whatwg/html/issues/13041).
+- `Document.reactivate()` is implemented in the retained-Document slice below,
+  with autocomplete-off form reset and visibility transitions still throwing.
+  The bfcache lifecycle must supply retained Documents and history inputs.
+- Full traversal coordination and persisted/fragment scrolling remain unfinished.
+  The provisional cross-document loader keeps its existing separate initialization
+  route, now releasing the shared script gate. Browlet has no cached-rendering UI;
+  the actual produced popstate therefore has hasUAVisualTransition false.
+
+Validation: all 118 focused cases in six suites pass on Node 24.19.0, 26.8.1, and
+custom 27 with and without the addon, including 21 new Document cases and one
+Location.hash integration case. The integration substitutes only persisted-state
+restoration, scrolling, and finalization, exercising real URL/binding/event delivery.
+Typechecking, type contracts, changed-file ESLint, import hierarchy, and whitespace
+checks pass. No failure classifications changed or native artifacts were rebuilt.
+
+## HTML §7.4.6.2: New-Document history initialization
+
+Audited the new-Document branch of
+[updating the document](https://html.spec.whatwg.org/multipage/browsing-the-web.html#update-document-for-history-step-application)
+against HTML `a7f6aed` and the live specification on 4 November 2026.
+`Document.updateForHistoryStepApplication()` now installs latestEntry, restores
+classic History state in the Document's realm, calls persisted-state restoration,
+initializes Navigation entries and activation, calls the BiDi committed hook,
+requests fragment-scroll scheduling, and then permits parser scripts. Initial
+Navigation setup emits no popstate, hashchange, or currententrychange. It does not
+advance the traversable's joint step or complete the history coordinator.
+
+The Document retains a one-way readiness flag and allocates a shared internal
+promise only if parsing must wait. Its existing provisional local commit path
+releases the same gate after Navigation initialization. This preserves that route
+without claiming its synchronous commit implements the full history algorithm.
+The streamed HTML consumer rechecks `parser.stopped` after the wait: the regression
+first demonstrated that an aborted parser could otherwise run its saved script
+callback when permission arrived later. General HTML script preparation remains
+a §7.5/HTMLScriptElement dependency.
+
+The source records these input corrections:
+
+| Marker | Evidence and chosen behavior |
+| --- | --- |
+| `history-new-document-inputs` (`SPEC_GAP`) | HTML reads the old latest entry's URL even when that entry is null, and later uses an unbound `navigable`. The old URL is needed only in the existing-Document branch; the new Document supplies its node navigable for commit reporting. Missing Navigation entries or a missing node navigable remain internal precondition errors. |
+| `history-population-navigation-id` | The history-population caller passes null while this branch asserts a non-null loading ID. Eric approved preserving that retained null through the provisional committed hook, extending the earlier population/Fetch ownership correction. No ID is invented and no automation protocol attribution is claimed. |
+
+[WebDriver BiDi's committed hook](https://w3c.github.io/webdriver-bidi/#webdriver-bidi-navigation-committed)
+requires navigation information, committed waiters, and subscribed sessions.
+Its navigation-status definition also omits HTML's `committed` status and describes
+null IDs for early cancellation, not this history-population case. The new UserAgent
+hook retains HTML's supplied inputs as a marked no-op until the BiDi audit resolves
+that mapping. [Ladybird's Document implementation](https://github.com/LadybirdBrowser/ladybird/blob/874f491af9b0675281d3caddb93982523f374f3e/Libraries/LibWeb/DOM/Document.cpp)
+likewise retains a Document-owned readiness flag/deferred parser start and leaves
+the non-null ID assertion unresolved; it is secondary source evidence, not a new
+browser policy decision.
+
+Remaining owners and stopping points:
+
+- `SessionHistoryEntry.restorePersistedState()` (§7.4.6.5) still throws. It follows
+  latestEntry/classic state installation and precedes Navigation initialization;
+  the operation is not an atomic transaction that can be retried after that throw.
+- `Document.tryToScrollToFragment()` explicitly throws. Its later implementation
+  must delay in parallel, queue a navigation task, test parser state and user-agent
+  interest, call §7.4.6.4 scrolling, and retry while the indicated part is absent.
+  Both this dependency and persisted-state restoration prevent script permission
+  through the full new-Document branch today. Tests replace those owners explicitly.
+- Real BiDi delivery, full traversal coordination, bfcache restoration, and
+  XML/script-preparation callers remain unfinished. The retained-Document slice
+  below implements reactivation around explicit form and visibility dependencies.
+  The existing
+  [initial about:blank fragment issue #13041](https://github.com/whatwg/html/issues/13041)
+  still needs its separate latest-entry initialization correction; this slice does
+  not fabricate Navigation entries for that caller.
+
+Validation: five focused suites contain 97 cases, including 12 new initialization
+cases and two streamed-parser ordering/cancellation cases. All 97 pass with the
+addon on Node 24.19.0, 26.8.1, and custom 27; each stock run has 94 passes and the
+same three existing native-global expected failures. The broader loader/parser
+check passes all 68 cases on Node 26.8.1 with the addon. Typechecking, type contracts,
+changed-file ESLint, import hierarchy, and whitespace checks pass. No failure
+classifications changed or native artifacts were rebuilt.
+
+## HTML §7.4.6.2: Retained-Document reactivation
+
+Audited [reactivating a Document](https://html.spec.whatwg.org/multipage/browsing-the-web.html#reactivate-a-document)
+against HTML `a7f6aed` and the live specification on 4 November 2026.
+`Document.reactivate()` now calls the selective form-reset owner, reconciles
+Navigation entries and activation, and, for a complete Document not already
+showing, sets `pageShowing`, clears `hasBeenRevealed`, requests visibility updating,
+and fires trusted persisted `pageshow`. Navigation's existing queued disposal runs
+after that event. Readiness/showing checks prevent duplicate delivery, including
+reentrant calls. No `currententrychange` or `pagereveal` is synthesized here.
+
+The existing `GlobalTimers` owner already pauses and resumes deadlines on full
+activity changes, before reactivation runs. Its per-timer suspension timestamps
+also cover timers started while inactive. This operation must not add the cached
+duration again or create a second suspended-timer list on Document. The regression
+checks both timers across an inactive interval and observes their remaining delays
+and actual callback order. It does not implement bfcache admission or unloading.
+
+### Entry/activation ordering correction
+
+`SPEC_CLASH(history-reactivation-navigation-order)` records HTML's activation
+update before the later reactivation entry-list refresh. The regression first
+failed because the previous page, created while this Document was cached, was not
+in its retained list: `activation.from` was null despite becoming a listed entry
+immediately afterward. Eric approved refreshing entries, then activation, then
+`pageshow`. The retained entry and activation objects keep their identities.
+
+`Document.reactivate()` takes two extra trailing inputs, `navigationType` and
+`previousEntryForActivation`, so the history-update caller can defer that existing
+activation operation until the entries are ready. Eric reviewed and accepted
+this signature extension; its `SPEC_MISMATCH` is removed. The behavioral conflict
+marker remains.
+
+The browser-only `node-compat/experimental/document-reactivation.mjs` probe ran on
+4 November with Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2. Chromium's
+full browser verified actual bfcache restoration twice (`persisted === true` and
+the original Document marker): the previous page was listed and `activation.from`
+was current during `pageshow`; visibility was visible; removed forward entries
+were disposed afterward. Firefox and WebKit reloaded in this setup, so their runs
+provide no live retained-Document ordering evidence.
+
+[Blink's `SetEntriesForRestore()`](https://github.com/chromium/chromium/blob/1136757f47c7e2b6cc593f871a5d79fc0e9834b4/third_party/blink/renderer/core/navigation_api/navigation_api.cc)
+refreshes the list before activation and queues disposal.
+[WebKit's `CachedPage::restore()`](https://github.com/WebKit/WebKit/blob/713192fabebfdd2955aa596c262c33bfbf3d50be/Source/WebCore/history/CachedPage.cpp)
+instead fires `pageshow` before `restoreNavigationAPIHistoryItems()`.
+[Gecko's `Document::OnPageShow()`](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622782fe62529bb3a4809780da01d6c/dom/base/Document.cpp)
+updates showing/visibility state before delivery and clears the reveal flag for
+persisted restoration. Source evidence does not turn the cache misses into
+successful browser probes.
+
+### Remaining owners and stopping points
+
+- `Document.resetAutocompleteOffControls()` throws before subsequent work. HTML
+  requires each control's computed autofill field name, including inherited form
+  defaults, input type/mantle rules, and invalid tokens, then its individual reset
+  algorithm. The [form-control roadmap](../../dom/nodes/html/forms/ROADMAP.md)
+  tracks those missing owners. A raw attribute query or whole-form reset would
+  select the wrong controls; this slice does not substitute either.
+- `Document.updateVisibilityState()` implements only the specified equal-state
+  return. A changed state throws until §6.2 can update the state, queue a timed
+  `VisibilityStateEntry`, run Screen Orientation, CSS View Transitions, Device
+  Posture and Web NFC hooks, and fire bubbling `visibilitychange`. Initial-state
+  assignment is not a replacement for those effects. Navigation and showing/
+  reveal flags already change before this dependency is reached; a throw is not
+  a completed restoration or an automatically retryable transaction.
+- `pageShowing` and `hasBeenRevealed` now exist and are maintained here. Initial
+  loading/unloading must also maintain showing state; §7.4.6.3's reveal producer
+  must set the reveal flag before inbound-transition work and `pagereveal`.
+- Full history coordination, retention/eviction policy, unloading and activation
+  scheduling must supply the retained Document and correct history inputs. The
+  provisional loader does not thereby gain end-to-end bfcache/back-forward support.
+  Fragment-scroll scheduling remains the next bounded §7.4.6.2 operation.
+
+The tests use real Window bindings and Agent tasks, retaining handlers installed
+before navigation. They substitute only the explicit unfinished owners when
+checking the subsequent ordering and also assert those owners' current throws.
+Validation: all 92 cases in seven focused suites pass on Node 24.19.0, 26.8.1, and
+custom 27, each with and without the addon, including 12 retained-Document cases.
+Typechecking, type contracts, changed-file ESLint, import hierarchy, and whitespace
+checks pass. No failure classifications changed or native artifacts were rebuilt.
 
 ## Removal condition
 

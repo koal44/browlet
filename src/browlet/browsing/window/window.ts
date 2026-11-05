@@ -1,4 +1,4 @@
-import { type InternalPromise, InternalError, TypeError } from '../../../infra/index';
+import { assertNever, type InternalPromise, InternalError, TypeError } from '../../../infra/index';
 import {
   arg, atArg, attr, defineIncludes, defineInterface, definePartialInterface, emptyDictionary, emptySequence, idlType,
   impl, invokeWith, nullable, op, roAttr, reference, sequence, union, xattr, type VoidFunction,
@@ -15,7 +15,7 @@ import {
   type ImportMapParseResult, type BrowletGlobalObject, type SpecifierResolutionRecord,
   type SpeculationRulesParseResult, type TimerAction,
 } from '../../scripting/index';
-import { PageTransitionEventImpl } from '../navigation/events/index';
+import { PageSwapEventImpl, PageTransitionEventImpl } from '../navigation/events/index';
 import { pointerGlobalEventHandlers, type MouseEventImpl, type ScreenPosition } from '../../interaction/events/index';
 import type { TrustedTypePolicyFactoryImpl } from '../policy/trusted-types/index';
 import { selectionGlobalEventHandlers, type SelectionImpl } from '../../interaction/selection/index';
@@ -25,12 +25,14 @@ import type { PerformanceImpl } from '../../performance/index';
 import { NavigatorImpl } from '../../navigator/index';
 import { windowPostMessage, type WindowPostMessageOptions } from '../../communication/index';
 import { WindowSessionStorageMixin, WindowLocalStorageMixin, type StorageImpl } from '../../storage/index';
-import { NavigationImpl } from '../navigation/api/index';
+import type { SessionHistoryEntry } from '../navigation/state/index';
+import { NavigationActivationImpl, NavigationHistoryEntryImpl, NavigationImpl, type NavigationType } from '../navigation/api/index';
 import type {
   BrowletEnvironment, WindowEnvironment, WindowOrWorkerGlobalScopeMixin, TimerHandler,
 } from '../../environment/index';
 import type { StructuredSerializeOptions } from '../../scripting/structured-data/index';
 import type { BrowsingContext, Navigable } from '../navigation/index';
+import type { ViewTransitionImpl } from '../../rendering/index';
 
 import { LocationImpl } from './location';
 import { BarPropImpl } from './bar-prop';
@@ -611,13 +613,52 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
 
   /** Fire a trusted page transition notification; cancellation has no lifecycle effect. */
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#fire-a-page-transition-event
-  // TODO(HTML lifecycle): Connect initial loading, history reactivation, and unloading with their persisted values.
+  // Document reactivation supplies persisted pageshow; initial loading and unloading remain §7.5 dependencies.
   firePageTransitionEvent(eventName: string, persisted: boolean): void {
     this.fireEvent(eventName, PageTransitionEventImpl, (event) => {
       event.persisted = persisted;
       event.cancelable = true;
       event.bubbles = true;
     }, true);
+  }
+
+  /** Fire pageswap for this Window's displayed Document from a task on its owning event loop. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#fire-the-pageswap-event
+  // Document deactivation supplies this caller; automatic delivery still needs CSS eligibility and recursive unloading.
+  firePageSwapEvent(targetEntry: SessionHistoryEntry, navigationType: NavigationType, viewTransition: ViewTransitionImpl | null): void {
+    if (this.env.responsibleEventLoop.currentlyRunningTask === null) {
+      throw new InternalError('Page swap must run on the displayed Document\'s event loop');
+    }
+    const document = this.getAssociatedDocument();
+    const targetDocument = targetEntry.document;
+    if (targetDocument === null) throw new InternalError('Page swap requires a populated destination Document');
+    const navigation = this.navigation;
+    let activation: NavigationActivationImpl | null = null;
+    // SPEC_CLASH(pageswap-redirect-origin): Follow HTML/Chromium's cross-origin redirect filter; WebKit checks same-site.
+    if (areSameOrigin(document.origin, targetDocument.origin) &&
+      (!targetDocument.wasCreatedViaCrossOriginRedirects || targetDocument.latestEntry !== null)) {
+      let destinationEntry: NavigationHistoryEntryImpl | null;
+      switch (navigationType) {
+        case 'reload': destinationEntry = navigation.currentEntry; break;
+        case 'traverse':
+          // SPEC_CLASH(pageswap-traversal-entry): Follow HTML/Chromium's existing entry identity; WebKit creates a substitute.
+          destinationEntry = navigation.entryList.find((entry) => entry.sessionHistoryEntry === targetEntry) ?? null;
+          break;
+        case 'push': case 'replace':
+          // SPEC_CLASH(pageswap-destination-entry): Follow HTML's actual entry/key/ID/state; Chromium/WebKit use temporary entries.
+          destinationEntry = new NavigationHistoryEntryImpl(targetEntry, this.env);
+          break;
+        default: assertNever(navigationType);
+      }
+      if (destinationEntry === null) throw new InternalError('Page swap requires an existing reload or traversal entry');
+      activation = new NavigationActivationImpl(navigation.currentEntry, destinationEntry, navigationType, this.env);
+    }
+    // SPEC_CLASH(pageswap-trust-target): Follow HTML/Chromium's trusted Window event; WebKit dispatches an untrusted Document target.
+    this.fireEvent('pageswap', PageSwapEventImpl, (event) => {
+      const swap = event as PageSwapEventImpl;
+      swap.activation = activation;
+      swap.viewTransition = viewTransition;
+    });
   }
 
   /** Identify this event target as a Window for event-dispatch rules. */

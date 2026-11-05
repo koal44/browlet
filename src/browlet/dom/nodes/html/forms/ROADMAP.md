@@ -43,6 +43,7 @@ child's replacement signature without changing the runtime prototype chain.
 | `HTMLInputElementImpl.updateRadioButtonGroup()` | No-op | Same nonempty name, tree, and form owner; uncheck other radio inputs. Connect every checkedness, type, name, form-owner, and connection trigger from §4.10.5. |
 | Input and textarea current `value` | Getters throw; not yet exposed as public IDL members | Implement dirty values, input type/value modes and sanitization, textarea raw/API values, reset/cloning, author writes, and editing. §3.2.6.4 automatic direction calls these getters for eligible controls; do not substitute default attributes or child text. Notify style/rendering consumers when a value change affects directionality. |
 | Input/textarea selection state | No offset/direction implementation or public selection APIs yet | Implement HTML §4.10.18 selection setters, setSelectionRange/setRangeText, value adjustment, and editing. Call the existing scheduleSelectionChange() entry only when extent/direction changes; keep this separate from Document Selection. |
+| History's selective control reset | `Document.resetAutocompleteOffControls()` throws during §7.4.6.2 retained-Document reactivation | Enumerate controls and compute the §4.10.18.7 autofill field name, including form-owner defaults, input type/mantle rules, and invalid tokens. Invoke each eligible control's reset algorithm with its values, dirty flags, checkedness, and selectedness. Raw `[autocomplete=off]` matching and whole-form reset are not equivalent. |
 | `HTMLSelectElementImpl.resetSelectedness()` | No-op | Selectedness-setting algorithm, including display size, disabled options, single/multiple selection, and all mutation triggers. |
 | `HTMLOptionElementImpl.askForReset()` | No-op | Notify the nearest ancestor select, run selectedness setting, and update selectedcontent. Connect option insertion/removal and selected-attribute changes. |
 | `HTMLSelectElementImpl.updateSelectedContent()` | No-op | Selectedcontent ownership and cloning, including the option and select mutation hooks. |
@@ -66,6 +67,8 @@ and [options tests](../../../../../../test/browlet/html/collections/options.test
 - [HTMLFormControlsCollection and RadioNodeList](https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#htmlformcontrolscollection)
 - [HTMLOptionsCollection](https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#htmloptionscollection)
 - [Form-associated elements](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#association-of-controls-and-forms)
+- [Autofill field names](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#autofill-field)
+- [History's selective control reset](https://html.spec.whatwg.org/multipage/browsing-the-web.html#history-autocomplete)
 - [Radio-button groups](https://html.spec.whatwg.org/multipage/input.html#radio-button-group)
 - [Select option membership](https://html.spec.whatwg.org/multipage/form-elements.html#concept-select-option-list)
 - [Selectedness setting](https://html.spec.whatwg.org/multipage/form-elements.html#selectedness-setting-algorithm)

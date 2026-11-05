@@ -1515,6 +1515,13 @@ The separate history-entry activation operation connects the active entry,
 Document/Window, and initial visibility, but its persisted-state capture still
 throws before those changes. The provisional loader retains its existing path;
 the full coordinator must call activation after any required unloading.
+The outgoing `pageswap` producer is implemented, including origin/redirect
+filtering and realm-owned activation. Document deactivation now orchestrates
+its dispatch and the capture-to-unloading continuation, but CSS eligibility/setup
+and recursive unloading remain explicit throwing dependencies. Automatic delivery
+still needs those owners and the full coordinator, including failure/discard
+completion and teardown during capture. The ordinary loader does not yet call
+this producer.
 Admitted requests still reject explicitly before Document population and activation;
 active entries and the final joint-history step remain unchanged. No successful
 back/forward or cross-document reload is implied by these checks.
@@ -1537,15 +1544,19 @@ retain it. See the [§7.4.4 audit](browlet/browsing/navigation/ROADMAP.md#html-7
 Session history entries now retain separate serialized classic History and
 Navigation states, including entries whose Document has not loaded. Scroll data
 and optional persisted user state have explicit null-only fields. Capture and
-restoration remain throwing operations; adding the entry fields does not implement
-traversal/PopStateEvent delivery or scrolling. Classic History-state commits and
-receiver-realm deserialization are now implemented. See the
+restoration remain throwing operations. Existing-Document updates restore classic
+state and dispatch history events, but those persistence boundaries still prevent
+complete traversal and scrolling. Classic History-state commits and receiver-realm
+deserialization are implemented. See the
 [entry audit](browlet/browsing/navigation/ROADMAP.md#html-7411-session-history-entries).
 `DocumentState` retains the recreation inputs and guards eviction of fully active
 Documents. Eviction still reaches unfinished recursive destruction; automatic
-cache selection, Fetch/srcdoc/POST repopulation, and history reactivation remain
-missing. `Document.latestEntry` is maintained by the local commit path, but full
-History updates and traversal still need to maintain it. HTML also leaves child
+cache selection and complete history restoration remain unfinished. Retained-Document
+reactivation now has its Navigation/event sequence, with selective form reset and
+visibility transitions still throwing. `Document.latestEntry` is maintained by the local commit path and both
+Document history-update branches; full traversal coordination remains unfinished.
+New-Document initialization still stops at persisted-state restoration and
+fragment-scroll scheduling before releasing parser scripts. HTML also leaves child
 history identification across reloads unspecified. See the
 [Document state audit](browlet/browsing/navigation/ROADMAP.md#html-7412-document-state).
 Session-history traversal queues now execute ordinary and target-tagged steps in
@@ -1730,15 +1741,16 @@ the contiguous same-origin list; initial about:blank, inactive, and opaque-origi
 Documents expose no entries. Request-referrer-policy capture for hiding older
 entry URLs is still missing, although the getter consumes stored policies.
 `updateCurrentEntry()` now stores state and fires a trusted current-entry-change
-event. Reactivation reconciliation and queued disposal are implemented, but the
-history/bfcache caller and its `pageshow` delivery are still absent. Same-document
+event. Reactivation reconciliation, queued disposal, and the Document's persisted
+`pageshow` caller are implemented around explicit form/visibility dependencies.
+The full history/bfcache coordinator remains unfinished. Same-document
 entry commits and Navigation EventTarget teardown during
 Document destruction remain unfinished. `navigation.activation` now retains its
 entry pair and navigation type, populated by the existing top-level push/replace
-commit before parser scripts. Updates preserve activation identity and hide
-ineligible predecessors. Full traversal/reload/reactivation and separate
-`pageswap` activation production remain unconnected; same-document updates must
-leave the retained activation alone. `navigate()` and `reload()` now perform
+commit before parser scripts and refreshed during retained-Document reactivation.
+Updates preserve activation identity and hide ineligible predecessors. Full
+traversal/reload completion remains unconnected; same-document updates must leave
+the retained activation alone. `navigate()` and `reload()` now perform
 conversion/validation, prepare serialized state, and own commit/completion promises,
 but valid requests still throw at the unfinished Navigable operations. Tracker
 settlement and event acceptance/cancellation are implemented; commit/completion
@@ -1797,24 +1809,37 @@ actual scrolling remain explicit dependencies. Inactive access follows HTML's Se
 including the recorded browser disagreement for retained `state`. See the
 [History audit](browlet/browsing/navigation/ROADMAP.md#html-725-history-foundations)
 and [method preparation](browlet/browsing/navigation/ROADMAP.md#html-725-pushreplace-state-preparation).
-`PopStateEvent` and `HashChangeEvent` now expose their constructors and payloads;
-DOM's legacy event factory also creates HashChangeEvent. Automatic popstate and
-queued hashchange delivery still require §7.4.6.2 state restoration/history
-application. Native visual-transition reporting and the corresponding Window
-handler attributes remain unimplemented. See the
+`PopStateEvent` and `HashChangeEvent` expose their constructors and payloads;
+DOM's legacy event factory also creates HashChangeEvent. Existing-Document history
+updates now restore classic state, update the URL, notify Navigation, fire trusted
+popstate, and queue trusted hashchange. Persisted-state restoration still throws
+after popstate and after the hashchange task is queued. New-Document initialization
+now orders classic state, persistence, Navigation entries/activation, a provisional
+BiDi committed notification, fragment-scroll scheduling, and parser-script permission.
+Persistence and scroll scheduling still throw; BiDi sessions and protocol attribution
+remain absent. The local loader releases the same script gate through its existing
+provisional commit path. Retained-Document reactivation refreshes Navigation entries
+and activation before persisted pageshow, but selective form reset and visibility
+transitions still throw. Full traversal coordination, cache retention, and scrolling
+remain unfinished; these producers do not make end-to-end back/forward traversal
+work. Browlet has no cached
+rendering UI, so hasUAVisualTransition remains false. The Window handler attributes
+are supplied by §8.1.8. See the
 [event-interface audit](browlet/browsing/navigation/events/ROADMAP.md).
 `PageSwapEvent` exposes its nullable activation/transition payloads, but outgoing
 history application does not yet produce it. `PageRevealEvent` exposes its nullable
-transition payload; the rendering `reveal` hook, once-per-activation Document state,
-inbound transition resolution, and activation after dispatch remain unconnected.
+transition payload; the rendering `reveal` hook, inbound transition resolution,
+and activation after dispatch remain unconnected. Document now retains the reveal
+flag and clears it during reactivation; the rendering producer must set it.
 ViewTransition currently supplies
 interface identity only: its promises, methods, and rendering lifecycle remain
 unfinished. See the [rendering dependency](browlet/rendering/ROADMAP.md#viewtransition-dependency-identity).
 `PageTransitionEvent` and Window's trusted pageshow/pagehide firing method are
-implemented, including the legacy Document target. Initial loading, reactivation,
-and unloading still need their production calls, Document `page showing` state,
-and cache-retention decisions; constructing or firing the event does not provide
-those lifecycle effects.
+implemented, including the legacy Document target. Retained-Document reactivation
+now maintains `pageShowing` and calls persisted pageshow around explicit form/visibility
+dependencies. Initial loading and unloading must also maintain that state and supply
+their production calls. Cache-retention decisions remain absent; constructing or
+firing the event does not provide those lifecycle effects.
 `BeforeUnloadEvent` has its legacy factory and independent string `returnValue`.
 Its special handler processing, automatic dispatch, activation/sandbox admission,
 BiDi/UI confirmation, and navigation cancellation remain unfinished. Generated

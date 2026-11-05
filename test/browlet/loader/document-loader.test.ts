@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { internalType } from '../../../src/infra/promises';
 import { Browlet } from '../../../src/browlet/browlet';
 import { getRelevantRealm } from '../../support/browlet-binding';
@@ -7,10 +7,13 @@ import { ResourceReader } from '../../../src/browlet/loader/resource-reader';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { fetch } from '../../../src/fetch/fetch';
 import { FetchRequest } from '../../../src/fetch/request';
+import { FetchBody, FetchResponse } from '../../../src/fetch/index';
+import { utf8Encode } from '../../../src/encoding/index';
 import { closeServer, listen } from './http-fixture';
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
+  vi.restoreAllMocks();
   for (const close of cleanup.splice(0).reverse()) await close();
 });
 
@@ -26,6 +29,53 @@ describe('Navigable HTML response loading', () => {
     expect(document.documentElement?.localName).toBe('html');
     expect(document.head?.localName).toBe('head');
     expect(document.body?.localName).toBe('body');
+  });
+
+  it.each([false, true])('waits for history initialization before parser scripts (abort: %s)', async (abort) => {
+    const browser = new Browlet({ route: () => '' });
+    await browser.navigate('https://example.test/old');
+    const env = getRelevantRealm(browser.window).env;
+    const navigable = env.realm.getAssociatedDocument().getNodeNavigable()!;
+    const previous = navigable.activeSessionHistoryEntry;
+    const response = new FetchResponse();
+    response.urlList.push(env.parseURL('https://example.test/new')!);
+    response.headerList.append('Content-Type', 'text/html');
+    response.body = FetchBody.fromBytes(utf8Encode('<!doctype html><script></script><p>after</p>'), env.userAgent.sandbox);
+    const resource = new ResourceReader(response, env.userAgent);
+    await new Promise<void>((resolve, reject) => resource.determineMIMEType().observe(() => { resolve(); }, reject));
+    const params = navigable.createNavigationParams(response);
+    const script = vi.fn(() => {});
+    const document = navigable.loadHTMLDocument(params, script, resource);
+    const target = navigable.createHistoryEntry(document, params);
+    const wait = vi.spyOn(document, 'waitForScriptsMayRun');
+    navigable.currentSessionHistoryEntry = navigable.activeSessionHistoryEntry = target;
+    document.makeActive();
+    await expect.poll(() => wait.mock.calls.length).toBe(1);
+    expect(script).not.toHaveBeenCalled();
+    expect(document.latestEntry).toBeNull();
+
+    if (abort) {
+      document.activeParser!.abort();
+      // A late permit must not invoke a script belonging to the stopped parser.
+      document.setReadyToRunScripts();
+      await new Promise<void>((resolve, reject) => { document.waitForScriptsMayRun().observe(resolve, reject); });
+      expect(script).not.toHaveBeenCalled();
+    } else {
+      vi.spyOn(target, 'restorePersistedState').mockImplementation(() => {});
+      vi.spyOn(document, 'tryToScrollToFragment').mockImplementation(() => {});
+      target.classicHistoryAPIState = document.env.serializeForStorage({ committed: true });
+      script.mockImplementation(() => {
+        expect(document.latestEntry).toBe(target);
+        expect(document.history.stateValue).toEqual({ committed: true });
+        expect(document.getRelevantGlobalObject()!.navigation.currentEntry!.sessionHistoryEntry).toBe(target);
+      });
+      document.env.queueTask('navigation-and-traversal', () => {
+        document.updateForHistoryStepApplication(target, false, 2, 1, 'push', [previous, target], previous);
+      });
+      await expect.poll(() => document.readyState).toBe('complete');
+      expect(script).toHaveBeenCalledOnce();
+      expect(document.querySelector('p')!.textContent).toBe('after');
+    }
   });
 
   it.each(['combined', 'repeated'])('loads stylesheet Link fields through navigation (%s)', async (format) => {

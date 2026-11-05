@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../../src/browlet/browlet';
-import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
+import { DocumentState, SessionHistoryEntry } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { ElementImpl } from '../../../../src/browlet/dom/nodes/element';
 import type { NavigateEvent as BrowletNavigateEvent } from '../../../../src/browlet/platform';
@@ -259,14 +259,46 @@ describe('fragment navigation', () => {
     expect(notify).not.toHaveBeenCalled();
   });
 
-  it('stops at the explicit Document history-update dependency before scrolling or queueing completion', async () => {
+  it('stops at persisted-state restoration before fragment scrolling or queueing completion', async () => {
     const { navigable, update, scroll, turns, url } = await fixture();
     update.mockRestore();
 
     expect(() => navigable.navigateToFragment(url, 'push', 'none', null, null, 'fragment'))
-      .toThrow('Document history-step application is not implemented');
+      .toThrow('Persisted history state restoration is not implemented');
     expect(scroll).not.toHaveBeenCalled();
     expect(turns).toHaveLength(0);
+  });
+
+  it('delivers popstate and hashchange from Location.hash through the real Document update', async () => {
+    const { browser, update, scroll, turns } = await fixture();
+    update.mockRestore();
+    vi.spyOn(SessionHistoryEntry.prototype, 'restorePersistedState').mockImplementation(() => {});
+    const result = await browser.evaluate(async () => {
+      const order: string[] = [];
+      let popState: unknown;
+      const changed = new Promise<HashChangeEvent>((resolve) => {
+        addEventListener('hashchange', (event) => { order.push('hashchange'); resolve(event); }, { once: true });
+      });
+      navigation.addEventListener('currententrychange', () => { order.push('entry'); }, { once: true });
+      addEventListener('popstate', (event) => {
+        order.push('popstate');
+        popState = {
+          state: event.state as unknown, same: event.state === history.state, trusted: event.isTrusted,
+          target: event.target === window, url: location.href,
+        };
+      }, { once: true });
+      location.hash = 'target';
+      order.push('returned');
+      const event = await changed;
+      return { order, popState, hash: { oldURL: event.oldURL, newURL: event.newURL, trusted: event.isTrusted, target: event.target === window } };
+    });
+    expect(result).toEqual({
+      order: ['entry', 'popstate', 'returned', 'hashchange'],
+      popState: { state: null, same: true, trusted: true, target: true, url: 'https://example.test/page#target' },
+      hash: { oldURL: 'https://example.test/page#before', newURL: 'https://example.test/page#target', trusted: true, target: true },
+    });
+    expect(scroll).toHaveBeenCalledOnce();
+    expect(turns).toHaveLength(1);
   });
 
   it('stops at the existing scrolling dependency before queueing completion', async () => {

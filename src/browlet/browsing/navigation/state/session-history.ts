@@ -107,7 +107,7 @@ export class SessionHistoryEntry {
   /** Capture scroll positions and any optional user state for a later traversal. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#save-persisted-state
   savePersistedState(): void {
-    // TODO(HTML §7.4.6.3): enumerate restorable regions and capture their positions.
+    // TODO(HTML §7.4.6.5): enumerate restorable regions and capture their positions.
     // Optional form-state capture should retain directionality alongside values when implemented.
     throw new InternalError('Persisted history state capture is not implemented');
   }
@@ -115,7 +115,7 @@ export class SessionHistoryEntry {
   /** Apply automatic scroll restoration and any user-agent state retained in this entry. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#restore-persisted-state
   restorePersistedState(): void {
-    // TODO(HTML §7.4.6.3): respect auto/manual and Navigation's scroll-restoration suppression before scrolling.
+    // TODO(HTML §7.4.6.5): respect auto/manual and Navigation's scroll-restoration suppression before scrolling.
     // Optional control restoration does not fire input/change; form-associated custom elements have their own callback.
     throw new InternalError('Persisted history state restoration is not implemented');
   }
@@ -123,7 +123,7 @@ export class SessionHistoryEntry {
   /** Attempt restoration of the saved scrollable regions, unless the user has scrolled. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#restore-scroll-position-data
   restoreScrollPositionData(): void {
-    // TODO(HTML §7.4.6.3): Capture scrollPositionData, restorable regions, and has-been-scrolled-by-the-user state.
+    // TODO(HTML §7.4.6.5): Capture scrollPositionData, restorable regions, and has-been-scrolled-by-the-user state.
     // Restoration can retry while content loads; scroll anchoring and CSSOM View supply the resulting positions.
     throw new InternalError('Session-history scroll restoration is not implemented');
   }

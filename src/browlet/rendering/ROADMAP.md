@@ -66,7 +66,7 @@ Non-live rectangle results have a different lifetime from live style queries.
 None of these measurement APIs is supplied by current computed-style snapshots.
 
 HTML history entries now retain an explicit `scrollPositionData` placeholder.
-§7.4.6.3 capture/restoration needs the viewport and other restorable scrollable
+§7.4.6.5 capture/restoration needs the viewport and other restorable scrollable
 regions, excluding navigable containers (children restore through their own
 entries). The capture format must support Document recreation without retaining
 old layout boxes or Documents. Position measurement, restore attempts as content
@@ -120,6 +120,24 @@ promises are fabricated to stand in for them.
 Document/Element start/active-transition APIs, named-element capture, rendering
 suppression, pseudo-element construction, animation, cleanup, cross-document
 opt-in, and outbound/inbound transfer remain explicit lifecycle dependencies.
+
+HTML §7.4.6.1's Document deactivation now calls two explicit Document-owned CSS
+boundaries: `canTriggerCrossDocumentViewTransition(newDocument, navigationType,
+isBrowserUINavigation)` and `setupCrossDocumentViewTransition(newDocument,
+proceedWithNavigation)`. Both throw until their CSS audit/implementation. The
+first needs UA opt-out and maintained outbound opt-in state as well as the
+navigation/origin checks. The second must retain and eventually invoke its
+continuation after capture or skipping, with destination transfer and rendering
+lifecycle cleanup; allocating the identity-only class is not sufficient.
+
+`SPEC_CLASH(cross-document-transition-setup-inputs)` follows
+[CSS's setup contract](https://drafts.csswg.org/css-view-transitions-2/#setup-outbound-transition),
+which omits the navigation type that HTML also passes. The eligibility operation
+already receives that type. This was approved and verified against the live
+specifications and CSSWG `909869d6b` on 4 November 2026. The navigation
+[deactivation audit](../browsing/navigation/ROADMAP.md#html-7461-deactivate-a-document-for-cross-document-navigation)
+records the queue and unloading boundaries, including unfinished failure/discard
+completion when the coordinator is connected.
 There is no production ViewTransition creator yet. The PageSwapEvent and
 PageRevealEvent tests supply internal identities only to exercise actual
 interface conversion and projection. PageRevealEvent's [producer inventory](../browsing/navigation/events/ROADMAP.md#pagerevealevent-7275)

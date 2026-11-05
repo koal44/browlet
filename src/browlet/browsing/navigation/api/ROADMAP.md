@@ -102,11 +102,11 @@ from §7.2.6.4.
   list and index immediately. Removed entries receive trusted `dispose` events
   in old-list order from a queued navigation-and-traversal task. This uses the
   existing HTML task source through `env.queueTask()`; no new event loop is added.
-- The §7.4.6 history-reactivation/bfcache caller remains absent. It must supply
-  the same-origin session-history list and update Navigation before firing
-  `pageshow`; disposal runs afterward. Tests supply that caller's inputs and
-  `pageshow` explicitly and verify real task-source and inactive-Document gating.
-  They do not demonstrate an implemented bfcache or traversal pipeline.
+- The §7.4.6.2 Document reactivation caller now refreshes entries and activation
+  before `pageshow`; disposal runs afterward. Selective form reset, visibility
+  transitions, and the full bfcache/traversal coordinator remain explicit in the
+  [retained-Document audit](../ROADMAP.md#html-7462-retained-document-reactivation).
+  The tests do not demonstrate an implemented end-to-end bfcache pipeline.
 - Same-document entry changes are implemented by
   `updateEntriesForSameDocumentNavigation()`: list mutation, tracker notification
   before author callbacks, captured event/tracker state, current-entry-change,
@@ -656,7 +656,8 @@ access through NavigationHistoryEntry's existing activity and referrer-policy
 rules. `activation.entry` is a retained entry, not a getter for the latest
 `navigation.currentEntry`. Same-document history changes leave the activation
 alone; the update operation mutates the retained activation object when supplied
-history-reactivation inputs. The actual traversal/reactivation caller is still absent.
+history-reactivation inputs. `Document.reactivate()` now supplies those inputs
+after refreshing the list; the full traversal coordinator remains unfinished.
 
 `NavigationImpl.updateActivation(navigationType, previousEntryForActivation?)`
 extracts step 7 from the larger document history-application algorithm, an
@@ -669,7 +670,7 @@ updates leave activation unchanged. The current entry must be initialized first.
 
 | Dependency | Required work |
 | --- | --- |
-| Full history-step application (§7.4.6.2) | Supply the previous active entry and resolved NavigationType. Audit HTML's ordering of activation before the later reactivation entry-list reconciliation: a newly visible predecessor might not yet be in the retained list. Preserve the old Document's initial-about:blank flag until replacement selection; an evicted unlisted predecessor currently throws explicitly rather than guessing that flag. The synchronous top-level new-Document commit is only one producer. |
+| Full history-step application (§7.4.6.2) | The Document history-update/reactivation caller now refreshes entries before activation and pageshow; `SPEC_CLASH(history-reactivation-navigation-order)` records the approved correction and browser evidence in the [navigation audit](../ROADMAP.md#html-7462-retained-document-reactivation). The coordinator must still supply the previous active entry and NavigationType. Preserve the previous Document's initial-about:blank flag until replacement selection; an evicted unlisted predecessor still throws rather than guessing that flag. |
 | Reload and traversal | Navigable's explicit unfinished operations must deliver their own `reload`/`traverse` types and restored entry state. A host same-URL load currently resolves to `replace`; it is not evidence of reload support. |
 | Same-document entry updates (§7.2.6.4) | Entry updates preserve the activation and its retained endpoints even if they leave the list. State updates to a retained session-history record remain visible through that entry. Full §7.4 history application remains unconnected. |
 | `pageswap` (§7.2.7.4, §7.4.6.2) | The event interface is implemented; outgoing-document lifecycle, redirect-chain same-origin checks, and View Transition integration remain unfinished. Its producer creates a **separate** activation in the outgoing Document's realm, with `from` equal to its current entry and a destination selected by navigation type; it must not mutate `navigation.activation`. |
@@ -1286,7 +1287,7 @@ Navigation IDL are accounted for below.
 | Method trackers and committed/finished lifecycle | §7.2.6.8 state, setup, settlement, event abortion, and Navigable abort/child-destruction notifications implemented. Their navigation/traversal/destruction producers remain explicit above. |
 | `traverseTo`, `back`, `forward` | §7.2.6.7 selection, no-op success, deduplication, source capture, and queued failure handling implemented. Traversal activation and traversal queue/history application remain explicit dependencies. |
 | `transition` | §7.2.6.8 attribute, state/getters, event production, commit/abort, and postcommit settlement implemented, including original-transition protection. Manual interception commits synchronous URL/history changes and finishes; automatic focus/scroll, queued history application, and lifecycle integration remain explicit above. |
-| `activation` | §7.2.6.9 interface, retained state, and update operation implemented; top-level new-Document commits populate it. Full history/reactivation/reload and separate pageswap production remain explicit above. |
+| `activation` | §7.2.6.9 interface, retained state, and update operation implemented; new-Document commits and Document reactivation populate it. Full traversal coordination, retained-Document form/visibility dependencies, and reload completion remain explicit. |
 | `navigate` firing, cancellation and exceptions to firing | Preparation, shared dispatch, tracker acceptance, and cancellation are implemented, including restricted traversal cancellation and history-action consumption. History and ordinary navigation are connected producers; the latter applies its source/target/initial-document/scheme exclusions. Other lifecycle producers, input activation, and completion dependencies remain above. |
 | Interception and asynchronous completion | Destination/event interfaces, interception registration, hash/download discrimination, transition creation, scroll validation, precommit controller/execution, synchronous URL/history commit, postcommit handlers/settlement, and finishing policy are implemented. Queued history application, loading UI, and automatic focus/scroll effects remain unfinished. |
 
@@ -1295,7 +1296,8 @@ NavigationCurrentEntryChangeEvent and adds PopStateEvent and HashChangeEvent.
 PageSwapEvent, PageRevealEvent, and PageTransitionEvent interfaces are also
 implemented, with their View Transition, history-application, and rendering
 dependencies explicit in that audit. Window's page-transition firing method is
-ready for the reactivation caller; the test supplies that call explicitly.
+used by the Document reactivation caller, with form/visibility and cache-retention
+dependencies kept explicit in the retained-Document audit.
 BeforeUnloadEvent's interface and legacy factory are also implemented; §8.1.8
 handler processing and the unload-prompt producer remain separate dependencies.
 The [§7.2.8 NotRestoredReasons interfaces](../ROADMAP.md#html-728-notrestoredreasons)

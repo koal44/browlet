@@ -8,7 +8,7 @@ import type { DOMEnvironment } from '../../../dom/environment';
 
 /** Carries the previous and current entry URLs without parsing constructor-supplied strings. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-hashchangeevent-interface
-// TODO(HTML §7.4.6.2): History application must queue trusted delivery with serialized entry URLs after restoring persisted state.
+// Existing-Document history application queues trusted delivery; persisted-state restoration still has an explicit owner boundary.
 export class HashChangeEventImpl extends EventImpl {
   /** Producer-supplied previous URL, after Web IDL string conversion for author construction. */
   oldURL: string;

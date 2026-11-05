@@ -8,7 +8,7 @@ import type { DOMEnvironment } from '../../../dom/environment';
 
 /** Carries restored History state, or the constructor's unchanged author value. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-popstateevent-interface
-// TODO(HTML §7.4.6.2): History application must supply restored state and the actual UA visual-transition result.
+// Existing-Document history application supplies restored state; cached-rendering UI and new-Document paths remain unfinished.
 export class PopStateEventImpl extends EventImpl {
   /** State supplied by the producer; event construction does not clone it. */
   state: unknown;

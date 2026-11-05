@@ -12,7 +12,7 @@ import { createSelectlet, type Selectlet } from '../../../selectlet/index';
 import { decode, getEncoding, utf8DecodeWithoutBOM, utf8Encode, type Encoding } from '../../../encoding/index';
 import {
   aboutBlankURL, areSameOrigin, areSameSite, copyURL, createOpaqueOrigin, effectiveDomain, obtainURLOrigin,
-  hostsEqual, isRegistrableDomainSuffixOfOrEqualTo, parseHost, serializeHost, serializeOrigin, serializeURL,
+  hostsEqual, isRegistrableDomainSuffixOfOrEqualTo, parseHost, serializeHost, serializeOrigin, serializeURL, urlsEqual,
   type Origin, type URLRecord,
 } from '../../../url/index';
 import { HTTPCookie, parseHTTPDate, parseLinkHeader, type CookieHost, type HTTPStatus } from '../../../http/index';
@@ -37,7 +37,7 @@ import {
   type EventHandlerCallback, type SpeculationRuleSet,
 } from '../../scripting/index';
 import { StorageEventImpl } from '../../storage/events/index';
-import { BeforeUnloadEventImpl, HashChangeEventImpl } from '../../browsing/navigation/events/index';
+import { BeforeUnloadEventImpl, HashChangeEventImpl, PopStateEventImpl } from '../../browsing/navigation/events/index';
 import {
   UIEventImpl, FocusEventImpl, KeyboardEventImpl, CompositionEventImpl, TextEventImpl, MouseEventImpl, pointerGlobalEventHandlers,
 } from '../../interaction/events/index';
@@ -65,9 +65,10 @@ import type { DocumentParser } from '../../html/parser/index';
 import type { SerializedRecord } from '../../scripting/structured-data/index';
 import type {
   BrowsingContext, Navigable, NavigableContainer, NavigationParams, HistoryHandlingBehavior,
-  NotRestoredReasonDetails, NotRestoredReasons, SessionHistoryEntry,
+  NotRestoredReasonDetails, NotRestoredReasons, SessionHistoryEntry, UserNavigationInvolvement,
 } from '../../browsing/navigation/index';
 import type { FocusableArea } from '../../interaction/index';
+import type { ViewTransitionImpl } from '../../rendering/index';
 
 import { HTMLCollectionImpl, NodeListImpl } from './collections';
 import { HTMLAllCollectionImpl } from './html-all-collection';
@@ -244,6 +245,14 @@ export class DocumentImpl extends NodeImpl {
   completelyLoadedTime: number | null = null;
   /** Whether tasks that depend on loading completion may proceed. */
   readyForPostLoadTasks = false;
+  /** Whether this Document has been shown without a subsequent pagehide. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#page-showing
+  // TODO(HTML §7.5): Initial pageshow and unloading must also maintain this flag.
+  pageShowing = false;
+  /** Whether the rendering reveal step has run for this activation. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#has-been-revealed
+  // TODO(HTML §7.4.6.3): The reveal producer must set this before transition resolution and pagereveal.
+  hasBeenRevealed = false;
   /** Elements whose pending work delays rendering, independently of script-blocking stylesheets. */
   // https://html.spec.whatwg.org/multipage/dom.html#render-blocking-element-set
   renderBlockingElements = new Set<ElementImpl>();
@@ -303,6 +312,10 @@ export class DocumentImpl extends NodeImpl {
   #scriptBlockingStyleSheets = new Set<ElementImpl>();
   /** Shared wait resolved when the blocking style-sheet set becomes empty. */
   #scriptBlockingStyleSheetsReady: InternalPromiseWithResolvers<void> | null = null;
+  /** Whether history initialization has reached the point that permits this Document's parser scripts. */
+  #readyToRunScripts = false;
+  /** Shared script wait, allocated only when parsing reaches the history-initialization gate. */
+  #scriptsMayRunReady: InternalPromiseWithResolvers<void> | null = null;
   /** Stable factory object associated with this document. */
   #implementation?: DOMImplementationImpl;
   /** History object retained by this Document, including when its Window is reused. */
@@ -1241,14 +1254,80 @@ export class DocumentImpl extends NodeImpl {
   /** Apply this Document's selected entry and script-visible history state on its event loop. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#update-document-for-history-step-application
   updateForHistoryStepApplication(
-    _entry: SessionHistoryEntry, _doNotReactivate: boolean, _scriptHistoryLength: number, _scriptHistoryIndex: number,
-    _navigationType: NavigationType | null, _entriesForNavigationAPI?: SessionHistoryEntry[],
-    _previousEntryForActivation?: SessionHistoryEntry,
+    entry: SessionHistoryEntry, doNotReactivate: boolean, scriptHistoryLength: number, scriptHistoryIndex: number,
+    navigationType: NavigationType | null, entriesForNavigationAPI?: SessionHistoryEntry[],
+    previousEntryForActivation?: SessionHistoryEntry,
   ): void {
-    // TODO(HTML §7.4.6.2): Update index/length/latestEntry, call restoreHistoryObjectState(), restore persisted state,
-    // update Navigation entries/activation, fire popstate and queue hashchange, and handle reactivation/scrolling/BiDi.
-    // Fragment navigation invokes this synchronously, then joint-history application reconciles it without duplicate events.
-    throw new InternalError('Document history-step application is not implemented');
+    const previousEntry = this.latestEntry;
+    const documentsEntryChanged = previousEntry !== entry;
+    this.history.index = scriptHistoryIndex;
+    this.history.lengthValue = scriptHistoryLength;
+    const window = this.getRelevantGlobalObject();
+    if (window === null) throw new InternalError('Document history updates require a Window');
+    const navigation = window.navigation;
+
+    if (previousEntry === null) {
+      // SPEC_GAP(history-new-document-inputs): HTML reads the null old entry's URL; only the existing-Document branch needs it.
+      // TODO(HTML #13041): Initial about:blank fragment callers need their separate latest-entry initialization correction.
+      if (entriesForNavigationAPI === undefined) throw new InternalError('New Document history initialization requires Navigation entries');
+      this.latestEntry = entry;
+      this.restoreHistoryObjectState(entry);
+      entry.restorePersistedState();
+      navigation.initializeEntriesForNewDocument(entriesForNavigationAPI, entry);
+    } else if (documentsEntryChanged) {
+      const oldURL = previousEntry.url;
+      this.latestEntry = entry;
+      this.restoreHistoryObjectState(entry);
+      // SPEC_GAP(history-document-url): HTML omits changing the Document URL on same-document traversal.
+      // All three browsers publish it before currententrychange/popstate; update base-URL consumers as well.
+      this.setURL(entry.url);
+      if (navigationType === null) throw new InternalError('An existing Document entry change requires a navigation type');
+      navigation.updateEntriesForSameDocumentNavigation(entry, navigationType);
+
+      // SPEC_CLASH(history-hashchange-url): HTML compares fragments alone; browsers also require equal non-fragment URLs.
+      if (oldURL.fragment !== entry.url.fragment && urlsEqual(oldURL, entry.url, true)) {
+        const oldURLString = serializeURL(oldURL);
+        const newURLString = serializeURL(entry.url);
+        // SPEC_CLASH(history-hashchange-queue-order): Queue before popstate, as Blink/Gecko do (HTML #12190).
+        // Delivery stays asynchronous and follows this task's persisted-state restoration.
+        this.env.queueTask('dom-manipulation', () => {
+          window.fireEvent('hashchange', HashChangeEventImpl, (baseEvent) => {
+            const event = baseEvent as HashChangeEventImpl;
+            event.oldURL = oldURLString;
+            event.newURL = newURLString;
+          });
+        });
+      }
+      window.fireEvent('popstate', PopStateEventImpl, (baseEvent) => {
+        const event = baseEvent as PopStateEventImpl;
+        // SPEC_CLASH(history-popstate-reentrant-state): Follow HTML/Firefox's live History state after currententrychange.
+        // Chromium/WebKit retain the traversal's original state if that listener calls replaceState().
+        event.state = this.history.stateValue;
+        // Browlet has no UI that displays cached history renderings. Connect its actual result if that owner is added.
+        event.hasUAVisualTransition = false;
+      });
+      entry.restorePersistedState();
+    }
+
+    if (!documentsEntryChanged && !doNotReactivate) {
+      if (entriesForNavigationAPI === undefined) throw new InternalError('Document reactivation requires Navigation entries');
+      this.reactivate(entry, entriesForNavigationAPI, navigationType, previousEntryForActivation);
+      return;
+    }
+
+    navigation.updateActivation(navigationType, previousEntryForActivation);
+    if (previousEntry === null) {
+      // SPEC_GAP(history-new-document-inputs): HTML's navigable variable is unbound; this Document supplies its node navigable.
+      const navigable = this.getNodeNavigable();
+      if (navigable === null) throw new InternalError('New Document history initialization requires a navigable');
+      // SPEC_CLASH(history-population-navigation-id): History population supplies null despite HTML's non-null assertion.
+      // Preserve its metadata through this provisional hook; BiDi must resolve protocol attribution when integrated.
+      this.env.userAgent.webDriverBiDiNavigationCommitted(navigable, {
+        id: this.duringLoadingNavigationID, status: 'committed', url: this.url,
+      });
+      this.tryToScrollToFragment();
+      this.setReadyToRunScripts();
+    }
   }
 
   /** Scroll the viewport to its beginning edges using CSSOM View's scroll operation. */
@@ -1266,12 +1345,30 @@ export class DocumentImpl extends NodeImpl {
     throw new InternalError('Document fragment scrolling is not implemented');
   }
 
+  /** Schedule fragment scrolling while this Document's parser may still discover its target. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#try-to-scroll-to-the-fragment
+  tryToScrollToFragment(): void {
+    // TODO(HTML §7.4.6.2): Delay in parallel, queue a navigation task, check parser/user interest, scroll,
+    // and retry while the indicated part is missing. §7.4.6.4's fragment selection/scrolling remains unfinished.
+    throw new InternalError('Fragment scrolling during document loading is not implemented');
+  }
+
   /** Initialize page visibility without dispatching a visibilitychange event. */
   // https://html.spec.whatwg.org/multipage/interaction.html#set-the-initial-visibility-state
   setInitialVisibilityState(visibilityState: DocumentVisibilityState): void {
     this.#visibilityState = visibilityState;
     // TODO(HTML §6.2 / Performance Timeline): Queue a VisibilityStateEntry with this state and timestamp 0.
     // PerformanceEntry, the timeline buffer, and observer delivery are not implemented yet.
+  }
+
+  /** Change page visibility and perform the associated cross-specification notifications. */
+  // https://html.spec.whatwg.org/multipage/interaction.html#update-the-visibility-state
+  updateVisibilityState(visibilityState: DocumentVisibilityState): void {
+    if (this.#visibilityState === visibilityState) return;
+    // TODO(HTML §6.2): Set the state, queue VisibilityStateEntry with the current high resolution time,
+    // run Screen Orientation and CSS View Transitions steps, then Device Posture/Web NFC hooks, and fire
+    // a bubbling visibilitychange. Those owners are not connected; do not substitute initial visibility.
+    throw new InternalError('Document visibility change processing is not implemented');
   }
 
   /** Retarget this document's browsing context to its Window and enable execution. */
@@ -1287,6 +1384,42 @@ export class DocumentImpl extends NodeImpl {
     browsingContext.activeDocument = this;
     browsingContext.windowProxy.setAssociatedWindow(env.realm.globalObject);
     env.markExecutionReady();
+  }
+
+  /** Restore a retained Document after it becomes fully active again. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#reactivate-a-document
+  // The final inputs defer the caller's activation update until the restored entries are available.
+  reactivate(
+    reactivatedEntry: SessionHistoryEntry, entriesForNavigationAPI: SessionHistoryEntry[],
+    navigationType: NavigationType | null = null, previousEntryForActivation?: SessionHistoryEntry,
+  ): void {
+    this.resetAutocompleteOffControls();
+
+    // GlobalTimers already adjusts deadlines when full activity is restored, before this operation runs.
+    // Its per-timer suspension timestamps also cover timers started while inactive; do not add the duration twice.
+    const window = this.getRelevantGlobalObject();
+    if (window === null) throw new InternalError('Document reactivation requires a Window');
+    const navigation = window.navigation;
+    // SPEC_CLASH(history-reactivation-navigation-order): HTML updates activation against the stale list;
+    // follow Chromium by reconciling entries first, then activation, both before pageshow. WebKit's source updates afterward.
+    navigation.updateEntriesForReactivation(entriesForNavigationAPI, reactivatedEntry);
+    navigation.updateActivation(navigationType, previousEntryForActivation);
+    if (this.currentDocumentReadiness === 'complete' && !this.pageShowing) {
+      this.pageShowing = true;
+      this.hasBeenRevealed = false;
+      this.updateVisibilityState('visible');
+      window.firePageTransitionEvent('pageshow', true);
+    }
+  }
+
+  /** Reset this Document's controls whose computed autofill field name is off. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#history-autocomplete
+  resetAutocompleteOffControls(): void {
+    // TODO(HTML §4.10.18.7): Enumerate controls and compute autofill field names, including form-owner defaults,
+    // input type/mantle rules, and invalid autocomplete tokens. Invoke each eligible control's §4.10 reset algorithm;
+    // current values, dirty flags, checkedness, and selectedness remain with the form owners.
+    // A raw [autocomplete=off] query or form.reset() does not implement this selective control reset.
+    throw new InternalError('Autocomplete-off control reset is not implemented');
   }
 
   /** Change readiness, record the first HTML parsing milestones, and notify listeners synchronously. */
@@ -1409,6 +1542,70 @@ export class DocumentImpl extends NodeImpl {
     } finally {
       this.unloadCounter--;
     }
+  }
+
+  /**
+   * Release traversal ownership and start unloading, after any outgoing transition capture.
+   * Enter from parallel history application; unloading owns the supplied completion.
+   */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#deactivate-a-document-for-a-cross-document-navigation
+  deactivateForCrossDocumentNavigation(
+    userInvolvement: UserNavigationInvolvement, targetEntry: SessionHistoryEntry,
+    navigationType: NavigationType, afterPotentialUnloads: () => void,
+  ): void {
+    const navigable = this.getNodeNavigable();
+    if (navigable === null) throw new InternalError('Document deactivation requires a node navigable');
+    const targetDocument = targetEntry.document;
+    if (targetDocument === null) throw new InternalError('Document deactivation requires a populated destination');
+    const window = this.getRelevantGlobalObject();
+    if (window === null) throw new InternalError('Document deactivation requires a Window');
+    const isBrowserUINavigation = userInvolvement === 'browser UI';
+
+    if (!this.canTriggerCrossDocumentViewTransition(targetDocument, navigationType, isBrowserUINavigation)) {
+      const firePageSwapBeforeUnload = () => { window.firePageSwapEvent(targetEntry, navigationType, null); };
+      // History application runs in parallel; the displayed Document's environment is not the caller's Agent.
+      navigable.setOngoingNavigation(null);
+      this.unloadAndDescendants(targetDocument, afterPotentialUnloads, firePageSwapBeforeUnload);
+      return;
+    }
+
+    const activeWindow = navigable.activeWindow;
+    if (activeWindow === null) throw new InternalError('Transition setup requires an active Window');
+    // TODO(HTML §7.4.6.1 coordinator): Forward setup/capture/unload failures and task discard to the waiting operation.
+    // Unloading and CSS capture still need their completion/failure contracts before that wait can be connected.
+    activeWindow.env.queueTask('navigation-and-traversal', () => {
+      const proceedAfterCapture = () => {
+        navigable.traversable.appendSessionHistoryTraversalSteps(() => {
+          navigable.setOngoingNavigation(null);
+          this.unloadAndDescendants(targetDocument, afterPotentialUnloads);
+        });
+      };
+      // SPEC_CLASH(cross-document-transition-setup-inputs): HTML also passes navigationType; CSS setup does not take it.
+      // Follow CSS's contract; its preceding eligibility check already receives the navigation type.
+      const viewTransition = this.setupCrossDocumentViewTransition(targetDocument, proceedAfterCapture);
+      window.firePageSwapEvent(targetEntry, navigationType, viewTransition);
+      // A non-null transition retains the continuation until capture finishes or the transition is skipped.
+      if (viewTransition === null) proceedAfterCapture();
+    });
+  }
+
+  /** Check outgoing transition eligibility, including the browser's native navigation experience. */
+  // https://drafts.csswg.org/css-view-transitions-2/#check-eligibility
+  canTriggerCrossDocumentViewTransition(
+    _newDocument: DocumentImpl, _navigationType: NavigationType, _isBrowserUINavigation: boolean,
+  ): boolean {
+    // TODO(CSS View Transitions 2 §12.5.1.1): Audit UA opt-out, the Document's outbound opt-in state,
+    // and reload/origin/redirect/traversal/browser-UI gates. Rule resolution and reveal/visibility updates are missing.
+    throw new InternalError('Cross-document view transition eligibility is not implemented');
+  }
+
+  /** Set up an outgoing transition, retaining the continuation until capture completes or is skipped. */
+  // https://drafts.csswg.org/css-view-transitions-2/#setup-outbound-transition
+  setupCrossDocumentViewTransition(_newDocument: DocumentImpl, _proceedWithNavigation: () => void): ViewTransitionImpl | null {
+    // TODO(CSS View Transitions 2 §12.5.1.2): Recheck opt-in, resolve types, skip an existing transition,
+    // allocate the outgoing transition, capture/transfer state, and resume navigation from post-capture steps.
+    // The identity-only ViewTransition does not supply these operations or their rendering/task lifecycle.
+    throw new InternalError('Cross-document view transition setup is not implemented');
   }
 
   /** Start unloading from the traversal queue; complete after the descendants and this Document unload. */
@@ -1596,9 +1793,17 @@ export class DocumentImpl extends NodeImpl {
   /** Wait until navigation permits scripts in the newly created document. */
   // https://html.spec.whatwg.org/#scripts-may-run-for-the-newly-created-document
   waitForScriptsMayRun(): InternalPromise<void> {
-    // PROVISIONAL(HTML navigation): current callers commit synchronously before
-    // parser tasks run. Full navigation must supply its script-readiness gate.
-    return this.env.InternalPromise.try(() => {}, idlType.undefined);
+    if (this.#readyToRunScripts) return this.env.InternalPromise.resolve(undefined, idlType.undefined);
+    return (this.#scriptsMayRunReady ??= this.env.InternalPromise.withResolvers(idlType.undefined)).promise;
+  }
+
+  /** Release parser-script waits after history initialization; repeated permission does not reopen the gate. */
+  // https://html.spec.whatwg.org/#scripts-may-run-for-the-newly-created-document
+  setReadyToRunScripts(): void {
+    this.#readyToRunScripts = true;
+    const ready = this.#scriptsMayRunReady;
+    this.#scriptsMayRunReady = null;
+    ready?.resolve(undefined);
   }
 
   /** Process response Link fields for the selected document-loading phase. */

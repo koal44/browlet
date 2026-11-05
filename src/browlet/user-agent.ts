@@ -765,6 +765,16 @@ export class UserAgent implements
     // PROVISIONAL: live sessions and navigation event delivery are not implemented.
   }
 
+  /** Notify automation after a new Document's history state has been initialized. */
+  // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-navigation-committed
+  webDriverBiDiNavigationCommitted(
+    _navigable: Navigable, _status: { id: string | null; status: 'committed'; url: URLRecord; },
+  ): void {
+    // TODO(WebDriver BiDi): Resume committed waiters and emit navigationCommitted to subscribed sessions.
+    // PROVISIONAL: sessions/protocol attribution are absent. HTML supplies "committed" although BiDi's status list
+    // omits it; history population can also supply a null ID. Preserve HTML's inputs until the BiDi audit.
+  }
+
   /** Notify automation that a navigation failed before committing. */
   // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-navigation-failed
   webDriverBiDiNavigationFailed(

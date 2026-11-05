@@ -11,11 +11,13 @@ against `404b3eb` (30 October 2026), on 1 November, then extended through
   nullable navigationType, required previous entry, EventInit handling, and
   receiver-realm projection. Its payload now lives here; the Navigation API
   retains only the producers. Its
-  current-entry-change producers are implemented; the full history application
-  and reactivation callers remain unfinished.
+  current-entry-change producers are implemented; full history coordination
+  remains unfinished. Retained-Document reactivation refreshes entries without
+  firing currententrychange.
 - §7.2.7.2 PopStateEvent exposes `state` and `hasUAVisualTransition` with null/false
   defaults. Constructor state is an unchanged `any` value, not a structured clone;
-  history restoration must supply the deserialized state for a real popstate.
+  existing-Document history application now supplies the restored classic state
+  for a trusted popstate. Full traversal and persisted-state restoration remain open.
 - §7.2.7.3 HashChangeEvent exposes `oldURL` and `newURL` with empty-string defaults.
   Binding converts USVString inputs without parsing or resolving them as URLs.
 - §7.2.7.4 PageSwapEvent exposes nullable NavigationActivation and ViewTransition
@@ -86,11 +88,11 @@ borrowed PopStateEvent getters, and the legacy event-factory distinction.
 
 | Requirement | Owner and remaining work |
 | --- | --- |
-| Restore and expose History state | HTML §7.4.6.2 history application must deserialize the entry's classic History state into the target realm, assign History's retained state, and pass that same value to PopStateEvent. Constructor state is not a substitute for this restoration. |
-| Popstate delivery | §7.4.6.2 must implement its changed-entry/history conditions and synchronous dispatch to the Document's global, after Navigation entry updates. History application is still unfinished; the traversal queue now runs its supplied work. |
+| Restore and expose History state | Existing-Document updates deserialize the entry's classic History state in the owning realm and retain it on History. Unchanged entries preserve the cached object's identity. New-Document initialization remains unfinished. |
+| Popstate delivery | Existing-Document updates synchronously dispatch after Navigation notifications, using the current History state. Full traversal coordination and persisted-state restoration remain explicit dependencies. See the [Document-update audit](../ROADMAP.md#html-7462-existing-document-history-updates) for reentrancy and browser choices. |
 | Native visual transitions | The user agent must report whether it already displayed a cached rendering. Browlet has no such UI; automatic production must keep hasUAVisualTransition false until a real presentation owner supplies it. Synthetic construction can explicitly set true. |
-| Hashchange delivery | §7.4.6.2 must compare entry URL fragments, serialize the previous/new URLs, restore persisted user state, and then queue the DOM manipulation task. URL/history application and persisted state remain unfinished; constructing an event does not change location or traverse history. |
-| Window handler attributes | §8.1.8 WindowEventHandlers currently supplies onstorage only. onpopstate/onhashchange and body/frameset forwarding remain scripting work; addEventListener accepts both events now. |
+| Hashchange delivery | Existing-Document updates compare URLs, retain old/new serialized values, and queue a trusted DOM-manipulation event before popstate. The event remains asynchronous. Persisted-state restoration still throws after popstate with hashchange already queued; the full traversal/scrolling lifecycle remains unfinished. |
+| Window handler attributes | §8.1.8 supplies onpopstate/onhashchange and body/frameset forwarding through the shared WindowEventHandlers machinery. The event producer does not need a separate handler path. |
 | Remaining audit | The §7.2.7 event interfaces are implemented; lifecycle and handler dependencies remain listed here. The [§7.2.8 diagnostic-interface audit](../ROADMAP.md#html-728-notrestoredreasons) is also implemented; document-order work continues at §7.3. |
 
 The §7.2.7 preamble points NavigateEvent to its dedicated §7.2.6.10 section,
@@ -114,22 +116,30 @@ the event does not widen the field to an arbitrary object or silently discard
 non-null supplied values. Tests supply an internal transition identity through
 real bindings, without claiming that captures or a transition occurred.
 
-The linked [§7.4.6.2 producer](https://html.spec.whatwg.org/multipage/browsing-the-web.html#fire-the-pageswap-event)
-must run on the displayed Document's agent loop, check target-document origin
-and cross-origin redirect history, and construct a **separate** activation in
-the outgoing realm. Reload reuses the current entry; traversal finds the target
-in the existing Navigation entry list; push/replace allocate a destination entry.
-The new activation's `from` is the outgoing current entry. It must not overwrite
-`navigation.activation`. Cross-origin navigation and cross-origin redirects to
-new Documents expose null activation; the bfcache-restoration exception must be
-preserved. Reconcile disabled Navigation entries with the existing
-`navigation-activation-disabled` decision when implementing this producer.
+The [§7.4.6.1 producer](https://html.spec.whatwg.org/multipage/browsing-the-web.html#fire-the-pageswap-event)
+is now `Window.firePageSwapEvent()`. It requires a task on the displayed
+Document's agent loop, checks target-document origin and cross-origin redirect
+history, and constructs a **separate** activation in the outgoing realm. Reload
+reuses the current entry; traversal finds the target by history-entry identity;
+push/replace allocate an outgoing-realm view of the actual destination entry.
+It does not overwrite `navigation.activation`. Cross-origin navigation and
+cross-origin redirects to new Documents expose null activation; a previously
+activated same-origin target retains the specified restoration exception.
+An initial about:blank predecessor can be null for push/replace. Reload/traversal
+require their existing destination entry. The producer does not fabricate one
+when the caller violates that precondition.
+
+The [producer audit](../ROADMAP.md#html-7461-outgoing-pageswap-production)
+records the approved event trust/target, redirect filtering, and destination-entry
+differences with Chromium/WebKit. Automatic deactivation, unloading, and CSS
+capture remain unfinished, so this is not yet automatic pageswap delivery.
 
 The producer also receives the CSS outbound transition, or null if none exists;
 capture, old/new-document transfer, opt-in checks, and lifecycle timing remain
 CSS View Transitions/history-application work. The constructor merely retains
 its input, so even a same-document transition can be supplied synthetically.
-The `onpageswap` handler and body/frameset forwarding remain Vin's §8.1.8 work.
+The `onpageswap` handler and body/frameset forwarding are supplied by the shared
+§8.1.8 handler machinery; production tests exercise the Window handler.
 
 `node-compat/experimental/page-swap-event.mjs` was run on 1 November with Chromium
 156.0.8078.4, Firefox 157.0, and WebKit 27.2. Chromium/WebKit agree with HTML on
@@ -153,8 +163,9 @@ DOM's legacy `createEvent()` table does not include PageRevealEvent.
 Automatic delivery belongs to HTML's [reveal algorithm](https://html.spec.whatwg.org/multipage/browsing-the-web.html#reveal),
 not to the event constructor. The remaining connections are:
 
-- Document's `has been revealed` state, initially false and reset on history
-  reactivation. Set it before resolving the inbound transition or dispatching,
+- Document's `has been revealed` state now exists, initially false and reset on
+  history reactivation. The reveal producer must set it before resolving the
+  inbound transition or dispatching,
   so revelation runs once per activation even across reentrant author callbacks.
 - The existing rendering pipeline's `reveal` phase must call that algorithm on
   the first update displaying the current page. It is currently an unconnected
@@ -209,11 +220,13 @@ The remaining callers and state are explicit dependencies:
 - Initial loading: §13's full stop-parsing algorithm must set Document's
   `page showing` state and fire `pageshow(false)` after Window load. The existing
   provisional completion path does not yet implement those steps.
-- History reactivation: §7.4.6.2 must update Navigation entries, test readiness and
-  `page showing`, update that flag, reset `has been revealed`, update visibility,
-  then fire `pageshow(true)`. The reactivation regression now uses the implemented
-  firing method to verify disposal remains later, but the production caller and
-  the two Document flags are still missing.
+- History reactivation: §7.4.6.2 now refreshes Navigation entries and activation,
+  tests readiness and `page showing`, updates that flag, clears `has been revealed`,
+  requests visibility updating, and fires `pageshow(true)`. Both Document flags
+  now exist. Form reset and changed visibility still throw; the bfcache/traversal
+  coordinator remains absent. The [retained-Document audit](../ROADMAP.md#html-7462-retained-document-reactivation)
+  records those owners, the approved entry/activation order, and actual event tests
+  proving that disposal follows pageshow.
 - Unloading: §7.5.9 must determine retention, update `page showing`, fire
   `pagehide(document.salvageable)`, then update visibility and continue cleanup.
   Existing salvageability, abortion, and WebSocket cleanup state do not complete

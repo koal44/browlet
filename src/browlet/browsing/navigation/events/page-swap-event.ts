@@ -10,7 +10,7 @@ import type { ViewTransitionImpl } from '../../../rendering/index';
 
 /** The outgoing Document's destination activation and optional outbound view transition. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-pageswapevent-interface
-// TODO(HTML §7.4.6.2): History application must create a separate outgoing activation with origin/redirect filtering and fire pageswap.
+// Window.firePageSwapEvent() owns trusted production; deactivation and CSS transition capture remain §7.4.6.1 dependencies.
 export class PageSwapEventImpl extends EventImpl {
   /** Destination activation supplied by the producer, or null when it cannot be exposed. */
   activation: NavigationActivationImpl | null;

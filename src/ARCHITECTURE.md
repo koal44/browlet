@@ -1173,6 +1173,14 @@ activation, and initial visibility after persisted-state capture. It does not
 advance the current entry or joint step, or restore script-visible history state.
 Persisted-state capture still throws; the full coordinator must supply its caller
 after any required unloading, preserving the displayed Document through population.
+Window owns outgoing `pageswap` production alongside its page-transition events.
+It uses its associated Document and realm, filters the destination activation,
+and dispatches through the existing trusted-event machinery. Document deactivation
+supplies its caller, either through recursive unloading or in the task that sets
+up an outgoing transition. CSS capture's continuation returns unloading to the
+traversal queue before releasing ownership. CSS eligibility/setup and recursive
+unloading still throw explicitly; coordinator failure/discard completion is not
+connected. Event production itself neither unloads nor activates Documents.
 Cross-document finalization inserts into the destination's own retained history,
 including child lists, and preserves replacement keys only across the same origin.
 The provisional history application still receives that destination and entry
@@ -1182,10 +1190,21 @@ Fragment navigation reuses Navigation's event dispatch and tracker handling, the
 prepares the active same-document entry synchronously. Document owns script-visible
 history application and scrolling; Traversable owns the later tagged finalization.
 The finalizer inserts or replaces entries in the destination's retained history,
-preserving queued changes within the active DocumentState. Document history updates,
-scrolling, and joint same-document history application remain explicit throwing
-boundaries. The provisional cross-document application rejects same-document
-changes before it can reinitialize Navigation's entries.
+preserving queued changes within the active DocumentState. For existing Documents,
+history application restores classic state in the owning realm, publishes the URL,
+notifies Navigation, fires popstate, and queues hashchange. Unchanged entries only
+reconcile length/index and activation; they retain the cached state object. New
+Documents restore classic/persisted state, initialize Navigation and activation,
+call the provisional BiDi committed hook, and request fragment-scroll scheduling
+before permitting parser scripts. The Document owns that one-way script gate;
+the streamed parser also checks whether it was stopped before resuming a waiting
+script. Retained-Document reactivation refreshes Navigation entries before activation
+and persisted pageshow, with Document-owned showing/reveal flags. Existing timers
+resume when full activity returns; reactivation does not adjust them a second time.
+Selective form reset and visibility transitions remain throwing dependencies, as do
+persisted-state restoration, fragment-scroll scheduling, and joint history application.
+The provisional local loader releases the same gate at its existing synchronous commit point;
+it rejects same-document changes before it can reinitialize Navigation's entries.
 
 Non-fetch URL routing stays on Navigable, using captured target sandbox and source
 activation inputs. UserAgent owns the external-handoff sandbox gate. Its handler

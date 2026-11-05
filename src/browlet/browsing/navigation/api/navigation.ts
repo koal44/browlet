@@ -262,8 +262,8 @@ export class NavigationImpl extends EventTargetImpl {
 
   /** Update the retained activation after history application has selected this Document's current entry. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#update-document-for-history-step-application
-  // Extracts step 7; the complete history application and reactivation/pageshow ordering remain in §7.4.6.2.
-  // TODO(HTML 7.4.6.2): Audit activation-before-reactivation ordering for newly visible predecessor entries at the real caller.
+  // Extracts step 7. Document reactivation supplies the refreshed entry list before this update and pageshow;
+  // see SPEC_CLASH(history-reactivation-navigation-order) at that caller.
   updateActivation(navigationType: NavigationType | null, previousEntryForActivation?: SessionHistoryEntry): void {
     if (previousEntryForActivation === undefined || navigationType === null) return;
     const document = this.env.getAssociatedDocument()!;

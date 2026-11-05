@@ -101,9 +101,11 @@ the DOM and parser. It is ready for the byte prescan and future meta element
 processing; it does not implement either consumer or encoding changes itself.
 
 The consumer waits for `Document.waitForScriptsMayRun()` before invoking its
-existing script handler. That gate currently resolves immediately: present
-callers commit synchronously before parser tasks run. Full navigation must
-supply its actual readiness condition. None of these provisional contracts
+existing script handler. History initialization now releases that Document-owned
+gate after its state and commit steps; the provisional local loader releases it
+at its existing synchronous commit point. A stopped parser ignores a late permit.
+Full history initialization still reaches unfinished persisted-state restoration
+and fragment-scroll scheduling before granting permission. None of these contracts
 completes script preparation or replaces the existing source-string route.
 
 The source-route callback in `Browlet` currently evaluates every encountered

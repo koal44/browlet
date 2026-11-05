@@ -7,7 +7,7 @@ import type { NavigationHistoryEntryImpl } from './navigation-history-entry';
 
 /** The entry pair and navigation type from a Document's most recent cross-document activation. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#navigation-activation-interface
-// TODO(HTML 7.2.7.4, 7.4.6.2): pageswap creates a separate activation in the outgoing Document's realm.
+// Window.firePageSwapEvent() creates a separate activation in the outgoing Document's realm.
 export class NavigationActivationImpl {
   /** Environment owning the activation and its entry platform objects. */
   env: BrowletEnvironment;

@@ -197,9 +197,14 @@ fallback; `abort()` cancels input and pending continuations. Encoding sniffing,
 byte retention for restart, and parser lifecycle remain in the
 [parser integration](../html/parser/ROADMAP.md).
 
-`Document.waitForScriptsMayRun()` provisionally resolves immediately because
-present callers commit before parser tasks run. `processLinkHeaders()` is a
-marked no-op in the pre-media and media phases; preload/link processing and
+`Document.waitForScriptsMayRun()` now waits for Document history initialization
+to permit scripts. The provisional local loader releases the same gate at its
+existing synchronous commit point. The streamed parser checks that it has not
+stopped when the wait resolves, so a late permit cannot run an aborted script.
+Full history application still reaches explicit persisted-state and fragment-scroll
+dependencies before granting permission; see the
+[new-Document audit](../browsing/navigation/ROADMAP.md#html-7462-new-document-history-initialization).
+`processLinkHeaders()` is a marked no-op in the pre-media and media phases; preload/link processing and
 media selection remain here. CSSOM stylesheet Link relations have a separate
 [Document method](../dom/nodes/document.ts), `processStyleSheetLinkHeaders()`: they fetch once, retain
 header order, and feed the parsed document's cascade. Script/load blockers remain

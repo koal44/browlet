@@ -848,7 +848,7 @@ export class Navigable {
   /** Save the displayed entry's state, then activate a populated entry and initialize its Document's visibility. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#activate-history-entry
   activateHistoryEntry(entry: SessionHistoryEntry): void {
-    // TODO(HTML §7.4.6.3): The persisted-state owner must capture scroll positions before activation can complete.
+    // TODO(HTML §7.4.6.5): The persisted-state owner must capture scroll positions before activation can complete.
     this.activeSessionHistoryEntry.savePersistedState();
     const document = entry.document;
     if (document === null) throw new InternalError('History activation requires a populated Document');
@@ -1422,7 +1422,10 @@ export class Navigable {
     const { env } = document;
     const parser = new HTMLDocumentParser(
       document,
-      (element, write) => document.waitForScriptsMayRun().then(() => handleScript(element, write)),
+      (element, write) => document.waitForScriptsMayRun().then(() => {
+        if (parser.stopped) return;
+        return handleScript(element, write);
+      }),
     );
     // PROVISIONAL(HTML bytes): BOM/transport decoding works; full encoding
     // selection and replay for restart remain with the parser integration.
@@ -1952,7 +1955,7 @@ export class Traversable extends Navigable implements FetchPromptTarget {
     this.currentSessionHistoryStep = targetStep;
     document.makeActive();
     // TODO(HTML §7.4.6.1): Replace this provisional activation with activateHistoryEntry() through the full coordinator,
-    // once savePersistedState() can capture the departing entry rather than throwing at its §7.4.6.3 boundary.
+    // once savePersistedState() can capture the departing entry rather than throwing at its §7.4.6.5 boundary.
     document.setInitialVisibilityState(navigable.traversable.systemVisibilityState);
     // This provisional caller only commits newly-created Documents. Reactivation and same-document
     // updates need their separate §7.2.6.4 algorithms, events, and tracker settlement.
@@ -1960,6 +1963,9 @@ export class Traversable extends Navigable implements FetchPromptTarget {
       navigable.getSessionHistoryEntriesForNavigationAPI(targetStep), historyEntry,
     );
     document.getRelevantGlobalObject()!.navigation.updateActivation(historyHandling, previousEntryForActivation);
+    // PROVISIONAL: this local loader commits synchronously. Full history application owns the same script gate
+    // after persisted-state restoration, BiDi committed reporting, and fragment-scroll scheduling.
+    document.setReadyToRunScripts();
   }
 
   /** Begin applying joint history, waiting for cancellation before advancing current entries. */
@@ -2024,6 +2030,8 @@ export class Traversable extends Navigable implements FetchPromptTarget {
         // processing ready jobs alongside runSynchronousNavigationSteps() and wake-ups for new tagged appends.
         // Add each dequeued continuation's navigable to the waiting set before dispatching its activation/update job.
         // Retain displayed-Document ownership through deactivation (HTML #12668); population can replace its shared state.
+        // Call Document.deactivateForCrossDocumentNavigation() for cross-document changes before activation.
+        // Its CSS eligibility/setup and recursive-unloading owners still throw explicitly.
         // Call activateHistoryEntry() for non-update-only continuations after any required unloading.
         // Connect failureSteps to completion so rejected jobs release the wait without duplicate reporting.
         // Run Document.updateForHistoryStepApplication() on each Document's loop, including classic
