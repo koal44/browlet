@@ -174,10 +174,19 @@ provide selectFromUser with fresh Range ownership, selectstart cancellation, and
 post-listener lifetime checks. §§6.2.1–6.2.2 now share per-target scheduling and
 firing across Document, input, and textarea. The local specification pass is
 complete; native endpoint selection, control state, and HTML document reset remain
-explicit owners. The smaller keyboard companion-values follow-up implements
-UIEvents-Key §2.2 selection/NFC and both key/code vocabularies, with native layout,
-classification, and keyboard input sequencing still explicit dependencies.
-Clipboard API follows; CSSOM View remains deferred.
+explicit owners. The [keyboard coordinator](browlet/interaction/keyboard/ROADMAP.md#queued-keyboard-delivery-2026-11-05)
+now supplies key selection/NFC, key/code vocabularies, modifier snapshots, and
+queued trusted keydown/keyup. Native layout/classification, HTML focus/activation,
+editing/default actions, and IME effects remain explicit dependencies.
+The [Clipboard opening review](browlet/interaction/clipboard/ROADMAP.md) covers
+§§1–4. The approved HTML §§6.11.2–6.11.3 [DataTransfer data slice](browlet/interaction/drag-drop/ROADMAP.md)
+now supplies string/File operations, bindings, and lifetime checks. Drag-image
+rendering remains an explicit throwing dependency; native dragging is separate.
+Clipboard §5.1 now exposes ClipboardEvent and reuses existing handlers and DOM
+dispatch. §5.2.1's ClipboardChangeEvent data interface is also implemented. Next
+are that subsection's native notification algorithms, with clipboard state, focus,
+activation/permissions, and storage-key change identifiers still to connect.
+CSSOM View remains deferred.
 HTML §8.1.8.3's synthetic pointer-event operation still needs its hookup. Input producers retain
 their HTML, editing, and layout owners.
 Source/deferred imports and the HTML Wasm parser remain explicit boundaries.

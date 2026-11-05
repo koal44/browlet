@@ -14,7 +14,8 @@ import { UIEventImpl, type UIEventInit } from './ui-event';
 // state, dispatch cancelable beforeinput where required, apply the edit, then dispatch input.
 // Synthetic construction/dispatch does not run those steps or start a composition session.
 // TODO(Input Events §6.1): Add the separate dataTransfer/targetRanges partials when integrating
-// that specification; DataTransfer still needs HTML §6.11's drag data store and projection.
+// that specification. HTML's DataTransfer data API now exists in drag-drop;
+// editing-owned target ranges and the Input Events declaration contributions remain unfinished.
 export class InputEventImpl extends UIEventImpl {
   /** Text supplied after Web IDL conversion; null and the empty string remain distinct. */
   data: string | null;

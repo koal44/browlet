@@ -22,8 +22,10 @@ import {
   reportIDL, reportBodyIDL, testReportBodyIDL, reportingObserverIDL, reportingObserverCallbackIDL,
   reportingObserverOptionsIDL, reportListIDL,
 } from '../../reporting/index';
+import { dataTransferIDLDefinitions } from '../../interaction/drag-drop/index';
 import { navigationEventIDLDefinitions } from '../../browsing/navigation/events/index';
 import { interactionEventIDLDefinitions } from '../../interaction/events/index';
+import { clipboardIDLDefinitions } from '../../interaction/clipboard/index';
 import {
   integrityViolationReportBodyIDL, coepViolationReportBodyIDL, coepInheritanceViolationReportBodyIDL,
   permissionsPolicyIDL, documentPermissionsPolicyIDL, iframePermissionsPolicyIDL,
@@ -92,6 +94,8 @@ export const browletDefinitions = [
   ...interactionEventIDLDefinitions,
   ...pointerLockIDLDefinitions,
   ...selectionIDLDefinitions,
+  ...dataTransferIDLDefinitions,
+  ...clipboardIDLDefinitions,
   notRestoredReasonDetailsIDL, notRestoredReasonsIDL,
   ...renderingIDLDefinitions,
   barPropIDL,

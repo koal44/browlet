@@ -16,6 +16,8 @@ Document lifecycle.
 | [pointer-lock](pointer-lock/ROADMAP.md) | UserAgent lock state, host operations, declarations, and lifetime integration. |
 | [wheel](wheel/ROADMAP.md) | Document-owned input queue and retained gesture target. |
 | [selection](selection/ROADMAP.md) | Document selection, live ranges, and change notifications. |
+| [drag-drop](drag-drop/ROADMAP.md) | DataTransfer store access, items, Files, and queued string reads; native dragging and image feedback remain explicit. |
+| [clipboard](clipboard/ROADMAP.md) | ClipboardEvent and ClipboardChangeEvent data/synthetic delivery; §5.2.1 native change notifications remain next. |
 
 Folders follow feature ownership; their dependency levels remain explicit in the
 import hierarchy. Document imports mouse/legacy/index directly so constructing its
@@ -242,11 +244,20 @@ scheduling/firing across Document, input, and textarea, including adoption and
 shadow-tree delivery. The local specification pass is complete; input/editing
 connections, cross-root user proposals, document reset, and HTML text-control
 state remain explicit dependencies.
-The keyboard companion-values follow-up now implements UIEvents-Key §2.2
-selection/NFC and both key/code vocabularies. Native layout/classification, live
-modifier state, and keyboard dispatch/editing remain explicit input-owner work;
-see the [events roadmap](keyboard/ROADMAP.md#keyboard-companion-values-2026-11-04).
-Clipboard API follows; CSSOM View remains deferred.
+The [keyboard coordinator](keyboard/ROADMAP.md#queued-keyboard-delivery-2026-11-05)
+now supplies receipt-time modifier snapshots and queued trusted keydown/keyup,
+using the existing key selection/NFC and vocabularies. Native layout/classification,
+HTML focus/activation, ordinary default actions, and IME effects remain explicit
+throwing dependencies. The local delivery slice is complete at those boundaries.
+The [Clipboard opening review](clipboard/ROADMAP.md#opening-review-2026-11-05)
+covers §§1–4 and identifies §5.1 ClipboardEvent as the first API implementation.
+The [HTML §§6.11.2–6.11.3 data slice](drag-drop/ROADMAP.md) now supplies the
+DataTransfer prerequisite. [Clipboard §5.1](clipboard/ROADMAP.md) now exposes
+ClipboardEvent through existing handlers and DOM dispatch. §5.2.1's
+ClipboardChangeEvent data interface is also implemented. Its native change
+notifications, focus replay and storage-key change IDs remain next; native
+clipboard/focus/permission effects require explicit owner connections.
+CSSOM View remains deferred.
 
 ## Input producer direction
 

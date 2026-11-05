@@ -46,8 +46,12 @@ export const layers = [
   ['browlet/scripting/'],
   // Policy consumes event/report primitives; documents construct and retain policy state.
   ['browlet/reporting/'],
+  // DataTransfer owns data and typed Element references; event payloads can consume it.
+  ['browlet/interaction/drag-drop/'],
   // Feature event payloads can serve Document's legacy factory without loading their producers.
   ['browlet/storage/events/', 'browlet/browsing/navigation/events/', 'browlet/interaction/events/'],
+  // Clipboard event data consumes DataTransfer; native clipboard integration is separate.
+  ['browlet/interaction/clipboard/'],
   // Document owns mouse/wheel input state; these foundations use event primitives and typed nodes only.
   ['browlet/interaction/mouse/legacy/', 'browlet/interaction/wheel/'],
   // Policy owns the source-expression algorithms shared with its CSP implementation.

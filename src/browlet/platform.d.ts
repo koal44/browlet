@@ -430,6 +430,21 @@ export interface GetComposedRangesOptions {
   shadowRoots?: Iterable<ShadowRoot>;
 }
 
+export interface ClipboardEventInit {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+  clipboardData?: DataTransfer | null;
+}
+
+export interface ClipboardChangeEventInit {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+  changeId?: bigint;
+  types?: Iterable<string>;
+}
+
 export interface SecurityPolicyViolationEventInit {
   bubbles?: boolean;
   cancelable?: boolean;
@@ -772,6 +787,8 @@ export type VoidFunction = () => void;
 export type NavigationInterceptHandler = () => void | PromiseLike<void>;
 
 export type NavigationPrecommitHandler = (controller: NavigationPrecommitController) => void | PromiseLike<void>;
+
+export type FunctionStringCallback = (data: string) => void;
 
 export type ReportingObserverCallback = (reports: Array<Report>, observer: ReportingObserver) => void;
 
@@ -2535,6 +2552,72 @@ export interface SelectionConstructor {
   [Symbol.hasInstance](value: unknown): value is Selection;
 }
 
+export interface DataTransfer {
+  dropEffect: string;
+  effectAllowed: string;
+  readonly items: DataTransferItemList;
+  setDragImage(image: Element, x: number, y: number): void;
+  readonly types: ReadonlyArray<string>;
+  getData(format: string): string;
+  setData(format: string, data: string): void;
+  clearData(format?: string): void;
+  readonly files: FileList;
+}
+
+export interface DataTransferConstructor {
+  readonly prototype: DataTransfer;
+  [Symbol.hasInstance](value: unknown): value is DataTransfer;
+  new (): DataTransfer;
+}
+
+export interface DataTransferItemList {
+  readonly length: number;
+  add(data: string, type: string): DataTransferItem | null;
+  add(data: File): DataTransferItem | null;
+  remove(index: number): void;
+  clear(): void;
+  readonly [index: number]: DataTransferItem | undefined;
+  [Symbol.iterator](): IterableIterator<DataTransferItem>;
+}
+
+export interface DataTransferItemListConstructor {
+  readonly prototype: DataTransferItemList;
+  [Symbol.hasInstance](value: unknown): value is DataTransferItemList;
+}
+
+export interface DataTransferItem {
+  readonly kind: string;
+  readonly type: string;
+  getAsString(callback: FunctionStringCallback | null): void;
+  getAsFile(): File | null;
+}
+
+export interface DataTransferItemConstructor {
+  readonly prototype: DataTransferItem;
+  [Symbol.hasInstance](value: unknown): value is DataTransferItem;
+}
+
+export interface ClipboardEvent extends Event {
+  readonly clipboardData: DataTransfer | null;
+}
+
+export interface ClipboardEventConstructor extends Ctor<EventConstructor> {
+  readonly prototype: ClipboardEvent;
+  [Symbol.hasInstance](value: unknown): value is ClipboardEvent;
+  new (type: string, eventInitDict?: ClipboardEventInit): ClipboardEvent;
+}
+
+export interface ClipboardChangeEvent extends Event {
+  readonly types: ReadonlyArray<string>;
+  readonly changeId: bigint;
+}
+
+export interface ClipboardChangeEventConstructor extends Ctor<EventConstructor> {
+  readonly prototype: ClipboardChangeEvent;
+  [Symbol.hasInstance](value: unknown): value is ClipboardChangeEvent;
+  new (type: string, eventInitDict?: ClipboardChangeEventInit): ClipboardChangeEvent;
+}
+
 export interface NotRestoredReasonDetails {
   readonly reason: string;
   toJSON(): object;
@@ -3125,6 +3208,11 @@ export interface Window extends EventTarget {
   PointerEvent: PointerEventConstructor;
   WheelEvent: WheelEventConstructor;
   Selection: SelectionConstructor;
+  DataTransfer: DataTransferConstructor;
+  DataTransferItemList: DataTransferItemListConstructor;
+  DataTransferItem: DataTransferItemConstructor;
+  ClipboardEvent: ClipboardEventConstructor;
+  ClipboardChangeEvent: ClipboardChangeEventConstructor;
   NotRestoredReasonDetails: NotRestoredReasonDetailsConstructor;
   NotRestoredReasons: NotRestoredReasonsConstructor;
   ViewTransition: ViewTransitionConstructor;

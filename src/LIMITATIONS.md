@@ -1151,6 +1151,25 @@ per-site storage access policies, and coordinated cookie/storage clearing
 remain unimplemented privacy-policy integrations.
 See the [Web Storage roadmap](browlet/storage/ROADMAP.md).
 
+## DataTransfer and clipboard prerequisites
+
+HTML DataTransfer, DataTransferItemList, and DataTransferItem support author-created
+string/File data, mode checks, stable identities, frozen types, and queued string
+callbacks. setDragImage() reaches an explicit throwing rendering dependency after
+its access checks; natural-image bitmaps, rendered Element snapshots, and native
+drag feedback are not available. Native DragEvent production, shared-store
+association across events, and effect copy-back/detachment integration remain
+unimplemented. ClipboardEvent now retains a supplied DataTransfer and supports
+synthetic dispatch through existing cut/copy/paste handlers. Those events do not
+access the system clipboard or edit the selection. ClipboardChangeEvent likewise
+provides only synthetic data: copied types, stable frozen-array identity and a
+supplied bigint changeId. Its constructor follows the draft's type/init and Window
+exposure rules rather than Chromium's init-only secure-context interface.
+Native clipboard-change notifications, native access, permission/focus gating,
+and actual copy/cut/paste actions
+remain unfinished. See the [data API boundary](browlet/interaction/drag-drop/ROADMAP.md)
+and [Clipboard event slice](browlet/interaction/clipboard/ROADMAP.md).
+
 ## HTML integration gates
 
 - **Element content handlers retain explicit dependencies.** HTML, SVG, and MathML
