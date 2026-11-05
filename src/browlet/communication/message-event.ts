@@ -2,9 +2,9 @@ import {
   arg, atArg, ctor, defineDictionary, defineInterface, defineTypedef, dictMember,
   emptyDictionary, emptySequence, frozenArray, idlType, impl, nullable, op, reference, roAttr, sequence, union,
 } from '../../web-idl/core/index';
+import type { DOMHighResTimeStamp } from '../../timing/index';
 import { serializeOrigin, type Origin } from '../../url/index';
 
-import type { DOMHighResTimeStamp } from '../timing/index';
 import { EventImpl, type EventInit } from '../dom/events/index';
 import type { DOMEnvironment } from '../dom/environment';
 import type { WindowProxyHandle } from '../browsing/window/index';

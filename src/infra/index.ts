@@ -42,7 +42,6 @@ export {
   toScalarValueString, normalizeNewlines, stripAndCollapseASCIIWhitespace, escapeRegExp, type ScalarValueString,
 } from './strings';
 export { TextCursor, TextCursorError } from './text-cursor';
-export { coarsenTime } from './time';
 export {
   mapTuple, assertNever, clamp, requireDefined, type DistributiveOmit, type PropertyOf, type SameArityTuple, type Permutations,
 } from './util';

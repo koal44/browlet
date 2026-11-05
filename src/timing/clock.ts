@@ -1,4 +1,4 @@
-import { InternalError, coarsenTime } from '../../infra/index';
+import { InternalError } from '../infra/index';
 
 import type { DOMHighResTimeStamp } from './high-resolution-time';
 
@@ -90,3 +90,17 @@ export class Duration {
     return this.milliseconds;
   }
 }
+
+/** Reduce a millisecond timestamp to the precision allowed by the environment's isolation boolean. */
+// High Resolution Time, coarsen time: https://w3c.github.io/hr-time/#dfn-coarsen-time
+export function coarsenTime(timestamp: number, crossOriginIsolatedCapability = false): number {
+  const resolution = crossOriginIsolatedCapability
+    ? FINE_RESOLUTION_MICROSECONDS
+    : COARSE_RESOLUTION_MICROSECONDS;
+  const microseconds = timestamp * 1_000;
+  const coarseMicroseconds = Math.trunc(microseconds / resolution) * resolution;
+  return coarseMicroseconds / 1_000;
+}
+
+const COARSE_RESOLUTION_MICROSECONDS = 100;
+const FINE_RESOLUTION_MICROSECONDS = 5;

@@ -5,7 +5,7 @@ import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { DocumentParser } from '../../../../src/browlet/html/parser/document-parser';
 import { HTMLDocumentParser } from '../../../../src/browlet/html/parser/html-document-parser';
 import type { Event } from '../../../../src/browlet/platform';
-import { Duration } from '../../../../src/browlet/timing/clock';
+import { Duration } from '../../../../src/timing/clock';
 import { unwrap } from '../../../support/browlet-binding';
 import { createTestDocument } from '../../../support/dom';
 
@@ -70,7 +70,7 @@ describe('Document loading status', () => {
     document.addEventListener('readystatechange', () => {
       times.push([document.loadTimingInfo.domInteractiveTime, document.loadTimingInfo.domCompleteTime]);
     });
-    const now = vi.spyOn(document.env.timing, 'currentHighResolutionTime')
+    const now = vi.spyOn(document.env, 'currentHighResolutionTime')
       .mockReturnValue(new Duration(12));
 
     document.updateCurrentDocumentReadiness('complete');

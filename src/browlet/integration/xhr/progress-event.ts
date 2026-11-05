@@ -2,8 +2,8 @@ import {
   arg, atArg, ctor, defineDictionary, defineInterface, dictMember,
   emptyDictionary, idlType, impl, integer, roAttr, reference,
 } from '../../../web-idl/core/index';
+import type { DOMHighResTimeStamp } from '../../../timing/index';
 
-import type { DOMHighResTimeStamp } from '../../timing/index';
 import { EventImpl, type EventInit, type EventTargetImpl } from '../../dom/events/index';
 import type { DOMEnvironment } from '../../dom/index';
 

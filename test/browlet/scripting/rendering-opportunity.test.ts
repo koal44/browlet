@@ -19,7 +19,7 @@ import {
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
 import {
   Duration, monotonicClock, UnsafeMoment,
-} from '../../../src/browlet/timing/clock';
+} from '../../../src/timing/clock';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -253,7 +253,7 @@ describe('Window rendering producer', () => {
   it('consults Document render blocking before running any rendering phase', () => {
     const { agent, document, navigable } = createWindowFixture();
     document.body!.remove();
-    vi.spyOn(document.env.timing, 'currentHighResolutionTime').mockReturnValue(new Duration(0));
+    vi.spyOn(document.env, 'currentHighResolutionTime').mockReturnValue(new Duration(0));
     const manualHost = createManualRenderingHost(Array.from({ length: 6 }, (_, i) =>
       new UnsafeMoment(monotonicClock, i + 1)));
     const updateRenderingAndUserInterface = vi.fn();
@@ -284,7 +284,7 @@ describe('Window rendering producer', () => {
     const script = document.head!.appendChild(document.createElement('script'));
     script.blockRendering();
     document.documentElement!.appendChild(document.createElement('body'));
-    const now = vi.spyOn(document.env.timing, 'currentHighResolutionTime').mockReturnValue(new Duration(5000));
+    const now = vi.spyOn(document.env, 'currentHighResolutionTime').mockReturnValue(new Duration(5000));
     const manualHost = createManualRenderingHost(Array.from({ length: 4 }, (_, i) =>
       new UnsafeMoment(monotonicClock, i + 1)));
     const updateRenderingAndUserInterface = vi.fn();

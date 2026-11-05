@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Clock } from '../../src/browlet/timing/clock';
+import { Clock, coarsenTime } from '../../src/timing/index';
 import { ConnectionTimingInfo } from '../../src/fetch/timing';
-import { coarsenTime } from '../../src/infra/time';
 
 describe('Fetch connection timing', () => {
   it.each([
@@ -47,6 +46,14 @@ describe('Fetch connection timing', () => {
 
     expect(result.domainLookupStartTime).toBe(10.12);
     expect(result.connectionEndTime).toBe(18.565);
+    expect(result.secureConnectionStartTime).toBe(0);
+  });
+
+  it('does not invent a TLS handshake when reusing a plain HTTP connection', () => {
+    const timing = createTiming();
+    timing.secureConnectionStartTime = 0;
+    const result = timing.clampAndCoarsen(20, false);
+    expect(result.connectionStartTime).toBe(20);
     expect(result.secureConnectionStartTime).toBe(0);
   });
 });

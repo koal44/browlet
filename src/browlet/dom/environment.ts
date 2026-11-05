@@ -1,4 +1,5 @@
-import type { DOMHighResTimeStamp, UnsafeMoment } from '../timing/index';
+import type { DOMHighResTimeStamp, UnsafeMoment } from '../../timing/index';
+
 import type { EventImpl } from './events/index';
 import type { DocumentImpl, MutationObserverImpl } from './nodes/index';
 import type { HTMLSlotElementImpl } from './nodes/html/index';

@@ -1,6 +1,6 @@
 import type { TaskCreationOptions, TaskHandle, TimerHost } from '../../infra/index';
+import { Duration } from '../../timing/index';
 
-import { Duration } from '../timing/index';
 import type { DocumentImpl } from '../dom/nodes/index';
 
 import type { EventLoop, Task } from './event-loop';

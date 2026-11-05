@@ -4,7 +4,7 @@ import type { InternalPromise } from '../infra/promises';
 import type { GlobalObject } from '../js-engine/index';
 import type { DOMExceptionConstructor } from '../web-idl/core/index';
 import type { BlobURLEntry, Host, Origin, URLRecord } from '../url/index';
-import type { CookieStore } from '../http/index';
+import type { CookieStore, HTTPStatus } from '../http/index';
 import type { StorageEnvironmentBase, StorageUserAgent } from '../storage/index';
 import type { MIMEType } from '../mime/index';
 import type { BlobImpl, FileEnvironment } from '../file/index';
@@ -64,12 +64,11 @@ export interface FetchEnvironment extends FetchEnvironmentBase, FileEnvironment 
   isSecureContext: boolean;
   /** Timing precision allowed for this client's fetches. */
   crossOriginIsolatedCapability: boolean;
-  /** Coarsen a shared monotonic timestamp and express it relative to this environment's origin. */
-  relativeHighResolutionTime(time: number): number;
   /** Record this environment's resource entry after Fetch applies timing-exposure checks. */
   markResourceTiming(
     timingInfo: FetchTimingInfo, requestedURL: URLRecord, initiatorType: string,
-    cacheUsage: CacheUsage | undefined, bodyInfo: ResponseBodyInfo, responseStatus: number,
+    cacheUsage: CacheUsage | undefined, bodyInfo: ResponseBodyInfo, responseStatus: HTTPStatus,
+    allowTransferSize: boolean,
   ): void;
   /** Consume a matching Document preload; notify when available, or return false for a miss. */
   consumePreloadedResource(

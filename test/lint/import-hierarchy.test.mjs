@@ -281,8 +281,8 @@ tester.run('import-order', order, {
     },
     {
       filename,
-      code: "import { JSRealm } from '../../../js-engine/index';\nimport type { Moment } from '../../timing/index';\nimport { InternalError } from '../../../infra/index';\nimport type { JSValue } from '../../../js-engine/index';",
-      output: "import { InternalError } from '../../../infra/index';\nimport { JSRealm } from '../../../js-engine/index';\nimport type { JSValue } from '../../../js-engine/index';\n\nimport type { Moment } from '../../timing/index';",
+      code: "import { JSRealm } from '../../../js-engine/index';\nimport type { Moment } from '../../../timing/index';\nimport { InternalError } from '../../../infra/index';\nimport type { JSValue } from '../../../js-engine/index';",
+      output: "import { InternalError } from '../../../infra/index';\nimport { JSRealm } from '../../../js-engine/index';\nimport type { JSValue } from '../../../js-engine/index';\nimport type { Moment } from '../../../timing/index';",
       errors: [{ messageId: 'order' }],
     },
     {

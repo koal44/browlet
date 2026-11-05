@@ -1,3 +1,4 @@
+import { domHighResTimeStampIDL, epochTimeStampIDL } from '../../../timing/index';
 import { streamsIDLDefinitions } from '../../../streams/index';
 import { encodingIDLDefinitions } from '../../../encoding/index';
 import { urlIDLDefinitions } from '../../../url/index';
@@ -8,7 +9,6 @@ import { xhrIDLDefinitions } from '../../../xhr/index';
 import { fetchIDLDefinitions } from '../../../fetch/index';
 import { styleletIDLDefinitions } from '../../../stylelet/index';
 
-import { domHighResTimeStampIDL, epochTimeStampIDL } from '../../timing/index';
 import { wasmIDLDefinitions } from '../../webassembly/index';
 import {
   errorEventIDL, errorEventInitIDL, promiseRejectionEventIDL, promiseRejectionEventInitIDL,

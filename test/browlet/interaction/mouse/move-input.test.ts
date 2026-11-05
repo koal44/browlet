@@ -9,7 +9,7 @@ import type { DocumentImpl, NodeImpl } from '../../../../src/browlet/dom/nodes/i
 import { PointerButton, type MouseInput, type MouseButtonInput } from '../../../../src/browlet/interaction/index';
 import { EventModifierState } from '../../../../src/browlet/interaction/events/index';
 import { userInteractionTaskSource } from '../../../../src/browlet/scripting/index';
-import { monotonicClock, UnsafeMoment } from '../../../../src/browlet/timing/index';
+import { monotonicClock, UnsafeMoment } from '../../../../src/timing/index';
 import { mockEventLoopTurns } from '../../../support/browlet-agent';
 import { getRelevantRealm, project, unwrap } from '../../../support/browlet-binding';
 
@@ -260,7 +260,7 @@ describe('Pointer Events §11.2.17: native mouse movement', () => {
     clock.mockReturnValue(new UnsafeMoment(monotonicClock, receipt.milliseconds + 100));
     a.addEventListener('pointerrawupdate', () => clock.mockReturnValue(new UnsafeMoment(monotonicClock, receipt.milliseconds + 200)));
     loop.runTaskTurn();
-    const expected = document.env.timing.relativeHighResolutionTime(receipt).toTimestamp();
+    const expected = document.env.relativeHighResolutionTime(receipt).toTimestamp();
     expect(events.map((event) => event.timeStamp)).toEqual([expected, expected, expected]);
     for (const event of events.slice(0, 2) as PointerEvent[]) {
       expect(event.getCoalescedEvents()[0]!.timeStamp).toBe(expected);

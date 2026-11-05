@@ -6,7 +6,7 @@ import type { DocumentImpl, ElementImpl } from '../../../../src/browlet/dom/node
 import { EventModifierState } from '../../../../src/browlet/interaction/events/index';
 import type { KeyboardInput } from '../../../../src/browlet/interaction/keyboard/index';
 import { userInteractionTaskSource } from '../../../../src/browlet/scripting/index';
-import { monotonicClock, UnsafeMoment } from '../../../../src/browlet/timing/index';
+import { monotonicClock, UnsafeMoment } from '../../../../src/timing/index';
 import { createManualUserAgent } from '../../../support/browlet-agent';
 import { getRelevantRealm, project, unwrap } from '../../../support/browlet-binding';
 
@@ -109,7 +109,7 @@ describe('UI Events §§3.5.4–3.5.6: queued keyboard input', () => {
     input.queueKey(keyInput(true), document);
     clock.mockReturnValue(new UnsafeMoment(monotonicClock, receipt.milliseconds + 100));
     loop.runTaskTurn();
-    expect(received[0]!.timeStamp).toBe(document.env.timing.relativeHighResolutionTime(receipt).toTimestamp());
+    expect(received[0]!.timeStamp).toBe(document.env.relativeHighResolutionTime(receipt).toTimestamp());
   });
 
   it('shares current modifier state across Windows but not queued snapshots or event realms', () => {

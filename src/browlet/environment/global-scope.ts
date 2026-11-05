@@ -54,13 +54,13 @@ export class WindowOrWorkerGlobalScopeMixin {
 
   constructor(env: BrowletEnvironment) {
     this.env = env;
-    this.performance = new PerformanceImpl(env.timing, env);
+    this.performance = new PerformanceImpl(env);
     this.trustedTypes = new TrustedTypePolicyFactoryImpl(env);
     this.timers = new GlobalTimers({
       eventLoop: env.responsibleEventLoop,
       host: env.userAgent.timerHost,
       queueTask: (steps, options) => env.queueTask('timer', steps, options),
-      time: env.timing,
+      time: env,
     });
   }
 

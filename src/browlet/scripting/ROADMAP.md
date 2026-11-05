@@ -1083,7 +1083,7 @@ questions above remain explicit rather than being inferred from these passing ca
 ### §8.1.6.5: Temporal clock calculation and installation boundary
 
 `BrowletEnvironment.getSystemUTCEpochNanoseconds()` implements the HTML algorithm
-using this global's relevant settings. It reads `timing.currentWallTime()`, which
+using this global's relevant settings. It reads `env.currentWallTime()`, which
 already applies the environment's isolation-sensitive coarsening, converts the
 reading to integer nanoseconds, and clamps it to Temporal's full Instant range
 (±8.64 × 10²¹ ns). Integral milliseconds are converted to bigint before scaling;

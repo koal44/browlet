@@ -463,7 +463,7 @@ describe('Fetch timing handover', () => {
     expect(timing.serverTimingHeaders).toEqual(['db;dur=4', 'app;dur=2']);
     expect(timing.endTime).toBeGreaterThanOrEqual(0);
     expect(mark).toHaveBeenCalledExactlyOnceWith(
-      timing, request.url, 'fetch', 'validated', reply.response.bodyInfo, 200,
+      timing, request.url, 'fetch', 'validated', reply.response.bodyInfo, 200, true,
     );
     expect(reply.response.bodyInfo.contentType).toBe('application/json');
   });
@@ -486,9 +486,10 @@ describe('Fetch timing handover', () => {
     });
     await complete(operation);
     expect(mark.mock.calls[0]![0]).toMatchObject({
-      startTime: 23, postRedirectStartTime: 23, finalNetworkRequestStartTime: 0, endTime: 0,
+      startTime: 23, postRedirectStartTime: 23, finalNetworkRequestStartTime: 0, endTime: 99,
     });
     expect(mark.mock.calls[0]![3]).toBeUndefined();
+    expect(mark.mock.calls[0]![6]).toBe(false);
     expect(operation.controller.extractFullTimingInfo().finalNetworkResponseStartTime).toBe(99);
   });
 
@@ -505,6 +506,24 @@ describe('Fetch timing handover', () => {
     expect(mark).not.toHaveBeenCalled();
     operation.controller.reportTiming(env);
     expect(mark).toHaveBeenCalledOnce();
+  });
+
+  it('keeps opaque body measurements private when an internal consumer completes a permitted fetch', async () => {
+    const { operation, request, env, reply } = await createFixture('https://other.test/resource');
+    const mark = vi.spyOn(env, 'markResourceTiming');
+    request.mode = 'no-cors';
+    request.initiatorType = 'fetch';
+    request.populateFromClient();
+    reply.response.headerList.append('Timing-Allow-Origin', '*');
+    reply.response.bodyInfo.encodedSize = 6;
+    reply.response.bodyInfo.decodedSize = 12;
+    reply.response.body = FetchBody.fromBytes(Uint8Array.of(1, 2, 3), env);
+    const { response } = await complete(operation);
+    expect(response.type).toBe('opaque');
+    expect(mark).toHaveBeenCalledOnce();
+    expect(mark.mock.calls[0]![4]).toMatchObject({ encodedSize: 0, decodedSize: 0 });
+    expect(mark.mock.calls[0]![5]).toBe(0);
+    expect(mark.mock.calls[0]![6]).toBe(false);
   });
 });
 

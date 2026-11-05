@@ -9,7 +9,7 @@ import { WindowIdleCallbacks } from '../../../src/browlet/browsing/window/idle-c
 import { DedicatedWorkerAgent, SandboxAgent } from '../../../src/browlet/scripting/agents';
 import type { WindowIdleRendering } from '../../../src/browlet/scripting/event-loop';
 import { domManipulationTaskSource } from '../../../src/browlet/scripting/tasks';
-import { Moment, monotonicClock, UnsafeMoment } from '../../../src/browlet/timing/clock';
+import { Moment, monotonicClock, UnsafeMoment } from '../../../src/timing/clock';
 
 afterEach(() => { vi.restoreAllMocks(); });
 

@@ -1,6 +1,7 @@
 import { asciiLower, assertNever, InternalError, internalType, type InternalPromise } from '../../../infra/index';
 import { randomUUID } from '../../../js-engine/index';
 import { DOMExceptionImpl } from '../../../web-idl/core/index';
+import { coarsenedSharedCurrentTime } from '../../../timing/index';
 import { utf8Decode, utf8Encode } from '../../../encoding/index';
 import {
   aboutBlankURL, areSameOrigin, areSameOriginDomain, copyURL, createOpaqueOrigin, obtainURLOrigin,
@@ -16,7 +17,6 @@ import {
   FetchBody, FetchRequest, FetchResponse, isFetchScheme, type FetchPromptTarget, type fetchPromptTargetBrand, type ReferrerPolicy,
 } from '../../../fetch/index';
 
-import { coarsenedSharedCurrentTime } from '../../timing/index';
 import { ClassicScript, ScriptFetchOptions, type EventLoop } from '../../scripting/index';
 import type { PointerId } from '../../interaction/events/index';
 import {

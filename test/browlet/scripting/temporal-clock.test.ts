@@ -6,7 +6,7 @@ import { Browlet } from '../../../src/browlet/browlet';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import { FetchResponse } from '../../../src/fetch/response';
 import { parseURL } from '../../../src/url/index';
-import { Moment, UnsafeMoment, wallClock } from '../../../src/browlet/timing/clock';
+import { Moment, UnsafeMoment, wallClock } from '../../../src/timing/clock';
 import { createManualUserAgent } from '../../support/browlet-agent';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { createSiblingWindow } from '../../support/windows';
@@ -47,8 +47,8 @@ describe('HTML Temporal clock integration', () => {
     const second = createSiblingWindow(first);
     const firstEnv = getRelevantRealm(first.window).env;
     const secondEnv = getRelevantRealm(second).env;
-    vi.spyOn(firstEnv.timing, 'currentWallTime').mockReturnValue(new Moment(wallClock, 123));
-    vi.spyOn(secondEnv.timing, 'currentWallTime').mockReturnValue(new Moment(wallClock, 456));
+    vi.spyOn(firstEnv, 'currentWallTime').mockReturnValue(new Moment(wallClock, 123));
+    vi.spyOn(secondEnv, 'currentWallTime').mockReturnValue(new Moment(wallClock, 456));
     const firstTemporal = Reflect.get(first.window, 'Temporal') as typeof Temporal;
     const secondTemporal = Reflect.get(second, 'Temporal') as typeof Temporal;
 
@@ -61,11 +61,11 @@ describe('HTML Temporal clock integration', () => {
     await browser.navigate('https://example.test/first');
     const oldEnv = getRelevantRealm(browser.window).env;
     const oldTemporal = Reflect.get(browser.window, 'Temporal') as typeof Temporal;
-    vi.spyOn(oldEnv.timing, 'currentWallTime').mockReturnValue(new Moment(wallClock, 123));
+    vi.spyOn(oldEnv, 'currentWallTime').mockReturnValue(new Moment(wallClock, 123));
     await browser.navigate('https://example.test/second');
     const newEnv = getRelevantRealm(browser.window).env;
     expect(newEnv).not.toBe(oldEnv);
-    vi.spyOn(newEnv.timing, 'currentWallTime').mockReturnValue(new Moment(wallClock, 456));
+    vi.spyOn(newEnv, 'currentWallTime').mockReturnValue(new Moment(wallClock, 456));
 
     expect(await browser.evaluate(() => Temporal.Now.instant().epochNanoseconds)).toBe(456_000_000n);
     expect(oldTemporal.Now.instant().epochNanoseconds).toBe(123_000_000n);
@@ -161,7 +161,7 @@ describe('HTML HostSystemUTCEpochNanoseconds calculation', () => {
   ])('converts coarsened %s milliseconds to %s nanoseconds', (milliseconds, nanoseconds) => {
     const browser = new Browlet({ route: () => '' });
     const env = getRelevantRealm(browser.window).env;
-    vi.spyOn(env.timing, 'currentWallTime').mockReturnValue(new Moment(wallClock, milliseconds));
+    vi.spyOn(env, 'currentWallTime').mockReturnValue(new Moment(wallClock, milliseconds));
 
     expect(env.getSystemUTCEpochNanoseconds()).toBe(nanoseconds);
   });
@@ -174,7 +174,7 @@ describe('HTML HostSystemUTCEpochNanoseconds calculation', () => {
   ])('clamps %s milliseconds to Temporal\'s Instant range', (milliseconds, nanoseconds) => {
     const browser = new Browlet({ route: () => '' });
     const env = getRelevantRealm(browser.window).env;
-    vi.spyOn(env.timing, 'currentWallTime').mockReturnValue(new Moment(wallClock, milliseconds));
+    vi.spyOn(env, 'currentWallTime').mockReturnValue(new Moment(wallClock, milliseconds));
 
     expect(env.getSystemUTCEpochNanoseconds()).toBe(nanoseconds);
   });

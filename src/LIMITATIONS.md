@@ -1644,15 +1644,32 @@ specification gap, not an unfinished implementation. The local-route response-po
 adapter remains until that producer supplies complete params. Navigation Timing
 now retains controller-backed inputs and the redirect count selected by HTML's
 taint/client/referrer/TAO rules. It still exposes no PerformanceNavigationTiming
-entry: Resource Timing construction, exposure filtering, diagnostic capture,
-and producer integration are absent. Performance Timeline now supplies
+entry: navigation-specific construction, exposure filtering, diagnostic capture,
+and producer integration are absent. Resource Timing now supplies its derived
+entry, getters, default JSON, and time-origin conversion for prepared Fetch inputs.
+Its buffer controls clear retained resource entries and resize the per-global limit.
+Resource-specific insertion retains overflow entries until a coalesced Timeline
+task fires the trusted buffer-full event, then promotes or discards those entries.
+Observers receive entries independently of that storage limit. The full event
+uses the shared HTML handler machinery and can notify again after discarded overflow.
+Completed HTTP Fetches now produce resource entries, with TAO/CORS filtering,
+cache-phase normalization, byte counts, and observer delivery. MIME support
+classification remains provisional: the explicit UserAgent support-policy stub
+means text/plain contentType is empty; its strict regression is an approved
+expected failure. Server Timing now parses captured response headers into retained
+metrics and a frozen resource-entry array, with Fetch's secure-context and TAO
+filtering. HTTP trailer delivery, navigation-entry initialization, and worker-producer
+acceptance remain dependencies. Body completion still belongs to Fetch's consumption and
+cancellation lifecycle; timing delivery does not force inaccessible bodies to drain.
+Performance Timeline now supplies
 the base entry, per-global buffers, synchronous `getEntries*()` queries, observer
 registration/record retrieval, buffered replay, observer-list queries, and shared
 task delivery, entry insertion, and initial navigation-ID association. The withdrawn
 numeric PerformanceEntry.id is omitted, following upstream issue #218 and browsers;
 navigationId follows the newer Soft Navigations model. Early producer capture and
 soft-navigation ID advancement remain explicit dependencies. No timing producer
-populates those buffers yet, and supportedEntryTypes remains empty.
+other than Fetch resources populates those buffers yet; supportedEntryTypes
+advertises resource only.
 Synthetic and supplied-response
 navigations without a controller still need fallback timing; retained start time
 does not reconstruct prior network measurements. Response-header processing and

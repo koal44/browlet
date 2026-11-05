@@ -4,7 +4,7 @@ import { createTestDocument } from '../../support/dom';
 import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import { Duration } from
-  '../../../src/browlet/timing/clock';
+  '../../../src/timing/clock';
 import type { EventLoop } from '../../../src/browlet/scripting/event-loop';
 import type { TaskHandle, TimerHost } from '../../../src/infra/tasks';
 
@@ -131,7 +131,7 @@ function createTimerFixture() {
 
   const { env } = document;
   const eventLoop = env.responsibleEventLoop;
-  vi.spyOn(env.timing, 'currentHighResolutionTime').mockImplementation(() => new Duration(host.now));
+  vi.spyOn(env, 'currentHighResolutionTime').mockImplementation(() => new Duration(host.now));
   const timers = env.getWindowOrWorkerGlobalScopeMixin().timers;
   return { eventLoop, host, timers, traversable };
 }

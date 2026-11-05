@@ -1,6 +1,6 @@
-import { coarsenTime } from '../infra/time';
+import { coarsenTime } from '../timing/index';
 
-/** Timing observations retained for Resource Timing and Navigation Timing, in milliseconds. */
+/** Coarsened shared-clock observations, converted to the entry's time origin by Resource Timing. */
 // https://fetch.spec.whatwg.org/#fetch-timing-info
 export class FetchTimingInfo {
   /** Fetch start timestamp in milliseconds, including time spent on redirects. */
@@ -25,17 +25,19 @@ export class FetchTimingInfo {
   finalConnectionTimingInfo: ConnectionTimingInfo | null = null;
   /** Worker processing observations, or null when no worker timing is attached. */
   serviceWorkerTimingInfo: ServiceWorkerTimingInfo | null = null;
-  /** Raw Server-Timing field values retained for later timing reports. */
+  /** Comma-split Server-Timing metrics, still unparsed, retained for later timing reports. */
   serverTimingHeaders: string[] = [];
   /** Whether the fetch was classified as render-blocking. */
   renderBlocking = false;
 
-  /** Hide timing details, retaining only the original fetch start. */
+  /** Hide timing details while retaining overall duration and render-blocking classification. */
   // https://fetch.spec.whatwg.org/#create-an-opaque-timing-info
   createOpaque(): FetchTimingInfo {
     const opaque = new FetchTimingInfo();
     opaque.startTime = this.startTime;
     opaque.postRedirectStartTime = this.startTime;
+    opaque.endTime = this.endTime;
+    opaque.renderBlocking = this.renderBlocking;
     return opaque;
   }
 }
@@ -80,7 +82,8 @@ export class ConnectionTimingInfo {
       result.domainLookupEndTime = defaultStartTime;
       result.connectionStartTime = defaultStartTime;
       result.connectionEndTime = defaultStartTime;
-      result.secureConnectionStartTime = defaultStartTime;
+      // SPEC_CLASH(fetch-reused-http-tls): Fetch replaces zero too; browsers preserve the absence of a TLS handshake on plain HTTP.
+      result.secureConnectionStartTime = this.secureConnectionStartTime === 0 ? 0 : defaultStartTime;
       return result;
     }
 

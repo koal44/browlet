@@ -1,11 +1,11 @@
 import { InternalError, internalType, type InternalPromise, type InternalPromiseWithResolvers } from '../../../infra/index';
+import { coarsenedSharedCurrentTime, type DOMHighResTimeStamp } from '../../../timing/index';
 import { utf8Encode } from '../../../encoding/index';
 import { aboutBlankURL, areSameOrigin, copyURL, type Origin, obtainURLOrigin, type URLRecord } from '../../../url/index';
 import {
   fetch, FetchBody, FetchResponse, isFetchScheme, isHTTPScheme, type FetchRequest, type FetchController, type ReferrerPolicy,
 } from '../../../fetch/index';
 
-import { coarsenedSharedCurrentTime, type DOMHighResTimeStamp } from '../../timing/index';
 import { PolicyContainer, OpenerPolicy, SandboxingFlagSet } from '../policy/index';
 import type { DocumentImpl } from '../../dom/nodes/index';
 import { HTMLIFrameElementImpl } from '../../dom/nodes/html/embedded/index';

@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 export const layers = [
   ['infra/'],
   ['js-engine/', 'web-idl/core/', 'url/core/'],
+  ['timing/'],
   ['web-idl/assembly/'],
   ['web-idl/values/'],
   ['web-idl/converters/'],
@@ -38,7 +39,7 @@ export const layers = [
   ['stylelet/cssom/'],
   ['stylelet/engine/'],
   ['stylelet/'],
-  ['browlet/timing/', 'browlet/dom/infra/', 'browlet/dom/nodes/element-definitions/', 'browlet/style/', 'browlet/webassembly/'],
+  ['browlet/dom/infra/', 'browlet/dom/nodes/element-definitions/', 'browlet/style/', 'browlet/webassembly/'],
   ['browlet/html/microsyntaxes/', 'browlet/dom/lists/'],
   ['browlet/dom/nodes/html/attributes/'],
   // HTML handlers use DOM's host-neutral listener values and dispatch metadata.

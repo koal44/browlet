@@ -1,6 +1,6 @@
 import { InternalError } from '../../../infra/index';
+import { unsafeSharedCurrentTime, type UnsafeMoment } from '../../../timing/index';
 
-import { unsafeSharedCurrentTime, type UnsafeMoment } from '../../timing/index';
 import { userInteractionTaskSource } from '../../scripting/index';
 import { WheelEventImpl, type MouseEventInput } from '../events/index';
 import type { DocumentImpl, ElementImpl, NodeImpl } from '../../dom/nodes/index';

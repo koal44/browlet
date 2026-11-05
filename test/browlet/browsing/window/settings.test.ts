@@ -6,7 +6,7 @@ import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable
 import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { PermissionsPolicy } from '../../../../src/browlet/browsing/policy/permissions';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
-import { monotonicClock } from '../../../../src/browlet/timing/clock';
+import { monotonicClock } from '../../../../src/timing/clock';
 import { obtainURLOrigin, parseURL } from '../../../../src/url/index';
 import { getRelevantRealm, unwrap } from '../../../support/browlet-binding';
 

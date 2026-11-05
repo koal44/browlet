@@ -25,6 +25,7 @@
     { "path": "../src/permissions" },
     { "path": "../src/storage" },
     { "path": "../src/web-idl/core" },
+    { "path": "../src/timing" },
     { "path": "../src/web-idl" },
     { "path": "../src/streams" },
     { "path": "../src/encoding" },

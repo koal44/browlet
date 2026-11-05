@@ -10,7 +10,7 @@ import {
 import { EventTargetImpl } from '../../src/browlet/dom/events/event-target';
 import type { EventImpl } from '../../src/browlet/dom/events/event';
 import type { ProgressEventImpl } from '../../src/browlet/integration/xhr/progress-event';
-import { monotonicClock, UnsafeMoment } from '../../src/browlet/timing/clock';
+import { monotonicClock, UnsafeMoment } from '../../src/timing/clock';
 import {
   BlobData, BlobImpl, BlobReadFailure, type BlobByteSource,
 } from '../../src/file/index';

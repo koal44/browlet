@@ -30,7 +30,7 @@ import {
 } from '../../../src/browlet/environment/index';
 import type { Task } from
   '../../../src/browlet/scripting/event-loop';
-import { Moment, monotonicClock } from '../../../src/browlet/timing/clock';
+import { Moment, monotonicClock } from '../../../src/timing/clock';
 import {
   createBrowletRealm,
 } from '../../../src/browlet/scripting/realm';

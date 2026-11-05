@@ -3,12 +3,12 @@ import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineInterface, dictMember,
   emptyDictionary, idlType, impl, integer, nullable, op, reference, roAttr, xattr,
 } from '../../../../web-idl/core/index';
+import type { DOMHighResTimeStamp } from '../../../../timing/index';
 import { utf8Encode } from '../../../../encoding/index';
 import { copyURL, createOpaqueOrigin, obtainURLOrigin, stripURLForReporting, type URLRecord } from '../../../../url/index';
 import type { HTTPStatus } from '../../../../http/index';
 import { FetchRequest, fetch, isFilteredResponse, type FetchResponse } from '../../../../fetch/index';
 
-import type { DOMHighResTimeStamp } from '../../../timing/index';
 import { EventImpl, type EventInit } from '../../../dom/events/index';
 import { ReportBodyImpl, ReportImpl, ReportingEndpoint } from '../../../reporting/index';
 import type { ElementImpl, DocumentImpl } from '../../../dom/nodes/index';

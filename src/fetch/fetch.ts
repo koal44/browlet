@@ -2,9 +2,9 @@ import { TypeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
 import { ParallelQueue } from '../infra/parallel-queue';
 import { type PromiseResultType, internalType, type InternalPromise, type InternalPromiseWithResolvers } from '../infra/promises';
-import { coarsenTime } from '../infra/time';
 import { getBufferSourceCopy, isUint8Array } from '../js-engine/index';
 import { idlType, isDOMException } from '../web-idl/core/index';
+import { coarsenTime } from '../timing/index';
 import { ReadableStreamImpl, TransformStreamImpl, type ReadableStreamDefaultReaderImpl } from '../streams/index';
 import { utf8DecodeWithoutBOM } from '../encoding/index';
 import {
@@ -33,7 +33,7 @@ import { FetchParams } from './params';
 import { isBlockedByBadPort, isBlockedByMIMEType, isBlockedByNosniff } from './policy';
 import { FetchRequest } from './request';
 import { FetchResponse, isFilteredResponse } from './response';
-import { FetchTimingInfo, type ServiceWorkerTimingInfo } from './timing';
+import { ConnectionTimingInfo, FetchTimingInfo, type ServiceWorkerTimingInfo } from './timing';
 import type { HTTPContentDecoder, HTTPTransportControl, HTTPUploadSource } from './transport';
 import { isHTTPScheme, isLocalURL } from './url';
 
@@ -788,6 +788,8 @@ function corsPreflightFetch(params: FetchParams): InternalPromise<FetchResponse>
 function fetchFinale(params: FetchParams, response: FetchResponse): void {
   const { request, timingInfo } = params;
   const internalResponse = isFilteredResponse(response) ? response.internalResponse : response;
+  // TODO(Server Timing / HTTP trailers): Retain Server-Timing trailer fields before publishing
+  // completed resource metrics when the transport gains trailer delivery. This captures headers only.
   if (response.type !== 'error' && request.client?.isSecureContext) {
     timingInfo.serverTimingHeaders = internalResponse.headerList.getDecodeAndSplit('Server-Timing') ?? [];
   }
@@ -808,6 +810,8 @@ function fetchFinale(params: FetchParams, response: FetchResponse): void {
     // SPEC_CLASH(fetch-finale-byte-stream): The draft's identity transform loses BYOB.
     // Observe the original stream instead, as Undici does; browsers retain byte streams.
     // SPEC_CLASH(fetch-body-completion): Flush covers normal EOF only; finish on error/cancel too.
+    // TODO(Fetch body lifecycle): Define host draining/discard of inaccessible opaque bodies without an internal consumer.
+    // A filtered null body is not evidence that this underlying stream has finished.
     internalResponse.body.stream.onCompletion(endOfBody, endOfBody);
   }
   if (params.processResponseConsumeBody !== null) {
@@ -1017,7 +1021,8 @@ function processFetchResponse(params: FetchParams, response: FetchResponse): voi
   if (request.isNavigation) {
     internalResponse.navigationTimingAllowValuesList = request.navigationTimingAllowValuesList.map((values) => [...values]);
   }
-  if (!request.timingAllowFailed) internalResponse.timingAllowPassed = true;
+  // SPEC_CLASH(fetch-error-timing-permission): Main fetch grants this even to network errors, contrary to the finale's opacity note. Keep failures hidden, as Chromium does.
+  if (response.type !== 'error' && !request.timingAllowFailed) internalResponse.timingAllowPassed = true;
   if (response.type !== 'error' && (internalResponse.isBlockedByMixedContent(request) || internalResponse.isBlockedByCSP(request) ||
     isBlockedByMIMEType(internalResponse, request) || isBlockedByNosniff(internalResponse, request))) {
     internalResponse.discardBody?.();
@@ -1054,7 +1059,8 @@ function endResponseBody(params: FetchParams, response: FetchResponse): void {
   params.controller.reportTimingSteps = (env) => {
     if (!isHTTPScheme(request.url.scheme)) return;
     let timingInfo = params.timingInfo;
-    timingInfo.endTime = env.relativeHighResolutionTime(unsafeEndTime);
+    // SPEC_CLASH(resource-timing-end-clock): Fetch makes this relative, but Resource Timing converts it again. Retain a coarsened shared timestamp until entry construction.
+    timingInfo.endTime = coarsenTime(unsafeEndTime, env.crossOriginIsolatedCapability);
     let cacheUsage = response.cacheUsage;
     const bodyInfo = response.bodyInfo;
     if (!response.timingAllowPassed) {
@@ -1070,7 +1076,10 @@ function endResponseBody(params: FetchParams, response: FetchResponse): void {
       }
     }
     if (request.initiatorType !== null) {
-      env.markResourceTiming(timingInfo, request.url, request.initiatorType, cacheUsage, bodyInfo, status);
+      // SPEC_CLASH(resource-timing-body-cors): Keep readable body sizes even without TAO, as Fetch/Resource Timing and Firefox specify.
+      // Chromium's older TAO gate and WebKit's same-origin gate differ. Transfer size requires both permissions.
+      const allowTransferSize = response.timingAllowPassed && response.type !== 'opaque' && response.type !== 'opaqueredirect';
+      env.markResourceTiming(timingInfo, request.url, request.initiatorType, cacheUsage, bodyInfo, status, allowTransferSize);
     }
   };
   queueTask(params, () => {
@@ -1129,7 +1138,18 @@ function fetchWithCache(
       const background = mode === 'default' && !reuse &&
         freshness.staleWhileRevalidate && requestControl === '' && request.client !== null;
       if (reuse || background) {
+        // SPEC_GAP(resource-timing-cache-phases): Fetch supplies no connection/request observations for a local hit.
+        // Normalize these phases to this fetch's start, as browser fallback getters do; cached bytes retain their sizes.
+        const timing = params.timingInfo;
+        const connection = new ConnectionTimingInfo();
+        connection.domainLookupStartTime = connection.domainLookupEndTime = timing.postRedirectStartTime;
+        connection.connectionStartTime = connection.connectionEndTime = timing.postRedirectStartTime;
+        // SPEC_CLASH(resource-timing-cache-protocol): A cache hit has no new protocol or TLS handshake. Keep empty/zero, as Chromium does; Firefox retains protocol.
+        timing.finalConnectionTimingInfo = connection;
+        timing.finalNetworkRequestStartTime = timing.postRedirectStartTime;
+        timing.firstInterimNetworkResponseStartTime = 0;
         const response = stored.materialize(request, 'local', now, env);
+        timing.finalNetworkResponseStartTime = coarsenTime(userAgent.unsafeSharedCurrentTime(), params.crossOriginIsolatedCapability);
         userAgent.webDriverBiDiResponseStarted(request, response);
         if (background) revalidateInBackground(sourceRequest);
         result.resolve(response);

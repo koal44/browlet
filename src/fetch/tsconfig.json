@@ -17,6 +17,7 @@
     { "path": "../mime" },
     { "path": "../storage" },
     { "path": "../streams" },
+    { "path": "../timing" },
     { "path": "../url" },
     { "path": "../web-idl/core" },
     { "path": "../xhr" }

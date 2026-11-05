@@ -328,7 +328,7 @@ path. Implement the named portion of a roadmap, not every future feature in it.
 
 **1: retain one deterministic host.** Extend the existing
 [scripting/event loop](browlet/scripting/ROADMAP.md),
-[timing](browlet/timing/README.md), [performance](browlet/performance/ROADMAP.md),
+[timing](timing/README.md), [performance](browlet/performance/ROADMAP.md),
 [abort](browlet/dom/abort/ROADMAP.md), and
 [browsing](browlet/browsing/ROADMAP.md) owners. Element task destinations retain
 their creation global; add checkpoint consumers at their owning algorithms.

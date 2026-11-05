@@ -21,9 +21,9 @@ import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import {
   monotonicClock, UnsafeMoment,
-} from '../../../src/browlet/timing/clock';
+} from '../../../src/timing/clock';
 
-import * as timing from '../../../src/browlet/timing/high-resolution-time';
+import * as timing from '../../../src/timing/high-resolution-time';
 
 afterEach(() => { vi.restoreAllMocks(); });
 

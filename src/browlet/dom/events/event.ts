@@ -3,8 +3,8 @@ import {
   arg, atArg, attr, constant, ctor, defineDictionary, defineInterface, dictMember,
   emptyDictionary, idlType, impl, integer, nullable, op, roAttr, reference, sequence, tsType, xattr,
 } from '../../../web-idl/core/index';
+import { unsafeSharedCurrentTime, type DOMHighResTimeStamp } from '../../../timing/index';
 
-import { unsafeSharedCurrentTime, type DOMHighResTimeStamp } from '../../timing/index';
 import type { BeforeUnloadEventImpl } from '../../browsing/navigation/events/index';
 import type { MouseEventImpl } from '../../interaction/events/index';
 import type { DOMEnvironment } from '../environment';

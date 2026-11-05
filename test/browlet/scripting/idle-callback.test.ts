@@ -8,7 +8,7 @@ import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/na
 import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { IdleDeadlineImpl, type IdleRequestCallback } from '../../../src/browlet/browsing/window/idle-callback';
 import { domManipulationTaskSource, idleTaskSource } from '../../../src/browlet/scripting/tasks';
-import { Moment, monotonicClock, UnsafeMoment } from '../../../src/browlet/timing/clock';
+import { Moment, monotonicClock, UnsafeMoment } from '../../../src/timing/clock';
 import { createManualEventLoop, createManualUserAgent } from '../../support/browlet-agent';
 import { runInHostTask } from '../../support/tasks';
 

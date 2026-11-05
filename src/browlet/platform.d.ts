@@ -23,6 +23,8 @@ export type PresentationStyle = "unspecified" | "inline" | "attachment";
 
 export type SecurityPolicyViolationEventDisposition = "enforce" | "report";
 
+export type RenderBlockingStatusType = "blocking" | "non-blocking";
+
 export type ShadowRootMode = "open" | "closed";
 
 export type SlotAssignmentMode = "manual" | "named";
@@ -2856,6 +2858,9 @@ export interface Performance extends EventTarget {
   getEntries(): Array<PerformanceEntry>;
   getEntriesByType(type: string): Array<PerformanceEntry>;
   getEntriesByName(name: string, type?: string): Array<PerformanceEntry>;
+  clearResourceTimings(): void;
+  setResourceTimingBufferSize(maxSize: number): void;
+  onresourcetimingbufferfull: EventHandlerNonNull | null;
 }
 
 export interface PerformanceConstructor extends Ctor<EventTargetConstructor> {
@@ -2899,6 +2904,56 @@ export interface PerformanceObserverEntryList {
 export interface PerformanceObserverEntryListConstructor {
   readonly prototype: PerformanceObserverEntryList;
   [Symbol.hasInstance](value: unknown): value is PerformanceObserverEntryList;
+}
+
+export interface PerformanceResourceTiming extends PerformanceEntry {
+  readonly initiatorType: string;
+  readonly deliveryType: string;
+  readonly nextHopProtocol: string;
+  readonly workerStart: number;
+  readonly redirectStart: number;
+  readonly redirectEnd: number;
+  readonly fetchStart: number;
+  readonly domainLookupStart: number;
+  readonly domainLookupEnd: number;
+  readonly connectStart: number;
+  readonly connectEnd: number;
+  readonly secureConnectionStart: number;
+  readonly requestStart: number;
+  readonly finalResponseHeadersStart: number;
+  readonly firstInterimResponseStart: number;
+  readonly responseStart: number;
+  readonly responseEnd: number;
+  readonly workerRouterEvaluationStart: number;
+  readonly workerCacheLookupStart: number;
+  readonly workerMatchedRouterSource: string;
+  readonly workerFinalRouterSource: string;
+  readonly transferSize: number;
+  readonly encodedBodySize: number;
+  readonly decodedBodySize: number;
+  readonly responseStatus: number;
+  readonly renderBlockingStatus: RenderBlockingStatusType;
+  readonly contentType: string;
+  readonly contentEncoding: string;
+  toJSON(): object;
+  readonly serverTiming: ReadonlyArray<PerformanceServerTiming>;
+}
+
+export interface PerformanceResourceTimingConstructor extends Ctor<PerformanceEntryConstructor> {
+  readonly prototype: PerformanceResourceTiming;
+  [Symbol.hasInstance](value: unknown): value is PerformanceResourceTiming;
+}
+
+export interface PerformanceServerTiming {
+  readonly name: string;
+  readonly duration: number;
+  readonly description: string;
+  toJSON(): object;
+}
+
+export interface PerformanceServerTimingConstructor {
+  readonly prototype: PerformanceServerTiming;
+  [Symbol.hasInstance](value: unknown): value is PerformanceServerTiming;
 }
 
 export interface Navigator {
@@ -3330,6 +3385,8 @@ export interface Window extends EventTarget {
   PerformanceEntry: PerformanceEntryConstructor;
   PerformanceObserver: PerformanceObserverConstructor;
   PerformanceObserverEntryList: PerformanceObserverEntryListConstructor;
+  PerformanceResourceTiming: PerformanceResourceTimingConstructor;
+  PerformanceServerTiming: PerformanceServerTimingConstructor;
   Navigator: NavigatorConstructor;
   ErrorEvent: ErrorEventConstructor;
   MessageEvent: MessageEventConstructor;

@@ -147,7 +147,7 @@ describe('Performance Timeline entry queueing', () => {
 
   it('uses zero for a non-Window global through the same queueing and projection machinery', () => {
     const env = createSandboxEnvironment();
-    const performance = new PerformanceImpl(env.timing, env);
+    const performance = new PerformanceImpl(env);
     const entry = new PerformanceEntryImpl(1, 'mark', 'non-window', 0, env);
     expect(performance.currentNavigationId).toBe(0);
     performance.queueEntry(entry);

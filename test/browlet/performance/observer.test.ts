@@ -26,11 +26,11 @@ describe('PerformanceObserver registration and records', () => {
     expect(Object.prototype.toString.call(observer)).toBe('[object PerformanceObserver]');
   });
 
-  it('advertises no producer prematurely and retains a frozen array per global', () => {
+  it('advertises the implemented resource producer and retains a frozen array per global', () => {
     const first = fixture();
     const second = fixture();
     const types = first.browser.window.PerformanceObserver.supportedEntryTypes;
-    expect(types).toEqual([]);
+    expect(types).toEqual(['resource']);
     expect(Object.isFrozen(types)).toBe(true);
     expect(first.browser.window.PerformanceObserver.supportedEntryTypes).toBe(types);
     expect(second.browser.window.PerformanceObserver.supportedEntryTypes).not.toBe(types);
@@ -245,11 +245,11 @@ describe('PerformanceObserverEntryList', () => {
 });
 
 /** Supply completed internal producer metadata/records; this does not simulate queueing or callback delivery. */
-function fixture(supportedTypes: PerformanceEntryType[] = []) {
+function fixture(supportedTypes?: PerformanceEntryType[]) {
   const browser = new Browlet({ route: () => '' });
   const env = unwrap<DocumentImpl>(browser.document).env;
   const performance = unwrap<PerformanceImpl>(browser.window.performance);
-  performance.supportedEntryTypes = supportedTypes;
+  if (supportedTypes !== undefined) performance.supportedEntryTypes = supportedTypes;
   const observer = new browser.window.PerformanceObserver(() => {});
   const implementation = unwrap<PerformanceObserverImpl>(observer);
   function entry(type: PerformanceEntryType, name: string, startTime: number, endTime?: number) {

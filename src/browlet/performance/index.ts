@@ -6,4 +6,6 @@ export {
   type PerformanceObserverCallback, type PerformanceObserverCallbackOptions,
 } from './observer';
 export { PerformanceObserverEntryListImpl } from './observer-entry-list';
+export { PerformanceResourceTimingImpl, type RenderBlockingStatusType } from './resource';
+export { PerformanceServerTimingImpl } from './server';
 export { performanceIDLDefinitions } from './web-idl';

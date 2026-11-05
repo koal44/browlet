@@ -4,10 +4,10 @@ import {
   type CompiledModule, type ModuleRequestPhase,
   type GlobalAccessSelector, type GlobalObject, type GlobalPrototypeKind, type GlobalThis, type RealmFunctionSteps,
 } from '../../js-engine/index';
+import { unsafeSharedCurrentTime, type DOMHighResTimeStamp, type UnsafeMoment } from '../../timing/index';
 import type { CallbackHooks, StampedPlatformObject, WebIDLEnvironment, WebIDLRealm } from '../../web-idl/index';
 import { serializeURL } from '../../url/index';
 
-import { unsafeSharedCurrentTime, type DOMHighResTimeStamp, type UnsafeMoment } from '../timing/index';
 import type { EventImpl } from '../dom/events/index';
 import type { DocumentImpl } from '../dom/nodes/index';
 import type { DOMRealm, WindowDOMRealm } from '../dom/index';
@@ -267,7 +267,7 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
       // default-precision clock; without supplied input this is coarsenedSharedCurrentTime().
       return time.coarsen().milliseconds;
     }
-    return env.timing.relativeHighResolutionTime(time).toTimestamp();
+    return env.relativeHighResolutionTime(time).toTimestamp();
   }
 
   /** Install this realm's globals while its retained creation context is running. */

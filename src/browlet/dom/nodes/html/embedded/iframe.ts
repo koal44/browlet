@@ -2,10 +2,10 @@ import { HTML_NAMESPACE, InternalError } from '../../../../../infra/index';
 import {
   attr, ctor, defineInterface, idlType, impl, nullable, reference, reflect, reflectEnumerated, roAttr, xattr,
 } from '../../../../../web-idl/core/index';
+import type { DOMHighResTimeStamp } from '../../../../../timing/index';
 import { areSameOriginDomain, createOpaqueOrigin, obtainURLOrigin, type Origin } from '../../../../../url/index';
 import { DeferredFetchQuota, type ReferrerPolicy } from '../../../../../fetch/index';
 
-import type { DOMHighResTimeStamp } from '../../../../timing/index';
 import { ElementTag, ContentCategory } from '../../element-definitions/index';
 import { loadingAttribute, referrerPolicyAttribute } from '../attributes/index';
 import {

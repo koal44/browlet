@@ -13,9 +13,9 @@ describe('Sticky activation', () => {
   it('compares the retained activation time with the Window clock and survives transient consumption', async () => {
     const { window } = await fixture();
     expect(window.hasStickyActivation()).toBe(false);
-    window.lastActivationTimestamp = window.env.timing.currentHighResolutionTime().milliseconds + 60_000;
+    window.lastActivationTimestamp = window.env.currentHighResolutionTime().milliseconds + 60_000;
     expect(window.hasStickyActivation()).toBe(false);
-    window.lastActivationTimestamp = window.env.timing.currentHighResolutionTime().milliseconds;
+    window.lastActivationTimestamp = window.env.currentHighResolutionTime().milliseconds;
     expect(window.hasStickyActivation()).toBe(true);
     window.consumeUserActivation();
     expect(window.lastActivationTimestamp).toBe(-Infinity);

@@ -4,11 +4,11 @@ import {
   arg, atArg, constant, ctor, defineInterface, idlType, impl, integer, nullable, op, roAttr,
   reference, union, DOMExceptionNames, DOMExceptionImpl,
 } from '../../../web-idl/core/index';
+import { unsafeSharedCurrentTime } from '../../../timing/index';
 import {
   packageData, type BlobImpl, type FileReadType,
 } from '../../../file/index';
 
-import { unsafeSharedCurrentTime } from '../../timing/index';
 import { EventTargetImpl } from '../../dom/events/index';
 import { EventHandlerMap, eventHandlerAttr, type EventHandlerCallback } from '../../scripting/index';
 import { type BrowletEnvironment } from '../../environment/index';

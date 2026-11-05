@@ -8,6 +8,28 @@ import { mockHTTPTransport } from './transport-fixture';
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('navigation timing handoff', () => {
+  it('keeps completion on the shared clock until the timing entry selects its time origin', async () => {
+    const request = createFetchRequest();
+    request.client = request.env;
+    request.destination = 'document';
+    request.mode = 'navigate';
+    request.initiatorType = 'fetch';
+    vi.spyOn(request.env.userAgent, 'unsafeSharedCurrentTime').mockReturnValue(100.543);
+    const report = vi.spyOn(request.env, 'markResourceTiming');
+    mockHTTPTransport(request.env.userAgent, (_request, listener) => {
+      listener.onHeaders(200, 'OK', new FetchHeaders(), true);
+      listener.onEnd();
+    });
+    const completed = Promise.withResolvers<void>();
+    const controller = fetch(request, {
+      useParallelQueue: true, processResponseEndOfBody: () => completed.resolve(),
+    }, request.env);
+    await completed.promise;
+    controller.reportTiming(request.env);
+    expect(report).toHaveBeenCalledOnce();
+    expect(report.mock.calls[0]![0].endTime).toBe(100.5);
+  });
+
   it.each(['document', 'iframe', 'frame', 'object', 'embed'] as const)(
     'retains full timing for a %s navigation before handing over the response', async (destination) => {
       const request = createFetchRequest();
@@ -50,7 +72,7 @@ describe('Fetch timing records', () => {
     });
   });
 
-  it('makes opaque timing retain only start time, including post-redirect start', () => {
+  it('keeps start, completion, and render blocking when hiding timing details', () => {
     const timing = Object.assign(new FetchTimingInfo(), {
       startTime: 1,
       redirectStartTime: 2,
@@ -76,11 +98,11 @@ describe('Fetch timing records', () => {
       finalNetworkRequestStartTime: 0,
       firstInterimNetworkResponseStartTime: 0,
       finalNetworkResponseStartTime: 0,
-      endTime: 0,
+      endTime: 9,
       finalConnectionTimingInfo: null,
       serviceWorkerTimingInfo: null,
       serverTimingHeaders: [],
-      renderBlocking: false,
+      renderBlocking: true,
     });
     expect(timing.postRedirectStartTime).toBe(4);
     expect(timing.serverTimingHeaders).toEqual(['db;dur=4']);

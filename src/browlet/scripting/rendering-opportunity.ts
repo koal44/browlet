@@ -1,6 +1,6 @@
 import { InternalError } from '../../infra/index';
+import type { UnsafeMoment } from '../../timing/index';
 
-import type { UnsafeMoment } from '../timing/index';
 import type { DocumentImpl, NodeImpl } from '../dom/nodes/index';
 import type { Navigable } from '../browsing/navigation/index';
 

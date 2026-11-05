@@ -3,41 +3,49 @@ import { randomInteger } from '../../js-engine/index';
 import {
   defineInterface, idlType, impl, op, reference, roAttr, xattr,
 } from '../../web-idl/core/index';
+import type { DOMHighResTimeStamp } from '../../timing/index';
+import type { HTTPStatus } from '../../http/index';
+import type { CacheUsage, FetchTimingInfo, ResponseBodyInfo } from '../../fetch/index';
 
-import type { EnvironmentTiming, DOMHighResTimeStamp } from '../timing/index';
 import { EventTargetImpl } from '../dom/events/index';
+import { EventHandlerMap, type EventHandlerCallback } from '../scripting/index';
 import type { BrowletEnvironment } from '../environment/index';
 
 import { PerformanceEntryBuffer, type PerformanceEntryImpl, type PerformanceEntryType } from './timeline';
 import type { PerformanceObserverImpl, PerformanceObserverCallbackOptions } from './observer';
 import { PerformanceObserverEntryListImpl } from './observer-entry-list';
+import { PerformanceResourceTimingImpl } from './resource';
 
 /** Exposes this global's coarsened timestamps and retained performance entries. */
 // https://w3c.github.io/hr-time/#the-performance-interface
 export class PerformanceImpl extends EventTargetImpl {
+  static #handlerDefinitions = new Map([['onresourcetimingbufferfull', 'resourcetimingbufferfull']]);
+
   /** Browser environment owning this global's performance facilities. */
   declare env: BrowletEnvironment;
+  override eventHandlers: EventHandlerMap = new EventHandlerMap(this, PerformanceImpl.#handlerDefinitions);
   /** This global's observers in registration order, retained until disconnect(). */
   // Each observer belongs to one global and owns its options list directly.
   registeredObservers = new Set<PerformanceObserverImpl>();
   /** Implemented producers for this global; Binding projects the retained list as a frozen array. */
-  // TODO(Performance Timeline §4.5): Populate from real producers only after their queueing/delivery paths exist.
-  supportedEntryTypes: PerformanceEntryType[] = [];
+  // Add other types only after their producers and delivery paths exist.
+  supportedEntryTypes: PerformanceEntryType[] = ['resource'];
   /** Current Window timing association, retained with this global; zero outside Window. */
   // https://wicg.github.io/soft-navigations/#navigation-id
   // TODO(Soft Navigations §§2.1, 5): Detect soft navigations and advance this ID at their emission.
   // Do not advance it for every URL update or timing entry; those are not equivalent operations.
   currentNavigationId: number;
-  /** Environment-owned clock conversion and precision policy. */
-  #timing: EnvironmentTiming;
   /** This global's buffers, keyed by entry type and allocated on first internal use. */
   #entryBufferMap = new Map<string, PerformanceEntryBuffer>();
   /** Whether this global already has a pending observer-delivery task. */
   #observerTaskQueued = false;
+  /** Resource entries awaiting space in the primary buffer, in insertion order. */
+  #resourceTimingSecondaryBuffer: PerformanceResourceTimingImpl[] = [];
+  /** Whether overflow processing is queued or running for this global. */
+  #resourceTimingBufferFullEventPending = false;
 
-  constructor(timing: EnvironmentTiming, env: BrowletEnvironment) {
+  constructor(env: BrowletEnvironment) {
     super(env);
-    this.#timing = timing;
     // Each Window gets an independent initial value, without waiting for a completed navigation entry.
     this.currentNavigationId = env.isWindow ? randomInteger(100, 10001) : 0;
   }
@@ -45,13 +53,21 @@ export class PerformanceImpl extends EventTargetImpl {
   /** Environment time origin expressed relative to the Unix epoch. */
   // https://w3c.github.io/hr-time/#dom-performance-timeorigin
   get timeOrigin(): DOMHighResTimeStamp {
-    return this.#timing.getTimeOriginTimestamp().toTimestamp();
+    return this.env.getTimeOriginTimestamp().toTimestamp();
+  }
+
+  get onresourcetimingbufferfull(): EventHandlerCallback | null {
+    return this.eventHandlers.get('onresourcetimingbufferfull');
+  }
+
+  set onresourcetimingbufferfull(callback: EventHandlerCallback | null) {
+    this.eventHandlers.set('onresourcetimingbufferfull', callback);
   }
 
   /** Elapsed high-resolution time since this environment's origin. */
   // https://w3c.github.io/hr-time/#dom-performance-now
   now(): DOMHighResTimeStamp {
-    return this.#timing.currentHighResolutionTime().toTimestamp();
+    return this.env.currentHighResolutionTime().toTimestamp();
   }
 
   /** Return the entries whose registry metadata permits synchronous timeline access. */
@@ -72,6 +88,64 @@ export class PerformanceImpl extends EventTargetImpl {
     return this.filterBufferMapByNameAndType(name, type ?? null);
   }
 
+  /** Create an entry from Fetch's filtered measurements and deliver it through this global's timeline. */
+  // https://w3c.github.io/resource-timing/#mark-resource-timing
+  // This global's retained Performance owns creation; the final flag carries the approved transfer-size exposure decision.
+  markResourceTiming(
+    timingInfo: FetchTimingInfo, requestedURL: string, initiatorType: string, cacheMode: CacheUsage | '',
+    bodyInfo: ResponseBodyInfo, responseStatus: HTTPStatus, deliveryType = '', allowTransferSize: boolean,
+  ): void {
+    const entry = new PerformanceResourceTimingImpl(
+      initiatorType, requestedURL, timingInfo, cacheMode, bodyInfo, responseStatus, deliveryType,
+      allowTransferSize, this.env,
+    );
+    this.queueEntry(entry);
+    this.addResourceTimingEntry(entry);
+  }
+
+  /** Clear retained resource entries without changing the limit or pending observer records. */
+  // https://w3c.github.io/resource-timing/#dom-performance-clearresourcetimings
+  clearResourceTimings(): void {
+    // The resource tuple's list length is the specified resource timing buffer current size.
+    this.getEntryBuffer('resource').entries.length = 0;
+  }
+
+  /** Change the resource limit; lowering it does not evict already retained entries. */
+  // https://w3c.github.io/resource-timing/#dom-performance-setresourcetimingbuffersize
+  setResourceTimingBufferSize(maxSize: number): void {
+    this.getEntryBuffer('resource').maxBufferSize = maxSize;
+  }
+
+  /** Check resource capacity without counting a dropped entry. */
+  // https://w3c.github.io/resource-timing/#dfn-can-add-resource-timing-entry
+  canAddResourceTimingEntry(): boolean {
+    const buffer = this.getEntryBuffer('resource');
+    return buffer.entries.length < buffer.maxBufferSize;
+  }
+
+  /** Insert a resource measurement using Resource Timing's overflow protocol. */
+  // https://w3c.github.io/resource-timing/#dfn-add-a-PerformanceResourceTiming-entry
+  addResourceTimingEntry(entry: PerformanceResourceTimingImpl): void {
+    if (entry.env !== this.env) throw new InternalError('Cannot retain a resource entry owned by another global');
+    const buffer = this.getEntryBuffer('resource');
+    if (this.canAddResourceTimingEntry() && !this.#resourceTimingBufferFullEventPending) {
+      buffer.entries.push(entry);
+      return;
+    }
+    // SPEC_CLASH(resource-timing-secondary-drop-count): Count each diversion once, as Chromium does, even if later rescued. Timeline's capacity check alone misses entries diverted while an overflow task is pending.
+    buffer.droppedEntriesCount++;
+    if (!this.#resourceTimingBufferFullEventPending) {
+      this.#resourceTimingBufferFullEventPending = true;
+      this.env.queueTask('performance-timeline', () => { this.fireResourceTimingBufferFull(); }, {
+        discardSteps: () => {
+          this.#resourceTimingSecondaryBuffer.length = 0;
+          this.#resourceTimingBufferFullEventPending = false;
+        },
+      });
+    }
+    this.#resourceTimingSecondaryBuffer.push(entry);
+  }
+
   /** Get or create this global's buffer and metadata for an entry type. */
   // https://w3c.github.io/performance-timeline/#relevant-performance-entry-tuple
   // The global's retained Performance owns the map; first internal access initializes an empty tuple.
@@ -84,7 +158,7 @@ export class PerformanceImpl extends EventTargetImpl {
     return buffer;
   }
 
-  /** Queue a completed entry for timeline storage and observer notification. */
+  /** Queue a completed entry for observers and storage; resource storage uses addResourceTimingEntry(). */
   // https://w3c.github.io/performance-timeline/#dfn-queue-a-performanceentry
   queueEntry(entry: PerformanceEntryImpl): void {
     if (entry.env !== this.env) throw new InternalError('Cannot queue a performance entry owned by another global');
@@ -99,9 +173,13 @@ export class PerformanceImpl extends EventTargetImpl {
       if (options !== undefined && entry.shouldAdd(options)) interestedObservers.add(observer);
     }
     for (const observer of interestedObservers) observer.observerBuffer.push(entry);
-    const buffer = this.getEntryBuffer(entryType);
-    // Admission precedes capacity: entries ineligible for storage must not count as dropped.
-    if (entry.shouldAdd() && !buffer.isFull()) buffer.entries.push(entry);
+    // SPEC_CLASH(resource-timing-double-insertion): Resource Timing's mark operation calls both queueEntry and addResourceTimingEntry. Retain resources only in the latter, matching browsers' single insertion.
+    // SPEC_CLASH(resource-timing-overflow-observer-delivery): Queue observers before overflow handling, as the specification and Chromium/Firefox do; WebKit defers secondary entries until its full-buffer task.
+    if (entryType !== 'resource') {
+      const buffer = this.getEntryBuffer(entryType);
+      // Admission precedes capacity: entries ineligible for storage must not count as dropped.
+      if (entry.shouldAdd() && !buffer.isFull()) buffer.entries.push(entry);
+    }
     this.queueObserverTask();
   }
 
@@ -140,6 +218,35 @@ export class PerformanceImpl extends EventTargetImpl {
         observer.callback.call(observer, entryList, observer, callbackOptions);
       }
     }, { discardSteps: () => { this.#observerTaskQueued = false; } });
+  }
+
+  /** Let handlers make room, preserving pending entry order and discarding excess on no progress. */
+  // https://w3c.github.io/resource-timing/#dfn-fire-a-buffer-full-event
+  private fireResourceTimingBufferFull(): void {
+    const secondary = this.#resourceTimingSecondaryBuffer;
+    const buffer = this.getEntryBuffer('resource');
+    // Advance through the FIFO once instead of repeatedly shifting the array.
+    let consumed = 0;
+    try {
+      while (consumed < secondary.length) {
+        const excessBefore = secondary.length - consumed;
+        if (!this.canAddResourceTimingEntry()) {
+          // SPEC_CLASH(resource-timing-full-event-bubbles): Use DOM's trusted, non-bubbling, non-cancelable event, as Chromium/WebKit do; Firefox sets bubbles to true.
+          this.fireEvent('resourcetimingbufferfull');
+        }
+        // https://w3c.github.io/resource-timing/#dfn-copy-secondary-buffer
+        // Read capacity after callbacks, which may clear/resize the buffer or append more entries.
+        while (consumed < secondary.length && buffer.entries.length < buffer.maxBufferSize) {
+          buffer.entries.push(secondary[consumed++]!);
+        }
+        const excessAfter = secondary.length - consumed;
+        if (excessBefore <= excessAfter) break;
+      }
+    } finally {
+      secondary.length = 0;
+      // SPEC_CLASH(resource-timing-full-event-rearm): Release the flag even after the specified no-progress abort, as Chromium/Firefox do and issue #231 supports; WebKit waits for a clear/resize.
+      this.#resourceTimingBufferFullEventPending = false;
+    }
   }
 
   /** Return fresh sorted results without exposing or reordering a retained buffer. */

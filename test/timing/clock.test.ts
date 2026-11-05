@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { Clock, Duration, Moment } from '../../../src/browlet/timing/clock';
+import { Clock, Duration, Moment } from '../../src/timing/index';
 
 describe('High Resolution Time concepts', () => {
   it('reports unsafe moments in a clock-specific coordinate system', () => {

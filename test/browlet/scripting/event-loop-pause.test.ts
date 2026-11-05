@@ -7,7 +7,7 @@ import { JSExecutionContext } from '../../../src/browlet/scripting/execution-con
 import { ClassicScript } from '../../../src/browlet/scripting/script';
 import { ScriptFetchOptions } from '../../../src/browlet/scripting/script-fetch-options';
 import { networkingTaskSource } from '../../../src/browlet/scripting/tasks';
-import { Duration } from '../../../src/browlet/timing/index';
+import { Duration } from '../../../src/timing/index';
 import { createManualEventLoop, createManualUserAgent } from '../../support/browlet-agent';
 import { runInHostTask } from '../../support/tasks';
 
@@ -109,7 +109,7 @@ describe('pausing an event loop', () => {
       },
     });
     const script = new ClassicScript('', env, env.apiBaseURL, new ScriptFetchOptions());
-    const timing = vi.spyOn(env.timing, 'currentHighResolutionTime')
+    const timing = vi.spyOn(env, 'currentHighResolutionTime')
       .mockReturnValueOnce(new Duration(100.125))
       .mockReturnValueOnce(new Duration(107.625));
     loop.runScriptEvaluation(env, () => {

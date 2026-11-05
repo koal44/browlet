@@ -1,7 +1,7 @@
 import { InternalError, type TaskCreationOptions } from '../../infra/index';
 import { bindAsyncContext, createMicrotaskQueue, type JSMicrotaskQueue } from '../../js-engine/index';
+import { Duration, monotonicClock, unsafeSharedCurrentTime, UnsafeMoment } from '../../timing/index';
 
-import { Duration, monotonicClock, unsafeSharedCurrentTime, UnsafeMoment } from '../timing/index';
 import type { DocumentImpl } from '../dom/nodes/index';
 import type { WindowImpl } from '../browsing/window/index';
 import type { BrowletEnvironment } from '../environment/index';
@@ -395,16 +395,15 @@ export class EventLoop {
       throw new InternalError('Pausing requires a running, unpaused task');
     }
 
-    // Capture the current global's clock before entering the host. It need not
+    // Use the current global's environment across the host call. It need not
     // belong to the task's Document or the script used for performance attribution.
-    const timing = env.timing;
-    const timeBeforePause = timing.currentHighResolutionTime();
+    const timeBeforePause = env.currentHighResolutionTime();
     this.#paused = true;
     try {
       // TODO(HTML pause step 3): A UI host must synchronously reflect pending
       // rendering/UI state where necessary. The headless host has no such UI.
       waitForGoal();
-      const duration = new Duration(timing.currentHighResolutionTime().milliseconds - timeBeforePause.milliseconds);
+      const duration = new Duration(env.currentHighResolutionTime().milliseconds - timeBeforePause.milliseconds);
       // TODO(Long Animation Frames §3.2.2): Supply record-pause-duration when
       // Document frame timing and pending-script records have an implementation.
       this.#init.taskTiming?.recordPauseDuration?.(duration, this.runningScript);

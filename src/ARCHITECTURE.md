@@ -244,6 +244,7 @@ handling can remain at the end of the call.
 | [`FetchEnvironmentBase`](fetch/environment.ts) | Extends the Storage view with top-level partition inputs and `determineNetworkPartitionKey()` |
 | HTML [`BrowletEnvironmentBase`](browlet/environment/environment.ts) | Shared browser state before and after realm creation: identity, owner, creation/security state, readiness, and partition derivation |
 | [`JSEnvironment`](js-engine/environment.ts) | `realm: JSRealm`, `InternalPromise`, background work, and task delivery for an existing owner |
+| [`TimingEnvironment`](timing/environment.ts) | Time origin, isolation policy, and clock conversions exposed directly by the existing owner |
 | [`StreamsEnvironment`](streams/environment.ts) | Extends JSEnvironment with DOM abort creation and HTML structured-data operations |
 | [`FileEnvironment`](file/environment.ts) | Extends the Streams view with native line endings for Blob text processing |
 | [`DOMEnvironment`](browlet/dom/environment.ts) | `realm: DOMRealm` for event behavior and the associated-document query; its Window specialization exposes the Agent's DOM notification state; `createEvent()` supplies event allocation |
@@ -1265,9 +1266,15 @@ concrete properties or their registry use `props/built-in/index.ts`.
 The package index composes its existing public API; internal
 components do not import it.
 
-Browlet's [timing foundation](browlet/timing/README.md) supplies shared clocks,
-precision, and time origins without importing DOM or Performance. The Performance
-API consumes timing and DOM events. Event and EventTarget form the shared
+The shared [Timing subsystem](timing/README.md) supplies clocks, coarsening,
+and time-origin calculations below Fetch and Browlet. Its only dependencies are
+Infra and Web IDL Core. `TimingEnvironment` describes the existing owner's time
+origin, isolation boolean, and timing operations. Browlet's environment forwards
+those operations to Timing's functions; callers and Performance retain that same
+owner without a separate timing object. The browser selects the origin and
+isolation policy; Timing retains the shared epoch estimate.
+The Performance API stays in Browlet and consumes Timing and DOM events.
+Event and EventTarget form the shared
 component in `browlet/dom/events`, below HTML scripting; its implementation
 modules import each other directly. The [UI Events hierarchy](browlet/interaction/events/ROADMAP.md)
 lives in `interaction/events/` as a foundation below DOM nodes,
@@ -1431,10 +1438,25 @@ owns one coalesced delivery task per global; it snapshots observer membership an
 drains each live batch before invoking its converted callback. Binding supplies
 callback projection, exception reporting, and checkpoints. Entry queueing applies
 producer admission independently to observer batches and capacity-limited global
-storage. The same retained Performance owns its Window's current navigation ID;
+storage. Resources queue observers first, then enter resource-specific storage
+once. Performance also owns their secondary FIFO and pending overflow task;
+the existing event machinery lets handlers clear or grow the primary buffer
+before pending entries are promoted or discarded. Neither promotion nor discard
+changes the already queued observer batch.
+The same retained Performance owns its Window's current navigation ID;
 entries preserve captured IDs, and non-Window owners use zero. Timing producers,
 early ID capture, and soft-navigation advancement remain separate work in the
 [Performance roadmap](browlet/performance/ROADMAP.md).
+
+`PerformanceResourceTimingImpl` retains Fetch timing/body records prepared for
+exposure and converts shared-clock observations using its own environment's
+time origin. Missing observations remain zero; borrowing another Window's getter
+does not select another clock. Fetch retains the completion timestamp on the
+shared clock and preserves overall duration when hiding detailed timing. An
+explicit timing-exposure flag controls the entry's transfer-size result; it does
+not replace Fetch's TAO/CORS filtering. Resource creation is separate from
+queueing, buffer management, and observer delivery. The environment's provisional
+reporting seam remains disconnected until those producer rules are implemented.
 
 Document lazily owns `LegacyMouseProcessor` in `interaction/mouse/legacy/`, a foundation
 that uses event machinery and type-only node references without loading higher
@@ -1697,7 +1719,7 @@ retain type references to supplied DOM nodes. Element and style/link elements
 compose these mixins; the mixins do not construct browser environments or nodes.
 
 HTML microsyntaxes are value algorithms depending only on Infra and Stylelet's
-color facilities. They sit one level above Browlet's platform, timing, DOM infra,
+color facilities. They sit one level above Browlet's platform, DOM infra,
 and style foundations, below DOM nodes and lifecycle components.
 Tree lookup belongs with its HTML consumer: hash-name parsing returns text,
 while image-map lookup lives under `dom/nodes/html/embedded` and consumes that parser.

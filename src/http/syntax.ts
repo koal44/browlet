@@ -26,6 +26,30 @@ export function collectHTTPQuotedString(c: TextCursor, extractValue = false): st
   return extractValue ? value : c.slice(positionStart);
 }
 
+/** Consume one token or complete quoted string, unescaping its value; return null for invalid syntax. */
+// https://www.rfc-editor.org/rfc/rfc9110.html#section-5.6.4
+// Unlike Fetch's quoted-string collector, RFC 9110 requires a closing quote
+// and only permits HTAB, SP, visible ASCII, and obs-text within quoted pairs.
+export function collectHTTPTokenOrQuotedString(cursor: TextCursor): string | null {
+  if (!cursor.match('"')) {
+    const start = cursor.pos();
+    cursor.consumeWhile(isHTTPToken);
+    return cursor.slice(start) || null;
+  }
+  let value = '';
+  while (!cursor.eof()) {
+    let ch = cursor.next();
+    if (ch === '"') return value;
+    if (ch === '\\') {
+      if (cursor.eof()) return null;
+      ch = cursor.next();
+    }
+    if (ch !== '\t' && (ch < ' ' || ch === '\x7f' || ch > '\xff')) return null;
+    value += ch;
+  }
+  return null;
+}
+
 /** Test a nonempty HTTP token, such as a method or header name. */
 // https://www.rfc-editor.org/rfc/rfc9110.html#section-5.6.2
 export function isHTTPToken(value: string): boolean {

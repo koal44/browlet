@@ -6,7 +6,7 @@ import { getRelevantRealm } from '../../support/browlet-binding';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
 import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
-import { Duration } from '../../../src/browlet/timing/clock';
+import { Duration } from '../../../src/timing/clock';
 import { type Task } from '../../../src/browlet/scripting/event-loop';
 import { installHostHooks } from '../../../src/browlet/scripting/host-hooks';
 import { jsEngineTaskSource } from '../../../src/browlet/scripting/tasks';
@@ -86,7 +86,7 @@ describe('HTML generic and timeout jobs', () => {
     Reflect.set(caller.realm.globalObject, 'wait', fixture.realm.evaluate('Atomics.waitAsync', 'wait-function.js'));
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     let now = 0;
-    vi.spyOn(fixture.realm.env.timing, 'currentHighResolutionTime')
+    vi.spyOn(fixture.realm.env, 'currentHighResolutionTime')
       .mockImplementation(() => new Duration(now));
     const advance = (milliseconds: number) => {
       now += milliseconds;
@@ -138,7 +138,7 @@ describe('HTML generic and timeout jobs', () => {
     const fixture = createFixture();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     let now = 0;
-    vi.spyOn(fixture.realm.env.timing, 'currentHighResolutionTime')
+    vi.spyOn(fixture.realm.env, 'currentHighResolutionTime')
       .mockImplementation(() => new Duration(now));
     fixture.realm.evaluate(`
       Atomics.waitAsync(waitArray, 0, 0, 1000).value.then(value => observe(value));

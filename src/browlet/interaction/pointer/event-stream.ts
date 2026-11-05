@@ -1,6 +1,6 @@
 import { DOMExceptionImpl, DOMExceptionNames } from '../../../web-idl/core/index';
+import type { DOMHighResTimeStamp } from '../../../timing/index';
 
-import type { DOMHighResTimeStamp } from '../../timing/index';
 import type { EventPathItem } from '../../dom/events/index';
 import {
   MouseEventImpl, PointerEventImpl, type PointerId, type PointerInputEventType,

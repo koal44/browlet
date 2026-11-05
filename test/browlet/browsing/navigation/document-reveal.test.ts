@@ -8,7 +8,7 @@ import { ViewTransitionImpl } from '../../../../src/browlet/rendering/index';
 import { WindowAgent } from '../../../../src/browlet/scripting/agents';
 import { WindowRenderingProducer, type RenderingOpportunityHost } from '../../../../src/browlet/scripting/rendering-opportunity';
 import { renderingTaskSource } from '../../../../src/browlet/scripting/tasks';
-import { monotonicClock, UnsafeMoment } from '../../../../src/browlet/timing/clock';
+import { monotonicClock, UnsafeMoment } from '../../../../src/timing/clock';
 import { createManualUserAgent } from '../../../support/browlet-agent';
 import { project, unwrap } from '../../../support/browlet-binding';
 import { runInHostTask } from '../../../support/tasks';

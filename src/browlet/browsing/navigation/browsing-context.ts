@@ -1,10 +1,10 @@
 import { InternalError } from '../../../infra/index';
+import { unsafeSharedCurrentTime } from '../../../timing/index';
 import {
   aboutBlankURL, serializeSite, copyURL, createOpaqueOrigin, serializeOrigin, serializeURL,
   areSameOrigin, isOrigin, obtainSite, obtainURLOrigin, type Origin, type URLRecord,
 } from '../../../url/index';
 
-import { unsafeSharedCurrentTime } from '../../timing/index';
 import {
   AgentCluster, WindowAgent, type AgentClusterKey, type CrossOriginIsolationMode,
 } from '../../scripting/index';

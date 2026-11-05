@@ -80,7 +80,7 @@ reuse only with correct selection, partitioning, and header/body preservation.
 | --- | --- |
 | [HTML loader](../browlet/loader/ROADMAP.md) and [parser](../browlet/html/parser/ROADMAP.md) | The byte-loader proof has BOM/transport decoding and UTF-8 fallback, plus abort. Complete sniffing/restart, script readiness, Link/preload processing, MIME handlers, and navigation. The source-text route remains separate. |
 | [Browsing](../browlet/browsing/ROADMAP.md) and [browser policy](../browlet/browsing/policy/ROADMAP.md) | Complete nested/srcdoc ancestry, policy inheritance, lifecycle/history destruction, navigation/download consumers, and actual automation sessions. Request's provisional prompt-target copy uses source-origin equality; the draft still describes the older settings-object target. |
-| [Performance](../browlet/performance/ROADMAP.md#fetch-and-navigation-integration) | Timing/body records exist; public Resource/Navigation Timing entries remain pending. Navigation retains live Fetch/controller timing. |
+| [Performance](../browlet/performance/ROADMAP.md#fetch-and-navigation-integration) | Completed HTTP fetches produce Resource Timing entries and filtered Server Timing metrics. Navigation retains live Fetch/controller timing; its public entry/lifecycle integration remains pending. Server-Timing trailers need transport delivery before resource entry publication. |
 | [Workers](../browlet/workers/ROADMAP.md) | Actual Service Worker selection, dispatch, response validation, timing, and body disposal. The no-worker hook returns null without preparing a clone. |
 | [File](../file/ROADMAP.md), [media](../browlet/media/ROADMAP.md), and [XHR](../xhr/ROADMAP.md) | Worker Blob URL cleanup, MediaSource object URLs, HTML-backed FormData construction, and XHR's Fetch consumer. Blob-only object URLs already work. |
 
@@ -161,6 +161,23 @@ Revisit these decisions when the specification or implementation evidence change
 - **`fetch-tls-start`:** [clamp/coarsen](https://fetch.spec.whatwg.org/#clamp-and-coarsen-connection-timing-info)
   names connection end for TLS start. Retain actual TLS start, as all three
   engines' source does; this evidence is not a live timing measurement.
+- **`resource-timing-end-clock`:** Fetch's completion callback makes end time
+  relative, while [Resource Timing's conversion](https://w3c.github.io/resource-timing/#dfn-convert-fetch-timestamp)
+  subtracts the entry owner's origin again. Retain a coarsened shared-clock end
+  time, converting once in the entry. The regression first observed `20.543...`
+  instead of `100.5` for a shared reading of `100.543` and origin `80`.
+  This also corrected `FetchTimingInfo.createOpaque()` to retain end time and
+  render-blocking, as Fetch already specifies. Its former regression incorrectly
+  required both to be cleared; the corrected expectations failed before the fix.
+  Automatic delivery now reaches Resource Timing entry construction, observer
+  queueing, and resource-specific buffering. See the
+  [Fetch timing integration](../browlet/performance/ROADMAP.md#fetch-produced-resource-timing)
+  for approved CORS body-size exposure, local-cache phase/protocol normalization,
+  plain-HTTP TLS-zero preservation, and failed-response opacity. The final
+  environment argument carries combined TAO/CORS transfer-size permission;
+  timing phases and filtered body/status records retain their separate rules.
+  MIME support classification, service-worker observations, and worker-producer
+  acceptance remain explicit owner dependencies.
 
 ### HTTP, Blob, and CORS
 

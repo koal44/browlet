@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { HTML_NAMESPACE, SVG_NAMESPACE } from '../../../../src/infra/namespaces';
 import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { Duration } from '../../../../src/browlet/timing/clock';
+import { Duration } from '../../../../src/timing/clock';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { createTestDocument } from '../../../support/dom';
 
@@ -153,7 +153,7 @@ describe('Document render blocking', () => {
 
   it('unblocks connected elements when the browsing context is cleared directly', () => {
     const document = TopLevelTraversable.create(new UserAgent(), null, '').activeDocument!;
-    vi.spyOn(document.env.timing, 'currentHighResolutionTime').mockReturnValue(new Duration(0));
+    vi.spyOn(document.env, 'currentHighResolutionTime').mockReturnValue(new Duration(0));
     document.body!.remove();
     const script = document.head!.appendChild(document.createElement('script'));
     script.blockRendering();
@@ -221,6 +221,6 @@ function createHTMLDocument() {
   document.contentType = 'text/html';
   const html = document.appendChild(document.createElementNS(HTML_NAMESPACE, 'html'));
   const head = html.appendChild(document.createElement('head'));
-  const now = vi.spyOn(document.env.timing, 'currentHighResolutionTime').mockReturnValue(new Duration(0));
+  const now = vi.spyOn(document.env, 'currentHighResolutionTime').mockReturnValue(new Duration(0));
   return { document, html, head, now };
 }

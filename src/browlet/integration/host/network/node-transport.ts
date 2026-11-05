@@ -5,6 +5,7 @@ import { nextTick } from 'node:process';
 import { Client, buildConnector, errors, type Dispatcher } from 'undici';
 
 import { InternalError } from '../../../../infra/index';
+import { unsafeSharedCurrentTime } from '../../../../timing/index';
 import { utf8Encode } from '../../../../encoding/index';
 import { obtainURLOrigin, serializeOrigin, serializeURLPath } from '../../../../url/index';
 import {
@@ -12,8 +13,6 @@ import {
   type FetchUserAgent, type HTTPConnection, type HTTPTransport, type HTTPTransportControl,
   type HTTPTransportListener, type HTTPTransportRequest, type HTTPUploadSource, type NetworkPartitionKey,
 } from '../../../../fetch/index';
-
-import { unsafeSharedCurrentTime } from '../../../timing/index';
 
 /** Node HTTP I/O owned by one UserAgent; Fetch keeps all browser processing. */
 export class NodeHTTPTransport implements HTTPTransport {

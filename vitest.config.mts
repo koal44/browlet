@@ -21,6 +21,7 @@ export default defineConfig({
             'test/wpt/**/*.test.ts',
             'test/selectlet/unit/**/*.test.ts',
             'test/infra/**/*.test.ts',
+            'test/timing/**/*.test.ts',
             'test/js-engine/**/*.test.ts',
             'test/mime/**/*.test.ts',
             'test/encoding/**/*.test.ts',

@@ -4,7 +4,7 @@ import { FetchResponse } from '../../../../src/fetch/index';
 import { createOpaqueOrigin, obtainURLOrigin, parseURL } from '../../../../src/url/index';
 import type { TimerHost } from '../../../../src/infra/tasks';
 import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { Duration } from '../../../../src/browlet/timing/clock';
+import { Duration } from '../../../../src/timing/clock';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { PageTransitionEvent, Window } from '../../../../src/browlet/platform';
 import { createManualUserAgent } from '../../../support/browlet-agent';
@@ -178,7 +178,7 @@ describe('retained-Document reactivation', () => {
     };
     const { document, top, target, previous } = fixture(host);
     let now = 0;
-    vi.spyOn(document.env.timing, 'currentHighResolutionTime').mockImplementation(() => new Duration(now));
+    vi.spyOn(document.env, 'currentHighResolutionTime').mockImplementation(() => new Duration(now));
     vi.spyOn(document, 'resetAutocompleteOffControls').mockImplementation(() => {});
     const timers = document.env.getWindowOrWorkerGlobalScopeMixin().timers;
     const order: string[] = [];

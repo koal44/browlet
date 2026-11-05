@@ -14,7 +14,7 @@ import { WindowAgent } from '../../../../src/browlet/scripting/agents';
 import { BrowletEnvironmentBase } from '../../../../src/browlet/environment/index';
 import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
 import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
-import { monotonicClock } from '../../../../src/browlet/timing/clock';
+import { monotonicClock } from '../../../../src/timing/clock';
 import { WindowProxyHandle } from '../../../../src/browlet/browsing/window/window-proxy';
 import { WindowImpl } from '../../../../src/browlet/browsing/window/window';
 import { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';

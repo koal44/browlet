@@ -11,7 +11,7 @@ import { FetchResponse, isFilteredResponse, type FilteredResponseType } from '..
 import { type ServiceWorkerTimingInfo } from '../../src/fetch/timing';
 import { BlobData, BlobImpl, FileImpl } from '../../src/file/index';
 import { toScalarValueString } from '../../src/infra/strings';
-import { coarsenTime } from '../../src/infra/time';
+import { coarsenTime } from '../../src/timing/index';
 import { ReadableStreamImpl } from '../../src/streams/index';
 import { parseURL } from '../../src/url/url';
 import { copyURL, serializeURL } from '../../src/url/core/index';

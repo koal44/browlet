@@ -8,7 +8,7 @@ import { ReportingObserverImpl } from '../../../src/browlet/reporting/observer';
 import { ReportingEndpoint } from '../../../src/browlet/reporting/endpoint';
 import { navigationAndTraversalTaskSource, networkingTaskSource } from '../../../src/browlet/scripting/tasks';
 import { HTMLDocumentParser } from '../../../src/browlet/html/parser/html-document-parser';
-import { Duration } from '../../../src/browlet/timing/clock';
+import { Duration } from '../../../src/timing/clock';
 import { BlobImpl } from '../../../src/file/blob';
 import { parseURL } from '../../../src/url/index';
 
@@ -105,7 +105,7 @@ describe('Document destruction', () => {
     document.body!.remove();
     const script = document.head!.appendChild(document.createElement('script'));
     script.blockRendering();
-    vi.spyOn(env.timing, 'currentHighResolutionTime').mockReturnValue(new Duration(0));
+    vi.spyOn(env, 'currentHighResolutionTime').mockReturnValue(new Duration(0));
     expect(script.isRenderBlocking()).toBe(true);
 
     env.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { document.destroy(); });

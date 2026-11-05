@@ -3,8 +3,8 @@ import {
   arg, atArg, ctor, defineDictionary, defineInterface, dictMember, emptyDictionary, emptySequence,
   idlType, impl, integer, op, reference, roAttr, sequence, xattr,
 } from '../../../web-idl/core/index';
+import type { DOMHighResTimeStamp } from '../../../timing/index';
 
-import type { DOMHighResTimeStamp } from '../../timing/index';
 import type { NodeImpl } from '../../dom/nodes/index';
 import type { DOMEnvironment } from '../../dom/environment';
 import type { WindowImpl } from '../../browsing/window/index';

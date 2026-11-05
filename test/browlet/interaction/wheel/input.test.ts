@@ -6,7 +6,7 @@ import type { DocumentImpl, ElementImpl } from '../../../../src/browlet/dom/node
 import { EventModifierState } from '../../../../src/browlet/interaction/events/index';
 import type { WheelInput } from '../../../../src/browlet/interaction/wheel/index';
 import { userInteractionTaskSource } from '../../../../src/browlet/scripting/index';
-import { UnsafeMoment } from '../../../../src/browlet/timing/index';
+import { UnsafeMoment } from '../../../../src/timing/index';
 import { createManualUserAgent } from '../../../support/browlet-agent';
 import { getRelevantRealm, project, unwrap } from '../../../support/browlet-binding';
 

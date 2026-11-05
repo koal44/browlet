@@ -1,5 +1,5 @@
 export {
-  collectHTTPQuotedString, isHTTPToken, isHTTPWhitespace, isHTTPTabOrSpace,
+  collectHTTPQuotedString, collectHTTPTokenOrQuotedString, isHTTPToken, isHTTPWhitespace, isHTTPTabOrSpace,
 } from './syntax';
 export type { HTTPStatus } from './status';
 export {

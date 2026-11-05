@@ -34,7 +34,6 @@ export function createClientEnvironment(
     isTopLevelWindow: false,
     isSecureContext: true,
     crossOriginIsolatedCapability: false,
-    relativeHighResolutionTime: (time) => time,
     markResourceTiming() {},
     consumePreloadedResource: () => false,
     parseURL(input, base, encoding) { return this.userAgent.parseURL(input, base, encoding); },

@@ -3,8 +3,8 @@ import {
   arg, defineInterface, definePartialInterface, defineTypedef, idlType, impl, op,
   reference, roAttr, sequence, xattr,
 } from '../../web-idl/core/index';
+import type { DOMHighResTimeStamp } from '../../timing/index';
 
-import type { DOMHighResTimeStamp } from '../timing/index';
 import type { BrowletEnvironment } from '../environment/index';
 
 import type { PerformanceObserverInit } from './observer';
@@ -45,7 +45,7 @@ export class PerformanceEntryBuffer {
   maxBufferSize: number;
   /** Whether Performance's synchronous queries may expose this timing family. */
   availableFromTimeline: boolean;
-  /** Eligible entries refused because this buffer was full. */
+  /** Entries refused by the primary buffer, including resource entries diverted for possible rescue. */
   droppedEntriesCount = 0;
 
   constructor(type: PerformanceEntryType) {

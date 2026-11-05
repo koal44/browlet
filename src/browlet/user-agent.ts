@@ -1,5 +1,6 @@
 import { InternalError, internalType, WeakOrderedSet, type InternalPromise, type TimerHost } from '../infra/index';
 import { randomUUID } from '../js-engine/index';
+import { unsafeSharedCurrentTime } from '../timing/index';
 import type { SelectletUserAgent } from '../selectlet/index';
 import {
   areSameOrigin, type Origin, type TupleOrigin, obtainURLOrigin, parseURL, serializeOrigin,
@@ -23,7 +24,6 @@ import {
 } from '../fetch/index';
 import { PercentageLiteral, createSystemColorPalette, type StyleletUserAgent } from '../stylelet/index';
 
-import { unsafeSharedCurrentTime } from './timing/index';
 import type { CORSSettingsState } from './dom/nodes/html/attributes/index';
 import {
   type Agent, AgentCluster, DedicatedWorkerAgent, EventLoop, ServiceWorkerAgent,

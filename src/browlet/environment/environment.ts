@@ -7,6 +7,10 @@ import {
   type GlobalObject, type JSEnvironment,
 } from '../../js-engine/index';
 import type { DOMExceptionConstructor } from '../../web-idl/core/index';
+import {
+  Moment, monotonicClock, currentHighResolutionTime, relativeHighResolutionTime, relativeHighResolutionCoarseTime,
+  getTimeOriginTimestamp, currentWallTime, type Duration, type UnsafeMoment, type TimingEnvironment,
+} from '../../timing/index';
 import { matchesExposure } from '../../web-idl/index';
 import type { SelectletEnvironment } from '../../selectlet/index';
 import { utf8Decode, utf8Encode, type Encoding } from '../../encoding/index';
@@ -15,6 +19,7 @@ import {
   type Origin, type URLRecord,
 } from '../../url/index';
 import { PermissionsImpl, type PermissionEnvironment, type PermissionDescriptor } from '../../permissions/index';
+import type { HTTPStatus } from '../../http/index';
 import { StorageManagerImpl, type StorageEnvironment, type StorageShed } from '../../storage/index';
 import {
   FetchGroup, getEnvironmentDefaultUserAgent, type IntegrityViolationReportBody,
@@ -24,7 +29,6 @@ import {
 } from '../../fetch/index';
 import { cssStyleSheetIDL, type StyleletEnvironment } from '../../stylelet/index';
 
-import { Moment, UnsafeMoment, monotonicClock, EnvironmentTiming } from '../timing/index';
 import type { CORSSettingsState } from '../dom/nodes/html/attributes/index';
 import { ErrorEventImpl, EventTargetImpl, PromiseRejectionEventImpl } from '../dom/events/index';
 import {
@@ -255,12 +259,10 @@ export interface BrowletEnvironmentInit {
 /** Composed browser settings, allocation, and task delivery for one realm and global. */
 // HTML's environment settings object.
 export abstract class BrowletEnvironment extends BrowletEnvironmentBase implements
-  JSEnvironment, DOMEnvironment, FetchEnvironment, PermissionEnvironment,
+  JSEnvironment, TimingEnvironment, DOMEnvironment, FetchEnvironment, PermissionEnvironment,
   StorageEnvironment, StyleletEnvironment, SelectletEnvironment {
   /** JavaScript realm associated with this browser environment. */
   realm: BrowletRealm;
-  /** Browser timing relative to this environment's time origin. */
-  timing: EnvironmentTiming;
   /** Requests tracked for this environment's lifetime. */
   fetchGroup = new FetchGroup();
   /** One StorageManager per settings object, independent of same-origin bucket sharing. */
@@ -346,7 +348,6 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     this.deserializeWithTransfer = initialization.deserializeWithTransfer;
     this.getMessagePorts = initialization.getMessagePorts;
     this.#getDOMException = initialization.getDOMException;
-    this.timing = new EnvironmentTiming(this);
     this.realm = realm;
     // Internal sandboxes participate in Binding without becoming HTML settings objects.
     if (baseEnv !== null) realm.env = this;
@@ -600,7 +601,7 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   /** Read this environment's coarsened epoch time, rounded and clamped for Temporal. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#hostsystemutcepochnanoseconds
   getSystemUTCEpochNanoseconds(): bigint {
-    const time = this.timing.currentWallTime();
+    const time = this.currentWallTime();
     // Convert the integral part before scaling: present-day epoch nanoseconds
     // already exceed Number's safe integer range. Round only the fractional ms.
     const milliseconds = Math.trunc(time.milliseconds);
@@ -613,20 +614,42 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     return ns;
   }
 
-  /** Fetch supplies shared numeric timestamps; HRT owns coarsening and time-origin conversion. */
-  relativeHighResolutionTime(time: number): number {
-    return this.timing.relativeHighResolutionTime(new UnsafeMoment(monotonicClock, time)).milliseconds;
+  /** Current coarsened monotonic time relative to this environment's origin. */
+  currentHighResolutionTime(): Duration {
+    return currentHighResolutionTime(this);
+  }
+
+  /** Coarsen a raw reading and express it relative to this environment's origin. */
+  relativeHighResolutionTime(time: UnsafeMoment): Duration {
+    return relativeHighResolutionTime(time, this);
+  }
+
+  /** Express an already-coarsened reading relative to this environment's origin. */
+  relativeHighResolutionCoarseTime(time: Moment): Duration {
+    return relativeHighResolutionCoarseTime(time, this);
+  }
+
+  /** This environment's time origin expressed relative to the Unix epoch. */
+  getTimeOriginTimestamp(): Duration {
+    return getTimeOriginTimestamp(this);
+  }
+
+  /** Current wall-clock time at this environment's permitted precision. */
+  currentWallTime(): Moment {
+    return currentWallTime(this);
   }
 
   /** Create and queue a resource entry on this environment's Performance Timeline. */
   // https://w3c.github.io/resource-timing/#mark-resource-timing
   markResourceTiming(
-    _timingInfo: FetchTimingInfo, _requestedURL: URLRecord, _initiatorType: string,
-    _cacheUsage: CacheUsage | undefined, _bodyInfo: ResponseBodyInfo, _responseStatus: number,
+    timingInfo: FetchTimingInfo, requestedURL: URLRecord, initiatorType: string,
+    cacheUsage: CacheUsage | undefined, bodyInfo: ResponseBodyInfo, responseStatus: HTTPStatus,
+    allowTransferSize: boolean,
   ): void {
-    // PROVISIONAL: Timeline queueing/delivery exist, but Resource Timing still needs
-    // entry construction, exposure filtering, and its secondary buffer/full-buffer event.
-    // The performance roadmap owns that integration.
+    this.getWindowOrWorkerGlobalScopeMixin().performance.markResourceTiming(
+      timingInfo, serializeURL(requestedURL), initiatorType, cacheUsage ?? '', bodyInfo,
+      responseStatus, '', allowTransferSize,
+    );
   }
 
   /** Select a Document preload; environments without a Document cannot consume one. */

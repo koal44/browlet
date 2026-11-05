@@ -3,8 +3,8 @@ import {
   arg, defineCallbackFunction, defineDictionary, defineInterface, definePartialInterface,
   dictMember, emptyDictionary, idlType, impl, onError, op, reference, roAttr,
 } from '../../../web-idl/core/index';
+import { unsafeSharedCurrentTime, type Moment } from '../../../timing/index';
 
-import { unsafeSharedCurrentTime, type Moment } from '../../timing/index';
 import { idleTaskSource } from '../../scripting/index';
 import type { WindowEnvironment } from '../../environment/index';
 
