@@ -1179,7 +1179,40 @@ write/clear decisions and queued notifications now exist. Command adapters and
 execCommand callers are not connected. Script paste permission, rendered selection
 extraction, editable-state queries, cut/paste editing/event delivery and native
 replacement/clearing remain named throwing methods. The transient-activation check
-for script copy/cut also retains its existing HTML dependency. See the [data API boundary](browlet/interaction/drag-drop/ROADMAP.md)
+for script copy/cut also retains its existing HTML dependency.
+Secure-Window ClipboardItem construction, presentationStyle, frozen types,
+getType() and supports() now operate on author-supplied data. MIME names are
+parsed/serialized, custom types stay distinct, strings become UTF-8 Blobs, and
+supplied Blobs retain their identity/realm. supports() recognizes the specified
+format vocabulary; it does not establish native adapter availability.
+SystemClipboard.readItems(document, unsanitizedTypes) explicitly throws pending
+native format enumeration and lazy item creation: generation checks, per-type
+cached reads, custom mappings and sanitization. Secure-Window Navigator.clipboard
+and Clipboard now exist; read() validates options, captures §9.1 permission facts,
+and delivers through the permissions/clipboard task sources. Real reads still
+reject at named unfinished dependencies: Document focus, Window transient
+activation, SystemClipboard.isPasteInteraction(), or readItems(). readText() now
+shares that admission flow, resolves absent text as empty, preserves DOMStrings,
+and decodes Blob bytes through File's UTF-8 reader. Its native readTextData()
+snapshot operation remains an explicit throwing dependency, so real system
+clipboard access is still unavailable. write() now implements §9.2 permission
+admission, representation joining/validation, item grouping, format preparation
+and queued commit delivery. Its native Cut/Copy provenance, multi-item support,
+rich-format preparation and asynchronous item writer remain throwing dependencies;
+HTML/SVG sanitization, image decoding, OS custom-format mappings and final native
+writes are not implemented. The registered clipboard-write descriptors use the
+existing store and prompt hook, whose default denies consent. writeText() now
+shares write admission and native commit, encoding a text/plain;charset=utf-8
+Blob and normalizing Windows line endings. It reaches the same throwing native
+writer; real OS clipboard writes remain unavailable. The §§10–11/Appendix A
+audit retains native format/JSON-map encoding, lazy getType reads and HTML paste
+processing as unfinished work at those throwing methods. Paste source provenance
+and referenced-file restrictions, read-side image preservation, and native
+size/count rejection are required before the adapter can supply real effects.
+The Clipboard task source follows HTML activity gating and Document destruction;
+it does not force rejected promises to execute author callbacks in an inactive or
+destroyed Document.
+See the [data API boundary](browlet/interaction/drag-drop/ROADMAP.md)
 and [Clipboard event slice](browlet/interaction/clipboard/ROADMAP.md).
 
 ## HTML integration gates

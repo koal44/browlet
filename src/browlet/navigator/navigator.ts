@@ -2,6 +2,7 @@ import { atArg, defineInterface, impl } from '../../web-idl/core/index';
 import type { PermissionsImpl } from '../../permissions/index';
 import type { StorageManagerImpl } from '../../storage/index';
 
+import { ClipboardImpl } from '../interaction/clipboard/index';
 import type { BrowletEnvironment } from '../environment/index';
 
 /** Stable Window navigator identity; independent specifications contribute its capabilities. */
@@ -10,9 +11,16 @@ import type { BrowletEnvironment } from '../environment/index';
 export class NavigatorImpl {
   /** Relevant settings, shared with this Navigator's owning Window. */
   env: BrowletEnvironment;
+  #clipboard: ClipboardImpl | null = null;
 
   constructor(env: BrowletEnvironment) {
     this.env = env;
+  }
+
+  /** Stable Clipboard object belonging to this Navigator's Window environment. */
+  // https://w3c.github.io/clipboard-apis/#h-navigator-clipboard
+  get clipboard(): ClipboardImpl {
+    return this.#clipboard ??= new ClipboardImpl(this.env);
   }
 
   /** Return this Navigator's Permissions object in its relevant environment. */

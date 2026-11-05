@@ -32,6 +32,9 @@ export const storageTaskSource = createTaskSource('storage');
 // https://w3c.github.io/permissions/#dfn-permissions-task-source
 export const permissionsTaskSource = createTaskSource('permissions');
 
+// https://w3c.github.io/clipboard-apis/#clipboard-task-source
+export const clipboardTaskSource = createTaskSource('clipboard');
+
 // Reporting leaves the task source unnamed; WebKit likewise gives it a distinct source.
 export const reportingTaskSource = createTaskSource('reporting');
 
@@ -50,6 +53,7 @@ export const taskSources: Record<TaskSourceKey, TaskSource> = {
   file: fileTaskSource,
   storage: storageTaskSource,
   permissions: permissionsTaskSource,
+  clipboard: clipboardTaskSource,
   report: reportingTaskSource,
   automation: automationTaskSource,
   engine: jsEngineTaskSource,

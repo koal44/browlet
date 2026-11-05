@@ -30,7 +30,7 @@ import {
   SharedWorkerAgent, WindowAgent, WorkletAgent,
 } from './scripting/index';
 import { type ReportingEndpoint, ReportImpl } from './reporting/index';
-import { SystemClipboard } from './interaction/clipboard/index';
+import { SystemClipboard, clipboardWritePermission } from './interaction/clipboard/index';
 import { PolicyContainer, HSTSStore, EmbedderPolicy, type SandboxingFlagSet } from './browsing/policy/index';
 import { CSPList } from './browsing/policy/csp/index';
 import type { IntersectionObserverMargin } from './dom/intersection-observer/index';
@@ -128,6 +128,7 @@ export class UserAgent implements
   /** Remembered feature decisions shared by this user agent's environments. */
   // https://w3c.github.io/permissions/#permission-store
   permissionStore = new PermissionStore([
+    clipboardWritePermission,
     new PersistentStoragePermission((origin) => { this.storagePersistence.revokeProtection(origin); }),
   ], (name) => { this.notifyPermissionStateChanged(name); });
   /** Discover queried permission results without keeping unobserved objects or their globals alive. */

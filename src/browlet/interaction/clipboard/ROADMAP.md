@@ -445,3 +445,555 @@ DataTransfer and keyboard-input coverage: 153 tests in seven files on custom Nod
 27, Node 24.19.0 and Node 26.8.1, each stock and compat. No skipped or expected-
 failure cases were added. Typecheck, generated platform declarations, type
 contracts, scoped ESLint, import boundaries and patch whitespace checks pass.
+
+## §7.2 author-created ClipboardItem, 2026-11-05
+
+Read §7.1 and §7.2 against the same current official checkout, 6201fd15.
+This bounded slice completes the author-constructor path in
+[§7.2](https://w3c.github.io/clipboard-apis/#clipboard-item-interface).
+§7.1 Navigator.clipboard needs the §7.3 Clipboard object, so it remains the next
+slice rather than returning a placeholder object.
+
+- ClipboardItem is exposed only on secure Window globals. Binding supplies the
+  nonempty record's Promise<(DOMString or Blob)> values and defaulted options.
+  Constructor getters, conversion order, enum validation and error ownership
+  use the existing Web IDL machinery.
+- MIME parsing and serialization produce the stored representation keys and
+  stable frozen types. The web prefix is a separate custom-format discriminator;
+  ordinary and custom forms can coexist. Normalized duplicates throw TypeError.
+- getType() creates an item-realm Promise, reacts to the selected input, creates
+  a fresh UTF-8 Blob for each string result, or retains a supplied Blob/File and
+  its original realm. MIME parameter values preserve their case. No global Blob
+  constructor or author-overridable encoding primitive is invoked internally.
+- Missing representations reject with item-realm NotFoundError. Invalid MIME
+  syntax throws through Binding, which turns the method failure into a rejected
+  Promise in the method's realm. Data rejections become NotFoundError; a failed
+  Web IDL fulfillment conversion instead rejects with that conversion failure.
+- supports() recognizes the exact mandatory/optional names plus valid custom MIME
+  formats. Its answer is format recognition, not a claim that a native host adapter
+  or permission grant is available. Ordinary names are not case-normalized here.
+
+### Browser choices approved by Eric
+
+The author-only probe runs in intercepted HTTP/HTTPS pages, without reading or
+writing native clipboard data. Installed versions: Chromium 156.0.8078.4,
+Firefox 157.0, WebKit 27.2. Reproduction and findings live in Experimental's
+input-delivery/clipboard-item.mjs and input-delivery/CLIPBOARD-ITEM.md.
+
+- SPEC_CLASH(clipboard-item-mime-validation): follow the draft's parsing,
+  normalization and duplicate checks, like Firefox for ordinary types. Chromium
+  and WebKit retain arbitrary raw spellings, including invalid MIME types;
+  Firefox does not accept custom web-prefixed types yet.
+- SPEC_GAP(clipboard-item-mime-equality): compare serialized MIME values, including
+  parameter order, as Firefox does. The draft compares parsed records without
+  defining equality of their parameter maps. Differently ordered parameter lists
+  therefore remain distinct; parameter-name casing and quoting normalize first.
+- SPEC_CLASH(clipboard-item-presentation-style): implement the specified enum and
+  options, like Firefox/WebKit. Chromium omits both the member and options.
+- SPEC_CLASH(clipboard-item-types-identity): retain one frozen value per item,
+  following the draft/Firefox. Chromium/WebKit return a fresh frozen array.
+- SPEC_CLASH(clipboard-item-string-blob): use UTF-8 replacement for lone surrogates
+  and omit the web prefix from Blob.type. Firefox/WebKit replace a lone surrogate
+  with one U+FFFD; Chromium's result decoded as three. Chromium/WebKit retain the
+  web prefix in string-backed Blob types; Firefox rejects that constructor input.
+- SPEC_CLASH(clipboard-item-data-rejection): follow the draft's NotFoundError.
+  Chromium propagates the original reason, Firefox uses DataError and WebKit
+  AbortError. Supplied Blob identity is preserved by all three browsers.
+- SPEC_CLASH(clipboard-item-supports): recognize the full specified vocabulary.
+  Chromium lacks text/uri-list; Firefox exposes only the mandatory set; this
+  Windows WebKit build reports only text/plain. Do not generalize that platform
+  result to every WebKit port.
+- SPEC_CLASH(clipboard-item-result-realms): use item-realm successful results,
+  like Chromium/Firefox, and item-realm missing-type errors, like Firefox.
+  Chromium uses the borrowed method realm for missing-type errors; WebKit also
+  uses that realm for successful Promises and newly created Blobs. Invalid MIME
+  TypeErrors use the method realm, matching Firefox. Frozen arrays use the item
+  realm in all three, and supplied foreign Blobs retain identity in all three.
+- SPEC_CLASH(clipboard-item-data-conversion): retain Web IDL's conversion at each
+  promise reaction, like Chromium. A mutable object's toString can therefore run
+  separately on repeated getType calls. Firefox caches the first conversion;
+  WebKit rejects object/null fulfillments instead of converting the DOMString arm.
+- SPEC_GAP(clipboard-item-conversion-failure): Web IDL's reaction can fail before
+  the Clipboard algorithm's fulfilled steps. The draft does not settle its
+  separately allocated p in that case. Reject p with the conversion failure rather
+  than leaving it pending; use the existing InternalPromise conversion-failure
+  callback. The [Web IDL reaction algorithm](https://webidl.spec.whatwg.org/#dfn-perform-steps-once-promise-is-settled)
+  remains unchanged.
+
+### Explicit native boundary and next work
+
+Eric approved SystemClipboard.readItems(document, unsanitizedTypes), an internal
+entry returning an InternalPromise of ClipboardItem implementations. It currently
+throws: native format enumeration must retain an originating item and clipboard
+change count without eagerly reading payload bytes. Those native items then need
+§7.2 getType's generation checks, per-type cached reads, custom-map decoding and
+sanitization/unsanitized policy. Author-created items must never stand in for this
+native path. Its caller will own permission admission and task-source delivery.
+No new expected failures or silent fallbacks were introduced for this boundary.
+
+Next: §7.1 and §7.3 Navigator.clipboard/Clipboard, followed by a bounded
+asynchronous read/write slice and §9 permission algorithms. The existing event
+and action layer still retains its explicit native, rendering and editing stubs.
+
+### Validation and fixture investigation
+
+The first focused run exposed an incorrect test expectation: an invalid MIME
+TypeError from a borrowed method belongs to the method realm, unlike the explicit
+NotFoundError created by the item. Firefox and existing Binding confirm this;
+no Binding change was necessary.
+
+Five initial Node 24/compat cases then timed out because the tests made sequential
+raw Node-to-Window Promise calls, outside HTML task delivery. This is the existing
+[raw host handoff limitation](../../scripting/ROADMAP.md#raw-host-promise-handoffs-on-hold),
+not a newly classified failure. The Clipboard tests now execute author calls
+through Browlet.evaluate and use same-agent sibling Windows for borrowed methods.
+The unchanged raw-handoff regressions remain in test/browlet/scripting.
+Pip's separate TSX cache/loader work does not apply to these Vite-loaded tests.
+
+Final validation: all 82 selected cases in ClipboardItem, action and system-clipboard
+coverage pass across custom Node 27, Node 24.19.0 and Node 26.8.1, each stock and
+compat (492 passing executions). The 27 new cases have no skips or expected
+failures. Generated declarations, typecheck, type contracts, scoped ESLint and
+import-boundary checks pass.
+
+## §§7.1/7.3.1 Clipboard object and asynchronous read, 2026-11-05
+
+This slice supplies [Navigator.clipboard](https://w3c.github.io/clipboard-apis/#h-navigator-clipboard)
+and [read()](https://w3c.github.io/clipboard-apis/#dom-clipboard-read), against
+6201fd15. It also implements the small [§9.1 permission algorithm](https://w3c.github.io/clipboard-apis/#h-clipboard-read-permission)
+needed for that flow. It does not supply a native clipboard backend.
+
+- Navigator lazily owns one ClipboardImpl in its existing environment. Clipboard
+  extends EventTarget, has no public constructor, and both the interface and the
+  Navigator attribute require a secure context. The partial IDL stays with
+  Clipboard and Navigator explicitly assembles it.
+- Binding supplies the converted options and sequence. Only exact text/html is
+  accepted in unsanitized. An unsupported entry rejects before focus, permission,
+  parallel work or native access. Empty options remain distinct from malformed
+  dictionary/sequence inputs; repeated allowed entries are preserved.
+- The request captures transient activation and native Paste-interaction provenance
+  during its calling task. The specification places the permission check inside
+  parallel work but refers to the current script; this approved timing adaptation
+  retains the originating interaction instead of consulting a later task.
+- SystemClipboard.checkReadPermission applies §9.1's activation-plus-Paste rule.
+  Its native isPasteInteraction(document) query throws until the adapter can
+  distinguish a UA/OS Paste interaction from synthetic events or script commands.
+  The persistent consent query used by clipboardchange remains separate. §9 only
+  registers clipboard-write; this read slice introduces no new permission feature.
+- The existing readItems(document, unsanitizedTypes) stub retains responsibility
+  for native format enumeration, generation/origin tracking, lazy representation
+  reads, caching, custom formats and sanitization. Its InternalPromise result is
+  delivered on the dedicated clipboard task source. Denied permission settles on
+  the existing permissions task source (called singular permission in this draft).
+  Native exceptions/rejections reject the author promise rather than escaping
+  the background callback or leaving the promise pending.
+- The original Document must be fully active and focused at entry, before native
+  access and before successful delivery. HTML still controls task runnability and
+  removes queued tasks on destruction; the API does not bypass that lifecycle.
+- readText, write and writeText have their specified IDL plus named throwing
+  implementation stubs. Their algorithms are the next bounded sections.
+
+### Approved gaps and browser evidence
+
+The interface-only probe in Experimental's input-delivery/clipboard-read.mjs
+never reads/writes the OS clipboard or requests permission. Chromium 156.0.8078.4,
+Firefox 157.0 and WebKit 27.2 agree on secure exposure, stable Navigator identity,
+EventTarget inheritance, illegal construction, method lengths, borrowed getters,
+and method-realm rejected promises/TypeErrors for invalid receivers. Successful
+read result realms are exercised by Browlet tests with the controlled native port;
+the probe does not claim native browser read results.
+
+- SPEC_GAP(clipboard-read-invalid-options-abort): §7.3.1 omits an abort after
+  rejecting unsupported options. Stop immediately, like Blink HandleRead.
+- SPEC_CLASH(clipboard-read-unsanitized-duplicates): §7.3.1 validates every entry;
+  Blink HandleRead rejects any list longer than one. Preserve repeated text/html
+  as specified, without adding a deduplication rule.
+- SPEC_CLASH(clipboard-read-permission): follow §9.1's narrow admission. Blink
+  ValidatePreconditions additionally accepts extension/persistent read grants.
+- SPEC_GAP(clipboard-read-document-lifetime): [§11.2](https://w3c.github.io/clipboard-apis/#privacy-async)
+  requires focus but does not place the check in §7.3.1 or specify later lifetime
+  checks. Retain the original fully active, focused Document at the three points
+  above. Blink checks focus at entry; the additional rechecks are Browlet's
+  explicitly approved policy, not a claim of browser consensus.
+
+Source evidence: [Blink clipboard_promise.cc](https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/modules/clipboard/clipboard_promise.cc),
+HandleRead and ValidatePreconditions. All four choices and the ownership/timing
+contract were reviewed with Eric before adoption.
+
+### Validation
+
+The 27 new tests cover exposure, conversion and receiver errors, option snapshots,
+permission facts, task sources, native completion/failure, realm identity, focus
+and activity changes, explicit missing dependencies and task destruction. Initial
+fixture failures counted evaluate's automation task or bypassed HTML's activity
+wake-up; they were corrected using existing scheduling facilities. No production
+scheduler change or failure reclassification was needed.
+
+All 164 Clipboard tests pass on custom Node 27, Node 24.19.0 and Node 26.8.1,
+each stock and compat: 984 passing executions, with no skips or expected failures.
+Generated declarations, typecheck, type contracts, scoped ESLint, import-boundary
+checks and patch whitespace checks pass. The final test typing cleanup was also
+rechecked in custom/compat (27 new cases passing).
+
+Next: §7.3.2 readText; audit its native text extraction/decoding and rejection
+steps separately. §§7.3.3–7.3.4 and §9.2 remain explicit write work.
+
+## §7.3.2 asynchronous plain-text read, 2026-11-05
+
+Refreshed the clean official checkout with a fast-forward-only pull; it remains
+at 6201fd15. This slice implements [readText()](https://w3c.github.io/clipboard-apis/#dom-clipboard-readtext)
+while keeping actual native selection and snapshot acquisition explicit.
+
+- read and readText share one private admission/task helper. The already reviewed
+  activation/Paste snapshot, focus/activity rechecks, permission task rejection,
+  clipboard completion source and Document task lifetime are unchanged.
+- The new SystemClipboard.readTextData(document) host dependency throws until
+  an adapter supplies a stable clipboard snapshot. It selects the first standard
+  text/plain representation by mapped MIME essence, excluding custom web types;
+  null means no plain text, while a rejected data promise means unreadable text.
+  It must retain generation consistency and avoid fetching unrelated formats.
+- Native OS text decoding belongs to that host boundary. It may return a DOMString
+  or a Blob containing UTF-8 bytes. readText preserves strings and uses Blob.text()
+  for the specified UTF-8 decoding, including BOM stripping and replacement of
+  malformed sequences. It ignores Blob.type/charset for this decoding rule.
+- The reader waits for both data and Blob bytes, then delivers through the
+  clipboard source with a final Document check. It never calls public read(),
+  creates author ClipboardItems, or uses author-replaced Blob prototype methods.
+- Input representation failures become receiver-realm NotFoundError. Synchronous
+  missing-owner exceptions remain visible; denied permission and lost focus
+  remain NotAllowedError. write/writeText are unchanged explicit stubs.
+
+### Approved specification conflicts
+
+The current draft checks a new representation's MIME field before assigning it,
+reads its uninitialized data promise, and rejects unconditionally after attaching
+fulfillment reactions. It therefore cannot literally implement its intended text
+read. Eric approved selecting native text explicitly and awaiting completion.
+
+- SPEC_CLASH(clipboard-readtext-empty): return an empty string for absent text,
+  following Gecko and WebKit's source, instead of the draft's final NotFoundError.
+- SPEC_CLASH(clipboard-readtext-settlement): await the selected representation and
+  UTF-8 decoding before final settlement, instead of racing the unconditional
+  rejection. Native completion in Blink/Gecko/WebKit similarly supplies the text
+  before fulfillment. Browlet uses its existing clipboard task source.
+- SPEC_CLASH(clipboard-readtext-data-failure): retain the draft's explicit
+  NotFoundError for unreadable representation data. Gecko's native error callback
+  instead uses NotAllowedError. Permission denial remains distinct in Browlet.
+
+Source inspection, not a native browser clipboard probe:
+
+- [Gecko Clipboard.cpp](https://github.com/mozilla/gecko-dev/blob/master/dom/events/Clipboard.cpp),
+  local d92a7ec0e622: ClipboardGetCallbackForReadText resolves a default-empty
+  nsAutoString if the text flavor is absent; ClipboardGetCallback::OnError maps
+  native failures to NotAllowedError.
+- [WebKit Clipboard.cpp](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/Modules/async-clipboard/Clipboard.cpp),
+  local 713192fa: readText selects the first text/plain item, retains empty text
+  when none exists, checks the pasteboard generation, then queues fulfillment.
+- [Blink clipboard_promise.cc](https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/modules/clipboard/clipboard_promise.cc):
+  HandleReadTextWithPermission performs a direct asynchronous plain-text read;
+  OnReadPlainText resolves after native completion.
+
+The existing Experimental interface probe already covers readText's method shape
+and receiver errors. No system clipboard contents were inspected or overwritten.
+The new regression fixture supplies the native dependency and exercises real
+Blob storage, streams, encoding, bindings and task delivery.
+
+### Validation
+
+The 16 new cases cover absent/empty text, unchanged DOMStrings, UTF-8 BOM and
+malformed sequences, delayed native and Blob reads, data failure mapping,
+permission denial, focus loss, concurrent reads, borrowed realms and the named
+native stub. All 180 Clipboard tests pass across custom Node 27, Node 24.19.0 and
+Node 26.8.1, each stock and compat: 1,080 passing executions, no skips or expected
+failures. Generated declarations remain current; typecheck, type contracts,
+scoped ESLint, import boundaries and patch whitespace checks pass.
+
+Next: §§7.3.3–7.3.4 asynchronous writes and their §9.2 permission dependency.
+
+## §§7.3.3/9.2 asynchronous item writing, 2026-11-05
+
+The approved readText slice, including the private helper name #runRead and its
+readData callback, was committed as 73ee9845. This next slice implements write()
+and write permission; writeText remains the explicit §7.3.4 stub.
+
+- ClipboardPermissionDescriptor is a separate contributing dictionary with
+  allowWithoutGesture=false. UserAgent registers ClipboardWritePermission in
+  the existing store. Both aspects default to prompt; the existing host prompt
+  hook defaults to denial. There is no clipboard-specific decision registry.
+- The feature's query and write admission resolve the descriptor relationship:
+  a stronger grant grants both; a weaker denial denies both. Contradictory raw
+  entries use denial precedence. Exact store lookup and unrelated features remain
+  unchanged. This feature-level state operation must also be used by future
+  Clipboard permission consumers rather than reading an exact store entry.
+- SystemClipboard.checkWritePermission(document) returns an InternalPromise of
+  boolean, adapting the draft's boolean/PermissionState mixture. It captures
+  activation/native provenance while the calling script's task is current, then
+  runs consent through the existing parallel queue. Only granted means true.
+  Denial/error completion uses the permissions task source.
+- write() collects the selected items' data through ClipboardItem.getWriteData,
+  which retains the converted representation promises and uses write's rejection
+  rule rather than invoking public getType. Strings become UTF-8 Blob data;
+  supplied Blobs retain identity. Failed fulfillment conversion remains an
+  observable rejection, consistent with the approved ClipboardItem policy.
+- Item and representation ordering, presentationStyle, and the separate custom
+  flag survive asynchronous resolution. All selected data is joined before rich
+  preparation; all preparation completes before one native commit. Empty writes
+  are admitted no-ops. Single-item hosts select only the first item.
+- Activity/focus is checked for the original Document at entry, after permission,
+  before preparation, before commit, and at completion. Every asynchronous phase
+  returns through a clipboard task. A committed change still queues notification
+  if focus was lost afterward; that notification uses its existing eligibility
+  checks. Native completion must report whether contents actually changed.
+
+### Explicit dependencies and accepted callable boundaries
+
+- SystemClipboard.isCopyInteraction(document): throwing task-scoped UA/OS
+  Cut-or-Copy provenance. Neither activation nor synthetic event names supply it.
+- supportsMultipleItems(): throwing native clipboard item-model query, needed
+  only for multiple requested items.
+- prepareWriteData(blob, document): throwing rich-format owner dependency for
+  standard HTML/SVG sanitization and PNG decoding/preparation. Plain text/URI-list
+  bytes and custom opaque data bypass rich sanitization. Supplied Blobs are never
+  mutated. Rejected preparation becomes NotAllowedError; a synchronous missing
+  dependency remains visible as its implementation error.
+- writeItems(items, document): throwing asynchronous native operation returning
+  whether contents changed. It must implement standard/custom OS format mapping,
+  custom-format limits, presentation styles, text conventions, binary encoding,
+  and collective commit. A delayed adapter must recheck the Document immediately
+  before changing the OS clipboard. Native echo suppression for the initiating
+  Document is the already-approved event-write contract.
+- Document.hasFocus(), Window.hasTransientActivation(), and broader permission
+  prompt/revocation lifetimes retain their existing owners. No fake system
+  clipboard or permissive native fallback is introduced.
+
+### Conflicts, gaps and evidence
+
+Eric approved each choice before implementation:
+
+- SPEC_CLASH(clipboard-write-permission): follow §9.2's descriptor-based rules;
+  Firefox/WebKit primarily admit writes through transient activation. Blink also
+  supports persistent grants. The descriptor registration/default and task-time
+  provenance capture are explicit integration choices.
+- SPEC_GAP(clipboard-permission-conflicting-decisions): weaker denial takes
+  precedence when the store has contradictory decisions. Permissions §4 specifies
+  the descriptor implications but not conflict resolution between stored entries.
+- SPEC_CLASH(clipboard-write-await-data): §7.3.3 proceeds past asynchronous
+  representation reactions without awaiting them and accumulates item lists
+  outside the item loop. Await all selected data, preserve item boundaries, and
+  commit collectively. Blink uses PromiseAll before writing, Gecko joins native
+  entries, and WebKit waits for every item before its pasteboard write.
+- SPEC_CLASH(clipboard-write-multiple-items): follow the draft's first-item
+  selection on a single-item host. Blink/Gecko instead reject multiple items;
+  WebKit has a multi-item collection path. Follow the draft and Blink/Gecko for
+  empty-input no-op behavior, retaining admission before completion.
+- SPEC_CLASH(clipboard-write-blob-type): use the supplied Blob.type as §7.3.3
+  directs. Blink validates it against the ClipboardItem key and then writes by
+  that key; Gecko/WebKit select by the key. Strings use the entry's canonical MIME
+  type. Standard formats use the exact mandatory/optional vocabulary.
+- SPEC_CLASH(clipboard-write-custom-identity): the main algorithm's format filter
+  would discard the custom formats Appendix A writes. Preserve isCustom separately
+  from the Blob MIME type; custom data stays opaque. Native custom mapping/limits
+  remain unfinished at writeItems rather than being claimed as implemented.
+- Existing SPEC_GAP(clipboard-read-document-lifetime) now covers write's later
+  preparation/commit boundaries as approved. Missing focus and native lifetime
+  effects remain executable dependencies.
+
+Sources: the current local Clipboard index.bs at 6201fd15cf28; Blink
+[ClipboardPromise](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/modules/clipboard/clipboard_promise.cc)
+(HandleWrite, HandleWriteWithPermission, WriteClipboardItemData,
+WriteNextRepresentation); Gecko
+[Clipboard.cpp](https://github.com/mozilla/gecko-dev/blob/master/dom/events/Clipboard.cpp)
+(Write, GetClipboardNativeItem, GetNativeEntry); WebKit
+[Clipboard.cpp](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/Modules/async-clipboard/Clipboard.cpp)
+and
+[ClipboardItemBindingsDataSource.cpp](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/Modules/async-clipboard/ClipboardItemBindingsDataSource.cpp)
+(ItemWriter, collectDataForWriting); and
+[Permissions §4](https://w3c.github.io/permissions/#dfn-stronger-than).
+The browser comparisons here are source inspections; tests never read or replace
+the developer's real OS clipboard.
+
+### Regression evidence
+
+A new mixed-failure test reproduced an unobserved rejection: an earlier rich
+preparation rejected asynchronously while a later one threw synchronously, so the
+array join was never reached. Capturing each preparation in HostPromise.try
+preserves every result for the join. The isolated regression failed with an
+unhandled NotAllowedError before the repair and passed afterward. Synchronous
+missing-dependency errors remain visible; no failure was reclassified.
+
+Validation: all 223 Clipboard cases in 10 files pass on custom Node 27,
+Node 24.19.0 and Node 26.8.1, stock and compat (1,338 case executions).
+The combined Clipboard and Permissions run passes all 362 cases in 27 files on
+custom compat. There are no new expected failures or disabled regressions.
+The full typecheck, test-contract typecheck, scoped ESLint, import-boundary check
+and diff whitespace check pass. The write slice was reviewed and approved before check-in.
+
+Next: §7.3.4 writeText(), reusing write permission and native commit ownership,
+then the remaining security/privacy and Appendix audit. Native clipboard effects
+remain unfinished until their explicit dependencies are implemented.
+
+## §7.3.4 asynchronous text writing, 2026-11-05
+
+The approved §§7.3.3/9.2 write/permission slice is committed as 95a43291.
+The clean Clipboard specification checkout was refreshed with a fast-forward-only
+pull and remains current at 6201fd15cf28. This slice implements writeText().
+
+- Binding supplies the converted DOMString. The shared private #runWrite helper
+  captures permission facts in the calling task, uses the existing consent flow,
+  and enters the clipboard task only after admission. The existing write() path
+  now uses that same helper without changing its representation preparation.
+- writeText constructs a Blob with type text/plain;charset=utf-8, UTF-8 bytes,
+  isCustom=false, and unspecified presentation. Empty text still writes one
+  zero-byte representation; it is not write([])'s no-op case. UTF-8 encoding
+  replaces unpaired surrogates and retains NUL and supplementary characters.
+- On CRLF hosts, the existing File convertLineEndingsToNative operation normalizes
+  CR, LF and CRLF using env.nativeLineEnding. On other hosts the supplied line
+  endings remain unchanged. The environment's already-composed host value is
+  sufficient; there is no new OS detection or native-text service.
+- Text goes directly to the existing #commitWrite method. No author ClipboardItem,
+  Blob constructor override, Clipboard.write method, or rich-format preparation
+  participates in this path. Native failure, notification, lifetime rechecks,
+  promise ownership and completion-task behavior remain shared with write().
+- The existing SystemClipboard.writeItems dependency still throws. Its required
+  format mapping uses MIME essence, as Appendix A specifies, so writeText's
+  charset parameter maps to standard plain text. Native text encoding, clipboard
+  access and write completion remain that owner's unfinished work. Focus,
+  activation and native Cut/Copy provenance retain their existing explicit
+  dependencies. No real OS clipboard was read or modified during validation.
+
+### Approved newline interpretation and source evidence
+
+SPEC_CLASH(clipboard-writetext-windows-newlines): the draft note literally replaces
+LF with CRLF, which would duplicate CR in an existing CRLF pair. Eric approved
+Blink's normalization of all three newline spellings on Windows. Source evidence:
+
+- [Blink SystemClipboard::WritePlainText](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/clipboard/system_clipboard.cc)
+  calls NormalizeLineEndingsToCrLf under the Windows build flag; its
+  [line-ending tests](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/platform/wtf/text/line_ending_test.cc)
+  explicitly cover LF, CRLF and lone CR becoming one CRLF.
+- [Blink ClipboardPromise](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/modules/clipboard/clipboard_promise.cc)
+  writes plain text after permission and commits before resolving.
+- [Gecko Clipboard::WriteText](https://github.com/mozilla/gecko-dev/blob/master/dom/events/Clipboard.cpp)
+  builds a plain-text item and reuses Write; [WebKit Clipboard::writeText](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/Modules/async-clipboard/Clipboard.cpp)
+  writes standard plain text through its pasteboard owner after admission.
+  These are implementation-source observations, not a new live native clipboard
+  probe or a claim that all engines agree on every platform's newline handling.
+
+### Validation and stopping point
+
+The focused writeText/write/write-permission run passes all 64 cases. New coverage
+includes UTF-8 bytes, empty text, both host newline rules, argument conversion,
+author API overrides, permission denial and delayed consent, focus lifetime,
+asynchronous native completion/failure, change notifications, borrowed-method
+realms and the still-throwing writer dependency.
+
+All 244 Clipboard cases in 11 files pass across custom Node 27, Node 24.19.0
+and Node 26.8.1, with stock and compat runtimes (1,464 case executions). There
+are no new expected failures or disabled regressions. Full typechecking,
+binding-contract typechecking, scoped ESLint, the import-boundary check, and
+whitespace validation pass. The writeText slice was reviewed and approved before check-in.
+
+Next: audit §§10–11 and Appendix A, cross-checking already implemented §§8–9.
+All four async Clipboard entry points now have their local flow, but native
+reads/writes, lazy native items, rich-format preparation, HTML focus/activation,
+editing operations and the native adapter remain explicit unfinished owners.
+
+## §§10–11 and Appendix A audit, 2026-11-05
+
+The approved writeText slice is committed as ebc6287e. The clean official
+Clipboard checkout was refreshed and remains at 6201fd15cf28. This audit reads
+[§10](https://w3c.github.io/clipboard-apis/#security),
+[§11](https://w3c.github.io/clipboard-apis/#privacy), and every
+[Appendix A algorithm](https://w3c.github.io/clipboard-apis/#algorithms),
+and cross-checks the implemented §§8–9 actions and permissions.
+
+### Security and privacy requirements
+
+- §10.1 explicitly labels its HTML/multipart policy table non-normative. It does
+  not supply a sanitizer or authorize arbitrary resource reads. §10.2's normative
+  rules prohibit fetching referenced online resources and exposing their contents
+  as Files/items, and prohibit exposing referenced local files from web-origin
+  clipboard markup. The existing throwing readForPaste dependency now records
+  these requirements and the native source-provenance requirement in code.
+- §10.3 permits write-side image transcoding but recommends preserving read-side
+  images and their metadata. readItems/readForPaste and prepareWriteData record
+  the separate responsibilities. Native getType must also obey §7.2.3's image/png
+  and requested text/html sanitization exceptions. The current native read stubs
+  remain throwing; author ClipboardItems do not sanitize supplied Blobs.
+- §10.4 requires graceful handling of excessive data. Both native writer stubs
+  now explicitly require size/count validation before mutation. No arbitrary
+  browser-wide quota or speculative OS limit is introduced. The adapter must
+  implement actual limits and errors before these stubs can be removed.
+- §11.1's data-access lifetime is implemented by fireEvent's finally-detach path:
+  retained transfers cannot read/write data, lists empty, and retained items are
+  disabled. Existing captured File/string and queued callback behavior retains
+  the previously approved HTML rules. HTML's DataTransferItemList.remove still
+  throws outside read/write mode; that list method is not a new clipboard effect.
+  Synthetic ClipboardEvents use only author-supplied data and cannot enter native
+  action admission merely through DOM dispatch.
+- §11.2's focus requirement is checked at async entry and before native work and
+  completion. §9 read/write decisions remain distinct, with consent delivery on
+  the existing permissions machinery. Optional permission-expiration policies
+  are not additional mandatory algorithms or newly enabled grants.
+- §§8.3/11.3 require explicit permission for script paste. runAction checks the
+  existing throwing hasScriptPastePermission dependency before dispatch/reading;
+  its code now records that any owner-provided prompt must name the requesting
+  hostname. Synthetic paste and activation alone do not establish this consent.
+
+### Appendix coverage and executable dependencies
+
+| Algorithm | Current owner and remaining work |
+| --- | --- |
+| A.1 write content | writeContentToClipboard implements replacement versus clear decisions. replaceNativeContents and clearNativeContents throw for native encoding/line endings, standard/custom formats, and whole/per-format OS mutation. |
+| A.2 write blobs and option | Clipboard joins all selected representations and preserves item/style/custom identity before writeItems. That native writer still throws for OS encoding and collective commit. |
+| A.3 standard native format | The read/write native dependencies own MIME-essence mapping to actual OS identifiers, including parameterized writeText plain text. Actual native name/handle mapping remains unfinished. |
+| A.4 MIME from native format | readChangeState, readForPaste and readItems still throw for discovery and mapping; unmapped formats cannot be guessed from their names. |
+| A.5 read custom formats | readItems still throws for custom-map discovery and lazy native item construction; later getType needs the originating item/generation and map lookup. |
+| A.6 write custom formats | writeItems still throws for native custom payloads and JSON map commit, including format-count limits. |
+| A.7–A.8 custom map/name | The native adapter must supply the specified platform map and indexed format names used by A.5/A.6. These are part of the throwing native mapping operations, not a completed host adapter. |
+| A.9 fire clipboard event | fireEvent and ClipboardDataTransferImpl implement trusted dispatch, modes, clear bookkeeping, sequence checks and detachment. getEventTarget/readForPaste remain explicit throwing targeting/decoding dependencies. |
+| A.10 HTML paste | readForPaste still throws for parser/serializer integration, source-relative URL resolution, source-qualified file/part access and deduplicated cid: references. The source now records required names, timestamps, fallback MIME and §10.2 restrictions. |
+
+A.1's native replacement must fail before cut can proceed to editing. A.2 uses the
+already approved collective commit rather than independent per-representation
+writes. A.9 shares the existing DataTransfer model; there is no second item store
+or new access registry. No live OS clipboard was read or modified by this audit.
+
+### Unresolved native work and draft questions
+
+This is a complete reading/audit checkpoint, not complete native Clipboard support.
+The remaining code dependencies above are executable throws, not documentation-only
+placeholders. HTML system focus/activation, native command provenance, persistent
+read consent, rendering/editing and adapter notification routing also remain with
+the owners recorded in earlier slices.
+
+SPEC_CLASH(clipboard-appendix-binary): A.2 UTF-8-decodes every payload despite
+§6.4's mandatory image/png support. The approved writer contract preserves binary
+data; its native encoding still throws. A.2 also attempts to mutate read-only
+Blob.type and leaves variables unset in its custom branch. The approved records
+already retain bytes, MIME and custom identity separately.
+
+SPEC_GAP(clipboard-custom-map-failures): A.5 does not specify how malformed JSON
+or invalid map values affect discovery. The policy remains pending at readItems.
+SPEC_GAP(clipboard-native-target): A.2 explicitly leaves selection among multiple
+OS clipboards undefined. The policy remains pending at writeItems and the native
+adapter. Neither gap is resolved by exposing the author APIs.
+
+A.6 literally permits 101 entries: it writes index 0 first and breaks only after
+incrementing the count beyond 100. Check that rule against the actual adapter
+before choosing its format limit. A.8's Linux custom-format prefix has incomplete
+quoting; its final native spelling also needs resolution at that implementation.
+
+The next useful local implementation slice is native ClipboardItem state and lazy
+getType delivery: retain the original item/generation, check staleness before cached
+results, share concurrent reads, and deliver results in the item's realm. Native
+format enumeration, byte access and rich-content processing can remain explicit
+host dependencies. Review its callable contract before introducing the native item
+representation; author items must retain their current independent behavior.
+
+Validation: all 244 existing Clipboard regressions in 11 files pass on custom
+Node 27 with compat (9.97 seconds). Patch whitespace and scoped ESLint checks
+pass. This audit changes dependency comments and roadmap/status notes, not
+runtime behavior; it adds no tests, expected failures or skips. The approved
+writeText slice's six-runtime validation is recorded above and was not repeated
+for these comment/documentation edits. The audit was reviewed and approved before check-in.

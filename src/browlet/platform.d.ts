@@ -19,6 +19,8 @@ export type NavigationFocusReset = "after-transition" | "manual";
 
 export type NavigationScrollBehavior = "after-transition" | "manual";
 
+export type PresentationStyle = "unspecified" | "inline" | "attachment";
+
 export type SecurityPolicyViolationEventDisposition = "enforce" | "report";
 
 export type ShadowRootMode = "open" | "closed";
@@ -66,6 +68,10 @@ export type BufferSource = Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | In
 export type AllowSharedBufferSource = ArrayBuffer | SharedArrayBuffer | Int8Array<ArrayBufferLike> | Int16Array<ArrayBufferLike> | Int32Array<ArrayBufferLike> | Uint8Array<ArrayBufferLike> | Uint16Array<ArrayBufferLike> | Uint32Array<ArrayBufferLike> | Uint8ClampedArray<ArrayBufferLike> | BigInt64Array<ArrayBufferLike> | BigUint64Array<ArrayBufferLike> | Float16Array<ArrayBufferLike> | Float32Array<ArrayBufferLike> | Float64Array<ArrayBufferLike> | DataView<ArrayBufferLike>;
 
 export type HTMLOrSVGScriptElement = HTMLScriptElement | SVGScriptElement;
+
+export type ClipboardItemData = string | Blob | PromiseLike<string | Blob>;
+
+export type ClipboardItems = Iterable<ClipboardItem>;
 
 export type ReportList = Iterable<Report>;
 
@@ -430,6 +436,11 @@ export interface GetComposedRangesOptions {
   shadowRoots?: Iterable<ShadowRoot>;
 }
 
+export interface ClipboardPermissionDescriptor {
+  name: string;
+  allowWithoutGesture?: boolean;
+}
+
 export interface ClipboardEventInit {
   bubbles?: boolean;
   cancelable?: boolean;
@@ -443,6 +454,14 @@ export interface ClipboardChangeEventInit {
   composed?: boolean;
   changeId?: bigint;
   types?: Iterable<string>;
+}
+
+export interface ClipboardItemOptions {
+  presentationStyle?: PresentationStyle;
+}
+
+export interface ClipboardUnsanitizedFormats {
+  unsanitized?: Iterable<string>;
 }
 
 export interface SecurityPolicyViolationEventInit {
@@ -2618,6 +2637,31 @@ export interface ClipboardChangeEventConstructor extends Ctor<EventConstructor> 
   new (type: string, eventInitDict?: ClipboardChangeEventInit): ClipboardChangeEvent;
 }
 
+export interface ClipboardItem {
+  readonly presentationStyle: PresentationStyle;
+  readonly types: ReadonlyArray<string>;
+  getType(type: string): Promise<Blob>;
+}
+
+export interface ClipboardItemConstructor {
+  readonly prototype: ClipboardItem;
+  [Symbol.hasInstance](value: unknown): value is ClipboardItem;
+  new (items: Record<string, string | Blob | PromiseLike<string | Blob>>, options?: ClipboardItemOptions): ClipboardItem;
+  supports(type: string): boolean;
+}
+
+export interface Clipboard extends EventTarget {
+  read(formats?: ClipboardUnsanitizedFormats): Promise<Array<ClipboardItem>>;
+  readText(): Promise<string>;
+  write(data: Iterable<ClipboardItem>): Promise<void>;
+  writeText(data: string): Promise<void>;
+}
+
+export interface ClipboardConstructor extends Ctor<EventTargetConstructor> {
+  readonly prototype: Clipboard;
+  [Symbol.hasInstance](value: unknown): value is Clipboard;
+}
+
 export interface NotRestoredReasonDetails {
   readonly reason: string;
   toJSON(): object;
@@ -2804,6 +2848,7 @@ export interface PerformanceConstructor extends Ctor<EventTargetConstructor> {
 
 export interface Navigator {
   readonly permissions: Permissions;
+  readonly clipboard: Clipboard;
   readonly maxTouchPoints: number;
   readonly storage: StorageManager;
 }
@@ -3213,6 +3258,8 @@ export interface Window extends EventTarget {
   DataTransferItem: DataTransferItemConstructor;
   ClipboardEvent: ClipboardEventConstructor;
   ClipboardChangeEvent: ClipboardChangeEventConstructor;
+  ClipboardItem: ClipboardItemConstructor;
+  Clipboard: ClipboardConstructor;
   NotRestoredReasonDetails: NotRestoredReasonDetailsConstructor;
   NotRestoredReasons: NotRestoredReasonsConstructor;
   ViewTransition: ViewTransitionConstructor;

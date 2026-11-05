@@ -1,7 +1,8 @@
-import { InternalError } from '../../../infra/index';
+import { InternalError, internalType, type InternalPromise } from '../../../infra/index';
 import { computeHash, randomUUID } from '../../../js-engine/index';
 import { utf8Encode } from '../../../encoding/index';
 import { StorageKey } from '../../../storage/index';
+import type { BlobImpl } from '../../../file/index';
 
 import { userInteractionTaskSource } from '../../scripting/index';
 import type { DragDataItem } from '../drag-drop/index';
@@ -10,8 +11,10 @@ import type { DocumentImpl, ElementImpl } from '../../dom/nodes/index';
 import { ClipboardChangeEventImpl } from './change-event';
 import { ClipboardEventImpl } from './event';
 import { ClipboardDataTransferImpl } from './event-data';
+import type { ClipboardItemImpl, ClipboardWriteItem } from './item';
+import { clipboardWritePermission } from './permission';
 
-/** System clipboard event algorithms and identifier lifetime, owned by one UserAgent. */
+/** System clipboard algorithms and native effects, owned by one UserAgent. */
 // https://w3c.github.io/clipboard-apis/#clipboard-event-clipboardchange
 export class SystemClipboard {
   /** Mix a fresh UA-lifetime value into native tokens, even if the OS reuses a token after restart. */
@@ -170,6 +173,11 @@ export class SystemClipboard {
   // formats, decode text, and create Files (using application/octet-stream for an unknown file type).
   // TODO(Clipboard / process an HTML paste event): parse/serialize markup, resolve source-relative URLs,
   // and process local-file/clipboard-part references before exposing text/html or application/xhtml+xml.
+  // §10.2 forbids fetching referenced online resources or exposing their contents as items/Files.
+  // Referenced local files are eligible only for local-application data; retain native origin
+  // provenance until that decision. A file: URL in web-origin markup does not grant file access.
+  // Appendix A.10 also requires deduplicated cid: item indices, File names/timestamps and
+  // unknown-type fallback. §10.3 recommends preserving image bytes/metadata on reads.
   // https://w3c.github.io/clipboard-apis/#to-process-html-paste-event
   // The snapshot contains no live native data source; a null token never permits later clipboard reads.
   readForPaste(_document: DocumentImpl): ClipboardPasteData {
@@ -186,6 +194,7 @@ export class SystemClipboard {
   // https://w3c.github.io/clipboard-apis/#allow-read-clipboard
   // TODO(Clipboard command permissions): supply the implementation-specific site/app decision.
   // §6's synchronous event API cannot prompt or wait here; permission UI belongs to its owner.
+  // Any earlier §8.3 permission prompt must identify the requesting Document's hostname.
   hasScriptPastePermission(_document: DocumentImpl): boolean {
     throw new InternalError('Script clipboard paste permission is not implemented');
   }
@@ -228,6 +237,8 @@ export class SystemClipboard {
   // TODO(Clipboard host / §6.4 and Appendix A.1): support text/plain, text/html and image/png,
   // map native format names, encode text and normalize native line endings, and materialize files.
   // Optional/custom formats need an explicit supported-format policy; never silently drop a required one.
+  // §10.4 requires graceful handling of excessive data: reject unsupported native sizes/counts
+  // before replacement, rather than clearing first and discovering an unrepresentable payload.
   // This action queues the initiating Document's change event. The adapter must suppress its native
   // observation echo for that Document while routing changes to other Documents through queueChange.
   replaceNativeContents(_items: DragDataItem[], _document: DocumentImpl): boolean {
@@ -276,6 +287,123 @@ export class SystemClipboard {
     throw new InternalError('Persistent clipboard-read permission is not implemented');
   }
 
+  /** Snapshot §9.1's facts during the requesting script's task. */
+  // https://w3c.github.io/clipboard-apis/#h-clipboard-read-permission
+  // SPEC_CLASH(clipboard-read-permission): Follow the draft's activation plus native-Paste rule;
+  // Blink additionally accepts extension or persistent clipboard-read permission grants.
+  checkReadPermission(document: DocumentImpl): boolean {
+    const realm = document.env.realm;
+    if (!realm.isWindow() || !realm.windowImplementation.hasTransientActivation()) return false;
+    return this.isPasteInteraction(document);
+  }
+
+  /** Capture §9.2's task facts, then request any needed consent in parallel. */
+  // https://w3c.github.io/clipboard-apis/#h-clipboard-write-permission
+  // SPEC_CLASH(clipboard-write-permission): Follow the descriptor-based draft;
+  // Gecko/WebKit primarily use transient activation, while Blink also accepts persistent grants.
+  // The specification returns a boolean or PermissionState. This entry returns
+  // an InternalPromise<boolean>, accepting only the granted decision from Permissions.
+  checkWritePermission(document: DocumentImpl): InternalPromise<boolean> {
+    const env = document.env;
+    const P = env.userAgent.HostPromise;
+    return P.try(() => {
+      const granted = clipboardWritePermission.getState(true, env) === 'granted';
+      const realm = env.realm;
+      const hasGesture = !granted && realm.isWindow() && realm.windowImplementation.hasTransientActivation();
+      const nativeCopy = hasGesture && this.isCopyInteraction(document);
+      const descriptor = { name: clipboardWritePermission.name, allowWithoutGesture: !hasGesture };
+      const result = P.withResolvers(internalType<boolean>());
+      env.runInParallel(() => {
+        try {
+          if (granted || nativeCopy) { result.resolve(true); return; }
+          if (clipboardWritePermission.getState(descriptor.allowWithoutGesture, env) === 'denied') {
+            result.resolve(false); return;
+          }
+          env.permissions.requestPermission(descriptor).observe(
+            (decision) => { result.resolve(decision === 'granted'); }, result.reject,
+          );
+        } catch (error) { result.reject(error); }
+      });
+      return result.promise;
+    }, internalType<boolean>());
+  }
+
+  /** Whether the current script runs from a UA/OS Cut or Copy control. */
+  isCopyInteraction(_document: DocumentImpl): boolean {
+    // TODO(Clipboard host): task-scoped native provenance, distinct from activation
+    // and from script-generated copy/cut events or execCommand calls.
+    throw new InternalError('Native Cut/Copy interaction provenance is not implemented');
+  }
+
+  /** Whether one native clipboard transaction can retain multiple separate items. */
+  supportsMultipleItems(): boolean {
+    // TODO(Clipboard host): query the selected OS clipboard's item model.
+    throw new InternalError('Native multi-item clipboard support is not implemented');
+  }
+
+  /** Prepare standard HTML/SVG/PNG data before any native clipboard mutation. */
+  prepareWriteData(_data: BlobImpl, _document: DocumentImpl): InternalPromise<BlobImpl> {
+    // TODO(Clipboard formats): decode/validate PNG and choose its native encoding;
+    // sanitize HTML/SVG using their document/format owners. Return a prepared copy,
+    // reject NotAllowedError on preparation failure, and never mutate the supplied Blob.
+    throw new InternalError('Rich clipboard write preparation is not implemented');
+  }
+
+  /** Commit all prepared items together; resolve whether clipboard contents changed. */
+  // https://w3c.github.io/clipboard-apis/#to-write-blobs-to-clipboard
+  writeItems(_items: ClipboardWriteItem[], _document: DocumentImpl): InternalPromise<boolean> {
+    // TODO(Clipboard host): native standard/custom format mapping by MIME essence
+    // (writeText supplies text/plain;charset=utf-8), custom-format limits,
+    // platform text conventions and binary image encoding, presentation styles, and
+    // one collective OS commit.
+    // SPEC_CLASH(clipboard-appendix-binary): A.2 UTF-8-decodes every payload, conflicting
+    // with §6.4 image/png support. The approved writer contract preserves binary data.
+    // Appendix A.3–A.8 cover native standard names and custom JSON map/index names.
+    // Check the draft's 101-entry custom-format loop against native capacity before registration. §10.4
+    // also requires graceful size/count failures; validate native limits before mutation.
+    // SPEC_GAP(clipboard-native-target): A.2 leaves selection among OS clipboards undefined;
+    // the native adapter must establish that policy before implementing this effect.
+    // Recheck the Document immediately before the effect if native preparation suspends.
+    // Resolve only after completion; reject native failures. The caller queues change
+    // notification, so the adapter must not echo that write to its initiating Document.
+    throw new InternalError('Native asynchronous clipboard item writing is not implemented');
+  }
+
+  /** Whether the current script runs from a UA/OS Paste control, not a synthetic paste event. */
+  isPasteInteraction(_document: DocumentImpl): boolean {
+    // TODO(Clipboard host): native menu/command provenance scoped to the running task.
+    // Activation alone, an event name, or script execCommand('paste') does not establish it.
+    throw new InternalError('Native Paste interaction provenance is not implemented');
+  }
+
+  /** Supply native lazy items after the async Clipboard reader has admitted access. */
+  // https://w3c.github.io/clipboard-apis/#dom-clipboard-read
+  // TODO(Clipboard §§7.2–7.3.1): enumerate native formats without reading payloads;
+  // retain the originating item and change count, then implement getType's stale-data
+  // rejection (even for cached data), concurrent read sharing, custom mapping and unsanitized policy.
+  // Appendix A.4/A.5 supply native-name and JSON-map discovery without eager payload reads.
+  // SPEC_GAP(clipboard-custom-map-failures): A.5 omits malformed JSON/map-value handling;
+  // resolve that policy at native discovery before producing author-visible items.
+  // §7.2.3 settles native getType reads on the clipboard task source with item-realm Blobs/errors;
+  // permitted unsanitized text/html and image/png bypass sanitization. Preserve image metadata
+  // on reads (§10.3); write-side decoding/transcoding is not a read-side fallback.
+  // ClipboardImpl owns permission admission and clipboard-task delivery.
+  // Author ClipboardItem construction must not be used as a fallback native snapshot.
+  readItems(_document: DocumentImpl, _unsanitizedTypes: string[]): InternalPromise<ClipboardItemImpl[]> {
+    throw new InternalError('Native lazy ClipboardItem reading is not implemented');
+  }
+
+  /** Read the first standard text/plain representation from one admitted native snapshot. */
+  // https://w3c.github.io/clipboard-apis/#dom-clipboard-readtext
+  readTextData(_document: DocumentImpl): InternalPromise<ClipboardTextData> {
+    // TODO(Clipboard host): select by mapped MIME essence, excluding custom web formats;
+    // capture the clipboard generation and return null only when plain text is absent.
+    // Decode OS-specific text to a DOMString or supply a Blob of UTF-8 bytes. Retain
+    // snapshot consistency until completion; reject if advertised text cannot be read.
+    // This operation must not fetch unrelated formats or use author ClipboardItems.
+    throw new InternalError('Native clipboard text snapshot reading is not implemented');
+  }
+
   #isEligible(document: DocumentImpl): boolean {
     // SPEC_CLASH(clipboard-change-native-eligibility): Gate real notifications on a secure, fully active Document;
     // the draft's Window-target algorithm omits these checks, while Blink receives through secure Clipboard ownership.
@@ -300,6 +428,9 @@ export class SystemClipboard {
     });
   }
 }
+
+/** Native standard text data; null distinguishes absent text from a failed read. */
+export type ClipboardTextData = string | BlobImpl | null;
 
 /** Native snapshot; types are canonical MIME names, and token equality identifies one clipboard write. */
 export interface ClipboardChangeState {

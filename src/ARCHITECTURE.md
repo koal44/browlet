@@ -1245,6 +1245,47 @@ actions reuse their keydown task. Native writes report a generation change befor
 notification is queued. Rendering/editing/native-format effects remain explicit
 throwing methods until their owners exist; no editor façade or Document state was
 introduced. Synthetic dispatch does not enter the action layer.
+ClipboardItem owns author-supplied representations under serialized MIME keys,
+including the custom-format discriminator, with the already-converted internal
+Promises supplied by Binding. Its environment owns result promises and newly
+created Blobs; supplied Blobs keep their original identity and realm. MIME parsing
+and UTF-8 encoding use their existing subsystem owners. There is no new registry,
+callback adapter or native clipboard state in an author item. SystemClipboard's
+throwing readItems(document, unsanitizedTypes) entry reserves the distinct native
+lazy-item path. Navigator lazily owns ClipboardImpl, an EventTarget in the same
+environment. Clipboard.read captures the calling task's §9.1 permission facts,
+uses the environment's parallel queue, and settles on the existing permissions
+source for denied access or the new clipboard source for native completion.
+Focus/activity checks retain the original Document before access and delivery.
+The native Paste provenance query remains a throwing SystemClipboard dependency;
+there is no new permission registry or implied persistent read grant.
+Clipboard.readText shares the same admission/delivery helper. Its separate
+SystemClipboard.readTextData(document) dependency selects one native plain-text
+snapshot, returning string/Blob data or null for absence. Clipboard preserves
+strings and reuses File's Blob.text UTF-8 decoding before delivering the result;
+permission failures and unreadable data remain distinct errors.
+Clipboard.write captures §9.2 activation/native Cut-or-Copy facts during the
+calling task and requests consent through the existing Permissions subsystem.
+ClipboardWritePermission supplies the two descriptor levels and their relationship;
+UserAgent installs it in its existing store. Public queries and write admission
+apply the relationship without another registry or changes to store matching.
+The existing host permission prompt defaults to denial. Native provenance still
+throws. ClipboardItem.getWriteData resolves author representations without routing
+through getType's different rejection policy. Clipboard keeps item grouping,
+presentation style and custom-format identity, joins all selected data, prepares
+rich formats, and commits once. SystemClipboard.supportsMultipleItems,
+prepareWriteData and writeItems are explicit throwing dependencies for the native
+item model, sanitization/codecs, and OS writing. Clipboard tasks recheck the
+original Document's activity/focus before preparation, commit and delivery;
+the adapter must also recheck immediately before an asynchronous native effect.
+Changed commits use the existing change-notification route, with the same native
+adapter echo-suppression requirement as event-driven writes. Clipboard.writeText
+shares the write admission helper and commit method. It creates one
+text/plain;charset=utf-8 Blob with unspecified presentation, using existing UTF-8
+encoding and File's native line-ending conversion on CRLF hosts. Non-Windows
+line endings are preserved. It does not require ClipboardItem representation
+promises or rich-format preparation; SystemClipboard.writeItems remains the same
+explicit native boundary.
 
 Document lazily owns `SelectionImpl` in `interaction/selection/`, below DOM nodes.
 Selection retains one public live Range and, only for cross-root spans, two internal

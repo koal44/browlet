@@ -193,8 +193,23 @@ flow, write/clear decisions and queued change notifications. Native writing,
 rendered selection, editing and script-paste permission remain explicit throwing
 dependencies; keyboard/menu/execCommand callers still need their owners. §§6.4–6.5
 format requirements are recorded at those effects; §6.6 informs later async read
-options. Next is §7's async Clipboard
-interface foundation, beginning with Navigator.clipboard and ClipboardItem.
+options. §7.2 now supplies author-created ClipboardItem data, promised Blob access,
+MIME validation and format recognition. Native lazy item reading remains the
+throwing SystemClipboard.readItems() dependency. §§7.1/7.3.1–7.3.2 now expose the
+Navigator-owned Clipboard and asynchronous read/readText admission and task flow,
+with §9.1's strict Paste-interaction permission rule. readText preserves strings
+and reuses Blob UTF-8 decoding. Focus, activation, native provenance, item
+metadata and plain-text snapshots remain explicit dependencies. §§7.3.3/9.2 now
+provide asynchronous write admission through Permissions, promised representation
+joining, format validation and collective commit flow. Native Cut/Copy provenance,
+item-model support, rich-format preparation and OS item writing remain explicit
+throwing dependencies. §7.3.4 writeText now shares write admission and native
+commit, with UTF-8 text and Windows newline preparation. The §§10–11/Appendix A
+audit maps each algorithm to local behavior or a named throwing dependency,
+including paste-origin restrictions, image preservation and native size/count
+limits. Native Clipboard support remains incomplete. Next: a bounded native
+ClipboardItem lazy-read slice, with byte access and format processing still
+owned by explicit host dependencies.
 CSSOM View remains deferred.
 HTML §8.1.8.3's synthetic pointer-event operation still needs its hookup. Input producers retain
 their HTML, editing, and layout owners.

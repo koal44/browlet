@@ -49,7 +49,7 @@ export { SpeculationRulesParseResult, SpeculationRuleSet } from './speculation-r
 export {
   domManipulationTaskSource, userInteractionTaskSource, networkingTaskSource,
   navigationAndTraversalTaskSource, renderingTaskSource, fileTaskSource, timerTaskSource, idleTaskSource,
-  storageTaskSource, permissionsTaskSource, reportingTaskSource, automationTaskSource, jsEngineTaskSource,
+  storageTaskSource, permissionsTaskSource, clipboardTaskSource, reportingTaskSource, automationTaskSource, jsEngineTaskSource,
   taskSources, type QueuedTaskHandle,
 } from './tasks';
 export { GlobalTimers, type TimerAction, type GlobalTimersOptions, type TimerKey } from './timers';
