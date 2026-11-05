@@ -65,6 +65,9 @@ function startFixture() {
           runtime.send({ error: error.stack });
         });
         break;
+      case 'nested-error':
+        void runNestedWorkerError(runtime).catch((error) => runtime.send({ error: error.stack }));
+        break;
       case 'inspect-policy': {
         const { parseURL } = loadTypeScript('../../../../src/url/index.ts', __filename);
         const container = runtime.creatorPolicyContainer;
@@ -100,6 +103,16 @@ function startFixture() {
         // Source evaluation and uninterruptible execution are the behavior under test.
         realm.evaluate('try { Atomics.store(state, 0, 1); for (;;) {} } finally { Atomics.store(state, 1, 1); }', 'worker-block.js');
         break;
+      case 'block-worker-script':
+        runBlockingWorkerScript(runtime, message.state, message.scriptType);
+        break;
+      case 'report-worker-error':
+        runWorkerError(runtime, message, followupTaskSource);
+        break;
+      case 'report-diagnostics':
+        runtime.reportError({ ...message.errorInfo, error: () => 'must not be cloned' });
+        runtime.send('reported');
+        break;
       case 'fail':
         throw new Error('worker host task failed');
       case 'disconnect':
@@ -119,6 +132,72 @@ function startFixture() {
       scriptRan: realm.globalObject.scriptRan === true,
     });
   });
+}
+
+async function runNestedWorkerError(runtime) {
+  const { WorkerImpl } = loadTypeScript('../../../../src/browlet/workers/index.ts', __filename);
+  const env = createFixtureWorkerEnvironment(runtime, 'https://creator.test/parent.js');
+  env.markExecutionReady();
+  const events = [];
+  env.global.addEventListener('error', (event) => { events.push({ message: event.message, error: event.error }); });
+  const worker = new WorkerImpl(env);
+  const child = new WorkerThread({ kind: 'dedicated', data: {}, worker }, () => {});
+  env.globalImplementation.reportErrorToOwner = (errorInfo) => {
+    runtime.reportError(errorInfo);
+    void child.terminate().then(() => runtime.send(events));
+  };
+  await child.ready;
+  child.send({ type: 'report-worker-error', scriptType: 'classic' });
+}
+
+function runWorkerError(runtime, message, followupTaskSource) {
+  const { ClassicScript, JavaScriptModuleScript, ScriptFetchOptions } = loadTypeScript('../../../../src/browlet/scripting/index.ts', __filename);
+  const env = createFixtureWorkerEnvironment(runtime, 'https://creator.test/error.js', message.scriptType);
+  env.markExecutionReady();
+  env.globalImplementation.reportErrorToOwner = (errorInfo) => runtime.reportError(errorInfo);
+  const events = [];
+  env.global.addEventListener('error', (event) => {
+    events.push({ message: event.message, errorType: typeof event.error, trusted: event.isTrusted });
+    if (message.cancelInside) event.preventDefault();
+  });
+  // A function cannot cross native structured cloning. It must remain available
+  // locally while outside delivery carries only its diagnostic string.
+  const source = 'const failure = function workerFailure() {}; failure.toString = () => "worker failed"; throw failure;';
+  const script = message.scriptType === 'module'
+    ? new JavaScriptModuleScript(source, env, env.apiBaseURL, new ScriptFetchOptions())
+    : new ClassicScript(source, env, env.apiBaseURL, new ScriptFetchOptions(), message.muted === true);
+  if (message.scriptType === 'module') script.record.link();
+  script.run();
+  // Module rejection reporting finishes at the checkpoint before this reply.
+  runtime.agent.eventLoop.queueTask(followupTaskSource, null, () => runtime.send(events));
+}
+
+function runBlockingWorkerScript(runtime, state, scriptType) {
+  const { ClassicScript, JavaScriptModuleScript, ScriptFetchOptions } = loadTypeScript('../../../../src/browlet/scripting/index.ts', __filename);
+  const env = createFixtureWorkerEnvironment(runtime, 'https://creator.test/blocked.js', scriptType);
+  env.markExecutionReady();
+  env.global.state = state;
+  env.global.announce = () => runtime.send('entering worker script');
+  env.global.onerror = () => { Atomics.store(state, 4, 1); return true; };
+  // These are actual HTML script runners in the worker environment. The shared
+  // array observes what survives native interruption without requiring delivery
+  // of another message from the blocked worker.
+  const source = `
+    Promise.resolve().then(() => Atomics.store(state, 3, 1));
+    try {
+      announce();
+      Atomics.store(state, 0, 1);
+      for (;;) {}
+    } catch {
+      Atomics.store(state, 1, 1);
+    } finally {
+      Atomics.store(state, 2, 1);
+    }
+  `;
+  const Script = scriptType === 'classic' ? ClassicScript : JavaScriptModuleScript;
+  const script = new Script(source, env, env.apiBaseURL, new ScriptFetchOptions());
+  if (scriptType === 'module') script.record.link();
+  void script.run();
 }
 
 async function inspectNestedWorker(runtime, url) {
@@ -146,7 +225,7 @@ async function inspectNestedWorker(runtime, url) {
 // owner or a cloned UserAgent. No fetching, storage, or lifetime service is used.
 // The actual received Origin records and runtime cluster feed a real worker
 // environment, which then creates a child through the production host adapter.
-function createFixtureWorkerEnvironment(runtime, url) {
+function createFixtureWorkerEnvironment(runtime, url, type = 'classic') {
   const { createWindowEnvironment, createWorkerEnvironment } = loadTypeScript('../../../../src/browlet/integration/web-idl/index.ts', __filename);
   const { UserAgent } = loadTypeScript('../../../../src/browlet/user-agent.ts', __filename);
   const { parseURL } = loadTypeScript('../../../../src/url/index.ts', __filename);
@@ -168,7 +247,7 @@ function createFixtureWorkerEnvironment(runtime, url) {
   outsideEnv.window.setAssociatedDocument(document);
   const env = createWorkerEnvironment({
     agent: runtime.agent, outsideEnv, url: parseURL(url).url, unsafeWorkerCreationTime: 1234,
-    type: 'classic', name: 'nested creator', credentials: 'same-origin', extendedLifetime: false,
+    type, name: 'worker fixture', credentials: 'same-origin', extendedLifetime: false,
   });
   // Apply the real local/response policy selection without pretending to fetch.
   // In particular, data workers inherit their owner's copied policy container.

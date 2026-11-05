@@ -5,6 +5,7 @@ import { Duration, monotonicClock, unsafeSharedCurrentTime, UnsafeMoment } from 
 import type { DocumentImpl } from '../dom/nodes/index';
 import type { WindowImpl } from '../browsing/window/index';
 import type { BrowletEnvironment } from '../environment/index';
+import type { WorkerGlobalImpl } from '../workers/index';
 
 import { DedicatedWorkerAgent, SharedWorkerAgent, ServiceWorkerAgent, WindowAgent, type Agent } from './agents';
 import { JSExecutionContext } from './execution-context';
@@ -38,6 +39,8 @@ export class EventLoop {
   #currentlyRunningTask: Task | null = null;
   #runningTaskTurn = false;
   #paused = false;
+  /** A destroyed worker loop never resumes task or microtask processing. */
+  #destroyed = false;
   #performingMicrotaskCheckpoint = false;
   /** Work arriving outside an HTML task needs a host checkpoint wake-up. */
   #microtaskCheckpointRequested = false;
@@ -120,7 +123,7 @@ export class EventLoop {
   /** Run one eligible task and its checkpoint; return false when none is runnable. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#event-loop-processing-model
   runTaskTurn(): boolean {
-    if (this.#paused) return false;
+    if (this.#destroyed || this.#paused) return false;
     const init = this.#init;
     if (this.#runningTaskTurn || this.#currentlyRunningTask !== null) {
       throw new InternalError('An event loop cannot run a task reentrantly');
@@ -132,6 +135,7 @@ export class EventLoop {
       );
     if (runnableTaskQueues.length === 0) {
       this.#startIdlePeriod();
+      this.#finishWorkerTurn();
       return false;
     }
 
@@ -187,6 +191,7 @@ export class EventLoop {
       );
     }
     this.#startIdlePeriod();
+    this.#finishWorkerTurn();
     if (taskError !== null) throw taskError.value;
     return true;
   }
@@ -353,6 +358,7 @@ export class EventLoop {
     // A host turn runs the wait outside HTML task execution. The wait registers
     // its completion; it must not busy-wait or block the host thread.
     this.#init.requestTurn(() => {
+      if (this.#destroyed) return;
       let queued = false;
       waitForGoal(() => {
         if (queued) return;
@@ -374,8 +380,7 @@ export class EventLoop {
         // Requeue the suspended task, retaining its source, Document, script
         // evaluation environments, and other task metadata. A spun microtask
         // resumes here as an ordinary task, not on the engine microtask queue.
-        this.#getTaskQueue(task.source).add(task);
-        this.#requestTurnIfNeeded();
+        this.#enqueueTask(task);
       });
     });
   }
@@ -423,7 +428,7 @@ export class EventLoop {
   /** Drain the shared queue, then schedule notifications for pending rejections. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#perform-a-microtask-checkpoint
   performMicrotaskCheckpoint(): void {
-    if (this.#paused || this.#performingMicrotaskCheckpoint) return;
+    if (this.#destroyed || this.#paused || this.#performingMicrotaskCheckpoint) return;
 
     this.#microtaskCheckpointRequested = false;
     this.#performingMicrotaskCheckpoint = true;
@@ -452,6 +457,7 @@ export class EventLoop {
 
   /** Include this environment's pending rejections in the next checkpoint. */
   scheduleRejectedPromiseNotification(env: BrowletEnvironment): void {
+    if (this.#destroyed) return;
     this.#rejectedPromiseEnvironments.add(env);
   }
 
@@ -460,6 +466,7 @@ export class EventLoop {
     steps: () => void,
     document: DocumentImpl | null = null,
   ): void {
+    if (this.#destroyed) return;
     const microtask = new Task(
       microtaskTaskSource,
       document,
@@ -487,6 +494,7 @@ export class EventLoop {
 
   /** Coalesce external wake-ups; an executing task or checkpoint already drains this queue. */
   requestMicrotaskCheckpoint(): void {
+    if (this.#destroyed) return;
     // Used both by parallel algorithms reaching a stable state and by native
     // cleanup completion. Notify the same host turn; do not add a dummy job.
     if (
@@ -507,13 +515,7 @@ export class EventLoop {
   ): Task {
     // Keep HTML's otherwise implied destination and Document explicit.
     const task = new Task(source, document, steps, options);
-    // HTML §10.2.2: closing workers discard new tasks from every source.
-    // Return an unqueued task so existing cancellation handles report removal as false.
-    const agent = this.agent;
-    if ((agent instanceof DedicatedWorkerAgent || agent instanceof SharedWorkerAgent || agent instanceof ServiceWorkerAgent) &&
-      agent.globalScope?.closing === true) return task;
-    this.#getTaskQueue(source).add(task);
-    this.#requestTurnIfNeeded();
+    this.#enqueueTask(task);
     return task;
   }
 
@@ -564,6 +566,44 @@ export class EventLoop {
 
   getTaskQueues(): Set<Set<Task>> {
     return this.#taskQueues;
+  }
+
+  /** Admit new and resumed tasks through the same worker-closing rule. */
+  #enqueueTask(task: Task): void {
+    if (this.#destroyed) return;
+    // HTML §10.2.2: closing workers discard new tasks from every source.
+    // Unqueued cancellation handles still report removal as false.
+    const agent = this.agent;
+    if ((agent instanceof DedicatedWorkerAgent || agent instanceof SharedWorkerAgent || agent instanceof ServiceWorkerAgent) &&
+      agent.globalScope?.closing === true) return;
+    this.#getTaskQueue(task.source).add(task);
+    this.#requestTurnIfNeeded();
+  }
+
+  /** Select a closing dedicated/shared worker only once every task queue is empty. */
+  #getWorkerReadyToFinish(): WorkerGlobalImpl | null {
+    const agent = this.agent;
+    if (!(agent instanceof DedicatedWorkerAgent || agent instanceof SharedWorkerAgent)) return null;
+    const global = agent.globalScope;
+    if (global?.closing !== true) return null;
+    for (const queue of this.#taskQueues) {
+      if (queue.size !== 0) return null;
+    }
+    return global;
+  }
+
+  /** Resume run-a-worker cleanup after the final task and its microtasks have finished. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#event-loop-processing-model
+  #finishWorkerTurn(): void {
+    if (this.#destroyed || this.#microtaskCheckpointRequested) return;
+    const global = this.#getWorkerReadyToFinish();
+    if (global === null) return;
+    this.#destroyed = true;
+    this.#rejectedPromiseEnvironments.clear();
+    global.finishRunning();
+    // TODO(HTML §10.2.4): Connect native isolate teardown when startup owns this
+    // environment. This stops the HTML loop; it does not abort running script.
+    // Service Worker shutdown belongs to its own processing model.
   }
 
   /** Offer idle work a live deadline only after runnable tasks have drained. */
@@ -632,17 +672,19 @@ export class EventLoop {
 
   #requestTurnIfNeeded(): void {
     if (
-      this.#paused || this.#turnRequested ||
-      (!this.#microtaskCheckpointRequested && !this.#idlePeriodRequested && !this.hasRunnableTasks())
+      this.#destroyed || this.#paused || this.#turnRequested ||
+      (!this.#microtaskCheckpointRequested && !this.#idlePeriodRequested && !this.hasRunnableTasks() &&
+        this.#getWorkerReadyToFinish() === null)
     ) return;
 
     this.#turnRequested = true;
     this.#init.requestTurn(() => {
       try {
-        if (this.#paused) return;
+        if (this.#destroyed || this.#paused) return;
         if (this.#microtaskCheckpointRequested) {
           this.performMicrotaskCheckpoint();
           this.#startIdlePeriod();
+          this.#finishWorkerTurn();
         } else {
           this.runTaskTurn();
         }

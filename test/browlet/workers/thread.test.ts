@@ -10,12 +10,18 @@ import { utf8Encode } from '../../../src/encoding/index';
 import { BlobData, BlobImpl } from '../../../src/file/index';
 import { FetchHeaders, type FetchRequest } from '../../../src/fetch/index';
 import {
-  WorkerThread, queueNodeTask, type WorkerThreadInitialization, type CreatorEnvironmentSnapshot,
+  WorkerThread, queueNodeTask, type WorkerThreadInit, type CreatorEnvironmentSnapshot,
 } from '../../../src/browlet/integration/host/index';
 import { createWindowEnvironment, createWorkerEnvironment } from '../../../src/browlet/integration/web-idl/index';
 import type { BrowletEnvironment } from '../../../src/browlet/environment/index';
-import { AgentCluster, DedicatedWorkerAgent, EventLoop, WindowAgent, createTaskSource } from '../../../src/browlet/scripting/index';
+import {
+  AgentCluster, DedicatedWorkerAgent, EventLoop, WindowAgent, createTaskSource, domManipulationTaskSource,
+} from '../../../src/browlet/scripting/index';
 import { UserAgent } from '../../../src/browlet/user-agent';
+import { BrowsingContext, DocumentState, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
+import { MessageChannelImpl, MessagePortImpl } from '../../../src/browlet/communication/index';
+import { WorkerImpl } from '../../../src/browlet/workers/index';
+import type { ErrorEvent, MessageEvent, MessagePort, Window, Worker } from '../../../src/browlet/platform';
 import { PolicyContainer } from '../../../src/browlet/browsing/policy/index';
 import { ContentSecurityPolicy, CSPList } from '../../../src/browlet/browsing/policy/csp/index';
 import {
@@ -104,15 +110,16 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
   });
 
   it('propagates a native termination failure through the shared internal completion', async () => {
-    const { thread } = createThread();
+    const { implementation, worker } = createTerminationWorker();
+    const { thread } = createThread({ kind: 'dedicated', data: {}, worker: implementation });
     await thread.ready;
     assert(entry.worker !== null);
     const nativeThread = entry.worker;
     const failure = new Error('Native termination failed');
     const terminate = vi.spyOn(nativeThread, 'terminate').mockRejectedValueOnce(failure);
     try {
-      const completion = thread.terminate();
-      expect(completion).toBe(thread.closed);
+      const completion = thread.closed;
+      expect(worker.terminate()).toBeUndefined();
       await expect(completion).rejects.toBe(failure);
       expect(thread.terminate()).toBe(completion);
       expect(terminate).toHaveBeenCalledOnce();
@@ -298,6 +305,43 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
     }
   });
 
+  it('stops a worker even when canceling its script fetch throws', async () => {
+    const { creatorEnv, producer, implementation, worker, messages, drain } = createTerminationWorker();
+    const dispatched = Promise.withResolvers<void>();
+    const failure = new Error('Fetch cleanup failed during termination');
+    const abort = vi.fn(() => { throw failure; });
+    vi.spyOn(creatorEnv.userAgent.httpTransport, 'dispatch').mockImplementation(() => {
+      dispatched.resolve();
+      return { pause() {}, resume() {}, abort };
+    });
+    const { thread, request } = createThread({ kind: 'dedicated', data: {}, worker: implementation });
+    await thread.ready;
+    assert(entry.worker !== null);
+    const nativeThread = entry.worker;
+    const state = new Int32Array(new SharedArrayBuffer(8));
+    try {
+      thread.fetchScript(createScriptRequest(creatorEnv));
+      await dispatched.promise;
+      expect(await request({ type: 'block', state })).toBe('entering loop');
+      await vi.waitFor(() => { expect(Atomics.load(state, 0)).toBe(1); }, { timeout: 5000 });
+      producer.postMessage('pending delivery', []);
+      const outcome = Promise.resolve(thread.closed).then((exit) => exit, (error: unknown) => error);
+      expect(worker.terminate()).toBeUndefined();
+      expect(await outcome).toBe(failure);
+      expect(nativeThread.threadId).toBe(-1);
+      expect(Atomics.load(state, 1)).toBe(0);
+      expect(abort).toHaveBeenCalledOnce();
+      expect(thread.terminate()).toBe(thread.closed);
+      producer.postMessage('after failed cleanup', []);
+      drain();
+      expect(messages).toEqual([]);
+    } finally {
+      await nativeThread.terminate();
+      // The failure is intentional; keep fixture cleanup from rethrowing it.
+      threads.delete(thread);
+    }
+  });
+
   it.each(['dedicated', 'shared'] as const)('carries %s creator environment snapshots and identities into the actual isolate', async (kind) => {
     const creatorEnv = createCreatorEnvironment();
     const document = creatorEnv.window.document;
@@ -437,9 +481,9 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
     expect(await request({ type: 'checkpoint' })).toEqual(['task', 'microtask', 'next task']);
   });
 
-  it('keeps the creator responsive and stops blocked execution without running its finally block', async () => {
+  it.each(['dedicated', 'shared'] as const)('keeps the creator responsive and stops a blocked %s worker without running finally', async (kind) => {
     const state = new Int32Array(new SharedArrayBuffer(8));
-    const { thread, request } = createThread();
+    const { thread, request } = createThread({ kind, data: {} });
     await thread.ready;
     expect(await request({ type: 'block', state })).toBe('entering loop');
     await vi.waitFor(() => { expect(Atomics.load(state, 0)).toBe(1); }, { timeout: 5000 });
@@ -455,19 +499,70 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
     expect(await Promise.resolve(19).then((value) => value + 1)).toBe(20);
   });
 
-  it('can terminate while host startup is still blocked', async () => {
-    const state = new Int32Array(new SharedArrayBuffer(8));
-    const { thread } = createThread({ kind: 'dedicated', data: { mode: 'wait-before-ready', state } });
+  it.each(['classic', 'module'])('Worker.terminate() aborts the HTML %s runner and clears its outside delivery queue', async (scriptType) => {
+    const { creatorEnv, producer, implementation, worker, messages, drain } = createTerminationWorker();
+    const state = new Int32Array(new SharedArrayBuffer(20));
+    const { thread, request } = createThread({ kind: 'dedicated', data: {}, worker: implementation });
+    await thread.ready;
+    expect(await request({ type: 'block-worker-script', scriptType, state })).toBe('entering worker script');
     await vi.waitFor(() => { expect(Atomics.load(state, 0)).toBe(1); }, { timeout: 5000 });
+    // Real HTML deliveries already queued in the creator. Cross-isolate port
+    // transport remains separate; no mock replaces the queue or native stop.
+    producer.postMessage('pending delivery', []);
+    const other = new MessageChannelImpl(creatorEnv);
+    const unrelated = creatorEnv.project(other.port2) as MessagePort;
+    const received: unknown[] = [];
+    unrelated.onmessage = (event) => { received.push((event as MessageEvent).data); };
+    other.port1.postMessage('unrelated delivery', []);
+    expect(worker.terminate()).toBeUndefined();
+    expect(worker.terminate()).toBeUndefined();
+    drain();
+    expect(messages).toEqual([]);
+    expect(received).toEqual(['unrelated delivery']);
+    expect(await thread.closed).toEqual({ code: 1, error: undefined, terminated: true });
+    // Only the entry marker changed: no catch, finally, pending reaction, or error event.
+    expect(Array.from(state)).toEqual([1, 0, 0, 0, 0]);
+    producer.postMessage('after native exit', []);
+    drain();
+    expect(messages).toEqual([]);
+    expect(() => thread.send({ type: 'inspect' })).toThrow('not running');
+    expect(worker.terminate()).toBeUndefined();
+  });
+
+  it('can terminate while host startup is still blocked', async () => {
+    const { producer, implementation, worker, messages, drain } = createTerminationWorker();
+    const state = new Int32Array(new SharedArrayBuffer(8));
+    const { thread } = createThread({ kind: 'dedicated', data: { mode: 'wait-before-ready', state }, worker: implementation });
+    await vi.waitFor(() => { expect(Atomics.load(state, 0)).toBe(1); }, { timeout: 5000 });
+    producer.postMessage('pending before readiness', []);
     const rejection = expect(thread.ready).rejects.toThrow('terminated during startup');
-    expect(await thread.terminate()).toMatchObject({ code: 1, terminated: true });
+    expect(worker.terminate()).toBeUndefined();
+    expect(await thread.closed).toMatchObject({ code: 1, terminated: true });
     await rejection;
+    producer.postMessage('after startup termination', []);
+    drain();
+    expect(messages).toEqual([]);
+  });
+
+  it('uses the receiver execution owner when Worker.terminate() is borrowed across realms', async () => {
+    const first = createTerminationWorker();
+    const second = createTerminationWorker();
+    const { thread } = createThread({ kind: 'dedicated', data: {}, worker: second.implementation });
+    await thread.ready;
+    const terminate = Reflect.get(first.worker, 'terminate');
+    expect(Reflect.apply(terminate, second.worker, [])).toBeUndefined();
+    expect(await thread.closed).toMatchObject({ code: 1, terminated: true });
   });
 
   it('reports bootstrap failures without an uncaught error in the creator', async () => {
-    const { thread } = createThread({ kind: 'dedicated', data: { mode: 'throw-before-ready' } });
+    const { implementation, worker, producer, messages, drain } = createTerminationWorker();
+    const { thread } = createThread({ kind: 'dedicated', data: { mode: 'throw-before-ready' }, worker: implementation });
     await expect(thread.ready).rejects.toThrow('bootstrap failed');
     expect(await thread.closed).toMatchObject({ code: 1, error: { message: 'bootstrap failed' }, terminated: false });
+    expect(worker.terminate()).toBeUndefined();
+    producer.postMessage('after failed startup', []);
+    drain();
+    expect(messages).toEqual([]);
   });
 
   it('reports a missing bootstrap file through readiness and teardown', async () => {
@@ -501,12 +596,152 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
     expect(() => thread.send({ type: 'inspect' })).toThrow('not running');
   });
 
+  it('preserves queued outside deliveries on natural exit while disconnecting the channel', async () => {
+    const { producer, implementation, worker, messages, drain } = createTerminationWorker();
+    const { thread } = createThread({ kind: 'dedicated', data: {}, worker: implementation });
+    await thread.ready;
+    producer.postMessage('sent before closing', []);
+    thread.send({ type: 'disconnect' });
+    expect(await thread.closed).toEqual({ code: 0, error: undefined, terminated: false });
+    expect(worker.terminate()).toBeUndefined();
+    producer.postMessage('after exit', []);
+    drain();
+    expect(messages).toEqual(['sent before closing']);
+  });
+
   it('rejects uncloneable host inputs while keeping a started thread usable', async () => {
     expect(() => createThread({ kind: 'dedicated', data: () => {} })).toThrow();
     const { thread, request } = createThread();
     await thread.ready;
     expect(() => thread.send(() => {})).toThrow();
     expect(await request({ type: 'echo', data: 42 })).toBe(42);
+  });
+});
+
+describe('Worker error transport', { timeout: 30_000 }, () => {
+  it.each(['classic', 'module'])('queues an uncanceled %s error on the Worker and then its owner', async (scriptType) => {
+    const { implementation, worker, creatorEnv, drain } = createTerminationWorker();
+    const scope = creatorEnv.global as unknown as Window;
+    const order: string[] = [];
+    const errors: ErrorEvent[] = [];
+    const sources: unknown[] = [];
+    const ownerCalls: unknown[][] = [];
+    worker.addEventListener('error', (event) => {
+      order.push('worker');
+      errors.push(event as ErrorEvent);
+      sources.push(creatorEnv.responsibleEventLoop.currentlyRunningTask?.source);
+    });
+    scope.addEventListener('error', (event) => { order.push('owner'); errors.push(event as ErrorEvent); });
+    scope.onerror = function(this: unknown, ...args: unknown[]) { ownerCalls.push([this, ...args]); return true; };
+    const { thread, request } = createThread({ kind: 'dedicated', data: {}, worker: implementation });
+    await thread.ready;
+
+    expect(await request({ type: 'report-worker-error', scriptType })).toEqual([
+      { message: 'worker failed', errorType: 'function', trusted: true },
+    ]);
+    expect(order).toEqual([]);
+    drain();
+
+    expect(order).toEqual(['worker', 'owner']);
+    expect(sources).toEqual([domManipulationTaskSource]);
+    expect(errors).toHaveLength(2);
+    for (const event of errors) {
+      expect(event).toBeInstanceOf(scope.ErrorEvent);
+      expect(event).toMatchObject({
+        message: 'worker failed', filename: '', lineno: 0, colno: 0,
+        error: null, isTrusted: true, cancelable: true, bubbles: false,
+      });
+    }
+    expect(errors[0]!.target).toBe(worker);
+    expect(errors[1]!.target === scope.window).toBe(true);
+    expect(ownerCalls).toHaveLength(1);
+    expect(ownerCalls[0]![0] === scope.window).toBe(true);
+    expect(ownerCalls[0]!.slice(1)).toEqual(['worker failed', '', 0, 0, null]);
+  });
+
+  it.each(['classic', 'module'])('does not forward a locally canceled %s error', async (scriptType) => {
+    const { implementation, worker, creatorEnv, drain } = createTerminationWorker();
+    const outsideError = vi.fn(() => false);
+    worker.onerror = outsideError;
+    const ownerError = vi.fn(() => true);
+    (creatorEnv.global as unknown as Window).onerror = ownerError;
+    const { thread, request } = createThread({ kind: 'dedicated', data: {}, worker: implementation });
+    await thread.ready;
+
+    expect(await request({ type: 'report-worker-error', scriptType, cancelInside: true })).toHaveLength(1);
+    drain();
+
+    expect(outsideError).not.toHaveBeenCalled();
+    expect(ownerError).not.toHaveBeenCalled();
+  });
+
+  it('lets the outside one-argument onerror handler cancel owner propagation by returning false', async () => {
+    const { implementation, worker, creatorEnv, drain } = createTerminationWorker();
+    const calls: unknown[][] = [];
+    worker.onerror = function(this: unknown, ...args: unknown[]) { calls.push([this, ...args]); return false; };
+    const ownerError = vi.fn(() => true);
+    (creatorEnv.global as unknown as Window).onerror = ownerError;
+    const { thread, request } = createThread({ kind: 'dedicated', data: {}, worker: implementation });
+    await thread.ready;
+
+    await request({ type: 'report-worker-error', scriptType: 'classic' });
+    drain();
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toHaveLength(2);
+    expect(calls[0]![0]).toBe(worker);
+    expect(calls[0]![1]).toMatchObject({ error: null, defaultPrevented: true });
+    expect(ownerError).not.toHaveBeenCalled();
+  });
+
+  it('retains classic-script muting across the isolate boundary', async () => {
+    const { implementation, worker, drain } = createTerminationWorker();
+    const errors: ErrorEvent[] = [];
+    worker.addEventListener('error', (event) => { event.preventDefault(); errors.push(event as ErrorEvent); });
+    const { thread, request } = createThread({ kind: 'dedicated', data: {}, worker: implementation });
+    await thread.ready;
+
+    expect(await request({ type: 'report-worker-error', scriptType: 'classic', muted: true })).toEqual([
+      { message: 'Script error.', errorType: 'object', trusted: true },
+    ]);
+    drain();
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({ message: 'Script error.', filename: '', lineno: 0, colno: 0, error: null });
+  });
+
+  it('preserves source diagnostics and drops a non-cloneable exception at the native boundary', async () => {
+    const { implementation, worker, creatorEnv, drain } = createTerminationWorker();
+    const errors: ErrorEvent[] = [];
+    worker.addEventListener('error', (event) => { errors.push(event as ErrorEvent); });
+    const scope = creatorEnv.global as unknown as Window;
+    scope.onerror = () => true;
+    scope.addEventListener('error', (event) => { errors.push(event as ErrorEvent); });
+    const { thread, request } = createThread({ kind: 'dedicated', data: {}, worker: implementation });
+    await thread.ready;
+    const errorInfo = { message: 'diagnostic', filename: 'https://creator.test/worker.js', lineno: 12, colno: 34 };
+
+    expect(await request({ type: 'report-diagnostics', errorInfo })).toBe('reported');
+    drain();
+
+    expect(errors).toHaveLength(2);
+    for (const event of errors) expect(event).toMatchObject({ ...errorInfo, error: null });
+  });
+
+  it('propagates through a live parent worker across two isolate boundaries', async () => {
+    const { implementation, worker, creatorEnv, drain } = createTerminationWorker();
+    const errors: ErrorEvent[] = [];
+    worker.addEventListener('error', (event) => { event.preventDefault(); errors.push(event as ErrorEvent); });
+    const { thread, request } = createThread({ kind: 'dedicated', data: {}, worker: implementation });
+    await thread.ready;
+
+    expect(await request({ type: 'nested-error' })).toEqual([{ message: 'worker failed', error: null }]);
+    expect(errors).toEqual([]);
+    drain();
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({ message: 'worker failed', error: null });
+    expect(errors[0]).toBeInstanceOf((creatorEnv.global as unknown as Window).ErrorEvent);
   });
 });
 
@@ -612,7 +847,7 @@ interface NestedInspection {
   child: ThreadInspection;
 }
 
-function createThread(initialization: WorkerThreadInitialization = { kind: 'dedicated', data: {} }) {
+function createThread(initialization: WorkerThreadInit = { kind: 'dedicated', data: {} }) {
   const messages = new EventEmitter();
   const thread = new WorkerThread(initialization, (message) => { messages.emit('message', message); });
   threads.add(thread);
@@ -628,6 +863,26 @@ function createThread(initialization: WorkerThreadInitialization = { kind: 'dedi
       thread.send(message);
       return (await reply)[0];
     },
+  };
+}
+
+/** Real outside Worker and controlled HTML deliveries; native execution still uses the isolate fixture. */
+function createTerminationWorker() {
+  const creatorEnv = createCreatorEnvironment();
+  const document = creatorEnv.window.document;
+  document.browsingContext = new BrowsingContext(creatorEnv.realm.windowProxy);
+  document.makeActive();
+  const traversable = new TopLevelTraversable(DocumentState.create(document));
+  const implementation = new WorkerImpl(creatorEnv);
+  const worker = creatorEnv.project(implementation) as Worker;
+  const producer = new MessagePortImpl(creatorEnv);
+  producer.entangle(implementation.outsidePort);
+  implementation.outsidePort.start();
+  const messages: unknown[] = [];
+  worker.onmessage = (event) => { messages.push((event as MessageEvent).data); };
+  return {
+    traversable, creatorEnv, producer, implementation, worker, messages,
+    drain: () => { while (creatorEnv.responsibleEventLoop.runTaskTurn()) { /* Drain runnable outside work. */ } },
   };
 }
 

@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { createOpaqueOrigin, obtainURLOrigin, parseURL, serializeURL } from '../../../src/url/index';
 import { StorageKey } from '../../../src/storage/index';
 import { FetchTimingInfo, ResponseBodyInfo } from '../../../src/fetch/timing';
+import { BrowsingContext, Navigable, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
+import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { PolicyContainer } from '../../../src/browlet/browsing/policy/index';
 import type { BrowletEnvironment } from '../../../src/browlet/environment/index';
 import { createWindowEnvironment, createWorkerEnvironment } from '../../../src/browlet/integration/web-idl/index';
@@ -14,7 +16,7 @@ import { UnsafeMoment, monotonicClock } from '../../../src/timing/index';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { DedicatedWorkerGlobalImpl, SharedWorkerGlobalImpl } from '../../../src/browlet/workers/index';
 import type { DedicatedWorkerGlobalScope, SharedWorkerGlobalScope, Performance, PerformanceEntry } from '../../../src/browlet/platform';
-import { createManualEventLoop } from '../../support/browlet-agent';
+import { createManualEventLoop, createManualUserAgent } from '../../support/browlet-agent';
 import { getBindingContext } from '../../support/browlet-binding';
 
 describe('Worker realm and settings setup (HTML §10.2.4 and §10.2.6.2)', () => {
@@ -28,6 +30,7 @@ describe('Worker realm and settings setup (HTML §10.2.4 and §10.2.6.2)', () =>
     expect((env.realm.agent as DedicatedWorkerAgent | SharedWorkerAgent).globalScope).toBe(global);
     expect(env.realm.env).toBe(env);
     expect(env.realm.baseEnv).toBe(env);
+    expect(env.realmExecutionContext).toBe(env.realm.executionContext);
     expect(env.realmExecutionContext.realm).toBe(env.realm);
     expect(env.realm.globalNames).toEqual(new Set(['Worker', shared ? 'SharedWorker' : 'DedicatedWorker']));
     expect(global.ownerSet.size).toBe(1);
@@ -64,12 +67,12 @@ describe('Worker realm and settings setup (HTML §10.2.4 and §10.2.6.2)', () =>
     // Fetch/constructor admission, including same-origin checks, is deliberately not this setup helper's job.
   });
 
-  it('keeps creator-derived settings stable when the creating Window replaces its Document', () => {
+  it.each([false, true])('keeps creator-derived settings when the creating Window replaces its Document, shared: %s', (shared) => {
     const outsideEnv = createOutsideEnvironment();
     const originalOrigin = outsideEnv.origin;
     const originalTopLevelOrigin = outsideEnv.topLevelOrigin;
     const document = outsideEnv.window.document;
-    const env = createWorker(outsideEnv);
+    const env = createWorker(outsideEnv, shared);
     const replacement = outsideEnv.createDocument();
     replacement.origin = createOpaqueOrigin();
     outsideEnv.window.setAssociatedDocument(replacement);
@@ -78,6 +81,39 @@ describe('Worker realm and settings setup (HTML §10.2.4 and §10.2.6.2)', () =>
     expect(env.topLevelOrigin).toBe(originalTopLevelOrigin);
     expect(env.globalImplementation.ownerSet.size).toBe(1);
     expect(env.globalImplementation.ownerSet.has(document)).toBe(true);
+  });
+
+  it.each([
+    ['https://creator.test/', false],
+    ['https://sub.creator.test/', false],
+    ['https://other.test/', true],
+    ['http://creator.test/', true],
+  ] as const)('inherits cookie-site ancestry from a creating frame at %s', (frameURL, crossSite) => {
+    const userAgent = createManualUserAgent();
+    const parent = TopLevelTraversable.create(userAgent, null, '');
+    parent.activeDocument!.origin = obtainURLOrigin(parseURL('https://creator.test/').url!);
+    const [, document] = BrowsingContext.createTopLevel(userAgent);
+    document.origin = obtainURLOrigin(parseURL(frameURL).url!);
+    const child = new Navigable(DocumentState.create(document), parent);
+    expect(document.getNodeNavigable()).toBe(child);
+    expect(document.env.hasCrossSiteAncestor).toBe(crossSite);
+
+    for (const shared of [false, true]) {
+      const env = createWorker(document.env, shared);
+      expect(env.hasCrossSiteAncestor).toBe(crossSite);
+      const nested = createWorker(env);
+      expect(nested.hasCrossSiteAncestor).toBe(crossSite);
+    }
+  });
+
+  it.each([false, true])('treats data workers as cross-site even for a top-level creator, shared: %s', (shared) => {
+    const outsideEnv = TopLevelTraversable.create(createManualUserAgent(), null, '').activeWindow!.env;
+    expect(outsideEnv.hasCrossSiteAncestor).toBe(false);
+    const ordinary = createWorker(outsideEnv, shared);
+    const data = createWorker(outsideEnv, shared, 'data:text/javascript,');
+    expect(ordinary.hasCrossSiteAncestor).toBe(false);
+    expect(data.hasCrossSiteAncestor).toBe(true);
+    expect(data.origin).not.toBe(outsideEnv.origin);
   });
 
   it.each([false, true])('gives a data URL its own opaque origin and cross-site ancestry, shared: %s', (shared) => {

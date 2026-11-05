@@ -30,7 +30,7 @@ import {
 import { cssStyleSheetIDL, type StyleletEnvironment } from '../../stylelet/index';
 
 import type { CORSSettingsState } from '../dom/nodes/html/attributes/index';
-import { ErrorEventImpl, EventTargetImpl, PromiseRejectionEventImpl } from '../dom/events/index';
+import { ErrorEventImpl, EventTargetImpl, PromiseRejectionEventImpl, type ErrorInformation } from '../dom/events/index';
 import {
   fetchClassicScript, fetchClassicWorkerScript, fetchClassicWorkerImportedScript,
   fetchExternalModuleScriptGraph, fetchModulepreloadModuleScriptGraph, fetchInlineModuleScriptGraph,
@@ -81,8 +81,9 @@ export class BrowletEnvironmentBase implements FetchEnvironmentBase {
   /** Top-level creation URL, or null when the environment has none. */
   topLevelCreationURL: URLRecord | null;
   /** Top-level origin, or null until it can be determined. */
-  // TODO: Worker/worklet setup must inherit this where specified; shared/service
-  // worker setup must choose its implementation-defined top-level origin policy.
+  // Dedicated/shared worker setup retains the first creator's top-level origin.
+  // TODO: Worklet setup must inherit this where specified; service-worker setup
+  // must choose its implementation-defined top-level origin policy.
   topLevelOrigin: Origin | null;
   /** Navigation's target browsing context, when present. */
   targetBrowsingContext: BrowsingContext | null;
@@ -496,8 +497,6 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
       return;
     }
 
-    const global = this.globalImplementation;
-    let notHandled = true;
     const errorInfo = ErrorEventImpl.extractErrorInformation(exception);
     if (script instanceof ClassicScript && script.mutedErrors) {
       errorInfo.error = null;
@@ -507,6 +506,17 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
       errorInfo.colno = 0;
     }
     if (omitError) errorInfo.error = null;
+    this.reportErrorInformation(errorInfo, exception);
+  }
+
+  /** Report extracted diagnostics, including worker reports whose original exception cannot cross isolates. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#report-an-exception
+  // SPEC_MISMATCH: report an exception(exception, global, omitError) -> nothing
+  // Local reporting extracts/mutes once above; worker delivery carries those
+  // attributes with error=null. The original value stays local for console output.
+  reportErrorInformation(errorInfo: ErrorInformation, exception: unknown = errorInfo.message): void {
+    const global = this.globalImplementation;
+    let notHandled = true;
 
     if (!global.inErrorReportingMode) {
       global.inErrorReportingMode = true;
@@ -515,8 +525,6 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
           notHandled = global.fireEvent('error', ErrorEventImpl, (event) => {
             event.initialize({ ...errorInfo, cancelable: true });
           });
-          // TODO(HTML §8.1.8.1): onerror needs its special five-argument callback
-          // and return-true cancellation. addEventListener uses DOM cancellation.
         }
       } finally {
         global.inErrorReportingMode = false;
@@ -524,14 +532,13 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     }
 
     if (!notHandled) return;
-    errorInfo.error = null;
     if (this.realm.agent instanceof DedicatedWorkerAgent) {
-      // TODO(HTML §8.1.4.6): Queue a DOM-manipulation task for the associated
-      // Worker's relevant global, fire the sanitized ErrorEvent there, and report
-      // an unhandled exception on the owner global with omitError=true. Worker
-      // objects, owner links, and implicit-port disentanglement are not implemented.
-      // Propagation must survive terminated parents while suppressing their handlers.
-      throw new InternalError('Dedicated-worker error propagation is not implemented');
+      const report = this.realm.agent.globalScope?.reportErrorToOwner;
+      if (report === null || report === undefined) {
+        throw new InternalError('Dedicated-worker error transport is not connected');
+      }
+      report({ ...errorInfo, error: null });
+      return;
     }
     // HTML permits reporting an unhandled exception to a developer console.
     console.error(exception);

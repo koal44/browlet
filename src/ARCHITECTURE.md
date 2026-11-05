@@ -992,12 +992,39 @@ processing-model work. It is not general response or MessagePort serialization.
 
 `WorkerEnvironment.completeScriptFetch()` handles failed-load error delivery and
 environment discard, or entangles the startup ports and calls `runScript()`.
-The outside target uses the EventTarget base until Worker/SharedWorker exist;
+The outside target uses the EventTarget base for both Worker and future SharedWorker;
 its original outside port retains the environment responsible for error delivery.
 `runScript()` reuses the script runners, without awaiting module evaluation, and
-activates ports or queues shared-worker connection delivery. Concrete outside
-object association, the separate-isolate startup caller, thread teardown, and
+activates ports or queues shared-worker connection delivery. The separate-isolate
+startup caller, natural thread teardown, and
 lifetime monitors remain explicit dependencies.
+
+After a dedicated/shared global starts closing, its event loop finishes all
+queued tasks and the final microtask checkpoint before becoming destroyed. The
+global's `finishRunning()` continuation clears timers, disconnects external ports,
+and empties its owners. `close()` requests a loop wake-up after clearing queues;
+new or resumed work cannot revive the destroyed loop. This is cooperative cleanup,
+independent of native thread teardown.
+
+The dedicated outside `WorkerImpl` retains its `WorkerThread` in the creating
+isolate. Host startup accepts that Worker, derives its creator environment/port,
+and installs the association after native creation succeeds, before readiness.
+Public `terminate()` forwards to the host and returns undefined; host completion
+stays on its internal promise. The host interrupts blocked native execution
+without scheduling inside work and clears pending outside deliveries. Native
+exit disconnects the port and releases the association, including when Fetch
+cleanup throws. Natural exit preserves messages sent before closing. Production
+startup must still supply the Worker before its constructor returns and connect
+the inside environment and services; a local Agent is not a cross-isolate handle.
+
+Dedicated error reporting uses a narrow `reportErrorToOwner` callback on the
+inside global. The runtime sends only diagnostic attributes, with a null error
+value, to the host's retained outside Worker. That object queues a DOM-manipulation
+task and forwards uncanceled diagnostics through its creator environment's
+existing error dispatch. Live nested workers use the same route at each hop;
+there is no cloned exception, remote Environment, or new service registry.
+Production startup must connect the callback before author execution. Routing
+through a terminated parent's isolate still needs a surviving owner connection.
 
 The [global-scope mixin](browlet/environment/global-scope.ts) composes each global's timers,
 Performance object, Reporting state, and resource associations. It sits above

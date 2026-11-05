@@ -24,6 +24,7 @@ export class MessagePortImpl extends EventTargetImpl {
   messageEventTargetMixin = new MessageEventTargetMixin(this.eventHandlers);
   #enabled = false;
   #taskSource = createTaskSource('port message');
+  /** Stable queue and peer identity, retained while the receiving object is in transit. */
   #endpoint = createPortEndpoint(this);
 
   constructor(env: BrowletEnvironment) {
@@ -58,6 +59,14 @@ export class MessagePortImpl extends EventTargetImpl {
     endpoint.port = value;
     for (const serialized of endpoint.messages.keys()) value.#enqueue(serialized);
     if (endpoint.remote !== null) value.env.getWindowOrWorkerGlobalScopeMixin().messagePorts.add(value);
+  }
+
+  /** Remove only this endpoint's deliveries, including those retained during transfer. */
+  static #clearMessageQueue(endpoint: PortEndpoint): void {
+    // Ports can share a task source. Null handles are messages waiting for a
+    // transferred port to be received, without a task in any event loop yet.
+    for (const task of endpoint.messages.values()) task?.remove();
+    endpoint.messages.clear();
   }
 
   get onmessage(): EventHandlerCallback | null { return this.messageEventTargetMixin.onmessage; }
@@ -101,6 +110,22 @@ export class MessagePortImpl extends EventTargetImpl {
     this.env.responsibleEventLoop.notifyTaskRunnabilityChanged();
   }
 
+  /** Discard queued deliveries at the entangled endpoint without disconnecting it. */
+  // https://html.spec.whatwg.org/multipage/workers.html#terminate-a-worker
+  clearOutgoingMessages(): void {
+    // Step 4, extracted for the dedicated worker's implicit inside port. Ordinary
+    // close/disentangle must preserve queued messages. The separate-isolate host
+    // owns the outside port directly and uses clearMessageQueue() instead.
+    const remote = this.#endpoint.remote;
+    if (remote === null) return;
+    MessagePortImpl.#clearMessageQueue(remote);
+  }
+
+  /** Discard this port's pending deliveries; host termination owns the outside port directly. */
+  clearMessageQueue(): void {
+    MessagePortImpl.#clearMessageQueue(this.#endpoint);
+  }
+
   /** Disconnect this endpoint and prevent any further transfer of it. */
   // https://html.spec.whatwg.org/multipage/web-messaging.html#dom-messageport-close
   close(): void {
@@ -141,9 +166,9 @@ export class MessagePortImpl extends EventTargetImpl {
         this.messageEventTarget.fireEvent('messageerror', MessageEventImpl);
         return;
       }
-      this.messageEventTarget.fireEvent('message', MessageEventImpl, (message) => {
-        message.data = received.deserialized;
-        message.ports = received.transferredValues.filter((value): value is MessagePortImpl => value instanceof MessagePortImpl);
+      this.messageEventTarget.fireEvent('message', MessageEventImpl, (event) => {
+        event.data = received.deserialized;
+        event.ports = received.transferredValues.filter((value): value is MessagePortImpl => value instanceof MessagePortImpl);
       });
     }, { isRunnable: () => this.#enabled });
     this.#endpoint.messages.set(serialized, task);

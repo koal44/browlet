@@ -145,7 +145,7 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   The implementation does not invent a display rate or simulate rendering. See the
   [idle-period dependencies](browlet/scripting/ROADMAP.md#html-8173-idle-period-processing).
 
-- **Forcibly aborting running scripts is unsupported and deferred.** Browlet,
+- **Forcibly aborting scripts on the shared Node thread remains deferred.** Browlet,
   page JavaScript, and the Node caller share a JavaScript execution thread. An
   infinite loop prevents same-thread callers, timers, and abort listeners from
   requesting a stop. `Agent.abortRunningScript()` explicitly throws an
@@ -154,7 +154,10 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   evaluation cancellation rejects host commands and removes queued work. Neither
   interrupts executing JavaScript. We retain direct synchronous host access and
   defer native termination work; this does not imply that external interruption
-  is impossible. See the [killing audit](browlet/scripting/ROADMAP.md#html-8145-killing-scripts).
+  is impossible. Independent workers have a separate native stop path through
+  `WorkerThread.terminate()`, including dedicated outside-port cleanup; that
+  whole-isolate operation does not interrupt a Window while retaining its Node
+  caller. See the [killing audit](browlet/scripting/ROADMAP.md#html-8145-killing-scripts).
 
 - **HTML script calling has explicit runtime boundaries.** Classic/module run
   methods implement eligibility, error/rejection control flow, and preparation/
@@ -2086,7 +2089,7 @@ the author-facing Worker/SharedWorker APIs remain absent. Shared globals retain
 creation fields and expose `onconnect`; discovery, automatic connection delivery,
 and lifetime monitoring remain pending. Dedicated globals forward messaging
 through a hidden port and can close their agent's task queues; automatic channel
-setup and thread teardown remain pending. WorkerLocation's read-only URL surface
+setup and native thread teardown remain pending. WorkerLocation's read-only URL surface
 is implemented; WorkerNavigator is an identity stub. `importScripts()` throws
 at its explicit synchronous-loading boundary. Dedicated/shared realm and settings
 composition is available internally, including initial ownership and separate resource
@@ -2124,10 +2127,37 @@ shared-service transport before it can call this path.
 outside `error`, and discard the unready environment. On success it entangles the
 startup ports and calls `runScript()` to mark readiness, evaluate the script,
 enable dedicated messaging, and queue shared `connect` delivery. These steps use
-the outside target's EventTarget base; concrete Worker/SharedWorker association
-and the separate-isolate caller remain unwired. Environment discard does not
+the outside target's EventTarget base; the separate-isolate caller remains
+unwired. Environment discard does not
 terminate a native thread. Owner monitoring and the ServiceWorkerContainer client
 message queue also remain processing-model dependencies.
+The dedicated `Worker` outside interface now has its hidden port, messaging
+overloads, and error/message handlers, with ordinary Web IDL conversion and
+constructor Trusted Types/URL checks. Valid public construction still throws at
+the missing production startup connection. `terminate()` now forwards through
+the outside Worker's retained WorkerThread. Local-agent interface tests
+exercise existing ports and script completion, not cross-isolate transport.
+The dedicated/shared worker event-loop tail now performs cooperative shutdown:
+after closing, all queues must empty and the final checkpoint must finish before
+timers, external ports, and owners are released. Already-sent outgoing messages
+remain deliverable. Later tasks, microtasks, and spinning continuations cannot
+restart that HTML loop. This does not abort a blocking script or dispose its native
+isolate; owner-driven closure/suspension, worker rendering,
+and Service Worker teardown remain separate dependencies.
+`WorkerThread.terminate()` now connects native interruption to dedicated outside
+port cleanup: it clears pending deliveries immediately and disconnects on native
+exit, even if Fetch cleanup fails. Actual HTML classic/module runner tests verify
+interruption without catch/finally or pending reactions through the public
+Worker method. Native exit releases its host association. The public constructor
+must supply the outside Worker before returning, and production inside settings,
+shared-service/MessagePort transport, and shared-worker connection cleanup remain
+unimplemented. Natural native exit preserves already-queued outside deliveries.
+Dedicated runtime errors now cross the native channel as diagnostics, without
+the original exception. Outside Worker delivery and uncanceled reporting through
+live owners use HTML tasks and the normal ErrorEvent binding. Production startup
+must attach the inside global's reporter. Propagation through terminated parents
+still needs a route that survives their isolates; source filename/line/column
+extraction remains the existing diagnostic metadata dependency.
 Worker API mixin forwarding, event producers, cross-thread
 messaging, and independent execution remain pending. Inheritance
 reports omit CORP's destination member and preserve local observation even with

@@ -176,8 +176,19 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
   /** Discard queued tasks and prevent further tasks; the running script can finish. */
   // https://html.spec.whatwg.org/multipage/workers.html#close-a-worker
   close(): void {
-    for (const queue of this.env.responsibleEventLoop.getTaskQueues()) queue.clear();
+    const loop = this.env.responsibleEventLoop;
+    for (const queue of loop.getTaskQueues()) queue.clear();
     this.closing = true;
+    loop.notifyTaskRunnabilityChanged();
+  }
+
+  /** Release the worker's resources after its event loop has been destroyed. */
+  // https://html.spec.whatwg.org/multipage/workers.html#run-a-worker
+  // Extracted final onComplete steps, after the event-loop processing step.
+  finishRunning(): void {
+    this.env.getWindowOrWorkerGlobalScopeMixin().timers.clear();
+    for (const port of this.ports) port.disentangle();
+    this.ownerSet.clear();
   }
 
   /** Local non-Blob workers inherit their owner's policies; other workers use the response. */

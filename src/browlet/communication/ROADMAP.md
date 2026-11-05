@@ -149,6 +149,16 @@ belong to the same global, neither is in its worker-port list. Closing the local
 end during transfer disconnects the channel, and receipt cannot revive it.
 No previous owner is retained. See the [§10.2.3 review](../workers/ROADMAP.md#document-order-review).
 
+`clearOutgoingMessages()` supplies the dedicated-worker termination queue step
+(HTML §10.2.4). It clears only the currently entangled endpoint's pending deliveries,
+including messages in transit, without altering connection or enabled state.
+Other ports on the unshipped shared task source and incoming messages remain
+queued. The separate-isolate `WorkerThread` host owns the outside port directly
+and uses `clearMessageQueue()` at termination, followed by disentanglement on
+native exit. Both operations share endpoint cancellation. The public Worker
+constructor must supply that port when connecting startup; ordinary port close
+and cooperative worker shutdown must preserve pending deliveries.
+
 The 2026-11-04 source comparison supports keeping channel state separate from
 live peer objects: Chromium moves a message-pipe descriptor into `MessagePortChannel`
 and clears the initial peer pointer; Firefox transfers port identifiers through

@@ -3,6 +3,7 @@ import {
 } from '../../web-idl/core/index';
 import type { FetchResponse } from '../../fetch/index';
 
+import type { ErrorInformation } from '../dom/events/index';
 import { EventHandlerMap, type EventHandlerCallback } from '../scripting/index';
 import { EmbedderPolicy, queueCOEPInheritanceViolation } from '../browsing/policy/index';
 import { MessageEventTargetMixin, MessagePortImpl } from '../communication/index';
@@ -23,6 +24,8 @@ export class DedicatedWorkerGlobalImpl extends WorkerGlobalImpl {
 
   /** Strongly retained, unexposed endpoint; startup supplies its outside peer and enables it. */
   insidePort: MessagePortImpl;
+  /** Host delivery to the outside Worker; startup connects this before author execution. */
+  reportErrorToOwner: ((errorInfo: ErrorInformation) => void) | null = null;
   /** One handler map for inherited worker events and dedicated-worker messages. */
   override eventHandlers: EventHandlerMap = new EventHandlerMap(this, DedicatedWorkerGlobalImpl.#handlerDefinitions);
   /** Implements the messaging handler attributes without starting the inside port. */

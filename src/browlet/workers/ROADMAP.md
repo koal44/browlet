@@ -65,8 +65,9 @@ The small §10.2.2 dependency is also connected: worker globals start with
 `closing = false`; `close()` clears every task queue on the worker's loop and
 sets that flag. EventLoop discards subsequent tasks for dedicated/shared/service
 worker agents whose attached global is closing. The current task and its
-microtasks can finish; this is not termination or thread teardown. Setting the
-flag directly, as later lifetime algorithms do, does not itself erase old tasks.
+microtasks can finish; cooperative loop shutdown is now connected below. This
+is not forced termination or native thread teardown. Setting the flag directly,
+as later lifetime algorithms do, does not itself erase old tasks.
 
 Tests project a real dedicated global and use separate agent queues for its
 hidden port and a manually supplied peer. Automatic startup,
@@ -558,11 +559,286 @@ target is a real projected EventTarget, not a provisional Worker API. All 38
 completion, execution, and fetching cases pass across the six runtime configurations
 (228 passes). Type checking, focused ESLint, import boundaries, and diff checks pass.
 
+**Cooperative shutdown (HTML §§8.1.7.3 and 10.2.4):** The worker event-loop tail
+now recognizes a closing dedicated/shared worker after all task queues are empty
+and the final checkpoint has finished. Disabled port queues still count as queued
+work. The destroyed loop rejects further tasks and microtasks; resumed spinning
+tasks use the same closing rule as newly queued tasks. `close()` wakes an idle
+loop so this tail runs even when it removed the last queued task.
+
+`WorkerGlobalImpl.finishRunning()` extracts run-a-worker's final three steps:
+clear its timers, disentangle its external ports (including a peer in transit),
+and empty its owner set. Outgoing messages already queued on other loops remain
+deliverable. Local-only channels are not in HTML's list of the worker's ports.
+The final task and its microtasks retain these resources until they finish.
+
+This supplies cooperative HTML-loop cleanup. Forced termination uses the separate
+outside execution owner described below. Natural native isolate teardown must
+still be connected when startup owns the
+composed environment. Owner-derived closing/suspension monitoring, worker timer
+advancement, rendering, and the Service Workers processing model remain explicit
+dependencies. Future lifetime monitors must wake the loop after changing closing
+state; no polling or owner observer registry is introduced here.
+
+Nine regressions exercise script/microtask completion, old and disabled queues,
+idle and external-checkpoint closure, late tasks/microtasks/spinning continuations,
+and external ports in transit alongside local-only channels. They use real worker
+environments and bindings with controlled host turns. All 242 selected worker,
+task, timer, idle-period, pause, and spinning cases pass in the six runtime
+configurations (1,452 passes). Type checking, focused ESLint, import boundaries,
+and diff checks pass. No engine or add-on change is required.
+
+**Termination messaging (HTML §10.2.4):** `MessagePortImpl.clearOutgoingMessages()`
+extracts terminate-a-worker's fourth step for the dedicated global's implicit
+inside port. It removes pending deliveries from the entangled endpoint, including
+disabled queues, tasks moved to another realm, and messages retained during port
+transfer. Other channels sharing the same task source and incoming messages are
+untouched. A delivery already running on the outside loop can finish.
+
+This operation does not disconnect the channel or stop the worker. Ordinary
+`close()` and cooperative shutdown continue to preserve already-sent messages.
+The separate-isolate host owns the outside port directly and clears its queue
+through `clearMessageQueue()`, using the same endpoint cancellation. It does not
+need a reference to the inside global across the isolate boundary.
+
+Seven new regressions cover enabled/disabled queues, unrelated and incoming
+messages, transferred and in-transit peers, a running delivery, a disconnected
+peer, and the dedicated worker's actual hidden port before cooperative cleanup.
+All 103 selected messaging, lifetime, execution, global-scope, and shutdown cases
+pass in the six runtime configurations (618 passes, no failures). No engine or
+add-on change is required.
+
+**Native worker termination connection (HTML §§8.1.4.5 and 10.2.4):**
+`WorkerThread` retains the dedicated outside Worker and its original port as local
+initialization state; neither is cloned into the worker. `terminate()` stops
+admitting host messages, requests native interruption directly, and clears the
+outside delivery queue before returning its existing internal completion. Native
+exit disposes the inside agent, queues, and heap without running author
+catch/finally or a final microtask checkpoint. Host exit handling cancels the
+initial fetch and disentangles the outside port. Natural exit preserves queued
+outside messages. Shared workers use the same native interruption; their future
+connection manager must own cleanup of all their outside connections.
+
+A regression exposed that canceling Fetch before requesting native interruption
+could throw and prevent the stop entirely. Fetch cleanup now runs after native
+exit; its error rejects the completion, and finally still releases the outside
+port. Termination remains idempotent, including while startup is blocked.
+
+Real-isolate fixtures compose worker environments and run both HTML classic and
+module scripts in infinite loops. Shared flags confirm that catch, finally,
+pending Promise reactions, and error handlers do not run. Real outside port queues
+cover immediate cancellation, unrelated deliveries, disconnection even when
+Fetch cleanup fails, and preservation of deliveries on natural exit. The fixture
+still supplies local services explicitly; it does not stand in for production
+cross-isolate UserAgent services or structured MessagePort transport.
+
+All 86 selected native-thread, messaging, and worker-shutdown cases pass on Node
+24.19.0, Node 26.8.1, and the custom build, each with and without the add-on (516
+passes, no failures). Type checking, focused ESLint, import boundaries, and diff
+checks pass.
+
+The public Worker constructor's startup call (§10.2.6.3), production inside
+environment composition, shared-service and port transport, and automatic natural
+thread teardown remain pending. `Agent.abortRunningScript()` still does not
+interrupt a Window sharing the caller's Node thread. No engine or add-on change
+is required for this worker-specific path.
+
+### Runtime errors and AbstractWorker (HTML §§10.2.5–10.2.6.1)
+
+Reviewed §10.2.5 against the existing §8.1.4.6 reporter. Classic-script runtime
+and parse errors, and module evaluation failures, reach the worker global's
+trusted, cancelable ErrorEvent. The shared HTML handler machinery already
+supplies the five-argument `WorkerGlobalScope.onerror` callback and cancels on
+true; ordinary event listeners can use `preventDefault()`. Classic-script
+muting and the per-global recursion guard remain in the common reporter.
+The stale TODO claiming that special onerror handling was missing is removed.
+
+§10.2.6.1 now has a real `AbstractWorkerMixin` and its Web IDL declaration.
+Outside-object `onerror` uses the ordinary EventHandler contract: one event
+argument, with false canceling the event. The existing ServiceWorker identity
+includes this mixin as required by the Service Workers specification. This adds
+the handler surface only; registration, worker execution, and service-worker
+error delivery remain separate dependencies. The upcoming Worker and
+SharedWorker implementations must include the same mixin.
+
+Tests exercise both dedicated and shared worker globals through real settings,
+bindings, and script runners. They cover local dispatch/cancellation, parse and
+module failures, muted errors, recursion suppression, and shared-worker console
+reporting. AbstractWorker tests use the existing ServiceWorker includer and
+cover callback arguments, cancellation, receiver checks, replacement, and removal.
+No private Binding fixture, native thread, add-on change, or engine patch is
+needed for these local behaviors.
+
+All 47 selected tests pass on Node 24.19.0, Node 26.8.1, and the custom build,
+each with and without the add-on (282 passes). The two previously approved
+script-selection skips remain unchanged in each configuration.
+
+Remaining dependencies are explicit rather than treating §10.2.5 as complete:
+
+- Dedicated errors now have diagnostic transport, outside Worker delivery, and
+  live-owner propagation as described below. Production startup must connect the
+  dedicated global's `reportErrorToOwner` to its runtime before author execution;
+  an unconnected reporter still fails explicitly.
+- Propagation must continue through terminated parents while suppressing their
+  handlers. Port disentanglement and the outside execution association now exist;
+  the error route that consumes them does not yet exist.
+- Error filename/line/column extraction remains the existing §8.1.4.6 diagnostic
+  metadata dependency. These tests do not claim source-position attribution.
+- The public worker `reportError()` API still belongs to the pending
+  WindowOrWorkerGlobalScope inclusion/forwarding. Script runners already use
+  the common environment reporter independently of that public API.
+
+### Worker settings audit (HTML §10.2.6.2)
+
+Reviewed [script settings for workers](https://html.spec.whatwg.org/multipage/workers.html#script-settings-for-workers)
+in document order. The setup introduced for §10.2.4 already supplies this
+section; no additional runtime behavior is needed in the settings object.
+
+| Requirement | Existing owner |
+| --- | --- |
+| Realm, retained execution context, and HostDefined settings | `createWorkerEnvironment()` composes the realm/global, and `BrowletEnvironment` attaches itself to that realm. |
+| Origin | Composition creates a fresh opaque origin for `data:` workers; otherwise it retains the creator's origin. |
+| Module map, API base URL, policy container, and isolation capability | `WorkerEnvironment` reads the worker global, including changes installed from the initial Fetch response. |
+| Cross-site ancestry | Composition captures the creator's ancestry flag and treats `data:` workers as cross-site. Nested workers inherit that decision. |
+| Time origin | The getter coarsens the original creation reading using the current worker isolation capability. |
+| Environment identity and initial state | A fresh ID, the script creation URL, null top-level creation URL, null target browsing context, and null active service worker come from the environment base. |
+| Top-level origin | Dedicated workers inherit it. Shared workers use the first creator's value as the implementation-defined policy, retaining it after that creator navigates. |
+
+Expanded settings tests cover same-site and cross-site frame ancestry, including
+scheme differences, nested workers, and a `data:` worker whose top-level creator
+has no cross-site ancestor. Earlier settings fixtures have no active navigable,
+so their creator is conservatively cross-site and did not cover the false path.
+The creator-replacement regression now covers shared workers too. Existing
+response-fetch tests verify that redirects replace both worker URL fields and
+install policies without changing the captured origin.
+
+The 37 settings and response-fetch cases pass on Node 24.19.0, Node 26.8.1,
+and the custom build, each with and without the add-on (222 passes, no failures).
+
+The accepted `SPEC_GAP(worker-setup-url)` remains: HTML reads the global URL before
+the processing model assigns it. Setup provisionally uses the request URL, and
+response initialization replaces it before execution. Separate-isolate setup
+still needs the creator snapshot connected to UserAgent/reporting services and
+the production global, as recorded above; these local settings tests do not
+claim that startup integration. Service-worker settings remain with their own
+standard.
+
+### Dedicated Worker outside object (HTML §10.2.6.3, first slice)
+
+Read the complete [dedicated Worker interface](https://html.spec.whatwg.org/multipage/workers.html#dedicated-workers-and-the-worker-interface).
+`WorkerImpl` now supplies the ordinary EventTarget implementation, a strongly
+retained hidden outside port, both `postMessage()` overloads, and the
+AbstractWorker/MessageEventTarget mixins. Assigning `onmessage` does not enable
+that port: initial-script completion remains responsible for queue enablement.
+Web IDL declares Worker, WorkerOptions, WorkerType, and the specified exposure
+to Window, DedicatedWorker, and SharedWorker globals.
+
+Constructor initialization applies the existing TrustedScriptURL compliant-string
+algorithm with the Worker sink name, then the relevant environment's encoding
+URL parser and SyntaxError DOMException. Web IDL owns argument, union, dictionary,
+and enum conversion. As with the dedicated global's inside port, implementation
+allocation creates the disabled, disconnected outside port; this precedes URL
+checks internally without exposing or registering a connection.
+
+Successful public construction still stops at the missing production run-a-worker
+connection. After valid input, `initialize()` throws there. Termination now uses
+the native execution association described below; production startup must install
+it before returning the public Worker.
+
+Tests project internally allocated outside implementations through ordinary
+Binding and connect real ports/settings in separate local agents. They cover
+cloning, both transfer overloads, delivery targets, queue enablement, messageerror,
+outside error-handler cancellation, cross-realm receivers, constructor conversions,
+Trusted Types, malformed URLs, and initial-script message delivery through
+`completeScriptFetch()`. These tests do not claim separate-isolate startup or
+treat the startup stub as required browser behavior.
+
+All 49 selected interface, global, and script-completion tests pass on Node
+24.19.0, Node 26.8.1, and the custom build, with and without the add-on (294
+passes, no failures or skips). Type checking, focused ESLint, import boundaries,
+and diff checks pass. No Node, V8, or add-on changes are needed for this slice.
+
+Still required before §10.2.6.3 is complete:
+
+- Connect the production isolate's creator snapshot to its WorkerEnvironment
+  and the creator UserAgent's shared services, retaining the outside Worker/host
+  association. Constructor options and the parsed URL must reach that startup.
+- Transport the hidden MessagePort channel across isolates, including messages
+  sent immediately after construction, before the initial script has loaded.
+- Connect the inside global's error reporter during production startup. Live-owner
+  propagation is implemented below; the terminated-parent route remains pending.
+
+Stay at this startup boundary before moving to §10.2.6.4 SharedWorker discovery.
+
+### Outside execution association and terminate (HTML §10.2.6.3)
+
+`WorkerThreadInit.worker` replaces its bare `outsidePort` input. A dedicated
+Worker supplies its own creator environment and hidden port. The host retains
+that outside object locally, and installs the reciprocal `WorkerImpl.thread`
+only after native creation succeeds. Shared and agent-only fixtures still supply
+`creatorEnv` directly; no implementation objects cross the startup channel.
+
+Public `terminate()` forwards to this host and returns undefined. The existing
+host path interrupts even blocked execution, clears pending outside deliveries,
+and completes Fetch/port cleanup independently of the creator's event loop.
+Exit releases the association even if Fetch cleanup throws. Calling terminate
+again is harmless; calling it after natural exit preserves messages sent before
+the worker closed. Host completion and failure remain on the internal `closed`
+promise, separate from the public return value.
+
+The real-isolate lifecycle tests now use projected Workers. Classic and module
+runners, blocked startup, repeated calls, cross-realm method borrowing, native
+termination failure, Fetch cleanup failure, and natural/failed exit exercise the
+public operation. These are still fixture-composed inside environments, not
+successful public `new Worker()` calls. Production startup, service/message
+transport, and the error-delivery connection remain the dependencies above.
+
+All 62 affected interface and native-thread cases pass on Node 24.19.0, Node
+26.8.1, and the custom build, with and without the add-on (372 passes, no failures
+or skips). Type checking, focused ESLint, import boundaries, and diff checks pass.
+
+### Dedicated error delivery across isolates (HTML §§8.1.4.6, 10.2.5)
+
+The dedicated global's `reportErrorToOwner` is a narrow host delivery callback,
+installed before execution. After local dispatch leaves an error uncanceled,
+the common environment reporter sends its diagnostic attributes with `error`
+set to null. `WorkerThreadRuntime.reportError()` copies only message, filename,
+line, and column onto the private channel; no exception value or platform object
+crosses isolates. The receiving `WorkerThread` uses its retained outside Worker.
+
+`WorkerImpl.reportError()` queues the required DOM-manipulation task. The
+outside Worker receives a trusted, cancelable ErrorEvent in its own realm. If
+uncanceled, the creator global receives the same diagnostics with `error: null`.
+`BrowletEnvironment.reportErrorInformation()` is the extracted dispatch portion
+of reporting: local callers retain `reportException()`, including extraction,
+script muting, and original-value console reporting. Transported reports enter
+with their existing attributes instead of re-extracting a fabricated exception.
+The existing recursion guard and five-argument global handler still apply.
+
+Real-isolate tests cover classic/module exceptions, local cancellation, outside
+handler cancellation, muting, diagnostic preservation, and a live nested-worker
+chain. A thrown function remains available to the inside handler and never
+reaches native structured cloning. Fixtures supply existing environment
+composition while the production shared-service startup remains unfinished.
+
+This does not finish propagation through terminated parent workers. The host
+channel is parent-local; a surviving owner route must outlive the parent's
+isolate and suppress its handlers. Native source-position extraction is also
+still pending; supplied locations survive transport, but ordinary extracted
+reports retain the existing empty filename and zero line/column.
+No Node, V8, or add-on changes are needed.
+
+All 93 selected worker and common error-reporting cases pass on Node 24.19.0,
+Node 26.8.1, and the custom build, with and without the add-on (558 passes).
+The two previously approved script-selection skips remain unchanged in each
+configuration. Type checking, focused ESLint, import boundaries, and diff checks pass.
+
 ## Present
 
 - `service-worker.ts` supplies a non-constructible, secure-context ServiceWorker
-  identity for MessageEventSource. Its registration, state, messaging, and
-  AbstractWorker members remain unfinished; this is separate from the global scope.
+  identity for MessageEventSource and includes AbstractWorker's error handler.
+  Its registration, state, messaging, and automatic error delivery remain
+  unfinished; this is separate from the global scope.
 - `BrowletEnvironment.fetchClassicWorkerScript()` supplies request setup, the custom fetch
   hook, response validation, UTF-8 decoding, and classic-script creation.
   `WorkerEnvironment.fetchScript()` now supplies its startup response hook; the
@@ -576,6 +852,9 @@ completion, execution, and fetching cases pass across the six runtime configurat
 - `WorkerEnvironment.completeScriptFetch()` handles failed-load notification/discard
   and successful port setup, then calls `runScript()` for execution and activation;
   public startup still needs to connect these steps on composed environments.
+- `WorkerGlobalImpl.finishRunning()` releases timers, external ports, and owners
+  after the closing worker's event loop has emptied and finished its checkpoint.
+  Native thread teardown and forced termination are still separate dependencies.
 - `WorkerGlobalImpl` supplies the common state and declared surface above.
   `DedicatedWorkerGlobalImpl`
   implements the §7.1.4 owner-policy check and inheritance reports; the base
@@ -629,7 +908,8 @@ completion, execution, and fetching cases pass across the six runtime configurat
   tasks on the appropriate outside or worker global.
 - If worker startup fails before execution readiness, run the inside
   environment's `discard()` steps. The Service Workers client discarded flag
-  exists on `BrowletEnvironmentBase`; this startup caller remains unimplemented.
+  exists on `BrowletEnvironmentBase`; `completeScriptFetch()` invokes it on failure,
+  while the separate-isolate startup caller remains unimplemented.
 - Startup must obtain and install the response's embedder policy, then call
   `workerGlobalScope.checkEmbedderPolicy(outsideEnv, response)` before script
   execution. False requires a network error and failed-startup cleanup. The
@@ -654,9 +934,12 @@ completion, execution, and fetching cases pass across the six runtime configurat
   settings. Populate the environment's fixed decision during worker setup;
   the worker script URL alone is not the classification input.
 - Closing discards already-queued tasks and sets a flag that prevents new tasks
-  from entering the worker queues. Termination additionally aborts the running
-  script and clears the dedicated worker's pending outside messages. These are
-  different lifecycle operations.
+  from entering the worker queues. The event-loop tail now performs cooperative
+  resource cleanup after the current task and microtasks finish. Termination
+  additionally aborts the running script and clears the dedicated worker's pending
+  outside messages. `WorkerThread.terminate()` supplies native interruption and
+  outside-port cleanup; startup must supply the outside Worker when its public
+  constructor and production environment/transport are connected.
 - Dedicated-worker messaging is the implicit entangled port. Shared workers
   receive one port per connection and are discovered by storage key, URL, and
   name through a serialized shared-worker manager. That manager is not a
@@ -672,6 +955,7 @@ completion, execution, and fetching cases pass across the six runtime configurat
 | `worker-global-scope.ts` | Common worker-global state, `self`/`location`/`navigator`, event handlers, closing, and `importScripts()` | HTML §§10.2.1.1, 10.2.2, and 10.3 |
 | `dedicated-worker-global-scope.ts` | Name, implicit inside port, `postMessage()`, `close()`, and `MessageEventTarget` behavior | HTML §10.2.1.2 |
 | `shared-worker-global-scope.ts` | Name, constructor identity fields, extended lifetime, `close()`, and connection events | HTML §10.2.1.3 |
+| `abstract-worker.ts` | Shared outside-object error-handler implementation and declaration | HTML §10.2.6.1 |
 | `worker.ts` | `Worker`, options/type declarations, outside port, construction, messaging, and explicit termination | HTML §10.2.6.3 |
 | `shared-worker.ts` | `SharedWorker`, options, exposed port, and connection to an existing or new shared global | HTML §10.2.6.4 |
 | `shared-worker-manager.ts` | Serialized storage-key/URL/name discovery, option compatibility, and connection dispatch | HTML §10.2.6.4; Storage |

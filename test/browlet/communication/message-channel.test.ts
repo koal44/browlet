@@ -3,12 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { createWindowEnvironment } from '../../../src/browlet/integration/web-idl/index';
 import { BrowsingContext, TopLevelTraversable, DocumentState } from '../../../src/browlet/browsing/navigation/index';
-import { MessageChannelImpl } from '../../../src/browlet/communication/index';
+import { MessageChannelImpl, type MessagePortImpl } from '../../../src/browlet/communication/index';
 import type { MessageEvent, MessagePort } from '../../../src/browlet/platform';
 import { AgentCluster, WindowAgent } from '../../../src/browlet/scripting/agents';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { obtainURLOrigin, parseURL } from '../../../src/url/index';
 import { createManualEventLoop } from '../../support/browlet-agent';
+import { unwrap } from '../../support/browlet-binding';
 
 afterEach(() => { vi.restoreAllMocks(); });
 
@@ -372,6 +373,98 @@ describe('MessageChannel and MessagePort (§9.4)', () => {
     expect([...ports]).toEqual([channel.port1, channel.port2]);
     channel.port1.disentangle();
     expect(ports.size).toBe(0);
+  });
+});
+
+describe('Clearing the entangled port queue for worker termination (HTML §10.2.4)', () => {
+  it.each([false, true])('clears pending outgoing messages without clearing incoming or unrelated messages (enabled: %s)', (enabled) => {
+    const page = createWindow();
+    const { port1, port2 } = new page.window.MessageChannel();
+    const other = new page.window.MessageChannel();
+    const outgoing = collect(port2);
+    const incoming = collect(port1);
+    const unrelated = collect(other.port2);
+    port1.start();
+    other.port2.start();
+    if (enabled) port2.start();
+    port1.postMessage('discard first');
+    other.port1.postMessage('other channel');
+    port1.postMessage('discard second');
+    port2.postMessage('incoming');
+    unwrap<MessagePortImpl>(port1).clearOutgoingMessages();
+    page.drain();
+    expect(outgoing).toEqual([]);
+    expect(incoming.map((event): unknown => event.data)).toEqual(['incoming']);
+    expect(unrelated.map((event): unknown => event.data)).toEqual(['other channel']);
+    port1.postMessage('after clearing');
+    page.drain();
+    expect(outgoing.map((event): unknown => event.data)).toEqual(enabled ? ['after clearing'] : []);
+    port2.start();
+    page.drain();
+    expect(outgoing.map((event): unknown => event.data)).toEqual(['after clearing']);
+  });
+
+  it('removes tasks moved to another realm by port transfer', () => {
+    const sender = createWindow();
+    const receiver = createWindow();
+    const { port1, port2 } = new sender.window.MessageChannel();
+    port1.postMessage('before transfer');
+    const transferred = sender.env.serializeWithTransfer(port2, [port2]);
+    const moved = receiver.env.deserializeWithTransfer(transferred).deserialized as MessagePort;
+    const received = collect(moved);
+    moved.start();
+    port1.postMessage('after transfer');
+    unwrap<MessagePortImpl>(port1).clearOutgoingMessages();
+    sender.drain();
+    receiver.drain();
+    expect(received).toEqual([]);
+    port1.postMessage('still connected');
+    receiver.drain();
+    expect(received.map((event): unknown => event.data)).toEqual(['still connected']);
+  });
+
+  it('clears messages before and during transfer while no receiving port object exists', () => {
+    const sender = createWindow();
+    const receiver = createWindow();
+    const { port1, port2 } = new sender.window.MessageChannel();
+    port1.postMessage('before transfer');
+    const transferred = sender.env.serializeWithTransfer(port2, [port2]);
+    port1.postMessage('during transfer');
+    unwrap<MessagePortImpl>(port1).clearOutgoingMessages();
+    port1.postMessage('after clearing');
+    const moved = receiver.env.deserializeWithTransfer(transferred).deserialized as MessagePort;
+    const received = collect(moved);
+    moved.start();
+    sender.drain();
+    receiver.drain();
+    expect(received.map((event): unknown => event.data)).toEqual(['after clearing']);
+  });
+
+  it('allows the current delivery to finish while discarding later deliveries', () => {
+    const page = createWindow();
+    const { port1, port2 } = new page.window.MessageChannel();
+    const received: unknown[] = [];
+    port2.onmessage = (event) => {
+      received.push((event as MessageEvent).data);
+      unwrap<MessagePortImpl>(port1).clearOutgoingMessages();
+      received.push('handler finished');
+    };
+    port1.postMessage('current');
+    port1.postMessage('discard');
+    page.drain();
+    expect(received).toEqual(['current', 'handler finished']);
+  });
+
+  it('does nothing after disconnection, preserving the former peer’s queued messages', () => {
+    const page = createWindow();
+    const { port1, port2 } = new page.window.MessageChannel();
+    const received = collect(port2);
+    port1.postMessage('already queued');
+    port1.close();
+    unwrap<MessagePortImpl>(port1).clearOutgoingMessages();
+    port2.start();
+    page.drain();
+    expect(received.map((event): unknown => event.data)).toEqual(['already queued']);
   });
 });
 

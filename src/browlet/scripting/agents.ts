@@ -56,6 +56,8 @@ export abstract class Agent {
   /** Abort this agent's running script without executing author catch/finally blocks. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#abort-a-running-script
   abortRunningScript(): void {
+    // Independent workers are stopped by their outside WorkerThread execution
+    // owner. The inside Agent is not a cross-isolate handle to that native thread.
     // Deferred for the shared Node execution thread: same-thread callers cannot
     // request a stop during a blocking loop. No independent stop channel or native
     // termination work is planned for this audit; see ROADMAP.md's killing-scripts section.

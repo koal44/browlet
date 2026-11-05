@@ -4,13 +4,14 @@ import { copyOrigin, copyURL, type Origin, type URLRecord } from '../../../url/i
 import type { HTTPStatus } from '../../../http/index';
 import { fetch, FetchResponse, isFilteredResponse, type FetchController, type FetchRequest, type ResponseType } from '../../../fetch/index';
 
+import type { ErrorInformation } from '../../dom/events/index';
 import {
   AgentCluster, DedicatedWorkerAgent, SharedWorkerAgent, EventLoop, createTaskSource, networkingTaskSource,
   type CrossOriginIsolationMode,
 } from '../../scripting/index';
 import { PolicyContainer, type PolicyContainerSnapshot } from '../../browsing/policy/index';
 import type { BrowletEnvironment } from '../../environment/index';
-import { WorkerGlobalImpl, type WorkerOwner } from '../../workers/index';
+import { WorkerGlobalImpl, type WorkerImpl, type WorkerOwner } from '../../workers/index';
 
 import { queueNodeTask } from './node';
 
@@ -37,10 +38,13 @@ export class WorkerThread {
   #state: 'starting' | 'running' | 'stopping' | 'closed' = 'starting';
   /** Initial script fetch owned by the creator's UserAgent; canceled when this execution owner closes. */
   #scriptFetch: FetchController | null = null;
+  /** Dedicated outside object and its hidden port, retained locally until native exit. */
+  #worker: WorkerImpl | null;
 
   /** Reload this Browlet bundle in a new isolate; the caller supplies no executable entry. */
-  constructor(initialization: WorkerThreadInitialization, onMessage: (message: unknown) => void) {
-    this.creatorEnv = initialization.creatorEnv ?? null;
+  constructor(initialization: WorkerThreadInit, onMessage: (message: unknown) => void) {
+    this.#worker = initialization.worker ?? null;
+    this.creatorEnv = this.#worker?.env ?? initialization.creatorEnv ?? null;
     this.owner = this.creatorEnv === null ? null : WorkerGlobalImpl.getRelevantOwner(this.creatorEnv);
     this.creatorEnvSnapshot = this.creatorEnv === null ? null : WorkerThread.captureCreatorEnvironment(this.creatorEnv);
     // The caller can terminate during startup and inspect closed without awaiting
@@ -59,6 +63,10 @@ export class WorkerThread {
         case 'message':
           onMessage(message.data);
           break;
+        case 'error':
+          if (this.#worker === null) throw new InternalError('Worker error requires its outside Worker');
+          this.#worker.reportError(message.errorInfo);
+          break;
         default:
           assertNever(message, 'Unknown worker thread output message kind');
       }
@@ -69,10 +77,25 @@ export class WorkerThread {
         this.#ready.reject(exit.error ?? new InternalError('Worker thread exited before completing startup'));
       }
       this.#state = 'closed';
-      this.#scriptFetch?.terminate();
+      const scriptFetch = this.#scriptFetch;
       this.#scriptFetch = null;
+      try {
+        scriptFetch?.terminate();
+      } finally {
+        // Native exit destroys the inside agent, its queues, and its heap. The
+        // surviving outside object must be released here, even if Fetch cleanup fails.
+        const worker = this.#worker;
+        this.#worker = null;
+        if (worker !== null) {
+          worker.thread = null;
+          worker.outsidePort.disentangle();
+        }
+      }
       return exit;
     });
+    // Publish the association only after native creation succeeds. It is available
+    // immediately, before readiness, and neither the Worker nor its port is cloned.
+    if (this.#worker !== null) this.#worker.thread = this;
   }
 
   /** Copy the creator's environment data before startup, preserving origin and cluster identities. */
@@ -153,15 +176,18 @@ export class WorkerThread {
     }, env.userAgent.sandbox);
   }
 
-  /** Stop even a blocked isolate and wait for teardown; HTML's termination bookkeeping is still separate. */
+  /** Abort independent worker execution, discard pending outside deliveries, and await host cleanup. */
+  // https://html.spec.whatwg.org/multipage/workers.html#terminate-a-worker
   terminate(): InternalPromise<JSThreadExit> {
     if (this.#state !== 'closed' && this.#state !== 'stopping') {
       this.#state = 'stopping';
-      this.#scriptFetch?.terminate();
-      this.#scriptFetch = null;
       this.#ready.reject(new InternalError('Worker thread was terminated during startup'));
-      // closed already observes this shared completion and includes local cleanup.
+      // The stop travels directly to the native execution owner, not through
+      // the blocked agent's task queue. Aborting the isolate discards its inside
+      // tasks and microtasks without author catch/finally or script cleanup.
+      // Host Fetch cleanup runs after exit so it cannot prevent this request.
       void this.#thread.terminate();
+      this.#worker?.outsidePort.clearMessageQueue();
     }
     return this.closed;
   }
@@ -239,6 +265,12 @@ export class WorkerThreadRuntime {
     this.#endpoint.send({ type: 'message', data });
   }
 
+  /** Forward only diagnostics; the thrown value remains in the worker's realm. */
+  reportError(errorInfo: ErrorInformation): void {
+    const { message, filename, lineno, colno } = errorInfo;
+    this.#endpoint.send({ type: 'error', errorInfo: { message, filename, lineno, colno, error: null } });
+  }
+
   /** Release the native control channel; remaining tasks/resources determine natural thread exit. */
   disconnect(): void {
     this.#endpoint.disconnect();
@@ -246,11 +278,13 @@ export class WorkerThreadRuntime {
 }
 
 /** Parent-side inputs; the live creator environment stays in its own isolate. */
-export interface WorkerThreadInitialization {
+export interface WorkerThreadInit {
   kind: 'dedicated' | 'shared';
   data: unknown;
-  /** Omitted only for agent/loop startup without a creator environment. */
+  /** Creator for shared or agent-only startup; a dedicated outside Worker supplies its own environment. */
   creatorEnv?: BrowletEnvironment;
+  /** Dedicated outside object, retained only in the creating isolate; omitted for shared or agent-only startup. */
+  worker?: WorkerImpl;
 }
 
 /** Creator values captured before startup; neither an Environment nor a Fetch client. */
@@ -293,7 +327,8 @@ interface WorkerThreadProtocol extends JSThreadProtocol {
 }
 
 /** Private acknowledgement and outbound data; never HTML MessageEvents. */
-type WorkerThreadMessage = { type: 'ready'; } | { type: 'message'; data: unknown; };
+type WorkerThreadMessage = { type: 'ready'; } | { type: 'message'; data: unknown; } |
+  { type: 'error'; errorInfo: ErrorInformation; };
 
 /** Consumed initial-script data for response initialization, not a clone of a streaming Fetch response. */
 export interface WorkerScriptResponse {

@@ -586,11 +586,19 @@ Script-element/worker startup still needs production callers for these runners.
 ## HTML §8.1.4.5 killing scripts
 
 `Agent.abortRunningScript()` names the operation on the execution owner, shared
-by its realms. It explicitly throws an InternalError until runtime termination
-is available. That throw reports an unfinished implementation; it is not the
-specified abortion. No callers are wired to claim successful termination.
+by its realms. This local operation still throws an InternalError; a Window
+sharing its Node caller's thread has no independent stop source. That throw
+reports an unfinished implementation; it is not the specified abortion.
 
-**Decision:** retain direct synchronous host access on Node's JavaScript thread
+Independent workers now use their outside `WorkerThread.terminate()` owner to
+stop native execution without sending a task to the blocked inside agent. Native
+exit discards that agent's entire isolate; the host clears the dedicated outside
+port queue immediately and disconnects it after exit. Classic and module runner
+regressions verify that catch/finally, pending reactions, and error handlers do
+not run. This whole-worker lifetime operation does not supply interruption that
+preserves a Window's shared Node thread. See the [worker termination review](../workers/ROADMAP.md#document-order-review).
+
+**Decision for the shared Node thread:** retain direct synchronous host access
 and defer forced script interruption. No addon termination work, watchdog, or
 move of Browlet into a worker is planned for this audit. An infinite loop can
 therefore block both the page and its Node caller indefinitely. Node does not
@@ -662,9 +670,9 @@ the early environment base. HTML's `[[HostDefined]]` name remains a spec referen
 | Muted classic errors | Replace author-visible details with `Script error.`, an empty filename, zero positions, and a null error. Classic runners supply their script explicitly, including parse failures without an evaluated frame; other callers use the modeled running-script lookup. Uncontrolled engine transitions still limit that lookup. |
 | Omit the error | `omitError` clears only the error value, preserving the other diagnostic attributes. |
 | Dispatch and recursion | Set the global's `inErrorReportingMode`, fire a trusted cancelable ErrorEvent when the global is an EventTarget, then clear the flag. Nested reporting does not dispatch another event on that global; different globals retain independent flags. |
-| Unhandled exception | Cancellation suppresses console reporting. Otherwise log the original exception to the Node console, the permitted developer sink. Dedicated-worker propagation has an explicit throwing boundary instead. |
-| Dedicated-worker propagation | Still needs the associated Worker object, its relevant global, DOM-manipulation task delivery, and implicit-port disentanglement state. The task must fire an event without the error value, then recursively report an unhandled exception with `omitError=true`. Continue through terminated/collected parents while suppressing handlers as specified. |
-| `reportError()` | Window calls its environment's reporter directly. Binding supplies the required argument and receiver ownership. Worker exposure awaits concrete worker globals. |
+| Unhandled exception | Cancellation suppresses further reporting. Dedicated workers forward diagnostic attributes through their startup-supplied owner reporter; outside Worker delivery and live-owner propagation use DOM-manipulation tasks. Other globals retain original-value console reporting. The worker roadmap tracks the remaining production connection and terminated-parent route. |
+| Dedicated-worker propagation | Local worker reporting/cancellation is covered by the §10.2.5 audit. The associated outside Worker, cross-isolate diagnostic transport, and DOM-manipulation task delivery remain pending. The task must fire an event without the error value, then recursively report an unhandled exception with `omitError=true`. Continue through terminated/collected parents while suppressing handlers; port disentanglement exists, but its error-propagation consumer does not. |
+| `reportError()` | Window calls its environment's reporter directly. Binding supplies the required argument and receiver ownership. Worker globals and their environment reporter exist; public worker exposure still needs WindowOrWorkerGlobalScope inclusion/forwarding. |
 | ErrorEvent | DOM event implementation and HTML IDL contribution provide the five attributes and constructor dictionary. An omitted `error` starts as undefined, unlike the explicit null used for muting/omission. |
 
 **Representation review:** extraction returns a typed attribute record in place
@@ -2737,7 +2745,7 @@ media, or parser caller is not by itself a reason to omit the scheduling operati
 | [Window idle periods](https://html.spec.whatwg.org/multipage/webappapis.html#idle-deadline-computation) | Implemented timestamps, idle branch, live 50ms/timer/render deadline, and per-Window coarsening. Window's idle API, callback lists, task delivery, timeout races, and cleanup are connected. | `WindowIdleRendering` still needs AnimationFrameProvider state and the production rendering/refresh host. Headless delivery uses the 50ms and timer bounds without a fake display rate; see the [idle-period slice](#html-8173-idle-period-processing) and [Request Idle Callback](#request-idle-callback-47). |
 | [Rendering](https://html.spec.whatwg.org/multipage/webappapis.html#update-the-rendering) | Document ordering and the ordered update pipeline are present. | The production refresh host and the owners of individual resize, scroll, animation, layout, paint, and observation steps remain absent; an ordered hook is not an implementation of its operation. |
 | Performance reporting | Task timing and long-task call sites are present. | [Long Tasks reporting](https://w3c.github.io/longtasks/#report-long-tasks) and Long Animation Frames task/script/frame records and algorithms are missing. |
-| Worker rendering/shutdown | Common/dedicated/shared global implementations and Agent records exist. `close()` discards queued tasks, and loops reject new tasks for a closing worker global. | [Worker event-loop processing](https://html.spec.whatwg.org/multipage/webappapis.html#event-loop-processing-model) still needs startup/settings, supported dedicated-worker animation callbacks, and the [run a worker](https://html.spec.whatwg.org/multipage/workers.html#run-a-worker) continuation. Queue closure does not implement thread teardown. |
+| Worker rendering/shutdown | Dedicated/shared globals and settings can be composed. `close()` discards queued tasks, loops reject new tasks, and the empty-loop tail destroys the loop after its final checkpoint, then runs the global's timer/port/owner cleanup. The outside `WorkerThread` can forcibly stop native execution and clear/disconnect a supplied dedicated outside port. | [Worker event-loop processing](https://html.spec.whatwg.org/multipage/webappapis.html#event-loop-processing-model) still needs automatic lifetime/suspension monitoring, supported dedicated-worker animation callbacks, and natural native teardown. Outside Worker association and the separate-isolate startup caller remain unfinished; see the [worker processing-model review](../workers/ROADMAP.md#document-order-review). |
 | Checkpoint tails | Rejection notification and DOM delivery are connected. | [IndexedDB transaction cleanup](https://w3c.github.io/IndexedDB/#cleanup-indexed-database-transactions) needs transaction state and the cleanup-event-loop association. [Long Animation Frames checkpoint timing](https://w3c.github.io/long-animation-frames/#record-timing-info-for-microtask-checkpoint) needs pending script/frame entries. The native clear's [ordering and Agent isolation](EVENT-LOOP-ARCHITECTURE.md#node-v8-checkpoint) remain separate engine questions. |
 
 The stable-state operation and its parallel-microtask specification clash are

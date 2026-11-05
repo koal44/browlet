@@ -54,6 +54,16 @@ a runnable task, install it, execute with cleanup, checkpoint, and request anoth
 host turn while runnable work remains. A future bounded batch must still perform
 the checkpoint after each task. "Continually run" does not require a blocking loop.
 
+For a closing dedicated/shared worker, the loop is destroyed only after every
+task queue is empty and the final checkpoint has finished. Non-runnable tasks
+still count. The loop then calls the global's `finishRunning()` continuation to
+clear timers, disconnect its external ports, and empty its owner set. New tasks,
+microtasks, host wake-ups, and resumed spinning tasks cannot restart a destroyed
+loop. `close()` requests a wake-up when needed; later owner monitors must also
+wake the loop after changing closing state. This is cooperative HTML cleanup;
+native thread teardown, forced script abortion, suspension, worker rendering,
+and the Service Workers lifecycle retain their own integration dependencies.
+
 Microtasks queued through `EventLoop.queueMicrotask()` outside an HTML
 task/checkpoint request a coalesced host wake-up. That wake-up drains the same
 engine queue before another ordinary task

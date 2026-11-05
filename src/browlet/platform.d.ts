@@ -29,6 +29,8 @@ export type NavigationTimingType = "navigate" | "reload" | "back_forward";
 
 export type PerformanceTimingConfidenceValue = "high" | "low";
 
+export type WorkerType = "classic" | "module";
+
 export type ShadowRootMode = "open" | "closed";
 
 export type SlotAssignmentMode = "manual" | "named";
@@ -534,6 +536,12 @@ export interface EventSourceInit {
 export interface WindowPostMessageOptions {
   transfer?: Iterable<object>;
   targetOrigin?: string;
+}
+
+export interface WorkerOptions {
+  credentials?: RequestCredentials;
+  name?: string;
+  type?: WorkerType;
 }
 
 export interface PromiseRejectionEventInit {
@@ -3139,6 +3147,11 @@ export interface DedicatedWorkerGlobalScope extends WorkerGlobalScope {
   SecurityPolicyViolationEvent: SecurityPolicyViolationEventConstructor;
   ReportingObserver: ReportingObserverConstructor;
   Performance: PerformanceConstructor;
+  PerformanceEntry: PerformanceEntryConstructor;
+  PerformanceObserver: PerformanceObserverConstructor;
+  PerformanceObserverEntryList: PerformanceObserverEntryListConstructor;
+  PerformanceResourceTiming: PerformanceResourceTimingConstructor;
+  PerformanceServerTiming: PerformanceServerTimingConstructor;
   WorkerNavigator: WorkerNavigatorConstructor;
   ErrorEvent: ErrorEventConstructor;
   MessageEvent: MessageEventConstructor;
@@ -3149,6 +3162,7 @@ export interface DedicatedWorkerGlobalScope extends WorkerGlobalScope {
   WorkerGlobalScope: WorkerGlobalScopeConstructor;
   DedicatedWorkerGlobalScope: DedicatedWorkerGlobalScopeConstructor;
   WorkerLocation: WorkerLocationConstructor;
+  Worker: WorkerConstructor;
   ServiceWorker: ServiceWorkerConstructor;
   PromiseRejectionEvent: PromiseRejectionEventConstructor;
   Event: EventConstructor;
@@ -3215,6 +3229,11 @@ export interface SharedWorkerGlobalScope extends WorkerGlobalScope {
   SecurityPolicyViolationEvent: SecurityPolicyViolationEventConstructor;
   ReportingObserver: ReportingObserverConstructor;
   Performance: PerformanceConstructor;
+  PerformanceEntry: PerformanceEntryConstructor;
+  PerformanceObserver: PerformanceObserverConstructor;
+  PerformanceObserverEntryList: PerformanceObserverEntryListConstructor;
+  PerformanceResourceTiming: PerformanceResourceTimingConstructor;
+  PerformanceServerTiming: PerformanceServerTimingConstructor;
   WorkerNavigator: WorkerNavigatorConstructor;
   ErrorEvent: ErrorEventConstructor;
   MessageEvent: MessageEventConstructor;
@@ -3225,6 +3244,7 @@ export interface SharedWorkerGlobalScope extends WorkerGlobalScope {
   WorkerGlobalScope: WorkerGlobalScopeConstructor;
   SharedWorkerGlobalScope: SharedWorkerGlobalScopeConstructor;
   WorkerLocation: WorkerLocationConstructor;
+  Worker: WorkerConstructor;
   ServiceWorker: ServiceWorkerConstructor;
   PromiseRejectionEvent: PromiseRejectionEventConstructor;
   Event: EventConstructor;
@@ -3295,8 +3315,23 @@ export interface WorkerLocationConstructor {
   [Symbol.hasInstance](value: unknown): value is WorkerLocation;
 }
 
-export interface ServiceWorker extends EventTarget {
+export interface Worker extends EventTarget {
+  terminate(): void;
+  postMessage(message: any, transfer: Iterable<object>): void;
+  postMessage(message: any, options?: StructuredSerializeOptions): void;
+  onerror: EventHandlerNonNull | null;
+  onmessage: EventHandlerNonNull | null;
+  onmessageerror: EventHandlerNonNull | null;
+}
 
+export interface WorkerConstructor extends Ctor<EventTargetConstructor> {
+  readonly prototype: Worker;
+  [Symbol.hasInstance](value: unknown): value is Worker;
+  new (scriptURL: TrustedScriptURL | string, options?: WorkerOptions): Worker;
+}
+
+export interface ServiceWorker extends EventTarget {
+  onerror: EventHandlerNonNull | null;
 }
 
 export interface ServiceWorkerConstructor extends Ctor<EventTargetConstructor> {
@@ -3633,6 +3668,7 @@ export interface Window extends EventTarget {
   MessageChannel: MessageChannelConstructor;
   BroadcastChannel: BroadcastChannelConstructor;
   EventSource: EventSourceConstructor;
+  Worker: WorkerConstructor;
   ServiceWorker: ServiceWorkerConstructor;
   PromiseRejectionEvent: PromiseRejectionEventConstructor;
   Window: WindowConstructor;
