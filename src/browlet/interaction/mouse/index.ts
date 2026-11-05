@@ -1,1 +1,1 @@
-export { LegacyMousePointer } from './legacy-mouse-pointer';
+export { LegacyMouseProcessor } from './legacy-mouse-processor';

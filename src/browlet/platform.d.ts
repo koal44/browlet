@@ -386,6 +386,42 @@ export interface PointerEventInit {
   width?: number;
 }
 
+export interface WheelEventInit {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+  detail?: number;
+  view?: Window | null;
+  altKey?: boolean;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+  modifierAltGraph?: boolean;
+  modifierCapsLock?: boolean;
+  modifierFn?: boolean;
+  modifierFnLock?: boolean;
+  modifierHyper?: boolean;
+  modifierNumLock?: boolean;
+  modifierScrollLock?: boolean;
+  modifierSuper?: boolean;
+  modifierSymbol?: boolean;
+  modifierSymbolLock?: boolean;
+  shiftKey?: boolean;
+  button?: number;
+  buttons?: number;
+  clientX?: number;
+  clientY?: number;
+  movementX?: number;
+  movementY?: number;
+  relatedTarget?: EventTarget | null;
+  screenX?: number;
+  screenY?: number;
+  deltaMode?: number;
+  deltaX?: number;
+  deltaY?: number;
+  deltaZ?: number;
+  momentum?: boolean;
+}
+
 export interface SecurityPolicyViolationEventInit {
   bubbles?: boolean;
   cancelable?: boolean;
@@ -2432,6 +2468,26 @@ export interface PointerEventConstructor extends Ctor<MouseEventConstructor> {
   new (type: string, eventInitDict?: PointerEventInit): PointerEvent;
 }
 
+export interface WheelEvent extends MouseEvent {
+  readonly DOM_DELTA_PIXEL: 0;
+  readonly DOM_DELTA_LINE: 1;
+  readonly DOM_DELTA_PAGE: 2;
+  readonly deltaX: number;
+  readonly deltaY: number;
+  readonly deltaZ: number;
+  readonly deltaMode: number;
+  readonly momentum: boolean;
+}
+
+export interface WheelEventConstructor extends Ctor<MouseEventConstructor> {
+  readonly prototype: WheelEvent;
+  [Symbol.hasInstance](value: unknown): value is WheelEvent;
+  new (type: string, eventInitDict?: WheelEventInit): WheelEvent;
+  readonly DOM_DELTA_PIXEL: 0;
+  readonly DOM_DELTA_LINE: 1;
+  readonly DOM_DELTA_PAGE: 2;
+}
+
 export interface NotRestoredReasonDetails {
   readonly reason: string;
   toJSON(): object;
@@ -3017,6 +3073,7 @@ export interface Window extends EventTarget {
   TextEvent: TextEventConstructor;
   MouseEvent: MouseEventConstructor;
   PointerEvent: PointerEventConstructor;
+  WheelEvent: WheelEventConstructor;
   NotRestoredReasonDetails: NotRestoredReasonDetailsConstructor;
   NotRestoredReasons: NotRestoredReasonsConstructor;
   ViewTransition: ViewTransitionConstructor;

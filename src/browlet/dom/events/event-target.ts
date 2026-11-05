@@ -154,6 +154,15 @@ export class EventTargetImpl {
     );
   }
 
+  /** Whether this target has a listener that can cancel this event type. */
+  // https://dom.spec.whatwg.org/#observing-event-listeners
+  // Registration has already resolved the target's default passive value.
+  hasNonPassiveEventListener(type: string): boolean {
+    return this.#eventListenerList.some(
+      (listener) => !listener.removed && listener.type === type && listener.passive === false,
+    );
+  }
+
   /** Return this target as visible against another target, without modifying either. */
   // https://dom.spec.whatwg.org/#retarget
   retargetAgainst(against: EventTargetImpl): EventTargetImpl {
@@ -237,7 +246,8 @@ export class EventTargetImpl {
 
   /**
    * Dispatch an internally created event without changing its trusted flag.
-   * Internal consumers may capture the completed path before listeners; they must not mutate it.
+   * Internal consumers may observe the completed path before listeners; they must not mutate it.
+   * Input producers can finalize flags from listener observation at this point.
    */
   // https://dom.spec.whatwg.org/#concept-event-dispatch
   dispatch(

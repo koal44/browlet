@@ -756,6 +756,12 @@ coalesced/predicted lists. Its constructor does not register devices, manage act
 pointers/capture, generate trusted samples, or perform hit testing. Native stream
 delivery now prepares trusted sample lists from supplied input; the device adapter,
 HTML's synthetic-pointer-event hookup, and inherited CSS geometry remain unfinished.
+The aggregate mouse source keeps persistentDeviceId=0 because it identifies no
+individual hardware device. Future identified-device producers must use page/session
+identities, randomized for a new session, rather than expose hardware identifiers.
+Optional prediction must not use additional sensitive history outside the current
+gesture. These producer constraints are recorded in source; author-supplied IDs
+and sample lists remain ordinary untrusted constructor data.
 The [PointerEvent object slice](browlet/interaction/events/ROADMAP.md#pointer-events-31-pointerevent-objects-and-orientation)
 records the approved rounding, orientation, and returned-array realm choices.
 UserAgent now retains active input sources with per-type primary selection and
@@ -763,7 +769,10 @@ chorded button transitions. A UserAgent-owned mouse producer now accepts normali
 button actions, queues user-interaction tasks, and registers context-local mouse
 streams before pointer/capture/mapped mouse delivery. Other devices, source
 retirement, and native adapter/WebDriver Actions integration remain unfinished.
-Author construction and dispatch do not mutate input state.
+Author construction and dispatch do not mutate input state. DOM removal now
+repairs each registered stream's previous boundary target before reinsertion, using
+the same stream scan as capture cleanup. Per-Document stream retirement is still
+unfinished; the existing top-level teardown alone does not supply that lifecycle.
 
 Pointer Events §6 exposes `Navigator.maxTouchPoints` and selects BiDi emulation
 before hardware capacity. The native digitizer query is an explicit throwing
@@ -819,14 +828,17 @@ hover target or null. `suppress()` cancels from a private last-input snapshot an
 exits the stream. `updateAfterLayout()` refreshes stationary-pointer boundaries
 without a move event; actual layout invalidation, scheduling, and hit testing
 remain unconnected owner dependencies. The input owner must supply the prepared
-event in its target's realm. Device-to-context ID assignment, stream registration
-and retirement, individual Document teardown, suppression
-triggers (device loss, modal UI, pan/zoom, HTML drag), and compatibility mouse default
-actions still need their producer. Per-pointer previous-boundary-target disconnection
-cleanup must be called by the future removal/input integration before reinsertion;
-checking connectivity during processing cannot detect a missed remove/reinsert.
+event in its target's realm. Mouse registration and queued delivery are connected;
+other devices still need context-local IDs, registration/retirement and their
+suppression triggers (device loss, modal UI, pan/zoom, HTML drag). Remaining mouse
+default actions stay with their HTML owners. DOM removal repairs previous
+boundary targets before reinsertion. Individual Document.destroy() silently
+clears its retained pointer references, including capture and click history,
+without retiring the physical source or clearing surviving Documents' state.
+Recursive/inactive destruction remains an explicit HTML §7.5.10 dependency.
 Author construction and dispatch keep their supplied attributes and do not change
-capture state. No device input or sample generation is connected.
+capture state. Hardware acquisition and measured/predicted sample collection
+remain producer dependencies.
 
 Native raw dispatch rejects insecure target documents before boundary delivery
 or input retention; author dispatch remains available. Native up preparation
@@ -878,6 +890,22 @@ steps also throw until their owners are connected.
 The tests supply those missing capabilities; they do not demonstrate physical
 mouse input, real focus, menus, or cross-document coordinate translation.
 Synthetic dispatch neither produces compatibility events nor changes suppression state.
+
+WheelEvent has its §12.1 constructor, inherited MouseEvent data, delta unit
+constants, and momentum field. Document.wheelInput accepts normalized input and
+explicit gesture-start/end notifications, retains the initial target, and queues
+trusted delivery. Actual DOM-path listeners determine cancelability. Removal,
+inactivity, and destruction clear retained state. This does not yet scroll:
+`hitTest()`, `getLockedElement()`, and `applyDefaultAction()` throw until layout,
+Pointer Lock, and scrolling/zooming owners are connected. Tests control these
+missing effects. Native units/signs/inertia, gesture timing for devices without
+phases, and routing across Documents still need a GUI or automation adapter.
+Synthetic dispatch does not enter transactions or default actions. Native events
+use null relatedTarget like all three browsers, inherited which=1 like Firefox/WebKit,
+and noncancelable passive-only delivery like Chromium/Firefox. Constructor deltaMode
+follows unsigned-long IDL conversion, including values outside the three native
+units, as all three browsers do. Negative zero is preserved like Firefox; momentum
+is exposed like the draft and Chromium, while Firefox/WebKit do not yet implement it.
 
 §3.3.12 now supplies internal click/auxclick/contextmenu creation and pointer-based
 target selection. The stream retains per-button press/release facts across capture release and

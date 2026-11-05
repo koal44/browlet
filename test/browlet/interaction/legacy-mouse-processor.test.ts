@@ -260,7 +260,7 @@ describe('Pointer Events §10.1: one effective legacy mouse position', () => {
   it('does not allocate compatibility state during unrelated DOM removal', () => {
     const browser = new Browlet({ route: () => '' });
     const document = unwrap<DocumentImpl>(browser.document);
-    const getter = vi.spyOn(document, 'legacyMousePointer', 'get');
+    const getter = vi.spyOn(document, 'legacyMouse', 'get');
     browser.document.body!.remove();
     expect(getter).not.toHaveBeenCalled();
   });
@@ -287,7 +287,7 @@ describe('Pointer Events §10.1: one effective legacy mouse position', () => {
 /** Real bindings and DOM dispatch; only the future device producer's normalized input is supplied. */
 function createFixture() {
   const browser = new Browlet({ route: () => '' });
-  const mouse = unwrap<DocumentImpl>(browser.document).legacyMousePointer;
+  const mouse = unwrap<DocumentImpl>(browser.document).legacyMouse;
   const trace: string[] = [];
   const labels = new Map<EventTarget, string>();
   const observe = (target: EventTarget, label: string) => {

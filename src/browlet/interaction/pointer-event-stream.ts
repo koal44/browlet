@@ -14,9 +14,10 @@ import { PointerCapture } from './pointer-capture';
 // https://w3c.github.io/pointerevents/#firing-events-using-the-pointerevent-interface
 // MouseInputProcessor registers mouse ID 1 in TopLevelTraversable.pointerEventStreams.
 // TODO(Pointer Events §3.1 / other input producers): register their context-local
-// IDs independently of UserAgent's source identity. Retirement and individual
-// Document teardown must release capture and Document references; top-level
-// teardown clears the retained stream map.
+// IDs independently of UserAgent's source identity and retire streams after their
+// final notifications. Document.destroy() clears only its retained references;
+// top-level teardown clears the map. Recursive/inactive destruction remains HTML
+// §7.5.10 work; its eventual calls to Document.destroy() must retain this cleanup.
 export class PointerEventStream {
   /** Context-local identifier assigned by the input owner, not the global source identity. */
   pointerId: PointerId;
@@ -38,8 +39,8 @@ export class PointerEventStream {
   // TODO(Pointer Lock): supply the owning Document's locked-element query when
   // composing the input producer. Do not assume an unlocked Document if unavailable.
   #hasLockedElement: (document: DocumentImpl) => boolean;
-  /** Actual DOM dispatch path retained until the next ordinary input or stream retirement. */
-  #previousPath: EventPathItem[] = [];
+  /** Nodes from the actual dispatch path, without unrelated targets or Window references from DOM's path metadata. */
+  #previousPathNodes: NodeImpl[] = [];
   /** Reused input snapshot, never projected or dispatched, so author reinitialization cannot change it. */
   #lastInput: PointerEventImpl | null = null;
   /** Each held button retains its press target until its release or stream cancellation. */
@@ -69,6 +70,15 @@ export class PointerEventStream {
     return ancestors;
   }
 
+  /** Retain only the nodes needed for later removal recovery, in their actual dispatch order. */
+  static #pathNodes(path: EventPathItem[]): NodeImpl[] {
+    const nodes: NodeImpl[] = [];
+    for (const item of path) {
+      if (item.invocationTarget.isNode()) nodes.push(item.invocationTarget);
+    }
+    return nodes;
+  }
+
   /**
    * Prepare normalized input, select its target, and request implicit capture before
    * boundary events or dispatch. Hit testing must use the current input position
@@ -87,6 +97,9 @@ export class PointerEventStream {
   // snapshots, map timestamps to the delivery realm, and optionally predict future
   // samples. initializeSampleLists() enforces list invariants; it does not collect
   // device input, choose a prediction algorithm, or schedule delivery.
+  // https://w3c.github.io/pointerevents/#security-and-privacy-considerations
+  // Predictions should use the current gesture; the producer must not use extra
+  // sensitive history, such as input from other sites, to generate those samples.
   // TODO(Pointer Events §§7.2–7.3 / input producer): capture DirectManipulation
   // permissions at the hit-tested element before down's author callbacks and
   // retain them for this contact. Consult every participant before pinch zoom;
@@ -147,7 +160,7 @@ export class PointerEventStream {
     const input = this.#lastInput ??= new PointerEventImpl('', {}, 0);
     input.copyInputFrom(event);
     input.type = type;
-    const mouse = input.isPrimary ? target.nodeDocument.legacyMousePointer : null;
+    const mouse = input.isPrimary ? target.nodeDocument.legacyMouse : null;
     mouse?.preparePointerEvent(target);
     this.clearDisconnectedTarget();
     // §§3.3.1–3.3.2 require entry before a first non-hover pointerdown as well as
@@ -177,16 +190,16 @@ export class PointerEventStream {
       this.#pressTargets.clear();
       this.#activation = null;
     }
-    let path: EventPathItem[] = [];
+    let path: NodeImpl[] = [];
     if (type === 'pointerdown') this.#pointerDownSent = true;
     else if (type === 'pointerup' || type === 'pointercancel') this.#pointerDownSent = false;
     // SPEC_CLASH(pointer-target-after-boundary-mutation): Keep the selected target like the draft/Chromium/Firefox; WebKit can redirect after reparenting in a boundary listener.
-    const result = target.dispatch(event, false, (dispatchPath) => { path = dispatchPath; });
+    const result = target.dispatch(event, false, (dispatchPath) => { path = PointerEventStream.#pathNodes(dispatchPath); });
     // The source snapshot survives author reinitialization and DOM retargeting.
     mouse?.dispatchAfterPointer(input, !result, mouseClickCount, focusOnMouseDown);
     this.previousTarget = target;
     this.needsOverEvent = false;
-    this.#previousPath = path;
+    this.#previousPathNodes = path;
     this.clearDisconnectedTarget();
     if (type === 'pointerup' || type === 'pointercancel') {
       // https://w3c.github.io/pointerevents/#implicit-release-of-pointer-capture
@@ -199,12 +212,12 @@ export class PointerEventStream {
       const hoverTarget = type === 'pointerup' ? getHoverTarget() : null;
       const hoverPath = this.#sendBoundaryEvents(input, hoverTarget);
       mouse?.updatePosition(input, hoverTarget);
-      if (hoverPath !== null) this.#previousPath = hoverPath;
+      if (hoverPath !== null) this.#previousPathNodes = hoverPath;
       this.previousTarget = hoverTarget;
       this.needsOverEvent = false;
       this.clearDisconnectedTarget();
       if (hoverTarget === null) {
-        this.#previousPath = [];
+        this.#previousPathNodes = [];
         this.#lastInput = null;
       }
     }
@@ -329,25 +342,58 @@ export class PointerEventStream {
     if (path === null) return;
     if (input.isPrimary) {
       const document = target?.nodeDocument ?? this.previousTarget?.nodeDocument;
-      document?.legacyMousePointer.updatePosition(input, target);
+      document?.legacyMouse.updatePosition(input, target);
     }
-    this.#previousPath = path;
+    this.#previousPathNodes = path;
     this.previousTarget = target;
     this.needsOverEvent = false;
     this.clearDisconnectedTarget();
   }
 
+  /**
+   * Release a destroyed Document's retained input, capture, boundaries and click history.
+   * This is Browlet lifecycle cleanup, not stream suppression: it runs no author code
+   * and keeps the pointer ID, device capabilities and physical button snapshot.
+   */
+  clearForDocument(document: DocumentImpl): void {
+    this.capture.clearForDocument(document);
+    if (this.activeDocument === document) {
+      this.activeDocument = null;
+      this.#pointerDownSent = false;
+      this.#lastInput = null;
+    } else if (this.#lastInput?.view?.document === document) {
+      this.#lastInput = null;
+    }
+    if (this.previousTarget?.nodeDocument === document) {
+      this.previousTarget = null;
+      this.needsOverEvent = false;
+      this.#previousPathNodes = [];
+    } else {
+      // A target may have been adopted into a surviving Document since dispatch.
+      this.#previousPathNodes = this.#previousPathNodes.filter((node) => node.nodeDocument !== document);
+    }
+    for (const [button, target] of this.#pressTargets) {
+      if (target.nodeDocument === document) this.#pressTargets.delete(button);
+    }
+    const activation = this.#activation;
+    if (activation && (
+      activation.target.nodeDocument === document || activation.pressTarget?.nodeDocument === document ||
+      activation.input.view?.document === document
+    )) {
+      this.#activation = null;
+    }
+  }
+
   /** Repair a removed previous target using its original dispatch path and require another over event. */
-  // TODO(Pointer Events §3.1.3 / DOM removal): invoke during removal, before reinsertion.
-  // The dispatch boundary also checks connectivity, but cannot detect a missed remove/reinsert.
+  // TopLevelTraversable invokes this from DOM removal before reinsertion; the
+  // dispatch boundary also checks targets disconnected during author callbacks.
   clearDisconnectedTarget(): void {
     if (this.previousTarget === null || this.previousTarget.isConnected) return;
     let passedPrevious = false;
-    for (const item of this.#previousPath) {
-      const node = item.invocationTarget;
+    for (const node of this.#previousPathNodes) {
       if (node === this.previousTarget) {
         passedPrevious = true;
-      } else if (passedPrevious && node.isNode() && node.isConnected) {
+      } else if (passedPrevious && node.isConnected) {
         this.previousTarget = node;
         this.needsOverEvent = true;
         return;
@@ -379,7 +425,7 @@ export class PointerEventStream {
   }
 
   /** Send a transition and return the over event's path, or null when no transition was needed. */
-  #sendBoundaryEvents(event: PointerEventImpl, target: NodeImpl | null): EventPathItem[] | null {
+  #sendBoundaryEvents(event: PointerEventImpl, target: NodeImpl | null): NodeImpl[] | null {
     const previous = this.previousTarget;
     if (previous === target && !this.needsOverEvent) return null;
 
@@ -398,9 +444,9 @@ export class PointerEventStream {
       this.#fireBoundary('pointerleave', exited[index]!, target, event);
     }
     if (target === null) return [];
-    let path: EventPathItem[] = [];
+    let path: NodeImpl[] = [];
     // SPEC_CLASH(pointer-boundary-removed-related-target): Keep the repaired previous target like Chromium/Firefox; WebKit uses null after removal.
-    this.#fireBoundary('pointerover', target, previous, event, (dispatchPath) => { path = dispatchPath; });
+    this.#fireBoundary('pointerover', target, previous, event, (dispatchPath) => { path = PointerEventStream.#pathNodes(dispatchPath); });
     for (let index = enterCount - 1; index >= 0; index--) {
       this.#fireBoundary('pointerenter', entered[index]!, previous, event);
     }
@@ -413,7 +459,7 @@ export class PointerEventStream {
     capturePath?: (path: EventPathItem[]) => void,
   ): void {
     if (type === 'pointerover' && source.isPrimary && !this.supportsHover && !this.#pointerDownSent) {
-      target.nodeDocument.legacyMousePointer.dispatchInitialMove(source, target);
+      target.nodeDocument.legacyMouse.dispatchInitialMove(source, target);
     }
     const notification = target.createTrustedEvent(PointerEventImpl) as PointerEventImpl;
     notification.copyInputFrom(source);

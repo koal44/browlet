@@ -23,8 +23,9 @@ The complete main UI Events draft was skimmed for this inventory. The separate
 `uievents/event-algo.bs` companion has `Status: DREAM`; its exploratory algorithms
 are research material, not a substitute for the main draft. Pointer Events was
 checked for the shared interface dependencies and input-processing boundaries;
-its full algorithm audit is still ahead.
-The Input Events reference was cloned on the same date and inspected for its
+its audit now reaches the WheelEvent interface, with explicit unfinished owner dependencies.
+Pointer Events was rechecked against upstream on 2026-11-04 at the same revision.
+The Input Events reference was cloned on 2026-11-02 and inspected for its
 InputEvent partials, inputType vocabulary, and editing/IME producer boundary;
 this does not constitute an audit of that whole specification.
 The key/code references were cloned on the same date and inspected for value
@@ -1118,9 +1119,10 @@ completion. The stream uses the original path to find a surviving connected
 ancestor if a listener removes or reparents/removes the target. It sets
 needsOverEvent so a subsequent delivery sends over even at that same ancestor.
 
-`clearDisconnectedTarget()` is the explicit removal-owner operation. As with
-capture cleanup, it must be called during removal before reinsertion; checking
-connectivity at the next dispatch cannot reconstruct a missed remove/reinsert.
+`clearDisconnectedTarget()` is the explicit removal-owner operation. The closing
+audit now connects it to DOM removal through the existing top-level stream scan,
+alongside capture cleanup, before reinsertion. Checking connectivity at the next
+dispatch cannot reconstruct a missed remove/reinsert.
 §3.1.4 layout-triggered delivery is separate: Chromium/Firefox can deliver the
 removal recovery before the next native move; this slice performs it on the next
 input-owner call. No layout wake-up, top-level ID registry, native adapter,
@@ -1555,8 +1557,9 @@ the active-Document restriction across a child frame. Eric approved:
 
 The source retains the unfinished owners explicitly: the input producer must
 assign IDs, register streams before delivery, and retire them after final
-notifications. It must connect individual Document teardown and supply the
-Pointer Lock owner's required query. No default unlocked state or device
+notifications. Individual Document teardown is connected by the
+[closing lifecycle integration](#document-lifetime-integration). Producers must
+supply the Pointer Lock owner's required query. No default unlocked state or device
 registration is inferred from author construction/dispatch. The shared map makes
 these APIs callable once input is supplied; it is not a native input pipeline.
 
@@ -1870,7 +1873,7 @@ beside `prepareTarget()`; this slice does not claim a device scheduling pipeline
 ## Pointer Events §10.1: effective legacy mouse position
 
 [§10.1](https://w3c.github.io/pointerevents/#tracking-the-effective-position-of-the-legacy-mouse-pointer)
-now has a lazy `Document.legacyMousePointer` owner in `interaction/mouse/`.
+now has a lazy `Document.legacyMouse` owner in `interaction/mouse/`.
 Its `updatePosition(event, target)` shares one position across all primary pointer
 types. The selected target is explicit because this precedes DOM dispatch's
 assignment to `event.target`; null means leaving the window. Unchanged targets
@@ -1936,7 +1939,7 @@ the reproducible probe remains in Experimental.
 The [hover](https://w3c.github.io/pointerevents/#mapping-for-devices-that-support-hover)
 and [non-hover](https://w3c.github.io/pointerevents/#mapping-for-devices-that-do-not-support-hover)
 algorithms now surround ordinary dispatch in `PointerEventStream`. The existing
-Document-owned `LegacyMousePointer` updates boundaries before primary down/move/up,
+Document-owned `LegacyMouseProcessor` updates boundaries before primary down/move/up,
 then maps down/move/up/cancel after pointer listeners. Cancellation sends mouseup
 to Window before capture loss and boundary exit. Nonprimary input produces no
 compatibility events. Raw updates produce no ordinary mapped mouse motion.
@@ -1948,7 +1951,7 @@ Eric approved the required `supportsHover` constructor input and
 manipulation and pointerType; click counting is independent of PointerEvent's
 required zero detail. The optional sample-list argument remains last.
 
-`LegacyMousePointer` owns a per-pointer-type PREVENT MOUSE EVENT set. A canceled
+`LegacyMouseProcessor` owns a per-pointer-type PREVENT MOUSE EVENT set. A canceled
 primary down suppresses mapped down/move/up until up/cancel; a hover move with
 zero buttons also clears a stale flag after a release outside the context.
 Passive listeners cannot set it, and canceling later pointer events does not set
@@ -2314,7 +2317,7 @@ event-definition registry is needed for these sections.
 
 | Requirement | Implementation and evidence |
 | --- | --- |
-| Nested/overlapping target order | `LegacyMousePointer.updatePosition()` sends out/leave before over/enter, leaves inside-out, enters outside-in, and excludes common ancestors. A new queued-input regression covers entry into three nested elements, return to an ancestor, and exit. All three browser probes agree on this ordinary sequence. |
+| Nested/overlapping target order | `LegacyMouseProcessor.updatePosition()` sends out/leave before over/enter, leaves inside-out, enters outside-in, and excludes common ancestors. A new queued-input regression covers entry into three nested elements, return to an ancestor, and exit. All three browser probes agree on this ordinary sequence. |
 | Stationary layout boundaries | `PointerEventStream.updateAfterLayout()` updates pointer and mouse boundaries without inventing a move. The new integration test verifies this after a producer-delivered position; layout still owns detecting/scheduling changes and hit testing. |
 | Button/click sequence and counts | The producer sends down/up before adapter-qualified click/auxclick, then any recognized primary dblclick. `clickCount` is explicitly the gesture's UI Events detail, including the upcoming click count on down/up. Recognition, tolerances, count reset, and OS timing remain adapter inputs. |
 | Removal during mouseup | Four new regressions first exposed click/auxclick on a detached target, with and without capture. `dispatchActivation()` now checks the selected target's connectivity before allocating or dispatching the activation. All three browsers suppress this detached case. Immediate reinsertion follows the approved Firefox choice below. |
@@ -2355,7 +2358,215 @@ cases and has no expected failures or skips. Typecheck, type contracts, scoped
 lint, import boundaries, and diff checks pass. The only runtime change is the
 activation target's connectivity guard; no addon or engine changes are needed.
 
-## Next in document order
+## Pointer Events §12.1: WheelEvent
+
+`WheelEventImpl` extends MouseEvent in this event foundation. Its declarations
+supply the Window constructor, inherited MouseEventInit conversion, three delta
+unit constants, double-valued deltaX/Y/Z, unsigned-long deltaMode, and momentum.
+Binding supplies timestamps, readonly accessors, receiver checks, realm-owned
+errors, and subclass construction. No new native hooks or event-dispatch path
+are needed.
+
+Author construction does not infer trusted wheel flags or convert the supplied
+units. Inherited initEvent/initUIEvent/initMouseEvent preserve wheel-specific
+fields. DOM's legacy createEvent table has no WheelEvent entry; all three browsers
+also reject the singular/plural names, and no initWheelEvent is added.
+Existing onwheel handlers and DOM passive-listener cancellation rules apply.
+
+The browser-only probe is
+`node-compat/experimental/input-delivery/wheel-event.mjs`; run it with
+`node input-delivery/wheel-event.mjs` from Experimental. Chromium 156.0.8078.4,
+Firefox 157.0, and WebKit 27.2 agree on defaults, full double precision, nonfinite
+delta rejection, constants, inherited initialization, and borrowed getter brands.
+Eric approved these choices on 2026-11-04:
+
+- `SPEC_CLASH(wheel-event-delta-mode)`: follow the constructor's unsigned-long
+  IDL and all three browsers, accepting converted values outside 0/1/2. The
+  prose says deltaMode must be a DOM_DELTA constant; native input must select
+  one of those units, without restricting arbitrary author construction.
+- `SPEC_CLASH(wheel-event-momentum)`: expose the draft's boolean field, as
+  Chromium does. Firefox/WebKit do not yet expose it.
+- `SPEC_CLASH(wheel-event-negative-zero)`: retain negative zero under Web IDL
+  double conversion, as Firefox does. Chromium/WebKit normalize the probed deltaX
+  to positive zero; this probe did not establish every axis.
+
+Native delivery is covered by the following §12 slice. Author construction and
+synthetic dispatch do not enter that producer or request scrolling/zooming.
+
+Validation: all 15 new WheelEvent tests pass on custom Node, Node 24.19.0, and
+Node 26.8.1, each with the addon disabled and enabled. With the existing MouseEvent
+and UIEvent tests, each configuration passes 49 tests, with no expected failures
+or skips. Project typecheck, targeted lint, and import-boundary checks pass.
+
+## Pointer Events §12: wheel input and transactions
+
+`Document.wheelInput` lazily owns `WheelInputProcessor`. This ownership, receipt
+snapshots, and HTML task entry are Browlet integration, approved by Eric on
+2026-11-04. §12 supplies the transaction-target, trusted-event, and cancellation
+requirements; it does not prescribe a queue API or a Document-owned class.
+
+`queue(input)` copies normalized mouse/wheel data and shared time at receipt,
+then delivers on the existing user-interaction task source. A required
+`startsTransaction` flag selects a new gesture; continuing and momentum updates
+retain its initial target. `queueEnd()` ends that gesture in queue order without
+inventing an event. No polling, guessed inactivity timer, or per-event device-unit
+conversion is introduced. The adapter owns physical input normalization, sign
+consistency, units, inertia, gesture timing for devices without phases, and
+cross-Document routing/coordinate translation before this entry.
+
+DOM builds the dispatch path once. Its existing pre-listener callback asks each
+path target whether it has an effective non-passive wheel listener, including
+slots, shadow roots, and Window. Registration has already resolved passive
+defaults. Only uncanceled delivery requests a default action; that operation
+receives the private input snapshot, so author changes to event properties cannot
+change the requested measurements. Event allocation uses the selected target's
+creation realm, while view uses its current Document. Synthetic dispatch has no
+transaction or native-default-action effect.
+
+The existing post-unlink Document notification now releases removed wheel targets
+as well as repairing legacy mouse position. It does not allocate unused input
+state. Removal/reinsertion releases retention; a state-preserving move keeps it.
+Inactivity clears the target and invalidates queued input even after reactivation;
+Document destruction also removes queued tasks through its existing cleanup.
+
+Browser evidence: `node input-delivery/native-wheel.mjs` in Experimental, using
+Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2. It checks trusted delivery,
+passive defaults, cancellation, and target mutations. Playwright exposes wheel
+notifications without native gesture-phase control: its two-event relocation
+results do not prove behavior within a single physical gesture. Blink's
+`MouseWheelEventManager` retains a frame-local target and consumes input phases;
+Gecko's `WheelTransaction` retains event/scroll targets with preference-based
+timing. These support explicit adapter timing rather than a guessed timeout here.
+
+Approved choices and recorded differences:
+
+- `SPEC_CLASH(wheel-related-target)`: null, matching all three browsers. The
+  draft's wheel table names the pointer's current target, which can instead suppress
+  DOM shadow dispatch when it equals the event target.
+- `SPEC_CLASH(native-wheel-which)`: inherit MouseEvent's button+1 value, yielding
+  one for native button zero, as Firefox/WebKit do. Chromium reports zero.
+- `SPEC_CLASH(wheel-passive-cancelability)`: no non-passive listener on the actual
+  path means noncancelable, following §12/DOM and Chromium/Firefox. WebKit keeps
+  cancelable=true in the probe, although passive preventDefault still does nothing.
+- `SPEC_CLASH(wheel-canceled-transaction)`: cancellation blocks one default
+  action without ending the gesture. Blink's manager also clears its target on
+  cancellation; §12 does not require that policy. Eric approved retaining the
+  target until adapter boundaries, removal, or owner lifetime changes.
+- `SPEC_GAP(wheel-removed-target)`: §12 supplies no removal-recovery algorithm.
+  End retention at unlinking, informed by Blink's ElementRemoved hook, so reinsertion
+  cannot silently restore the old gesture target.
+
+Reached owner dependencies are callable and throwing in `wheel/input.ts`:
+
+- `hitTest(clientX, clientY)`: Pointer Events §12/CSSOM View hit testing, with
+  painted text containment and HTML inertness/input eligibility supplied by layout.
+- `getLockedElement()`: Pointer Lock's pointer-lock state redirects wheel input;
+  that owner/adapter must also supply frozen absolute coordinates when locked.
+- `applyDefaultAction(target, input)`: §12's scroll/zoom action and CSSOM View
+  scrolling, including scrollable-target choice, line/page geometry, and platform
+  preferences. A modifier alone does not identify whether the intended effect is zoom.
+
+Validation: the 22 new input tests and 49 WheelEvent/MouseEvent/UIEvent tests pass
+on custom Node, Node 24.19.0, and Node 26.8.1, with the addon disabled and enabled:
+71 ordinary passes per configuration, no skips or expected failures. The custom
+addon run also passes 218 tests including existing DOM dispatch, mouse/removal,
+pointer capture, and Document lifecycle coverage. Project typecheck, focused lint,
+and import-boundary checks pass.
+
+## Pointer Events §§13–16: closing audit
+
+Reviewed the remaining local draft at the revision above:
+
+| Section | Result |
+| --- | --- |
+| §13 Examples | Informative uses of existing constructors, listeners, pointer types, sample lists, and device IDs. No additional event algorithm. |
+| §14 Security and privacy | Sensor-disclosure choices belong to future device acquisition. Prediction must not draw on extra sensitive data such as cross-site input history; the existing producer TODO and sample-input contract now say so. |
+| §15 Glossary | Confirms active source versus nonzero buttons, per-pointer active Document, measurable input fields, and layout-owned topmost targeting. Touchpad wheel input is not itself direct-manipulation input. No additional implementation class. |
+| §16 Legacy event initializers | The separate MouseEvent partial already supplies initMouseEvent with every declared default/type. Existing tests cover all arguments, conversion before the dispatch guard, inherited reset behavior, retained unaddressed fields, and receiver/realm identity. |
+
+The closing appendices contain acknowledgments, revision history, and generated
+IDL; they introduce no further runtime steps. No new browser policy was selected.
+
+§3.1's device identity requirement remains a producer obligation:
+persistentDeviceId is zero when the generating device is not identified. An
+identified device needs a page/session association and a newly randomized ID for
+a new session, rather than its hardware identifier. The current aggregate mouse
+source supplies no hardware identity and keeps zero. Author constructor inputs
+are untrusted data and are not randomized or interpreted as device registration.
+The source field and producer/sample contracts name these future obligations.
+No prediction algorithm or hardware identity store is introduced by this audit.
+
+### Earlier local hookup found during the audit
+
+The existing pointer removal operation had no DOM caller. Two new regressions
+through the queued mouse producer failed: after removing a target's subtree,
+with or without immediate reinsertion, previousTarget still referred to the
+disconnected child instead of the surviving dispatch ancestor. Reinsertion made
+the next dispatch's connectivity check miss the removal altogether.
+
+TopLevelTraversable's existing post-unlink stream scan now calls
+clearDisconnectedTarget() alongside pending-capture release. Its helper is
+renamed notifyPointerTargetRemoval(); no extra traversal, registry, or author
+callback is added. The next input sends the required pointerover using the
+repaired ancestor. The third regression confirms that state-preserving moves
+do not trigger this repair. This retains the already approved boundary policy.
+
+Validation: 66 movement/boundary/capture tests pass on custom Node, Node 24.19.0,
+and Node 26.8.1, each with the addon disabled and enabled. The broader custom-addon
+run passes 171 tests including sample lists, legacy MouseEvent initialization,
+PointerEvent construction, legacy mouse processing, and wheel delivery. No expected
+failures or skips were added. Typecheck, focused lint, import checks, and diff
+checks pass.
+
+### Document lifetime integration
+
+The existing [HTML destroy operation](https://html.spec.whatwg.org/multipage/document-lifecycle.html#destroy-a-document)
+already performs single-active-Document cleanup from its event-loop task.
+Browlet now connects retained pointer cleanup there, alongside the existing
+legacy mouse and wheel cleanup. This is implementation lifetime work, not an
+additional Pointer Events firing algorithm or an implementation of unloading.
+
+Destroying a Document does not disconnect its retained DOM tree. The regression
+therefore cannot rely on isConnected: before the repair, old capture redirected
+later queued mouse movement into the destroyed Document, completed activation
+still fired there, and adopting an old pressed element afterward revived its
+click pair.
+
+TopLevelTraversable scans its existing stream map and delegates selective cleanup
+to PointerEventStream and PointerCapture. It clears the destroyed Document's
+active selection, pending/effective capture, boundary path, input view and button
+history without dispatching author events. Stream identity, device capabilities,
+physical button state and surviving Documents' targets/pairs remain intact.
+DOM's captured path is retained as nodes only; unused related-target and Window
+metadata cannot keep another Document alive. Document task removal remains the
+existing event-loop operation, including queued mouse input.
+
+This closes the identified local pointer/wheel lifecycle hooks. It does not
+implement HTML §7.5.9 unloading, §7.5.10 recursive/inactive destruction or bfcache
+policy. Those existing throwing dependencies remain with their HTML owner, and
+their eventual destruction paths must retain this per-Document cleanup.
+
+Validation: all five new regressions first failed against the previous code.
+The focused 59-test destruction/boundary/capture run passes on custom Node,
+Node 24.19.0 and Node 26.8.1, each stock and addon. The broader custom-addon
+run passes 147 tests, including queued mouse input and top-level destruction.
+No skips or expected failures were added. Typecheck and focused lint pass.
+
+## Status and remaining work
+
+The document-order reading and algorithm audit has reached the end of the draft.
+It does not make every producer and owner integration complete.
+
+- **HTML lifecycle owner:** the existing single-Document destruction path now
+  clears retained input state. Recursive/inactive destruction and unloading
+  remain explicit HTML §§7.5.9–7.5.10 dependencies, not new input algorithms.
+- **Other-device producers:** source registration/retirement, context-local IDs,
+  session device identity, sensor acquisition, batching, and optional prediction.
+- **Other specification or host owners:** Pointer Lock, layout hit testing and
+  coordinates, scrolling/zooming, HTML activation/focus/editing/drag behavior,
+  native menus, device adapters, and WebDriver Actions. Reached operations retain
+  their named throwing dependencies; optional future producers are not simulated.
+
 
 §3.1.5's orientation conversion is already covered by PointerEvent construction.
 §3.2's initialization/creation algorithms are implemented, and §§3.3.1–3.3.11's
@@ -2373,13 +2584,13 @@ target maintenance are implemented up to the producer dependencies above. §10's
 shared position, hover/non-hover mapping, and suppression are connected to the
 internal stream. §11's audit has reached the end of §11.4, with mouse-button, qualifying
 click/double-click, unlocked movement, and mouse context-menu production
-implemented up to the dependencies above. Pause feature work here for consolidation;
-§12 still needs WheelEvent and wheel-event processing, followed by the closing
-examples/security/glossary/legacy audit. Other-device
-stream registration, retirement, and per-pointer previous-boundary-target removal
-notification remain explicit integration work.
-Those steps must consume active source
-state and expose any reached targeting/input dependencies explicitly in code;
+implemented up to the dependencies above. §12 now supplies WheelEvent and queued
+wheel transactions, cancellation, and lifecycle cleanup up to its explicit owner
+dependencies. The closing audit above completes the reading pass and connects
+per-pointer previous-boundary-target removal notifications. Individual Document
+cleanup is connected at the existing destroy hook; other-device
+registration/retirement remains explicit integration work. Those producers must
+consume active source state and expose reached targeting/input dependencies in code;
 the MouseEvent geometry dependencies remain explicit. Editing and selection producers
 remain with their HTML/Input Events/Selection API owners. Complete HTML §6.6
 before claiming focus-event production, including the main/legacy focus-order

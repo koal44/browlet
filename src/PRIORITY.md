@@ -142,9 +142,17 @@ press/release pair. Movement supplies secure raw/pointer/mouse delivery with sha
 receipt-time input; context menus honor adapter timing and cancellation. The order
 and event-type audit also prevents activation on a disconnected release target.
 Layout, Pointer Lock, HTML activation/focus, and native menu UI remain explicit
-callable dependencies. Pause here for consolidation before §12 Wheel Events.
-Other device-to-context ID assignment, retirement, individual Document teardown,
-removal hookup, and the remaining input/default-action producers remain explicit dependencies.
+callable dependencies. §12 now supplies WheelEvent construction and Document-owned
+wheel transactions, queued delivery, and listener-based cancelability. Hit testing,
+Pointer Lock, and scrolling/zooming remain explicit callable dependencies; native
+normalization, gesture timing, and cross-Document routing remain adapter work.
+The closing examples/security/glossary/legacy audit is complete. DOM removal now
+connects previous-pointer-target repair through the existing capture-cleanup scan.
+Individual Document.destroy() now clears its retained pointer state while
+preserving surviving Documents and physical device state. This closes the
+identified local pointer/wheel plumbing. Recursive/inactive destruction remains
+HTML §7.5.10 work; other-device ID assignment/retirement and input/default-action
+producers retain their explicit dependencies.
 HTML §8.1.8.3's synthetic
 pointer-event operation still needs its hookup. Input producers retain
 their HTML, editing, and layout owners.

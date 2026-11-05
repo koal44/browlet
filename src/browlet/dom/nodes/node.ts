@@ -809,11 +809,11 @@ export abstract class NodeImpl extends EventTargetImpl {
     const nextSibling = this.nextSibling;
     this.#removeTreeNode();
 
-    // Pointer Events §8.5: release disconnected pending capture before removal
-    // steps can reinsert the subtree. DOM's state-preserving move bypasses this.
-    this.getNodeNavigable()?.topLevelTraversable.releaseDisconnectedPointerCaptures();
-    // Pointer Events §10: preserve the compatibility mouse's ancestor at removal time.
-    this.nodeDocument.notifyLegacyMouseRemoval(this, parent);
+    // Pointer Events §§3.1.3/8.5: repair previous targets and release pending capture
+    // before removal steps can reinsert the subtree. State-preserving moves bypass this.
+    this.getNodeNavigable()?.topLevelTraversable.notifyPointerTargetRemoval();
+    // Pointer Events §§10/12: preserve the mouse's removal ancestor and release wheel targets.
+    this.nodeDocument.notifyInputTargetRemoval(this, parent);
 
     const slottable: ElementImpl | TextImpl | null = this.isElement() || this.isText() ? this : null;
     const slot = slottable?.getAssignedSlot() ?? null;

@@ -72,8 +72,20 @@ and [context menus](events/ROADMAP.md#pointer-events-11218-mouse-context-menus)
 for the boundary and next algorithms.
 
 The [§§11.3–11.4 audit](events/ROADMAP.md#pointer-events-113114-mouse-order-and-event-type-audit)
-closes the mouse-delivery pass at its explicit owner dependencies. Pause here for
-consolidation before §12's Wheel Events work.
+closes the mouse-delivery pass at its explicit owner dependencies. §12 now
+provides WheelEvent construction and Document-owned queued wheel delivery.
+The adapter supplies normalized measurements and explicit gesture boundaries;
+transactions retain their initial target, observe DOM listeners for cancelability,
+and request default actions only after uncanceled dispatch. Named operations throw
+until hit testing, Pointer Lock state, and scrolling/zooming are connected.
+See the [wheel-input slice](events/ROADMAP.md#pointer-events-12-wheel-input-and-transactions).
+The [closing audit](events/ROADMAP.md#pointer-events-1316-closing-audit) is complete;
+legacy initialization was already implemented. It also connects the missing
+previous-pointer-target repair to DOM removal.
+[Individual Document cleanup](events/ROADMAP.md#document-lifetime-integration)
+now clears retained pointer state through the existing Document.destroy() hook.
+The identified local pointer/wheel plumbing is complete. Recursive/inactive
+destruction remains HTML §7.5.10 work, separate from the unfinished input/layout owners.
 
 The first visible dependencies are HTML §6.6's focus model; HTML §6.8 editing,
 Selection API and Input Events; keyboard layout/modifier input and IME behavior;

@@ -13,8 +13,8 @@ import { MouseEventImpl, type MouseEventInit, type MouseEventInput } from './mou
 
 /** Pointer data supplied by construction, without registering a live device or active pointer. */
 // https://w3c.github.io/pointerevents/#pointerevent-interface
-// TODO(Pointer Events §§3.1.3–3.1.4, 3.3): native production must consume the
-// UserAgent's activePointers, map context-local IDs, hit test, invoke PointerCapture processing, and order events.
+// MouseInputProcessor connects trusted mouse delivery through PointerEventStream.
+// Other device producers still own acquisition, identity, registration, and retirement.
 export class PointerEventImpl extends MouseEventImpl {
   pointerId: PointerId;
   /** Contact geometry in CSS pixels. */
@@ -31,6 +31,11 @@ export class PointerEventImpl extends MouseEventImpl {
   azimuthAngle: number;
   pointerType: string;
   isPrimary: boolean;
+  /** Author-supplied data; trusted producers use zero for an unidentified device. */
+  // https://w3c.github.io/pointerevents/#dom-pointerevent-persistentdeviceid
+  // TODO(native device identity): map identifiable hardware to a page/session ID,
+  // randomize it for a new session, and never expose the hardware identifier itself.
+  // The aggregate mouse producer has no identified device and retains zero.
   persistentDeviceId: number;
   /** Retained event identities, independent of each author-facing sequence result. */
   #coalescedEvents: PointerEventImpl[];
@@ -355,7 +360,11 @@ export type PointerActivationEventType = 'click' | 'auxclick' | 'contextmenu';
 export type PointerInputEventType = 'pointerover' | 'pointerenter' | 'pointerdown' | 'pointermove' | 'pointerrawupdate' |
   'pointerup' | 'pointercancel' | 'pointerout' | 'pointerleave';
 
-/** Chronological native input snapshots; delivery creates independent platform events from them. */
+/**
+ * Chronological native input snapshots; delivery creates independent platform events.
+ * The producer owns prediction provenance; list validation cannot detect sensitive
+ * history from outside the current gesture.
+ */
 export type PointerEventSamples = {
   coalescedEvents: PointerEventImpl[];
   predictedEvents: PointerEventImpl[];

@@ -41,7 +41,8 @@ import { BeforeUnloadEventImpl, HashChangeEventImpl } from '../../browsing/navig
 import {
   UIEventImpl, FocusEventImpl, KeyboardEventImpl, CompositionEventImpl, TextEventImpl, MouseEventImpl, pointerEventHandlers,
 } from '../../interaction/events/index';
-import { LegacyMousePointer } from '../../interaction/mouse/index';
+import { LegacyMouseProcessor } from '../../interaction/mouse/index';
+import { WheelInputProcessor } from '../../interaction/wheel/index';
 import {
   InsecureRequestsPolicy, PolicyContainer, OpenerPolicy, PermissionsPolicy, PermissionsPolicyImpl, SandboxingFlagSet,
   type SandboxingFlag, type PolicyControlledFeature, type PolicyFeatureValue,
@@ -273,7 +274,9 @@ export class DocumentImpl extends NodeImpl {
   /** Internal subscribers notified when navigation changes this document's activity. */
   #fullyActiveObservers = new Set<FullyActiveStateObserver>();
   /** Shared compatibility mouse position, allocated only when a primary pointer is delivered. */
-  #legacyMousePointer?: LegacyMousePointer;
+  #legacyMouse?: LegacyMouseProcessor;
+  /** Wheel gesture target and queued input, allocated only for native/automation delivery. */
+  #wheelInput?: WheelInputProcessor;
   /** Lazily created style engine for this document. */
   #stylelet?: Stylelet;
   /** Stylesheet collections and matching context, retained independently of the engine. */
@@ -320,8 +323,13 @@ export class DocumentImpl extends NodeImpl {
   }
 
   /** One effective mouse position shared by primary mouse, pen, and touch input in this Document. */
-  get legacyMousePointer(): LegacyMousePointer {
-    return this.#legacyMousePointer ??= new LegacyMousePointer(this);
+  get legacyMouse(): LegacyMouseProcessor {
+    return this.#legacyMouse ??= new LegacyMouseProcessor(this);
+  }
+
+  /** Native/automation wheel entry for this receiving viewport. */
+  get wheelInput(): WheelInputProcessor {
+    return this.#wheelInput ??= new WheelInputProcessor(this);
   }
 
   /** Classic history state owned by this Document rather than by its Window. */
@@ -1405,7 +1413,11 @@ export class DocumentImpl extends NodeImpl {
     this.salvageable = false;
     for (const port of global.messagePorts) port.disentangle();
     this.runUnloadingCleanup();
-    this.#legacyMousePointer?.clear();
+    this.#legacyMouse?.clear();
+    this.#wheelInput?.clear();
+    // Browlet input lifetime integration: discard this Document's retained
+    // pointer references before detaching it, without firing teardown events.
+    navigable.topLevelTraversable.clearPointerStateForDocument(this);
     eventLoop.removeTasksForDocument(this);
     global.handoffReports();
     global.clearReportingState();
@@ -1474,9 +1486,10 @@ export class DocumentImpl extends NodeImpl {
     // TODO: connect fullscreen, media, service-worker, and lock cleanup as implemented.
   }
 
-  /** Notify existing compatibility mouse state without allocating it for documents with no input. */
-  notifyLegacyMouseRemoval(node: NodeImpl, parent: NodeImpl): void {
-    this.#legacyMousePointer?.removedFrom(node, parent);
+  /** Notify existing input state after unlinking, without allocating it for documents with no input. */
+  notifyInputTargetRemoval(node: NodeImpl, parent: NodeImpl): void {
+    this.#legacyMouse?.removedFrom(node, parent);
+    this.#wheelInput?.removedFrom(node);
   }
 
   /** Inherit the browsing context's upgrade policy before applying this document's own directives. */
@@ -1936,6 +1949,7 @@ export class DocumentImpl extends NodeImpl {
   /** Notify subscribers and descendant Documents after navigation or lifecycle state changes. */
   notifyFullyActiveStateChanged(): void {
     const fullyActive = this.isFullyActive();
+    if (!fullyActive) this.#wheelInput?.clear();
     for (const observer of this.#fullyActiveObservers) {
       observer(fullyActive);
     }

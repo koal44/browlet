@@ -1214,7 +1214,7 @@ owns current-event bookkeeping for handlers and ordinary listeners alike. The
 event component retains only type references to HTML/node owners. XHR's
 ProgressEvent lives in browser integration and reuses that event machinery.
 
-Document lazily owns `LegacyMousePointer` in `interaction/mouse/`, a foundation
+Document lazily owns `LegacyMouseProcessor` in `interaction/mouse/`, a foundation
 that uses event machinery and type-only node references without loading higher
 input producers. All primary pointer types share its effective mouse position.
 It snapshots flat-tree ancestor chains for compatibility boundary transitions;
@@ -1235,6 +1235,19 @@ Synthetic dispatch does not enter this machinery. The mouse producer queues butt
 actions as HTML user-interaction tasks and supplies a focusing continuation only
 for an uncanceled mapped mousedown. Native input adapters, hit testing, click
 counting, and focus/editing/drag default actions retain their explicit owners.
+
+Document also lazily owns `WheelInputProcessor` in `interaction/wheel/`. Its
+normalized input entry snapshots receipt data/time and queues user-interaction
+tasks. The adapter identifies gesture starts and ends; the processor retains the
+initial target across continuing/momentum updates. The existing post-unlink input
+notification clears removed wheel targets without allocating unused state.
+Inactivity invalidates queued input even if the Document is reactivated; destruction
+also removes its tasks. DOM builds the dispatch path once, then an internal callback
+observes effective non-passive listeners before delivery to choose cancelability.
+Only uncanceled delivery requests the default action, using private input rather
+than author-modifiable event properties. Hit testing, Pointer Lock state, and
+scrolling/zooming remain named throwing owner dependencies. Device normalization,
+native gesture timing, and cross-Document routing precede this internal entry.
 
 UserAgent lazily owns `MouseInputProcessor` in `interaction/mouse-input.ts`, above
 the event and legacy-mouse foundations. One aggregate mouse source supplies button
@@ -1268,8 +1281,12 @@ in `interaction/pointer-capture.ts` separately owns one pointer stream's pending
 and effective targets. `PointerEventStream` composes that capture state with its
 context-local ID, current buttons, and active Document. `TopLevelTraversable`
 retains the active streams in `pointerEventStreams`, shared with its descendant
-documents and cleared by top-level teardown. The mouse producer registers ID 1;
-other device registration and retirement remain with their future producers.
+documents and cleared by top-level teardown. Individual Document.destroy() calls
+the existing top-level owner to clear only that Document's capture, boundaries,
+last-input view and button/activation history. This silent lifecycle cleanup
+keeps the stream ID/device state and surviving Documents' targeting state.
+The mouse producer registers ID 1; other device registration and retirement
+remain with their future producers.
 Author construction/dispatch cannot create these streams.
 UserAgent's source collection retains no DOM targets. Element's public capture
 methods resolve the receiver's current top-level context, reject unknown IDs,
@@ -1277,8 +1294,9 @@ and delegate to the stream. Their Pointer Events partial declaration remains
 with the interaction owner; Binding performs the ordinary long conversion and
 receiver-realm exception handling. Pending capture is visible immediately.
 DOM removal notifies the top-level stream owner once after unlinking, before
-removal steps. It releases disconnected pending targets through the existing
-stream method; it dispatches no events and retains no reverse target registry.
+removal steps. Its existing stream scan repairs previous boundary targets along
+their retained dispatch paths and releases disconnected pending capture. It
+dispatches no events and retains no reverse target registry.
 Effective capture remains until processing, with loss at the reconnected element
 or, if still disconnected, its Document. State-preserving moves bypass this hook.
 Capture processing uses the target's existing DOM event creation and dispatch,
@@ -1297,8 +1315,9 @@ the input, and records its previous target. Raw delivery first checks the select
 target document's secure-context classification and retains no rejected input.
 Native up attribute preparation zeros pressure before capture processing.
 DOM dispatch has an optional internal path-capture callback before listeners;
-pointer delivery retains that actual path
-for removal recovery after DOM clears the event's transient state. One private,
+pointer delivery retains only that path's nodes
+for removal recovery after DOM clears the event's transient state. It does not
+retain DOM path metadata's secondary targets or Window references. One private,
 reusable event implementation holds input fields without being projected or
 dispatched, protecting later cancellation from author reinitialization. Suppression
 creates a fresh trusted cancel event, releases capture, and exits. After up, the
@@ -1318,9 +1337,11 @@ keyboard state remain explicit producer responsibilities.
 `updateAfterLayout()` performs one stationary-pointer boundary pass with a required
 hit-test callable and caller-realm timestamp. It generates no move event; the
 layout/input owners must arrange invalidation, coalescing, and subsequent passes.
-Device-to-context ID assignment, stream registration/retirement, individual
-Document teardown, previous-boundary-target removal notifications, task delivery,
-and the remaining firing steps still need their producer integration.
+Mouse registration, queued delivery, DOM-removal recovery and individual
+Document cleanup are connected. Recursive/inactive Document destruction remains
+HTML §7.5.10 work; its lifecycle integration must preserve the existing cleanup.
+Other devices still need ID assignment, registration/retirement and delivery
+through these stream operations.
 
 Native stream delivery accepts an optional `PointerEventSamples` input containing
 coalesced and predicted snapshots. `PointerEventImpl.initializeSampleLists()` creates

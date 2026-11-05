@@ -1872,15 +1872,22 @@ export class TopLevelTraversable extends Traversable {
     return true;
   }
 
-  /** Release pending capture after a DOM subtree is unlinked, without dispatching during removal. */
+  /** Repair pointer targets after unlinking, without dispatching during removal. */
+  // https://w3c.github.io/pointerevents/#firing-events-using-the-pointerevent-interface
   // https://w3c.github.io/pointerevents/#implicit-release-of-pointer-capture
   // Scan the existing streams once per removal, rather than retaining a reverse
   // target registry or walking every node in the removed subtree.
-  releaseDisconnectedPointerCaptures(): void {
+  notifyPointerTargetRemoval(): void {
     for (const stream of this.pointerEventStreams.values()) {
+      stream.clearDisconnectedTarget();
       const pending = stream.capture.pendingTargetOverride;
       if (pending && !pending.isConnected) stream.releasePointerCapture(pending);
     }
+  }
+
+  /** Discard one Document's pointer references while retaining the shared input sources and other Documents' state. */
+  clearPointerStateForDocument(document: DocumentImpl): void {
+    for (const stream of this.pointerEventStreams.values()) stream.clearForDocument(document);
   }
 
   /**

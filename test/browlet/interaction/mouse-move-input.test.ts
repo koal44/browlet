@@ -53,6 +53,46 @@ describe('Pointer Events §11.2.17: native mouse movement', () => {
     expect(pointer.getPredictedEvents()).toEqual([]);
   });
 
+  it.each([false, true])('repairs the pointer target at subtree removal (reinsert: %s)', async (reinsert) => {
+    const { browser, document, input, loop, a, b, hitTest, traversable, window } = await createFixture();
+    const child = browser.document.createElement('span');
+    const parent = browser.document.body!;
+    a.append(child);
+    hitTest.mockReturnValue(unwrap<NodeImpl>(child));
+    input.queueMove(moveInput(), document);
+    loop.runTaskTurn();
+    const stream = traversable.pointerEventStreams.get(1)!;
+    a.remove();
+    if (reinsert) parent.append(a);
+    expect(stream.previousTarget === unwrap<NodeImpl>(parent)).toBe(true);
+    expect(stream.needsOverEvent).toBe(true);
+    const target = reinsert ? child : b;
+    const boundaries: boolean[][] = [];
+    window.addEventListener('pointerover', (event) => {
+      boundaries.push([event.target === target, (event as PointerEvent).relatedTarget === parent]);
+    });
+    hitTest.mockReturnValue(unwrap<NodeImpl>(target));
+    input.queueMove(moveInput(), document);
+    loop.runTaskTurn();
+    expect(boundaries).toEqual([[true, true]]);
+    expect(stream.needsOverEvent).toBe(false);
+  });
+
+  it('keeps pointer boundaries unchanged through a state-preserving move', async () => {
+    const { browser, document, input, loop, a, traversable, window } = await createFixture();
+    input.queueMove(moveInput(), document);
+    loop.runTaskTurn();
+    const boundaries: string[] = [];
+    for (const type of ['pointerover', 'pointerout']) window.addEventListener(type, () => boundaries.push(type));
+    browser.document.body!.moveBefore(a, null);
+    const stream = traversable.pointerEventStreams.get(1)!;
+    expect(stream.previousTarget === unwrap<NodeImpl>(a)).toBe(true);
+    expect(stream.needsOverEvent).toBe(false);
+    input.queueMove(moveInput(), document);
+    loop.runTaskTurn();
+    expect(boundaries).toEqual([]);
+  });
+
   it('updates motion once for each raw/pointer/mouse group', async () => {
     const { input, document, loop, events } = await createFixture();
     for (const move of [moveInput(10.9, -10.9), moveInput(14.1, -7.1), moveInput(14.9, -9.2)]) input.queueMove(move, document);

@@ -199,7 +199,7 @@ describe('Pointer Events §3.1.3: boundary ordering and ordinary dispatch', () =
     expect(stream.previousTarget).toBe(unwrap(browser.document.documentElement!));
   });
 
-  it('allows the future removal owner to notify before reinsertion', () => {
+  it('repairs a standalone stream when removal is reported before reinsertion', () => {
     const { send, a, left, stream } = createFixture();
     send(a);
     a.remove();

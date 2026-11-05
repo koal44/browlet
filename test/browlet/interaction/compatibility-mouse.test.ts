@@ -121,7 +121,7 @@ describe('Pointer Events §§10.2–10.3: compatibility mouse mapping', () => {
     trace.length = 0;
     send('pointerup', b, { isPrimary: false });
     expect(trace.every((type) => !type.startsWith('mouse'))).toBe(true);
-    expect(document.legacyMousePointer.target).toBe(unwrap(a));
+    expect(document.legacyMouse.target).toBe(unwrap(a));
     trace.length = 0;
     send('pointermove', a, { buttons: 1 });
     expect(trace).not.toContain('mousemove:a');

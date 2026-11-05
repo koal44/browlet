@@ -40,6 +40,12 @@ export class PointerCapture {
     this.clearDisconnectedTargets();
   }
 
+  /** Forget a destroyed Document's capture without dispatching into its retained DOM tree. */
+  clearForDocument(document: DocumentImpl): void {
+    if (this.pendingTargetOverride?.nodeDocument === document) this.pendingTargetOverride = null;
+    if (this.#targetOverride?.nodeDocument === document) this.#targetOverride = null;
+  }
+
   /** Correct connectivity when processing capture and redirect a still-disconnected effective target to its Document. */
   // https://w3c.github.io/pointerevents/#implicit-release-of-pointer-capture
   // DOM removal immediately releases pending requests through the top-level

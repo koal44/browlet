@@ -3,7 +3,7 @@ import type { DocumentImpl, ElementImpl, NodeImpl } from '../../dom/nodes/index'
 
 /** One Document's compatibility mouse delivery, shared by all primary pointer types. */
 // https://w3c.github.io/pointerevents/#tracking-the-effective-position-of-the-legacy-mouse-pointer
-export class LegacyMousePointer {
+export class LegacyMouseProcessor {
   /** Owner of the shared position, suppression flags, and cancellation's Window target. */
   #document: DocumentImpl;
   /** Last target, or its surviving ancestor after removal. Null means outside the window. */
@@ -60,8 +60,8 @@ export class LegacyMousePointer {
     if (previous === target && !removed) return;
 
     // SPEC_CLASH(mouse-boundary-ancestor-snapshot): Snapshot before notifications like Firefox/WebKit; Chromium rebuilds after mouseout.
-    const exited = LegacyMousePointer.#ancestors(previous);
-    const entered = LegacyMousePointer.#ancestors(target);
+    const exited = LegacyMouseProcessor.#ancestors(previous);
+    const entered = LegacyMouseProcessor.#ancestors(target);
     let leaveCount = exited.length;
     let enterCount = entered.length;
     while (leaveCount > 0 && enterCount > 0 && exited[leaveCount - 1] === entered[enterCount - 1]) {
@@ -136,12 +136,12 @@ export class LegacyMousePointer {
   // https://w3c.github.io/pointerevents/#compatibility-mapping-with-mouse-events
   // Use ancestry at removal time, not the old event's dispatch path. No event is fired here.
   removedFrom(removed: NodeImpl, parent: NodeImpl): void {
-    const target = LegacyMousePointer.#repairTarget(this.#target, removed, parent);
+    const target = LegacyMouseProcessor.#repairTarget(this.#target, removed, parent);
     if (target !== this.#target) {
       this.#target = target;
       this.#needsOverEvent = true;
     }
-    this.#pointerTarget = LegacyMousePointer.#repairTarget(this.#pointerTarget, removed, parent);
+    this.#pointerTarget = LegacyMouseProcessor.#repairTarget(this.#pointerTarget, removed, parent);
   }
 
   /** Release retained targets when the owning Document is destroyed. */
