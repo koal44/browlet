@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { require as tsRequire } from 'tsx/cjs/api';
+import { requireTypeScript as tsRequire } from '../../support/typescript.cjs';
 
 import type * as BrowletModule from '../../../src/browlet/browlet';
 import { runScenarios } from '../../scenario/dispatch';

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { require as tsRequire } from 'tsx/cjs/api';
+import { requireTypeScript as tsRequire } from '../../support/typescript.cjs';
 
 import type * as MediaListModule from '../../../src/stylelet/cssom/media/media-list';
 import type * as EnvironmentFixture from '../environment-fixture';

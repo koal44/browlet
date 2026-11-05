@@ -48,12 +48,22 @@ realm-heavy files and subprocess fixtures otherwise compete for enough CPU and
 memory to cause intermittent timeouts. Use `--maxWorkers` for deliberate local
 comparisons; the ordinary test timeouts remain unchanged.
 
-TypeScript child fixtures preload `test/support/register-typescript.cjs`. It
-keeps TSX's transform cache under `node-compat/.cache/tsx-unit`, avoiding a linear
-lookup through the shared temporary cache from other projects/worktrees. The
-child's normal temp environment is restored before its fixture runs, and each
-fixture still gets a fresh process and module graph. `TSX_DISABLE_CACHE` remains
-available for cache-free comparisons; no Node compile cache is enabled here.
+Declaration generation and test fixtures load TypeScript through `test/support/typescript.cjs`.
+It keeps TSX's transform cache under `node-compat/.cache/tsx-unit`, avoiding a
+linear lookup through the shared temporary cache from other projects/worktrees.
+`requireTypeScript()` uses a stable, scoped namespace so unchanged source reuses
+its cached transform across runs without taking over Playwright's loader. TSX's
+default scoped require uses a timestamp namespace and misses those cache entries.
+Source changes still invalidate transforms; evaluated modules remain local to
+their process. The normal temp environment is restored before loaded code runs.
+
+Dedicated TypeScript subprocess fixtures retain their ordinary CommonJS preload,
+`test/support/register-typescript.cjs`, which delegates to the shared setup.
+Disposable worker-isolate fixtures set `TSX_DISABLE_CACHE=1` first: their deliberate
+termination can interrupt TSX's background cache writes and delay process exit
+on Windows. Production worker startup loads the package bundle, without TSX.
+`TSX_DISABLE_CACHE` also remains available for cache-free comparisons; no Node
+compile cache is enabled here.
 
 ## Browser tests
 

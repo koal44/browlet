@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
-import { require as tsxRequire } from 'tsx/cjs/api';
+import { requireTypeScript as tsxRequire } from '../support/typescript.cjs';
 
 import * as esm from '../../packages/stylelet/dist/index.mjs';
 

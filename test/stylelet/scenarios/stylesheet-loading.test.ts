@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { expect, test, type Page } from '@playwright/test';
-import { require as tsRequire } from 'tsx/cjs/api';
+import { requireTypeScript as tsRequire } from '../../support/typescript.cjs';
 
 import type * as BrowletModule from '../../../src/browlet/browlet';
 import type * as ResponseModule from '../../../src/fetch/response';

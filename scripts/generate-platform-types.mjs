@@ -1,6 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { require as tsRequire } from 'tsx/cjs/api';
+import { requireTypeScript as tsRequire } from '../test/support/typescript.cjs';
 
 // Loading TypeScript declarations without typechecking avoids a bootstrap dependency on the output.
 const { generatePlatformTypes } = tsRequire('../src/web-idl/generate.ts', import.meta.url);
