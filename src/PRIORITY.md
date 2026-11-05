@@ -141,10 +141,10 @@ and primary double-clicks in the release task. Chorded clicks retain each button
 press/release pair. Movement supplies secure raw/pointer/mouse delivery with shared
 receipt-time input; context menus honor adapter timing and cancellation. The order
 and event-type audit also prevents activation on a disconnected release target.
-Layout, Pointer Lock, HTML activation/focus, and native menu UI remain explicit
-callable dependencies. §12 now supplies WheelEvent construction and Document-owned
-wheel transactions, queued delivery, and listener-based cancelability. Hit testing,
-Pointer Lock, and scrolling/zooming remain explicit callable dependencies; native
+Layout, locked input delivery, HTML activation/focus, and native menu UI remain
+explicit callable dependencies. §12 now supplies WheelEvent construction and Document-owned
+wheel transactions, queued delivery, and listener-based cancelability. Hit testing
+and scrolling/zooming remain explicit callable dependencies; native
 normalization, gesture timing, and cross-Document routing remain adapter work.
 The closing examples/security/glossary/legacy audit is complete. DOM removal now
 connects previous-pointer-target repair through the existing capture-cleanup scan.
@@ -153,8 +153,15 @@ preserving surviving Documents and physical device state. This closes the
 identified local pointer/wheel plumbing. Recursive/inactive destruction remains
 HTML §7.5.10 work; other-device ID assignment/retirement and input/default-action
 producers retain their explicit dependencies.
-HTML §8.1.8.3's synthetic
-pointer-event operation still needs its hookup. Input producers retain
+The adjacent [Pointer Lock pass](browlet/interaction/POINTER-LOCK.md) supplies
+§§2–5's state/API and mouse/wheel lock queries. Native effects and HTML focus/
+activation remain explicit throwing dependencies. §§6–7 connect locked relative
+input and fixed mouse/wheel coordinates. §8 now handles disconnection, queued-request
+validity, and adoption-safe notifications; native unlock/focus-loss signals and
+HTML teardown remain explicit dependencies. The closing §§9–12 audit adds no
+further runtime algorithms; the native feature remains incomplete. Selection API
+is next, followed by Clipboard API; their references are prepared. CSSOM View remains deferred.
+HTML §8.1.8.3's synthetic pointer-event operation still needs its hookup. Input producers retain
 their HTML, editing, and layout owners.
 Source/deferred imports and the HTML Wasm parser remain explicit boundaries.
 Later host-hook algorithms must be connected before judging

@@ -219,7 +219,8 @@ Every flag's remaining enforcement owner is explicit:
 | --- | --- |
 | navigation; auxiliary navigation; top-level navigation with/without activation; custom-protocol navigation | Target selection checks auxiliary restrictions; navigation admission and named lookup use the §7.4.2.4 sandbox predicate with captured activation/flags and the permitted creator. Activation notification/expiry, history-application callers, and Window.close remain unfinished. The §7.4.2.3.4 external-handoff gate consumes captured target flags/source activation; handler selection and the host handoff still throw explicitly. `isNavigationOrHistoryUpdateBlocked()` is the separate implementation-defined throttle. |
 | origin | Context/response preparation can select an opaque origin. Initial iframe and auxiliary creation inherit creator origin/base/cookie state. Source capture for later about:blank/srcdoc navigation remains unfinished. |
-| forms; pointer lock | Form submission and pointer-lock entry points must apply their flags. |
+| forms | Form submission must apply its sandbox flag. |
+| pointer lock | PointerLock.requestPointerLock() rejects the active Document's flag with SecurityError before native acquisition. HTML focus/activation and native acquisition remain separate dependencies. |
 | scripts; automatic features | The environment's scripting predicate reads the scripts flag. Parser/script preparation, automatic media playback, and autofocus still need their owning consumers; parsing the automatic-features flag does not enforce them. |
 | document.domain | The Document setter rejects the flag before domain relaxation. |
 | propagation to auxiliary contexts | New-target selection copies restrictions unless the source permits escape; subsequent navigation must consume the context's popup flag set. |

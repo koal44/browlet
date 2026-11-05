@@ -113,6 +113,7 @@ export class DocumentImpl extends NodeImpl {
     ...globalEventHandlers,
     ...pointerEventHandlers,
     ['onreadystatechange', 'readystatechange'], ['onvisibilitychange', 'visibilitychange'],
+    ['onpointerlockchange', 'pointerlockchange'], ['onpointerlockerror', 'pointerlockerror'],
   ]);
 
   /** Browser settings used by this document's loading, policy, and event operations. */
@@ -727,6 +728,11 @@ export class DocumentImpl extends NodeImpl {
   /** Focused element visible from this document's tree. */
   get activeElement(): ElementImpl | null {
     return this.#documentOrShadowRootMixin.activeElement;
+  }
+
+  /** Pointer-locked element visible from this document's tree. */
+  get pointerLockElement(): ElementImpl | null {
+    return this.#documentOrShadowRootMixin.pointerLockElement;
   }
 
   get styleSheets(): StyleSheetListImpl {
@@ -1490,6 +1496,8 @@ export class DocumentImpl extends NodeImpl {
   notifyInputTargetRemoval(node: NodeImpl, parent: NodeImpl): void {
     this.#legacyMouse?.removedFrom(node, parent);
     this.#wheelInput?.removedFrom(node);
+    // Pointer Lock §8: disconnection releases lock before removal callbacks can reinsert/adopt the target.
+    this.env.userAgent.releaseDisconnectedPointerLock();
   }
 
   /** Inherit the browsing context's upgrade policy before applying this document's own directives. */
@@ -1888,6 +1896,21 @@ export class DocumentImpl extends NodeImpl {
     if (container.isConnected) {
       this.#navigableContainerInsertionOrder.set(container, this.#nextNavigableContainerInsertionOrder++);
     }
+  }
+
+  /** Release pointer lock only when this Document owns the current locked tree. */
+  // https://w3c.github.io/pointerlock/#extensions-to-the-document-interface
+  exitPointerLock(): void {
+    this.env.userAgent.pointerLock.exitForDocument(this);
+  }
+
+  /** Whether this Document is on the focused chain of a traversable with system focus. */
+  // https://html.spec.whatwg.org/multipage/interaction.html#has-focus-steps
+  hasFocus(): boolean {
+    // TODO(HTML §6.6): consult top-level system focus and follow the focused-area
+    // chain through child navigables. Visibility or full activity cannot replace it.
+    // The public hasFocus() binding remains deferred with the rest of focus management.
+    throw new InternalError('Document focus state is not implemented');
   }
 
   /** Whether this is the active Document and every container Document is fully active. */

@@ -798,8 +798,8 @@ dispatch. `PointerCapture` now implements pending-target transitions and trusted
 capture notifications with copied input data. `PointerEventStream.prepareTarget()`
 now combines attribute/ID preparation, capture processing, target selection,
 active-document tracking, and implicit capture for direct-manipulation down events.
-Hit testing and the Document's Pointer Lock query are required callables supplied
-by their future owners, not implemented layout/Pointer Lock operations. Device
+Hit testing remains a required callable supplied by layout. The mouse producer's
+Document lock query now reads UserAgent's PointerLock state. Device
 capability is supplied explicitly rather than inferred from pointerType. Internal
 capture requests validate connectivity, lock state, buttons, and active Document;
 Element's public capture methods now resolve the active ID from the receiver's
@@ -813,8 +813,8 @@ make device pointers available. Author-created PointerEvents cannot register IDs
 DOM removal immediately releases disconnected pending capture through that map;
 reinsertion does not restore it. Effective loss waits for capture processing and
 targets the reconnected element or its Document if still detached. State-preserving
-moves retain capture. Pointer Lock success still needs to invoke the existing
-release operation; the source identifies that unfinished owner dependency.
+moves retain capture. Successful Pointer Lock application now invokes the existing
+release operation; native lock acquisition remains an explicit host dependency.
 Pointer Events §5's eleven handler attributes are connected on every
 GlobalEventHandlers includer. The raw-update property is exposed only in secure
 contexts; its content attribute can still handle author-dispatched events on an
@@ -877,16 +877,17 @@ input before pointermove/mousemove, including raw updates for chorded button
 changes, with receipt-time buttons and realm-relative timestamps. Window motion
 updates once per position even when compatibility mousemove is suppressed.
 Each update is unbatched; prediction and display-aligned coalescing are not supplied.
-Locked movement throws until Pointer Lock supplies targeting and native deltas;
-adapter interruption/exit notifications must clear the Window's motion history.
+Pointer Lock's queueRelativeMove path accepts measured deltas and freezes absolute
+coordinates; absolute queueMove input while locked throws. Exit resets unlocked
+motion history. Native interruption notification and normalization remain adapter duties.
 Adapter-selected context menus now dispatch on press or release, independently of
 down cancellation and before any qualifying auxclick. An uncanceled contextmenu
 reaches `showContextMenu()`, which throws until a native UI adapter supplies menu
 display, positioning, and modal input handling. A canceled menu needs no UI effect.
 The selected pointer target is retained across layout changes; a still-disconnected
 target suppresses delivery, whereas browsers can re-hit-test and retarget the menu.
-Its layout hit test, Pointer Lock query, HTML activation notification, and click-focus
-steps also throw until their owners are connected.
+Its Pointer Lock query now reads the shared controller. Layout hit testing,
+HTML activation notification, and click-focus steps still throw until connected.
 The tests supply those missing capabilities; they do not demonstrate physical
 mouse input, real focus, menus, or cross-document coordinate translation.
 Synthetic dispatch neither produces compatibility events nor changes suppression state.
@@ -896,9 +897,9 @@ constants, and momentum field. Document.wheelInput accepts normalized input and
 explicit gesture-start/end notifications, retains the initial target, and queues
 trusted delivery. Actual DOM-path listeners determine cancelability. Removal,
 inactivity, and destruction clear retained state. This does not yet scroll:
-`hitTest()`, `getLockedElement()`, and `applyDefaultAction()` throw until layout,
-Pointer Lock, and scrolling/zooming owners are connected. Tests control these
-missing effects. Native units/signs/inertia, gesture timing for devices without
+`hitTest()` and `applyDefaultAction()` throw until layout and scrolling/zooming
+owners are connected. `getLockedElement()` reads UserAgent's lock state; queued
+locked wheel input uses its frozen coordinates. Tests control the missing effects. Native units/signs/inertia, gesture timing for devices without
 phases, and routing across Documents still need a GUI or automation adapter.
 Synthetic dispatch does not enter transactions or default actions. Native events
 use null relatedTarget like all three browsers, inherited which=1 like Firefox/WebKit,
@@ -906,6 +907,19 @@ and noncancelable passive-only delivery like Chromium/Firefox. Constructor delta
 follows unsigned-long IDL conversion, including values outside the three native
 units, as all three browsers do. Negative zero is preserved like Firefox; momentum
 is exposed like the draft and Chromium, while Firefox/WebKit do not yet implement it.
+
+The Pointer Lock draft audit covers §§1–12; §§9–12 add no runtime algorithms.
+Pointer Lock §§2–5 supply ordered request/release, Document handlers and shadow
+retargeting. A real native lock cannot yet be acquired: HTML focus/transient
+activation and native cursor acquisition/restoration/raw-motion support remain
+throwing operations. §§6–7 now deliver normalized locked input, with frozen
+coordinates and measured relative motion. Mouse boundaries are suppressed per the
+draft/Firefox; ordinary pointer boundaries remain. §8 now releases disconnected
+targets, rechecks queued requests, and retains notification Documents after adoption.
+Native default-unlock/focus-loss signals and HTML unloading/destruction remain
+unconnected; synthetic keyboard/blur events do not supply them. Tests control the
+unfinished native effects and focus/activation queries. Exact dependencies and approved
+browser conflicts are in [the Pointer Lock roadmap](browlet/interaction/POINTER-LOCK.md).
 
 §3.3.12 now supplies internal click/auxclick/contextmenu creation and pointer-based
 target selection. The stream retains per-button press/release facts across capture release and

@@ -29,6 +29,16 @@ export class DocumentOrShadowRootMixin {
     return candidate.body ?? candidate.documentElement;
   }
 
+  /** Pointer-lock target retargeted into this tree, excluding other Documents. */
+  // https://w3c.github.io/pointerlock/#extensions-to-the-documentorshadowroot-mixin
+  get pointerLockElement(): ElementImpl | null {
+    const root = this.#root;
+    const target = root.nodeDocument.env.userAgent.pointerLock.target;
+    if (target === null) return null;
+    const candidate = target.retargetAgainst(root) as ElementImpl;
+    return candidate.getRoot() === root ? candidate : null;
+  }
+
   /** Sheets supplied by style and link nodes in this tree scope. */
   // https://drafts.csswg.org/cssom/#dom-documentorshadowroot-stylesheets
   get styleSheets(): StyleSheetListImpl {

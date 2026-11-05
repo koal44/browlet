@@ -24,14 +24,21 @@ export class WheelInputProcessor {
    * Queue normalized input in this Document's viewport coordinates.
    * The adapter identifies gesture starts, including any timeout for devices without phases;
    * momentum updates remain in that gesture. Buttons/modifiers describe input at receipt.
+   * Locked input must arrive at the lock's Document; its acquisition snapshot supplies coordinates.
    */
   // https://w3c.github.io/pointerevents/#events-wheelevents
   // §12 leaves timing implementation-specific. A required flag makes the adapter's
   // decision explicit; no timer, polling, or guessed physical-unit conversion lives here.
   queue(input: WheelInput): void {
-    const action = { ...input };
+    const lock = this.#document.env.userAgent.pointerLock;
+    const lockedTarget = lock.target?.nodeDocument === this.#document ? lock.target : null;
+    const generation = lock.generation;
+    const action = { ...input, ...(lockedTarget === null ? null : lock.position) };
     const time = unsafeSharedCurrentTime();
-    this.#queueTask(() => { this.#deliver(action, time); });
+    this.#queueTask(() => {
+      if (lockedTarget !== null && (lock.generation !== generation || lockedTarget.nodeDocument !== this.#document)) return;
+      this.#deliver(action, time);
+    });
   }
 
   /** Queue a gesture-end notification after earlier input, without inventing a zero-delta event. */
@@ -64,10 +71,10 @@ export class WheelInputProcessor {
 
   /** Query this Document's actual locked pointer target, rather than assuming unlocked input. */
   // https://w3c.github.io/pointerlock/#dfn-pointer-lock-state
-  // TODO(Pointer Lock): wheel events target the locked element; the input adapter
-  // must also supply that owner's frozen absolute coordinates in normalized input.
+  // queue() retains Pointer Lock's frozen coordinates alongside the measured deltas.
   getLockedElement(): ElementImpl | null {
-    throw new InternalError('Wheel input requires Pointer Lock state');
+    const target = this.#document.env.userAgent.pointerLock.target;
+    return target?.nodeDocument === this.#document ? target : null;
   }
 
   /** Apply the environment's scrolling or zooming action using private input after uncanceled delivery. */
@@ -151,7 +158,7 @@ export class WheelInputProcessor {
 }
 
 /** Post-normalization native/automation data; these are not Web IDL constructor inputs. */
-export type WheelInput = MouseEventInput & {
+export interface WheelInput extends MouseEventInput {
   /** True on the first update of a new gesture; false on continuing and momentum updates. */
   startsTransaction: boolean;
   deltaX: number;
@@ -160,4 +167,4 @@ export type WheelInput = MouseEventInput & {
   /** Native input must select pixels, lines, or pages; author-created events have ordinary unsigned-long conversion. */
   deltaMode: 0 | 1 | 2;
   momentum: boolean;
-};
+}

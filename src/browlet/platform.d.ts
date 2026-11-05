@@ -422,6 +422,10 @@ export interface WheelEventInit {
   momentum?: boolean;
 }
 
+export interface PointerLockOptions {
+  unadjustedMovement?: boolean;
+}
+
 export interface SecurityPolicyViolationEventInit {
   bubbles?: boolean;
   cancelable?: boolean;
@@ -3702,6 +3706,7 @@ export interface ShadowRoot extends DocumentFragment {
   onslotchange: EventHandlerNonNull | null;
   readonly customElementRegistry: CustomElementRegistry | null;
   readonly activeElement: Element | null;
+  readonly pointerLockElement: Element | null;
   readonly styleSheets: StyleSheetList;
   adoptedStyleSheets: Array<CSSStyleSheet>;
 }
@@ -3766,6 +3771,9 @@ export interface Document extends Node {
   onreadystatechange: EventHandlerNonNull | null;
   onvisibilitychange: EventHandlerNonNull | null;
   readonly all: HTMLAllCollection;
+  onpointerlockchange: EventHandlerNonNull | null;
+  onpointerlockerror: EventHandlerNonNull | null;
+  exitPointerLock(): void;
   readonly permissionsPolicy: PermissionsPolicy;
   onabort: EventHandlerNonNull | null;
   onauxclick: EventHandlerNonNull | null;
@@ -3867,6 +3875,7 @@ export interface Document extends Node {
   getElementById(elementId: string): Element | null;
   readonly customElementRegistry: CustomElementRegistry | null;
   readonly activeElement: Element | null;
+  readonly pointerLockElement: Element | null;
   readonly styleSheets: StyleSheetList;
   adoptedStyleSheets: Array<CSSStyleSheet>;
 }
@@ -3935,6 +3944,7 @@ export interface Element extends Node {
   getElementsByClassName(classNames: string): HTMLCollection;
   insertAdjacentElement(where: string, element: Element): Element | null;
   insertAdjacentText(where: string, data: string): void;
+  requestPointerLock(options?: PointerLockOptions): Promise<void>;
   setPointerCapture(pointerId: number): void;
   releasePointerCapture(pointerId: number): void;
   hasPointerCapture(pointerId: number): boolean;

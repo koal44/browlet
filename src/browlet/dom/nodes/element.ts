@@ -1,4 +1,4 @@
-import { HTML_NAMESPACE, type TextDirection, asciiLower, asciiUpper, InternalError } from '../../../infra/index';
+import { HTML_NAMESPACE, type TextDirection, asciiLower, asciiUpper, InternalError, type InternalPromise } from '../../../infra/index';
 import {
   arg, attr, defineDictionary, defineIncludes, defineInterface, dictMember, idlType, impl,
   nullable, op, reference, roAttr, sequence, union, xattr,
@@ -21,6 +21,7 @@ import type { IntersectionObserverRegistration } from '../intersection-observer/
 import { ElementAssociations, type ElementConstructor } from '../../html/reflection/index';
 import type { BrowletEnvironment } from '../../environment/index';
 import type { NavigableContainer } from '../../browsing/navigation/index';
+import type { PointerLockOptions } from '../../interaction/index';
 
 import { NodeImpl, NodeType } from './node';
 import type { AttrImpl } from './attribute';
@@ -217,6 +218,12 @@ export class ElementImpl extends NodeImpl {
   // https://html.spec.whatwg.org/multipage/webappapis.html#queue-an-element-task
   queueTask(source: TaskSource, steps: () => void): void {
     this.env.realm.queueGlobalTask(source, steps);
+  }
+
+  /** Request the UserAgent's native pointer lock using this element's owning environment. */
+  // https://w3c.github.io/pointerlock/#requestPointerLock
+  requestPointerLock(options: PointerLockOptions): InternalPromise<void> {
+    return this.nodeDocument.env.userAgent.pointerLock.requestPointerLock(this, options);
   }
 
   /** Request capture of an active context-local pointer, without delivering notifications yet. */

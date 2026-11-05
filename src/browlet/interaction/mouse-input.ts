@@ -2,8 +2,8 @@ import { InternalError } from '../../infra/index';
 
 import { unsafeSharedCurrentTime, type UnsafeMoment } from '../timing/index';
 import { userInteractionTaskSource } from '../scripting/index';
-import { PointerEventImpl, type EventModifierState, type PointerInputEventType } from './events/index';
-import type { DocumentImpl, NodeImpl } from '../dom/nodes/index';
+import { PointerEventImpl, type EventModifierState, type MouseInput, type PointerInputEventType } from './events/index';
+import type { DocumentImpl, ElementImpl, NodeImpl } from '../dom/nodes/index';
 import type { TopLevelTraversable } from '../browsing/navigation/index';
 import type { UserAgent } from '../user-agent';
 
@@ -29,6 +29,7 @@ export class MouseInputProcessor {
    * Coordinates are CSS pixels in that Window; click recognition/counting comes from the adapter.
    * A qualifying release delivers click/auxclick and any primary dblclick in the same task, after mouseup.
    * The adapter can request a context menu on either press or release, before any qualifying click.
+   * Locked input must be routed to the lock's Document; acquisition supplies its frozen coordinates.
    * Repeated reports of the same button state do not produce another task or event.
    */
   // Ownership checks, record snapshots, duplicate filtering, and lazy stream
@@ -41,10 +42,14 @@ export class MouseInputProcessor {
     if (change === null) return;
     // Modifier snapshots have no mutators. Copy the action so a host reusing its
     // input buffer cannot change coordinates, click count, or the transition later.
-    const action = { ...input };
+    const lock = this.#userAgent.pointerLock;
+    const target = lock.target?.nodeDocument === document ? lock.target : null;
+    const generation = lock.generation;
+    const action = { ...input, ...(target === null ? null : lock.position) };
     const time = unsafeSharedCurrentTime();
     this.#queueTask(document, traversable, (stream) => {
-      this.#handleButton(action, change, time, stream, document);
+      if (target !== null && (lock.generation !== generation || target.nodeDocument !== document)) return;
+      this.#handleButton(action, change, time, stream, document, target);
     });
   }
 
@@ -65,6 +70,29 @@ export class MouseInputProcessor {
     });
   }
 
+  /**
+   * Queue native relative motion for the current lock. The adapter selects raw or
+   * accelerated deltas according to acquisition options; it must not derive these
+   * values from frozen absolute coordinates. Native gaps must supply a zero delta.
+   */
+  // https://w3c.github.io/pointerlock/#extensions-to-the-mouseevent-interface
+  // Routing, snapshotting and task lifetime are Browlet integration. Discard input
+  // from an old lock rather than delivering it into a new destination or mode.
+  queueRelativeMove(input: RelativeMouseInput): void {
+    const lock = this.#userAgent.pointerLock;
+    const { target, position, generation } = lock;
+    if (target === null || position === null) throw new InternalError('Relative mouse input requires pointer lock');
+    const document = target.nodeDocument;
+    const traversable = this.#getTraversable(document);
+    const action = { ...position, ...input };
+    const buttons = this.#source.buttons;
+    const time = unsafeSharedCurrentTime();
+    this.#queueTask(document, traversable, (stream) => {
+      if (lock.generation !== generation || target.nodeDocument !== document) return;
+      this.#handleMove(action, buttons, time, stream, document, target, action);
+    });
+  }
+
   /** Select an input target using the receiving Document's viewport coordinates. */
   // https://w3c.github.io/pointerevents/#dfn-hit-test
   // TODO(CSSOM View elementFromPoint / HTML inertness and disabled controls):
@@ -79,9 +107,8 @@ export class MouseInputProcessor {
 
   /** Query the supplied Document's Pointer Lock owner before movement or capture. */
   // https://w3c.github.io/pointerlock/#dfn-lock-target
-  // TODO(Pointer Lock): connect the actual locked-element state, without assuming unlocked.
-  hasLockedElement(_document: DocumentImpl): boolean {
-    throw new InternalError('Mouse input requires Pointer Lock state');
+  hasLockedElement(document: DocumentImpl): boolean {
+    return this.#userAgent.pointerLock.target?.nodeDocument === document;
   }
 
   /** Notify HTML of an activation-triggering mouse press before its listeners run. */
@@ -139,6 +166,7 @@ export class MouseInputProcessor {
   // existing attributes/targeting and DOM's activation-behavior dispatch.
   #handleButton(
     input: MouseButtonInput, change: PointerButtonChange, time: UnsafeMoment, stream: PointerEventStream, document: DocumentImpl,
+    lockedTarget: ElementImpl | null,
   ): void {
     // Browlet representation: an undispatched snapshot lets capture notifications
     // precede hit testing without allocating the author-visible event in the wrong realm.
@@ -154,14 +182,16 @@ export class MouseInputProcessor {
 
     // §3.1.3 supplies capture processing and target selection; the native handlers
     // describe the ordinary hit-test case without duplicating those pointer rules.
-    const hitTest = () => this.hitTest(document, input.clientX, input.clientY);
+    const generation = this.#userAgent.pointerLock.generation;
+    const hitTest = () => lockedTarget ?? this.hitTest(document, input.clientX, input.clientY);
     // §3.3.5 includes chorded button changes: they produce pointermove rather
     // than down/up, so secure input needs a preceding raw update too.
     if (change.type === 'pointermove' && document.env.isSecureContext) {
       const rawTarget = stream.prepareTarget('pointerrawupdate', sample, hitTest);
       const raw = this.#createEvent('pointerrawupdate', rawTarget, sample, time);
-      stream.dispatchToTarget(raw, rawTarget, hitTest, input.clickCount);
+      stream.dispatchToTarget(raw, rawTarget, hitTest, input.clickCount, undefined, undefined, lockedTarget !== null);
     }
+    if (lockedTarget !== null && this.#userAgent.pointerLock.generation !== generation) return;
     const target = stream.prepareTarget(change.type, sample, hitTest);
     // HTML §6.4 adds activation notification before press listeners.
     if (input.pressed) this.notifyUserActivation(target.nodeDocument);
@@ -172,7 +202,7 @@ export class MouseInputProcessor {
     // existing pipeline, including chords/suppression; mousedown's actual result
     // controls the §11.2.12 focusing continuation.
     stream.dispatchToTarget(event, target, hitTest, input.clickCount, undefined,
-      (mouseTarget) => this.focusOnMouseDown(mouseTarget),
+      (mouseTarget) => this.focusOnMouseDown(mouseTarget), lockedTarget !== null,
     );
     // §§11.2.18/11.4 permit platform-selected press or release timing. The adapter
     // requests the menu independently of pointerdown/mousedown cancellation.
@@ -187,15 +217,18 @@ export class MouseInputProcessor {
     }
   }
 
-  /** Deliver one unlocked position through the shared capture, boundary, and mouse-mapping algorithms. */
+  /** Deliver absolute or locked-relative motion through the shared pointer/mouse algorithms. */
   // https://w3c.github.io/pointerevents/#dfn-handle-native-mouse-move
   // §11.2.17 describes ordinary hit testing and mouse boundaries. §§3.1.3 and 10
   // supply capture-aware target selection and interleaving in the existing stream.
   // §3.3.5 additionally requires secure raw delivery before its corresponding move.
-  #handleMove(input: MouseInput, buttons: number, time: UnsafeMoment, stream: PointerEventStream, document: DocumentImpl): void {
-    // TODO(Pointer Lock §6): use the locked target, suppress boundary transitions,
-    // and obtain native relative/unadjusted deltas instead of frozen screen positions.
-    if (this.hasLockedElement(document)) throw new InternalError('Locked mouse movement requires Pointer Lock targeting and relative input');
+  #handleMove(
+    input: MouseInput, buttons: number, time: UnsafeMoment, stream: PointerEventStream, document: DocumentImpl,
+    lockedTarget: ElementImpl | null = null, relative: RelativeMouseInput | null = null,
+  ): void {
+    if (lockedTarget === null && this.hasLockedElement(document)) {
+      throw new InternalError('Pointer Lock movement requires native relative input through queueRelativeMove()');
+    }
     const window = document.getRelevantGlobalObject();
     if (window === null) throw new InternalError('Mouse movement requires a Window');
 
@@ -209,20 +242,27 @@ export class MouseInputProcessor {
     sample.timeStamp = document.env.realm.eventTimeStamp(time);
     // Update once, including when canceled pointerdown suppresses mapped mousemove.
     // The undispatched snapshot survives author reinitialization of either event.
-    window.setPointerLockAttributesForMousemove(sample);
+    if (relative === null) { window.setPointerLockAttributesForMousemove(sample); }
+    else {
+      sample.movementX = relative.movementX;
+      sample.movementY = relative.movementY;
+    }
 
-    const hitTest = () => this.hitTest(document, input.clientX, input.clientY);
+    const generation = this.#userAgent.pointerLock.generation;
+    const hitTest = () => lockedTarget ?? this.hitTest(document, input.clientX, input.clientY);
     if (document.env.isSecureContext) {
       const rawTarget = stream.prepareTarget('pointerrawupdate', sample, hitTest);
       const raw = this.#createEvent('pointerrawupdate', rawTarget, sample, time);
-      stream.dispatchToTarget(raw, rawTarget, hitTest, 0);
+      stream.dispatchToTarget(raw, rawTarget, hitTest, 0, undefined, undefined, lockedTarget !== null);
     }
+    if (lockedTarget !== null && this.#userAgent.pointerLock.generation !== generation) return;
     // Raw listeners can change layout or pending capture; select the move target afterward.
     const target = stream.prepareTarget('pointermove', sample, hitTest);
     const event = this.#createEvent('pointermove', target, sample, time);
-    stream.dispatchToTarget(event, target, hitTest, 0);
+    stream.dispatchToTarget(event, target, hitTest, 0, undefined, undefined, lockedTarget !== null);
     // TODO(HTML §6.11 / Selection API): connect drag initiation and selection extension
     // at their native movement/default-action owners; emitting mousemove does not implement them.
+    // Pointer Lock §2.1 forbids drag/drop while locked; that future owner must honor lockedTarget.
   }
 
   /** Allocate input in the selected target's creation realm, independently of its current Document view. */
@@ -269,17 +309,15 @@ export class MouseInputProcessor {
 export type MouseButton = PointerButton.Primary | PointerButton.Auxiliary | PointerButton.Secondary |
   PointerButton.Back | PointerButton.Forward;
 
-/** Native/automation position and modifiers, in the receiving Window's CSS pixels. */
-export type MouseInput = {
-  screenX: number;
-  screenY: number;
-  clientX: number;
-  clientY: number;
+/** Measured relative motion, already adjusted (or unadjusted) by the native adapter. */
+export interface RelativeMouseInput {
+  movementX: number;
+  movementY: number;
   modifiers: EventModifierState;
-};
+}
 
 /** One button action; held buttons are computed from the UserAgent's source, not supplied by callers. */
-export type MouseButtonInput = MouseInput & {
+export interface MouseButtonInput extends MouseInput {
   button: MouseButton;
   pressed: boolean;
   /** False for presses; true only when the adapter recognizes this release as a click. */
@@ -290,4 +328,4 @@ export type MouseButtonInput = MouseInput & {
   contextMenu: boolean;
   /** UI Events detail for this gesture: 1 for the first click, 2 for the second; counted by the adapter. */
   clickCount: number;
-};
+}

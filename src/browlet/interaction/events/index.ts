@@ -5,8 +5,8 @@ export { KeyboardEventImpl, type KeyboardEventInit } from './keyboard-event';
 export { EventModifierState, type EventModifierInit } from './event-modifiers';
 export { CompositionEventImpl, type CompositionEventInit } from './composition-event';
 export {
-  MouseEventImpl, type MouseEventInit, type MouseEventInput, type MouseBoundaryType,
-  type MappedMouseType, type ScreenPosition,
+  MouseEventImpl, type MouseEventInit, type MouseEventInput, type MouseInput, type MouseBoundaryType,
+  type MappedMouseType, type MousePosition, type ScreenPosition,
 } from './mouse-event';
 export {
   PointerEventImpl, type PointerId, type PointerEventInit, type PointerEventType, type PointerInputEventType,

@@ -62,9 +62,10 @@ updating Window motion once. Button and movement actions retain receipt-time
 state/timestamps; events translate that shared time into their creation realms.
 An explicit context-menu flag selects press or release timing. Trusted dispatch
 and cancellation precede the native menu request and any qualifying click.
-It calls explicit throwing dependencies for layout targeting, Pointer Lock state,
-HTML activation/focus, and native menu UI. Its focused tests control these owners;
-physical mouse input, real focus, and a native menu are not claimed.
+It queries the UserAgent's Pointer Lock state and calls explicit throwing
+dependencies for layout targeting, HTML activation/focus, and native menu UI.
+Its focused tests control these owners; physical mouse input, real focus, and
+a native menu are not claimed.
 See the [button-input slice](events/ROADMAP.md#pointer-events-1121011213-mouse-button-input)
 and [native-click slice](events/ROADMAP.md#pointer-events-1121411215-native-clicks)
 plus [native movement](events/ROADMAP.md#pointer-events-11217-native-movement)
@@ -77,7 +78,8 @@ provides WheelEvent construction and Document-owned queued wheel delivery.
 The adapter supplies normalized measurements and explicit gesture boundaries;
 transactions retain their initial target, observe DOM listeners for cancelability,
 and request default actions only after uncanceled dispatch. Named operations throw
-until hit testing, Pointer Lock state, and scrolling/zooming are connected.
+until hit testing and scrolling/zooming are connected. Its lock query now reads
+UserAgent's Pointer Lock controller.
 See the [wheel-input slice](events/ROADMAP.md#pointer-events-12-wheel-input-and-transactions).
 The [closing audit](events/ROADMAP.md#pointer-events-1316-closing-audit) is complete;
 legacy initialization was already implemented. It also connects the missing
@@ -172,8 +174,9 @@ in the DOM mixin. `focus.ts` currently describes only the focused area's DOM
 anchor, which can be a Document (viewport) or an Element (including a control
 subpart). It does not yet model the focusable area kinds or their lifecycles.
 
-`Document.focusedArea` is an explicit throwing dependency. Replace that stub
-with the shared focus state when implementing initialization, focusing and
+`Document.focusedArea` and `Document.hasFocus()` are explicit throwing dependencies.
+Pointer Lock consumes hasFocus internally; its public binding remains deferred.
+Replace these stubs with the shared focus model when implementing initialization, focusing and
 unfocusing, removal/inertness fixup, focus events, and the navigable focus chain.
 Keep the focused area distinct from the top-level traversable's system focus:
 an inactive document can retain its focused area. `activeElement`, `hasFocus`,
@@ -191,6 +194,20 @@ fallback, then moving the sequential focus navigation starting point. Keep this
 on the shared focus model, including focus-event reentrancy and Document teardown.
 Fragment scrolling has a separate focusing step; manual navigation focus reset
 does not suppress that step.
+
+## Pointer Lock and adjacent specifications
+
+[Pointer Lock §§2–5](POINTER-LOCK.md) supplies the lazy UserAgent lock owner,
+request/release API, Document notifications, and Document/ShadowRoot projection.
+Native effects and HTML focus/activation remain explicit throwing dependencies.
+§§6–7 now connect locked relative delivery and frozen mouse/wheel coordinates
+through the existing pointer/mouse pipeline. Native sensor/gap notification and
+cross-Document routing remain adapter duties. §8 now releases disconnected locks,
+rechecks queued requests, and retains notification Documents across adoption.
+Native unlock/focus-loss signals and HTML teardown remain explicit owner dependencies.
+The closing §§9–12 audit found no additional runtime algorithm. Native Pointer Lock
+remains blocked on those owners; the next adjacent specification is Selection API,
+followed by Clipboard API. CSSOM View remains deferred.
 
 ## Removal condition
 

@@ -47,14 +47,21 @@ export class LegacyMouseProcessor {
   /**
    * Update from a primary input and its selected target in this Document, or null for window exit.
    * Boundary cancellation never suppresses the remaining transition or future input.
+   * Pointer Lock updates the retained position without mouse boundary notifications.
    */
   // The target is explicit because this runs before dispatch assigns E.target.
   // PointerEventStream calls before primary down/up/move and at window exit,
   // even when PREVENT MOUSE EVENT is set. Synthetic dispatch must not call it.
   // Layout/hit testing and native input scheduling remain required producer inputs;
   // this does not guess a target.
-  updatePosition(event: PointerEventImpl, target: NodeImpl | null): void {
+  updatePosition(event: PointerEventImpl, target: NodeImpl | null, pointerLocked = false): void {
     if (!event.isPrimary) return;
+    // SPEC_CLASH(pointer-lock-mouse-boundaries): Suppress mouse boundaries per Pointer Lock §2.1 and Firefox; Chromium emits them on lock entry/retargeting. Pointer boundaries remain with the stream.
+    if (pointerLocked) {
+      this.#target = target;
+      this.#needsOverEvent = false;
+      return;
+    }
     const previous = this.#target;
     const removed = this.#needsOverEvent;
     if (previous === target && !removed) return;

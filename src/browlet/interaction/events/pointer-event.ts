@@ -365,10 +365,10 @@ export type PointerInputEventType = 'pointerover' | 'pointerenter' | 'pointerdow
  * The producer owns prediction provenance; list validation cannot detect sensitive
  * history from outside the current gesture.
  */
-export type PointerEventSamples = {
+export interface PointerEventSamples {
   coalescedEvents: PointerEventImpl[];
   predictedEvents: PointerEventImpl[];
-};
+}
 
 /** Converted constructor data; missing orientation members remain absent until construction. */
 export interface PointerEventInit extends MouseEventInit {

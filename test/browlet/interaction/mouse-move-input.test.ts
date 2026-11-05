@@ -316,11 +316,18 @@ describe('Pointer Events §11.2.17: native mouse movement', () => {
     expect(() => input.queueMove(moveInput(), unwrap(other.document))).toThrow(/live browsing context/);
   });
 
-  it.each(['missing lock state', 'locked input', 'missing layout'])(
+  it('delivers unlocked movement through the real Pointer Lock state query', async () => {
+    const { input, document, loop, events, locked } = await createFixture();
+    locked.mockRestore();
+    input.queueMove(moveInput(), document);
+    loop.runTaskTurn();
+    expect(events.map((event) => event.type)).toEqual(['pointerrawupdate', 'pointermove', 'mousemove']);
+  });
+
+  it.each(['locked input', 'missing layout'])(
     'keeps %s explicit before movement delivery', async (dependency) => {
       const { input, document, loop, events, locked, hitTest } = await createFixture();
-      if (dependency === 'missing lock state') locked.mockRestore();
-      else if (dependency === 'locked input') locked.mockReturnValue(true);
+      if (dependency === 'locked input') locked.mockReturnValue(true);
       else hitTest.mockRestore();
       input.queueMove(moveInput(), document);
       expect(() => loop.runTaskTurn()).toThrow(dependency === 'missing layout' ? /layout hit testing/ : /Pointer Lock/);

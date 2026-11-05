@@ -70,11 +70,11 @@ export enum PointerButton {
 }
 
 /** A button transition for the producer; movement without a transition separately uses button = -1. */
-export type PointerButtonChange = {
+export interface PointerButtonChange {
   type: 'pointerdown' | 'pointermove' | 'pointerup';
   button: PointerButton;
   buttons: number;
-};
+}
 
 /*
  * partial interface Navigator {

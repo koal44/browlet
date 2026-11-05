@@ -214,21 +214,29 @@ export type MappedMouseType = MouseBoundaryType | 'mousedown' | 'mousemove' | 'm
 // TODO(Pointer Events, MouseEvent Algorithms / native input and CSSOM View): the
 // input adapter must supply current buttons/modifiers and mapped coordinates.
 // There is no default snapshot: missing input must not masquerade as an idle mouse.
-export type MouseEventInput = {
+export interface MouseEventInput extends MouseInput {
+  /** Held-button mask for this input; a native mouse producer supplies §11.2.3's aggregate mouse state. */
+  buttons: number;
+}
+
+/** Native/automation position and modifiers; the mouse processor adds its aggregate held buttons. */
+export interface MouseInput extends MousePosition {
+  modifiers: EventModifierState;
+}
+
+/** Absolute mouse coordinates in screen and receiving-viewport CSS pixels. */
+export interface MousePosition {
   screenX: number;
   screenY: number;
   clientX: number;
   clientY: number;
-  /** Held-button mask for this input; a native mouse producer supplies §11.2.3's aggregate mouse state. */
-  buttons: number;
-  modifiers: EventModifierState;
-};
+}
 
 /** A position relative to the origin of the screen coordinate system. */
-export type ScreenPosition = {
+export interface ScreenPosition {
   x: number;
   y: number;
-};
+}
 
 /** Converted data; construction does not infer button state or event-type defaults. */
 export interface MouseEventInit extends EventModifierInit {

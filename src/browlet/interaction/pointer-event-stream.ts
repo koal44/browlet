@@ -48,7 +48,7 @@ export class PointerEventStream {
   /** A delivered down awaiting up/cancel; activation history alone also survives pointerup. */
   #pointerDownSent = false;
   /** Private button snapshot and completed pair survive capture release and author reinitialization. */
-  #activation: { input: PointerEventImpl; target: NodeImpl; captured: boolean; pressTarget: NodeImpl | null; } | null = null;
+  #activation: { input: PointerEventImpl; target: NodeImpl; targetOverridden: boolean; pressTarget: NodeImpl | null; } | null = null;
 
   constructor(
     pointerId: PointerId, isDirectManipulation: boolean, supportsHover: boolean, hasLockedElement: (document: DocumentImpl) => boolean,
@@ -139,18 +139,21 @@ export class PointerEventStream {
    * Optional sample lists contain measured inputs and predictions, not dispatched events.
    * mouseClickCount comes from the input producer; pointer detail remains zero.
    * An optional focusing continuation runs only after an uncanceled mapped mousedown.
+   * Locked mouse delivery suppresses mouse boundaries and keeps the selected activation target;
+   * pointer boundaries and capture processing retain their ordinary behavior.
    * Returns false when the ordinary event was canceled; boundary cancellation is independent.
    */
   // https://w3c.github.io/pointerevents/#firing-events-using-the-pointerevent-interface
   // This extracts the dispatch/previous-target steps for an already prepared event and target.
   // §9 sample lists are supplied explicitly by the input producer as a final argument.
-  // MouseInputProcessor supplies adapter-qualified click counts and unlocked mouse
-  // movement. Other producers must supply their own normalized input; compatibility
+  // MouseInputProcessor supplies adapter-qualified click counts and absolute or
+  // locked-relative movement. Other producers must supply their own normalized input; compatibility
   // dispatch does not infer timing/distance thresholds or native relative deltas.
   dispatchToTarget(
     event: PointerEventImpl, target: NodeImpl, getHoverTarget: () => NodeImpl | null, mouseClickCount: number,
     samples?: PointerEventSamples,
     focusOnMouseDown?: (target: NodeImpl) => void,
+    pointerLocked = false,
   ): boolean {
     const type = event.type;
     // https://w3c.github.io/pointerevents/#the-pointerrawupdate-event
@@ -168,7 +171,7 @@ export class PointerEventStream {
     // SPEC_CLASH(pointer-rawupdate-boundary-order): Follow the shared firing algorithm and Firefox; Chromium sends raw before the boundary transition.
     this.#sendBoundaryEvents(input, target);
     if (mouse !== null && (type === 'pointerdown' || type === 'pointermove' || type === 'pointerup')) {
-      mouse.updatePosition(input, mouse.pointerTarget);
+      mouse.updatePosition(input, mouse.pointerTarget, pointerLocked);
     }
     if (type === 'pointerdown' || type === 'pointerup' || (type === 'pointermove' && input.button >= 0)) {
       // SPEC_CLASH(pointer-activation-chord-pairing): Pair each button's press/release per §11.3 and Firefox; Chromium/WebKit use the latest press target.
@@ -178,14 +181,14 @@ export class PointerEventStream {
       const pressed = type === 'pointerdown' || (type === 'pointermove' && (input.buttons & mask) !== 0);
       if (pressed) this.#pressTargets.set(input.button, target);
       const activation = this.#activation ??= {
-        input: new PointerEventImpl('', {}, 0), target, captured: false, pressTarget: null,
+        input: new PointerEventImpl('', {}, 0), target, targetOverridden: false, pressTarget: null,
       };
       activation.pressTarget = pressed ? null : this.#pressTargets.get(input.button) ?? null;
       if (!pressed) this.#pressTargets.delete(input.button);
       activation.input.copyInputFrom(input);
       activation.input.type = type;
       activation.target = target;
-      activation.captured = this.capture.targetOverride !== null;
+      activation.targetOverridden = pointerLocked || this.capture.targetOverride !== null;
     } else if (type === 'pointercancel') {
       this.#pressTargets.clear();
       this.#activation = null;
@@ -211,7 +214,7 @@ export class PointerEventStream {
       // SPEC_CLASH(pointer-up-hover-target): Restore the hit target per §8.5 and Chromium/Firefox; WebKit missed the destination in the captured-mouse probe.
       const hoverTarget = type === 'pointerup' ? getHoverTarget() : null;
       const hoverPath = this.#sendBoundaryEvents(input, hoverTarget);
-      mouse?.updatePosition(input, hoverTarget);
+      mouse?.updatePosition(input, hoverTarget, pointerLocked);
       if (hoverPath !== null) this.#previousPathNodes = hoverPath;
       this.previousTarget = hoverTarget;
       this.needsOverEvent = false;
@@ -247,10 +250,10 @@ export class PointerEventStream {
   dispatchActivation(type: PointerActivationEventType, detail: number, doubleClick = false): boolean {
     const activation = this.#activation;
     if (activation === null) return true;
-    const { input, captured, pressTarget } = activation;
+    const { input, targetOverridden, pressTarget } = activation;
     if (type !== 'contextmenu' && pressTarget === null) return true;
     let target: NodeImpl | null = activation.target;
-    if (type !== 'contextmenu' && !captured) {
+    if (type !== 'contextmenu' && !targetOverridden) {
       // SPEC_CLASH(pointer-activation-live-ancestry): Use the current ancestry per the draft/Firefox; Chromium/WebKit suppress the probed reparented press.
       // SPEC_CLASH(pointer-activation-shadow-ancestry): Follow all three browsers through slots and shadow hosts; literal DOM ancestry cannot connect those targets.
       const ancestors = new Set<NodeImpl>();
@@ -417,8 +420,7 @@ export class PointerEventStream {
   /** Release this element's pending capture without delivering notifications yet. */
   // https://w3c.github.io/pointerevents/#releasing-pointer-capture
   // Element.releasePointerCapture resolves the active ID before calling this operation.
-  // TODO(Pointer Events §8.5 / Pointer Lock success): when the unfinished lock
-  // owner applies a lock, release each affected stream's pending capture here.
+  // PointerLock releases each pending capture here when applying a lock (§8.5).
   // Effective loss is delivered by the next pending-capture processing pass.
   releasePointerCapture(element: ElementImpl): void {
     if (this.capture.pendingTargetOverride === element) this.capture.pendingTargetOverride = null;

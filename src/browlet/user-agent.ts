@@ -45,7 +45,7 @@ import {
   BrowsingContextGroup, Navigable, TopLevelTraversable, type NavigableContainer, type PostResource,
   type Traversable, type UnloadCancellationResult, type UserNavigationInvolvement,
 } from './browsing/navigation/index';
-import { ActivePointers, MouseInputProcessor } from './interaction/index';
+import { ActivePointers, MouseInputProcessor, PointerLock } from './interaction/index';
 import { NodeHTTPTransport, createContentDecoder, supportedContentCodings } from './integration/host/network/index';
 import { NodePromise, queueNodeTask, nodeTimerHost } from './integration/host/index';
 import type { PermissionStatusImpl } from './integration/permissions/index';
@@ -178,6 +178,8 @@ export class UserAgent implements
 
   /** Allocate the native/automation mouse owner only when input is used. */
   #mouseInput: MouseInputProcessor | null = null;
+  /** Pointer Lock state is shared across Documents and allocated on first use. */
+  #pointerLock: PointerLock | null = null;
 
   constructor() {
     this.sandbox = createSandboxEnvironment(this);
@@ -187,12 +189,26 @@ export class UserAgent implements
     return this.#mouseInput ??= new MouseInputProcessor(this);
   }
 
+  get pointerLock(): PointerLock {
+    return this.#pointerLock ??= new PointerLock(this);
+  }
+
   /** Node host consent hook; a browser without a configured prompt declines new requests. */
   // TODO(Permissions host integration): cancel still-open prompts when their requesting global is destroyed.
   onPermissionPrompt: PermissionPrompt = () => false;
 
   /** Node host chooser; absent UI denies selection. Pending UI cancellation is the same dependency as prompting. */
   onPermissionChoice: PermissionChooser = () => 'denied';
+
+  /** Release an existing lock after DOM unlinking without allocating an unused controller. */
+  // https://w3c.github.io/pointerlock/#requirements
+  // SPEC_CLASH(pointer-lock-state-preserving-move): DOM moveBefore bypasses removal, preserving lock; the Chromium/Firefox probe releases it.
+  releaseDisconnectedPointerLock(): void {
+    const lock = this.#pointerLock;
+    if (lock === null) return;
+    const target = lock.target;
+    if (target !== null && !target.isConnected) lock.exitPointerLock(target);
+  }
 
   /** Recheck live results after a decision or feature-specific constraint changes. */
   // TODO(Permissions Policy/feature APIs): call this when enablement or other permission inputs change.

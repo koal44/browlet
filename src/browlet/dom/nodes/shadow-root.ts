@@ -73,6 +73,11 @@ export class ShadowRootImpl extends DocumentFragmentImpl {
     return this.#documentOrShadowRootMixin.activeElement;
   }
 
+  /** Pointer-locked element visible within this shadow tree. */
+  get pointerLockElement(): ElementImpl | null {
+    return this.#documentOrShadowRootMixin.pointerLockElement;
+  }
+
   /** Live associated sheets, excluding the separately retained adopted list. */
   get styleSheets(): StyleSheetListImpl {
     return this.#documentOrShadowRootMixin.styleSheets;

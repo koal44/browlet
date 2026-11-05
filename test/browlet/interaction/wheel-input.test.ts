@@ -317,11 +317,7 @@ describe('Pointer Events §12: wheel input', () => {
     expect(apply).toHaveBeenCalledOnce();
   });
 
-  it('fails explicitly at the missing Pointer Lock, hit-testing, and default-action owners', () => {
-    const lock = createFixture();
-    lock.locked.mockRestore();
-    lock.input.queue(wheelInput());
-    expect(() => lock.loop.runTaskTurn()).toThrow(/Pointer Lock state/);
+  it('fails explicitly at the missing hit-testing and default-action owners', () => {
     const layout = createFixture();
     layout.hitTest.mockRestore();
     layout.input.queue(wheelInput());

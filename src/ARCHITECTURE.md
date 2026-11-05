@@ -1245,8 +1245,9 @@ Inactivity invalidates queued input even if the Document is reactivated; destruc
 also removes its tasks. DOM builds the dispatch path once, then an internal callback
 observes effective non-passive listeners before delivery to choose cancelability.
 Only uncanceled delivery requests the default action, using private input rather
-than author-modifiable event properties. Hit testing, Pointer Lock state, and
-scrolling/zooming remain named throwing owner dependencies. Device normalization,
+than author-modifiable event properties. Hit testing and scrolling/zooming remain
+named throwing owner dependencies. Pointer Lock supplies the actual locked target
+and frozen coordinates. Device normalization,
 native gesture timing, and cross-Document routing precede this internal entry.
 
 UserAgent lazily owns `MouseInputProcessor` in `interaction/mouse-input.ts`, above
@@ -1265,11 +1266,10 @@ capture or layout before the following move selects its target.
 The adapter's context-menu flag selects press or release timing. The processor
 dispatches a trusted contextmenu using private input and the triggering pointer
 target, then requests native UI only if uncanceled. The menu precedes any click
-from that transition and does not process capture again. Layout targeting,
-Pointer Lock state, HTML activation/focusing, and native menu UI are named
-throwing dependencies on this owner until their implementations can be connected.
-Tests control only those
-dependencies and drive the real queue/stream/Binding/listener path. A native GUI
+from that transition and does not process capture again. The Pointer Lock query
+reads UserAgent's controller. Layout targeting, HTML activation/focusing, and
+native menu UI remain named throwing dependencies on this owner.
+Tests control those dependencies and drive the real queue/stream/Binding/listener path. A native GUI
 adapter and WebDriver Actions connection remain separate integration work.
 
 UserAgent owns `ActivePointers` in `interaction/pointer.ts`. These retained input
@@ -1342,6 +1342,25 @@ Document cleanup are connected. Recursive/inactive Document destruction remains
 HTML §7.5.10 work; its lifecycle integration must preserve the existing cleanup.
 Other devices still need ID assignment, registration/retirement and delivery
 through these stream operations.
+
+UserAgent lazily owns one `PointerLock` shared by its Documents. The controller
+retains lock state, a weak per-Document API-release exemption, and an Infra
+parallel queue. Element/Document APIs delegate to it; the DocumentOrShadowRoot
+mixin owns getter retargeting. Bindings supply conversion and relevant-realm
+Promise/error projection; element user-interaction tasks notify then settle.
+Mouse/capture and wheel queries read this owner; successful acquisition releases
+pending capture through existing stream methods. Acquisition supplies frozen
+screen/client coordinates; MouseInputProcessor.queueRelativeMove accepts measured
+deltas and reuses the existing pointer/mouse pipeline. A locked-delivery flag
+suppresses mouse boundaries, retaining pointer dispatch and the locked activation
+target. Generations discard queued input after lock changes; exit resets unlocked
+motion history. Native effects and HTML focus are explicit throwing dependencies;
+the focus query lives on Document.hasFocus(), not the PointerLock controller.
+Document's existing removal notification asks UserAgent to release its already-created
+controller's disconnected target, without allocating a controller on unused paths.
+Queued requests recheck their original Document and focus before acquisition;
+notification tasks retain the affected Document across adoption. Native unlock/
+focus-loss signals and HTML teardown remain unfinished in the [Pointer Lock roadmap](browlet/interaction/POINTER-LOCK.md).
 
 Native stream delivery accepts an optional `PointerEventSamples` input containing
 coalesced and predicted snapshots. `PointerEventImpl.initializeSampleLists()` creates
