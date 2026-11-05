@@ -1,3 +1,4 @@
+import { randomUUID } from '../js-engine/index';
 import { serializeHost, type Host, type OpaqueOrigin, type Origin, type Site } from './core/index';
 
 import { hostsEqual, obtainPublicSuffix, obtainRegistrableDomain, parseHost } from './host';
@@ -8,7 +9,9 @@ import { hostsEqual, obtainPublicSuffix, obtainRegistrableDomain, parseHost } fr
  * https://html.spec.whatwg.org/multipage/browsers.html#concept-origin-opaque
  */
 export function createOpaqueOrigin(potentiallyTrustworthy = false): OpaqueOrigin {
-  return { kind: 'opaque', identity: Symbol('opaque origin'), potentiallyTrustworthy };
+  // Host transport must preserve equality across isolates. This private token
+  // never replaces the public "null" serialization of an opaque origin.
+  return { kind: 'opaque', identity: randomUUID(), potentiallyTrustworthy };
 }
 
 /*

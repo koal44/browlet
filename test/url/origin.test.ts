@@ -10,6 +10,20 @@ import {
 } from '../../src/url/origin';
 
 describe('origin comparisons', () => {
+  it('preserves opaque identity through host transport without exposing it in origin serialization', () => {
+    const original = createOpaqueOrigin(true);
+    const received = structuredClone(original);
+    const forwarded = structuredClone(received);
+
+    expect(forwarded).not.toBe(original);
+    expect(areSameOrigin(original, forwarded)).toBe(true);
+    expect(areSameOriginDomain(original, forwarded)).toBe(true);
+    expect(areSameSite(original, forwarded)).toBe(true);
+    expect(areSameOrigin(createOpaqueOrigin(true), forwarded)).toBe(false);
+    expect(forwarded).toMatchObject({ potentiallyTrustworthy: true });
+    expect(serializeOrigin(forwarded)).toBe('null');
+  });
+
   it('compares opaque origins by identity', () => {
     const first = createOpaqueOrigin();
     const second = createOpaqueOrigin();

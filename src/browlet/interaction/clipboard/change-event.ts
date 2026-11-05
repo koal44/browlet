@@ -9,11 +9,9 @@ import type { DOMEnvironment } from '../../dom/environment';
 
 /** Clipboard change data; construction copies supplied values without observing the system clipboard. */
 // https://w3c.github.io/clipboard-apis/#h-clipboardchange-event-steps
-// TODO(Clipboard §5.2.1 / fire a clipboardchange event, Document focus steps, generate a changeId):
-// The native producer still needs mandatory formats, a changing system identifier,
-// storage-key hashing, activation/permission gating, and pending focus replay.
-// Document.hasFocus() is an existing throwing dependency; this data object does
-// not choose the notification target or supply native clipboard access.
+// SystemClipboard owns native filtering, identifier generation, gating and focus replay.
+// Its native snapshot and persistent-permission operations, and Document.hasFocus(),
+// remain explicit throwing dependencies until their owners are implemented.
 export class ClipboardChangeEventImpl extends EventImpl {
   /** Immutable snapshot by list identity; Binding owns its realm's frozen array. */
   types: readonly string[];

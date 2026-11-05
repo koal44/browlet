@@ -1223,6 +1223,29 @@ coordinator in the import hierarchy. Folder moves do not change the retained
 UserAgent, Document, and top-level-context state owners. Each feature keeps its
 implementation evidence and remaining work in its own `ROADMAP.md`.
 
+UserAgent lazily owns SystemClipboard in interaction/clipboard. The controller
+owns a session value for change IDs, while Document owns the pending-focus flag.
+Explicit native/focus entries queue Document-associated user-interaction tasks;
+DOM's trusted-event factory and Binding retain event and array realm ownership.
+A single host snapshot supplies canonical MIME types and a per-write token.
+StorageKey owns its byte encoding, reusing the UUID carried by each opaque origin;
+Clipboard combines it with the session/token and hashes to 128 bits. Native
+snapshot access, persistent read consent and HTML system focus remain named
+throwing dependencies. HTML's future focus transition calls the explicit
+Document notification; neither activity nor visibility substitutes for focus.
+For trusted copy/cut/paste, SystemClipboard.fireEvent runs within an admitted
+caller's task and returns cancellation, copied item data and clear bookkeeping.
+A native-only ClipboardDataTransferImpl subclass uses the existing DataTransfer
+binding, tracks native paste lifetime, and detaches in finally after dispatch.
+Other transfers acquire no clipboard state. Target selection and native paste
+preparation remain named throwing dependencies. SystemClipboard.runAction owns §8
+admission and default/canceled branching; its required source distinguishes native
+UI from script commands. Menu adapters use queueAction, while keyboard default
+actions reuse their keydown task. Native writes report a generation change before
+notification is queued. Rendering/editing/native-format effects remain explicit
+throwing methods until their owners exist; no editor façade or Document state was
+introduced. Synthetic dispatch does not enter the action layer.
+
 Document lazily owns `SelectionImpl` in `interaction/selection/`, below DOM nodes.
 Selection retains one public live Range and, only for cross-root spans, two internal
 collapsed Ranges tracking its composed endpoints. Range directly references Selection through

@@ -10,7 +10,8 @@ export type Origin = OpaqueOrigin | TupleOrigin;
 
 export type OpaqueOrigin = {
   kind: 'opaque';
-  identity: symbol;
+  /** Private identity, preserved when this origin is copied to another isolate. */
+  identity: string;
   // Retains the creator's trust decision without changing opaque-origin identity.
   // https://w3c.github.io/webappsec-secure-contexts/#is-origin-trustworthy
   potentiallyTrustworthy: boolean;

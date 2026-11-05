@@ -517,11 +517,11 @@ export class BrowsingContextGroup {
 /** Indexes clusters by origin or site value rather than record identity. */
 class AgentClusterMap {
   /** Value-comparable keys do not keep otherwise unreachable clusters alive. */
-  #values = new Map<string | symbol, WeakRef<AgentCluster>>();
+  #values = new Map<string, WeakRef<AgentCluster>>();
 
-  static #getKey(key: AgentClusterKey): string | symbol {
+  static #getKey(key: AgentClusterKey): string {
     if (Array.isArray(key)) return `site:${serializeSite(key)}`;
-    if (key.kind === 'opaque') return key.identity;
+    if (key.kind === 'opaque') return `opaque:${key.identity}`;
     return `origin:${serializeOrigin(key)}`;
   }
 
@@ -551,12 +551,12 @@ class AgentClusterMap {
 /** Remembers each origin's initial cluster key using origin value equality. */
 class HistoricalAgentClusterKeyMap {
   /** Origin decisions remain available for the entire group's lifetime. */
-  #values = new Map<string | symbol, AgentClusterKey>();
+  #values = new Map<string, AgentClusterKey>();
 
-  static #getKey(origin: Origin): string | symbol {
+  static #getKey(origin: Origin): string {
     return origin.kind === 'opaque'
-      ? origin.identity
-      : serializeOrigin(origin);
+      ? `opaque:${origin.identity}`
+      : `origin:${serializeOrigin(origin)}`;
   }
 
   get(origin: Origin): AgentClusterKey | undefined {

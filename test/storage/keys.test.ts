@@ -129,6 +129,42 @@ describe('storage-key equality', () => {
   });
 });
 
+describe('storage-key byte representation', () => {
+  it('encodes equal tuple keys identically regardless of URL path or domain relaxation', () => {
+    const first = StorageKey.obtainForNonStoragePurposes(createStorageEnvironment('https://example.test/a'));
+    const second = StorageKey.obtainForNonStoragePurposes(createStorageEnvironment('https://example.test:443/b'));
+    expect(first.toBytes()).toEqual(second.toBytes());
+    const origin: TupleOrigin = {
+      kind: 'tuple', scheme: 'https', host: { kind: 'domain', value: 'example.test' },
+      port: null, domain: { kind: 'domain', value: 'test' },
+    };
+    expect(new StorageKey(origin).toBytes()).toEqual(first.toBytes());
+  });
+
+  it.each(['http://example.test/', 'https://other.test/', 'https://example.test:8443/'])(
+    'encodes unequal tuple keys differently: %s', (url) => {
+      const first = StorageKey.obtainForNonStoragePurposes(createStorageEnvironment('https://example.test/'));
+      const second = StorageKey.obtainForNonStoragePurposes(createStorageEnvironment(url));
+      expect(first.toBytes()).not.toEqual(second.toBytes());
+    },
+  );
+
+  it('retains opaque identity across key/origin objects without merging different null origins', () => {
+    const origin = createOpaqueOrigin();
+    const first = new StorageKey(origin);
+    expect(new StorageKey({ ...origin }).toBytes()).toEqual(first.toBytes());
+    expect(new StorageKey(structuredClone(origin)).toBytes()).toEqual(first.toBytes());
+    expect(new StorageKey(createOpaqueOrigin()).toBytes()).not.toEqual(first.toBytes());
+    expect(new TextDecoder().decode(first.toBytes())).not.toBe('null');
+  });
+
+  it('does not let callers mutate the retained opaque representation', () => {
+    const key = new StorageKey(createOpaqueOrigin());
+    const expected = key.toBytes(); const changed = key.toBytes(); changed.fill(0);
+    expect(key.toBytes()).toEqual(expected); expect(key.toBytes()).not.toBe(expected);
+  });
+});
+
 function createStorageEnvironment(url: string) {
   const creationURL = parseURL(url).url!;
   return {

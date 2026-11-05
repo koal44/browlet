@@ -1,4 +1,5 @@
-import { areSameOrigin, obtainURLOrigin, type Origin } from '../url/index';
+import { utf8Encode } from '../encoding/index';
+import { areSameOrigin, obtainURLOrigin, serializeOrigin, type Origin } from '../url/index';
 
 import type { StorageEnvironmentBase } from './environment';
 
@@ -26,6 +27,17 @@ export class StorageKey {
   static obtainForNonStoragePurposes(env: StorageEnvironmentBase): StorageKey {
     const origin = env.origin ?? obtainURLOrigin(env.creationURL);
     return new StorageKey(origin);
+  }
+
+  /** Encode this key for non-storage algorithms, preserving key equality without exposing opaque identities. */
+  // Clipboard §5.2.1 permits a user-agent-specific storage-key byte representation.
+  // https://w3c.github.io/clipboard-apis/#h-changeid-generation
+  // Extend this alongside equals() if Storage adds partition components.
+  toBytes(): Uint8Array<ArrayBuffer> {
+    const origin = this.origin;
+    return utf8Encode(origin.kind === 'opaque'
+      ? 'opaque:' + origin.identity
+      : 'tuple:' + serializeOrigin(origin));
   }
 
   /** Whether both keys identify the same storage partition. */

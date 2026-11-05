@@ -256,6 +256,9 @@ export class DocumentImpl extends NodeImpl {
 
   /** Whether a selectionchange task is already queued for this target. */
   selectionChangeScheduled = false;
+  /** A permitted clipboard change was deferred while this Document lacked system focus. */
+  // https://w3c.github.io/clipboard-apis/#h-fire-clipboardchange-event
+  clipboardChangePending = false;
 
   /** Associated browsing context, or null for a detached document. */
   #browsingContext: BrowsingContext | null = null;
@@ -1452,6 +1455,7 @@ export class DocumentImpl extends NodeImpl {
     this.runUnloadingCleanup();
     this.#legacyMouse?.clear();
     this.#wheelInput?.clear();
+    this.clipboardChangePending = false;
     // Browlet input lifetime integration: discard this Document's retained
     // pointer references before detaching it, without firing teardown events.
     navigable.topLevelTraversable.clearPointerStateForDocument(this);
@@ -1938,6 +1942,13 @@ export class DocumentImpl extends NodeImpl {
     this.env.userAgent.pointerLock.exitForDocument(this);
   }
 
+  /** Queue Clipboard's pending notification after the focus owner reports a gain of system focus. */
+  // https://w3c.github.io/clipboard-apis/#h-document-focus-steps
+  // TODO(HTML §6.6): call this from completed system-focus transitions, not visibility or full-activity changes.
+  notifySystemFocusGained(): void {
+    if (this.clipboardChangePending) this.env.userAgent.systemClipboard.queueFocus(this);
+  }
+
   /** Whether this Document is on the focused chain of a traversable with system focus. */
   // https://html.spec.whatwg.org/multipage/interaction.html#has-focus-steps
   hasFocus(): boolean {
@@ -2006,7 +2017,10 @@ export class DocumentImpl extends NodeImpl {
   /** Notify subscribers and descendant Documents after navigation or lifecycle state changes. */
   notifyFullyActiveStateChanged(): void {
     const fullyActive = this.isFullyActive();
-    if (!fullyActive) this.#wheelInput?.clear();
+    if (!fullyActive) {
+      this.#wheelInput?.clear();
+      this.clipboardChangePending = false;
+    }
     for (const observer of this.#fullyActiveObservers) {
       observer(fullyActive);
     }

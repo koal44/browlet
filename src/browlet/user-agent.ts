@@ -30,6 +30,7 @@ import {
   SharedWorkerAgent, WindowAgent, WorkletAgent,
 } from './scripting/index';
 import { type ReportingEndpoint, ReportImpl } from './reporting/index';
+import { SystemClipboard } from './interaction/clipboard/index';
 import { PolicyContainer, HSTSStore, EmbedderPolicy, type SandboxingFlagSet } from './browsing/policy/index';
 import { CSPList } from './browsing/policy/csp/index';
 import type { IntersectionObserverMargin } from './dom/intersection-observer/index';
@@ -182,6 +183,8 @@ export class UserAgent implements
   #keyboardInput: KeyboardInputProcessor | null = null;
   /** Pointer Lock state is shared across Documents and allocated on first use. */
   #pointerLock: PointerLock | null = null;
+  /** System clipboard notification identity belongs to this UserAgent and is allocated only when used. */
+  #systemClipboard: SystemClipboard | null = null;
 
   constructor() {
     this.sandbox = createSandboxEnvironment(this);
@@ -197,6 +200,10 @@ export class UserAgent implements
 
   get pointerLock(): PointerLock {
     return this.#pointerLock ??= new PointerLock(this);
+  }
+
+  get systemClipboard(): SystemClipboard {
+    return this.#systemClipboard ??= new SystemClipboard();
   }
 
   /** Node host consent hook; a browser without a configured prompt declines new requests. */

@@ -61,7 +61,14 @@ owns [B–C](../file/ROADMAP.md#blob-url-integration).
 `equals()`. The one-member tuple is represented by its named `origin` field.
 Storage acquisition returns null for opaque origins or disabled storage;
 non-storage acquisition preserves opaque-origin identity and remains available
-when storage is disabled. Blob URL checks and BroadcastChannel use the latter.
+when storage is disabled. Blob URL checks, BroadcastChannel and Clipboard
+change-ID generation use the latter. StorageKey.toBytes() provides Clipboard's
+permitted UA-specific binary representation without exposing origin internals to
+that consumer. Equal tuple keys encode identically, ignoring document.domain;
+opaque identities use the UUID already carried by each origin. No encoding
+registry is needed, and transported origin copies retain the same bytes.
+Returned bytes are fresh so consumers cannot mutate the origin's identity.
+This encoding must evolve with equals() when partition components are added.
 
 The narrow `StorageEnvironmentBase` interface in `environment.ts` is implemented by
 Browlet's `BrowletEnvironmentBase` base class. Full `BrowletEnvironment` objects extend it;

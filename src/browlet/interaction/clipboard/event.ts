@@ -10,10 +10,11 @@ import type { DOMEnvironment } from '../../dom/environment';
 
 /** Clipboard event data; synthetic construction and dispatch do not access the system clipboard. */
 // https://w3c.github.io/clipboard-apis/#clipboard-event-interfaces
-// TODO(Clipboard / fire a clipboard event): native delivery must supply a filtered
-// data store, choose its access mode and target, and apply copy/cut/paste policy.
-// DOM's generic event factory is not that producer. Keyboard default actions remain
-// an explicit dependency until native clipboard access and editing are connected.
+// SystemClipboard.fireEvent owns trusted delivery and its temporary DataTransfer.
+// SystemClipboard.runAction owns admission and copy/cut/paste action branching.
+// TODO(Clipboard integration): connect keyboard/menu/script command callers and
+// the explicit native/rendering/editing dependencies; synthetic DOM dispatch must
+// never invoke these effects.
 export class ClipboardEventImpl extends EventImpl {
   /** The supplied transfer keeps its identity, mutability, and relevant realm. */
   clipboardData: DataTransferImpl | null;

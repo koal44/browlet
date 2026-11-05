@@ -183,9 +183,18 @@ The [Clipboard opening review](browlet/interaction/clipboard/ROADMAP.md) covers
 now supplies string/File operations, bindings, and lifetime checks. Drag-image
 rendering remains an explicit throwing dependency; native dragging is separate.
 Clipboard §5.1 now exposes ClipboardEvent and reuses existing handlers and DOM
-dispatch. §5.2.1's ClipboardChangeEvent data interface is also implemented. Next
-are that subsection's native notification algorithms, with clipboard state, focus,
-activation/permissions, and storage-key change identifiers still to connect.
+dispatch. §5.2.1 now supplies ClipboardChangeEvent data, queued notifications,
+focus replay and storage-key change IDs. Native clipboard state, persistent read
+consent and HTML system focus remain explicit throwing dependencies.
+§§5.2.2–5.2.4 now have trusted event delivery and temporary DataTransfer lifetime;
+rendered/editable target selection and native paste preparation still throw.
+§5.3, §§6.1–6.3 and §§8.1–8.3 now have action admission and cancellation/default
+flow, write/clear decisions and queued change notifications. Native writing,
+rendered selection, editing and script-paste permission remain explicit throwing
+dependencies; keyboard/menu/execCommand callers still need their owners. §§6.4–6.5
+format requirements are recorded at those effects; §6.6 informs later async read
+options. Next is §7's async Clipboard
+interface foundation, beginning with Navigator.clipboard and ClipboardItem.
 CSSOM View remains deferred.
 HTML §8.1.8.3's synthetic pointer-event operation still needs its hookup. Input producers retain
 their HTML, editing, and layout owners.

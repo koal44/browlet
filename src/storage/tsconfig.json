@@ -12,6 +12,7 @@
     { "path": "../permissions" },
     { "path": "../infra" },
     { "path": "../js-engine" },
+    { "path": "../encoding" },
     { "path": "../web-idl/core" },
     { "path": "../url" }
   ]

@@ -50,7 +50,7 @@ export const layers = [
   ['browlet/interaction/drag-drop/'],
   // Feature event payloads can serve Document's legacy factory without loading their producers.
   ['browlet/storage/events/', 'browlet/browsing/navigation/events/', 'browlet/interaction/events/'],
-  // Clipboard event data consumes DataTransfer; native clipboard integration is separate.
+  // Clipboard data/notification algorithms use lower event/task primitives and type-only Document references.
   ['browlet/interaction/clipboard/'],
   // Document owns mouse/wheel input state; these foundations use event primitives and typed nodes only.
   ['browlet/interaction/mouse/legacy/', 'browlet/interaction/wheel/'],

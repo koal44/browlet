@@ -1161,13 +1161,25 @@ drag feedback are not available. Native DragEvent production, shared-store
 association across events, and effect copy-back/detachment integration remain
 unimplemented. ClipboardEvent now retains a supplied DataTransfer and supports
 synthetic dispatch through existing cut/copy/paste handlers. Those events do not
-access the system clipboard or edit the selection. ClipboardChangeEvent likewise
-provides only synthetic data: copied types, stable frozen-array identity and a
-supplied bigint changeId. Its constructor follows the draft's type/init and Window
-exposure rules rather than Chromium's init-only secure-context interface.
-Native clipboard-change notifications, native access, permission/focus gating,
-and actual copy/cut/paste actions
-remain unfinished. See the [data API boundary](browlet/interaction/drag-drop/ROADMAP.md)
+access the system clipboard or edit the selection. ClipboardChangeEvent supports
+copied types, stable frozen-array identity and a supplied bigint changeId. Its
+constructor follows the draft's type/init and Window exposure rules rather than
+Chromium's init-only secure-context interface. SystemClipboard supplies queued
+trusted notifications, focus replay, mandatory-format filtering and 128-bit IDs
+derived from Storage keys. Native snapshot access, persistent read consent and
+Document focus tracking still throw; no OS clipboard observer or HTML focus-gain
+caller is installed. Synthetic construction remains available on HTTP; native
+notification delivery requires a secure, fully active Document. Actual clipboard
+reads/writes and end-to-end copy/cut/paste remain unfinished. Trusted copy/cut/paste
+now have event dispatch, writable/read-only stores, clear bookkeeping and revoked
+post-dispatch access. SystemClipboard.getEventTarget() and readForPaste() throw
+for missing editing/rendered-selection targeting and native paste preparation,
+including HTML processing. §8 action admission, cancellation/default branching,
+write/clear decisions and queued notifications now exist. Command adapters and
+execCommand callers are not connected. Script paste permission, rendered selection
+extraction, editable-state queries, cut/paste editing/event delivery and native
+replacement/clearing remain named throwing methods. The transient-activation check
+for script copy/cut also retains its existing HTML dependency. See the [data API boundary](browlet/interaction/drag-drop/ROADMAP.md)
 and [Clipboard event slice](browlet/interaction/clipboard/ROADMAP.md).
 
 ## HTML integration gates

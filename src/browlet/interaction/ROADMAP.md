@@ -17,7 +17,7 @@ Document lifecycle.
 | [wheel](wheel/ROADMAP.md) | Document-owned input queue and retained gesture target. |
 | [selection](selection/ROADMAP.md) | Document selection, live ranges, and change notifications. |
 | [drag-drop](drag-drop/ROADMAP.md) | DataTransfer store access, items, Files, and queued string reads; native dragging and image feedback remain explicit. |
-| [clipboard](clipboard/ROADMAP.md) | ClipboardEvent and ClipboardChangeEvent data/synthetic delivery; §5.2.1 native change notifications remain next. |
+| [clipboard](clipboard/ROADMAP.md) | Event data, queued change notifications, focus replay and StorageKey-specific IDs; native/focus/permission effects remain explicit. |
 
 Folders follow feature ownership; their dependency levels remain explicit in the
 import hierarchy. Document imports mouse/legacy/index directly so constructing its
@@ -254,9 +254,11 @@ covers §§1–4 and identifies §5.1 ClipboardEvent as the first API implementa
 The [HTML §§6.11.2–6.11.3 data slice](drag-drop/ROADMAP.md) now supplies the
 DataTransfer prerequisite. [Clipboard §5.1](clipboard/ROADMAP.md) now exposes
 ClipboardEvent through existing handlers and DOM dispatch. §5.2.1's
-ClipboardChangeEvent data interface is also implemented. Its native change
-notifications, focus replay and storage-key change IDs remain next; native
-clipboard/focus/permission effects require explicit owner connections.
+ClipboardChangeEvent data and local notification algorithms are implemented,
+including queued delivery, focus replay and storage-key change IDs. Native
+clipboard state, persistent read consent and HTML focus remain explicit throwing
+dependencies. Next are §§5.2.2–5.2.4's copy/cut/paste event definitions and their
+referenced action algorithms.
 CSSOM View remains deferred.
 
 ## Input producer direction
