@@ -41,7 +41,7 @@ import { BeforeUnloadEventImpl, HashChangeEventImpl } from '../../browsing/navig
 import {
   UIEventImpl, FocusEventImpl, KeyboardEventImpl, CompositionEventImpl, TextEventImpl, MouseEventImpl, pointerGlobalEventHandlers,
 } from '../../interaction/events/index';
-import { LegacyMouseProcessor } from '../../interaction/mouse/index';
+import { LegacyMouseProcessor } from '../../interaction/mouse/legacy/index';
 import { WheelInputProcessor } from '../../interaction/wheel/index';
 import {
   InsecureRequestsPolicy, PolicyContainer, OpenerPolicy, PermissionsPolicy, PermissionsPolicyImpl, SandboxingFlagSet,
@@ -1378,7 +1378,7 @@ export class DocumentImpl extends NodeImpl {
       eventLoop.terminationNestingLevel++;
       try {
         // SPEC_GAP(beforeunload-event-reference): HTML later reads an undefined event variable; retain the dispatched event.
-        event = window.createTrustedEvent(BeforeUnloadEventImpl) as BeforeUnloadEventImpl;
+        event = window.createTrustedEvent(BeforeUnloadEventImpl);
         event.type = 'beforeunload';
         event.cancelable = true;
         // SPEC_CLASH(beforeunload-document-target): All three browsers use Document as target while dispatching on Window;

@@ -8,6 +8,7 @@ export interface DOMEnvironment {
   /** Realm owning this environment's DOM objects. */
   realm: DOMRealm;
   /** Create a trusted event owned by this environment's realm. */
+  createEvent<T extends EventImpl>(eventConstructor: EventImplConstructor<T>): T;
   createEvent(eventConstructor?: EventImplConstructor): EventImpl;
 }
 
@@ -48,4 +49,4 @@ export interface WindowDOMAgent {
 }
 
 /** Event class whose constructor dependencies are supplied by its registered Binding. */
-export type EventImplConstructor = abstract new (...argumentsList: never[]) => EventImpl;
+export type EventImplConstructor<T extends EventImpl = EventImpl> = abstract new (...argumentsList: never[]) => T;

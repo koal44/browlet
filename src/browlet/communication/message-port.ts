@@ -131,8 +131,7 @@ export class MessagePortImpl extends EventTargetImpl {
         this.messageEventTarget.fireEvent('messageerror', MessageEventImpl);
         return;
       }
-      this.messageEventTarget.fireEvent('message', MessageEventImpl, (event) => {
-        const message = event as MessageEventImpl;
+      this.messageEventTarget.fireEvent('message', MessageEventImpl, (message) => {
         message.data = received.deserialized;
         message.ports = received.transferredValues.filter((value): value is MessagePortImpl => value instanceof MessagePortImpl);
       });

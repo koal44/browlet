@@ -104,8 +104,7 @@ export class StorageImpl {
         if (traversable === undefined || remoteDocument.getNodeNavigable()?.traversable !== traversable) continue;
       }
       remoteStorage.env.realm.queueGlobalTask(domManipulationTaskSource, () => {
-        remoteStorage.env.window.fireEvent('storage', StorageEventImpl, (event) => {
-          const storageEvent = event as StorageEventImpl;
+        remoteStorage.env.window.fireEvent('storage', StorageEventImpl, (storageEvent) => {
           storageEvent.key = key;
           storageEvent.oldValue = oldValue;
           storageEvent.newValue = newValue;

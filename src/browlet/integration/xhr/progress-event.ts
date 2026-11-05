@@ -36,8 +36,7 @@ export class ProgressEventImpl extends EventImpl {
     transmitted: number,
     length: number,
   ): boolean {
-    return target.fireEvent(name, ProgressEventImpl, (event) => {
-      const progress = event as ProgressEventImpl;
+    return target.fireEvent(name, ProgressEventImpl, (progress) => {
       progress.loaded = transmitted;
       if (length !== 0) {
         progress.lengthComputable = true;

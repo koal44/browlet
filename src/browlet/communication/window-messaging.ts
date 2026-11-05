@@ -36,15 +36,13 @@ export function windowPostMessage(
     try {
       received = targetWindow.env.deserializeWithTransfer(serialized);
     } catch {
-      targetWindow.fireEvent('messageerror', MessageEventImpl, (event) => {
-        const message = event as MessageEventImpl;
+      targetWindow.fireEvent('messageerror', MessageEventImpl, (message) => {
         message.setOrigin(origin);
         message.source = source;
       });
       return;
     }
-    targetWindow.fireEvent('message', MessageEventImpl, (event) => {
-      const message = event as MessageEventImpl;
+    targetWindow.fireEvent('message', MessageEventImpl, (message) => {
       message.setOrigin(origin);
       message.source = source;
       message.data = received.deserialized;

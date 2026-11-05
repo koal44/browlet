@@ -526,7 +526,7 @@ async function fixture() {
     const transition = new NavigationTransitionImpl('push', navigation.currentEntry!, destination, document.env);
     navigation.transition = transition;
     const controller = document.env.createAbortController();
-    const event = document.env.createEvent(NavigateEventImpl) as NavigateEventImpl;
+    const event = document.env.createEvent(NavigateEventImpl);
     event.type = 'navigate';
     event.destination = destination;
     event.signal = controller.signal;

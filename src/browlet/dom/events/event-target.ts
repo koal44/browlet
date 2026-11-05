@@ -90,6 +90,8 @@ export class EventTargetImpl {
 
   /** Create and dispatch a trusted event, returning false if canceled. */
   // https://dom.spec.whatwg.org/#concept-event-fire
+  fireEvent<T extends EventImpl>(name: string, eventConstructor: EventImplConstructor<T>, initialize?: (event: T) => void, legacyTargetOverride?: boolean): boolean;
+  fireEvent(name: string, eventConstructor?: EventImplConstructor, initialize?: (event: EventImpl) => void, legacyTargetOverride?: boolean): boolean;
   fireEvent(
     name: string,
     eventConstructor?: EventImplConstructor,
@@ -104,6 +106,8 @@ export class EventTargetImpl {
 
   /** Create a trusted event in the environment supplied at construction. */
   // https://dom.spec.whatwg.org/#concept-event-create
+  createTrustedEvent<T extends EventImpl>(eventConstructor: EventImplConstructor<T>): T;
+  createTrustedEvent(eventConstructor?: EventImplConstructor): EventImpl;
   createTrustedEvent(eventConstructor?: EventImplConstructor): EventImpl {
     return this.env.createEvent(eventConstructor);
   }

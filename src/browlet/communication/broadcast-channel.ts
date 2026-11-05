@@ -66,12 +66,11 @@ export class BroadcastChannelImpl extends EventTargetImpl {
           data = destination.env.deserialize(serialized);
         } catch {
           destination.fireEvent('messageerror', MessageEventImpl, (event) => {
-            (event as MessageEventImpl).setOrigin(sourceOrigin);
+            event.setOrigin(sourceOrigin);
           });
           return;
         }
-        destination.fireEvent('message', MessageEventImpl, (event) => {
-          const message = event as MessageEventImpl;
+        destination.fireEvent('message', MessageEventImpl, (message) => {
           message.data = data;
           message.setOrigin(sourceOrigin);
         });

@@ -175,8 +175,7 @@ describe('UI Events: FocusEvent', () => {
       }, { once: true });
     });
     const target = getRelevantRealm(browser.window).env.window;
-    expect(target.fireEvent('focus', FocusEventImpl, (event) => {
-      const focus = event as FocusEventImpl;
+    expect(target.fireEvent('focus', FocusEventImpl, (focus) => {
       focus.view = target;
       focus.relatedTarget = target.getAssociatedDocument();
       focus.setFlags({ composed: true });

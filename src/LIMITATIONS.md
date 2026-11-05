@@ -719,10 +719,17 @@ Events extension's dataTransfer and getTargetRanges/targetRanges are not yet
 implemented. See the [event roadmap](browlet/interaction/events/ROADMAP.md#section-34-event-objects-and-producer-boundary).
 
 KeyboardEvent construction, all specified modifier queries, legacy initialization,
-and DOM's legacy factory are available. Keyboard input production is not:
-UserAgent modifier tracking, native mapping, focus selection/traversal, editing,
-and activation/composition default actions still need their owners. Synthetic
-keyboard dispatch does not enact those actions or enforce device-event order.
+and DOM's legacy factory are available. The companion key-selection algorithm
+and key/code vocabularies are also implemented; constructor strings bypass their
+producer rules. Native layout lookup, key-string classification, and glyph-only
+text translation remain required adapter inputs. UserAgent.keyboardInput now retains
+post-transition modifier snapshots and queues trusted keydown/keyup through HTML
+user-interaction tasks. Each event selects current focus and its target's realm;
+canceling a press gates ordinary effects without dropping its release. No native
+keyboard listener or GUI adapter exists. Document focus and activation notification,
+focus traversal, editing, Clipboard commands and IME effects remain named throwing
+dependencies. Synthetic keyboard dispatch does not enter the producer.
+See the [keyboard delivery boundary](browlet/interaction/keyboard/ROADMAP.md#queued-keyboard-delivery-2026-11-05).
 The [keyboard slice](browlet/interaction/events/ROADMAP.md#section-35-event-objects-and-keyboard-ordering)
 records those dependencies and the approved modifier/legacy browser differences.
 
@@ -780,7 +787,7 @@ dependency, so ordinary reads still fail until an input host supplies it. Active
 BiDi sessions and scoped touch overrides are also unfinished; the selector returns
 null in their absence. Tests supply these narrow queries through real bindings;
 they do not establish hardware discovery. See the
-[§6 audit](browlet/interaction/events/ROADMAP.md#pointer-events-6-navigator-touch-capacity).
+[§6 audit](browlet/interaction/pointer/ROADMAP.md#pointer-events-6-navigator-touch-capacity).
 
 Stylelet now parses and computes `touch-action`, including directional keywords
 and `pinch-zoom`, through the normal cascade and CSSOM paths. `DirectManipulation`
@@ -791,7 +798,7 @@ scroll-container classification, and local-coordinate direction mapping must be
 supplied by layout; the property's own applicability query still throws. Shadow-tree
 queries reach Stylelet's explicit unfinished scope-selection path, retained as one
 approved expected failure. See the
-[§7.2–§7.3 audit](browlet/interaction/events/ROADMAP.md#pointer-events-7273-direct-manipulation-decisions).
+[§7.2–§7.3 audit](browlet/interaction/pointer/ROADMAP.md#pointer-events-7273-direct-manipulation-decisions).
 
 PointerEvent's internal attribute initializer applies the §3.1.3.1 table before
 dispatch. `PointerCapture` now implements pending-target transitions and trusted
@@ -958,7 +965,7 @@ targets, rechecks queued requests, and retains notification Documents after adop
 Native default-unlock/focus-loss signals and HTML unloading/destruction remain
 unconnected; synthetic keyboard/blur events do not supply them. Tests control the
 unfinished native effects and focus/activation queries. Exact dependencies and approved
-browser conflicts are in [the Pointer Lock roadmap](browlet/interaction/POINTER-LOCK.md).
+browser conflicts are in [the Pointer Lock roadmap](browlet/interaction/pointer-lock/ROADMAP.md).
 
 §3.3.12 now supplies internal click/auxclick/contextmenu creation and pointer-based
 target selection. The stream retains per-button press/release facts across capture release and

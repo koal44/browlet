@@ -1,0 +1,1 @@
+export { LegacyMouseProcessor } from './processor';

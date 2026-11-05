@@ -255,7 +255,7 @@ export class NavigateEventImpl extends EventImpl {
     this.abortController.abort(reason);
     const errorInfo = ErrorEventImpl.extractErrorInformation(reason);
     navigation.fireEvent('navigateerror', ErrorEventImpl, (event) => {
-      (event as ErrorEventImpl).initialize(errorInfo);
+      event.initialize(errorInfo);
     });
     transition?.reject(reason);
     if (navigation.transition === transition) navigation.transition = null;

@@ -145,8 +145,7 @@ describe('HTML §7.2.7.4: PageSwapEvent', () => {
     const previousActivation = browser.window.navigation.activation;
     let received: PageSwapEventPlatform | undefined;
     browser.window.addEventListener('pageswap', (event) => { received = event as PageSwapEventPlatform; });
-    targetWindow.fireEvent('pageswap', PageSwapEventImpl, (event) => {
-      const swap = event as PageSwapEventImpl;
+    targetWindow.fireEvent('pageswap', PageSwapEventImpl, (swap) => {
       swap.activation = activation;
       swap.viewTransition = implementation;
     });

@@ -251,8 +251,8 @@ opacity, and explicit missing dependencies. They do not establish an animation e
 
 [Touch-action value tests](../../../test/stylelet/unit/props/touch-action.test.ts)
 cover grammar, canonical ordering, CSS-wide values, and animation exclusion.
-[Browlet integration tests](../../../test/browlet/interaction/touch-action.test.ts)
+[Browlet integration tests](../../../test/browlet/interaction/pointer/touch-action.test.ts)
 exercise CSSOM mutation, the cascade, defaulting, and custom-property substitution.
-The [Pointer Events audit](../../browlet/interaction/events/ROADMAP.md#pointer-events-71-touch-action-css-property)
+The [Pointer Events audit](../../browlet/interaction/pointer/ROADMAP.md#pointer-events-71-touch-action-css-property)
 records browser disagreements and the pending layout/gesture consumers. This
 property's computed value does not itself restrict scrolling or zooming.

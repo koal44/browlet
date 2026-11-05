@@ -164,7 +164,7 @@ export class EventSourceImpl extends EventTargetImpl {
       if (value === '') {
         this.#lastEventID = lastEventID;
         if (data !== '') {
-          const event = this.createTrustedEvent(MessageEventImpl) as MessageEventImpl;
+          const event = this.createTrustedEvent(MessageEventImpl);
           event.type = eventType || 'message';
           event.data = data.slice(0, -1);
           event.setOrigin(origin);

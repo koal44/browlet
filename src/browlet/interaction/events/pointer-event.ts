@@ -81,7 +81,7 @@ export class PointerEventImpl extends MouseEventImpl {
   static override create(
     type: string, target: NodeImpl | WindowImpl, bubbles: boolean, cancelable: boolean, input: MouseEventInput,
   ): PointerEventImpl {
-    const event = target.createTrustedEvent(PointerEventImpl) as PointerEventImpl;
+    const event = target.createTrustedEvent(PointerEventImpl);
     event.initializePointerEvent(type, target, bubbles, cancelable, input);
     return event;
   }
@@ -96,7 +96,7 @@ export class PointerEventImpl extends MouseEventImpl {
     if (!target || (!target.isNode() && !target.isWindow())) {
       throw new InternalError('PointerEvent creation from MouseEvent requires a Node or Window target');
     }
-    const event = target.createTrustedEvent(PointerEventImpl) as PointerEventImpl;
+    const event = target.createTrustedEvent(PointerEventImpl);
     event.#initializeFromMouseEvent(type, source, bubbles, cancelable, target);
     return event;
   }
@@ -112,7 +112,7 @@ export class PointerEventImpl extends MouseEventImpl {
   // not-trusted flag. HTMLElement.click()
   // and keyboard activation remain their owners' callers, not automatic dispatch here.
   static createActivation(type: PointerActivationEventType, target: NodeImpl, source: MouseEventImpl): PointerEventImpl {
-    const event = target.createTrustedEvent(PointerEventImpl) as PointerEventImpl;
+    const event = target.createTrustedEvent(PointerEventImpl);
     event.#initializeFromMouseEvent(type, source, true, true, target);
     event.view = target.nodeDocument.getRelevantGlobalObject();
     event.relatedTarget = null;
@@ -262,7 +262,7 @@ export class PointerEventImpl extends MouseEventImpl {
         throw new InternalError('Pointer samples must be chronological and on the correct side of the parent timestamp');
       }
       previous = source.timeStamp;
-      const sample = target.createTrustedEvent(PointerEventImpl) as PointerEventImpl;
+      const sample = target.createTrustedEvent(PointerEventImpl);
       // SPEC_CLASH(pointer-sample-data): Preserve measured input and timestamps like all three browsers instead of §9.3's blanket defaulting; keep composed=false like Chromium rather than Firefox/WebKit.
       sample.copyInputFrom(source);
       sample.type = this.type;

@@ -235,8 +235,7 @@ describe('Pointer Events: WheelEvent', () => {
       }, { once: true, passive: false });
     });
     const target = getRelevantRealm(browser.window).env.window;
-    expect(target.fireEvent('wheel', WheelEventImpl, (event) => {
-      const wheel = event as WheelEventImpl;
+    expect(target.fireEvent('wheel', WheelEventImpl, (wheel) => {
       wheel.deltaY = 2.5;
       wheel.deltaMode = 1;
       wheel.momentum = true;

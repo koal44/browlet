@@ -111,7 +111,7 @@ describe('HTML §7.2.7.5: PageRevealEvent', () => {
     let received: PageRevealEventPlatform | undefined;
     browser.window.addEventListener('pagereveal', (event) => { received = event as PageRevealEventPlatform; });
     document.getRelevantGlobalObject()!.fireEvent('pagereveal', PageRevealEventImpl, (event) => {
-      (event as PageRevealEventImpl).viewTransition = implementation;
+      event.viewTransition = implementation;
     });
     expect(received).toBeInstanceOf(browser.window.PageRevealEvent);
     expect(received!.isTrusted).toBe(true);

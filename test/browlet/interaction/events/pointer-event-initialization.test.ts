@@ -49,7 +49,7 @@ describe('Pointer Events: producer initialization and creation', () => {
     input.modifiers = new EventModifierState({ modifierAltGraph: true });
     event.initializePointerEvent('pointermove', target, true, true, input);
 
-    const copy = target.createTrustedEvent(PointerEventImpl) as PointerEventImpl;
+    const copy = target.createTrustedEvent(PointerEventImpl);
     copy.copyInputFrom(event);
     platform.initMouseEvent('legacy');
     expect([platform.altKey, platform.getModifierState('AltGraph')]).toEqual([false, false]);

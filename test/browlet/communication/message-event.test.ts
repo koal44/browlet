@@ -58,8 +58,7 @@ describe('MessageEvent (§9.1)', () => {
       received.push(event as MessageEvent);
     });
 
-    unwrap<EventTargetImpl>(target).fireEvent('message', MessageEventImpl, (event) => {
-      const message = event as MessageEventImpl;
+    unwrap<EventTargetImpl>(target).fireEvent('message', MessageEventImpl, (message) => {
       expect(message.data).toBeNull();
       message.data = undefined;
     });

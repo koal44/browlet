@@ -479,12 +479,13 @@ now provide Document/control task coalescing/firing. Conformance and security/pr
 add no mandatory runtime algorithm; assistive-technology mouse/keyboard emulation
 is optional. This closes the local scheduling/firing work and the document-order
 pass through Selection API; the concrete owner dependencies above remain, so it
-is not a claim of full Selection API support. Clipboard API is the next adjacent
-specification; CSSOM View remains deferred.
+is not a claim of full Selection API support. The previously planned
+[keyboard companion-values follow-up](../keyboard/ROADMAP.md#keyboard-companion-values-2026-11-04)
+now precedes Clipboard API; CSSOM View remains deferred.
 
 ## Validation
 
-`test/browlet/interaction/selection.test.ts` covers projected identity and errors,
+`test/browlet/interaction/selection/selection.test.ts` covers projected identity and errors,
 borrowed methods/realm ownership, actual-change coalescing and reentrant delivery,
 cross-Document/shadow lifetime, state-preserving moves, structural mutation, text
 replacement/split/normalization, and Range content operations. The new snapshot

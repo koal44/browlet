@@ -230,8 +230,7 @@ describe('UI Events: CompositionEvent', () => {
       }, { once: true });
     });
     const target = unwrap<ElementImpl>(browser.document.body!);
-    expect(target.fireEvent('compositionupdate', CompositionEventImpl, (event) => {
-      const composition = event as CompositionEventImpl;
+    expect(target.fireEvent('compositionupdate', CompositionEventImpl, (composition) => {
       composition.data = 'text';
       composition.view = getRelevantRealm(browser.window).env.window;
       composition.setFlags({ bubbles: true, composed: true });

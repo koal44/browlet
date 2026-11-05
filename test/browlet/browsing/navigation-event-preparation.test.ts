@@ -214,7 +214,7 @@ async function fixture() {
   // Observe the unfinished shared firing boundary without manufacturing event dispatch or completion.
   const inner = vi.spyOn(navigation, 'innerNavigateEventFiring').mockReturnValue(false);
   const startOngoing = () => {
-    const event = document.env.createEvent(NavigateEventImpl) as NavigateEventImpl;
+    const event = document.env.createEvent(NavigateEventImpl);
     const controller = document.env.createAbortController();
     event.abortController = controller;
     event.signal = controller.signal;

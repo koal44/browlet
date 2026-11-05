@@ -58,7 +58,7 @@ share one expansion per element and query.
   assignment; closed roots require host-supplied operations.
   Pointer Events §7.2 now reaches this dependency when capturing touch-action
   through a slot/shadow-host chain. Its enabled regression in
-  `test/browlet/interaction/direct-manipulation.test.ts` is an Eric-approved
+  `test/browlet/interaction/pointer/direct-manipulation.test.ts` is an Eric-approved
   expected failure until query scope selection and cross-scope inheritance work.
 - [x] Connect custom-property computation and substitution before resolving
   consuming built-ins. Preserve the distinction between parse-time rejection,

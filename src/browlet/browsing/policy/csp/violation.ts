@@ -114,7 +114,7 @@ export class CSPViolation {
       if (target !== null && target.getShadowIncludingRoot() !== document) target = null;
       const body = new CSPViolationReportBodyImpl(this);
       (target ?? document)?.fireEvent('securitypolicyviolation', SecurityPolicyViolationEventImpl, (event) => {
-        (event as SecurityPolicyViolationEventImpl).initialize({
+        event.initialize({
           documentURI: body.documentURL, referrer: body.referrer ?? '', blockedURI: body.blockedURL ?? '',
           effectiveDirective: body.effectiveDirective, violatedDirective: body.effectiveDirective,
           originalPolicy: body.originalPolicy, sourceFile: body.sourceFile ?? '', sample: body.sample ?? '',

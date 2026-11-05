@@ -8,6 +8,7 @@ import { Browlet } from '../../src/browlet/browlet';
 import { WindowImpl } from '../../src/browlet/browsing/window/window';
 import { EventImpl } from '../../src/browlet/dom/events/event';
 import { EventTargetImpl } from '../../src/browlet/dom/events/event-target';
+import { KeyboardEventImpl } from '../../src/browlet/interaction/events/keyboard-event';
 import { AbortSignalImpl } from '../../src/browlet/dom/abort/abort-signal';
 import { AttrImpl } from '../../src/browlet/dom/nodes/attribute';
 import { TextImpl } from '../../src/browlet/dom/nodes/text';
@@ -19,7 +20,7 @@ import { itPassesWith } from '../test-runtime';
 
 afterEach(() => vi.restoreAllMocks());
 
-// GlobalEventHandlers in this insecure realm, including Pointer Events' partial mixin.
+// GlobalEventHandlers in this insecure realm, including Pointer Events and Selection partial mixins.
 const globalEventHandlerNames = [
   'onabort', 'onauxclick', 'onbeforeinput', 'onbeforematch', 'onbeforetoggle', 'onblur', 'oncancel',
   'oncanplay', 'oncanplaythrough', 'onchange', 'onclick', 'onclose', 'oncommand', 'oncontextlost',
@@ -30,7 +31,7 @@ const globalEventHandlerNames = [
   'onmouseenter', 'onmouseleave', 'onmousemove', 'onmouseout', 'onmouseover', 'onmouseup', 'onpaste',
   'onpause', 'onplay', 'onplaying', 'onpointercancel', 'onpointerdown', 'onpointerenter', 'onpointerleave',
   'onpointermove', 'onpointerout', 'onpointerover', 'onpointerup', 'onprogress', 'onratechange', 'onreset', 'onresize', 'onscroll',
-  'onscrollend', 'onsecuritypolicyviolation', 'onseeked', 'onseeking', 'onselect', 'onslotchange',
+  'onscrollend', 'onsecuritypolicyviolation', 'onseeked', 'onseeking', 'onselect', 'onselectionchange', 'onselectstart', 'onslotchange',
   'onstalled', 'onsubmit', 'onsuspend', 'ontimeupdate', 'ontoggle', 'onvolumechange', 'onwaiting',
   'onwebkitanimationend', 'onwebkitanimationiteration', 'onwebkitanimationstart', 'onwebkittransitionend', 'onwheel',
 ];
@@ -384,6 +385,7 @@ describe('Browlet DOM binding', () => {
       'documentURI',
       'domain',
       'embeds',
+      'exitPointerLock',
       'firstElementChild',
       'forms',
       'getElementById',
@@ -391,6 +393,7 @@ describe('Browlet DOM binding', () => {
       'getElementsByName',
       'getElementsByTagName',
       'getElementsByTagNameNS',
+      'getSelection',
       'head',
       'hidden',
       'images',
@@ -401,9 +404,10 @@ describe('Browlet DOM binding', () => {
       'lastModified',
       'links',
       'moveBefore',
-      ...[...globalEventHandlerNames, 'onreadystatechange', 'onvisibilitychange'].sort(),
+      ...[...globalEventHandlerNames, 'onpointerlockchange', 'onpointerlockerror', 'onreadystatechange', 'onvisibilitychange'].sort(),
       'permissionsPolicy',
       'plugins',
+      'pointerLockElement',
       'prepend',
       'querySelector',
       'querySelectorAll',
@@ -465,6 +469,7 @@ describe('Browlet DOM binding', () => {
       'removeAttributeNS',
       'replaceChildren',
       'replaceWith',
+      'requestPointerLock',
       'setAttribute',
       'setAttributeNode',
       'setAttributeNodeNS',
@@ -553,6 +558,7 @@ describe('Browlet DOM binding', () => {
       'host',
       'mode',
       'onslotchange',
+      'pointerLockElement',
       'serializable',
       'slotAssignment',
       'styleSheets',
@@ -767,6 +773,29 @@ describe('Browlet DOM binding', () => {
     expect(event.isTrusted).toBe(true);
     expect(ctx.getPlatformRecord(event, PlatformRecordSource.Implementation)?.realm).toBe(realm);
     expect(ctx.getPlatformRecord(target, PlatformRecordSource.Implementation)?.platformObject).toBeUndefined();
+  });
+
+  it.each(['environment', 'target'] as const)('preserves a supplied event class through the %s factory', (factory) => {
+    const first = createBrowlet();
+    const second = createBrowlet();
+    const realm = getRelevantRealm(first.window);
+    const ctx = getBindingContext(realm);
+    const other = getBindingContext(getRelevantRealm(second.window));
+    vi.spyOn(realm, 'eventTimeStamp').mockReturnValue(123);
+    const target = ctx.construct(EventTargetImpl);
+    const event = factory === 'environment'
+      ? realm.env.createEvent(KeyboardEventImpl)
+      : target.createTrustedEvent(KeyboardEventImpl);
+
+    event.key = 'a';
+    expect(event).toBeInstanceOf(KeyboardEventImpl);
+    expect(event.timeStamp).toBe(123);
+    expect(event.isTrusted).toBe(true);
+    expect(ctx.getPlatformRecord(event, PlatformRecordSource.Implementation)?.platformObject).toBeUndefined();
+    const platformEvent = other.project(KeyboardEventImpl, event);
+    expect(platformEvent).toBeInstanceOf(getConstructor(first, 'KeyboardEvent'));
+    expect(platformEvent).toMatchObject({ key: 'a' });
+    expect(ctx.getPlatformRecord(event, PlatformRecordSource.Implementation)?.realm).toBe(realm);
   });
 
   it('creates an initialized Document without allocating its platform object', () => {

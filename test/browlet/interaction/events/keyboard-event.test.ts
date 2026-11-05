@@ -101,6 +101,15 @@ describe('UI Events: KeyboardEvent', () => {
     })).toEqual(['\ud800', 'vendorFuture', 0xffffffff, 5, 97, 5, true, true, true, 0, 0, 0, '', '', 0]);
   });
 
+  it('keeps constructor strings outside native key selection and vocabulary checks', async () => {
+    const browser = new Browlet({ route: () => '' });
+    const values = ['e\u0301', '\u0001', 'vendorFuture', 'F0', 'Soft8', 'KeyQ', ''];
+    expect(await browser.evaluate((values) => values.map((value) => {
+      const event = new KeyboardEvent('keydown', { key: value, code: value });
+      return [event.key, event.code];
+    }), values)).toEqual(values.map((value) => [value, value]));
+  });
+
   it('checks constructor and method inputs in the invoked function realm', async () => {
     const browser = new Browlet({ route: () => '' });
     expect(await browser.evaluate(() => {
@@ -265,8 +274,7 @@ describe('UI Events: KeyboardEvent', () => {
       };
     });
     const target = unwrap<ElementImpl>(browser.document.body!);
-    expect(target.fireEvent('keydown', KeyboardEventImpl, (event) => {
-      const keyboard = event as KeyboardEventImpl;
+    expect(target.fireEvent('keydown', KeyboardEventImpl, (keyboard) => {
       keyboard.key = 'a';
       keyboard.view = getRelevantRealm(browser.window).env.window;
       keyboard.setFlags({ bubbles: true, cancelable: true, composed: true });

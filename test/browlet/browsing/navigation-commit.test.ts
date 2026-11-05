@@ -127,8 +127,7 @@ describe('Navigate-event commit coordination', () => {
       }, { once: true });
     });
     vi.spyOn(document, 'updateURLAndHistory').mockImplementation(() => {
-      sourceNavigation.fireEvent('currententrychange', NavigationCurrentEntryChangeEventImpl, (baseEvent) => {
-        const change = baseEvent as NavigationCurrentEntryChangeEventImpl;
+      sourceNavigation.fireEvent('currententrychange', NavigationCurrentEntryChangeEventImpl, (change) => {
         change.navigationType = 'push';
         change.from = sourceNavigation.currentEntry!;
       });
@@ -154,8 +153,7 @@ describe('Navigate-event commit coordination', () => {
       }, { once: true });
     });
     vi.spyOn(document, 'updateURLAndHistory').mockImplementation(() => {
-      sourceNavigation.fireEvent('currententrychange', NavigationCurrentEntryChangeEventImpl, (baseEvent) => {
-        const change = baseEvent as NavigationCurrentEntryChangeEventImpl;
+      sourceNavigation.fireEvent('currententrychange', NavigationCurrentEntryChangeEventImpl, (change) => {
         change.navigationType = 'push';
         change.from = sourceNavigation.currentEntry!;
       });

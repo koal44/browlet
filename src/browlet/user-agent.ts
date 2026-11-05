@@ -45,7 +45,7 @@ import {
   BrowsingContextGroup, Navigable, TopLevelTraversable, type NavigableContainer, type PostResource,
   type Traversable, type UnloadCancellationResult, type UserNavigationInvolvement,
 } from './browsing/navigation/index';
-import { ActivePointers, MouseInputProcessor, PointerLock } from './interaction/index';
+import { ActivePointers, KeyboardInputProcessor, MouseInputProcessor, PointerLock } from './interaction/index';
 import { NodeHTTPTransport, createContentDecoder, supportedContentCodings } from './integration/host/network/index';
 import { NodePromise, queueNodeTask, nodeTimerHost } from './integration/host/index';
 import type { PermissionStatusImpl } from './integration/permissions/index';
@@ -178,6 +178,8 @@ export class UserAgent implements
 
   /** Allocate the native/automation mouse owner only when input is used. */
   #mouseInput: MouseInputProcessor | null = null;
+  /** Allocate shared keyboard modifier state and queued input delivery on first use. */
+  #keyboardInput: KeyboardInputProcessor | null = null;
   /** Pointer Lock state is shared across Documents and allocated on first use. */
   #pointerLock: PointerLock | null = null;
 
@@ -187,6 +189,10 @@ export class UserAgent implements
 
   get mouseInput(): MouseInputProcessor {
     return this.#mouseInput ??= new MouseInputProcessor(this);
+  }
+
+  get keyboardInput(): KeyboardInputProcessor {
+    return this.#keyboardInput ??= new KeyboardInputProcessor(this);
   }
 
   get pointerLock(): PointerLock {

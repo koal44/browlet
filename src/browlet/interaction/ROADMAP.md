@@ -5,6 +5,26 @@ cross-document state under `interaction/`, but do not turn the chapter into one
 large manager or make input, editing, and drag-and-drop prerequisites for the
 Document lifecycle.
 
+## Organization and dependency boundaries
+
+| Owner | Scope |
+| --- | --- |
+| [events](events/ROADMAP.md) | Shared event classes, modifier snapshots, creation algorithms, and Web IDL declarations. |
+| [keyboard](keyboard/ROADMAP.md) | UserAgent keyboard input queue and modifier state, key selection, and key/code vocabularies. |
+| [mouse](mouse/ROADMAP.md) | UserAgent input delivery, with lower-level Document compatibility state in mouse/legacy. |
+| [pointer](pointer/ROADMAP.md) | Active sources, per-context streams, capture, and direct-manipulation decisions. |
+| [pointer-lock](pointer-lock/ROADMAP.md) | UserAgent lock state, host operations, declarations, and lifetime integration. |
+| [wheel](wheel/ROADMAP.md) | Document-owned input queue and retained gesture target. |
+| [selection](selection/ROADMAP.md) | Document selection, live ranges, and change notifications. |
+
+Folders follow feature ownership; their dependency levels remain explicit in the
+import hierarchy. Document imports mouse/legacy/index directly so constructing its
+compatibility state does not load the mouse input coordinator. Shared event classes
+stay below DOM nodes. Mouse delivery consumes the pointer component. Root index.ts
+composes existing exports; focus.ts remains the small shared focusable-area type.
+Tests use the same topic groups. Detailed specification evidence and unfinished
+work live in the owning roadmaps, with the overall sequence retained here.
+
 ## Constraints to preserve early
 
 - Page visibility is mutable Document state initialized from the top-level
@@ -51,6 +71,12 @@ the specified Window, Document, or UserAgent owner.
 Synthetic construction and dispatch do not themselves supply native input,
 focus changes, editing, pointer capture, or scrolling.
 
+UserAgent.keyboardInput now accepts normalized key transitions through the
+[queued keyboard coordinator](keyboard/ROADMAP.md#queued-keyboard-delivery-2026-11-05).
+It captures modifier/layout facts before task delivery, selects current focus for
+each event, and gates ordinary keydown effects on cancellation. Existing Document
+focus stubs and named activation/default-action/IME operations remain explicit.
+
 `MouseInputProcessor` now provides normalized button and movement entries through
 UserAgent, using real user-interaction tasks and existing pointer/mouse delivery.
 An explicit adapter flag delivers qualifying click/auxclick immediately after
@@ -66,13 +92,13 @@ It queries the UserAgent's Pointer Lock state and calls explicit throwing
 dependencies for layout targeting, HTML activation/focus, and native menu UI.
 Its focused tests control these owners; physical mouse input, real focus, and
 a native menu are not claimed.
-See the [button-input slice](events/ROADMAP.md#pointer-events-1121011213-mouse-button-input)
-and [native-click slice](events/ROADMAP.md#pointer-events-1121411215-native-clicks)
-plus [native movement](events/ROADMAP.md#pointer-events-11217-native-movement)
-and [context menus](events/ROADMAP.md#pointer-events-11218-mouse-context-menus)
+See the [button-input slice](mouse/ROADMAP.md#pointer-events-1121011213-mouse-button-input)
+and [native-click slice](mouse/ROADMAP.md#pointer-events-1121411215-native-clicks)
+plus [native movement](mouse/ROADMAP.md#pointer-events-11217-native-movement)
+and [context menus](mouse/ROADMAP.md#pointer-events-11218-mouse-context-menus)
 for the boundary and next algorithms.
 
-The [§§11.3–11.4 audit](events/ROADMAP.md#pointer-events-113114-mouse-order-and-event-type-audit)
+The [§§11.3–11.4 audit](mouse/ROADMAP.md#pointer-events-113114-mouse-order-and-event-type-audit)
 closes the mouse-delivery pass at its explicit owner dependencies. §12 now
 provides WheelEvent construction and Document-owned queued wheel delivery.
 The adapter supplies normalized measurements and explicit gesture boundaries;
@@ -80,11 +106,11 @@ transactions retain their initial target, observe DOM listeners for cancelabilit
 and request default actions only after uncanceled dispatch. Named operations throw
 until hit testing and scrolling/zooming are connected. Its lock query now reads
 UserAgent's Pointer Lock controller.
-See the [wheel-input slice](events/ROADMAP.md#pointer-events-12-wheel-input-and-transactions).
-The [closing audit](events/ROADMAP.md#pointer-events-1316-closing-audit) is complete;
+See the [wheel-input slice](wheel/ROADMAP.md#pointer-events-12-wheel-input-and-transactions).
+The [closing audit](pointer/ROADMAP.md#pointer-events-1316-closing-audit) is complete;
 legacy initialization was already implemented. It also connects the missing
 previous-pointer-target repair to DOM removal.
-[Individual Document cleanup](events/ROADMAP.md#document-lifetime-integration)
+[Individual Document cleanup](pointer/ROADMAP.md#document-lifetime-integration)
 now clears retained pointer state through the existing Document.destroy() hook.
 The identified local pointer/wheel plumbing is complete. Recursive/inactive
 destruction remains HTML §7.5.10 work, separate from the unfinished input/layout owners.
@@ -197,7 +223,7 @@ does not suppress that step.
 
 ## Pointer Lock and adjacent specifications
 
-[Pointer Lock §§2–5](POINTER-LOCK.md) supplies the lazy UserAgent lock owner,
+[Pointer Lock §§2–5](pointer-lock/ROADMAP.md) supplies the lazy UserAgent lock owner,
 request/release API, Document notifications, and Document/ShadowRoot projection.
 Native effects and HTML focus/activation remain explicit throwing dependencies.
 §§6–7 now connect locked relative delivery and frozen mouse/wheel coordinates
@@ -216,7 +242,50 @@ scheduling/firing across Document, input, and textarea, including adoption and
 shadow-tree delivery. The local specification pass is complete; input/editing
 connections, cross-root user proposals, document reset, and HTML text-control
 state remain explicit dependencies.
+The keyboard companion-values follow-up now implements UIEvents-Key §2.2
+selection/NFC and both key/code vocabularies. Native layout/classification, live
+modifier state, and keyboard dispatch/editing remain explicit input-owner work;
+see the [events roadmap](keyboard/ROADMAP.md#keyboard-companion-values-2026-11-04).
 Clipboard API follows; CSSOM View remains deferred.
+
+## Input producer direction
+
+Node's [readline keypress API](https://nodejs.org/api/readline.html#readlineemitkeypresseventsstream-interface)
+and [TTY raw mode](https://nodejs.org/api/tty.html#readstreamsetrawmodemode) provide
+terminal input, not a browser window's complete keyboard/pointer/IME input
+contract. V8 executes the author handlers; the embedder supplies device input.
+
+Use one input-processing path when those algorithms are reached. Tests or a
+headless automation caller can supply explicit key/pointer actions to that path;
+an eventual window-system adapter can supply real device actions. Queue the work
+through the owning event loop and its user-interaction task source, then apply
+the specified focus/target selection, input-state updates, event dispatch, and
+default actions in order. Author-created events still use ordinary dispatch and
+do not impersonate this host input path.
+
+A native window adapter may use an existing OS/windowing library or external
+host process; that is separate from changing Node/V8 or our execution addon.
+The exact adapter and input API are undecided until a concrete consumer needs
+them. Coordinate-based pointer input still needs real hit testing; a test-supplied
+target does not complete that dependency.
+
+The [input-delivery investigation](../../../node-compat/experimental/input-delivery/README.md)
+traces Chromium/Firefox/WebKit production and automation paths. Its browser-only
+probe passes six cases in all three engines: driver input performs trusted input
+and default actions that author event dispatch does not reproduce. Add a small
+programmatic driver alongside the first input producer and use the same scenario
+intentions against real browsers. Current Browlet automation has no input-action
+implementation; full WebDriver transport is not a prerequisite for this test seam.
+Keep physical keys, committed text, and composition updates distinct. A physical
+key need not produce text, and text can arrive without a key press. Preserve
+coordinate spaces and scale, wheel delta units, repeat/modifier information, and
+the selected viewport until the owning algorithm translates them. IME integration
+also needs a return path for surrounding text, selection, and caret placement;
+it is not just a stream of keyboard events.
+
+Qt and Slint remain candidates for an optional native-window adapter. Neither is
+selected or installed. Their Node/event-pump integration belongs at that host
+boundary; event implementations must not depend on their input object types.
 
 ## Removal condition
 

@@ -1214,6 +1214,15 @@ owns current-event bookkeeping for handlers and ordinary listeners alike. The
 event component retains only type references to HTML/node owners. XHR's
 ProgressEvent lives in browser integration and reuses that event machinery.
 
+Interaction groups keyboard values, mouse delivery, pointer processing, Pointer Lock,
+wheel delivery, and Selection in their named folders. The root index composes their
+exports. Event classes stay in the lower `events/` foundation. `mouse/legacy/` is
+also a separate foundation: Document imports its narrow entry point without loading
+`mouse/input.ts`. Pointer state/capture/streams and Pointer Lock precede the mouse
+coordinator in the import hierarchy. Folder moves do not change the retained
+UserAgent, Document, and top-level-context state owners. Each feature keeps its
+implementation evidence and remaining work in its own `ROADMAP.md`.
+
 Document lazily owns `SelectionImpl` in `interaction/selection/`, below DOM nodes.
 Selection retains one public live Range and, only for cross-root spans, two internal
 collapsed Ranges tracking its composed endpoints. Range directly references Selection through
@@ -1244,7 +1253,7 @@ resolved bidi direction; that dependency currently throws without changing state
 Input/editing, rendering, and document.open reset remain separate owners in the
 [Selection roadmap](browlet/interaction/selection/ROADMAP.md).
 
-Document lazily owns `LegacyMouseProcessor` in `interaction/mouse/`, a foundation
+Document lazily owns `LegacyMouseProcessor` in `interaction/mouse/legacy/`, a foundation
 that uses event machinery and type-only node references without loading higher
 input producers. All primary pointer types share its effective mouse position.
 It snapshots flat-tree ancestor chains for compatibility boundary transitions;
@@ -1280,7 +1289,7 @@ named throwing owner dependencies. Pointer Lock supplies the actual locked targe
 and frozen coordinates. Device normalization,
 native gesture timing, and cross-Document routing precede this internal entry.
 
-UserAgent lazily owns `MouseInputProcessor` in `interaction/mouse-input.ts`, above
+UserAgent lazily owns `MouseInputProcessor` in `interaction/mouse/input.ts`, above
 the event and legacy-mouse foundations. One aggregate mouse source supplies button
 state across Windows; each input action snapshots that state at receipt, before
 independent event loops can run their tasks in a different order. The processor
@@ -1302,12 +1311,12 @@ native menu UI remain named throwing dependencies on this owner.
 Tests control those dependencies and drive the real queue/stream/Binding/listener path. A native GUI
 adapter and WebDriver Actions connection remain separate integration work.
 
-UserAgent owns `ActivePointers` in `interaction/pointer.ts`. These retained input
+UserAgent owns `ActivePointers` in `interaction/pointer/active-pointers.ts`. These retained input
 sources own button state and primary-pointer selection independently of event
 snapshots and Window lifetimes. They carry no author-visible pointerId: the
 producer must separately map sources to IDs within each top-level context.
 Activation/retirement and button transitions are implemented. `PointerCapture`
-in `interaction/pointer-capture.ts` separately owns one pointer stream's pending
+in `interaction/pointer/capture.ts` separately owns one pointer stream's pending
 and effective targets. `PointerEventStream` composes that capture state with its
 context-local ID, current buttons, and active Document. `TopLevelTraversable`
 retains the active streams in `pointerEventStreams`, shared with its descendant
@@ -1390,7 +1399,7 @@ Document's existing removal notification asks UserAgent to release its already-c
 controller's disconnected target, without allocating a controller on unused paths.
 Queued requests recheck their original Document and focus before acquisition;
 notification tasks retain the affected Document across adoption. Native unlock/
-focus-loss signals and HTML teardown remain unfinished in the [Pointer Lock roadmap](browlet/interaction/POINTER-LOCK.md).
+focus-loss signals and HTML teardown remain unfinished in the [Pointer Lock roadmap](browlet/interaction/pointer-lock/ROADMAP.md).
 
 Native stream delivery accepts an optional `PointerEventSamples` input containing
 coalesced and predicted snapshots. `PointerEventImpl.initializeSampleLists()` creates

@@ -183,8 +183,7 @@ describe('UI Events: InputEvent', () => {
     });
     const env = getRelevantRealm(browser.document).env;
     const target = env.window.getAssociatedDocument();
-    expect(target.fireEvent('input', InputEventImpl, (event) => {
-      const input = event as InputEventImpl;
+    expect(target.fireEvent('input', InputEventImpl, (input) => {
       input.view = env.window;
       input.data = 'text';
       input.inputType = 'insertText';

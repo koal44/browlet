@@ -201,8 +201,7 @@ describe('UI Events §8.4: TextEvent', () => {
       }, { once: true });
     });
     const target = unwrap<ElementImpl>(browser.document.body!);
-    expect(target.fireEvent('textInput', TextEventImpl, (event) => {
-      const text = event as TextEventImpl;
+    expect(target.fireEvent('textInput', TextEventImpl, (text) => {
       text.data = 'text';
       text.view = getRelevantRealm(browser.window).env.window;
       text.setFlags({ bubbles: true, cancelable: true, composed: true });

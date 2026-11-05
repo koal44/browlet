@@ -26,8 +26,7 @@ describe('Pointer Events §3.1.3.1: internal event attributes', () => {
           event.cancelable, event.composed, event.detail, event.isTrusted, event.defaultPrevented,
           event.target === browser.window, getRelevantRealm(event) === realm];
       });
-      const uncanceled = realm.env.window.fireEvent(type, PointerEventImpl, (value) => {
-        const event = value as PointerEventImpl;
+      const uncanceled = realm.env.window.fireEvent(type, PointerEventImpl, (event) => {
         event.bubbles = !bubbles;
         event.cancelable = !cancelable;
         event.composed = !composed;
@@ -98,7 +97,7 @@ describe('Pointer Events §3.1.3.1: internal event attributes', () => {
     });
     const child = unwrap<ElementImpl>(browser.document.getElementById('host')!.shadowRoot!.firstElementChild!);
     for (const type of ['pointerover', 'pointerenter'] as const) {
-      child.fireEvent(type, PointerEventImpl, (event) => (event as PointerEventImpl).setPointerEventAttributes(type));
+      child.fireEvent(type, PointerEventImpl, (event) => event.setPointerEventAttributes(type));
     }
     expect(await browser.evaluate(() => Reflect.get(window, 'received') as string[])).toEqual([
       'pointerover:child', 'pointerover:shadow', 'pointerover:host:true', 'pointerover:document', 'pointerenter:child',
@@ -120,7 +119,7 @@ describe('Pointer Events §3.1.3.1: internal event attributes', () => {
     })).toEqual([[false, false, false], false, [false, true, false, 8, true, false, true]]);
 
     const realm = getRelevantRealm(browser.window);
-    const internal = realm.env.createEvent(PointerEventImpl) as PointerEventImpl;
+    const internal = realm.env.createEvent(PointerEventImpl);
     internal.setPointerEventAttributes('pointerdown');
     const platform = project(internal) as PointerEventPlatform;
     expect(platform.isTrusted).toBe(true);

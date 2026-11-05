@@ -163,6 +163,6 @@ async function fixture() {
   await browser.navigate('https://example.test/current');
   const document = unwrap<DocumentImpl>(browser.document);
   const navigation = document.getRelevantGlobalObject()!.navigation;
-  const event = document.env.createEvent(NavigateEventImpl) as NavigateEventImpl;
+  const event = document.env.createEvent(NavigateEventImpl);
   return { browser, document, navigation, event };
 }

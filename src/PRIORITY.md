@@ -153,7 +153,7 @@ preserving surviving Documents and physical device state. This closes the
 identified local pointer/wheel plumbing. Recursive/inactive destruction remains
 HTML §7.5.10 work; other-device ID assignment/retirement and input/default-action
 producers retain their explicit dependencies.
-The adjacent [Pointer Lock pass](browlet/interaction/POINTER-LOCK.md) supplies
+The adjacent [Pointer Lock pass](browlet/interaction/pointer-lock/ROADMAP.md) supplies
 §§2–5's state/API and mouse/wheel lock queries. Native effects and HTML focus/
 activation remain explicit throwing dependencies. §§6–7 connect locked relative
 input and fixed mouse/wheel coordinates. §8 now handles disconnection, queued-request
@@ -174,8 +174,10 @@ provide selectFromUser with fresh Range ownership, selectstart cancellation, and
 post-listener lifetime checks. §§6.2.1–6.2.2 now share per-target scheduling and
 firing across Document, input, and textarea. The local specification pass is
 complete; native endpoint selection, control state, and HTML document reset remain
-explicit owners. Clipboard API follows;
-CSSOM View remains deferred.
+explicit owners. The smaller keyboard companion-values follow-up implements
+UIEvents-Key §2.2 selection/NFC and both key/code vocabularies, with native layout,
+classification, and keyboard input sequencing still explicit dependencies.
+Clipboard API follows; CSSOM View remains deferred.
 HTML §8.1.8.3's synthetic pointer-event operation still needs its hookup. Input producers retain
 their HTML, editing, and layout owners.
 Source/deferred imports and the HTML Wasm parser remain explicit boundaries.

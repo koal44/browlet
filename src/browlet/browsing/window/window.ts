@@ -614,7 +614,7 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   // TODO(HTML lifecycle): Connect initial loading, history reactivation, and unloading with their persisted values.
   firePageTransitionEvent(eventName: string, persisted: boolean): void {
     this.fireEvent(eventName, PageTransitionEventImpl, (event) => {
-      (event as PageTransitionEventImpl).persisted = persisted;
+      event.persisted = persisted;
       event.cancelable = true;
       event.bubbles = true;
     }, true);

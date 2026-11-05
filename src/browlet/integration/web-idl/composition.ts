@@ -13,7 +13,7 @@ import { EventLoop, SandboxAgent, BrowletRealm, WindowRealm, installRealmHostHoo
 import { TrustedScriptImpl } from '../../browsing/policy/trusted-types/index';
 import { AbortControllerImpl, AbortSignalImpl } from '../../dom/abort/index';
 import { DocumentImpl, ElementImpl } from '../../dom/nodes/index';
-import { DOMStringListImpl } from '../../dom/index';
+import { DOMStringListImpl, type EventImplConstructor } from '../../dom/index';
 import { MessagePortImpl } from '../../communication/index';
 import { WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
 import {
@@ -180,6 +180,14 @@ function getCodeForEval(argument: unknown): string | undefined {
 
 /** Supply the binding-owned functions consumed during environment construction. */
 export function createBrowletEnvironmentInit(context: BindingContext<BrowletEnvironment>): BrowletEnvironmentInit {
+  function createEvent<T extends EventImpl>(eventConstructor: EventImplConstructor<T>): T;
+  function createEvent(eventConstructor?: EventImplConstructor): EventImpl;
+  function createEvent(EventConstructor: EventImplConstructor = EventImpl): EventImpl {
+    const event = context.construct<EventImpl>(EventConstructor, ['', {}]);
+    event.isTrusted = true;
+    return event;
+  }
+
   return {
     project: (implInst) => context.project(implInst.constructor, implInst),
     unwrap: (platformObject) => context.unwrap(platformObject),
@@ -193,11 +201,7 @@ export function createBrowletEnvironmentInit(context: BindingContext<BrowletEnvi
     },
     createDocument: () => context.construct(DocumentImpl),
     createDOMStringList: (strings) => context.construct(DOMStringListImpl, [strings]),
-    createEvent: (EventConstructor = EventImpl) => {
-      const event = context.construct<EventImpl>(EventConstructor, ['', {}]);
-      event.isTrusted = true;
-      return event;
-    },
+    createEvent,
     createAbortSignal: () => context.construct(AbortSignalImpl),
     createQuotaExceededError: () =>
       context.project(QuotaExceededErrorImpl, new QuotaExceededErrorImpl()) as StampedPlatformObject<QuotaExceededError>,

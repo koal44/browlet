@@ -176,8 +176,7 @@ describe('HTML §12.2.4: StorageEvent', () => {
     await browser.evaluate(() => {
       window.addEventListener('storage', (event) => { Reflect.set(globalThis, 'receivedStorageEvent', event); });
     });
-    getRelevantRealm(browser.window).env.window.fireEvent('storage', StorageEventImpl, (event) => {
-      const storageEvent = event as StorageEventImpl;
+    getRelevantRealm(browser.window).env.window.fireEvent('storage', StorageEventImpl, (storageEvent) => {
       storageEvent.key = 'key';
       storageEvent.oldValue = 'old';
       storageEvent.newValue = 'new';

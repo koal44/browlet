@@ -107,7 +107,7 @@ export class WheelInputProcessor {
 
     // Creation belongs to the target's realm, even for an adopted Element.
     // The current Document supplies view; the receipt time is translated once.
-    const event = target.createTrustedEvent(WheelEventImpl) as WheelEventImpl;
+    const event = target.createTrustedEvent(WheelEventImpl);
     event.initializeMouseEvent('wheel', target, true, false, input);
     event.timeStamp = target.env.realm.eventTimeStamp(time);
     event.composed = true;

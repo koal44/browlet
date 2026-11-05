@@ -173,7 +173,7 @@ describe('UI Events: UIEvent', () => {
     other.document.adoptNode(node);
     const target = kind === 'node' ? unwrap<NodeImpl>(node) : getRelevantRealm(other.window).env.window;
     const realm = getRelevantRealm(owner.window);
-    const event = realm.env.createEvent(UIEventImpl) as UIEventImpl;
+    const event = realm.env.createEvent(UIEventImpl);
     const platform = getBindingContext(realm).project(UIEventImpl, event) as UIEventPlatform;
     expect(platform.isTrusted).toBe(true);
     expect(platform.view).toBeNull();
@@ -206,8 +206,7 @@ describe('UI Events: UIEvent', () => {
       }, { once: true });
     });
     const target = getRelevantRealm(browser.window).env.window;
-    expect(target.fireEvent('host', UIEventImpl, (event) => {
-      const ui = event as UIEventImpl;
+    expect(target.fireEvent('host', UIEventImpl, (ui) => {
       ui.view = target;
       ui.detail = 5;
       ui.setFlags({ cancelable: true });

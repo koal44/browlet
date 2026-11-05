@@ -119,7 +119,7 @@ export class NavigationImpl extends EventTargetImpl {
     current.sessionHistoryEntry.navigationAPIState = serializedState;
     // TODO: Integrate Document destruction with this EventTarget's lifetime; serialization can destroy its Window.
     this.fireEvent('currententrychange', NavigationCurrentEntryChangeEventImpl, (event) => {
-      (event as NavigationCurrentEntryChangeEventImpl).from = current;
+      event.from = current;
     });
   }
 
@@ -338,8 +338,7 @@ export class NavigationImpl extends EventTargetImpl {
     const loop = this.env.responsibleEventLoop;
     loop.prepareToRunScript(this.env);
     try {
-      this.fireEvent('currententrychange', NavigationCurrentEntryChangeEventImpl, (baseEvent) => {
-        const change = baseEvent as NavigationCurrentEntryChangeEventImpl;
+      this.fireEvent('currententrychange', NavigationCurrentEntryChangeEventImpl, (change) => {
         change.navigationType = navigationType;
         change.from = oldCurrentEntry;
       });
@@ -356,7 +355,7 @@ export class NavigationImpl extends EventTargetImpl {
   /** Prepare a traversal destination, exposing state only for an entry in this Navigation's list. */
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#fire-a-traverse-navigate-event
   fireTraverseNavigateEvent(destinationSHE: SessionHistoryEntry, userInvolvement: UserNavigationInvolvement = 'none'): boolean {
-    const event = this.env.createEvent(NavigateEventImpl) as NavigateEventImpl;
+    const event = this.env.createEvent(NavigateEventImpl);
     const entry = this.entryList.find((candidate) => candidate.sessionHistoryEntry === destinationSHE) ?? null;
     const state = entry === null ? this.env.serializeForStorage(null) : destinationSHE.navigationAPIState;
     const destination = new NavigationDestinationImpl(
@@ -385,7 +384,7 @@ export class NavigationImpl extends EventTargetImpl {
     }
     if (!document.isFullyActive()) return false;
 
-    const event = this.env.createEvent(NavigateEventImpl) as NavigateEventImpl;
+    const event = this.env.createEvent(NavigateEventImpl);
     event.classicHistoryAPIState = options.classicHistoryAPIState ?? null;
     // SPEC_CLASH(navigation-destination-default-state): Keep HTML's null default separate from classic History state.
     // Chromium/Firefox use undefined; WebKit exposes classic History state for pushState instead.
@@ -406,7 +405,7 @@ export class NavigationImpl extends EventTargetImpl {
     // SPEC_CLASH(navigation-download-abort-order): All three browsers abort before dispatch; HTML's later download notification violates firing's ongoing-event assertion.
     // https://github.com/whatwg/html/issues/11802 — the caller's later notification is insufficient for an already ongoing navigation.
     while (this.ongoingNavigateEvent !== null) this.abortOngoingNavigation();
-    const event = this.env.createEvent(NavigateEventImpl) as NavigateEventImpl;
+    const event = this.env.createEvent(NavigateEventImpl);
     // SPEC_CLASH(navigation-destination-default-state): Follow HTML's serialized null; browsers expose undefined for downloads.
     const destination = new NavigationDestinationImpl(destinationURL, null, this.env.serializeForStorage(null), false, this.env);
     return this.innerNavigateEventFiring('push', event, destination, userInvolvement, sourceElement, null, filename);

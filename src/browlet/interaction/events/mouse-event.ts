@@ -65,7 +65,7 @@ export class MouseEventImpl extends UIEventImpl {
   static create(
     type: string, target: NodeImpl | WindowImpl, bubbles: boolean, cancelable: boolean, input: MouseEventInput,
   ): MouseEventImpl {
-    const event = target.createTrustedEvent(MouseEventImpl) as MouseEventImpl;
+    const event = target.createTrustedEvent(MouseEventImpl);
     event.initializeMouseEvent(type, target, bubbles, cancelable, input);
     return event;
   }
@@ -90,7 +90,7 @@ export class MouseEventImpl extends UIEventImpl {
   static fromPointerEvent(
     type: MappedMouseType, target: NodeImpl | WindowImpl, source: PointerEventImpl, clickCount: number,
   ): MouseEventImpl {
-    const event = target.createTrustedEvent(MouseEventImpl) as MouseEventImpl;
+    const event = target.createTrustedEvent(MouseEventImpl);
     event.copyInputFrom(source);
     event.type = type;
     // https://w3c.github.io/pointerevents/#mouse-event-types

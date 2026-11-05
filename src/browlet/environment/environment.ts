@@ -26,7 +26,7 @@ import { cssStyleSheetIDL, type StyleletEnvironment } from '../../stylelet/index
 
 import { Moment, UnsafeMoment, monotonicClock, EnvironmentTiming } from '../timing/index';
 import type { CORSSettingsState } from '../dom/nodes/html/attributes/index';
-import { ErrorEventImpl, EventTargetImpl, PromiseRejectionEventImpl, type EventImpl } from '../dom/events/index';
+import { ErrorEventImpl, EventTargetImpl, PromiseRejectionEventImpl } from '../dom/events/index';
 import {
   fetchClassicScript, fetchClassicWorkerScript, fetchClassicWorkerImportedScript,
   fetchExternalModuleScriptGraph, fetchModulepreloadModuleScriptGraph, fetchInlineModuleScriptGraph,
@@ -53,7 +53,7 @@ import { NodeImpl, type DocumentImpl, type ElementImpl } from '../dom/nodes/inde
 import { HTMLAnchorElementImpl } from '../dom/nodes/html/text/index';
 import type { HTMLFormElementImpl } from '../dom/nodes/html/forms/index';
 import { HTMLAreaElementImpl } from '../dom/nodes/html/embedded/index';
-import type { DOMEnvironment, DOMStringListImpl, EventImplConstructor } from '../dom/index';
+import type { DOMEnvironment, DOMStringListImpl } from '../dom/index';
 import { MessageEventImpl, type MessagePortImpl } from '../communication/index';
 import { SessionHistoryEntry, type DocumentState } from '../browsing/navigation/state/index';
 import { openWindow, WindowImpl, type WindowProxyHandle } from '../browsing/window/index';
@@ -225,7 +225,7 @@ export interface BrowletEnvironmentInit {
     argumentsList: unknown[],
   ) => T;
   /** Create a trusted event in this environment's realm. */
-  createEvent: (eventConstructor?: EventImplConstructor) => EventImpl;
+  createEvent: DOMEnvironment['createEvent'];
   /** Allocate a controller and its signal with binding ownership. */
   createAbortController: () => AbortControllerImpl;
   /** Allocate a signal following the supplied implementation-side signals. */
@@ -517,7 +517,7 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
       try {
         if (EventTargetImpl.is(global)) {
           notHandled = global.fireEvent('error', ErrorEventImpl, (event) => {
-            (event as ErrorEventImpl).initialize({ ...errorInfo, cancelable: true });
+            event.initialize({ ...errorInfo, cancelable: true });
           });
           // TODO(HTML §8.1.8.1): onerror needs its special five-argument callback
           // and return-true cancellation. addEventListener uses DOM cancellation.
@@ -573,7 +573,7 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
         throw new InternalError('Promise rejection events require an EventTarget global');
       }
       global.fireEvent('rejectionhandled', PromiseRejectionEventImpl, (event) => {
-        (event as PromiseRejectionEventImpl).initialize({ promise, reason: getPromiseResult(promise) });
+        event.initialize({ promise, reason: getPromiseResult(promise) });
       });
     });
   }
@@ -593,7 +593,7 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
         }
         const reason = getPromiseResult(promise);
         const notCanceled = global.fireEvent('unhandledrejection', PromiseRejectionEventImpl, (event) => {
-          (event as PromiseRejectionEventImpl).initialize({ promise, reason, cancelable: true });
+          event.initialize({ promise, reason, cancelable: true });
         });
         if (notCanceled) console.error(reason);
         // A listener can attach a handler while the event is being dispatched.

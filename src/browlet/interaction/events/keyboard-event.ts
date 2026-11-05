@@ -4,6 +4,7 @@ import {
 } from '../../../web-idl/core/index';
 
 import type { DOMHighResTimeStamp } from '../../timing/index';
+import type { NodeImpl } from '../../dom/nodes/index';
 import type { DOMEnvironment } from '../../dom/environment';
 import type { WindowImpl } from '../../browsing/window/index';
 
@@ -12,20 +13,20 @@ import { EventModifierState, type EventModifierInit } from './event-modifiers';
 
 /** Key data and modifier state captured for one notification. */
 // https://w3c.github.io/uievents/#interface-keyboardevent
-// TODO(UI Events §§3.5.4, 4.3.1, 4.3.4): The input producer must update the UserAgent's
-// held/toggled modifier state before taking an event snapshot, even if keydown is
-// canceled. Cancellation suppresses default actions, not state changes or keyup.
-// These per-event snapshots must not change device state or establish an IME session.
-// TODO(UI Events §§4.2–4.3): Map native input using UIEvents-Key / UIEvents-Code:
-// code identifies the physical key; key follows layout/modifiers at each notification,
-// including release. Dead keys/IME need composition state, not inferred keystrokes.
-// Producer key-string selection (including NFC) must not rewrite constructor strings.
+// KeyboardInputProcessor retains adapter-supplied modifier state before queuing
+// trusted delivery, then uses selectKey() for each press/release independently.
+// These per-event snapshots do not change device state or establish an IME session.
+// TODO(UI Events §§4.2–4.3): The native adapter must supply layout/modifier facts
+// afresh for every notification, including key-string classification and glyph-only text.
+// isKeyboardCode() recognizes the vocabulary; physical/native scan-code mapping,
+// including Fn/media positions and virtual keyboards, still belongs to the adapter.
+// Dead keys/IME need composition state, not inferred keystrokes. Constructor strings
+// remain converted DOMStrings and must bypass the producer's NFC selection.
 // SPEC_CLASH(virtual-keyboard-code): §4.2.4 permits undefined/factory-reset key values; UIEvents-Code requires its code vocabulary. Producer choice remains pending.
-// TODO(UI Events §§3.5.5–3.5.6): The producer must select the focused target (HTML §6.6),
-// dispatch keydown, and, unless canceled, invoke editing (HTML §6.8 / Input Events),
-// focus traversal, activation (HTML §6.5), or composition (UI Events §3.6) as applicable.
-// Editing orders beforeinput -> edit -> input. Repeats rerun the keydown path; keyup
-// selects the then-current target. Synthetic dispatch does not perform those actions.
+// TODO(UI Events §§3.5.5–3.5.6): Connect the producer's explicit focus, activation,
+// default-action and composition dependencies. Editing must order beforeinput ->
+// edit -> input. Queued keyup already selects current focus, and cancellation
+// already gates ordinary keydown effects. Synthetic dispatch does not run them.
 // TODO(UI Events §§7.3, 8.3): Native legacy codes need the OS/key mapping and IME state;
 // do not derive them from author-supplied key strings. Optional keypress production
 // needs the same focused target and cancellation/editing pipeline as keydown.
@@ -59,6 +60,27 @@ export class KeyboardEventImpl extends UIEventImpl {
     this.#modifiers = new EventModifierState(eventInitDict);
   }
 
+  /** Create a trusted key notification using the target's realm and the producer's captured input. */
+  // https://w3c.github.io/uievents/#event-type-keydown
+  // https://w3c.github.io/uievents/#event-type-keyup
+  // DOM allocation and UI Events attributes are combined here. Key selection is
+  // performed by the producer; constructor strings never enter that algorithm.
+  static create(type: KeyboardEventType, target: NodeImpl, key: string, input: KeyboardEventInput): KeyboardEventImpl {
+    const event = target.createTrustedEvent(KeyboardEventImpl);
+    event.initializeUIEvent(type, target, true, true);
+    event.composed = true;
+    event.isTrusted = true;
+    event.key = key;
+    event.code = input.code;
+    event.location = input.location;
+    event.repeat = input.repeat;
+    event.isComposing = input.isComposing;
+    event.keyCode = input.keyCode;
+    event.charCode = 0;
+    event.#modifiers = input.modifiers;
+    return event;
+  }
+
   get ctrlKey(): boolean { return this.#modifiers.getModifierState('Control'); }
   get shiftKey(): boolean { return this.#modifiers.getModifierState('Shift'); }
   get altKey(): boolean { return this.#modifiers.getModifierState('Alt'); }
@@ -87,6 +109,21 @@ export class KeyboardEventImpl extends UIEventImpl {
     this.location = location;
     this.#modifiers = new EventModifierState({ ctrlKey, altKey, shiftKey, metaKey });
   }
+}
+
+/** Native press/release notifications; deprecated keypress has a separate text/IME contract. */
+export type KeyboardEventType = 'keydown' | 'keyup';
+
+/** Normalized native attributes supplied alongside the producer's selected key value. */
+export interface KeyboardEventInput {
+  code: string;
+  location: number;
+  repeat: boolean;
+  isComposing: boolean;
+  /** Native legacy code, including zero when unavailable; never inferred from character text. */
+  keyCode: number;
+  /** Complete held/toggled modifier state after this transition. */
+  modifiers: EventModifierState;
 }
 
 /** Converted constructor data; key/code mapping belongs to the input producer. */

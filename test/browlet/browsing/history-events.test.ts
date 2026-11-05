@@ -180,13 +180,11 @@ describe('HTML §§7.2.7.2–3: history event interfaces', () => {
     });
     const state = Reflect.get(browser.window, 'eventState') as object;
     const targetWindow = getRelevantRealm(browser.window).env.window;
-    targetWindow.fireEvent('popstate', PopStateEventImpl, (event) => {
-      const pop = event as PopStateEventImpl;
+    targetWindow.fireEvent('popstate', PopStateEventImpl, (pop) => {
       pop.state = state;
       pop.hasUAVisualTransition = true;
     });
-    targetWindow.fireEvent('hashchange', HashChangeEventImpl, (event) => {
-      const hash = event as HashChangeEventImpl;
+    targetWindow.fireEvent('hashchange', HashChangeEventImpl, (hash) => {
       hash.oldURL = 'https://example.test/#before';
       hash.newURL = 'https://example.test/#after';
     });

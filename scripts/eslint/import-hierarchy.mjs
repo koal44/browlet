@@ -49,7 +49,7 @@ export const layers = [
   // Feature event payloads can serve Document's legacy factory without loading their producers.
   ['browlet/storage/events/', 'browlet/browsing/navigation/events/', 'browlet/interaction/events/'],
   // Document owns mouse/wheel input state; these foundations use event primitives and typed nodes only.
-  ['browlet/interaction/mouse/', 'browlet/interaction/wheel/'],
+  ['browlet/interaction/mouse/legacy/', 'browlet/interaction/wheel/'],
   // Policy owns the source-expression algorithms shared with its CSP implementation.
   ['browlet/browsing/policy/'],
   ['browlet/browsing/policy/csp/'],
@@ -80,6 +80,9 @@ export const layers = [
   // Navigation composes resource consumption with document creation and parsing.
   ['browlet/loader/'],
   ['browlet/browsing/navigation/'],
+  // Pointer state and lock controllers precede the mouse delivery coordinator.
+  ['browlet/interaction/pointer/', 'browlet/interaction/pointer-lock/', 'browlet/interaction/keyboard/'],
+  ['browlet/interaction/mouse/'],
   ['browlet/interaction/'],
   // Rendering owns document-bound transitions and their eventual presentation lifecycle.
   ['browlet/rendering/'],

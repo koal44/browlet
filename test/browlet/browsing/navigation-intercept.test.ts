@@ -237,7 +237,7 @@ async function fixture() {
   const document = unwrap<DocumentImpl>(browser.document);
   const navigation = document.getRelevantGlobalObject()!.navigation;
   // Supply the unfinished event-production boundary; use real dispatch, bindings, and Document activity.
-  const event = document.env.createEvent(NavigateEventImpl) as NavigateEventImpl;
+  const event = document.env.createEvent(NavigateEventImpl);
   event.type = 'navigate';
   event.canIntercept = true;
   event.cancelable = true;
