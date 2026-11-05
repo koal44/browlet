@@ -165,6 +165,13 @@ export class UserAgent implements
   /** Render-blocking cutoff in milliseconds from the relevant global's time origin. */
   // https://html.spec.whatwg.org/multipage/dom.html#render-blocked
   renderBlockingTimeout = 5000;
+  /** Milliseconds an ownerless shared worker may survive between page loads. */
+  // https://html.spec.whatwg.org/multipage/workers.html#between-loads-shared-worker-timeout
+  betweenLoadsSharedWorkerTimeout = 5000;
+  /** Policy ceiling in milliseconds for a Service Worker running without clients. */
+  // TODO(Service Workers): Enforce this policy in the service-worker lifetime controller.
+  // Shared workers use the same value so their extension never exceeds that ceiling.
+  serviceWorkerWithoutClientsTimeout = 5 * 60 * 1000;
   /** Maximum age of queued reports in milliseconds; Reporting suggests about two days. */
   maxReportAge = 2 * 24 * 60 * 60 * 1000;
   /** Reporting endpoints are retired after exceeding this consecutive-failure count. */
@@ -206,6 +213,12 @@ export class UserAgent implements
 
   get systemClipboard(): SystemClipboard {
     return this.#systemClipboard ??= new SystemClipboard();
+  }
+
+  /** Shared-worker extension equals the user agent's Service Worker no-client lifetime policy. */
+  // https://html.spec.whatwg.org/multipage/workers.html#extended-lifetime-shared-worker-timeout
+  get extendedLifetimeSharedWorkerTimeout(): number {
+    return this.serviceWorkerWithoutClientsTimeout;
   }
 
   /** Node host consent hook; a browser without a configured prompt declines new requests. */
@@ -343,6 +356,25 @@ export class UserAgent implements
 
   appendTopLevelTraversable(traversable: TopLevelTraversable): void {
     this.topLevelTraversableSet.add(traversable);
+  }
+
+  /** Whether any navigable has an active Document that has not completely loaded. */
+  // https://html.spec.whatwg.org/multipage/workers.html#permissible-worker
+  hasLoadingNavigable(): boolean {
+    // Reuse registered Windows, including children beneath inactive ancestors.
+    // A replaced Document is excluded by its node-navigable lookup; fully-active
+    // status and origin are deliberately not conditions in HTML's worker check.
+    for (const group of this.browsingContextGroupSet) {
+      for (const cluster of group.agentClusterMap.values()) {
+        for (const agent of cluster.agents) {
+          if (!(agent instanceof WindowAgent)) continue;
+          for (const window of agent.windowObjects) {
+            if (window.navigable !== null && window.document.completelyLoadedTime === null) return true;
+          }
+        }
+      }
+    }
+    return false;
   }
 
   /** Remove a tab/window presentation when a UI host is attached. */

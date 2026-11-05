@@ -10,6 +10,7 @@ import type { AbortSignalImpl } from '../abort/index';
 import type { NodeImpl, ShadowRootMode } from '../nodes/index';
 import type { DOMEnvironment, DOMRealm, EventImplConstructor } from '../environment';
 import type { WindowImpl } from '../../browsing/window/index';
+import type { WorkerGlobalImpl } from '../../workers/index';
 
 import { EventPhase, type EventImpl, type EventPathItem } from './event';
 
@@ -217,6 +218,11 @@ export class EventTargetImpl {
   }
 
   isWindow(): this is WindowImpl {
+    return false;
+  }
+
+  /** Whether this target is the inside global of a worker. */
+  isWorkerGlobal(): this is WorkerGlobalImpl {
     return false;
   }
 

@@ -157,8 +157,8 @@ export class BrowletEnvironmentBase implements FetchEnvironmentBase {
 
   /** Security classification fixed when the environment was created. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#secure-context
-  // TODO(HTML §8.1.3.5): Worker setup must use the first owner's relevant settings;
-  // worklet setup must supply true. Neither global/settings lifecycle exists yet.
+  // Dedicated/shared worker composition captures the first owner's decision.
+  // TODO(HTML §8.1.3.5): Service worker setup must supply its decision; worklet setup must supply true.
   get isSecureContext(): boolean {
     return this.#isSecureContext;
   }
@@ -353,7 +353,7 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     if (baseEnv !== null) realm.env = this;
   }
 
-  /** The platform global installed in this environment's realm. */
+  /** Platform global installed in this realm; see globalImplementation for internal HTML state. */
   get global(): GlobalObject {
     return this.realm.globalObject;
   }
@@ -390,7 +390,7 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   }
 
   abstract get apiBaseURL(): URLRecord;
-  /** Internal HTML global state; separate from the platform global exposed to scripts. */
+  /** Implementation owning HTML state; global returns the separate platform object. */
   abstract get globalImplementation(): BrowletGlobalObject;
   abstract get moduleMap(): ModuleMap;
   abstract get origin(): Origin;

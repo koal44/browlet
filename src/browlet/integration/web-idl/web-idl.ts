@@ -67,7 +67,7 @@ import {
   trustedTypesWindowOrWorkerGlobalScopeIDL,
 } from '../../environment/index';
 import { structuredSerializeOptionsIDL } from '../../scripting/structured-data/index';
-import { serviceWorkerIDL } from '../../workers/index';
+import { workerIDLDefinitions } from '../../workers/index';
 import { elementPointerCaptureIDL, navigatorPointerEventsIDL, pointerLockIDLDefinitions } from '../../interaction/index';
 import { renderingIDLDefinitions } from '../../rendering/index';
 import { progressEventIDL, progressEventInitIDL } from '../xhr/index';
@@ -132,7 +132,7 @@ export const browletDefinitions = [
   eventSourceIDL,
   eventSourceInitIDL,
   windowPostMessageOptionsIDL,
-  serviceWorkerIDL,
+  ...workerIDLDefinitions,
   promiseRejectionEventIDL,
   promiseRejectionEventInitIDL,
   structuredSerializeOptionsIDL,

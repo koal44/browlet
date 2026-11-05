@@ -5,6 +5,7 @@ import type { MutationObserverImpl } from '../dom/nodes/index';
 import type { HTMLSlotElementImpl } from '../dom/nodes/html/index';
 import type { CustomElementRegistryImpl } from '../dom/nodes/html/custom-elements/index';
 import type { WindowImpl } from '../browsing/window/index';
+import type { DedicatedWorkerGlobalImpl, SharedWorkerGlobalImpl, ServiceWorkerGlobalImpl } from '../workers/index';
 
 import type { EventLoop } from './event-loop';
 
@@ -118,9 +119,10 @@ export class SandboxAgent extends Agent {
 }
 
 /** Execution owner for one dedicated worker global. */
-// PROVISIONAL: no DedicatedWorkerGlobalScope, worker settings, or independent execution yet.
+// TODO(HTML §10.2.4): Startup must compose worker settings on an independent execution backend.
 export class DedicatedWorkerAgent extends Agent {
-  globalScope: unknown = undefined;
+  /** Inside global attached by worker startup, before any author script runs. */
+  globalScope: DedicatedWorkerGlobalImpl | undefined;
 
   constructor(eventLoop: EventLoop) {
     super(true, eventLoop);
@@ -128,9 +130,10 @@ export class DedicatedWorkerAgent extends Agent {
 }
 
 /** Execution owner for one shared worker global. */
-// PROVISIONAL: no SharedWorkerGlobalScope, connection manager, or independent execution yet.
+// TODO(HTML §§10.2.4, 10.2.6.4): Startup, connection management, and independent execution remain pending.
 export class SharedWorkerAgent extends Agent {
-  globalScope: unknown = undefined;
+  /** Inside global attached by worker startup, before any author script runs. */
+  globalScope: SharedWorkerGlobalImpl | undefined;
 
   constructor(eventLoop: EventLoop) {
     super(true, eventLoop);
@@ -140,7 +143,8 @@ export class SharedWorkerAgent extends Agent {
 /** Execution owner for one service worker global. */
 // PROVISIONAL: the existing service-worker listener hook does not supply a global or execution lifetime.
 export class ServiceWorkerAgent extends Agent {
-  globalScope: unknown = undefined;
+  /** Inside global attached by the service-worker startup algorithm. */
+  globalScope: ServiceWorkerGlobalImpl | undefined;
 
   constructor(eventLoop: EventLoop) {
     super(false, eventLoop);

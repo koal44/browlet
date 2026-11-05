@@ -140,6 +140,25 @@ old port immediately, then installs it on the receiving port. While in flight,
 messages accumulate without a runnable task. This keeps both-end transfers paired
 and prevents the old object from consuming messages or closing the moved channel.
 
+Worker lifetime ownership uses `isEntangledOutsideGlobal()` to inspect the
+connection without requiring a receiving object. A null remote endpoint means
+disconnected; a remote endpoint with no port is in transit and still connected.
+That end currently belongs to the transport, so the local port remains in the
+worker's list. Receipt establishes the peer's current global; if both ends now
+belong to the same global, neither is in its worker-port list. Closing the local
+end during transfer disconnects the channel, and receipt cannot revive it.
+No previous owner is retained. See the [§10.2.3 review](../workers/ROADMAP.md#document-order-review).
+
+The 2026-11-04 source comparison supports keeping channel state separate from
+live peer objects: Chromium moves a message-pipe descriptor into `MessagePortChannel`
+and clears the initial peer pointer; Firefox transfers port identifiers through
+its background service; WebKit retains channel identifiers and pending-transfer
+state after detaching the old object from its context. These are transport
+architecture observations, not a browser timing oracle for worker termination.
+Sources: [Chromium `Disentangle()`](https://chromium.googlesource.com/chromium/src/+/1136757f47c7e2b6cc593f871a5d79fc0e9834b4/third_party/blink/renderer/core/messaging/message_port.cc#170),
+[Firefox `CloneAndDisentangle()`](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622782fe62529bb3a4809780da01d6c/dom/messagechannel/MessagePort.cpp#L630),
+and [WebKit `lenientDisentangle()`](https://github.com/WebKit/WebKit/blob/713192fabebfdd2955aa596c262c33bfbf3d50be/Source/WebCore/dom/MessagePort.cpp#L233).
+
 Binding resolves ports in transfer lists for source/target identity checks; the
 message graph and other transferable values retain their JavaScript representation.
 The shared detached marker now lives in Scripting's lower-level transferable

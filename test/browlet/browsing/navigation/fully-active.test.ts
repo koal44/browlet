@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
@@ -76,6 +76,38 @@ describe('fully active Documents', () => {
     expect(auxiliary.containerDocument).toBeNull();
     expect(document.isFullyActive()).toBe(true);
     expect(document.location).not.toBeNull();
+  });
+
+  it('tracks descendant inactivity from the ancestor transition, preserving the uninterrupted period', () => {
+    const userAgent = new UserAgent();
+    let now = 0;
+    vi.spyOn(userAgent, 'unsafeSharedCurrentTime').mockImplementation(() => now);
+    const root = TopLevelTraversable.create(userAgent, null, '');
+    const parent = createChild(root);
+    const child = createChild(parent.navigable);
+    const rootDocument = root.activeDocument!;
+    const activeEntry = root.activeSessionHistoryEntry;
+    const emptyEntry = rootDocument.env.createSessionHistoryEntry(activeEntry.url, new DocumentState());
+    expect(rootDocument.nonFullyActiveSince).toBeNull();
+    expect(parent.document.nonFullyActiveSince).toBeNull();
+    expect(child.document.nonFullyActiveSince).toBeNull();
+
+    now = 20;
+    root.activeSessionHistoryEntry = emptyEntry;
+    expect(rootDocument.nonFullyActiveSince).toBe(20);
+    expect(parent.document.nonFullyActiveSince).toBe(20);
+    expect(child.document.nonFullyActiveSince).toBe(20);
+    now = 30;
+    rootDocument.notifyFullyActiveStateChanged();
+    expect(child.document.nonFullyActiveSince).toBe(20);
+
+    root.activeSessionHistoryEntry = activeEntry;
+    expect(rootDocument.nonFullyActiveSince).toBeNull();
+    expect(parent.document.nonFullyActiveSince).toBeNull();
+    expect(child.document.nonFullyActiveSince).toBeNull();
+    now = 40;
+    root.activeSessionHistoryEntry = emptyEntry;
+    expect(child.document.nonFullyActiveSince).toBe(40);
   });
 });
 

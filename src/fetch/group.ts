@@ -11,6 +11,13 @@ export class FetchGroup {
   /** Deferred requests and invocation state retained for that environment. */
   deferredFetchRecords: DeferredFetchRecord[] = [];
 
+  /** Whether an environment's Fetch work is still awaiting end-of-body delivery. */
+  hasPendingFetches(): boolean {
+    // Aborting the controller alone does not deliver completion. Fetch sets done
+    // in its queued end-of-body task, including for failed or aborted requests.
+    return this.fetchRecords.some(({ request }) => !request.done);
+  }
+
   /** Placeholder for document cancellation; currently discards no work. */
   // PROVISIONAL: complete HTML's task/data cleanup and keepalive/deferred-fetch rules.
   cancel(): boolean {

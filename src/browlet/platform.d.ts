@@ -3005,6 +3005,15 @@ export interface NavigatorConstructor {
   [Symbol.hasInstance](value: unknown): value is Navigator;
 }
 
+export interface WorkerNavigator {
+
+}
+
+export interface WorkerNavigatorConstructor {
+  readonly prototype: WorkerNavigator;
+  [Symbol.hasInstance](value: unknown): value is WorkerNavigator;
+}
+
 export interface ErrorEvent extends Event {
   readonly message: string;
   readonly filename: string;
@@ -3093,6 +3102,197 @@ export interface EventSourceConstructor extends Ctor<EventTargetConstructor> {
   readonly CONNECTING: 0;
   readonly OPEN: 1;
   readonly CLOSED: 2;
+}
+
+export interface WorkerGlobalScope extends EventTarget {
+  readonly self: WorkerGlobalScope;
+  readonly location: WorkerLocation;
+  readonly navigator: WorkerNavigator;
+  importScripts(...urls: Array<TrustedScriptURL | string>): void;
+  onerror: OnErrorEventHandlerNonNull | null;
+  onlanguagechange: EventHandlerNonNull | null;
+  onoffline: EventHandlerNonNull | null;
+  ononline: EventHandlerNonNull | null;
+  onrejectionhandled: EventHandlerNonNull | null;
+  onunhandledrejection: EventHandlerNonNull | null;
+}
+
+export interface WorkerGlobalScopeConstructor extends Ctor<EventTargetConstructor> {
+  readonly prototype: WorkerGlobalScope;
+  [Symbol.hasInstance](value: unknown): value is WorkerGlobalScope;
+}
+
+export interface DedicatedWorkerGlobalScope extends WorkerGlobalScope {
+  get name(): string;
+  set name(value: unknown);
+  postMessage(message: any, transfer: Iterable<object>): void;
+  postMessage(message: any, options?: StructuredSerializeOptions): void;
+  close(): void;
+  onmessage: EventHandlerNonNull | null;
+  onmessageerror: EventHandlerNonNull | null;
+  DOMException: DOMExceptionConstructor;
+  QuotaExceededError: QuotaExceededErrorConstructor;
+  CustomElementRegistry: CustomElementRegistryConstructor;
+  Origin: OriginConstructor;
+  ReportBody: ReportBodyConstructor;
+  CSPViolationReportBody: CSPViolationReportBodyConstructor;
+  SecurityPolicyViolationEvent: SecurityPolicyViolationEventConstructor;
+  ReportingObserver: ReportingObserverConstructor;
+  Performance: PerformanceConstructor;
+  WorkerNavigator: WorkerNavigatorConstructor;
+  ErrorEvent: ErrorEventConstructor;
+  MessageEvent: MessageEventConstructor;
+  MessagePort: MessagePortConstructor;
+  MessageChannel: MessageChannelConstructor;
+  BroadcastChannel: BroadcastChannelConstructor;
+  EventSource: EventSourceConstructor;
+  WorkerGlobalScope: WorkerGlobalScopeConstructor;
+  DedicatedWorkerGlobalScope: DedicatedWorkerGlobalScopeConstructor;
+  WorkerLocation: WorkerLocationConstructor;
+  ServiceWorker: ServiceWorkerConstructor;
+  PromiseRejectionEvent: PromiseRejectionEventConstructor;
+  Event: EventConstructor;
+  CustomEvent: CustomEventConstructor;
+  EventTarget: EventTargetConstructor;
+  AbortSignal: AbortSignalConstructor;
+  AbortController: AbortControllerConstructor;
+  DOMStringList: DOMStringListConstructor;
+  ByteLengthQueuingStrategy: ByteLengthQueuingStrategyConstructor;
+  CountQueuingStrategy: CountQueuingStrategyConstructor;
+  ReadableStream: ReadableStreamConstructor;
+  ReadableStreamDefaultReader: ReadableStreamDefaultReaderConstructor;
+  ReadableStreamBYOBReader: ReadableStreamBYOBReaderConstructor;
+  ReadableStreamDefaultController: ReadableStreamDefaultControllerConstructor;
+  ReadableByteStreamController: ReadableByteStreamControllerConstructor;
+  ReadableStreamBYOBRequest: ReadableStreamBYOBRequestConstructor;
+  WritableStream: WritableStreamConstructor;
+  WritableStreamDefaultController: WritableStreamDefaultControllerConstructor;
+  WritableStreamDefaultWriter: WritableStreamDefaultWriterConstructor;
+  TransformStream: TransformStreamConstructor;
+  TransformStreamDefaultController: TransformStreamDefaultControllerConstructor;
+  TextDecoder: TextDecoderConstructor;
+  TextEncoder: TextEncoderConstructor;
+  TextDecoderStream: TextDecoderStreamConstructor;
+  TextEncoderStream: TextEncoderStreamConstructor;
+  Blob: BlobConstructor;
+  File: FileConstructor;
+  FileList: FileListConstructor;
+  Permissions: PermissionsConstructor;
+  PermissionStatus: PermissionStatusConstructor;
+  StorageManager: StorageManagerConstructor;
+  FileReader: FileReaderConstructor;
+  FormData: FormDataConstructor;
+  ProgressEvent: ProgressEventConstructor;
+  URL: URLConstructor;
+  URLSearchParams: URLSearchParamsConstructor;
+  Headers: HeadersConstructor;
+  Request: RequestConstructor;
+  Response: ResponseConstructor;
+  TrustedHTML: TrustedHTMLConstructor;
+  TrustedScript: TrustedScriptConstructor;
+  TrustedScriptURL: TrustedScriptURLConstructor;
+  TrustedTypePolicy: TrustedTypePolicyConstructor;
+  TrustedTypePolicyFactory: TrustedTypePolicyFactoryConstructor;
+  WebAssembly: WebAssembly;
+}
+
+export interface DedicatedWorkerGlobalScopeConstructor extends Ctor<WorkerGlobalScopeConstructor> {
+  readonly prototype: DedicatedWorkerGlobalScope;
+  [Symbol.hasInstance](value: unknown): value is DedicatedWorkerGlobalScope;
+}
+
+export interface SharedWorkerGlobalScope extends WorkerGlobalScope {
+  get name(): string;
+  set name(value: unknown);
+  close(): void;
+  onconnect: EventHandlerNonNull | null;
+  DOMException: DOMExceptionConstructor;
+  QuotaExceededError: QuotaExceededErrorConstructor;
+  CustomElementRegistry: CustomElementRegistryConstructor;
+  Origin: OriginConstructor;
+  ReportBody: ReportBodyConstructor;
+  CSPViolationReportBody: CSPViolationReportBodyConstructor;
+  SecurityPolicyViolationEvent: SecurityPolicyViolationEventConstructor;
+  ReportingObserver: ReportingObserverConstructor;
+  Performance: PerformanceConstructor;
+  WorkerNavigator: WorkerNavigatorConstructor;
+  ErrorEvent: ErrorEventConstructor;
+  MessageEvent: MessageEventConstructor;
+  MessagePort: MessagePortConstructor;
+  MessageChannel: MessageChannelConstructor;
+  BroadcastChannel: BroadcastChannelConstructor;
+  EventSource: EventSourceConstructor;
+  WorkerGlobalScope: WorkerGlobalScopeConstructor;
+  SharedWorkerGlobalScope: SharedWorkerGlobalScopeConstructor;
+  WorkerLocation: WorkerLocationConstructor;
+  ServiceWorker: ServiceWorkerConstructor;
+  PromiseRejectionEvent: PromiseRejectionEventConstructor;
+  Event: EventConstructor;
+  CustomEvent: CustomEventConstructor;
+  EventTarget: EventTargetConstructor;
+  AbortSignal: AbortSignalConstructor;
+  AbortController: AbortControllerConstructor;
+  DOMStringList: DOMStringListConstructor;
+  ByteLengthQueuingStrategy: ByteLengthQueuingStrategyConstructor;
+  CountQueuingStrategy: CountQueuingStrategyConstructor;
+  ReadableStream: ReadableStreamConstructor;
+  ReadableStreamDefaultReader: ReadableStreamDefaultReaderConstructor;
+  ReadableStreamBYOBReader: ReadableStreamBYOBReaderConstructor;
+  ReadableStreamDefaultController: ReadableStreamDefaultControllerConstructor;
+  ReadableByteStreamController: ReadableByteStreamControllerConstructor;
+  ReadableStreamBYOBRequest: ReadableStreamBYOBRequestConstructor;
+  WritableStream: WritableStreamConstructor;
+  WritableStreamDefaultController: WritableStreamDefaultControllerConstructor;
+  WritableStreamDefaultWriter: WritableStreamDefaultWriterConstructor;
+  TransformStream: TransformStreamConstructor;
+  TransformStreamDefaultController: TransformStreamDefaultControllerConstructor;
+  TextDecoder: TextDecoderConstructor;
+  TextEncoder: TextEncoderConstructor;
+  TextDecoderStream: TextDecoderStreamConstructor;
+  TextEncoderStream: TextEncoderStreamConstructor;
+  Blob: BlobConstructor;
+  File: FileConstructor;
+  FileList: FileListConstructor;
+  Permissions: PermissionsConstructor;
+  PermissionStatus: PermissionStatusConstructor;
+  StorageManager: StorageManagerConstructor;
+  FileReader: FileReaderConstructor;
+  FormData: FormDataConstructor;
+  ProgressEvent: ProgressEventConstructor;
+  URL: URLConstructor;
+  URLSearchParams: URLSearchParamsConstructor;
+  Headers: HeadersConstructor;
+  Request: RequestConstructor;
+  Response: ResponseConstructor;
+  TrustedHTML: TrustedHTMLConstructor;
+  TrustedScript: TrustedScriptConstructor;
+  TrustedScriptURL: TrustedScriptURLConstructor;
+  TrustedTypePolicy: TrustedTypePolicyConstructor;
+  TrustedTypePolicyFactory: TrustedTypePolicyFactoryConstructor;
+  WebAssembly: WebAssembly;
+}
+
+export interface SharedWorkerGlobalScopeConstructor extends Ctor<WorkerGlobalScopeConstructor> {
+  readonly prototype: SharedWorkerGlobalScope;
+  [Symbol.hasInstance](value: unknown): value is SharedWorkerGlobalScope;
+}
+
+export interface WorkerLocation {
+  readonly href: string;
+  toString(): string;
+  readonly origin: string;
+  readonly protocol: string;
+  readonly host: string;
+  readonly hostname: string;
+  readonly port: string;
+  readonly pathname: string;
+  readonly search: string;
+  readonly hash: string;
+}
+
+export interface WorkerLocationConstructor {
+  readonly prototype: WorkerLocation;
+  [Symbol.hasInstance](value: unknown): value is WorkerLocation;
 }
 
 export interface ServiceWorker extends EventTarget {

@@ -2080,12 +2080,36 @@ including focus/blur, also leave the annotation-derived property list incomplete
 COEP navigation and dedicated-worker inheritance checks and observer reports are
 implemented, but automatic child creation/destruction, navigation network-error handling,
 and worker startup still prevent complete enforcement through those lifecycles.
-The new abstract worker globals expose no author-facing Worker API. Inheritance
+WorkerGlobalScope, DedicatedWorkerGlobalScope, and SharedWorkerGlobalScope have declared members and
+can be projected for internally supplied implementations, but worker startup and
+the author-facing Worker/SharedWorker APIs remain absent. Shared globals retain
+creation fields and expose `onconnect`; discovery, automatic connection delivery,
+and lifetime monitoring remain pending. Dedicated globals forward messaging
+through a hidden port and can close their agent's task queues; automatic channel
+setup, queue enablement, and thread teardown remain pending. WorkerLocation's read-only URL surface
+is implemented; WorkerNavigator is an identity stub. `importScripts()` throws
+at its explicit synchronous-loading boundary. Dedicated/shared realm and settings
+composition is available internally, including initial ownership and separate resource
+state. It leaves execution readiness false and still runs on the caller's thread.
+Worker API mixin forwarding, response-policy setup, event producers, cross-thread
+messaging, and independent execution remain pending. Inheritance
 reports omit CORP's destination member and preserve local observation even with
 an empty endpoint or outbound delivery disabled. Private Network Access and
 Opaque Response Blocking remain absent; the
 [COEP audit](browlet/browsing/policy/ROADMAP.md#html-714-cross-origin-embedder-policies)
 records these dependencies without claiming physical isolation.
+
+Worker lifetime ownership now selects a creating Document or worker and lists
+ports connected outside the worker, including peers in transit. Ownerless and
+Document-inactive periods, shared-worker timeout policies, and extended-lifetime/
+actively-needed decisions are implemented. Protected/permissible/suspendable
+checks now use owners, external ports, uncanceled timers, pending Fetch completion,
+EventSources, and loading navigables. IndexedDB transactions and WebSocket/WebTransport
+activity remain explicit inputs to add when those subsystems exist. Worker timer
+advancement, automatic startup/additional shared-owner registration, shutdown/suspension,
+and Service Worker enforcement of the shared no-client lifetime ceiling remain
+pending; see the
+[worker lifetime review](browlet/workers/ROADMAP.md#document-order-review).
 
 Sandbox parsing, iframe attribute state, and creation-flag propagation exist,
 but complete sandbox enforcement does not. Navigation admission and named lookup
@@ -2098,4 +2122,5 @@ and worker initialization are implemented independently of the missing full
 iframe/navigation/history/worker lifecycles. Unassociated containers still use
 an absent CSP list until a self origin is available. The
 [§§7.1.5–7.1.7 audit](browlet/browsing/policy/ROADMAP.md#html-715-sandboxing)
-maps every flag and remaining owner; partial worker globals still expose no IDL.
+maps every flag and remaining owner; service worker globals still await
+their own declaration, and all workers await startup integration.

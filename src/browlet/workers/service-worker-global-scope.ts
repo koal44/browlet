@@ -1,11 +1,11 @@
 import type { EventListenerCallback } from '../dom/events/index';
 
-import { WorkerGlobalScopeImpl } from './worker-global-scope';
+import { WorkerGlobalImpl } from './worker-global-scope';
 
 /** Applies service-worker listener rules before a complete worker global is available. */
 // https://w3c.github.io/ServiceWorker/#serviceworkerglobalscope
 // TODO(Service Workers): Web IDL declaration, registration, script resources, and worker event types.
-export abstract class ServiceWorkerGlobalScopeImpl extends WorkerGlobalScopeImpl
+export abstract class ServiceWorkerGlobalImpl extends WorkerGlobalImpl
 {
   /** Whether the worker's script has completed its initial evaluation. */
   protected abstract scriptResourceHasEverBeenEvaluated: boolean;

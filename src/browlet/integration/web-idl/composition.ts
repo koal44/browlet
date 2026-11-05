@@ -6,10 +6,12 @@ import {
   PlatformRecordSource, BindingWorld, QuotaExceededErrorImpl, reference, type BindingContext, type ImplementationClass,
   type StampedPlatformObject, type RealmBinding,
 } from '../../../web-idl/index';
+import { createOpaqueOrigin } from '../../../url/index';
 import { type PermissionDescriptor } from '../../../permissions/index';
+import { StorageKey } from '../../../storage/index';
 
 import { EventImpl } from '../../dom/events/index';
-import { EventLoop, SandboxAgent, BrowletRealm, WindowRealm, installRealmHostHooks } from '../../scripting/index';
+import { EventLoop, SandboxAgent, SharedWorkerAgent, BrowletRealm, WindowRealm, installRealmHostHooks } from '../../scripting/index';
 import { TrustedScriptImpl } from '../../browsing/policy/trusted-types/index';
 import { AbortControllerImpl, AbortSignalImpl } from '../../dom/abort/index';
 import { DocumentImpl, ElementImpl } from '../../dom/nodes/index';
@@ -19,11 +21,13 @@ import { WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
 import {
   type WindowEnvironmentInit, BrowletEnvironmentBase, SandboxEnvironment, WindowEnvironment,
   type BrowletEnvironment, type BrowletEnvironmentInit, WindowOrWorkerGlobalScopeMixin,
+  WorkerEnvironment, type WorkerEnvironmentInit,
 } from '../../environment/index';
 import {
   structuredDeserialize, type SerializedRecord, structuredSerialize, structuredSerializeForStorage, structuredClone,
   structuredSerializeWithTransfer, structuredDeserializeWithTransfer,
 } from '../../scripting/structured-data/index';
+import { DedicatedWorkerGlobalImpl, SharedWorkerGlobalImpl, WorkerGlobalImpl } from '../../workers/index';
 import { queueNodeTask } from '../host/index';
 import { PermissionStatusImpl } from '../permissions/index';
 import { htmlExtendedAttributeHooks, getWindowProxyAccess, installWasmIntrinsics, installWasmExceptionBinding } from './bindings/index';
@@ -145,6 +149,63 @@ export function createWindowEnvironment(
   }
   if (reservedEnv !== null) reservedEnv.id = '';
   realm.windowImplementation.setWindowOrWorkerGlobalScopeMixin(new WindowOrWorkerGlobalScopeMixin(env));
+  installRealmHostHooks(env, getCodeForEval);
+  installWasmIntrinsics(context);
+  return env;
+}
+
+/** Compose a worker's realm, global, and settings on its caller-supplied agent. */
+// https://html.spec.whatwg.org/multipage/workers.html#run-a-worker
+// https://html.spec.whatwg.org/multipage/workers.html#set-up-a-worker-environment-settings-object
+// This is only the setup portion. The processing-model caller must supply independent
+// execution, fetch/initialize the response policies, and mark execution readiness.
+export function createWorkerEnvironment(initialization: WorkerEnvironmentInit): WorkerEnvironment {
+  const { agent, outsideEnv, url, unsafeWorkerCreationTime, type, name, credentials, extendedLifetime } = initialization;
+  const owner = WorkerGlobalImpl.getRelevantOwner(outsideEnv);
+  const isShared = agent instanceof SharedWorkerAgent;
+  const globalName = isShared ? 'SharedWorker' : 'DedicatedWorker';
+  const isData = url.scheme === 'data';
+  const baseEnv = new BrowletEnvironmentBase({
+    userAgent: outsideEnv.userAgent, creationURL: url, topLevelCreationURL: null,
+    // HTML leaves shared workers' top-level origin implementation-defined. Capture
+    // the first creator's partition, as dedicated workers do; do not change it on reconnect.
+    topLevelOrigin: outsideEnv.topLevelOrigin, targetBrowsingContext: null,
+    isSecureContext: outsideEnv.isSecureContext,
+  });
+  const settings = {
+    origin: isData ? createOpaqueOrigin() : outsideEnv.origin,
+    hasCrossSiteAncestor: outsideEnv.hasCrossSiteAncestor || isData,
+    unsafeWorkerCreationTime,
+  };
+  let env!: WorkerEnvironment;
+  let context!: BindingContext<BrowletEnvironment>;
+  const realm = new BrowletRealm({ agent, baseEnv, globalNames: ['Worker', globalName] });
+  realm.initialize({
+    createGlobalObject: () => {
+      context = browletBindingWorld.register(realm, (binding) => {
+        env = new WorkerEnvironment(realm, baseEnv, createBrowletEnvironmentInit(binding), settings);
+        return env;
+      });
+      let global: DedicatedWorkerGlobalImpl | SharedWorkerGlobalImpl;
+      if (agent instanceof SharedWorkerAgent) {
+        global = new SharedWorkerGlobalImpl(type, name, StorageKey.obtainForNonStoragePurposes(outsideEnv),
+          url, credentials, extendedLifetime, env);
+        agent.globalScope = global;
+      } else {
+        global = new DedicatedWorkerGlobalImpl(type, name, env);
+        agent.globalScope = global;
+      }
+      // SPEC_GAP(worker-setup-url): Settings read the global URL before run-a-worker
+      // assigns the response URL. Use the request URL provisionally; Blink likewise
+      // computes initial settings from its separate script_url creation parameter.
+      // The Fetch hook must replace both global.url and env.creationURL on success.
+      global.url = url;
+      global.ownerSet.add(owner);
+      env.globalImplementation = global;
+      installWasmExceptionBinding(browletBindingWorld.getRealmBinding(realm)! as RealmBinding<BrowletEnvironment>);
+      return context.projectGlobalObject(global, `${globalName}GlobalScope`);
+    },
+  });
   installRealmHostHooks(env, getCodeForEval);
   installWasmIntrinsics(context);
   return env;

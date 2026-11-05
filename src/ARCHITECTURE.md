@@ -398,8 +398,9 @@ HTML's per-global scripting state belongs to global implementations, described
 by [`BrowletGlobalObject`](browlet/scripting/global-object.ts). Window initializes
 it directly without changing EventTarget inheritance or projecting internal
 fields onto the author-facing object. Worker/worklet global implementations must
-provide the same state. Module maps remain settings-owned; import maps are a
-separate per-global record. `env.globalImplementation` selects that internal
+provide the same state. Settings expose the module map: Window settings select
+the current Document's map, and worker settings must select WorkerGlobalScope's
+map. Import maps are a separate per-global record. `env.globalImplementation` selects that internal
 global state; `env.global` remains the platform global used for author execution
 and task routing. Neither lookup copies state or moves it onto the environment.
 
@@ -923,6 +924,15 @@ incorrectly typed nulls. Origins, API base URLs, policies, module maps, ancestry
 time origins, and Window/Worker global-scope state also fail explicitly.
 Top-level associations and reporting/referrer sources are null. Window
 construction still requires a complete BrowletEnvironmentBase.
+
+Dedicated/shared worker composition accepts a selected agent and creates a
+`WorkerEnvironment`, realm, and declared global. Creator-derived origin, ancestry,
+security, and time-origin inputs are retained; response-dependent URL, module map,
+policy, and isolation queries use the worker global. The environment owns its
+global resource mixin. Setup attaches the initial owner but leaves execution
+readiness false. This is not a worker launcher: independent execution, transporting
+UserAgent services/owner identities between isolates, script fetching, and lifetime
+monitoring remain the worker processing model's dependencies.
 
 Fetch makes three separate choices: the request's client supplies policy and
 lifetime state; `FetchParams.env` supplies execution; the callback destination

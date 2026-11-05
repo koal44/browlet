@@ -9,6 +9,54 @@ import type { EventLoop } from '../../../src/browlet/scripting/event-loop';
 import type { TaskHandle, TimerHost } from '../../../src/infra/tasks';
 
 describe('HTML timers', () => {
+  it('counts a timeout through queued callback delivery, then releases it', () => {
+    const { timers, host, eventLoop } = createTimerFixture();
+    const callback = vi.fn();
+    expect(timers.hasOutstandingTimers()).toBe(false);
+    timers.setTimeout(callback, 10, []);
+    expect(timers.hasOutstandingTimers()).toBe(true);
+    host.advanceBy(10);
+    expect(callback).not.toHaveBeenCalled();
+    expect(timers.hasOutstandingTimers()).toBe(true);
+    runNextTask(eventLoop);
+    expect(callback).toHaveBeenCalledOnce();
+    expect(timers.hasOutstandingTimers()).toBe(false);
+  });
+
+  it.each([false, true])('does not count a cleared timer when its callback was queued: %s', (queued) => {
+    const { timers, host, eventLoop } = createTimerFixture();
+    const callback = vi.fn();
+    const id = timers.setTimeout(callback, 10, []);
+    if (queued) host.advanceBy(10);
+    timers.clearTimer(id);
+    expect(timers.hasOutstandingTimers()).toBe(false);
+    if (!queued) host.advanceBy(10);
+    runNextTask(eventLoop);
+    expect(callback).not.toHaveBeenCalled();
+    expect(timers.hasOutstandingTimers()).toBe(false);
+  });
+
+  it('keeps an interval outstanding between deliveries until it is canceled', () => {
+    const { timers, host, eventLoop } = createTimerFixture();
+    const id = timers.setInterval(() => {}, 10, []);
+    host.advanceBy(10);
+    runNextTask(eventLoop);
+    expect(timers.hasOutstandingTimers()).toBe(true);
+    timers.clearTimer(id);
+    expect(timers.hasOutstandingTimers()).toBe(false);
+  });
+
+  it('counts algorithmic waits without public IDs and releases them on completion or cleanup', () => {
+    const { timers, host } = createTimerFixture();
+    timers.runStepsAfterTimeout('AbortSignal-timeout', 10, () => {});
+    expect(timers.hasOutstandingTimers()).toBe(true);
+    host.advanceBy(10);
+    expect(timers.hasOutstandingTimers()).toBe(false);
+    timers.runStepsAfterTimeout('JavaScript', 10, () => {});
+    timers.clear();
+    expect(timers.hasOutstandingTimers()).toBe(false);
+  });
+
   it('counts only fully-active time before completing a timeout', () => {
     const fixture = createTimerFixture();
     const completion = vi.fn();

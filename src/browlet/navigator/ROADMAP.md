@@ -40,7 +40,10 @@ it, and Binding supplies its platform identity. Querying, status updates, and
 remaining dependencies are covered in the
 [Permissions roadmap](../../permissions/ROADMAP.md#61-navigator-permissions).
 WorkerNavigator must expose its environment's object and assemble the exported
-Worker partial when implemented. Storage's `persist()` uses the same permission owner.
+Worker partial when worker settings are implemented. Its current identity-only
+implementation supports WorkerGlobalScope's stable `navigator` attribute; the
+HTML mixins and Permissions/Storage members are still explicit dependencies.
+Storage's `persist()` uses the same permission owner.
 
 For `NavigatorID.userAgent`, call Fetch's `getEnvironmentDefaultUserAgent()`
 with this Navigator's relevant settings object, as HTML prescribes. Browlet's

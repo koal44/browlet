@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { createSandboxEnvironment } from '../../../src/browlet/integration/web-idl/index';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
-import { WorkerGlobalScopeImpl } from '../../../src/browlet/workers/worker-global-scope';
+import { WorkerGlobalImpl } from '../../../src/browlet/workers/worker-global-scope';
 import { FetchResponse } from '../../../src/fetch/response';
 import { BlobImpl } from '../../../src/file/blob';
 import { parseURL } from '../../../src/url/url';
@@ -14,7 +14,7 @@ describe('Worker policy-container initialization', () => {
     const browser = new Browlet({ route: () => '' });
     const document = unwrap<DocumentImpl>(browser.document);
     document.policyContainer.referrerPolicy = 'no-referrer';
-    const worker = new TestWorker(createSandboxEnvironment());
+    const worker = new TestWorker('classic', '', createSandboxEnvironment(document.env.userAgent));
     worker.url = parseURL(url).url!;
     worker.ownerSet.add(document);
     worker.initializePolicyContainer(makeResponse('unsafe-url'), document.env);
@@ -27,9 +27,9 @@ describe('Worker policy-container initialization', () => {
   it('inherits from a worker owner without consulting its unrelated construction environment', () => {
     const browser = new Browlet({ route: () => '' });
     const env = unwrap<DocumentImpl>(browser.document).env;
-    const owner = new TestWorker(createSandboxEnvironment());
+    const owner = new TestWorker('classic', '', createSandboxEnvironment(env.userAgent));
     owner.policyContainer.referrerPolicy = 'same-origin';
-    const worker = new TestWorker(createSandboxEnvironment());
+    const worker = new TestWorker('classic', '', createSandboxEnvironment(env.userAgent));
     worker.url = parseURL('data:text/javascript,').url!;
     worker.ownerSet.add(owner);
     worker.initializePolicyContainer(makeResponse('unsafe-url'), env);
@@ -40,11 +40,11 @@ describe('Worker policy-container initialization', () => {
   it('requires exactly one owner for local non-Blob workers', () => {
     const browser = new Browlet({ route: () => '' });
     const document = unwrap<DocumentImpl>(browser.document);
-    const worker = new TestWorker(createSandboxEnvironment());
+    const worker = new TestWorker('classic', '', createSandboxEnvironment(document.env.userAgent));
     worker.url = parseURL('data:text/javascript,').url!;
     expect(() => worker.initializePolicyContainer(makeResponse(), document.env)).toThrow('exactly one owner');
     worker.ownerSet.add(document);
-    worker.ownerSet.add(new TestWorker(createSandboxEnvironment()));
+    worker.ownerSet.add(new TestWorker('classic', '', createSandboxEnvironment(document.env.userAgent)));
     expect(() => worker.initializePolicyContainer(makeResponse(), document.env)).toThrow('exactly one owner');
   });
 
@@ -52,7 +52,7 @@ describe('Worker policy-container initialization', () => {
     const browser = new Browlet({ route: () => '' });
     const document = unwrap<DocumentImpl>(browser.document);
     document.policyContainer.referrerPolicy = 'no-referrer';
-    const worker = new TestWorker(createSandboxEnvironment());
+    const worker = new TestWorker('classic', '', createSandboxEnvironment(document.env.userAgent));
     worker.ownerSet.add(document);
     worker.initializePolicyContainer(makeResponse('origin'), document.env);
     expect(worker.policyContainer.referrerPolicy).toBe('origin');
@@ -64,9 +64,9 @@ describe('Worker policy-container initialization', () => {
     document.policyContainer.referrerPolicy = 'no-referrer';
     const { env } = document;
     const blobURL = env.userAgent.blobURLStore.add(new BlobImpl(['body'], {}, env), env);
-    const owner = new TestWorker(createSandboxEnvironment());
+    const owner = new TestWorker('classic', '', createSandboxEnvironment(env.userAgent));
     owner.policyContainer.referrerPolicy = 'unsafe-url';
-    const worker = new TestWorker(createSandboxEnvironment());
+    const worker = new TestWorker('classic', '', createSandboxEnvironment(env.userAgent));
     worker.url = env.parseURL(blobURL)!;
     worker.ownerSet.add(owner);
     const response = new FetchResponse();
@@ -77,8 +77,8 @@ describe('Worker policy-container initialization', () => {
   });
 });
 
-class TestWorker extends WorkerGlobalScopeImpl {
-  url = parseURL('https://worker.test/main.js').url!;
+class TestWorker extends WorkerGlobalImpl {
+  override url = parseURL('https://worker.test/main.js').url!;
 }
 
 function makeResponse(policy = 'origin'): FetchResponse {

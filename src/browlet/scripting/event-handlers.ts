@@ -278,6 +278,7 @@ function createEventHandlerCallback(
 
 // HTML's special case requires the event interface, event type, and current target.
 function isSpecialErrorEvent(event: EventImpl): event is ErrorEventImpl {
-  // TODO(HTML workers): Include WorkerGlobalScope with its author projection and handler declarations.
-  return event.isErrorEvent() && event.type === 'error' && event.currentTarget?.isWindow() === true;
+  const target = event.currentTarget;
+  return event.isErrorEvent() && event.type === 'error' && target !== null &&
+    (target.isWindow() || target.isWorkerGlobal());
 }

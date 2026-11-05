@@ -69,6 +69,16 @@ export class MessagePortImpl extends EventTargetImpl {
   get onmessageerror(): EventHandlerCallback | null { return this.messageEventTargetMixin.onmessageerror; }
   set onmessageerror(callback: EventHandlerCallback | null) { this.messageEventTargetMixin.onmessageerror = callback; }
 
+  /** Whether the channel extends beyond this global, including a peer in transit. */
+  isEntangledOutsideGlobal(): boolean {
+    const remote = this.#endpoint.remote;
+    // A missing remote endpoint means disconnected. A missing remote port means
+    // its endpoint is in transit: the channel still exists, but no global owns
+    // that end until receipt. Do not discard the local worker's connection or
+    // retain the detached sender's environment as the peer's current owner.
+    return remote !== null && (remote.port === null || remote.port.env !== this.env);
+  }
+
   /** Serialize synchronously, then add delivery work to the entangled port. */
   // https://html.spec.whatwg.org/multipage/web-messaging.html#message-port-post-message-steps
   postMessage(message: unknown, options: StructuredSerializeOptions | object[]): void {

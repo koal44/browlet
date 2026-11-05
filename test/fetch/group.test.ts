@@ -4,6 +4,30 @@ import { FetchGroup, type DeferredFetchRecord } from '../../src/fetch/group';
 import { createFetchRequest } from './fetch-fixture';
 
 describe('Fetch groups', () => {
+  it('counts pending completion even after termination, until Fetch marks the request done', () => {
+    const group = new FetchGroup();
+    const request = createFetchRequest();
+    expect(group.hasPendingFetches()).toBe(false);
+    group.fetchRecords.push({ request, controller: new FetchController() });
+    expect(group.hasPendingFetches()).toBe(true);
+    group.terminate();
+    expect(group.hasPendingFetches()).toBe(true);
+    request.done = true;
+    expect(group.hasPendingFetches()).toBe(false);
+  });
+
+  it('counts unfinished requests without a controller, but not unsent deferred requests', () => {
+    const group = new FetchGroup();
+    group.deferredFetchRecords.push({ request: createFetchRequest(), notifyInvoked() {}, invokeState: 'pending' });
+    expect(group.hasPendingFetches()).toBe(false);
+    const request = createFetchRequest();
+    request.keepalive = true;
+    group.fetchRecords.push({ request, controller: null });
+    expect(group.hasPendingFetches()).toBe(true);
+    request.done = true;
+    expect(group.hasPendingFetches()).toBe(false);
+  });
+
   it('terminates an empty group without invoking any deferred work', () => {
     expect(() => new FetchGroup().terminate()).not.toThrow();
   });

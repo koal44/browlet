@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { createSandboxEnvironment } from '../../../src/browlet/integration/web-idl/index';
+import { UserAgent } from '../../../src/browlet/user-agent';
 import { parseURL } from '../../../src/url/url';
 import {
-  ServiceWorkerGlobalScopeImpl,
+  ServiceWorkerGlobalImpl,
 } from '../../../src/browlet/workers/service-worker-global-scope';
 
-class TestServiceWorkerGlobalScope extends ServiceWorkerGlobalScopeImpl
+class TestServiceWorkerGlobalScope extends ServiceWorkerGlobalImpl
 {
-  url = parseURL('https://worker.test/service.js').url!;
+  override url = parseURL('https://worker.test/service.js').url!;
   warnings: string[] = [];
   evaluated = false;
   handledTypes = new Set<string>();
@@ -30,9 +30,9 @@ class TestServiceWorkerGlobalScope extends ServiceWorkerGlobalScopeImpl
   }
 }
 
-describe('ServiceWorkerGlobalScopeImpl', () => {
+describe('ServiceWorkerGlobalImpl', () => {
   it('reports late service-worker event registrations', () => {
-    const worker = new TestServiceWorkerGlobalScope(createSandboxEnvironment());
+    const worker = new TestServiceWorkerGlobalScope('classic', '', new UserAgent().sandbox);
     worker.evaluated = true;
 
     worker.addEventListener('fetch', () => {});
@@ -44,7 +44,7 @@ describe('ServiceWorkerGlobalScopeImpl', () => {
   });
 
   it('reports removal of an event type the worker handles', () => {
-    const worker = new TestServiceWorkerGlobalScope(createSandboxEnvironment());
+    const worker = new TestServiceWorkerGlobalScope('classic', '', new UserAgent().sandbox);
     const listener = () => {};
     worker.handledTypes.add('fetch');
     worker.addEventListener('fetch', listener);
@@ -57,7 +57,7 @@ describe('ServiceWorkerGlobalScopeImpl', () => {
   });
 
   it('obtains fetch callbacks in event listener order', () => {
-    const worker = new TestServiceWorkerGlobalScope(createSandboxEnvironment());
+    const worker = new TestServiceWorkerGlobalScope('classic', '', new UserAgent().sandbox);
     const first = () => {};
     const ignored = () => {};
     const second = () => {};

@@ -301,6 +301,8 @@ export class DocumentImpl extends NodeImpl {
   #lazyLoadIntersectionObserver: IntersectionObserverImpl | null = null;
   /** Internal subscribers notified when navigation changes this document's activity. */
   #fullyActiveObservers = new Set<FullyActiveStateObserver>();
+  /** Monotonic start of the current inactive period; null while fully active. */
+  #nonFullyActiveSince: number | null = this.env.userAgent.unsafeSharedCurrentTime();
   /** Shared compatibility mouse position, allocated only when a primary pointer is delivered. */
   #legacyMouse?: LegacyMouseProcessor;
   /** Wheel gesture target and queued input, allocated only for native/automation delivery. */
@@ -440,6 +442,12 @@ export class DocumentImpl extends NodeImpl {
         if (element.isConnected) element.unblockRendering();
       }
     }
+  }
+
+  /** Monotonic milliseconds since which this Document has continuously been non-fully-active. */
+  // Used by HTML's shared-worker extended-lifetime check; this is internal, uncoarsened time.
+  get nonFullyActiveSince(): number | null {
+    return this.#nonFullyActiveSince;
   }
 
   /** Associated WindowProxy handle, or null without a browsing context. */
@@ -2348,6 +2356,8 @@ export class DocumentImpl extends NodeImpl {
   /** Notify subscribers and descendant Documents after navigation or lifecycle state changes. */
   notifyFullyActiveStateChanged(): void {
     const fullyActive = this.isFullyActive();
+    if (fullyActive) this.#nonFullyActiveSince = null;
+    else this.#nonFullyActiveSince ??= this.env.userAgent.unsafeSharedCurrentTime();
     if (!fullyActive) {
       this.#wheelInput?.clear();
       this.clipboardChangePending = false;

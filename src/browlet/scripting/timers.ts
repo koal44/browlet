@@ -34,6 +34,17 @@ export class GlobalTimers {
     return deadline === Infinity ? null : new Duration(deadline);
   }
 
+  /** Count uncanceled public timers, including queued callbacks, and other algorithmic timeout waits. */
+  hasOutstandingTimers(): boolean {
+    if (this.#idMap.size > 0) return true;
+    // clearTimeout/clearInterval remove the ID before the underlying wait expires.
+    // Other run-steps-after-a-timeout callers have no public ID to consult.
+    for (const timer of this.#activeTimers.values()) {
+      if (timer.orderingIdentifier !== 'setTimeout/setInterval') return true;
+    }
+    return false;
+  }
+
   setAssociatedDocument(document: DocumentImpl): void {
     this.#stopObservingDocument?.();
     this.#stopObservingDocument = null;

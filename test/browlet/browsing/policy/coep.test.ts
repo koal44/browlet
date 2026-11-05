@@ -8,8 +8,8 @@ import { EmbedderPolicy, queueCOEPInheritanceViolation, type EmbedderPolicyValue
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
 import { BrowletEnvironmentBase } from '../../../../src/browlet/environment/index';
 import type { Window } from '../../../../src/browlet/platform';
-import { DedicatedWorkerGlobalScopeImpl } from '../../../../src/browlet/workers/dedicated-worker-global-scope';
-import { WorkerGlobalScopeImpl } from '../../../../src/browlet/workers/worker-global-scope';
+import { DedicatedWorkerGlobalImpl } from '../../../../src/browlet/workers/dedicated-worker-global-scope';
+import { WorkerGlobalImpl } from '../../../../src/browlet/workers/worker-global-scope';
 import { FetchResponse } from '../../../../src/fetch/response';
 import { obtainURLOrigin, parseURL } from '../../../../src/url/url';
 import { serializeURL } from '../../../../src/url/core/url';
@@ -107,7 +107,7 @@ describe.each(['navigation', 'worker initialization'] as const)('COEP %s inherit
       const { child } = createChild(owner);
       expect(child.checkResponseEmbedderPolicy(response, policy)).toBe(allowed);
     } else {
-      const worker = new TestDedicatedWorker(createSandboxEnvironment());
+      const worker = new TestDedicatedWorker('classic', '', createSandboxEnvironment(owner.env.userAgent));
       worker.embedderPolicy = policy;
       expect(worker.checkEmbedderPolicy(owner.env, response)).toBe(allowed);
     }
@@ -179,15 +179,15 @@ describe('COEP worker ownership', () => {
     const owner = createOwner();
     owner.env.policyContainer.embedderPolicy.value = 'require-corp';
     owner.env.policyContainer.embedderPolicy.reportOnlyValue = 'credentialless';
-    const worker = new TestOtherWorker(createSandboxEnvironment());
+    const worker = new TestOtherWorker('classic', '', createSandboxEnvironment(owner.env.userAgent));
     expect(worker.checkEmbedderPolicy(owner.env, makeResponse())).toBe(true);
     expect(owner.scope.reports).toEqual([]);
   });
 
   it('keeps default policy and scripting state separate for each worker', () => {
-    const env = createSandboxEnvironment();
-    const first = new TestDedicatedWorker(env);
-    const second = new TestOtherWorker(env);
+    const env = createManualUserAgent().sandbox;
+    const first = new TestDedicatedWorker('classic', '', env);
+    const second = new TestOtherWorker('classic', '', env);
     first.embedderPolicy.value = 'require-corp';
     expect(second.embedderPolicy).toEqual(new EmbedderPolicy());
     expect(first.importMap).not.toBe(second.importMap);
@@ -225,9 +225,9 @@ function makeResponse(): FetchResponse {
 }
 
 // Exercise the partial implementation owners without pretending worker startup or projection exists.
-class TestDedicatedWorker extends DedicatedWorkerGlobalScopeImpl {
-  url = parseURL('https://worker.test/dedicated.js').url!;
+class TestDedicatedWorker extends DedicatedWorkerGlobalImpl {
+  override url = parseURL('https://worker.test/dedicated.js').url!;
 }
-class TestOtherWorker extends WorkerGlobalScopeImpl {
-  url = parseURL('https://worker.test/other.js').url!;
+class TestOtherWorker extends WorkerGlobalImpl {
+  override url = parseURL('https://worker.test/other.js').url!;
 }

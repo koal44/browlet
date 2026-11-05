@@ -6,7 +6,7 @@ import type { DocumentImpl } from '../dom/nodes/index';
 import type { WindowImpl } from '../browsing/window/index';
 import type { BrowletEnvironment } from '../environment/index';
 
-import { WindowAgent, type Agent } from './agents';
+import { DedicatedWorkerAgent, SharedWorkerAgent, ServiceWorkerAgent, WindowAgent, type Agent } from './agents';
 import { JSExecutionContext } from './execution-context';
 import type { BrowletRealm } from './realm';
 import { JSScriptOrModule, type Script } from './script';
@@ -507,6 +507,11 @@ export class EventLoop {
   ): Task {
     // Keep HTML's otherwise implied destination and Document explicit.
     const task = new Task(source, document, steps, options);
+    // HTML §10.2.2: closing workers discard new tasks from every source.
+    // Return an unqueued task so existing cancellation handles report removal as false.
+    const agent = this.agent;
+    if ((agent instanceof DedicatedWorkerAgent || agent instanceof SharedWorkerAgent || agent instanceof ServiceWorkerAgent) &&
+      agent.globalScope?.closing === true) return task;
     this.#getTaskQueue(source).add(task);
     this.#requestTurnIfNeeded();
     return task;
