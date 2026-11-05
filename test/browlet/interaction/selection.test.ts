@@ -770,6 +770,476 @@ describe('Selection API §3: live composed spans across roots', () => {
   });
 });
 
+describe('Selection API §3: selecting all children', () => {
+  it('replaces the old Range with direct child boundaries and forward direction', () => {
+    const f = createFixture();
+    const nested = f.document.createElement('span'); nested.append('one', f.document.createElement('i'), 'two');
+    f.a.append(nested, f.document.createComment('three'));
+    f.selection.setBaseAndExtent(f.text, 3, f.text, 1);
+    const old = f.selection.getRangeAt(0);
+    f.loop.runTaskTurn();
+    expect(f.selection.selectAllChildren(f.a)).toBeUndefined();
+    expect(state(f.selection)).toEqual([f.a, 0, f.a, 3, false, 1, 'Range', 'forward']);
+    expect(f.selection.getRangeAt(0)).not.toBe(old);
+    expect(boundaries(old)).toEqual([f.text, 1, f.text, 3]);
+    expect(f.loop.runTaskTurn()).toBe(true);
+    old.setStart(f.text, 0);
+    expect(f.loop.runTaskTurn()).toBe(false);
+  });
+
+  it.each(['element', 'text', 'comment', 'instruction'] as const)('uses zero child boundaries for a childless %s', (kind) => {
+    const f = createFixture();
+    const node = kind === 'element' ? f.document.createElement('span') : kind === 'text' ? f.text :
+      kind === 'comment' ? f.document.createComment('nonempty') : f.document.createProcessingInstruction('target', 'nonempty');
+    if (!node.isConnected) f.a.appendChild(node);
+    f.selection.selectAllChildren(node);
+    expect(state(f.selection)).toEqual([node, 0, node, 0, true, 1, 'Caret', 'forward']);
+  });
+
+  it('selects Document children, including its DocumentType', () => {
+    const f = createFixture();
+    if (f.document.doctype === null) f.document.insertBefore(f.document.implementation.createDocumentType('html', '', ''), f.root);
+    f.selection.selectAllChildren(f.document);
+    expect(boundaries(f.selection.getRangeAt(0))).toEqual([f.document, 0, f.document, f.document.childNodes.length]);
+    expect(f.selection.direction).toBe('forward');
+  });
+
+  it.each(['root', 'element', 'text'] as const)('selects a connected closed-shadow %s and detaches the old composed span', (kind) => {
+    const f = createCrossRootFixture();
+    const node = kind === 'root' ? f.shadow : kind === 'element' ? f.span : f.shadowText;
+    const count = kind === 'text' ? 0 : 1;
+    const old = f.selection.getRangeAt(0);
+    f.selection.selectAllChildren(node);
+    expect(state(f.selection)).toEqual([node, 0, node, count, count === 0, 1, count === 0 ? 'Caret' : 'Range', 'forward']);
+    expect(boundaries(f.selection.getComposedRanges({ shadowRoots: [f.shadow] })[0]!)).toEqual([node, 0, node, count]);
+    expect(f.selection.getRangeAt(0)).not.toBe(old);
+    f.loop.runTaskTurn();
+    f.text.insertData(0, '+');
+    expect(f.loop.runTaskTurn()).toBe(false);
+  });
+
+  it('ignores detached, foreign, and attribute nodes without clearing Selection', () => {
+    const f = createFixture();
+    const other = createFixture(f.userAgent);
+    const detached = f.document.createElement('div');
+    const shadow = detached.attachShadow({ mode: 'closed' });
+    const fragment = f.document.createDocumentFragment();
+    const range = selectedRange(f); f.loop.runTaskTurn();
+    for (const node of [detached, shadow, fragment, other.text, f.document.createAttribute('name')]) {
+      f.selection.selectAllChildren(node);
+      expect(f.selection.getRangeAt(0)).toBe(range);
+      expect(boundaries(range)).toEqual([f.text, 1, f.text, 3]);
+    }
+    expect(f.loop.runTaskTurn()).toBe(false);
+  });
+
+  it('rejects DocumentType before membership and invalid author arguments during conversion', () => {
+    const f = createFixture(); const range = selectedRange(f); f.loop.runTaskTurn();
+    const doctype = f.document.implementation.createDocumentType('html', '', '');
+    expect(() => f.selection.selectAllChildren(doctype)).toThrow(expect.objectContaining({ name: 'InvalidNodeTypeError' }));
+    for (const args of [[], [null], [{}]]) {
+      expect(() => f.selection.selectAllChildren(...args as [Node])).toThrow(f.documentImpl.env.realm.TypeError);
+    }
+    expect(f.selection.getRangeAt(0)).toBe(range);
+    expect(f.loop.runTaskTurn()).toBe(false);
+  });
+
+  it('replaces an identical Range silently but notifies a direction-only change', () => {
+    const f = createFixture();
+    f.selection.setBaseAndExtent(f.a, 1, f.a, 0); f.loop.runTaskTurn();
+    f.selection.selectAllChildren(f.a);
+    expect(f.loop.runTaskTurn()).toBe(true);
+    const old = f.selection.getRangeAt(0);
+    f.selection.selectAllChildren(f.a);
+    expect(f.selection.getRangeAt(0)).not.toBe(old);
+    expect(f.loop.runTaskTurn()).toBe(false);
+  });
+
+  it('keeps a borrowed result in the receiver realm and exceptions in the method realm', () => {
+    const f = createFixture(); const other = createFixture(f.userAgent);
+    other.window.Selection.prototype.selectAllChildren.call(f.selection, f.a);
+    expect(f.selection.getRangeAt(0)).toBeInstanceOf(f.window.Range);
+    expect(f.selection.getRangeAt(0)).not.toBeInstanceOf(other.window.Range);
+    const doctype = f.document.implementation.createDocumentType('html', '', '');
+    expect(() => other.window.Selection.prototype.selectAllChildren.call(f.selection, doctype)).toThrow(other.window.DOMException);
+  });
+});
+
+describe('Selection API §3: modify validation and rendered movement dependency', () => {
+  it.each([{ count: 0, args: [] }, { count: 1, args: ['move'] }, { count: 2, args: ['move', 'forward'] }] as const)(
+    'omitted arguments leave a selection unchanged ($count supplied)', ({ args }) => {
+      const f = createCrossRootFixture(); const range = f.selection.getRangeAt(0); f.loop.runTaskTurn();
+      expect(f.selection.modify.length).toBe(0);
+      expect(f.selection.modify(...args)).toBeUndefined();
+      expect(f.selection.getRangeAt(0)).toBe(range);
+      expect(boundaries(f.selection.getComposedRanges({ shadowRoots: [f.shadow] })[0]!)).toEqual([f.text, 1, f.shadowText, 4]);
+      expect(f.loop.runTaskTurn()).toBe(false);
+    },
+  );
+
+  it.each([
+    ['select', 'forward', 'character'], [' move', 'forward', 'character'], ['move', 'up', 'character'],
+    ['move', 'forward ', 'character'], ['move', 'forward', 'codepoint'], ['move', 'forward', 'character '],
+    ['move', 'forward', 'ſentence'],
+  ])('rejects unsupported strings without changing selection: %s %s %s', (alter, direction, granularity) => {
+    const f = createFixture(); const range = selectedRange(f); f.loop.runTaskTurn();
+    const before = state(f.selection);
+    expect(f.selection.modify(alter, direction, granularity)).toBeUndefined();
+    expect(f.selection.getRangeAt(0)).toBe(range);
+    expect(state(f.selection)).toEqual(before);
+    expect(f.loop.runTaskTurn()).toBe(false);
+  });
+
+  it('ignores the specified movement requests while Selection is empty', () => {
+    const f = createFixture();
+    for (const alter of ['move', 'extend']) {
+      for (const direction of ['forward', 'backward', 'left', 'right']) {
+        for (const granularity of ['character', 'word', 'sentence', 'line', 'paragraph',
+          'lineboundary', 'sentenceboundary', 'paragraphboundary', 'documentboundary']) {
+          expect(f.selection.modify(alter.toUpperCase(), direction.toUpperCase(), granularity.toUpperCase())).toBeUndefined();
+        }
+      }
+    }
+    expect(state(f.selection)).toEqual([null, 0, null, 0, true, 0, 'None', 'none']);
+    expect(f.loop.runTaskTurn()).toBe(false);
+  });
+
+  it('converts every supplied DOMString before algorithm validation', () => {
+    const f = createFixture(); const trace: string[] = [];
+    const argument = (name: string, value: string) => ({ toString() { trace.push(name); return value; } }) as unknown as string;
+    f.selection.modify(argument('alter', 'invalid'), argument('direction', 'forward'), argument('granularity', 'character'));
+    expect(trace).toEqual(['alter', 'direction', 'granularity']);
+    expect(() => f.selection.modify('invalid', Symbol() as unknown as string, 'character')).toThrow(f.documentImpl.env.realm.TypeError);
+  });
+
+  it('reads empty state after conversion reentrantly clears a composed selection', () => {
+    const f = createCrossRootFixture();
+    f.selection.modify('move', 'forward', {
+      toString() { f.selection.removeAllRanges(); return 'character'; },
+    } as unknown as string);
+    expect(f.selection.rangeCount).toBe(0);
+    f.loop.runTaskTurn();
+    f.text.insertData(0, '+'); f.shadowText.insertData(0, '+');
+    expect(f.loop.runTaskTurn()).toBe(false);
+  });
+
+  it('uses the borrowed method realm for conversion errors', () => {
+    const f = createFixture(); const other = createFixture(f.userAgent);
+    expect(() => other.window.Selection.prototype.modify.call(f.selection, Symbol() as unknown as string, 'forward', 'character'))
+      .toThrow(other.documentImpl.env.realm.TypeError);
+  });
+
+  // TODO(Selection / editing and text layout): both required movement results were
+  // observed failing at the named dependency. Eric approved these expected failures.
+  it.fails('moves the caret forward by a rendered character', () => {
+    const f = createFixture();
+    f.selection.collapse(f.text, 1);
+    f.selection.modify('MoVe', 'FoRwArD', 'ChArAcTeR');
+    expect([f.selection.anchorNode, f.selection.anchorOffset, f.selection.focusNode, f.selection.focusOffset])
+      .toEqual([f.text, 2, f.text, 2]);
+  });
+
+  it.fails('extends right using the resolved bidi direction at the caret', () => {
+    const f = createFixture();
+    f.selection.collapse(f.text, 1);
+    f.selection.modify('extend', 'right', 'character');
+    expect([f.selection.anchorNode, f.selection.anchorOffset, f.selection.focusNode, f.selection.focusOffset])
+      .toEqual([f.text, 1, f.text, 2]);
+  });
+});
+
+describe('Selection API §3: deleting selected content', () => {
+  it('does nothing for an empty selection or ordinary caret', () => {
+    const f = createFixture();
+    expect(f.selection.deleteFromDocument.length).toBe(0);
+    expect(f.selection.deleteFromDocument()).toBeUndefined();
+    expect(f.selection.rangeCount).toBe(0);
+    expect(f.loop.runTaskTurn()).toBe(false);
+    f.selection.collapse(f.text, 2);
+    const range = f.selection.getRangeAt(0); f.loop.runTaskTurn();
+    f.selection.deleteFromDocument();
+    expect(f.text.data).toBe('abcd');
+    expect(boundaries(range)).toEqual([f.text, 2, f.text, 2]);
+    expect(f.selection.getRangeAt(0)).toBe(range);
+    expect(f.loop.runTaskTurn()).toBe(false);
+  });
+
+  it.each(['forward', 'backward'] as const)('mutates the same Range and preserves %s direction', (direction) => {
+    const f = createFixture();
+    f.selection.setBaseAndExtent(f.text, direction === 'forward' ? 1 : 3, f.text, direction === 'forward' ? 3 : 1);
+    const range = f.selection.getRangeAt(0); f.loop.runTaskTurn();
+    f.selection.deleteFromDocument();
+    expect(f.text.data).toBe('ad');
+    expect(f.selection.getRangeAt(0)).toBe(range);
+    expect(state(f.selection)).toEqual([f.text, 1, f.text, 1, true, 1, 'Caret', direction]);
+    expect(f.loop.runTaskTurn()).toBe(true);
+    expect(f.loop.runTaskTurn()).toBe(false);
+    range.setEnd(f.text, 2);
+    expect(f.selection.isCollapsed).toBe(false);
+    expect(f.loop.runTaskTurn()).toBe(true);
+  });
+
+  it('removes whole intermediate nodes and selected prefixes/suffixes with one notification', () => {
+    const f = createFixture();
+    const middle = f.document.createElement('strong'); middle.textContent = 'middle';
+    f.root.insertBefore(middle, f.b);
+    f.selection.setBaseAndExtent(f.text, 1, f.b.firstChild!, 2);
+    const range = f.selection.getRangeAt(0); f.loop.runTaskTurn();
+    f.selection.deleteFromDocument();
+    expect(f.a.textContent).toBe('a');
+    expect(f.b.textContent).toBe('gh');
+    expect(middle.isConnected).toBe(false);
+    const offset = Array.from(f.root.childNodes).indexOf(f.b);
+    expect(boundaries(range)).toEqual([f.root, offset, f.root, offset]);
+    expect(f.selection.getRangeAt(0)).toBe(range);
+    expect(f.loop.runTaskTurn()).toBe(true);
+    expect(f.loop.runTaskTurn()).toBe(false);
+  });
+
+  it.each(['comment', 'instruction'] as const)('deletes a selected %s through CharacterData mutation', (kind) => {
+    const f = createFixture();
+    const node = kind === 'comment' ? f.document.createComment('abcd') : f.document.createProcessingInstruction('target', 'abcd');
+    f.a.appendChild(node); f.selection.setBaseAndExtent(node, 1, node, 3);
+    const range = f.selection.getRangeAt(0); f.loop.runTaskTurn();
+    f.selection.deleteFromDocument();
+    expect(node.data).toBe('ad');
+    expect(boundaries(range)).toEqual([node, 1, node, 1]);
+    expect(f.selection.getRangeAt(0)).toBe(range);
+    expect(f.loop.runTaskTurn()).toBe(true);
+  });
+
+  it('deletes inside a connected shadow root without replacing the Range', () => {
+    const f = createCrossRootFixture();
+    f.selection.setBaseAndExtent(f.shadowText, 4, f.shadowText, 1);
+    const range = f.selection.getRangeAt(0); f.loop.runTaskTurn();
+    f.selection.deleteFromDocument();
+    expect(f.shadowText.data).toBe('sow');
+    expect(f.selection.getRangeAt(0)).toBe(range);
+    expect(state(f.selection)).toEqual([f.shadowText, 1, f.shadowText, 1, true, 1, 'Caret', 'backward']);
+    expect(f.loop.runTaskTurn()).toBe(true);
+  });
+
+  it('leaves a cross-root span and its live endpoint associations intact', () => {
+    const f = createCrossRootFixture(); const range = f.selection.getRangeAt(0); f.loop.runTaskTurn();
+    f.selection.deleteFromDocument();
+    expect(f.text.data).toBe('abcd'); expect(f.shadowText.data).toBe('shadow');
+    expect(f.selection.getRangeAt(0)).toBe(range);
+    expect(boundaries(f.selection.getComposedRanges({ shadowRoots: [f.shadow] })[0]!)).toEqual([f.text, 1, f.shadowText, 4]);
+    expect(f.loop.runTaskTurn()).toBe(false);
+    f.text.insertData(0, '+');
+    expect(boundaries(f.selection.getComposedRanges({ shadowRoots: [f.shadow] })[0]!)).toEqual([f.text, 2, f.shadowText, 4]);
+    expect(f.loop.runTaskTurn()).toBe(true);
+  });
+
+  it('preserves a foreign-created Range and uses the borrowed receiver Selection', () => {
+    const f = createFixture(); const other = createFixture(f.userAgent);
+    const range = other.document.createRange(); range.setStart(f.text, 1); range.setEnd(f.text, 3);
+    f.selection.addRange(range);
+    other.window.Selection.prototype.deleteFromDocument.call(f.selection);
+    expect(f.text.data).toBe('ad'); expect(other.text.data).toBe('abcd');
+    expect(f.selection.getRangeAt(0)).toBe(range);
+    expect(range).toBeInstanceOf(other.window.Range);
+    expect(() => other.window.Selection.prototype.deleteFromDocument.call({} as Selection)).toThrow(other.documentImpl.env.realm.TypeError);
+  });
+});
+
+describe('Selection API §3: node containment', () => {
+  it('requires a node even for empty Selection and defaults partial containment to false', () => {
+    const f = createFixture();
+    expect(f.selection.containsNode.length).toBe(1);
+    expect(f.selection.containsNode(f.a)).toBe(false);
+    for (const args of [[], [null], [{}]]) {
+      expect(() => f.selection.containsNode(...args as [Node])).toThrow(f.documentImpl.env.realm.TypeError);
+    }
+    selectedRange(f); f.loop.runTaskTurn();
+    expect(f.selection.containsNode(f.text)).toBe(false);
+    expect(f.selection.containsNode(f.text, undefined)).toBe(false);
+    expect(f.selection.containsNode(f.text, true)).toBe(true);
+    expect(f.loop.runTaskTurn()).toBe(false);
+  });
+
+  it('distinguishes selecting an entire node from selecting all its children', () => {
+    const f = createFixture(); const range = f.document.createRange();
+    range.selectNode(f.a); f.selection.addRange(range);
+    expect([f.selection.containsNode(f.a), f.selection.containsNode(f.text), f.selection.containsNode(f.b)])
+      .toEqual([true, true, false]);
+    f.selection.selectAllChildren(f.a);
+    expect([f.selection.containsNode(f.a), f.selection.containsNode(f.a, true), f.selection.containsNode(f.text)])
+      .toEqual([false, true, true]);
+    f.selection.setBaseAndExtent(f.text, 0, f.text, f.text.length);
+    expect([f.selection.containsNode(f.text), f.selection.containsNode(f.text, true)]).toEqual([false, true]);
+  });
+
+  it.each(['text', 'comment', 'instruction'] as const)('requires full enclosure of a partially selected %s too', (kind) => {
+    const f = createFixture();
+    const node = kind === 'text' ? f.text : kind === 'comment' ? f.document.createComment('abcd') :
+      f.document.createProcessingInstruction('target', 'abcd');
+    if (!node.isConnected) f.a.appendChild(node);
+    f.selection.setBaseAndExtent(node, 1, node, 3);
+    expect(f.selection.containsNode(node)).toBe(false);
+    expect(f.selection.containsNode(node, true)).toBe(true);
+    f.selection.collapse(node, 2);
+    expect(f.selection.containsNode(node)).toBe(false);
+    expect(f.selection.containsNode(node, true)).toBe(true);
+  });
+
+  it('does not count touching outer edges as partial containment', () => {
+    const f = createFixture(); const range = f.document.createRange();
+    range.setStartBefore(f.a); range.collapse(true); f.selection.addRange(range);
+    expect(f.selection.containsNode(f.a, true)).toBe(false);
+    range.setStartAfter(f.a); range.collapse(true);
+    expect(f.selection.containsNode(f.a, true)).toBe(false);
+    f.selection.collapse(f.text, 2);
+    expect(f.selection.containsNode(f.a, true)).toBe(true);
+    expect(f.selection.containsNode(f.a)).toBe(false);
+  });
+
+  it('distinguishes a caret in an empty element from selection of the element itself', () => {
+    const f = createFixture(); const empty = f.document.createElement('i'); f.a.appendChild(empty);
+    f.selection.selectAllChildren(empty);
+    expect([f.selection.containsNode(empty), f.selection.containsNode(empty, true)]).toEqual([false, true]);
+    f.selection.getRangeAt(0).selectNode(empty);
+    expect([f.selection.containsNode(empty), f.selection.containsNode(empty, true)]).toEqual([true, true]);
+  });
+
+  it('handles Document and DocumentType without invalid Range boundary operations', () => {
+    const f = createFixture();
+    const doctype = f.document.doctype ?? f.document.insertBefore(f.document.implementation.createDocumentType('html', '', ''), f.root);
+    f.selection.selectAllChildren(f.document);
+    expect([f.selection.containsNode(f.document), f.selection.containsNode(f.document, true)]).toEqual([false, true]);
+    expect([f.selection.containsNode(doctype), f.selection.containsNode(doctype, true)]).toEqual([true, true]);
+    f.selection.setBaseAndExtent(f.text, 1, f.text, 3);
+    expect(f.selection.containsNode(doctype, true)).toBe(false);
+  });
+
+  it('rejects detached, foreign, attribute, and shadow-tree membership', () => {
+    const f = createCrossRootFixture(); const other = createFixture(f.userAgent);
+    f.selection.selectAllChildren(f.document);
+    for (const node of [f.document.createElement('div'), f.document.createDocumentFragment(), f.document.createAttribute('name'),
+      other.a, f.shadow, f.span, f.shadowText]) {
+      expect(f.selection.containsNode(node)).toBe(false);
+      expect(f.selection.containsNode(node, true)).toBe(false);
+    }
+    f.selection.setBaseAndExtent(f.shadowText, 1, f.shadowText, 4);
+    expect(f.selection.containsNode(f.document, true)).toBe(false);
+    expect(f.selection.containsNode(f.shadowText, true)).toBe(false);
+  });
+
+  it('uses only the exposed ordinary Range for a cross-root span', () => {
+    const f = createCrossRootFixture();
+    expect(f.selection.containsNode(f.a, true)).toBe(false);
+    f.selection.setBaseAndExtent(f.shadowText, 1, f.b.firstChild!, 2);
+    const before = boundaries(f.selection.getComposedRanges({ shadowRoots: [f.shadow] })[0]!); f.loop.runTaskTurn();
+    expect(f.selection.containsNode(f.host, true)).toBe(false);
+    expect(f.selection.containsNode(f.b, true)).toBe(true);
+    expect(f.selection.containsNode(f.b)).toBe(false);
+    expect(boundaries(f.selection.getComposedRanges({ shadowRoots: [f.shadow] })[0]!)).toEqual(before);
+    expect(f.loop.runTaskTurn()).toBe(false);
+  });
+
+  it('uses Web IDL boolean conversion without invoking object coercion', () => {
+    const f = createFixture(); selectedRange(f);
+    const coercion = vi.fn(() => { throw new Error('boolean conversion must not call this'); });
+    expect(f.selection.containsNode(f.text, { valueOf: coercion, toString: coercion } as unknown as boolean)).toBe(true);
+    expect(f.selection.containsNode(f.text, Symbol() as unknown as boolean)).toBe(true);
+    expect(f.selection.containsNode(f.text, 0 as unknown as boolean)).toBe(false);
+    expect(coercion).not.toHaveBeenCalled();
+  });
+
+  it('uses the borrowed receiver and the method realm for conversion errors', () => {
+    const f = createFixture(); const other = createFixture(f.userAgent); selectedRange(f);
+    expect(other.window.Selection.prototype.containsNode.call(f.selection, f.text, true)).toBe(true);
+    expect(other.window.Selection.prototype.containsNode.call(f.selection, other.text, true)).toBe(false);
+    expect(() => other.window.Selection.prototype.containsNode.call(f.selection, null as unknown as Node))
+      .toThrow(other.documentImpl.env.realm.TypeError);
+    expect(() => f.selection.containsNode.call({} as Selection, f.text)).toThrow(f.documentImpl.env.realm.TypeError);
+  });
+});
+
+describe('Selection API §3: rendered-text stringification dependency', () => {
+  it('stringifies empty and ordinary caret selections without changing state', () => {
+    const f = createFixture();
+    expect(f.selection.toString.length).toBe(0);
+    expect(f.selection.toString()).toBe('');
+    expect(String(f.selection)).toBe('');
+    expect(f.loop.runTaskTurn()).toBe(false);
+    f.selection.collapse(f.text, 2);
+    const range = f.selection.getRangeAt(0); f.loop.runTaskTurn();
+    expect(String(f.selection)).toBe('');
+    expect(f.selection.getRangeAt(0)).toBe(range);
+    expect(f.selection.direction).toBe('none');
+    expect(f.loop.runTaskTurn()).toBe(false);
+  });
+
+  it('uses the borrowed stringifier receiver and method-realm errors', () => {
+    const f = createFixture(); const other = createFixture(f.userAgent);
+    expect(other.window.Selection.prototype.toString.call(f.selection)).toBe('');
+    expect(() => other.window.Selection.prototype.toString.call({} as Selection)).toThrow(other.documentImpl.env.realm.TypeError);
+  });
+
+  // TODO(Selection / rendering): these required results were observed failing at
+  // the named dependency. Eric approved retaining both as expected failures.
+  it.fails('omits hidden content from rendered selected text', () => {
+    const f = createFixture();
+    const hidden = f.document.createElement('span'); hidden.setAttribute('hidden', ''); hidden.textContent = 'hidden';
+    f.a.replaceChildren('a', hidden, 'b'); f.selection.selectAllChildren(f.a);
+    expect(f.selection.toString()).toBe('ab');
+  });
+
+  it.fails('collapses whitespace in rendered selected text', () => {
+    const f = createFixture(); f.text.data = 'alpha  beta'; f.selection.selectAllChildren(f.a);
+    expect(f.selection.toString()).toBe('alpha beta');
+  });
+});
+
+describe('Selection API §§4.3, 6.2: Selection event-handler delivery', () => {
+  it('delivers coalesced changes to the current Document handler without starting a user selection', () => {
+    const f = createFixture();
+    const start = vi.fn();
+    const elsewhere = vi.fn();
+    const oldHandler = vi.fn();
+    const events: unknown[] = [];
+    f.document.onselectstart = start;
+    f.document.onselectionchange = oldHandler;
+    f.window.onselectionchange = elsewhere;
+    Reflect.set(f.a, 'onselectionchange', elsewhere);
+    f.selection.collapse(f.text, 1);
+    f.selection.collapse(f.text, 2);
+    f.document.onselectionchange = function(event) {
+      events.push([this === f.document, event.target === f.document, event.isTrusted,
+        event.bubbles, event.cancelable, event.composed, f.selection.focusOffset]);
+      return false;
+    };
+    expect(events).toEqual([]);
+    expect(f.loop.runTaskTurn()).toBe(true);
+    expect(events).toEqual([[true, true, true, false, false, false, 2]]);
+    expect(oldHandler).not.toHaveBeenCalled();
+    expect(elsewhere).not.toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
+    expect(f.loop.runTaskTurn()).toBe(false);
+  });
+
+  it('permits reentrant handler changes and observes removal before the next queued task', () => {
+    const f = createFixture();
+    const events: number[] = [];
+    f.document.onselectionchange = () => {
+      events.push(f.selection.focusOffset);
+      f.document.onselectionchange = () => { events.push(f.selection.focusOffset); };
+      f.selection.collapse(f.text, 3);
+    };
+    f.selection.collapse(f.text, 1);
+    expect(f.loop.runTaskTurn()).toBe(true);
+    expect(events).toEqual([1]);
+    expect(f.loop.runTaskTurn()).toBe(true);
+    expect(events).toEqual([1, 3]);
+    f.selection.collapse(f.text, 4);
+    f.document.onselectionchange = null;
+    expect(f.loop.runTaskTurn()).toBe(true);
+    expect(events).toEqual([1, 3]);
+    expect(f.loop.runTaskTurn()).toBe(false);
+  });
+});
+
 describe('Selection API §§5–6.2: live boundaries and queued changes', () => {
   it('coalesces changes into one trusted, non-bubbling Document event on the user-interaction task source', () => {
     const f = createFixture();

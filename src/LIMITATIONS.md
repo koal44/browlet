@@ -917,9 +917,33 @@ ordinary and collapsed at the later point; getComposedRanges exposes the full sp
 Explicit public Range edits replace that extra span, while automatic DOM mutations
 retain it. State-preserving moves retain and reorder the span; extend and collapse
 replace it using the ordinary Range. These cross-root choices differ from some
-browser behavior, as recorded in the owning roadmap. Later §3 methods, §4.3 handler attributes,
-document.open reset, user selection/editing, control notifications and
-caret/highlight rendering remain unfinished. Source TODOs identify these owners;
+browser behavior, as recorded in the owning roadmap. selectAllChildren selects direct
+children (including connected shadow trees), leaving childless/CharacterData nodes
+at offset zero with forward direction. modify is only partially implemented:
+invalid arguments and empty selections are handled; valid movement throws from the
+named editing/text-layout dependency before changing state. Rendered caret positions,
+UAX9 embedding direction/affinity, and granularity navigation remain missing, with
+two approved expected-failure regressions preserving required movement results.
+deleteFromDocument mutates the retained ordinary Range, including connected shadow
+selections; cross-root spans remain unchanged. containsNode uses approved DOM
+whole-node enclosure/intersection and ordinary-document membership, without layout
+normalization. The stringifier returns empty for empty selections/ordinary carets;
+rendered content reaches a named throwing dependency, with two additional approved
+expected failures. Rendered text and input/textarea value selection remain missing.
+§4.3 onselectstart/onselectionchange properties and content handlers now use the
+existing GlobalEventHandlers machinery. SVG attributes work like Chromium/WebKit;
+body attributes stay local like Firefox. §§6–6.1 now provide the internal
+selectFromUser entry for a producer-supplied same-tree Range and direction. It
+copies into Selection's realm, honors selectstart cancellation, tracks live DOM
+adjustment, and rejects lifetime invalidation. This does not produce native
+selection gestures. §§6.2.1–6.2.2 now share notification scheduling/firing across
+Document, input, and textarea. Controls retain their own bubbling, non-composed
+event inside shadow trees and remain deliverable across detachment/adoption and
+Document inactivity, independently of callback-realm activity. HTML selection
+setters and value/editing steps must call that internal entry once their actual
+control state exists. Cross-root user proposals, document.open reset, input/editing
+endpoint selection, control state, and caret/highlight rendering remain unfinished.
+Source TODOs identify these owners;
 this slice supplies programmatic state without claiming user-input or
 rendered-selection support.
 

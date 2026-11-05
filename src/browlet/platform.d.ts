@@ -1044,6 +1044,8 @@ export interface HTMLElement extends Element {
   onpointerleave: EventHandlerNonNull | null;
   ongotpointercapture: EventHandlerNonNull | null;
   onlostpointercapture: EventHandlerNonNull | null;
+  onselectstart: EventHandlerNonNull | null;
+  onselectionchange: EventHandlerNonNull | null;
   nonce: string;
   autofocus: boolean;
 }
@@ -1952,6 +1954,8 @@ export interface SVGElement extends Element {
   onpointerleave: EventHandlerNonNull | null;
   ongotpointercapture: EventHandlerNonNull | null;
   onlostpointercapture: EventHandlerNonNull | null;
+  onselectstart: EventHandlerNonNull | null;
+  onselectionchange: EventHandlerNonNull | null;
   get style(): CSSStyleProperties;
   set style(value: string);
   nonce: string;
@@ -2096,6 +2100,8 @@ export interface MathMLElement extends Element {
   onpointerleave: EventHandlerNonNull | null;
   ongotpointercapture: EventHandlerNonNull | null;
   onlostpointercapture: EventHandlerNonNull | null;
+  onselectstart: EventHandlerNonNull | null;
+  onselectionchange: EventHandlerNonNull | null;
   get style(): CSSStyleProperties;
   set style(value: string);
   nonce: string;
@@ -2517,6 +2523,11 @@ export interface Selection {
   collapseToEnd(): void;
   extend(node: Node, offset?: number): void;
   setBaseAndExtent(anchorNode: Node, anchorOffset: number, focusNode: Node, focusOffset: number): void;
+  selectAllChildren(node: Node): void;
+  modify(alter?: string, direction?: string, granularity?: string): void;
+  deleteFromDocument(): void;
+  containsNode(node: Node, allowPartialContainment?: boolean): boolean;
+  toString(): string;
 }
 
 export interface SelectionConstructor {
@@ -2978,6 +2989,8 @@ export interface Window extends EventTarget {
   onpointerleave: EventHandlerNonNull | null;
   ongotpointercapture: EventHandlerNonNull | null;
   onlostpointercapture: EventHandlerNonNull | null;
+  onselectstart: EventHandlerNonNull | null;
+  onselectionchange: EventHandlerNonNull | null;
   onafterprint: EventHandlerNonNull | null;
   onbeforeprint: EventHandlerNonNull | null;
   onbeforeunload: OnBeforeUnloadEventHandlerNonNull | null;
@@ -3897,6 +3910,8 @@ export interface Document extends Node {
   onpointerleave: EventHandlerNonNull | null;
   ongotpointercapture: EventHandlerNonNull | null;
   onlostpointercapture: EventHandlerNonNull | null;
+  onselectstart: EventHandlerNonNull | null;
+  onselectionchange: EventHandlerNonNull | null;
   readonly children: HTMLCollection;
   readonly firstElementChild: Element | null;
   readonly lastElementChild: Element | null;

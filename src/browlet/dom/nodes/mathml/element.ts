@@ -5,7 +5,8 @@ import type { CSSDeclarationBlock, CSSStylePropertiesImpl } from '../../../../st
 import { ElementTag, ContentCategory } from '../element-definitions/index';
 import { ElementCSSInlineStyleMixin } from '../../../style/index';
 import { EventHandlerMap, globalEventHandlers } from '../../../scripting/index';
-import { pointerEventHandlers } from '../../../interaction/events/index';
+import { pointerGlobalEventHandlers } from '../../../interaction/events/index';
+import { selectionGlobalEventHandlers } from '../../../interaction/selection/index';
 
 import { ElementImpl } from '../element';
 import { HTMLOrSVGOrMathMLElementMixin, htmlOrSVGOrMathMLElementIDL } from '../html-or-svg-or-mathml-element';
@@ -14,7 +15,9 @@ import { HTMLOrSVGOrMathMLElementMixin, htmlOrSVGOrMathMLElementIDL } from '../h
 // https://w3c.github.io/mathml-core/#dom-mathmlelement
 export class MathMLElementImpl extends ElementImpl {
   /** Complete supported-name table shared by all MathML elements. */
-  static #handlerDefinitions = new Map([...globalEventHandlers, ...pointerEventHandlers]);
+  static #handlerDefinitions = new Map([
+    ...globalEventHandlers, ...pointerGlobalEventHandlers, ...selectionGlobalEventHandlers,
+  ]);
 
   override eventHandlers: EventHandlerMap = new EventHandlerMap(this, MathMLElementImpl.#handlerDefinitions);
 

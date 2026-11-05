@@ -4,6 +4,7 @@ import {
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/core/index';
 
 import { ElementTag, ContentCategory } from '../../element-definitions/index';
+import { scheduleSelectionChange } from '../../../../interaction/selection/index';
 
 import { HTMLElementImpl } from '../html-element';
 
@@ -24,11 +25,21 @@ export class HTMLTextAreaElementImpl extends HTMLElementImpl {
     this.prototype.directionalityAttributes = [...this.prototype.directionalityAttributes, 'placeholder'];
   }
 
+  /** Whether a selectionchange task is already queued for this target. */
+  selectionChangeScheduled = false;
+
   /** Current control value, independent of the default child text once the value is dirty. */
   // https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#concept-fe-value
   get value(): string {
     // TODO(HTML §4.10.11): Supply the raw/API value and dirty-value lifecycle.
     throw new InternalError('Textarea current value is not implemented');
+  }
+
+  /** Schedule notification after an actual control selection extent/direction change. */
+  // https://w3c.github.io/selection-api/#selectionchange-event
+  scheduleSelectionChange(): void {
+    // TODO(HTML §4.10.11 / §4.10.18): selection setters, setSelectionRange/setRangeText, and value/editing steps must call this after changes.
+    scheduleSelectionChange(this);
   }
 
   protected override getAutoDirection(): TextDirection | null {

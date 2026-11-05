@@ -1,6 +1,7 @@
+import { asciiLower, InternalError } from '../../../infra/index';
 import {
   arg, defineDictionary, defineInterface, dictMember, DOMExceptionImpl, DOMExceptionNames,
-  emptyDictionary, emptySequence, idlType, impl, integer, nullable, op, reference, roAttr, sequence,
+  emptyDictionary, emptySequence, idlType, impl, integer, nullable, op, reference, roAttr, sequence, stringifier, xattr,
 } from '../../../web-idl/core/index';
 
 import { AbstractRangeImpl, RangeImpl, StaticRangeImpl } from '../../dom/ranges/index';
@@ -191,6 +192,115 @@ export class SelectionImpl {
     this.#setAnchorAndFocus(anchorNode, anchorOffset, focusNode, focusOffset);
   }
 
+  /** Replace Selection with the node's direct children, not its character data. */
+  // https://w3c.github.io/selection-api/#dom-selection-selectallchildren
+  selectAllChildren(node: NodeImpl): void {
+    if (node.isDocumentType()) throw new DOMExceptionImpl('', DOMExceptionNames.invalidNodeType);
+    // SPEC_CLASH(selection-children-shadow): All browsers accept connected shadow-tree nodes; the draft still requires an ordinary root equal to the Document.
+    if (!node.hasShadowIncludingInclusiveAncestor(this.#document)) return;
+    // DOM node length counts UTF-16 units for CharacterData; this operation counts children.
+    const childCount = node.isCharacterData() ? 0 : node.getLength();
+    // SPEC_CLASH(selection-children-direction): Use the draft/WebKit's forward direction even for no children; Chromium/Firefox report none.
+    this.#setAnchorAndFocus(node, 0, node, childCount);
+  }
+
+  /** Validate a request for the same caret movement used by interactive selection. */
+  // https://w3c.github.io/selection-api/#dom-selection-modify
+  modify(alter?: string, direction?: string, granularity?: string): void {
+    alter = asciiLower(alter ?? '');
+    if (alter !== 'extend' && alter !== 'move') return;
+    direction = asciiLower(direction ?? '');
+    if (direction !== 'forward' && direction !== 'backward' && direction !== 'left' && direction !== 'right') return;
+    granularity = asciiLower(granularity ?? '');
+    switch (granularity) {
+      case 'character': case 'word': case 'sentence': case 'line': case 'paragraph':
+      case 'lineboundary': case 'sentenceboundary': case 'paragraphboundary': case 'documentboundary':
+        break;
+      default: return;
+    }
+    if (this.#range === null) return;
+    this.#modifyRenderedSelection(alter, direction, granularity);
+  }
+
+  /** Delete through the associated ordinary Range, retaining its identity and direction. */
+  // https://w3c.github.io/selection-api/#dom-selection-deletefromdocument
+  deleteFromDocument(): void {
+    // SPEC_CLASH(selection-delete-shadow): Allow connected same-root shadow selections like Chromium/Firefox; the draft restricts endpoints to the document tree and WebKit does not delete the probed shadow selection.
+    // SPEC_CLASH(selection-delete-range): Keep the associated Range as the draft/Chromium/WebKit do; Firefox replaces it after deletion.
+    // A cross-root span has a collapsed ordinary Range. Its no-op deletion leaves
+    // the composed endpoints attached, as all three browsers do.
+    this.#range?.deleteContents();
+  }
+
+  /** Test the ordinary Range against the node's full extent or partial overlap. */
+  // https://w3c.github.io/selection-api/#dom-selection-containsnode
+  containsNode(node: NodeImpl, allowPartialContainment: boolean): boolean {
+    const range = this.#range;
+    if (range === null || node.getRoot() !== this.#document || range.startContainer.getRoot() !== this.#document) return false;
+    // SPEC_CLASH(selection-contains-boundaries): Use WebKit's DOM node enclosure/intersection; the draft's visual equivalence is underspecified and Chromium normalizes through layout.
+    // SPEC_CLASH(selection-contains-text): Full containment requires the whole Text node too, like WebKit; Chromium/Firefox also accept partial text selections.
+    if (allowPartialContainment) return range.intersectsNode(node);
+    const parent = node.parentNode;
+    if (parent === null) return false;
+    const index = node.getIndex();
+    return AbstractRangeImpl.compareBoundaryPoints(range.startContainer, range.startOffset, parent, index) !== 1 &&
+      AbstractRangeImpl.compareBoundaryPoints(range.endContainer, range.endOffset, parent, index + 1) !== -1;
+  }
+
+  /** Return rendered selected text; raw Range text is not a substitute for layout. */
+  // https://w3c.github.io/selection-api/#dom-selection-stringifier
+  toString(): string {
+    // TODO(HTML text controls): consult the active input/textarea value selection
+    // before these DOM-only fast paths once that selection owner is implemented.
+    if (this.#range === null || (this.#range.collapsed && this.#composed === null)) return '';
+    return this.#getRenderedSelectedText();
+  }
+
+  /**
+   * Accept an input producer's proposed ordinary-tree selection, unless canceled or invalidated.
+   * Copies the Range into this Selection's realm; the proposal and old associated Range retain
+   * their identities. The producer supplies direction after applying selectability and editing/focus policy.
+   * Returns false without installing the proposal; author changes made by listeners remain.
+   */
+  // https://w3c.github.io/selection-api/#user-interactions
+  // https://w3c.github.io/selection-api/#selectstart-event
+  // SPEC_GAP(selection-user-direction): §6 describes direction using already-ordered Range ends.
+  // Keep the producer's gesture direction explicitly; Range alone cannot recover anchor/focus.
+  selectFromUser(range: RangeImpl, direction: SelectionDirection): boolean {
+    const { startContainer, startOffset, endContainer, endOffset } = range;
+    const document = this.#document;
+    if (!document.isFullyActive() || startContainer.getShadowIncludingRoot() !== document ||
+      endContainer.getShadowIncludingRoot() !== document) return false;
+
+    // §6 requires a new Range. Construct it in the Selection's realm even when
+    // the proposal was created elsewhere; DOM mutations during dispatch adjust it.
+    const newRange = new RangeImpl(document, this.env);
+    newRange.setStart(startContainer, startOffset);
+    newRange.setEnd(endContainer, endOffset);
+    // SPEC_CLASH(selection-user-start-gate): use §6.1's previous empty/collapsed condition,
+    // including caret proposals. Firefox excludes carets; Chromium/WebKit also fire
+    // when a click replaces a previously noncollapsed range.
+    if (this.#range === null || this.#range.collapsed) {
+      if (!startContainer.fireEvent('selectstart', undefined, (event) => {
+        event.bubbles = true;
+        event.cancelable = true;
+      })) return false;
+    }
+
+    // SPEC_GAP(selection-user-reentrancy): §6.1 does not define invalidation during dispatch.
+    // SPEC_CLASH(selection-user-live-proposal): retain DOM's live-Range adjustments, like
+    // Firefox's text-insertion behavior; Chromium/WebKit retain the earlier offsets.
+    // Reject disconnected original endpoints like Chromium/WebKit, even if Range's
+    // removal steps repaired the proposed endpoints to a surviving parent.
+    if (!document.isFullyActive() || startContainer.getShadowIncludingRoot() !== document ||
+      endContainer.getShadowIncludingRoot() !== document ||
+      newRange.startContainer.getShadowIncludingRoot() !== document ||
+      newRange.endContainer.getShadowIncludingRoot() !== document) return false;
+
+    this.#replaceRange(newRange, direction);
+    return true;
+  }
+
   /** Receive live-boundary changes; DOM adjustments retain the separate composed span. */
   // https://w3c.github.io/selection-api/#selectionchange-event
   rangeChanged(range: RangeImpl, fromMutation = false): void {
@@ -336,23 +446,55 @@ export class SelectionImpl {
     if (changed) this.#document.scheduleSelectionChange();
   }
 
+  /** Complete modify's direction resolution and movement using the future editing/layout owner. */
+  // https://w3c.github.io/selection-api/#dom-selection-modify (steps 5–11)
+  // SPEC_GAP(selection-modify-granularity): The draft refers to user-requested movement without precisely defining each granularity's destinations.
+  // TODO(Selection / editing and text layout): resolve UAX9 embedding direction at
+  // the focus (including caret affinity), then navigate rendered character/word/
+  // sentence/line/paragraph/document boundaries. HTML's first-strong direction and
+  // raw DOM text offsets cannot supply these results. Resolve the movement before
+  // publishing direction/endpoints, so this explicit dependency leaves state intact.
+  #modifyRenderedSelection(
+    _alter: SelectionAlteration, _direction: SelectionModifyDirection, _granularity: SelectionGranularity,
+  ): void {
+    throw new InternalError('Selection.modify requires rendered caret movement and bidi resolution');
+  }
+
+  /** Collect selected text using the future rendering and text-control selection owners. */
+  // https://w3c.github.io/selection-api/#dom-selection-stringifier
+  // TODO(Selection / rendering and HTML text controls): use the live composed span
+  // when present, processed text fragments, visibility/selectability, whitespace,
+  // text transformation, and line/block separators. A control selection instead
+  // needs its current value and selected offsets, not child Text nodes. HTML's
+  // innerText collection and layout's text fragments remain unfinished; Range's
+  // ordinary-tree stringifier cannot supply this rendered result.
+  #getRenderedSelectedText(): string {
+    throw new InternalError('Selection stringification requires rendered selected text and text-control selection');
+  }
+
   #detachComposed(): void {
     this.#composed?.start.setSelection(null);
     this.#composed?.end.setSelection(null);
     this.#composed = null;
   }
 
-  // TODO(Selection API §3): selectAllChildren, modify,
-  // deleteFromDocument, containsNode, and stringification are not exposed yet.
-  // TODO(§§2, 6 / input and rendering owners): user selection, selectstart,
-  // focus/editing policy, and caret/highlight painting need their concrete producers.
+  // TODO(input/editing): supply selectFromUser with hit-tested/selectable endpoints
+  // and gesture direction; native mouse/keyboard selection is not connected.
+  // Cross-root user gestures need composed proposals; this entry accepts only an
+  // ordinary Range and must not be fed a collapsed substitute for a composed span.
+  // Programmatic methods remain separate. Rendering owns caret/highlight painting;
+  // HTML text controls own value selections and §6.2 element notifications.
 }
 
 export interface GetComposedRangesOptions {
   shadowRoots: ShadowRootImpl[];
 }
 
-type SelectionDirection = 'none' | 'forward' | 'backward';
+export type SelectionDirection = 'none' | 'forward' | 'backward';
+type SelectionAlteration = 'move' | 'extend';
+type SelectionModifyDirection = 'forward' | 'backward' | 'left' | 'right';
+type SelectionGranularity = 'character' | 'word' | 'sentence' | 'line' | 'paragraph' |
+  'lineboundary' | 'sentenceboundary' | 'paragraphboundary' | 'documentboundary';
 
 interface SelectionBoundaries {
   startContainer: NodeImpl;
@@ -437,7 +579,11 @@ function copyBoundaries(target: SelectionBoundaries, source: SelectionBoundaries
  *   undefined collapseToEnd();
  *   undefined extend(Node node, optional unsigned long offset = 0);
  *   undefined setBaseAndExtent(Node anchorNode, unsigned long anchorOffset, Node focusNode, unsigned long focusOffset);
- *   // Remaining §3 members are the next bounded slice.
+ *   undefined selectAllChildren(Node node);
+ *   undefined modify(optional DOMString alter, optional DOMString direction, optional DOMString granularity);
+ *   [CEReactions] undefined deleteFromDocument();
+ *   boolean containsNode(Node node, optional boolean allowPartialContainment = false);
+ *   stringifier;
  * };
  */
 export const selectionIDL = defineInterface({
@@ -479,6 +625,18 @@ export const selectionIDL = defineInterface({
       arg('anchorNode', reference('Node')), arg('anchorOffset', idlType.unsignedLong),
       arg('focusNode', reference('Node')), arg('focusOffset', idlType.unsignedLong),
     ]),
+    op('selectAllChildren', idlType.undefined, [arg('node', reference('Node'))]),
+    op('modify', idlType.undefined, [
+      arg('alter', idlType.DOMString, { optional: true }),
+      arg('direction', idlType.DOMString, { optional: true }),
+      arg('granularity', idlType.DOMString, { optional: true }),
+    ]),
+    op('deleteFromDocument', idlType.undefined, [], xattr('CEReactions')),
+    op('containsNode', idlType.boolean, [
+      arg('node', reference('Node')),
+      arg('allowPartialContainment', idlType.boolean, { optional: true, default: false }),
+    ]),
+    stringifier(),
   ],
 });
 

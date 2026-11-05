@@ -6,7 +6,7 @@ import { eventHandlerMapAttr } from '../../scripting/index';
 // https://w3c.github.io/pointerevents/#extensions-to-the-globaleventhandlers-mixin
 // Content attributes remain supported in insecure contexts; SecureContext controls
 // IDL property exposure, while native raw delivery has its own secure-context gate.
-export const pointerEventHandlers = new Map<string, string>([
+export const pointerGlobalEventHandlers = new Map<string, string>([
   'pointerover', 'pointerenter', 'pointerdown', 'pointermove', 'pointerrawupdate',
   'pointerup', 'pointercancel', 'pointerout', 'pointerleave', 'gotpointercapture', 'lostpointercapture',
 ].map((type) => [`on${type}`, type]));
@@ -28,7 +28,7 @@ export const pointerEventHandlers = new Map<string, string>([
  */
 export const pointerGlobalEventHandlersIDL = definePartialInterfaceMixin({
   name: 'GlobalEventHandlers',
-  members: Array.from(pointerEventHandlers, ([name]) => ({
+  members: Array.from(pointerGlobalEventHandlers, ([name]) => ({
     ...eventHandlerMapAttr(name),
     // SPEC_CLASH(pointer-rawupdate-handler-exposure): Follow the draft/Chromium/Firefox; WebKit implements neither the property nor the content handler.
     ...(name === 'onpointerrawupdate' ? xattr('SecureContext') : {}),

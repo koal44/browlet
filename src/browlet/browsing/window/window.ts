@@ -16,9 +16,9 @@ import {
   type SpeculationRulesParseResult, type TimerAction,
 } from '../../scripting/index';
 import { PageTransitionEventImpl } from '../navigation/events/index';
-import { pointerEventHandlers, type MouseEventImpl, type ScreenPosition } from '../../interaction/events/index';
+import { pointerGlobalEventHandlers, type MouseEventImpl, type ScreenPosition } from '../../interaction/events/index';
 import type { TrustedTypePolicyFactoryImpl } from '../policy/trusted-types/index';
-import type { SelectionImpl } from '../../interaction/selection/index';
+import { selectionGlobalEventHandlers, type SelectionImpl } from '../../interaction/selection/index';
 import type { HistoryImpl } from '../history/index';
 import { HTMLCollectionImpl, type DocumentImpl, type ElementImpl } from '../../dom/nodes/index';
 import type { PerformanceImpl } from '../../performance/index';
@@ -41,7 +41,9 @@ import { WindowIdleCallbacks, type IdleRequestCallback, type IdleRequestOptions 
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-window-object
 export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   /** Complete supported-name table shared by all Windows. */
-  static #handlerDefinitions = new Map([...globalEventHandlers, ...pointerEventHandlers, ...windowEventHandlers]);
+  static #handlerDefinitions = new Map([
+    ...globalEventHandlers, ...pointerGlobalEventHandlers, ...selectionGlobalEventHandlers, ...windowEventHandlers,
+  ]);
 
   declare env: WindowEnvironment;
   // HTML §8.1.3.3 — internal global state, retained when the associated Document changes.

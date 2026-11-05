@@ -14,5 +14,5 @@ export {
 } from './pointer-event';
 export { WheelEventImpl, type WheelEventInit } from './wheel-event';
 export { TextEventImpl } from './text-event';
-export { pointerEventHandlers } from './pointer-event-handlers';
+export { pointerGlobalEventHandlers } from './pointer-event-handlers';
 export { interactionEventIDLDefinitions } from './web-idl';

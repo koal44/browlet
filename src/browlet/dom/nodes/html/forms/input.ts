@@ -7,6 +7,7 @@ import {
 
 import { ElementTag, ContentCategory, emptyContent } from '../../element-definitions/index';
 import { EnumeratedAttribute } from '../../../../html/microsyntaxes/index';
+import { scheduleSelectionChange } from '../../../../interaction/selection/index';
 
 import { HTMLElementImpl } from '../html-element';
 
@@ -34,6 +35,9 @@ export class HTMLInputElementImpl extends HTMLElementImpl {
   // https://html.spec.whatwg.org/#concept-input-dirty-checkedness-flag
   dirtyCheckedness = false;
 
+  /** Whether a selectionchange task is already queued for this target. */
+  selectionChangeScheduled = false;
+
   static is(value: unknown): value is HTMLInputElementImpl {
     return value instanceof HTMLInputElementImpl;
   }
@@ -55,6 +59,13 @@ export class HTMLInputElementImpl extends HTMLElementImpl {
   set checked(value: boolean) {
     this.dirtyCheckedness = true;
     this.setCheckedness(value);
+  }
+
+  /** Schedule notification after an actual control selection extent/direction change. */
+  // https://w3c.github.io/selection-api/#selectionchange-event
+  scheduleSelectionChange(): void {
+    // TODO(HTML §4.10.5 / §4.10.18): selection setters, setSelectionRange/setRangeText, and value/editing steps must call this after changes.
+    scheduleSelectionChange(this);
   }
 
   override hasCategory(category: ContentCategory): boolean {

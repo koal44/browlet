@@ -1237,6 +1237,10 @@ Selection once before moving callbacks, so it can reorder the retained endpoints
 reverse direction, and refresh the same public Range without discarding the span.
 Selection's extend and collapse operations retain their ordinary-Range rules and
 replace the composed span; every replacement/clear detaches its hidden trackers.
+selectAllChildren uses the same replacement path with direct child offsets. modify
+keeps DOMString conversion in Binding and validates the specified tokens before
+calling an explicit editing/text-layout dependency for rendered caret movement and
+resolved bidi direction; that dependency currently throws without changing state.
 Input/editing, rendering, and document.open reset remain separate owners in the
 [Selection roadmap](browlet/interaction/selection/ROADMAP.md).
 

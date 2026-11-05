@@ -207,10 +207,16 @@ rechecks queued requests, and retains notification Documents across adoption.
 Native unlock/focus-loss signals and HTML teardown remain explicit owner dependencies.
 The closing §§9–12 audit found no additional runtime algorithm. Native Pointer Lock
 remains blocked on those owners. [Selection API](selection/ROADMAP.md) now supplies
-the shared Document/Window Selection, range attachment and live updates, and
-coalesced Document selectionchange events. Continue §3 at getComposedRanges and
-the remaining selection operations, then §4.3 handler attributes and the input/
-editing dependencies. Clipboard API follows; CSSOM View remains deferred.
+shared Document/Window Selection, live and composed ranges, deletion/containment,
+coalesced Document/control selectionchange, and §4.3 event-handler properties/content attributes.
+modify and stringification retain called editing/layout dependencies and four
+approved expected failures. §§6–6.1 now provide the internal selectFromUser entry,
+selectstart cancellation, and post-listener lifetime checks. §§6.2.1–6.2.2 now share
+scheduling/firing across Document, input, and textarea, including adoption and
+shadow-tree delivery. The local specification pass is complete; input/editing
+connections, cross-root user proposals, document reset, and HTML text-control
+state remain explicit dependencies.
+Clipboard API follows; CSSOM View remains deferred.
 
 ## Removal condition
 

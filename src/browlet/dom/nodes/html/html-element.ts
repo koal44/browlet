@@ -11,7 +11,8 @@ import { ElementCSSInlineStyleMixin } from '../../../style/index';
 import { dirAttribute, getMicrodataURLAttribute, isGlobalContentAttribute, translateAttribute } from './attributes/index';
 import type { EventTargetImpl } from '../../events/index';
 import { EventHandlerMap, globalEventHandlers } from '../../../scripting/index';
-import { pointerEventHandlers } from '../../../interaction/events/index';
+import { pointerGlobalEventHandlers } from '../../../interaction/events/index';
+import { selectionGlobalEventHandlers } from '../../../interaction/selection/index';
 
 import { ElementImpl } from '../element';
 import type { NodeImpl } from '../node';
@@ -24,7 +25,9 @@ import type { HTMLFormElementImpl } from './forms/index';
 // https://html.spec.whatwg.org/multipage/dom.html#htmlelement
 export class HTMLElementImpl extends ElementImpl {
   /** Complete supported-name table shared by all HTML elements. */
-  static #handlerDefinitions = new Map([...globalEventHandlers, ...pointerEventHandlers]);
+  static #handlerDefinitions = new Map([
+    ...globalEventHandlers, ...pointerGlobalEventHandlers, ...selectionGlobalEventHandlers,
+  ]);
 
   // WindowEventHandlers names and the Window-reflecting body element event handler set.
   // onbeforeunload remains in this target set while its special invocation rules await integration.
@@ -269,7 +272,9 @@ export class HTMLElementImpl extends ElementImpl {
    */
   // https://html.spec.whatwg.org/multipage/dom.html#concept-element-attributes
   allowsContentAttribute(name: string): boolean {
-    if (isGlobalContentAttribute(name) || pointerEventHandlers.has(name)) return true;
+    if (isGlobalContentAttribute(name) || pointerGlobalEventHandlers.has(name) || selectionGlobalEventHandlers.has(name)) {
+      return true;
+    }
     // HTML compatibility spellings; required values and companion attributes are separate checks.
     if (name === 'xmlns' || name === 'xml:lang') return this.nodeDocument.type === 'html';
     if (name === 'role' || name.startsWith('aria-')) {

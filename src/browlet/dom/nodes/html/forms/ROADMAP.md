@@ -22,6 +22,10 @@ algorithms remain missing, as recorded in the [element roadmap](../ROADMAP.md).
 - Inputs retain checkedness and dirty checkedness. Options retain selectedness
   and dirtiness. The implemented attribute changes preserve those distinctions.
   Selects supply option membership and explicit selected-index changes.
+- Input and textarea each retain Selection API's pending-notification flag and
+  forward scheduleSelectionChange() to the shared §6.2 algorithm. It coalesces a
+  trusted, bubbling, non-composed event at the control. The entry is internal;
+  control selection offsets/direction and their public APIs remain unfinished.
 
 The form-controls implementation extends `HTMLCollectionImpl`, retaining its
 first-element `namedItem()` operation. The form-controls platform method forwards
@@ -38,6 +42,7 @@ child's replacement signature without changing the runtime prototype chain.
 | `HTMLFormElementImpl.getListedElements()` | Throws until form-owner association exists | Listed-element classification; external `form` references and duplicate IDs; parser associations; tree/attribute/adoption changes; form-associated custom elements. Do not substitute descendant-only membership. |
 | `HTMLInputElementImpl.updateRadioButtonGroup()` | No-op | Same nonempty name, tree, and form owner; uncheck other radio inputs. Connect every checkedness, type, name, form-owner, and connection trigger from §4.10.5. |
 | Input and textarea current `value` | Getters throw; not yet exposed as public IDL members | Implement dirty values, input type/value modes and sanitization, textarea raw/API values, reset/cloning, author writes, and editing. §3.2.6.4 automatic direction calls these getters for eligible controls; do not substitute default attributes or child text. Notify style/rendering consumers when a value change affects directionality. |
+| Input/textarea selection state | No offset/direction implementation or public selection APIs yet | Implement HTML §4.10.18 selection setters, setSelectionRange/setRangeText, value adjustment, and editing. Call the existing scheduleSelectionChange() entry only when extent/direction changes; keep this separate from Document Selection. |
 | `HTMLSelectElementImpl.resetSelectedness()` | No-op | Selectedness-setting algorithm, including display size, disabled options, single/multiple selection, and all mutation triggers. |
 | `HTMLOptionElementImpl.askForReset()` | No-op | Notify the nearest ancestor select, run selectedness setting, and update selectedcontent. Connect option insertion/removal and selected-attribute changes. |
 | `HTMLSelectElementImpl.updateSelectedContent()` | No-op | Selectedcontent ownership and cloning, including the option and select mutation hooks. |

@@ -33,13 +33,13 @@ import { ElementTag } from './element-definitions/index';
 import type { DOMStringListImpl } from '../lists/index';
 import { EventImpl, CustomEventImpl, type EventTargetImpl } from '../events/index';
 import {
-  EventHandlerMap, eventHandlerMapAttr, globalEventHandlers, ModuleMap, SpeculationRulesParseResult, userInteractionTaskSource,
+  EventHandlerMap, eventHandlerMapAttr, globalEventHandlers, ModuleMap, SpeculationRulesParseResult,
   type EventHandlerCallback, type SpeculationRuleSet,
 } from '../../scripting/index';
 import { StorageEventImpl } from '../../storage/events/index';
 import { BeforeUnloadEventImpl, HashChangeEventImpl } from '../../browsing/navigation/events/index';
 import {
-  UIEventImpl, FocusEventImpl, KeyboardEventImpl, CompositionEventImpl, TextEventImpl, MouseEventImpl, pointerEventHandlers,
+  UIEventImpl, FocusEventImpl, KeyboardEventImpl, CompositionEventImpl, TextEventImpl, MouseEventImpl, pointerGlobalEventHandlers,
 } from '../../interaction/events/index';
 import { LegacyMouseProcessor } from '../../interaction/mouse/index';
 import { WheelInputProcessor } from '../../interaction/wheel/index';
@@ -52,7 +52,7 @@ import { RangeImpl } from '../ranges/index';
 import { NodeIteratorImpl, TreeWalkerImpl, SHOW_ALL, type NodeFilterCallback } from '../traversal/index';
 // The observer retains registrations; rendering input and scheduled notification remain provisional.
 import { IntersectionObserverImpl, type IntersectionObserverEntryImpl } from '../intersection-observer/index';
-import { SelectionImpl } from '../../interaction/selection/index';
+import { SelectionImpl, scheduleSelectionChange, selectionGlobalEventHandlers } from '../../interaction/selection/index';
 import { HistoryImpl } from '../../browsing/history/index';
 import type { NavigationTimingRecord } from '../../performance/index';
 // eslint-disable-next-line browlet/dependency-direction -- DOM's legacy event factory includes HTML-defined event interfaces.
@@ -112,7 +112,8 @@ export class DocumentImpl extends NodeImpl {
   /** General and Document-only handler definitions, composed once for all Documents. */
   static #handlerDefinitions = new Map([
     ...globalEventHandlers,
-    ...pointerEventHandlers,
+    ...pointerGlobalEventHandlers,
+    ...selectionGlobalEventHandlers,
     ['onreadystatechange', 'readystatechange'], ['onvisibilitychange', 'visibilitychange'],
     ['onpointerlockchange', 'pointerlockchange'], ['onpointerlockerror', 'pointerlockerror'],
   ]);
@@ -253,6 +254,9 @@ export class DocumentImpl extends NodeImpl {
   /** Document event-handler attributes and their registered listeners. */
   override eventHandlers: EventHandlerMap = new EventHandlerMap(this, DocumentImpl.#handlerDefinitions);
 
+  /** Whether a selectionchange task is already queued for this target. */
+  selectionChangeScheduled = false;
+
   /** Associated browsing context, or null for a detached document. */
   #browsingContext: BrowsingContext | null = null;
   /** Page visibility, initially hidden until navigable initialization or history activation. */
@@ -281,8 +285,6 @@ export class DocumentImpl extends NodeImpl {
   #wheelInput?: WheelInputProcessor;
   /** Shared author-visible Selection, created only when requested in a browsing context. */
   #selection?: SelectionImpl;
-  /** Selection API §2's per-Document notification flag. */
-  #selectionChangeScheduled = false;
   /** Lazily created style engine for this document. */
   #stylelet?: Stylelet;
   /** Stylesheet collections and matching context, retained independently of the engine. */
@@ -1009,13 +1011,7 @@ export class DocumentImpl extends NodeImpl {
   /** Coalesce selection changes; a listener may schedule a later notification. */
   // https://w3c.github.io/selection-api/#scheduling-selectionchange-event
   scheduleSelectionChange(): void {
-    if (this.#selectionChangeScheduled) return;
-    this.#selectionChangeScheduled = true;
-    this.env.responsibleEventLoop.queueTask(userInteractionTaskSource, this, () => {
-      // https://w3c.github.io/selection-api/#firing-selectionchange-event
-      this.#selectionChangeScheduled = false;
-      this.fireEvent('selectionchange');
-    });
+    scheduleSelectionChange(this);
   }
 
   /** Notify only an existing Selection after a state-preserving DOM move. */

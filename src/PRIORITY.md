@@ -164,8 +164,17 @@ further runtime algorithms; the native feature remains incomplete. The adjacent
 Document/Window state, live Range attachment, composed snapshots, collapse methods,
 and Document selectionchange tasks. §3 now adds extend and composed endpoint state
 for cross-root setBaseAndExtent, including live mutation, move ordering, and explicit
-replacement/detachment. The former expected failure now passes normally. Next are
-the remaining §3 operations and §4.3 handler attributes. Clipboard API follows;
+replacement/detachment. The former cross-root expected failure now passes normally.
+selectAllChildren, deleteFromDocument, and DOM-based containsNode are implemented.
+modify exposes validation and empty-selection handling; stringification exposes
+empty/caret results. Their called editing/layout and rendered-text dependencies
+remain unfinished, with four approved expected failures. §4.3 now supplies
+onselectstart/onselectionchange through the existing handler maps. §§6–6.1 now
+provide selectFromUser with fresh Range ownership, selectstart cancellation, and
+post-listener lifetime checks. §§6.2.1–6.2.2 now share per-target scheduling and
+firing across Document, input, and textarea. The local specification pass is
+complete; native endpoint selection, control state, and HTML document reset remain
+explicit owners. Clipboard API follows;
 CSSOM View remains deferred.
 HTML §8.1.8.3's synthetic pointer-event operation still needs its hookup. Input producers retain
 their HTML, editing, and layout owners.
