@@ -42,6 +42,12 @@ export class DedicatedWorkerGlobalImpl extends WorkerGlobalImpl {
   get onmessageerror(): EventHandlerCallback | null { return this.messageEventTargetMixin.onmessageerror; }
   set onmessageerror(callback: EventHandlerCallback | null) { this.messageEventTargetMixin.onmessageerror = callback; }
 
+  /** Reuse the dedicated global's hidden endpoint instead of creating a new connection port. */
+  override connectPort(outsidePort: MessagePortImpl): MessagePortImpl {
+    outsidePort.entangle(this.insidePort);
+    return this.insidePort;
+  }
+
   /** Apply the corresponding MessagePort postMessage overload to the hidden inside port. */
   // https://html.spec.whatwg.org/multipage/workers.html#dom-dedicatedworkerglobalscope-postmessage
   postMessage(message: unknown, options: StructuredSerializeOptions | object[]): void {

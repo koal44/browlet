@@ -44,6 +44,7 @@ import {
   type BrowletGlobalObject, type EventHandlerCallback,
 } from '../scripting/index';
 import { ReportImpl, ReportBodyImpl, TestReportBodyImpl } from '../reporting/index';
+import { ContentSecurityPolicy } from '../browsing/policy/csp/index';
 import {
   InsecureRequestsPolicy, PermissionsPolicy, reportPermissionsPolicyViolation, reportPotentialPermissionsPolicyViolation,
   type PolicyContainer, type PolicyControlledFeature,
@@ -51,7 +52,6 @@ import {
   COEPInheritanceViolationReportBodyImpl, type COEPInheritanceViolationReportBody,
   PermissionsPolicyViolationReportBodyImpl, type PermissionsPolicyViolationReportBody,
 } from '../browsing/policy/index';
-import { ContentSecurityPolicy } from '../browsing/policy/csp/index';
 import type { AbortControllerImpl, AbortSignalImpl } from '../dom/abort/index';
 import { NodeImpl, type DocumentImpl, type ElementImpl } from '../dom/nodes/index';
 import { HTMLAnchorElementImpl } from '../dom/nodes/html/text/index';
@@ -780,9 +780,9 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   /** Fetch a worker module graph for these settings using the outside fetch client. */
   fetchModuleWorkerScriptGraph(
     url: URLRecord, fetchClient: BrowletEnvironment, destination: Destination, credentialsMode: RequestCredentials,
-    onComplete: ModuleFetchCallback,
+    onComplete: ModuleFetchCallback, performFetch?: PerformScriptFetch,
   ): void {
-    fetchModuleWorkerScriptGraph(url, fetchClient, destination, credentialsMode, this, onComplete);
+    fetchModuleWorkerScriptGraph(url, fetchClient, destination, credentialsMode, this, onComplete, performFetch);
   }
 
   /** Fetch a worklet module graph using responses shared across its globals. */

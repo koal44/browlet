@@ -19,10 +19,10 @@ import {
 
 import { ClassicScript, ScriptFetchOptions, type EventLoop } from '../../scripting/index';
 import type { PointerId } from '../../interaction/events/index';
+import type { CSPList } from '../policy/csp/index';
 import {
   EmbedderPolicy, OpenerPolicy, PermissionsPolicy, PolicyContainer, queueCOEPInheritanceViolation, SandboxingFlagSet,
 } from '../policy/index';
-import type { CSPList } from '../policy/csp/index';
 import type { DocumentImpl, DocumentVisibilityState, ElementImpl } from '../../dom/nodes/index';
 import {
   HTMLIFrameElementImpl, type HTMLEmbedElementImpl, type HTMLObjectElementImpl,

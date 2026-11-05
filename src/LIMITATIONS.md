@@ -1097,7 +1097,7 @@ worker integration. Extra permission data and automatic expiry also remain
 unimplemented. Future features must register their descriptor/result declarations
 and supply any additional query behavior and state implications for ordered
 descriptor aspects.
-[Permissions Policy](browlet/browsing/policy/ROADMAP.md#permissions-policy) has feature
+[Permissions Policy](browlet/browsing/policy/permissions-policy/ROADMAP.md) has feature
 definitions, per-Document empty policy records, allowlist matching, and attribute
 and response-header parsers. Iframe `allow`/`allowFullscreen` reflection and
 declared-origin/container-policy processing exist. Fullscreen remains unregistered;
@@ -2086,12 +2086,49 @@ the author-facing Worker/SharedWorker APIs remain absent. Shared globals retain
 creation fields and expose `onconnect`; discovery, automatic connection delivery,
 and lifetime monitoring remain pending. Dedicated globals forward messaging
 through a hidden port and can close their agent's task queues; automatic channel
-setup, queue enablement, and thread teardown remain pending. WorkerLocation's read-only URL surface
+setup and thread teardown remain pending. WorkerLocation's read-only URL surface
 is implemented; WorkerNavigator is an identity stub. `importScripts()` throws
 at its explicit synchronous-loading boundary. Dedicated/shared realm and settings
 composition is available internally, including initial ownership and separate resource
 state. It leaves execution readiness false and still runs on the caller's thread.
-Worker API mixin forwarding, response-policy setup, event producers, cross-thread
+JS Engine can start a separate isolate and stop blocked execution. Browlet's host
+adapter reloads the existing package bundle with a private startup marker,
+creates its worker agent/loop, and
+acknowledges host readiness. A creator environment snapshot, existing Origin/URL
+records, and owner-assigned cluster IDs cross the startup channel; the parent
+retains the actual owner. Dedicated workers inherit the cluster ID, shared workers get a
+fresh one, and subsequent capture preserves those identities. Cluster membership
+sets remain local. Creator policy snapshots also cross the channel and are
+reconstructed as local policy implementations, retaining CSP self origins,
+enforcement/reporting state, COEP, referrer policy, and integrity policies.
+It is not yet connected to environment composition: UserAgent services,
+report delivery, and remote lifetime updates remain dependencies.
+Copied URL records omit cached Blob registrations; resolving Blob URLs still
+requires access to the original UserAgent's store.
+The bootstrap rejects commands at that unfinished
+boundary; it does not create a worker global or fetch/execute author code yet.
+Its internal Node-cloned messages are not HTML MessagePort transport.
+The host adapter can now fetch a prepared initial-script request in the creator
+isolate and hand its consumed response to an explicit worker networking-task
+consumer. Fetch retains the original stores and client; host-owned body streams
+and parallel callback delivery avoid depending on creator Document activity.
+Blob creator policies travel as values, and thread teardown cancels pending
+fetching. The production startup caller/consumer, reserved inside-client
+identity, module-descendant and nested-worker service routing remain unwired.
+WorkerEnvironment can fetch and parse/link its root script and initialize response
+URL, CSP, COEP, and isolation state using the existing Fetch machinery. This is
+tested on composed worker settings; the separate-isolate bootstrap still needs
+the creator environment snapshot and reconstructed policies connected to
+shared-service transport before it can call this path.
+`WorkerEnvironment.completeScriptFetch()` can reject failed scripts, queue the
+outside `error`, and discard the unready environment. On success it entangles the
+startup ports and calls `runScript()` to mark readiness, evaluate the script,
+enable dedicated messaging, and queue shared `connect` delivery. These steps use
+the outside target's EventTarget base; concrete Worker/SharedWorker association
+and the separate-isolate caller remain unwired. Environment discard does not
+terminate a native thread. Owner monitoring and the ServiceWorkerContainer client
+message queue also remain processing-model dependencies.
+Worker API mixin forwarding, event producers, cross-thread
 messaging, and independent execution remain pending. Inheritance
 reports omit CORP's destination member and preserve local observation even with
 an empty endpoint or outbound delivery disabled. Private Network Access and

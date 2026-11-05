@@ -4,7 +4,7 @@ import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { PermissionsPolicy } from '../../../../src/browlet/browsing/policy/permissions';
+import { PermissionsPolicy } from '../../../../src/browlet/browsing/policy/permissions-policy/policy';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
 import type { Window } from '../../../../src/browlet/platform';

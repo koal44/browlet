@@ -4,7 +4,7 @@ import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
 import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
-import { PermissionsPolicy } from '../../../../src/browlet/browsing/policy/permissions';
+import { PermissionsPolicy } from '../../../../src/browlet/browsing/policy/permissions-policy/policy';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { monotonicClock } from '../../../../src/timing/clock';
 import { obtainURLOrigin, parseURL } from '../../../../src/url/index';

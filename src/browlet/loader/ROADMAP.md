@@ -23,7 +23,7 @@ element's `load` handlers return, using the then-current raw `allow` and `src`,
 before clearing the child Document's load-in-progress flag. Child Window `load`
 is a separate event. The checker exists; iframe timing/flags, attribute processing,
 and document-completion callers remain unfinished.
-See the [integration review](../browsing/policy/ROADMAP.md#101-html-integration).
+See the [integration review](../browsing/policy/permissions-policy/ROADMAP.md#101-html-integration).
 
 The javascript: string-result path now calls `Navigable.loadHTMLDocument(params)`
 with a synthetic UTF-8 response, inherited policy, null request/controller/reserved

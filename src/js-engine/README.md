@@ -15,6 +15,8 @@ the [roadmap](ROADMAP.md) identifies remaining engine/HTML integration work.
 | --- | --- |
 | [realm.ts](realm.ts) | `JSRealm`, captured built-ins, JSON, classic compilation/evaluation, function/object allocation, buffers, and global-object integration |
 | [runtime.ts](runtime.ts) | Isolate associations, microtask queues, realm lookup, Promise observation, and host-hook adaptation |
+| [threads.ts](threads.ts) | Independent execution, private native message endpoints, startup data, and native teardown |
+| [node-promise.ts](node-promise.ts) | Internal completions on the isolate's Node host queue, independent of browser realms |
 | [node-addons.ts](node-addons.ts) | Typed optional backend operations, bound once when loaded |
 | [environment.ts](environment.ts) | Portable realm, internal Promise, and scheduling requirements on existing environments |
 | [buffers.ts](buffers.ts) | Buffer/view brands, slot inspection, and byte operations |
@@ -23,6 +25,34 @@ the [roadmap](ROADMAP.md) identifies remaining engine/HTML integration work.
 | [index.ts](index.ts) | Entry point for other subsystems |
 
 ## Environments and allocation
+
+`JSThread.initialize(moduleURL, steps)` selects the host's file-module entry once
+per loaded engine copy. In a matching child, it schedules the host setup after
+module evaluation. JS Engine owns file-URL decoding, the private native startup
+envelope, and its entry-identity check; ordinary imports in unrelated workers
+do not run setup. `new JSThread(data, onMessage)` then needs no path argument.
+`JSThreadEndpoint` supplies the inside connection and original host data without
+exposing Node's Worker, parentPort, workerData, MessagePort, or startup envelope.
+Native errors and exit are retained in `closed`; `terminate()` interrupts blocked
+execution and returns that same internal completion. `NodePromise` keeps its
+result private and observes completion on the creating isolate's host queue,
+independently of HTML event loops. Node's termination Promise stays inside this
+backend; a rejected termination request rejects the internal completion. Browlet
+chains local cleanup onto it, preserving that queue and propagating cleanup
+failures. The backend inherits the current Node executable, startup options, and
+environment, including the selected addon.
+
+Both endpoints take the same `JSThreadProtocol` type, which declares startup data
+and each message direction. TypeScript checks host sends and receives against
+that contract; the native receive boundary still trusts the cloned value's
+type. This is trusted internal transport, not runtime schema validation.
+Browlet exhaustively switches on the declared kinds with `assertNever`, while
+leaving payloads nested as data.
+
+These facilities have no browser readiness handshake, Agent kind, task policy,
+or HTML structured-cloning semantics. Browlet owns its worker setup protocol and
+queues received commands on the worker EventLoop. A native thread starting does
+not mean the browser's worker environment is ready to execute author scripts.
 
 `JSRealm.compileFunction(body, parameters, options)` compiles a FunctionBody in
 its owning context without executing it or consulting eval/Function policy.

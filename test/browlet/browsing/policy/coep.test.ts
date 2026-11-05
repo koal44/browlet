@@ -4,7 +4,7 @@ import { createSandboxEnvironment } from '../../../../src/browlet/integration/we
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { EmbedderPolicy, queueCOEPInheritanceViolation, type EmbedderPolicyValue } from '../../../../src/browlet/browsing/policy/coep';
+import { EmbedderPolicy, queueCOEPInheritanceViolation, type EmbedderPolicyValue } from '../../../../src/browlet/browsing/policy/cross-origin/coep';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
 import { BrowletEnvironmentBase } from '../../../../src/browlet/environment/index';
 import type { Window } from '../../../../src/browlet/platform';

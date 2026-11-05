@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../../src/browlet/browlet';
-import { PermissionsPolicy } from '../../../../src/browlet/browsing/policy/permissions';
-import type { PermissionsPolicyImpl } from '../../../../src/browlet/browsing/policy/permissions-policy';
+import { PermissionsPolicy } from '../../../../src/browlet/browsing/policy/permissions-policy/policy';
+import type { PermissionsPolicyImpl } from '../../../../src/browlet/browsing/policy/permissions-policy/permissions-policy';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
 import type { HTMLIFrameElement, Window } from '../../../../src/browlet/platform';

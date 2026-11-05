@@ -5,7 +5,7 @@ import { UserAgent } from '../../../../src/browlet/user-agent';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import {
   PermissionsPolicy, PermissionsPolicyAllowlist, type PolicyControlledFeature,
-} from '../../../../src/browlet/browsing/policy/permissions';
+} from '../../../../src/browlet/browsing/policy/permissions-policy/policy';
 import { createOpaqueOrigin, obtainURLOrigin, parseURL, type TupleOrigin } from '../../../../src/url/index';
 import { getRelevantRealm } from '../../../support/browlet-binding';
 import { createTestDocument } from '../../../support/dom';

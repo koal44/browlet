@@ -1,6 +1,7 @@
 import { idlType } from '../../src/web-idl/core/index';
 import { internalType } from '../../src/infra/promises';
-import { NodePromise, queueNodeTask } from '../../src/browlet/integration/host/node';
+import { NodePromise } from '../../src/js-engine/index';
+import { queueNodeTask } from '../../src/browlet/integration/host/node';
 import type {
   FetchEnvironment, FetchPolicyContainer, FetchUserAgent,
 } from '../../src/fetch/environment';

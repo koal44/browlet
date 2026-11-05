@@ -5,7 +5,7 @@ import {
   applyIntegrityAlgorithm, parseIntegrityMetadata, type FetchRequest, type IntegrityAlgorithm,
 } from '../../../../fetch/index';
 
-import { urlMatchesSourceExpression } from '../source-expressions';
+import { urlMatchesSourceExpression } from './source-expressions';
 
 /** One policy's directive names and token lists, interpreted by each directive's algorithm. */
 // https://w3c.github.io/webappsec-csp/#framework-policy

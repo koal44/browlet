@@ -1,14 +1,15 @@
 import { InternalError, asciiLower } from '../../../../infra/index';
-import { obtainURLOrigin, parseURL, serializeURL, type Origin, type URLRecord } from '../../../../url/index';
+import { copyOrigin, obtainURLOrigin, parseURL, serializeURL, type Origin, type URLRecord } from '../../../../url/index';
 import type { FetchCSPList, FetchRequest, FetchResponse } from '../../../../fetch/index';
 
-import { SandboxingFlagSet } from '../sandbox';
+import { SandboxingFlagSet } from '../sandbox/index';
 import type { DocumentImpl, ElementImpl } from '../../../dom/nodes/index';
 import type { BrowletEnvironment } from '../../../environment/index';
+import type { WorkerGlobalImpl } from '../../../workers/index';
 import type { Navigable } from '../../navigation/index';
 import type { UserAgent } from '../../../user-agent';
 
-import { ContentSecurityPolicy, type CSPDisposition } from './policy';
+import { ContentSecurityPolicy, type ContentSecurityPolicySnapshot, type CSPDisposition } from './policy';
 import type { CSPInlineAttributeType } from './directives';
 import { CSPViolation } from './violation';
 
@@ -27,6 +28,13 @@ export class CSPList implements FetchCSPList {
 
   constructor(selfOrigin: Origin) {
     this.selfOrigin = selfOrigin;
+  }
+
+  /** Restore policy behavior in this isolate while retaining the original meaning of 'self'. */
+  static fromSnapshot(snapshot: CSPListSnapshot): CSPList {
+    const list = new CSPList(copyOrigin(snapshot.selfOrigin));
+    list.policies = snapshot.policies.map((policy) => ContentSecurityPolicy.fromSnapshot(policy));
+    return list;
   }
 
   /** Parse response policies with the final response URL's origin for 'self'. */
@@ -192,6 +200,27 @@ export class CSPList implements FetchCSPList {
     }
   }
 
+  /** Initialize a worker's policies, returning whether sandbox restrictions prohibit execution. */
+  // https://w3c.github.io/webappsec-csp/#run-global-object-csp-initialization
+  // https://w3c.github.io/webappsec-csp/#sandbox-init
+  initializeWorker(global: WorkerGlobalImpl): boolean {
+    let blocked = false;
+    for (const policy of this.policies) {
+      for (const warning of policy.parsingWarnings) global.env.reportConsoleWarning(warning);
+      if (policy.disposition !== 'enforce') continue;
+      if (policy.directives.has('upgrade-insecure-requests')) {
+        global.env.insecureRequestsPolicy.enableFor(global.env.apiBaseURL);
+      }
+      const sandbox = policy.directives.get('sandbox');
+      // sandbox has no effect when delivered through a meta element, including
+      // such a policy inherited by a local worker from its owner.
+      if (sandbox === undefined || policy.source !== 'header') continue;
+      const flags = SandboxingFlagSet.parse(sandbox.tokens.join(' '));
+      if (flags.has('sandboxed-scripts') || flags.has('sandboxed-origin')) blocked = true;
+    }
+    return blocked;
+  }
+
   /** Sandbox restrictions supplied by enforced response policies, before origin selection. */
   // https://html.spec.whatwg.org/multipage/browsers.html#forced-sandboxing-flag-set
   getSandboxingFlags(): SandboxingFlagSet {
@@ -335,6 +364,14 @@ export class CSPList implements FetchCSPList {
     return blocked;
   }
 
+  /** Copy policy values for host transport without retaining mutable origin or directive records. */
+  toSnapshot(): CSPListSnapshot {
+    return {
+      selfOrigin: copyOrigin(this.selfOrigin),
+      policies: this.policies.map((policy) => policy.toSnapshot()),
+    };
+  }
+
   /** Copy policy data while preserving the origin used by inherited 'self' checks. */
   clone(): CSPList {
     const copy = new CSPList(this.selfOrigin);
@@ -368,6 +405,12 @@ export class CSPList implements FetchCSPList {
     if (client === null) throw new InternalError('CSP violation reporting requires a client');
     client.reportCSPViolation(policy, request);
   }
+}
+
+/** Copied policies and their inherited origin, independent of any environment or reporting service. */
+export interface CSPListSnapshot {
+  selfOrigin: Origin;
+  policies: ContentSecurityPolicySnapshot[];
 }
 
 // https://w3c.github.io/trusted-types/dist/spec/#trusted-types-csp-directive

@@ -82,7 +82,7 @@ tester.run('dependency-direction', direction, {
     { filename: sourceFile('browlet/browsing/navigation/api/navigate-event'), code: "import { restoreScrollPositionData } from '../state/index';" },
     { filename: sourceFile('web-idl/converters/interface'), code: "import { getPlatformRecord } from '../values/index';" },
     { filename: sourceFile('web-idl/converters/dictionary'), code: "import { compileHostSteps } from '../../js-engine/index';" },
-    { filename: sourceFile('browlet/browsing/policy/csp/directives'), code: "import { urlMatchesSourceExpression } from '../source-expressions';" },
+    { filename: sourceFile('browlet/browsing/policy/csp/list'), code: "import { SandboxingFlagSet } from '../sandbox/index';" },
     { filename: fileURLToPath(new URL('../browlet/example.ts', import.meta.url)), code: "import { Browlet } from '../../src/browlet/index';" },
     { filename, code: "import type { UserAgent } from '../../user-agent';" },
     { filename, code: "import { type UserAgent } from '../../user-agent';" },

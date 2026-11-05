@@ -1,4 +1,5 @@
 import { InternalError } from '../../infra/index';
+import { randomUUID } from '../../js-engine/index';
 import type { Origin, Site } from '../../url/index';
 
 import type { MutationObserverImpl } from '../dom/nodes/index';
@@ -119,7 +120,7 @@ export class SandboxAgent extends Agent {
 }
 
 /** Execution owner for one dedicated worker global. */
-// TODO(HTML §10.2.4): Startup must compose worker settings on an independent execution backend.
+// TODO(HTML §10.2.4): Connect the isolate host's agent to worker settings, remote ownership, and UserAgent services.
 export class DedicatedWorkerAgent extends Agent {
   /** Inside global attached by worker startup, before any author script runs. */
   globalScope: DedicatedWorkerGlobalImpl | undefined;
@@ -165,14 +166,18 @@ export class WorkletAgent extends Agent {
 // https://html.spec.whatwg.org/multipage/webappapis.html#integration-with-the-javascript-agent-cluster-formalism
 // PROVISIONAL: membership does not isolate native execution, memory, or host-injected values.
 export class AgentCluster {
-  /** Agents permanently associated with this cluster. */
+  /** Logical cluster identity, retained by its local representations in other isolates. */
+  id: string;
+  /** Agents in this isolate permanently associated with the cluster. */
   agents = new Set<Agent>();
   /** Defaults to none; Window clusters inherit their browsing context group's mode. */
   crossOriginIsolationMode: CrossOriginIsolationMode;
   /** Whether this cluster uses an origin key instead of a site key. */
   isOriginKeyed = false;
 
-  constructor(crossOriginIsolationMode: CrossOriginIsolationMode = 'none') {
+  /** Allocate a cluster, or its local representation using an ID received from the trusted host. */
+  constructor(crossOriginIsolationMode: CrossOriginIsolationMode = 'none', id = randomUUID()) {
+    this.id = id;
     this.crossOriginIsolationMode = crossOriginIsolationMode;
   }
 

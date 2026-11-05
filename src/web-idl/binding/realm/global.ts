@@ -16,6 +16,7 @@ export function isNamedPropertiesObject(object: object): boolean {
 }
 
 export class GlobalPlatformObjectBinding {
+  /** Realm binding owning global allocation and property conversion. */
   #binding: RealmBinding;
 
   // Project helper: retain the owning realm binding.
@@ -23,9 +24,22 @@ export class GlobalPlatformObjectBinding {
     this.#binding = binding;
   }
 
-  // Project adapter for Web IDL §3.8.1 [[SetPrototypeOf]] on global platform objects.
+  // Project adapter for global property access and Web IDL §3.8.1 [[SetPrototypeOf]].
   createObject(target: object): object {
-    return this.#withPrototypeBehavior(target);
+    const realm = this.#binding.realm;
+    // ACCOMMODATION(node-vm-global-proxy): Without native global allocation,
+    // free global property access inherits through this object but supplies
+    // Node's global proxy as receiver. Use the projected global for that exact
+    // receiver when it is also globalThis. WindowProxy has its own forwarding;
+    // ordinary author objects inheriting from this global keep their receiver.
+    const resolveReceiver = (receiver: unknown): unknown =>
+      receiver === realm.globalProxy && realm.globalThis === object ? object : receiver;
+    const object = new Proxy(target, {
+      get: (target_, property, receiver) => Reflect.get(target_, property, resolveReceiver(receiver)) as unknown,
+      set: (target_, property, value, receiver) => Reflect.set(target_, property, value, resolveReceiver(receiver)),
+      setPrototypeOf: (target_, value) => this.#setPrototypeOf(target_, value),
+    });
+    return object;
   }
 
   // Project adapter for Web IDL §3.7.4 Named properties object — allocation and internal methods.
@@ -109,17 +123,11 @@ export class GlobalPlatformObjectBinding {
 
   // Project allocator for Web IDL §3.7.3 Interface prototype object — global prototype-chain behavior.
   createPrototypeObject(prototype: object): object {
-    return this.#withPrototypeBehavior(
-      this.#binding.realm.createOrdinaryObject(prototype),
-    );
-  }
-
-  // Project adapter: supply global prototype behavior through a Proxy when needed.
-  #withPrototypeBehavior(target: object): object {
-    if (this.#binding.realm.isGlobalPrototypeChainMutable) return target;
+    const realm = this.#binding.realm;
+    const target = realm.createOrdinaryObject(prototype);
+    if (realm.isGlobalPrototypeChainMutable) return target;
     return new Proxy(target, {
-      setPrototypeOf: (target_, value) =>
-        this.#setPrototypeOf(target_, value),
+      setPrototypeOf: (target_, value) => this.#setPrototypeOf(target_, value),
     });
   }
 

@@ -75,7 +75,7 @@ belong to the existing owners, not new terminology or resource abstractions:
   roadmaps until those engines are implemented.
 - §2.2 defines `autoplay`, `cross-origin-isolated`, and
   `focus-without-user-activation`, each with default allowlist `'self'`.
-  [Permissions Policy](../browsing/policy/ROADMAP.md) still needs declared,
+  [Permissions Policy](../browsing/policy/permissions-policy/ROADMAP.md) still needs declared,
   inherited, and container policies plus actual feature checks. Register these
   defaults with that implementation, not in an unused standalone table.
 

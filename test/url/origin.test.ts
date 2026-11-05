@@ -4,15 +4,28 @@ import { hostsEqual, parseHost } from '../../src/url/host';
 import type { Domain, Host, TupleOrigin } from '../../src/url/core/index';
 import {
   areSameOrigin, areSameOriginDomain, areSameSite,
-  areSchemelesslySameSite, createOpaqueOrigin, effectiveDomain,
+  areSchemelesslySameSite, copyOrigin, createOpaqueOrigin, effectiveDomain,
   isRegistrableDomainSuffixOfOrEqualTo, obtainSite, serializeOrigin, serializeSite,
   sitesAreSameSite,
 } from '../../src/url/origin';
 
 describe('origin comparisons', () => {
-  it('preserves opaque identity through host transport without exposing it in origin serialization', () => {
+  it('copies tuple hosts and domain overrides without sharing mutable IPv6 pieces', () => {
+    const original = tupleOrigin('https', { kind: 'ipv6', pieces: [0, 0, 0, 0, 0, 0, 0, 1] }, 8443);
+    original.domain = { kind: 'ipv6', pieces: [0, 0, 0, 0, 0, 0, 0, 2] };
+    const copy = copyOrigin(original);
+    expect(areSameOrigin(original, copy)).toBe(true);
+    expect(areSameOriginDomain(original, copy)).toBe(true);
+    if (original.host.kind !== 'ipv6') throw new Error('Expected IPv6');
+    original.host.pieces[7] = 3;
+    original.domain.pieces[7] = 4;
+    expect(serializeOrigin(copy)).toBe('https://[::1]:8443');
+    expect(effectiveDomain(copy)).toEqual({ kind: 'ipv6', pieces: [0, 0, 0, 0, 0, 0, 0, 2] });
+  });
+
+  it.each(['direct', 'copied'] as const)('preserves opaque identity through %s host transport without exposing it in origin serialization', (source) => {
     const original = createOpaqueOrigin(true);
-    const received = structuredClone(original);
+    const received = structuredClone(source === 'copied' ? copyOrigin(original) : original);
     const forwarded = structuredClone(received);
 
     expect(forwarded).not.toBe(original);

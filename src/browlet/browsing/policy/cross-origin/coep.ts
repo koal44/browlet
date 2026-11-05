@@ -1,8 +1,8 @@
-import { defineInterface, idlType, impl, op, roAttr, xattr } from '../../../web-idl/core/index';
-import type { FetchEmbedderPolicy, FetchEmbedderPolicyValue, FetchResponse } from '../../../fetch/index';
+import { defineInterface, idlType, impl, op, roAttr, xattr } from '../../../../web-idl/core/index';
+import type { FetchEmbedderPolicy, FetchEmbedderPolicyValue, FetchResponse } from '../../../../fetch/index';
 
-import { ReportBodyImpl } from '../../reporting/index';
-import type { BrowletEnvironment, BrowletEnvironmentBase } from '../../environment/index';
+import { ReportBodyImpl } from '../../../reporting/index';
+import type { BrowletEnvironment, BrowletEnvironmentBase } from '../../../environment/index';
 
 /** Cross-origin embedding requirements and their reporting endpoints. */
 // https://html.spec.whatwg.org/multipage/browsers.html#embedder-policy

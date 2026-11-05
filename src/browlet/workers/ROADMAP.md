@@ -242,15 +242,321 @@ navigation, data origins, security inheritance, response-state changes, precisio
 and callback delivery on the worker loop. They compose real realms on the current
 thread and do not start workers through author constructors.
 
-The next boundary is the execution backend and remaining `run a worker` steps.
-Existing agent allocation still creates loops on the host thread. Separate-isolate
-startup needs creator/owner identity and UserAgent services transported explicitly;
-the current outside-environment object cannot simply be sent to another isolate.
-Script fetching and its response hook, channel entanglement/enablement, shared
+The separate-isolate backend now lives in JS Engine's `threads.ts`. `JSThread`
+and `JSThreadEndpoint` hide native threads, ports, and initialization data, preserving
+the current executable, backend environment, and Node startup options. They report
+native failure/exit and can terminate blocked execution. They have no HTML Agent
+or readiness policy.
+
+`WorkerThread` in `integration/host/worker-thread.ts` owns the browser setup
+acknowledgement and reloads the current Browlet bundle (`index.mjs` or
+`index.cjs`) in the new isolate. Callers supply no executable path. Private
+startup data inside JS Engine identifies the exact bundle that should start its worker runtime;
+ordinary imports inside other Node workers or another installed copy remain
+ordinary imports. This trusted host entry is separate from the author's
+worker-script URL. It reports readiness only when the inside runtime finishes
+host setup, not at Node's earlier `online` event.
+`WorkerThreadRuntime` creates the dedicated/shared agent and EventLoop inside the
+isolate and queues incoming commands as tasks. Native termination does not yet
+implement HTML's termination algorithm or the public Worker interface. The control channel
+uses Node cloning for host data. It does not implement HTML structured cloning,
+transferable ports, or author `message` events. Lifecycle tests redirect only
+the native loader to a trusted source fixture to create an engine realm, exercise
+tasks/checkpoints, prove creator progress during a blocked worker script, and
+cover failure/exit/cancellation.
+Their TypeScript-loader startup cost is not a measurement of a packaged worker.
+
+`integration/host/worker-thread.ts` registers its module URL and browser setup
+steps once with `JSThread.initialize()`. JS Engine owns file-URL conversion,
+the native startup envelope and marker check, and the host turn after module
+evaluation. Thread construction supplies only data and a receiver; the browser
+adapter imports no Node modules and never handles a filesystem entry path.
+There is no eval, extra worker
+bundle, private package mapping, or new public export. Each isolate loads its
+own JavaScript definitions; importing the package does not construct another
+Browlet, Window, or UserAgent. The native thread primitives remain in JS Engine.
+The full package costs some extra loading; the existing worker environment's
+shared Web IDL assembly already brings in most of that graph.
+Build with `node scripts/build.mjs browlet` before running artifact tests. They
+relocate the published files (including special characters in the path), load
+both parent formats, and cover both worker kinds, cancellation, the explicit
+missing settings/service boundary, and unrelated workers importing the library.
+Source lifecycle tests keep their explicit TypeScript fixture; raw source startup
+still requires a suitable loader rather than a fallback to a different artifact.
+
+The remaining startup boundary is connecting the creator environment snapshot,
+restored policy values, and cluster identity to UserAgent services. The runtime
+owns its execution agent and local cluster membership; it leaves UserAgent services and the complete
+WorkerGlobalScope to that integration.
+The current outside-environment object cannot simply be sent to another isolate.
+The production entry deliberately stops at host readiness. It keeps its control
+channel alive but rejects commands until startup can connect that endpoint to
+`createWorkerEnvironment()` with transported settings and services. Existing
+UserAgent agent allocation still creates loops on its own thread.
+Connecting script fetching to that host, channel entanglement/enablement, shared
 connection delivery, execution readiness, automatic suspension/termination, and
 cleanup remain pending. Worker timer advancement must follow running/suspended
 time. The WindowOrWorkerGlobalScope resource mixin exists internally, but its
-worker API forwarding is still a §10.3 dependency. No Node/V8 patch was made.
+worker API forwarding is still a §10.3 dependency. No addon or Node/V8 patch was made.
+
+The next §10.2.4 slice supplies `WorkerEnvironment.fetchScript(outsideEnv,
+credentials, onComplete)`, extracting the processing model's fetching portion.
+It uses the existing classic/module worker fetchers, reserves the inside client
+for the root, installs its final URL and policy container, initializes worker
+CSP, checks COEP inheritance, and derives the worker's isolation capability.
+The global's embedder policy uses the selected container, including inherited
+local/Blob policies. Shared workers choose logical isolation, consistent with
+Window startup; this does not claim physical isolation. Dedicated workers also
+require the owner's capability and lose it for data URLs.
+
+The module worker entry now forwards the existing custom-fetch hook through its
+root and descendants. Descendants take the normal Fetch path without replacing
+the global's root URL or policies. The returned script/graph is parsed and linked,
+but not executed. The processing-model caller still owns failure events,
+environment discarding, port setup, execution readiness, and evaluation.
+The separate-isolate bootstrap remains at its explicit transport boundary.
+
+`SPEC_CLASH(worker-rejected-response-url)`: the response hook replaces a rejected
+response with a network error, then uses that response for COEP reporting and
+the data-URL check. Network errors have no URL. Keep the original response for
+the remaining checks and return a network error to the script loader afterward.
+An incoming network error bypasses initialization because it has no response
+settings to install. Tests retain simultaneous CSP/COEP rejection and reporting.
+
+The transport review found that opaque-origin/agent identities contained
+Symbols, while owner and UserAgent references point at live objects. Author
+structured serialization does not provide remote access to those objects.
+Chromium likewise separates copied settings from service connections:
+[`GlobalScopeCreationParams`](https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/core/workers/global_scope_creation_params.h)
+contains origin/cluster inputs and remote Blob-store/browser-service endpoints;
+`DedicatedWorker` captures a `FetchClientSettingsObjectSnapshot`. Reuse Browlet's
+serialization where its value contracts apply, but preserve shared-service and
+owner identity through a deliberate host transport. No copying of UserAgent
+stores, replacement UserAgent, or generic remote-object registry was added.
+
+`WorkerThread.captureCreatorEnvironment()` captures a plain
+`CreatorEnvironmentSnapshot` before creating the isolate. The thread retains
+the live `creatorEnv` and exact original owner locally, and sends its
+`creatorEnvSnapshot` to `WorkerThreadRuntime`.
+It carries creation/base/top-level URLs, origin/top-level origin, security and
+ancestry flags, isolation capability, creator identity, and policy data. This
+snapshot is not an Environment or a Fetch client; reporting and shared-service connections
+must be supplied before it can drive either worker composition or script fetching.
+
+The transport uses existing `URLRecord` and `Origin` records, including tuple
+hosts/domains. `copyURL()` and `copyOrigin()` detach mutable paths and host data,
+so later changes to the live creator do not change the retained snapshot. URLs
+cross as records without serialization/reparsing; their cached Blob registrations
+are omitted because they refer to live environments. Opaque origins now own UUID
+identity strings instead of Symbols: copies preserve equality through native cloning,
+while ordinary origin serialization still returns `"null"`. `AgentCluster` owns
+its portable ID, and the environment retains its existing ID. There is no weak
+identity table or separate UserAgent/agent/owner token. The retained owner reference
+prevents navigation in one Window environment from changing the worker's owner.
+
+The inside dedicated agent joins a local cluster representation with the inherited
+ID, keying, and isolation mode. A shared agent gets a new origin-keyed cluster
+with mode `none`; response processing may subsequently update that mode. A nested
+dedicated worker captures its creator's current cluster ID rather than minting a
+new identity for that representation. Membership sets hold only local agents.
+Identity does not provide remote-object access or native memory isolation.
+
+This matches the responsibility split in current browser sources:
+Chromium's [GlobalScopeCreationParams](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/workers/global_scope_creation_params.h)
+copies existing SecurityOrigin and agent-cluster identity; its
+[DedicatedWorkerMessagingProxy](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/workers/dedicated_worker_messaging_proxy.h)
+owns startup/control. Firefox's [WorkerLoadInfo](https://github.com/mozilla-firefox/firefox/blob/main/dom/workers/WorkerLoadInfo.h)
+carries general principal data and a cluster ID, while WorkerPrivate retains the
+parent worker. WebKit's [WorkerThread](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/workers/WorkerThread.h)
+and [WorkerMessagingProxy](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/workers/WorkerMessagingProxy.cpp)
+separate copied parameters from parent/child lifetime management. Their existing
+origin representations preserve opaque identity; Browlet does so at Origin's
+owner rather than defining another worker-specific origin type.
+
+Shared-service connections and remote lifetime updates remain unfinished.
+Blob URLs carry records without cached registrations; resolving them
+still requires the original UserAgent's store. HTML structured serialization contains
+local AgentCluster references and requires a destination binding; it still needs
+its own cross-isolate transport. No Node or V8 change was required.
+
+Thread tests cover both worker kinds receiving the snapshot, navigation/post-send
+mutation, opaque equality/separation, IPv6 values, absent top-level values, Blob
+URL records crossing without their cached registration, and real isolate → isolate
+nested startup through WorkerThread. Nested tests compose
+a real worker environment using fixture-local services, since remote services do
+not exist yet. They check inherited clusters (including a shared parent), fresh
+data-worker origins, unchanged top-level partitions, and exact local ownership;
+they do not claim that the public Worker constructor or remote service transport
+is implemented. Origin tests also preserve public `"null"` serialization.
+
+The next startup slice transports the creator's policy container. PolicyContainer,
+CSPList, and ContentSecurityPolicy own `toSnapshot()`/`fromSnapshot()`; the
+host channel carries plain values and reconstructs local implementations.
+PolicyContainer restores its CSP list directly. HTML sandbox flags live in
+`policy/sandbox/`; source matching belongs to CSP and is reused by Permissions Policy. CSP's
+current directives, original reporting text, warnings, source, disposition, order,
+and inherited `self` origin remain distinct. Re-parsing the original text would
+lose changes made to parsed policies. COEP's enforced/report-only settings and
+endpoint names, referrer policy, and both integrity policies are preserved too.
+Snapshot capture and reconstruction each detach mutable lists and origin records.
+
+`WorkerThreadRuntime.creatorPolicyContainer` is the creator's policy data,
+not the worker response's selected policy container. The same-isolate response
+selection path remains unchanged. Cross-isolate tests reconstruct and evaluate
+directives in both worker kinds after creator mutation/navigation. The existing
+nested data-worker fixture now applies the real local-policy inheritance algorithm
+before creating its child, preserving inherited CSP `self` despite the data
+worker's new origin. Fixture-local services still supply that composition;
+these tests do not claim production script fetching or public Worker startup.
+
+Reporting endpoint names do not supply report delivery, and a policy snapshot
+does not resolve Blob registrations or provide cookies/storage. The shared-service
+transport, remote ownership/lifetime, and Fetch client connection remain explicit
+dependencies at the production startup boundary. No Node/V8 or add-on changes.
+
+The next §10.2.4 slice supplies the **initial script Fetch response handoff**.
+`WorkerThread.fetchScript(request)` accepts a normally prepared HTML script
+request in the creator isolate. Existing Fetch owns origin/CSP checks, redirects,
+credentials, cookies, caches, and captured Blob registrations there. Its body
+streams use the UserAgent's existing sandbox execution owner, and its callbacks
+use Fetch's parallel queue, so an inactive creator Document cannot stall body
+consumption or delivery. The request retains its real client; it is not a Fetch
+client reconstructed from the creator snapshot.
+
+Only the consumed script response crosses the private channel: unfiltered URL
+history, status, headers, failure state, and body bytes. This is not general
+Fetch-response serialization; it carries no live streams, controllers, or timing
+resources. Blob creator policies are captured through the existing UserAgent
+factory before cached Blob entries are removed from transported URLs. Network
+errors do not attempt Blob policy inheritance. The receiving runtime rebuilds
+response metadata and policy implementations and invokes its supplied consumer
+on the worker's networking task source. Termination or unexpected isolate exit
+cancels a pending fetch; a late completion cannot send into a stopped worker.
+
+Both endpoints now use one private `WorkerThreadProtocol` for startup data and
+the two message directions. JS Engine contains the untyped native transport
+boundary; Browlet has explicit cases for each message kind and rejects unknown
+kinds with `assertNever`. Receivers trust the typed message object rather than
+guarding against null or validating entire response snapshots. Nested payloads
+remain data, not control messages.
+
+JS Engine owns `NodePromise` and exposes one internal thread completion with a
+private implementation result. Native termination Promises stay at that backend
+boundary. The worker host chains its local cleanup onto the engine completion;
+`terminate()` returns the same completion as `closed`, including rejection if
+termination or cleanup fails. Readiness and cleanup reactions run on the creating
+isolate's host queue without advancing a page or child event loop. No Promise or
+resolver crosses the isolate boundary.
+
+The protocol and lifecycle follow-up passes 40 worker cases in each of the six
+supported runtime configurations (240 passes), including termination rejection
+and cleanup failure propagation, plus all 18 rebuilt CJS/ESM bootstrap artifact
+tests. Typecheck, focused ESLint, import checks, and diff checks pass.
+
+This is a transport building block, **not connected public worker startup**.
+The production bootstrap still has no script-response consumer or composed
+WorkerEnvironment. The startup caller must supply the reserved inside-client
+identity and prepared request, then connect response policy initialization,
+parsing/evaluation, failure cleanup, and execution readiness. Local non-Blob
+policy inheritance must still use the captured owner policies; Blob responses
+must use the transported Blob creator policies. Module descendant requests,
+nested-worker service forwarding, reporting, and remote lifetime management
+remain separate dependencies. No copied UserAgent or replacement stores are
+created, and no Node/V8 or add-on change is needed.
+
+Real-isolate regressions cover both worker kinds, cookies sent and stored in the
+creator's store, redirected responses, CSP rejection before network dispatch,
+Blob revocation and retained policy values, absent/failed bodies, networking-task
+delivery without creator-loop advancement, and fetch cancellation on both forced
+termination and unexpected worker failure. Script bytes are not executed.
+
+Validation: 35 thread/snapshot/handoff cases and 19 existing worker-fetch cases
+pass in each of the six supported runtime configurations (324 passes). All 14
+rebuilt CJS/ESM bootstrap artifact cases pass, along with typecheck, focused
+ESLint, import checks, and diff checks. The build retains its existing cycle
+warnings; these runs produce no shutdown warning.
+
+Validation: all eight policy snapshot/transport cases pass across the six runtime
+configurations. The full 31-case thread/snapshot suite passes on Node 26/compat,
+as do 60 policy/worker-fetch cases and 14 rebuilt CJS/ESM bootstrap artifact cases.
+Typecheck, focused ESLint, import-boundary checks, build, and diff checks pass.
+The build retains its existing circular warnings; worker tests exit without the
+earlier shutdown warning.
+
+Validation: the initial 23-test thread/snapshot suite passed on Node 24.19.0,
+Node 26.8.1, and the custom build, each with and without the add-on (138 passes).
+After the naming and URL-record follow-up, all 11 affected snapshot/transport
+tests pass across those six configurations (66 passes). The rebuilt, relocated
+CJS/ESM bootstrap again has 14 passing artifact tests. Earlier broader URL/origin,
+browsing-context, agent, and same-cluster checks had 412 passes and one existing
+expected failure for Window Atomics.wait. Typecheck, ESLint, import boundaries,
+and the package build pass; the build retains its existing circular warnings.
+
+The earlier official-Node runs' intermittent `Timeout terminating forks worker`
+warning came from the source fixture's tsx disk-cache I/O. On Node 26/compat,
+402 background writes were still pending at the fixture's first command; hundreds
+of cache-file handles remained after the native worker terminated. Vitest's stop
+handshake completed promptly, but Windows process destruction took over ten
+seconds. The fixture now disables only tsx's disk cache before loading source,
+retaining its in-memory cache. Production workers load the package bundle and do
+not use tsx. No engine/add-on changes, timeout increases, or test reclassification
+were needed. The 11 affected cases then exited about 29 ms after the process kill.
+All 24 thread tests now pass and exit without warnings across the six runtime
+configurations (144 passes). Focused ESLint and diff checks pass. Investigation
+probes and measured controls are in the experimental repository's
+`worker-shutdown/FINDINGS.md`.
+
+The script-fetch tests use real worker composition, Fetch, CSP/COEP, script parsing, and
+module linking, replacing only HTTP I/O. They cover redirects, local inheritance,
+sandbox allow/deny/report-only/meta behavior, failed responses, nested-worker
+capability inputs, module credentials, and root-policy retention across descendants.
+They exercise this consumer on the current thread, not a completed worker launcher.
+
+**Initial script execution and port activation (HTML §10.2.4):**
+`WorkerEnvironment.runScript(script, outsidePort, insidePort)` extracts the
+successful onComplete steps 9–14 from run-a-worker. From the initial script's
+completion task it marks execution readiness, uses the existing classic/module
+runner, and enables the outside port. Dedicated workers also enable their inside
+port; shared workers instead queue a trusted `connect` MessageEvent with that
+port as both source and the sole frozen ports entry. Module evaluation, including
+top-level await, does not delay activation. Normal script error reporting remains
+with the existing runner, and `close()` suppresses further worker tasks.
+
+`WorkerEnvironment.completeScriptFetch(script, worker, outsidePort)` now supplies
+the preceding completion steps. Null scripts and `errorToRethrow` queue an ordinary
+trusted `error` at the outside target on its original port's environment, discard
+the unready worker environment, and stop. Successful loads reuse the dedicated
+global's hidden port or create a shared connection port, entangle it with the
+outside port, and call `runScript()`. WorkerLocation already reads the final response URL.
+
+The outside target currently uses the existing EventTarget base because the
+concrete Worker/SharedWorker classes have not been implemented. Their startup
+caller must supply the corresponding original outside port and associate the
+outside object with the global. Owner-derived closing/suspension monitoring and
+the ServiceWorkerContainer client message queue also remain dependencies. The
+separate-isolate bootstrap still has no composed WorkerEnvironment or connected
+script-response consumer; these helpers do not replace that integration or thread teardown.
+
+Executing real worker source exposed a bare-global receiver gap: `onmessage = ...`
+reached Binding with Node's underlying global proxy instead of the projected worker
+global. The existing global platform-object proxy now redirects that exact receiver
+when its object is also globalThis. Explicit author receivers and WindowProxy's
+separate forwarding are preserved; the raw top-level `this` identity limitation
+remains. No engine or add-on change is required.
+
+Nine new regressions cover activation ordering through script cleanup and its
+microtasks, shared connection identity and explicit port start, runtime error
+reporting, top-level await, close, and bare versus explicit global receivers.
+All nine pass in the six runtime configurations. The wider 80-case worker/Binding/
+Window matrix has no ordinary failures; stock runtimes retain 25 existing expected
+Window-access failures per runtime.
+
+Ten completion regressions cover dedicated/shared network and parse failures,
+error task ownership and event shape, port setup, actual classic/module fetching
+through execution, and module syntax/link failures before readiness. The outside
+target is a real projected EventTarget, not a provisional Worker API. All 38
+completion, execution, and fetching cases pass across the six runtime configurations
+(228 passes). Type checking, focused ESLint, import boundaries, and diff checks pass.
 
 ## Present
 
@@ -258,16 +564,18 @@ worker API forwarding is still a §10.3 dependency. No Node/V8 patch was made.
   identity for MessageEventSource. Its registration, state, messaging, and
   AbstractWorker members remain unfinished; this is separate from the global scope.
 - `BrowletEnvironment.fetchClassicWorkerScript()` supplies request setup, the custom fetch
-  hook, response validation, and UTF-8 decoding up to the explicitly unfinished
-  classic-script creation method. Its tests use existing Window settings to
-  exercise the fetch-client/target-settings boundary; worker startup and
-  production callers remain absent. See the
+  hook, response validation, UTF-8 decoding, and classic-script creation.
+  `WorkerEnvironment.fetchScript()` now supplies its startup response hook; the
+  separate-isolate processing-model caller remains pending. See the
   [script-fetching audit](../scripting/ROADMAP.md#html-8142-fetching-scripts).
 - `fetchModuleWorkerScriptGraph()` now fetches the root and delegates descendant
   loading/linking, retaining the outside fetch client and target worker settings.
-  Its constructors and module-record operations remain explicit dependencies;
-  worker startup still needs to call it. Classic `importScripts()` fetching remains
+  `WorkerEnvironment.fetchScript()` supplies the response hook and tests real
+  parsing/linking; worker startup still needs to call it. Classic `importScripts()` fetching remains
   an explicit stub until synchronous pause can be supplied.
+- `WorkerEnvironment.completeScriptFetch()` handles failed-load notification/discard
+  and successful port setup, then calls `runScript()` for execution and activation;
+  public startup still needs to connect these steps on composed environments.
 - `WorkerGlobalImpl` supplies the common state and declared surface above.
   `DedicatedWorkerGlobalImpl`
   implements the §7.1.4 owner-policy check and inheritance reports; the base

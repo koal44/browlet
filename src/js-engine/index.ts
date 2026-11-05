@@ -3,6 +3,8 @@ export type {
   CompiledModule, ImportModuleDynamically, ModuleCompilationOptions, ModuleRequest, ModuleRequestPhase, WebAssemblyModule,
 } from './modules';
 export type { JSEnvironment } from './environment';
+export { JSThread, JSThreadEndpoint, type JSThreadExit, type JSThreadProtocol } from './threads';
+export { NodePromise } from './node-promise';
 export { addon } from './node-addons';
 export {
   bindAsyncContext, compileHostFunction, compileHostSteps, createMicrotaskQueue, getAssociatedRealm, getCreationRealm,

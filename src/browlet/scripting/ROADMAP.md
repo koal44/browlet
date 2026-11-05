@@ -1116,7 +1116,7 @@ report-only restriction reports without reducing permitted precision. Retained
 native methods continue using their own environment after WindowProxy reuse.
 The tests explicitly supply concrete isolation; configuring native AgentCluster
 isolation and completing child navigation remain separate work. See the
-[policy connection](../browsing/policy/ROADMAP.md#permissions-policy-clock-prerequisite).
+[policy connection](../browsing/policy/permissions-policy/ROADMAP.md#permissions-policy-clock-prerequisite).
 
 Eric accepted the remaining native limits on 2026-10-31:
 

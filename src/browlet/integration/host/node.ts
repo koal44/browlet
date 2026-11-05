@@ -1,4 +1,4 @@
-import { InternalPromise, type TimerHost } from '../../../infra/index';
+import type { TimerHost } from '../../../infra/index';
 
 // HTML section 2.1.1 permits cooperative scheduling. Captured closures stay
 // in this isolate; true worker parallelism needs algorithm-specific data and
@@ -17,13 +17,3 @@ export const nodeTimerHost: TimerHost = {
     return { remove: () => { clearTimeout(handle); } };
   },
 };
-
-/** Internal continuations for browser-owned work that has no HTML realm. */
-// Page implementations use their environment's execution facilities instead.
-export class NodePromise<T> extends InternalPromise<T> {
-  protected override observeNative(fulfilled: (value: unknown) => void, rejected: (reason: unknown) => void): void {
-    void this.backing.then(fulfilled, rejected).catch((error: unknown) => {
-      queueNodeTask(() => { throw error; });
-    });
-  }
-}

@@ -934,6 +934,43 @@ readiness false. This is not a worker launcher: independent execution, transport
 UserAgent services/owner identities between isolates, script fetching, and lifetime
 monitoring remain the worker processing model's dependencies.
 
+JS Engine's `JSThread` and `JSThreadEndpoint` own native isolate startup, internal
+cloned-data channels, and native teardown. Node Worker/MessagePort objects and
+startup globals remain private there. The host registers its module URL and
+setup steps once through `JSThread.initialize()`; the engine owns native path
+conversion, startup marking, and scheduling, so thread construction takes only
+data and a receiver. Browlet's worker host adapter owns the
+setup acknowledgement; its inside runtime creates the dedicated/shared agent and
+EventLoop, then turns incoming commands into tasks. It does not create another
+UserAgent or stand-in owner objects. Browlet reloads its existing
+`index.mjs` or `index.cjs` bundle in the isolate, without eval or another built
+entry. Private startup data identifies that exact bundle; ordinary imports in
+other Node workers or another installed copy do not start the runtime. Host
+setup runs after the bundle has finished evaluating. It starts the agent and loop
+without a source loader or caller-selected file. `WorkerThread` retains the live
+`creatorEnv` and exact original Document/worker owner locally. Its plain
+`creatorEnvSnapshot` carries existing `Origin` and `URLRecord` values, security
+flags, the environment ID, and cluster settings. Mutable record data is copied;
+URL records omit cached Blob registrations, which remain with the UserAgent.
+Opaque origins own private UUID identities that survive copying; public origin
+serialization remains `"null"`.
+`AgentCluster` likewise owns a portable ID. The receiving runtime associates its
+dedicated agent with a local representation of that cluster, or gives a shared
+worker a fresh origin-keyed cluster. Membership sets contain only local agents.
+Nested capture therefore preserves inherited identity without a weak table or
+new UserAgent, agent, or owner tokens. The control channel connects the worker to
+its parent; identity alone grants no access to remote services. Connecting the
+snapshot to environment composition still requires policy and UserAgent service
+transport. HTML structured-clone records also still contain local cluster/object
+references and need their own transport; startup snapshots do not replace it.
+Host readiness and native termination are
+separate from HTML execution readiness and termination cleanup.
+JS Engine owns `NodePromise` and exposes one internal thread completion with a
+private implementation result. Browlet chains local cleanup onto that completion;
+readiness and cleanup use the creating isolate's host queue, independently of
+page or worker activity. Native termination Promises stay inside JS Engine.
+Only messages cross isolates; these Promises and their resolvers stay local.
+
 Fetch makes three separate choices: the request's client supplies policy and
 lifetime state; `FetchParams.env` supplies execution; the callback destination
 selects a global or parallel queue. A null client does not imply missing
@@ -942,6 +979,25 @@ with a null client. Initiating algorithms assign the client explicitly when
 they have one; reporting can retain the sandbox owner with no client. Cloning
 and preflights preserve both choices. Reserved clients, full settings, and sandbox environments must not be
 substituted for one another just because an algorithm can reach a UserAgent.
+
+The worker initial-script handoff uses those three choices: the prepared request
+keeps its creator client and shared UserAgent stores, body execution uses that
+UserAgent's sandbox, and parallel Fetch completion sends consumed bytes/metadata
+to the receiving worker's networking task queue. Blob creator policies are copied
+before stripping live registrations from response URLs. WorkerThread retains and
+cancels the Fetch controller on teardown. This host transport does not compose a
+remote environment or supply the reserved inside client; connecting startup,
+response policy initialization, module descendants, and nested workers remains
+processing-model work. It is not general response or MessagePort serialization.
+
+`WorkerEnvironment.completeScriptFetch()` handles failed-load error delivery and
+environment discard, or entangles the startup ports and calls `runScript()`.
+The outside target uses the EventTarget base until Worker/SharedWorker exist;
+its original outside port retains the environment responsible for error delivery.
+`runScript()` reuses the script runners, without awaiting module evaluation, and
+activates ports or queues shared-worker connection delivery. Concrete outside
+object association, the separate-isolate startup caller, thread teardown, and
+lifetime monitors remain explicit dependencies.
 
 The [global-scope mixin](browlet/environment/global-scope.ts) composes each global's timers,
 Performance object, Reporting state, and resource associations. It sits above
@@ -1243,8 +1299,14 @@ entry consume `integration/web-idl/` composition, which installs the lower
 The generic Web IDL subsystem's environment contracts and generator remain in
 `web-idl/`; they do not need individual layers.
 Shared code uses its existing owner when that owner fits: JS Engine supplies host
-compilation, Web IDL's `values/` owns platform identity records, and policy owns
-source-expression matching. Browlet's `environment/`, `dom/lists/`, and navigation's
+compilation, Web IDL's `values/` owns platform identity records, and policy's `sandbox/`
+owns HTML sandbox flags. CSP consumes sandboxing and owns source-expression matching;
+PolicyContainer sits above CSP and restores each policy from its own snapshot.
+Worker integration passes the snapshot without supplying policy reconstruction callbacks.
+Policy's `permissions-policy/` groups feature policy state, inspection, and reporting;
+`cross-origin/` groups COOP and COEP. Both inherit the enclosing policy component's
+dependency level and expose their members through the existing policy index.
+Browlet's `environment/`, `dom/lists/`, and navigation's
 `state/` provide separate homes where their consumers need a distinct foundation.
 Imports put external packages first, then other subsystems and foundations (Infra, JS Engine,
 Web IDL, Streams, then Encoding), then sibling components, then the current component's
@@ -1713,8 +1775,8 @@ retains that callback's realm and author identity; the handler map does not rece
 Binding Context or discover ownership through a registry.
 
 Policy and CSP sit below the node implementations that construct and retain their
-state. Policy's `source-expressions.ts` is a lower entry point shared by CSP and
-Permissions Policy; matching needs only Infra and URL, without loading policy state.
+state. CSP's `source-expressions.ts` provides matching shared with Permissions Policy;
+the matching algorithms need only Infra and URL.
 Their event and report implementations depend on DOM events and shared
 Reporting, which sit below policy. CSP keeps type references to supplied Documents
 and environments without loading their concrete classes. Document retains policy

@@ -23,7 +23,7 @@ export {
   requestIDL, FetchRequest, type FetchMode, type RequestCredentials, type RequestPriority, type RequestInternalPriority,
   type FetchRequestInfo, type FetchRequestInit,
 } from './request';
-export { responseIDL, FetchResponse, isFilteredResponse, type CacheUsage, type ResponseImpl } from './response';
+export { responseIDL, FetchResponse, isFilteredResponse, type CacheUsage, type ResponseImpl, type ResponseType } from './response';
 export { ConnectionTimingInfo, FetchTimingInfo, type ResponseBodyInfo, type ServiceWorkerTimingInfo } from './timing';
 export {
   parseIntegrityMetadata, applyIntegrityAlgorithm, type IntegrityMetadata, type IntegrityAlgorithm,

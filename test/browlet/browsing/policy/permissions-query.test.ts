@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import {
   DeclaredPermissionsPolicy, PermissionsPolicy, PermissionsPolicyAllowlist, type PolicyControlledFeature,
-} from '../../../../src/browlet/browsing/policy/permissions';
+} from '../../../../src/browlet/browsing/policy/permissions-policy/policy';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
 import type { HTMLIFrameElement, Window } from '../../../../src/browlet/platform';

@@ -75,6 +75,14 @@ and reconcile the prose with implementations. The
 [shared Document creation audit](../../navigation/ROADMAP.md#html-751-document-ancestry-csp-and-referrer-initialization)
 tests the specified initialization effects before loader callbacks.
 
+Worker response initialization now calls `CSPList.initializeWorker()` before
+script parsing. It applies the global initialization loop and sandbox's worker
+check: enforced header policies must allow both scripts and same-origin access.
+Report-only and meta sandbox directives do not block. All policies still run
+after rejection, including enforced insecure-request upgrades. This returns a
+blocked boolean rather than CSP's Allowed/Blocked strings. The worker Fetch
+consumer and tests live in [the worker roadmap](../../../workers/ROADMAP.md).
+
 ## Violations and hash reporting
 
 `CSPViolation` captures the protected Document URL/status/referrer and original
@@ -631,8 +639,9 @@ documentation cleanup does not refresh those observations.
   The frame-ancestor matcher, response-policy aggregation, and null-global
   violation/reporting paths are implemented, including synthetic null requests.
   HTML population now performs admission; its error-page and Document loaders remain unfinished.
-- **Globals:** worker/worklet initialization and violation construction;
-  global event-handler attributes. Window addEventListener already works.
+- **Globals:** worklet initialization, connecting worker initialization to its
+  separate-isolate startup, worker/worklet violation construction, and global
+  event-handler attributes. Window addEventListener already works.
 - **Console:** `env.reportConsoleWarning()` is provisional. Supply a real
   Console Printer/output sink while retaining attribution; do not call the
   author's overridable console or substitute Node console output.

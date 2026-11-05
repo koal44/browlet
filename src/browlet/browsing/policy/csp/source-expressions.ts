@@ -1,8 +1,8 @@
-import { asciiLower } from '../../../infra/index';
+import { asciiLower } from '../../../../infra/index';
 import {
   areSameOrigin, getDefaultPort, hostsEqual, obtainURLOrigin, percentDecodeString, serializeHost, serializeURLPath,
   type Host, type Origin, type URLRecord,
-} from '../../../url/index';
+} from '../../../../url/index';
 
 /** Whether a source expression authorizes the URL, including permitted secure upgrades. */
 // https://w3c.github.io/webappsec-csp/#match-url-to-source-expression

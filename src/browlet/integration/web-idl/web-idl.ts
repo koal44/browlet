@@ -27,14 +27,14 @@ import { navigationEventIDLDefinitions } from '../../browsing/navigation/events/
 import { interactionEventIDLDefinitions } from '../../interaction/events/index';
 import { clipboardIDLDefinitions } from '../../interaction/clipboard/index';
 import {
+  cspViolationReportBodyIDL, securityPolicyViolationEventIDL, securityPolicyViolationEventInitIDL,
+  securityPolicyViolationEventDispositionIDL,
+} from '../../browsing/policy/csp/index';
+import {
   integrityViolationReportBodyIDL, coepViolationReportBodyIDL, coepInheritanceViolationReportBodyIDL,
   permissionsPolicyIDL, documentPermissionsPolicyIDL, iframePermissionsPolicyIDL,
   permissionsPolicyViolationReportBodyIDL,
 } from '../../browsing/policy/index';
-import {
-  cspViolationReportBodyIDL, securityPolicyViolationEventIDL, securityPolicyViolationEventInitIDL,
-  securityPolicyViolationEventDispositionIDL,
-} from '../../browsing/policy/csp/index';
 import { trustedTypesIDLDefinitions } from '../../browsing/policy/trusted-types/index';
 import { selectionIDLDefinitions } from '../../interaction/selection/index';
 import { historyIDL, scrollRestorationIDL } from '../../browsing/history/index';

@@ -12,7 +12,7 @@ import { EmbedderPolicy, PolicyContainer } from '../browsing/policy/index';
 import type { TrustedScriptURLImpl } from '../browsing/policy/trusted-types/index';
 import type { DocumentImpl } from '../dom/nodes/index';
 import { WorkerNavigatorImpl } from '../navigator/index';
-import type { MessagePortImpl } from '../communication/index';
+import { MessagePortImpl } from '../communication/index';
 import type { BrowletEnvironment, BrowletEnvironmentBase } from '../environment/index';
 
 import { WorkerLocationImpl } from './worker-location';
@@ -101,6 +101,14 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
 
   override isWorkerGlobal(): this is WorkerGlobalImpl {
     return true;
+  }
+
+  /** Entangle a new inside connection with its outside peer before script execution. */
+  // https://html.spec.whatwg.org/multipage/workers.html#run-a-worker
+  connectPort(outsidePort: MessagePortImpl): MessagePortImpl {
+    const insidePort = new MessagePortImpl(this.env);
+    outsidePort.entangle(insidePort);
+    return insidePort;
   }
 
   /** Only shared workers can opt into an extended lifetime. */

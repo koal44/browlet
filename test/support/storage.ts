@@ -1,7 +1,7 @@
 import { obtainURLOrigin, parseURL } from '../../src/url/index';
 import { PermissionStore } from '../../src/permissions/index';
 import { StorageShed, persistentStoragePermission, type StorageEnvironment, type StorageUserAgent } from '../../src/storage/index';
-import { NodePromise } from '../../src/browlet/integration/host/node';
+import { NodePromise } from '../../src/js-engine/index';
 
 import { createPermissionEnvironment } from './permissions';
 

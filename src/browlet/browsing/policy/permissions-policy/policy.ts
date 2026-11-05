@@ -1,11 +1,10 @@
-import { asciiLower, asciiWhitespaceRunPattern } from '../../../infra/index';
-import { areSameOrigin, areSameOriginDomain, obtainURLOrigin, parseURL, serializeOrigin, type Origin } from '../../../url/index';
-import type { StructuredDictionary } from '../../../http/index';
-import type { FetchResponse } from '../../../fetch/index';
+import { asciiLower, asciiWhitespaceRunPattern } from '../../../../infra/index';
+import { areSameOrigin, areSameOriginDomain, obtainURLOrigin, parseURL, serializeOrigin, type Origin } from '../../../../url/index';
+import type { StructuredDictionary } from '../../../../http/index';
+import type { FetchResponse } from '../../../../fetch/index';
 
-import type { ElementImpl } from '../../dom/nodes/index';
-
-import { isSchemeOrHostSourceExpression, urlMatchesSourceExpression } from './source-expressions';
+import { isSchemeOrHostSourceExpression, urlMatchesSourceExpression } from '../csp/index';
+import type { ElementImpl } from '../../../dom/nodes/index';
 
 /** Internal policy state, separate from the public PermissionsPolicy inspection interface. */
 // https://w3c.github.io/webappsec-permissions-policy/#permissions-policy

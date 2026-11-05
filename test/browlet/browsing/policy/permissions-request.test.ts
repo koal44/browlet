@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { PermissionsPolicy } from '../../../../src/browlet/browsing/policy/permissions';
+import { PermissionsPolicy } from '../../../../src/browlet/browsing/policy/permissions-policy/policy';
 import { FetchRequest, FetchResponse } from '../../../../src/fetch/index';
 import { createOpaqueOrigin, obtainURLOrigin, parseURL } from '../../../../src/url/index';
 import { createManualUserAgent } from '../../../support/browlet-agent';

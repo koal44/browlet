@@ -1,4 +1,4 @@
-import { serializeHost, type Host } from './host';
+import { copyHost, serializeHost, type Host } from './host';
 import type { Origin } from './origin';
 
 /*
@@ -71,8 +71,7 @@ export function copyURL(url: URLRecord): URLRecord {
   return {
     ...url,
     path: typeof url.path === 'string' ? url.path : [...url.path],
-    host: url.host === null ? null : url.host.kind === 'ipv6'
-      ? { ...url.host, pieces: [...url.host.pieces] } : { ...url.host },
+    host: url.host === null ? null : copyHost(url.host),
   };
 }
 

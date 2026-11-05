@@ -55,9 +55,10 @@ export const layers = [
   ['browlet/interaction/clipboard/'],
   // Document owns mouse/wheel input state; these foundations use event primitives and typed nodes only.
   ['browlet/interaction/mouse/legacy/', 'browlet/interaction/wheel/'],
-  // Policy owns the source-expression algorithms shared with its CSP implementation.
-  ['browlet/browsing/policy/'],
+  // CSP consumes HTML sandbox flags; policy containers and Permissions Policy consume CSP.
+  ['browlet/browsing/policy/sandbox/'],
   ['browlet/browsing/policy/csp/'],
+  ['browlet/browsing/policy/'],
   ['browlet/browsing/policy/trusted-types/'],
   // Mutation participants retain typed nodes without loading their implementation classes.
   ['browlet/dom/ranges/', 'browlet/dom/traversal/', 'browlet/dom/intersection-observer/'],

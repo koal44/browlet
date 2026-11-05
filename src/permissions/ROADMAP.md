@@ -442,7 +442,7 @@ and Storage cleanup without data loss.
   pending host answer or an already queued §5.2 store write; those must be
   coordinated with newer user intent when the prompt lifecycle is integrated.
   Secure-context and queued-task Document lifecycle checks exist;
-  [Permissions Policy](../browlet/browsing/policy/ROADMAP.md) evaluation is still
+  [Permissions Policy](../browlet/browsing/policy/permissions-policy/ROADMAP.md) evaluation is still
   a dependency for policy-controlled features.
 - WorkerNavigator integration, worker creation/termination, and non-store state
   invalidations from Permissions Policy and future feature APIs remain dependencies.

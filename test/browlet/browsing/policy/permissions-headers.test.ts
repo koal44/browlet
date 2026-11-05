@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DeclaredPermissionsPolicy, PermissionsPolicy, type PermissionsPolicyAllowlist,
-} from '../../../../src/browlet/browsing/policy/permissions';
+} from '../../../../src/browlet/browsing/policy/permissions-policy/policy';
 import { FetchResponse } from '../../../../src/fetch/response';
 import { createOpaqueOrigin, obtainURLOrigin, parseURL, type Origin } from '../../../../src/url/index';
 

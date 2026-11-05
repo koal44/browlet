@@ -140,9 +140,9 @@ export function fetchInlineModuleScriptGraph(
 // https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-module-worker-script-tree
 export function fetchModuleWorkerScriptGraph(
   url: URLRecord, fetchClient: BrowletEnvironment, destination: Destination, credentialsMode: RequestCredentials,
-  env: BrowletEnvironment, onComplete: ModuleFetchCallback,
+  env: BrowletEnvironment, onComplete: ModuleFetchCallback, performFetch?: PerformScriptFetch,
 ): void {
-  fetchWorkletModuleWorkerScriptGraph(url, fetchClient, destination, credentialsMode, env, onComplete);
+  fetchWorkletModuleWorkerScriptGraph(url, fetchClient, destination, credentialsMode, env, onComplete, performFetch);
 }
 
 /** Fetch a worklet graph, sharing downloaded responses while creating modules in this global. */

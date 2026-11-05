@@ -1,8 +1,8 @@
-import { InternalError } from '../../../infra/index';
-import { areSameOrigin, copyURL, serializeURL, type Origin, type URLRecord } from '../../../url/index';
-import type { FetchResponse } from '../../../fetch/index';
+import { InternalError } from '../../../../infra/index';
+import { areSameOrigin, copyURL, serializeURL, type Origin, type URLRecord } from '../../../../url/index';
+import type { FetchResponse } from '../../../../fetch/index';
 
-import type { BrowletEnvironment, BrowletEnvironmentBase } from '../../environment/index';
+import type { BrowletEnvironment, BrowletEnvironmentBase } from '../../../environment/index';
 
 import { EmbedderPolicy } from './coep';
 

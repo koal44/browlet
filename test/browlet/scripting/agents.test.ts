@@ -11,6 +11,7 @@ import {
 import { BrowletRealm } from '../../../src/browlet/scripting/realm';
 import { networkingTaskSource } from '../../../src/browlet/scripting/tasks';
 import type { Domain, Host, TupleOrigin } from '../../../src/url/core/index';
+import { createOpaqueOrigin } from '../../../src/url/origin';
 import { itPassesWith } from '../../test-runtime';
 
 describe('WindowAgent', () => {
@@ -86,6 +87,21 @@ describe('Agent', () => {
 });
 
 describe('AgentCluster', () => {
+  it('keeps a transported identity with independent local membership', () => {
+    const original = new AgentCluster('logical');
+    const local = new AgentCluster(original.crossOriginIsolationMode, original.id);
+    const parent = new WindowAgent(createManualEventLoop());
+    const child = new DedicatedWorkerAgent(createManualEventLoop());
+    original.add(parent);
+    local.add(child);
+
+    expect(local.id).toBe(original.id);
+    expect(new AgentCluster().id).not.toBe(original.id);
+    expect(local.crossOriginIsolationMode).toBe('logical');
+    expect(original.agents).toEqual(new Set([parent]));
+    expect(local.agents).toEqual(new Set([child]));
+  });
+
   it('starts without origin keying or cross-origin isolation', () => {
     const cluster = new AgentCluster();
 
@@ -275,6 +291,14 @@ describe('BrowsingContextGroup.obtainSimilarOriginWindowAgent', () => {
     const second = group.obtainSimilarOriginWindowAgent(equivalentOrigin, true);
 
     expect(second).toBe(first);
+  });
+
+  it('recognizes transported opaque origins without merging distinct opaque origins', () => {
+    const origin = createOpaqueOrigin();
+    const group = new UserAgent().createBrowsingContextGroup();
+    const original = group.obtainSimilarOriginWindowAgent(origin, false);
+    expect(group.obtainSimilarOriginWindowAgent(structuredClone(origin), true)).toBe(original);
+    expect(group.obtainSimilarOriginWindowAgent(createOpaqueOrigin(), false)).not.toBe(original);
   });
 
   it('ignores ports for site-keyed agent clusters', () => {

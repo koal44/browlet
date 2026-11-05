@@ -1,5 +1,5 @@
 import { randomUUID } from '../js-engine/index';
-import { serializeHost, type Host, type OpaqueOrigin, type Origin, type Site } from './core/index';
+import { copyHost, serializeHost, type Host, type OpaqueOrigin, type Origin, type Site } from './core/index';
 
 import { hostsEqual, obtainPublicSuffix, obtainRegistrableDomain, parseHost } from './host';
 
@@ -12,6 +12,15 @@ export function createOpaqueOrigin(potentiallyTrustworthy = false): OpaqueOrigin
   // Host transport must preserve equality across isolates. This private token
   // never replaces the public "null" serialization of an opaque origin.
   return { kind: 'opaque', identity: randomUUID(), potentiallyTrustworthy };
+}
+
+/** Copy an origin's mutable records while retaining its logical identity. */
+export function copyOrigin(origin: Origin): Origin {
+  if (origin.kind === 'opaque') return { ...origin };
+  return {
+    ...origin, host: copyHost(origin.host),
+    domain: origin.domain === null ? null : copyHost(origin.domain),
+  };
 }
 
 /*

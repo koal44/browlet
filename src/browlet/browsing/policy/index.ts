@@ -2,9 +2,9 @@ export {
   EmbedderPolicy, type EmbedderPolicyValue, COEPViolationReportBodyImpl, type COEPViolationReportBody,
   coepViolationReportBodyIDL, queueCOEPInheritanceViolation,
   COEPInheritanceViolationReportBodyImpl, type COEPInheritanceViolationReportBody, coepInheritanceViolationReportBodyIDL,
-} from './coep';
-export { PolicyContainer } from './container';
-export { OpenerPolicy, sanitizeURLForReport, type OpenerPolicyValue, type OpenerPolicyAccessReportParams } from './coop';
+  OpenerPolicy, sanitizeURLForReport, type OpenerPolicyValue, type OpenerPolicyAccessReportParams,
+} from './cross-origin/index';
+export { PolicyContainer, type PolicyContainerSnapshot } from './container';
 export { HSTSStore, HSTSPolicy, type HSTSHost } from './hsts';
 export {
   IntegrityPolicy, IntegrityViolationReportBodyImpl, integrityViolationReportBodyIDL,
@@ -12,13 +12,9 @@ export {
 export {
   PermissionsPolicy, PermissionsPolicyAllowlist, DeclaredPermissionsPolicy,
   type PolicyControlledFeature, type PolicyFeatureValue, type PermissionsPolicyDirective,
-} from './permissions';
-export {
   PermissionsPolicyImpl, permissionsPolicyIDL, documentPermissionsPolicyIDL, iframePermissionsPolicyIDL,
-} from './permissions-policy';
-export {
   PermissionsPolicyViolationReportBodyImpl, type PermissionsPolicyViolationReportBody,
   permissionsPolicyViolationReportBodyIDL, reportPermissionsPolicyViolation, reportPotentialPermissionsPolicyViolation,
-} from './permissions-policy-report';
-export { SandboxingFlagSet, type SandboxingFlag } from './sandbox';
+} from './permissions-policy/index';
+export { SandboxingFlagSet, type SandboxingFlag } from './sandbox/index';
 export { InsecureRequestsPolicy } from './upgrade-insecure-requests';

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { PermissionsPolicy } from '../../../../src/browlet/browsing/policy/permissions';
+import { PermissionsPolicy } from '../../../../src/browlet/browsing/policy/permissions-policy/policy';
 import type { Report } from '../../../../src/browlet/platform';
 import { FetchResponse } from '../../../../src/fetch/index';
 import { obtainURLOrigin, parseURL } from '../../../../src/url/index';

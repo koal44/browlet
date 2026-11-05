@@ -35,6 +35,17 @@ export class ContentSecurityPolicy {
     this.disposition = disposition;
   }
 
+  /** Reconstruct already-parsed policy data received through the private host transport. */
+  static fromSnapshot(snapshot: ContentSecurityPolicySnapshot): ContentSecurityPolicy {
+    const policy = new ContentSecurityPolicy(snapshot.source, snapshot.disposition);
+    policy.serialized = snapshot.serialized;
+    policy.parsingWarnings = [...snapshot.parsingWarnings];
+    for (const [name, tokens] of snapshot.directives) {
+      policy.directives.set(name, new CSPDirectiveValue([...tokens]));
+    }
+    return policy;
+  }
+
   /** Parse one policy, keeping the first occurrence of each directive name. */
   // https://w3c.github.io/webappsec-csp/#parse-serialized-policy
   static parse(serialized: string | Uint8Array, source: CSPSource, disposition: CSPDisposition): ContentSecurityPolicy {
@@ -124,6 +135,15 @@ export class ContentSecurityPolicy {
     const requestDirective = CSPDirectives.getRequestDirective(request);
     if (requestDirective === null) throw new InternalError('CSP violation requires a request directive');
     return CSPViolation.fromGlobal(this, requestDirective, request.url, env);
+  }
+
+  /** Capture parsed directives, including changes made after parsing; do not reparse reporting text. */
+  toSnapshot(): ContentSecurityPolicySnapshot {
+    return {
+      source: this.source, disposition: this.disposition, serialized: this.serialized,
+      parsingWarnings: [...this.parsingWarnings],
+      directives: new Map([...this.directives].map(([name, value]) => [name, [...value.tokens]])),
+    };
   }
 
   /** Copy directive data without sharing mutable maps or value lists. */
@@ -217,6 +237,15 @@ export class ContentSecurityPolicy {
     // TODO: Reuse loader/SRI completed bytes or digests when those consumers exist.
     response.body.clone().readAll(reportBytes, () => {}, env.realm.globalObject);
   }
+}
+
+/** Cloneable policy data; original text is retained separately from the current directives. */
+export interface ContentSecurityPolicySnapshot {
+  directives: Map<string, string[]>;
+  disposition: CSPDisposition;
+  source: CSPSource;
+  serialized: string;
+  parsingWarnings: string[];
 }
 
 /** Enforcement and monitoring are independent for each policy in a CSP list. */

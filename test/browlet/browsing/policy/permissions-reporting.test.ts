@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
-import type { PermissionsPolicyViolationReportBody } from '../../../../src/browlet/browsing/policy/permissions-policy-report';
+import type { PermissionsPolicyViolationReportBody } from '../../../../src/browlet/browsing/policy/permissions-policy/reporting';
 import type { Report } from '../../../../src/browlet/platform';
 import { ReportImpl } from '../../../../src/browlet/reporting/report';
 import { utf8Decode } from '../../../../src/encoding/index';

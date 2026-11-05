@@ -919,6 +919,13 @@ a retired Window after its public proxy is reused. Ordinary author accessors and
 explicit or borrowed getter calls retain their actual receivers. The allocation
 owns that engine behavior; Web IDL continues to own receiver checks and projection.
 
+Without native global allocation, Node's underlying global proxy inherits from
+the projected global. When that object is also globalThis, its existing binding
+proxy translates the exact Node receiver during property get/set so bare worker
+attributes use the platform object. Author-supplied receivers remain unchanged;
+WindowProxy retains its own forwarding. This does not replace the underlying
+top-level `this` or add a platform-record alias for it.
+
 Interfaces attach HTML's `serialSteps` and `transferSteps` directly to their
 declarations. The steps live with the owning implementation and run for the exact
 primary interface; inherited state must be included explicitly. Both directions

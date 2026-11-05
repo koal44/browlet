@@ -14,7 +14,7 @@ import { HTML_NAMESPACE } from '../../../../src/infra/index';
 import { obtainURLOrigin, parseURL } from '../../../../src/url/url';
 import type { URLRecord } from '../../../../src/url/core/index';
 import { CSPList } from '../../../../src/browlet/browsing/policy/csp/list';
-import { PermissionsPolicy } from '../../../../src/browlet/browsing/policy/permissions';
+import { PermissionsPolicy } from '../../../../src/browlet/browsing/policy/permissions-policy/policy';
 
 describe('Document', () => {
   it('uses the DOM document defaults', () => {

@@ -30,6 +30,11 @@ export type EmptyHost = {
   kind: 'empty';
 };
 
+/** Copy a host, including an IPv6 address's mutable pieces. */
+export function copyHost(host: Host): Host {
+  return host.kind === 'ipv6' ? { ...host, pieces: [...host.pieces] } : { ...host };
+}
+
 export function serializeHost(host: Host): string {
   switch (host.kind) {
     case 'ipv4':

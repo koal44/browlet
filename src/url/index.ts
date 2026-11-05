@@ -7,7 +7,7 @@ export {
   type URLUserAgent, type URLParseResult,
 } from './url';
 export {
-  areSameOrigin, areSameOriginDomain, areSameSite, areSchemelesslySameSite, createOpaqueOrigin, effectiveDomain,
+  areSameOrigin, areSameOriginDomain, areSameSite, areSchemelesslySameSite, copyOrigin, createOpaqueOrigin, effectiveDomain,
   isOrigin, isRegistrableDomainSuffixOfOrEqualTo,
   obtainSite, serializeOrigin, serializeSite, sitesAreSameSite,
 } from './origin';

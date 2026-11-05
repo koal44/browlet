@@ -1,9 +1,9 @@
-import { defineInterface, idlType, impl, nullable, op, roAttr, xattr } from '../../../web-idl/core/index';
+import { defineInterface, idlType, impl, nullable, op, roAttr, xattr } from '../../../../web-idl/core/index';
 
-import { ReportBodyImpl } from '../../reporting/index';
-import type { BrowletEnvironment } from '../../environment/index';
+import { ReportBodyImpl } from '../../../reporting/index';
+import type { BrowletEnvironment } from '../../../environment/index';
 
-import type { PolicyControlledFeature } from './permissions';
+import type { PolicyControlledFeature } from './policy';
 
 /** Queue an actual feature-use violation through its Document's environment. */
 // https://w3c.github.io/webappsec-permissions-policy/#report-permissions-policy-violation

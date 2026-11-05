@@ -91,7 +91,7 @@ export class EventTargetImpl {
 
   /** Create and dispatch a trusted event, returning false if canceled. */
   // https://dom.spec.whatwg.org/#concept-event-fire
-  fireEvent<T extends EventImpl>(name: string, eventConstructor: EventImplConstructor<T>, initialize?: (event: T) => void, legacyTargetOverride?: boolean): boolean;
+  fireEvent<T extends EventImpl>(name: string, eventConstructor: EventImplConstructor<T>, initialize?: (event: NoInfer<T>) => void, legacyTargetOverride?: boolean): boolean;
   fireEvent(name: string, eventConstructor?: EventImplConstructor, initialize?: (event: EventImpl) => void, legacyTargetOverride?: boolean): boolean;
   fireEvent(
     name: string,
@@ -99,6 +99,8 @@ export class EventTargetImpl {
     initialize?: (event: EventImpl) => void,
     legacyTargetOverride = false,
   ): boolean {
+    // Binding constructs the supplied class. Without one, the overload fixes
+    // the initializer to EventImpl rather than permitting an arbitrary subtype.
     const event = this.createTrustedEvent(eventConstructor);
     event.type = name;
     initialize?.(event);

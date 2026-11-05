@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createOpaqueOrigin } from '../../../../src/url/index';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext, Navigable, DocumentState } from '../../../../src/browlet/browsing/navigation/index';
-import { OpenerPolicy } from '../../../../src/browlet/browsing/policy/coop';
+import { OpenerPolicy } from '../../../../src/browlet/browsing/policy/cross-origin/coop';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/index';
 import { CrossOriginObjectBinding } from '../../../../src/browlet/integration/web-idl/bindings/cross-origin';

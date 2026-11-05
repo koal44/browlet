@@ -44,11 +44,11 @@ import {
 } from '../../interaction/events/index';
 import { LegacyMouseProcessor } from '../../interaction/mouse/legacy/index';
 import { WheelInputProcessor } from '../../interaction/wheel/index';
+import { CSPList } from '../../browsing/policy/csp/index';
 import {
   InsecureRequestsPolicy, PolicyContainer, OpenerPolicy, PermissionsPolicy, PermissionsPolicyImpl, SandboxingFlagSet,
   type SandboxingFlag, type PolicyControlledFeature, type PolicyFeatureValue,
 } from '../../browsing/policy/index';
-import { CSPList } from '../../browsing/policy/csp/index';
 import { RangeImpl } from '../ranges/index';
 import { NodeIteratorImpl, TreeWalkerImpl, SHOW_ALL, type NodeFilterCallback } from '../traversal/index';
 // The observer retains registrations; rendering input and scheduled notification remain provisional.
@@ -302,7 +302,7 @@ export class DocumentImpl extends NodeImpl {
   /** Internal subscribers notified when navigation changes this document's activity. */
   #fullyActiveObservers = new Set<FullyActiveStateObserver>();
   /** Monotonic start of the current inactive period; null while fully active. */
-  #nonFullyActiveSince: number | null = this.env.userAgent.unsafeSharedCurrentTime();
+  #nonFullyActiveSince: number | null;
   /** Shared compatibility mouse position, allocated only when a primary pointer is delivered. */
   #legacyMouse?: LegacyMouseProcessor;
   /** Wheel gesture target and queued input, allocated only for native/automation delivery. */
@@ -349,6 +349,7 @@ export class DocumentImpl extends NodeImpl {
 
   constructor(env: BrowletEnvironment) {
     super(NodeType.Document, null, env);
+    this.#nonFullyActiveSince = env.userAgent.unsafeSharedCurrentTime();
     this.nodeDocument = this;
     this.#documentOrShadowRootMixin = new DocumentOrShadowRootMixin(this);
     this.#parentNodeMixin = new ParentNodeMixin(this);
@@ -2356,9 +2357,10 @@ export class DocumentImpl extends NodeImpl {
   /** Notify subscribers and descendant Documents after navigation or lifecycle state changes. */
   notifyFullyActiveStateChanged(): void {
     const fullyActive = this.isFullyActive();
-    if (fullyActive) this.#nonFullyActiveSince = null;
-    else this.#nonFullyActiveSince ??= this.env.userAgent.unsafeSharedCurrentTime();
-    if (!fullyActive) {
+    if (fullyActive) {
+      this.#nonFullyActiveSince = null;
+    } else {
+      this.#nonFullyActiveSince ??= this.env.userAgent.unsafeSharedCurrentTime();
       this.#wheelInput?.clear();
       this.clipboardChangePending = false;
     }

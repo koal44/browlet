@@ -1,13 +1,13 @@
 import {
   arg, defineInterface, definePartialInterface, idlType, impl, op, reference, roAttr, sequence, xattr,
-} from '../../../web-idl/core/index';
-import { obtainURLOrigin, parseURL, serializeOrigin, type Origin } from '../../../url/index';
+} from '../../../../web-idl/core/index';
+import { obtainURLOrigin, parseURL, serializeOrigin, type Origin } from '../../../../url/index';
 
-import type { DocumentImpl } from '../../dom/nodes/index';
-import type { HTMLIFrameElementImpl } from '../../dom/nodes/html/embedded/index';
-import type { BrowletEnvironment } from '../../environment/index';
+import type { DocumentImpl } from '../../../dom/nodes/index';
+import type { HTMLIFrameElementImpl } from '../../../dom/nodes/html/embedded/index';
+import type { BrowletEnvironment } from '../../../environment/index';
 
-import { PermissionsPolicy } from './permissions';
+import { PermissionsPolicy } from './policy';
 
 /** Script-visible inspection object associated with one Document or iframe. */
 // https://w3c.github.io/webappsec-permissions-policy/#the-policy-object

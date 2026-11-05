@@ -3,7 +3,7 @@ import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { SandboxingFlagSet } from '../../../../src/browlet/browsing/policy/sandbox';
+import { SandboxingFlagSet } from '../../../../src/browlet/browsing/policy/sandbox/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
 import type { HTMLObjectElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/object';

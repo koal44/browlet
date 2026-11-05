@@ -1,5 +1,5 @@
 import { InternalError, internalType, WeakOrderedSet, type InternalPromise, type TimerHost } from '../infra/index';
-import { randomUUID } from '../js-engine/index';
+import { NodePromise, randomUUID } from '../js-engine/index';
 import { unsafeSharedCurrentTime } from '../timing/index';
 import type { SelectletUserAgent } from '../selectlet/index';
 import {
@@ -31,8 +31,8 @@ import {
 } from './scripting/index';
 import { type ReportingEndpoint, ReportImpl } from './reporting/index';
 import { SystemClipboard, clipboardWritePermission } from './interaction/clipboard/index';
-import { PolicyContainer, HSTSStore, EmbedderPolicy, type SandboxingFlagSet } from './browsing/policy/index';
 import { CSPList } from './browsing/policy/csp/index';
+import { PolicyContainer, HSTSStore, EmbedderPolicy, type SandboxingFlagSet } from './browsing/policy/index';
 import type { IntersectionObserverMargin } from './dom/intersection-observer/index';
 import type { DocumentImpl, ElementImpl } from './dom/nodes/index';
 import type { PerformanceNavigationTimingImpl, PerformanceTimingConfidenceValue } from './performance/index';
@@ -49,7 +49,7 @@ import {
 } from './browsing/navigation/index';
 import { ActivePointers, KeyboardInputProcessor, MouseInputProcessor, PointerLock } from './interaction/index';
 import { NodeHTTPTransport, createContentDecoder, supportedContentCodings } from './integration/host/network/index';
-import { NodePromise, queueNodeTask, nodeTimerHost } from './integration/host/index';
+import { queueNodeTask, nodeTimerHost } from './integration/host/index';
 import type { PermissionStatusImpl } from './integration/permissions/index';
 import { BlobURLEntry, BlobURLStore } from './integration/file/index';
 import { browletDOM } from './integration/index';

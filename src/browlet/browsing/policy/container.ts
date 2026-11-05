@@ -1,10 +1,13 @@
 import { InternalError } from '../../../infra/index';
 import type { URLRecord } from '../../../url/index';
-import { isLocalURL, type FetchPolicyContainer, type FetchResponse, type ReferrerPolicy } from '../../../fetch/index';
+import {
+  isLocalURL, type FetchEmbedderPolicy, type FetchIntegrityPolicy, type FetchPolicyContainer,
+  type FetchResponse, type ReferrerPolicy,
+} from '../../../fetch/index';
 
-import type { CSPList } from './csp/index';
+import { CSPList, type CSPListSnapshot } from './csp/index';
 
-import { EmbedderPolicy } from './coep';
+import { EmbedderPolicy } from './cross-origin/index';
 import { IntegrityPolicy } from './integrity-policy';
 
 /** Policies associated with a document, worker, or worklet. */
@@ -21,6 +24,21 @@ export class PolicyContainer implements FetchPolicyContainer {
   integrityPolicy: IntegrityPolicy = new IntegrityPolicy();
   /** Integrity requirements checked for reporting without blocking requests. */
   reportOnlyIntegrityPolicy: IntegrityPolicy = new IntegrityPolicy();
+
+  /** Restore independent policy implementations from trusted host data, without consulting live owners. */
+  static fromSnapshot(snapshot: PolicyContainerSnapshot): PolicyContainer {
+    const container = new PolicyContainer();
+    container.cspList = snapshot.cspList === undefined ? undefined : CSPList.fromSnapshot(snapshot.cspList);
+    Object.assign(container.embedderPolicy, snapshot.embedderPolicy);
+    container.referrerPolicy = snapshot.referrerPolicy;
+    for (const name of ['integrityPolicy', 'reportOnlyIntegrityPolicy'] as const) {
+      const policy = snapshot[name];
+      container[name].sources = [...policy.sources];
+      container[name].blockedDestinations = [...policy.blockedDestinations];
+      container[name].endpoints = [...policy.endpoints];
+    }
+    return container;
+  }
 
   // https://html.spec.whatwg.org/multipage/browsers.html#requires-storing-the-policy-container-in-history
   static requiresStorageInHistory(url: URLRecord): boolean {
@@ -59,6 +77,18 @@ export class PolicyContainer implements FetchPolicyContainer {
     }
   }
 
+  /** Capture cloneable values for another isolate; reporting endpoints remain names, not service connections. */
+  // Internal transport data, not author-facing structured serialization or a new policy parsing step.
+  toSnapshot(): PolicyContainerSnapshot {
+    return {
+      cspList: this.cspList?.toSnapshot(),
+      embedderPolicy: { ...this.embedderPolicy },
+      referrerPolicy: this.referrerPolicy,
+      integrityPolicy: { ...this.integrityPolicy.clone() },
+      reportOnlyIntegrityPolicy: { ...this.reportOnlyIntegrityPolicy.clone() },
+    };
+  }
+
   /** Copy the implemented policy state independently of its current owner. */
   // https://html.spec.whatwg.org/multipage/browsers.html#clone-a-policy-container
   clone(): PolicyContainer {
@@ -71,4 +101,13 @@ export class PolicyContainer implements FetchPolicyContainer {
     clone.reportOnlyIntegrityPolicy = this.reportOnlyIntegrityPolicy.clone();
     return clone;
   }
+}
+
+/** Plain host-transport representation, using the existing data-only policy contracts. */
+export interface PolicyContainerSnapshot {
+  cspList: CSPListSnapshot | undefined;
+  embedderPolicy: FetchEmbedderPolicy;
+  referrerPolicy: ReferrerPolicy;
+  integrityPolicy: FetchIntegrityPolicy;
+  reportOnlyIntegrityPolicy: FetchIntegrityPolicy;
 }
