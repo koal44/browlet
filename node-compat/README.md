@@ -120,7 +120,7 @@ job arrival: a Node-owned Promise can enqueue a Window callback without settling
 a Window Promise. Such raw handoffs remain outside the supported automation bridge.
 JS Engine omits it when installed native Promise-job hooks already wake HTML.
 
-The first observed queue installs one native callback through Node's public
+The first observed queue installs one observer through Node's public
 [`promiseHooks.onSettled()`](https://nodejs.org/api/v8.html#promisehooksonsettledsettled)
 multiplexer. It coexists with application/Node hooks rather than replacing them.
 Node retains the observer for its environment's lifetime; it owns no queues and
@@ -129,13 +129,30 @@ no `.then()` observation, Promise/Atomics replacement, or polling timer. This su
 ordinary completion progress on official addon bases; HTML generic/timeout task
 ownership and active-time waiting still require the custom enqueue hooks.
 
+The observer first makes a non-mutating native metadata query: does this Promise's
+queue need a checkpoint notification? The query must never invoke JavaScript or
+throw. Older V8 can nevertheless surface a pending module exception at that native
+return, so the adapter catches it and retries the same query once. A second failure
+propagates. The actual notification and its callbacks stay outside that catch.
+Already-requested or running checkpoints need no second native call. This keeps
+notification synchronous without retained settlement batches or scheduling Promises.
+The workaround is isolated in `RegisterModuleSettlementWorkaround` in `vm.cc`
+and `observeSettlementsWithModuleWorkaround` in `vm.cjs`, linked to the same
+upstream fix. Remove those paired pieces when all supported engines include it;
+the ordinary checkpoint notification logic remains independent of the workaround.
+
 The custom engine also carries the
 [upstream V8 module-evaluation fix](https://github.com/v8/v8/commit/1cdea338fd59d4700b1b311feb76e6a57c679844)
 described in [BUILDING.md](../BUILDING.md#v8-patches). Without it, a native call
 inside a Promise settlement hook can report a module's evaluation failure twice.
 The failure reproduces on official Node 26.8.1 with public Node APIs and no addon;
-the addon is one way to expose it. The maintained engine patch includes a Node
-regression. Its runtime reproduction on Node 24 has not been established.
+the query guard prevents this observer from exposing it. The maintained engine
+patch includes a Node regression. An unrelated hook that throws before our observer
+can still have its exception misreported as the module error on official Node 26;
+bare Node reproduces that limitation. This workaround does not repair other hooks.
+Maintained addon regressions cover Node/addon module rejection identities, nested
+Promise creation, genuine callback/hook errors, timeout termination, native tracing,
+and synchronous/coalesced queue wakeups on every supported addon base.
 
 `createContextHandle()` creates a native V8 context registered with Node;
 `runInContext()` evaluates there. These are not `node:vm` Contextify objects.

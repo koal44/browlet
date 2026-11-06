@@ -78,6 +78,50 @@ test('a detached Promise owner cannot notify its former queue', () => {
   assert.equal(notifications, 0);
 });
 
+test('a checkpoint suppresses its completed work but preserves another queue\'s wake-up', () => {
+  let firstNotifications = 0;
+  let secondNotifications = 0;
+  const first = compat.createMicrotaskQueue(() => { firstNotifications++; });
+  const second = compat.createMicrotaskQueue(() => { secondNotifications++; });
+  const firstContext = compat.createContextHandle({ microtaskQueue: first });
+  const secondContext = compat.createContextHandle({ microtaskQueue: second });
+  const state = compat.runInContext(`
+    const state = { reactions: 0 };
+    new Promise(resolve => { state.resolve = resolve; }).then(() => state.reactions++);
+    state;
+  `, secondContext);
+  firstContext.globalProxy.resolveOther = state.resolve;
+  compat.runInContext('Promise.resolve().then(() => resolveOther())', firstContext);
+  assert.equal(firstNotifications, 1);
+  assert.equal(secondNotifications, 0);
+  first.runMicrotasks();
+  assert.equal(firstNotifications, 1, 'drained reactions must not schedule another checkpoint');
+  assert.equal(secondNotifications, 1, 'the other queue still needs its checkpoint');
+  assert.equal(state.reactions, 0);
+  second.runMicrotasks();
+  assert.equal(state.reactions, 1);
+  assert.equal(secondNotifications, 1);
+});
+
+test('an internal Atomics completion still wakes its owning queue', async () => {
+  let notifications = 0;
+  const queue = compat.createMicrotaskQueue(() => { notifications++; });
+  const context = compat.createContextHandle({ microtaskQueue: queue });
+  const state = compat.runInContext(`
+    const state = { result: undefined };
+    const wait = Atomics.waitAsync(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+    wait.value.then(value => { state.result = value; });
+    state;
+  `, context);
+  const deadline = performance.now() + 2000;
+  while (notifications === 0 && performance.now() < deadline) await delay(10);
+  assert.equal(notifications, 1);
+  assert.equal(state.result, undefined, 'notification must leave author reactions queued');
+  queue.runMicrotasks();
+  assert.equal(state.result, 'timed-out');
+  assert.equal(notifications, 1);
+});
+
 test('native cleanup notifies only its queue and coalesces until a checkpoint', { timeout: 15000 }, async () => {
   let notifications = 0;
   let unrelated = 0;

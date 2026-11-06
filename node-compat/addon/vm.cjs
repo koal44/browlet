@@ -136,7 +136,7 @@ module.exports = (native, initializeGlobalObject) => {
       if (!sharedIdentity) registry.get(id).referrer = compiled;
       return compiled;
     },
-    createMicrotaskQueue: callback => native.createMicrotaskQueue(callback, onSettled),
+    createMicrotaskQueue: callback => native.createMicrotaskQueue(callback, observeSettlementsWithModuleWorkaround),
     createContextHandle: function createContextHandle(options = {}) {
       for (const key of Object.keys(options)) {
         if (key !== 'microtaskQueue' && key !== 'reuseGlobalProxyFrom' && key !== 'globalPrototypeChain' && key !== 'globalAccess' &&
@@ -208,3 +208,22 @@ module.exports = (native, initializeGlobalObject) => {
     },
   };
 };
+
+// HACK: paired with RegisterModuleSettlementWorkaround in vm.cc. Keep the pure
+// native query and this guard together; notifications themselves must not be caught.
+// https://github.com/v8/v8/commit/1cdea338fd59d4700b1b311feb76e6a57c679844
+function observeSettlementsWithModuleWorkaround(observer, needsPromiseNotification) {
+  return onSettled(promise => {
+    let needed;
+    try {
+      needed = needsPromiseNotification(promise);
+    } catch {
+      // Old V8 can surface a pending module exception when a native
+      // function returns, even though this metadata query cannot itself throw.
+      // Catching that stale exception allows one retry of the same pure query.
+      needed = needsPromiseNotification(promise);
+    }
+    // Keep notification callbacks and genuine failures outside the guard.
+    if (needed) observer(promise);
+  });
+}

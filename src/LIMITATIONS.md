@@ -215,6 +215,13 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   unsupported; the maintained bridge forwards to Node's default handler. See the
   [rejection audit](browlet/scripting/ROADMAP.md#html-8147-unhandled-promise-rejections).
 
+- **`node-module-settlement-reporting`:** Official Node 26 can misreport a throwing
+  Promise settlement hook's error as the module evaluation error. Bare Node
+  reproduces it. The addon's guarded metadata query avoids exposing the engine
+  defect through its own observer, but does not repair unrelated hooks. Custom
+  Node retains the upstream module-evaluation fix. See the
+  [queue observation contract](../node-compat/README.md#contexts-globals-and-optional-facilities).
+
 - **Retained Window event targets follow Chromium.** Live event targets,
   path entries, and function-listener receivers expose WindowProxy on both
   backends. After replacement, converting the old Window returns null as in

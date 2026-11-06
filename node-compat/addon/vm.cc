@@ -134,6 +134,39 @@ void NotifyPromiseSettled(const FunctionCallbackInfo<Value>& args) {
   }
 }
 
+// HACK: old V8 leaves a module exception pending while invoking settlement hooks.
+// Keep this extra query/registration with observeSettlementsWithModuleWorkaround
+// in vm.cjs; remove both together when supported engines contain the correction.
+// https://github.com/v8/v8/commit/1cdea338fd59d4700b1b311feb76e6a57c679844
+bool RegisterModuleSettlementWorkaround(Isolate* isolate, Local<Function> register_observer) {
+  // The JS guard can retry this query, so it must not mutate, call JS, or throw.
+  const auto needs_notification = [](const FunctionCallbackInfo<Value>& args) {
+    auto isolate = args.GetIsolate();
+    auto queues = observed_queues.find(isolate);
+    Local<Context> context;
+    if (queues == observed_queues.end() ||
+        !args[0].As<Promise>()->GetCreationContext().ToLocal(&context)) {
+      args.GetReturnValue().Set(false);
+      return;
+    }
+    auto entry = queues->second.find(context->GetMicrotaskQueue());
+    if (entry == queues->second.end()) {
+      args.GetReturnValue().Set(false);
+      return;
+    }
+    // Mirror NotifyCheckpoint's coalescing without invoking its callback.
+    auto queue = entry->second;
+    args.GetReturnValue().Set(!queue->checkpoint_requested &&
+        !queue->queue->IsRunningMicrotasks() && !queue->notify.IsEmpty());
+  };
+  auto host = isolate->GetCurrentContext();
+  Local<Value> observers[] = {
+    Function::New(host, NotifyPromiseSettled).ToLocalChecked(),
+    Function::New(host, needs_notification).ToLocalChecked()
+  };
+  return !register_observer->Call(host, Undefined(isolate), 2, observers).IsEmpty();
+}
+
 class ContextHandle : public NativeHandle {
  public:
   enum State { kAttached, kDetached, kTransferred };
@@ -201,9 +234,7 @@ void CreateQueue(const FunctionCallbackInfo<Value>& args) {
       Fail(isolate, "ERR_INVALID_ARG_TYPE", "Expected the Node Promise hook registrar");
       return;
     }
-    auto host = isolate->GetCurrentContext();
-    Local<Value> observer = Function::New(host, NotifyPromiseSettled).ToLocalChecked();
-    if (args[1].As<Function>()->Call(host, Undefined(isolate), 1, &observer).IsEmpty()) return;
+    if (!RegisterModuleSettlementWorkaround(isolate, args[1].As<Function>())) return;
     data->observing_promise_settlements = true;
   }
   Local<Object> holder;
