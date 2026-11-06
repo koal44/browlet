@@ -1,4 +1,4 @@
-export type { NavigationTimingRecord, NavigationTimingType } from './navigation';
+export { PerformanceNavigationTimingImpl, type NavigationTimingInit, type NavigationTimingType } from './navigation';
 export { PerformanceImpl, performanceIDL } from './performance';
 export { PerformanceEntryImpl, PerformanceEntryBuffer, type PerformanceEntryType } from './timeline';
 export {
@@ -8,4 +8,5 @@ export {
 export { PerformanceObserverEntryListImpl } from './observer-entry-list';
 export { PerformanceResourceTimingImpl, type RenderBlockingStatusType } from './resource';
 export { PerformanceServerTimingImpl } from './server';
+export { PerformanceTimingConfidenceImpl, type PerformanceTimingConfidenceValue } from './confidence';
 export { performanceIDLDefinitions } from './web-idl';

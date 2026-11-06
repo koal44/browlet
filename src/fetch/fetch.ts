@@ -1056,6 +1056,11 @@ function processFetchResponse(params: FetchParams, response: FetchResponse): voi
 function endResponseBody(params: FetchParams, response: FetchResponse): void {
   const { request } = params;
   const unsafeEndTime = request.env.userAgent.unsafeSharedCurrentTime();
+  // SPEC_GAP(navigation-fetch-completion): Navigation extracts live timing without invoking
+  // Resource Timing reporting. Record completion now, as browsers do, using this fetch's precision.
+  if (request.isNavigation) {
+    params.timingInfo.endTime = coarsenTime(unsafeEndTime, params.crossOriginIsolatedCapability);
+  }
   params.controller.reportTimingSteps = (env) => {
     if (!isHTTPScheme(request.url.scheme)) return;
     let timingInfo = params.timingInfo;

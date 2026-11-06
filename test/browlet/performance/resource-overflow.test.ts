@@ -257,7 +257,7 @@ function fixture() {
     const timing = new FetchTimingInfo();
     timing.startTime = nextStart++;
     timing.endTime = timing.startTime + 1;
-    return new PerformanceResourceTimingImpl('fetch', name, timing, '', new ResponseBodyInfo(), 200, '', true, env);
+    return new PerformanceResourceTimingImpl('fetch', name, timing, '', new ResponseBodyInfo(), 200, '', true, [], env);
   }
   function record(name: string) {
     const resource = entry(name);

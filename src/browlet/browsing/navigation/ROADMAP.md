@@ -58,10 +58,11 @@ outside consumers use its index, while its modules import each other directly.
   the history step and clears forward entries.
 - `state/session-history.ts` models entries and nested histories for the active
   top-level traversable; `state/document-state.ts` retains their document/reload state.
-- `not-restored-reasons.ts` owns the §7.2.8 diagnostic implementations and their
-  backing records. Document and TopLevelTraversable have explicit throwing
-  collection/filtering entry points; cache decisions and Navigation Timing
-  exposure remain separate.
+- `diagnostics/` owns the §7.2.8 diagnostic implementations and backing records,
+  below Document and Performance. Document collects and masks the records;
+  TopLevelTraversable forwards to it. Performance captures available diagnostics
+  when creating a navigation entry. Population forwards the target's masked
+  diagnostics before activation; cache lifecycle producers remain separate dependencies.
 - `events/` supplies PopStateEvent and HashChangeEvent and their declaration
   collection. Document's legacy event factory also creates HashChangeEvent.
   Automatic delivery remains history-application work; the
@@ -407,7 +408,7 @@ requires comparing a parameter-free handoff through their existing Documents/env
 | existing `events/navigation-current-entry-change-event.ts` | Implemented for state and same-document entry updates; full history-application caller remains | HTML §7.2.7.1 |
 | existing `api/navigate-event.ts` | Event dispatch, interception, precommit/commit/postcommit execution, synchronous URL/history effects, success/error, and finish policy are implemented; queued history application, automatic focus/scroll, and lifecycle producers remain | HTML §7.2.6 |
 | `events/` | Interfaces through BeforeUnloadEvent, the legacy factory entries, and Window's page-transition firing method are implemented. Lifecycle callers and handler processing remain separate. | HTML §7.2.7 |
-| existing `not-restored-reasons.ts` | Diagnostic interfaces, recursive creation, Document-tree collection/masking, and the Document/history-record accessor are implemented; lifecycle callers and Navigation Timing remain | HTML §7.2.8 and §7.4.6.2 |
+| `diagnostics/not-restored-reasons.ts` | Diagnostic interfaces, recursive creation, Document-tree collection/masking, and target-history Navigation Timing capture are implemented; lifecycle callers remain | HTML §7.2.8 and §7.4.6.2 |
 | `traversal.ts` | Traversal queue, apply history step, back/forward/reload | HTML §§7.4.1, 7.4.3, and 7.4.6 |
 | `state/` | Complete document/session-history state and persisted user state | HTML §§7.4.1–7.4.2 |
 
@@ -591,7 +592,7 @@ contract on raw iframe source text when URL parsing fails; ID/name remain DOMStr
 | Tree collection | `Document.buildNotRestoredReasonsForDocumentState()` implements HTML's [document-state builder](https://html.spec.whatwg.org/multipage/browsing-the-web.html#build-not-restored-reasons-for-document-state): capture URL and iframe metadata, clone blocking-detail membership, recurse through shadow-including child containers, and assign each active history state. See the §7.4.6.2 audits below for the approved collection, metadata, and shadow-tree corrections. |
 | Cross-origin filtering | `TopLevelTraversable.buildNotRestoredReasons()` implements the [top-level builder](https://html.spec.whatwg.org/multipage/browsing-the-web.html#build-not-restored-reasons-for-a-top-level-traversable-and-its-descendants): collect, compare strict Document origins, hide foreign URL/reasons/children, and retain a generic masked blockage in the root report. Blockers anywhere behind a foreign ancestor count; same-origin descendants behind it remain unreachable through the filtered tree. |
 | Cache lifecycle | Admission, eviction, unloading, restoration, and failed-history navigation must retain or replace diagnostic records at their specified steps. Interface creation does not provide a back/forward cache. |
-| Navigation Timing | `PerformanceNavigationTiming` remains absent; PerformanceEntry, Resource Timing entries, and Timeline delivery now exist. The provisional `Document.createNavigationTimingEntry()` and `NavigationTimingRecord` mark the exact missing step: create and retain the diagnostic object when constructing the real navigation entry, then return it from the getter. The [Performance roadmap](../../performance/ROADMAP.md#restoration-diagnostics-dependency) records the consumer contract and null/realm gap. No public diagnostic-producing accessor exists yet. |
+| Navigation Timing | History population forwards the target DocumentState's masked diagnostics before activation and loader callbacks. The entry retains them in its own realm; child entries receive null and redirects drop the replaced state's diagnostics. See the [consumer contract](../../performance/ROADMAP.md#restoration-diagnostics-handoff). |
 
 `SPEC_CLASH(not-restored-reasons-collection)` records three producer problems.
 The §7.4.6.2 builders resolve all three as approved: initialize children as a list,
@@ -5400,7 +5401,7 @@ origin check in both directions.
 | Local response preparation | `#prepareResponsePolicy()` still completes unfinished local-route params. Move that work into the local producer before removing the adapter; final Fetch/srcdoc/supplied-response params already bypass it. |
 | 8–10: Document fields and Window association | Audited below: incoming state is fresh even when the initial Window is reused, and association precedes loader callbacks without activating the Document. Cookie-URL producer/history inputs and the public registry API remain separate dependencies. |
 | 11–14: ancestry, CSP, referrer | Audited below: captured iframe policy and known container initialize ancestry before activation; CSP applies to the incoming Document; referrer consumes Fetch's resolved value. Existing masking/null-request choices remain. CSP's unspecified style-src initialization and Console output remain explicit dependencies. |
-| 15–16: Navigation Timing | Audited below: controller-backed timing now selects redirect counts using HTML's taint/client/referrer/TAO rule and retains available consumer inputs once. No-controller fallback, public entry construction/filtering, and Timeline buffering remain explicit dependencies; the raw record is not a finished timing entry. |
+| 15–16: Navigation Timing | Controller-backed creation selects redirect counts using HTML's taint/client/referrer/TAO rule. All shared-factory Documents expose destination metadata and buffer the entry before callbacks, using zero unavailable fetch phases/transfer size without a controller. Target-history diagnostics arrive before activation; child entries retain null. Load completion notifies observers without reinsertion. Initial about:blank intentionally has no entry. Missing producer timing, unload/Critical-CH producers, and diagnostic lifecycle callers remain explicit. |
 | 17–20: response headers | Refresh and Speculation-Rules throw when present. Early Hints producer processing throws; its retained commit callback is invoked. HTML pre-media Link processing remains a marked no-op, distinct from the implemented CSSOM stylesheet-Link consumer. Each needs its own header/ordering audit. |
 | 21: deferred Fetch quota | The existing `potentiallyFreeDeferredFetchQuota()` consumer is connected; full deferred-fetch request/lifetime integration retains its Fetch owner. |
 | §§7.5.2–7.5.11 | HTML production parser/script setup, other Document loaders, finish/unload/destruction/abort coordination remain separate bounded slices. Window allocation does not complete those operations. |
@@ -5531,15 +5532,21 @@ HTML source `a7f6aed` still duplicates the entry-creation call, uses removed
 response timing and out-of-scope variables, and omits required consumer arguments.
 `SPEC_CLASH(html-navigation-response-timing)` and open
 [PR #12890](https://github.com/whatwg/html/pull/12890) record those corrections.
-The refreshed Navigation Timing source `48c0048` requires the remaining
-Resource Timing and Timeline queueing foundation. Realm-owned navigation entry
-construction, public timestamp/status/body filtering, cache-mode conversion,
-Critical-CH restart measurement, NotRestoredReasons allocation, buffering and
-load-event queuing remain explicit consumer dependencies. Synthetic and
-supplied-response navigation still need a separate fallback decision; the source
-marks this return before retaining inputs. The srcdoc browser probe exposes
-different entry/end-time behavior, so this slice invents neither a public entry
-nor unavailable network measurements.
+The Performance detour now supplies realm-owned navigation entry construction,
+destination response exposure, cache-mode conversion, available diagnostic
+allocation, buffering, and load-event observer delivery. History population now
+forwards the final target state's masked diagnostics before Document activation;
+the [handoff audit](../../performance/ROADMAP.md#restoration-diagnostics-handoff)
+records the missing specification input and child/redirect boundaries. Critical-CH
+restart measurement, previous-Document unload, and diagnostic lifecycle callers
+remain explicit consumer dependencies. Synthetic and supplied-response
+navigation now use the [approved fallback](../../performance/ROADMAP.md#navigation-timing-creation-without-a-fetch-controller):
+Document URL, retained response data, and zero unavailable fetch phases/transfer
+size. Initial about:blank intentionally has no entry, following HTML/WebKit and
+Navigation Timing issue #155; the [initial-blank audit](../../performance/ROADMAP.md#initial-aboutblank-is-a-separate-creation-path)
+records the approved browser disagreement and initial-Window reuse regressions.
+Original fetch timing for supplied network responses and synthetic-loader
+completion remain explicit dependencies.
 
 Validation: 18 added cases cover count selection, retained inputs and callback
 ordering, the required request, and the real Fetch redirect handoff. Four
@@ -5551,8 +5558,11 @@ expected failures, skips, or native artifacts were introduced.
 
 The current detour implements [Performance Timeline](../../performance/ROADMAP.md#performance-timeline-entries-buffers-and-synchronous-queries)
 before continuing the timing consumers. Its base entry, per-global buffers, and
-synchronous queries now exist, as do observer registration and record retrieval.
-Buffered replay, queueing/delivery, and real timing producers remain explicit.
+synchronous queries, observer registration/replay/delivery, resource production,
+and shared-factory navigation creation/delivery now exist. See the
+[delivery audit](../../performance/ROADMAP.md#navigation-timing-load-event-delivery)
+for single insertion, buffered replay, and the still-provisional loader's missing
+initial pageshow, BiDi load-complete notification, and parser task sequencing.
 Resume HTML at §7.5.1 steps 17–20, the remaining response-header
 and callback ordering audit, beginning with Refresh, after that detour.
 

@@ -5,6 +5,7 @@ import { Browlet } from '../../../src/browlet/browlet';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { ResourceReader } from '../../../src/browlet/loader/resource-reader';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
+import type { PerformanceEntry, PerformanceNavigationTiming, Window } from '../../../src/browlet/platform';
 import { fetch } from '../../../src/fetch/fetch';
 import { FetchRequest } from '../../../src/fetch/request';
 import { FetchBody, FetchResponse } from '../../../src/fetch/index';
@@ -142,6 +143,7 @@ describe('Navigable HTML response loading', () => {
         ...(suppliedType ? { 'Content-Type': 'text/html; charset=windows-1252' } : {}),
         'Content-Security-Policy': "default-src 'none'",
         'Content-Language': languageHeaders,
+        'Server-Timing': 'document;dur=4',
       });
       response.write(Buffer.from('<html><p>caf', 'latin1'));
       response.write(suppliedType ? Buffer.from([0xe9, 0x3c, 0x2f, 0x70, 0x3e]) : Buffer.from('é</p>'));
@@ -162,6 +164,7 @@ describe('Navigable HTML response loading', () => {
     // This test supplies the navigation inputs. Full navigation request
     // construction and redirect handling remain with HTML §7.4.
     const loading = Promise.withResolvers<DocumentImpl>();
+    const notifications: { entries: PerformanceEntry[]; loadEnd: number; }[] = [];
     const controller = fetch(request, {
       useParallelQueue: true,
       processResponse(response) {
@@ -170,6 +173,13 @@ describe('Navigable HTML response loading', () => {
           const params = navigable.createNavigationParams(response);
           params.request = request;
           params.fetchController = controller;
+          params.commitEarlyHints = (incoming) => {
+            const window = incoming.env.realm.globalObject as Window;
+            new window.PerformanceObserver((list) => {
+              const entries = list.getEntries();
+              notifications.push({ entries, loadEnd: (entries[0] as PerformanceNavigationTiming).loadEventEnd });
+            }).observe({ type: 'navigation' });
+          };
           const resource = new ResourceReader(response, env.userAgent);
           resource.determineMIMEType().then((type) => {
             // Handler dispatch is still navigation work. This bounded consumer
@@ -196,8 +206,27 @@ describe('Navigable HTML response loading', () => {
     expect(explicit.matches(':lang(fr)')).toBe(false);
     expect(document.policyContainer.cspList?.policies).toHaveLength(1);
     expect(navigable.activeSessionHistoryEntry.documentState.resource).toBeNull();
-    expect(document.navigationTimingEntry?.fetchTimingInfo).toBe(controller.extractFullTimingInfo());
+    expect(document.navigationTimingEntry?.timingInfo).toBe(controller.extractFullTimingInfo());
     expect(document.navigationTimingEntry?.documentTimingInfo).toBe(document.loadTimingInfo);
-    expect(document.navigationTimingEntry?.bodyInfo.decodedSize).toBe(suppliedType ? 41 : 42);
+    expect(document.navigationTimingEntry?.resourceInfo.decodedSize).toBe(suppliedType ? 41 : 42);
+    const window = document.env.realm.globalObject as Window;
+    const entries = window.performance.getEntriesByType('navigation');
+    expect(entries).toHaveLength(1);
+    const entry = entries[0] as PerformanceNavigationTiming;
+    expect(entry.name).toBe(`${origin}/page`);
+    expect(entry.responseStatus).toBe(200);
+    expect(entry.responseEnd).toBeGreaterThan(0);
+    expect(entry.responseEnd).toBeGreaterThanOrEqual(entry.responseStart);
+    expect(entry.encodedBodySize).toBe(suppliedType ? 41 : 42);
+    expect(entry.decodedBodySize).toBe(suppliedType ? 41 : 42);
+    expect(entry.loadEventEnd).toBeGreaterThan(0);
+    expect(entry.duration).toBe(entry.loadEventEnd);
+    expect(entry.serverTiming.map((metric) => [metric.name, metric.duration])).toEqual([['document', 4]]);
+    expect(window.performance.getEntriesByType('navigation')[0]).toBe(entry);
+    await expect.poll(() => notifications.length).toBe(1);
+    expect(notifications[0]!.entries).toEqual([entry]);
+    expect(notifications[0]!.loadEnd).toBeGreaterThan(0);
+    // Navigation completion does not need a secondary Resource Timing report.
+    expect(window.performance.getEntriesByType('resource')).toEqual([]);
   });
 });

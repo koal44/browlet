@@ -72,6 +72,7 @@ export class PerformanceObserverImpl {
     this.#performance.registeredObservers.add(this);
     if (options.buffered) {
       // SPEC_CLASH(performance-observer-buffered-order): Follow Performance Timeline by appending the retained buffer in order. Browsers sort each replay; Chromium/WebKit also merge repeated replays chronologically. Queries still sort their result.
+      // SPEC_CLASH(navigation-timing-buffered-replay): Keep Timeline/Chromium/Firefox's early replay, completion notification, and later replays. WebKit suppresses navigation entries already seen by this observer.
       for (const entry of this.#performance.getEntryBuffer(supportedType).entries) {
         if (entry.shouldAdd(options)) this.observerBuffer.push(entry);
       }

@@ -509,6 +509,10 @@ async function fixture() {
   const browser = new Browlet({ route: () => '' });
   await browser.navigate('https://example.test/current');
   const document = unwrap<DocumentImpl>(browser.document);
+  // Finish loading/Performance delivery before tests advance their own operation by one turn.
+  await runInHostTask(() => {
+    while (document.env.responsibleEventLoop.runTaskTurn()) { /* Drain loading tasks. */ }
+  });
   const navigation = document.getRelevantGlobalObject()!.navigation;
   // Navigation startup does not yet dispatch its navigate event. Supply its objects/acceptance at that boundary;
   // cancellation, event dispatch, promise settlement, and projection use their real owners.

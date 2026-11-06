@@ -408,7 +408,7 @@ function createChild(parent: Navigable): Navigable {
 /** Retain the internal state that the history coordinator must release without running the abortion algorithm. */
 function pendingNavigation(navigable: Navigable) {
   const navigation = navigable.activeWindow!.navigation;
-  const event = navigation.env.createEvent(NavigateEventImpl) as NavigateEventImpl;
+  const event = navigation.env.createEvent(NavigateEventImpl);
   event.type = 'navigate';
   event.abortController = navigation.env.createAbortController();
   event.signal = event.abortController.signal;

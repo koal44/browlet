@@ -655,9 +655,8 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
     }
     // SPEC_CLASH(pageswap-trust-target): Follow HTML/Chromium's trusted Window event; WebKit dispatches an untrusted Document target.
     this.fireEvent('pageswap', PageSwapEventImpl, (event) => {
-      const swap = event as PageSwapEventImpl;
-      swap.activation = activation;
-      swap.viewTransition = viewTransition;
+      event.activation = activation;
+      event.viewTransition = viewTransition;
     });
   }
 

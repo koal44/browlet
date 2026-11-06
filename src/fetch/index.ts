@@ -24,7 +24,7 @@ export {
   type FetchRequestInfo, type FetchRequestInit,
 } from './request';
 export { responseIDL, FetchResponse, isFilteredResponse, type CacheUsage, type ResponseImpl } from './response';
-export { ConnectionTimingInfo, type FetchTimingInfo, type ResponseBodyInfo, type ServiceWorkerTimingInfo } from './timing';
+export { ConnectionTimingInfo, FetchTimingInfo, type ResponseBodyInfo, type ServiceWorkerTimingInfo } from './timing';
 export {
   parseIntegrityMetadata, applyIntegrityAlgorithm, type IntegrityMetadata, type IntegrityAlgorithm,
 } from './integrity';

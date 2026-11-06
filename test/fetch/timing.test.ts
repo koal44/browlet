@@ -8,6 +8,27 @@ import { mockHTTPTransport } from './transport-fixture';
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('navigation timing handoff', () => {
+  it('updates extracted navigation completion without requiring a resource timing report', async () => {
+    const request = createFetchRequest();
+    request.client = request.env;
+    request.destination = 'document';
+    request.mode = 'navigate';
+    request.initiatorType = null;
+    vi.spyOn(request.env.userAgent, 'unsafeSharedCurrentTime').mockReturnValue(100.543);
+    const report = vi.spyOn(request.env, 'markResourceTiming');
+    mockHTTPTransport(request.env.userAgent, (_request, listener) => {
+      listener.onHeaders(200, 'OK', new FetchHeaders(), true);
+      listener.onEnd();
+    });
+    const completed = Promise.withResolvers<void>();
+    const controller = fetch(request, {
+      useParallelQueue: true, processResponseEndOfBody: () => completed.resolve(),
+    }, request.env);
+    await completed.promise;
+    expect(controller.extractFullTimingInfo().endTime).toBe(100.5);
+    expect(report).not.toHaveBeenCalled();
+  });
+
   it('keeps completion on the shared clock until the timing entry selects its time origin', async () => {
     const request = createFetchRequest();
     request.client = request.env;

@@ -11,11 +11,12 @@ import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
 import { BrowletEnvironmentBase, type BrowletEnvironment } from '../../../../src/browlet/environment/index';
 import { ResourceReader } from '../../../../src/browlet/loader/resource-reader';
+import type { PerformanceNavigationTiming, Window } from '../../../../src/browlet/platform';
 import { FetchHeaders, FetchRequest, FetchResponse } from '../../../../src/fetch/index';
 import { internalType } from '../../../../src/infra/index';
 import { createOpaqueOrigin, obtainURLOrigin, parseURL, serializeURL } from '../../../../src/url/index';
 import { mockHTTPTransport } from '../../../fetch/transport-fixture';
-import { unwrap } from '../../../support/browlet-binding';
+import { getRelevantRealm, unwrap } from '../../../support/browlet-binding';
 
 afterEach(() => { vi.restoreAllMocks(); });
 
@@ -836,6 +837,108 @@ describe('srcdoc navigation parameters', () => {
   });
 });
 
+describe('history population Navigation Timing diagnostics', () => {
+  it.each(['top-level', 'child', 'no diagnostics'] as const)('captures %s diagnostics before loader callbacks', async (kind) => {
+    const state = kind === 'child'
+      ? await childFixture().then((state) => ({ ...state, navigable: state.child }))
+      : await fixture();
+    const { navigable, entry, source, failures } = state;
+    const departingDocument = navigable.activeDocument!;
+    navigable.activeSessionHistoryEntry.documentState.notRestoredReasons = {
+      src: null, id: null, name: null, url: departingDocument.url,
+      reasons: [{ reason: 'departing-only' }], children: [],
+    };
+    if (kind !== 'no diagnostics') {
+      entry.documentState.notRestoredReasons = {
+        src: null, id: null, name: null, url: entry.url,
+        reasons: [{ reason: 'masked' }],
+        children: [{ src: 'https://foreign.test/', id: '', name: '', url: null, reasons: null, children: null }],
+      };
+    }
+    entry.documentState.requestReferrer = null;
+    const params = suppliedParams(navigable, serializeURL(entry.url));
+    params.navigationTimingType = 'back_forward';
+    let observed: {
+      document: DocumentImpl; timing: PerformanceNavigationTiming; reasons: PerformanceNavigationTiming['notRestoredReasons'];
+    } | undefined;
+    params.commitEarlyHints = (document) => {
+      const window = document.env.realm.globalObject as Window;
+      const timing = window.performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
+      observed = { document, timing, reasons: timing.notRestoredReasons };
+    };
+    // The actual loader still needs parser-script preparation. Exercise its real
+    // shared Document factory, including Timing creation and Early Hints callbacks.
+    vi.spyOn(navigable, 'loadDocument').mockImplementation((params) =>
+      navigable.createAndInitializeDocument('html', 'text/html', params));
+    const complete = vi.fn();
+    const failed = vi.fn();
+    navigable.ongoingNavigation = 'traversal';
+    navigable.populateHistoryEntryDocument(entry, 'back_forward', source, navigable.snapshotTargetParams(), 'none', {
+      navigationParams: params, completionSteps: complete, failureSteps: failed,
+    });
+    await expect.poll(() => complete.mock.calls.length + failed.mock.calls.length + failures.length).toBe(1);
+    expect(failed).not.toHaveBeenCalled();
+    expect(failures).toEqual([]);
+    expect(observed).toBeDefined();
+    const { document, timing, reasons } = observed!;
+    expect(entry.document).toBe(document);
+    expect(document.getNodeNavigable()).toBeNull();
+    expect(navigable.activeDocument).toBe(departingDocument);
+    expect(timing.type).toBe('back_forward');
+    if (kind === 'top-level') {
+      expect(reasons).not.toBeNull();
+      expect(reasons!.reasons!.map(({ reason }) => reason)).toEqual(['masked']);
+      expect(reasons!.children![0]).toMatchObject({ url: null, reasons: null, children: null });
+      expect(getRelevantRealm(reasons!)).toBe(document.env.realm);
+      expect(getRelevantRealm(reasons!.reasons![0]!)).toBe(document.env.realm);
+      expect(Object.isFrozen(reasons!.reasons)).toBe(true);
+      expect(Object.isFrozen(reasons!.children)).toBe(true);
+      entry.documentState.notRestoredReasons = null;
+      expect(timing.notRestoredReasons).toBe(reasons);
+      expect(timing.toJSON()).toMatchObject({ notRestoredReasons: reasons });
+    } else {
+      expect(reasons).toBeNull();
+    }
+  });
+
+  it.each([false, true])('uses the final history state after Fetch (redirect: %s)', async (redirect) => {
+    const { navigable, entry, env, source, target, failures } = await fixture();
+    const oldState = entry.documentState;
+    const diagnostics = oldState.notRestoredReasons = {
+      src: null, id: null, name: null, url: entry.url,
+      reasons: [{ reason: 'masked' }], children: [],
+    };
+    const transport = mockHTTPTransport(env.userAgent, (request, listener) => {
+      const shouldRedirect = redirect && serializeURL(request.url) === 'https://example.test/next';
+      listener.onHeaders(shouldRedirect ? 302 : 200, shouldRedirect ? 'Found' : 'OK',
+        new FetchHeaders(shouldRedirect ? [['Location', 'https://other.test/final']] : [['Content-Type', 'text/html']]), true);
+      listener.onEnd();
+    });
+    vi.spyOn(navigable, 'loadDocument').mockImplementation((params) =>
+      navigable.createAndInitializeDocument('html', 'text/html', params));
+    const complete = vi.fn();
+    const failed = vi.fn();
+    navigable.ongoingNavigation = 'traversal';
+    navigable.populateHistoryEntryDocument(entry, 'back_forward', source, target, 'none', {
+      completionSteps: complete, failureSteps: failed,
+    });
+    await expect.poll(() => complete.mock.calls.length + failed.mock.calls.length + failures.length).toBe(1);
+    expect(failed).not.toHaveBeenCalled();
+    expect(failures).toEqual([]);
+    expect(transport).toHaveBeenCalledTimes(redirect ? 2 : 1);
+    const window = entry.document!.env.realm.globalObject as Window;
+    const timing = window.performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
+    expect(timing.type).toBe('back_forward');
+    if (redirect) {
+      expect(entry.documentState).not.toBe(oldState);
+      expect(timing.notRestoredReasons).toBeNull();
+    } else {
+      expect(timing.notRestoredReasons!.reasons!.map(({ reason }) => reason)).toEqual(['masked']);
+    }
+    expect(oldState.notRestoredReasons).toBe(diagnostics);
+  });
+});
+
 async function fixture() {
   const browser = new Browlet({ route: () => '' });
   await browser.navigate('https://example.test/start');
@@ -868,10 +971,10 @@ async function childFixture() {
   return { ...state, child, env: childDocument.env, target: child.snapshotTargetParams() };
 }
 
-function suppliedParams(navigable: Navigable): NavigationParams {
+function suppliedParams(navigable: Navigable, url = 'https://response.test/final'): NavigationParams {
   const response = new FetchResponse();
   response.headerList.append('Content-Type', 'text/html');
-  response.urlList.push(parseURL('https://response.test/final').url!);
+  response.urlList.push(parseURL(url).url!);
   return navigable.createNavigationParams(response);
 }
 

@@ -18,9 +18,9 @@ import {
   type Origin, type URLRecord,
 } from '../../../url/index';
 import { HTTPCookie, parseHTTPDate, parseLinkHeader, type CookieHost, type HTTPStatus } from '../../../http/index';
-import { getMIMETypeEssence } from '../../../mime/index';
+import { getMIMETypeEssence, minimizeSupportedMIMEType } from '../../../mime/index';
 import {
-  fetch, FetchRequest, isFilteredResponse, isOkStatus, parseReferrerPolicyFromHeader,
+  fetch, FetchRequest, FetchTimingInfo, isFilteredResponse, isOkStatus, parseReferrerPolicyFromHeader,
   DeferredFetchQuota, minimalDeferredFetchQuotaPool,
   type FetchController, type FetchResponse, type ReferrerPolicy,
 } from '../../../fetch/index';
@@ -55,7 +55,8 @@ import { NodeIteratorImpl, TreeWalkerImpl, SHOW_ALL, type NodeFilterCallback } f
 import { IntersectionObserverImpl, type IntersectionObserverEntryImpl } from '../intersection-observer/index';
 import { SelectionImpl, scheduleSelectionChange, selectionGlobalEventHandlers } from '../../interaction/selection/index';
 import { HistoryImpl } from '../../browsing/history/index';
-import type { NavigationTimingRecord } from '../../performance/index';
+import type { NotRestoredReasonDetails, NotRestoredReasons } from '../../browsing/navigation/diagnostics/index';
+import type { PerformanceNavigationTimingImpl } from '../../performance/index';
 // eslint-disable-next-line browlet/dependency-direction -- DOM's legacy event factory includes HTML-defined event interfaces.
 import { MessageEventImpl } from '../../communication/index';
 import type { StorageImpl } from '../../storage/index';
@@ -66,7 +67,7 @@ import type { DocumentParser } from '../../html/parser/index';
 import type { SerializedRecord } from '../../scripting/structured-data/index';
 import type {
   BrowsingContext, Navigable, NavigableContainer, NavigationParams, HistoryHandlingBehavior,
-  NotRestoredReasonDetails, NotRestoredReasons, SessionHistoryEntry, UserNavigationInvolvement,
+  SessionHistoryEntry, UserNavigationInvolvement,
 } from '../../browsing/navigation/index';
 import type { FocusableArea } from '../../interaction/index';
 import type { ViewTransitionImpl } from '../../rendering/index';
@@ -240,8 +241,8 @@ export class DocumentImpl extends NodeImpl {
     unloadEventStartTime: 0,
     unloadEventEndTime: 0,
   };
-  /** Retained navigation inputs; public Performance entry creation is provisional. */
-  navigationTimingEntry?: NavigationTimingRecord;
+  /** Retained navigation entry, absent until a supported navigation producer supplies measurements. */
+  navigationTimingEntry?: PerformanceNavigationTimingImpl;
   /** Completion timestamp, or null until the document is completely loaded. */
   completelyLoadedTime: number | null = null;
   /** Whether tasks that depend on loading completion may proceed. */
@@ -1303,15 +1304,13 @@ export class DocumentImpl extends NodeImpl {
         // SPEC_CLASH(history-hashchange-queue-order): Queue before popstate, as Blink/Gecko do (HTML #12190).
         // Delivery stays asynchronous and follows this task's persisted-state restoration.
         this.env.queueTask('dom-manipulation', () => {
-          window.fireEvent('hashchange', HashChangeEventImpl, (baseEvent) => {
-            const event = baseEvent as HashChangeEventImpl;
+          window.fireEvent('hashchange', HashChangeEventImpl, (event) => {
             event.oldURL = oldURLString;
             event.newURL = newURLString;
           });
         });
       }
-      window.fireEvent('popstate', PopStateEventImpl, (baseEvent) => {
-        const event = baseEvent as PopStateEventImpl;
+      window.fireEvent('popstate', PopStateEventImpl, (event) => {
         // SPEC_CLASH(history-popstate-reentrant-state): Follow HTML/Firefox's live History state after currententrychange.
         // Chromium/WebKit retain the traversal's original state if that listener calls replaceState().
         event.state = this.history.stateValue;
@@ -1480,7 +1479,7 @@ export class DocumentImpl extends NodeImpl {
     if (window === null) throw new InternalError('Document revelation requires a Window');
     // SPEC_CLASH(pagereveal-target-and-trust): Follow HTML/Chromium's trusted Window target; WebKit emits an untrusted Document-targeted event.
     window.fireEvent('pagereveal', PageRevealEventImpl, (event) => {
-      (event as PageRevealEventImpl).viewTransition = transition;
+      event.viewTransition = transition;
     });
     if (transition !== null) {
       const { env } = this;
@@ -1537,7 +1536,10 @@ export class DocumentImpl extends NodeImpl {
     this.readyForPostLoadTasks = true;
     window.fireEvent('load', undefined, undefined, true);
     timing.loadEventEndTime = env.currentHighResolutionTime().toTimestamp();
+    // TODO(HTML stop-parsing): The full loader still needs BiDi load-complete notification,
+    // initial pageshow dispatch, and their specified ordering before timing delivery.
     this.completelyFinishLoading();
+    this.queueNavigationTimingEntry();
   }
 
   /** Record that this document has completely finished loading. */
@@ -1853,49 +1855,64 @@ export class DocumentImpl extends NodeImpl {
     };
   }
 
-  /** Select and retain navigation timing inputs pending the public Performance entry foundation. */
+  /** Select navigation-visible measurements and retain the entry in this Document's timeline. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#create-and-initialize-a-document-object
   // https://w3c.github.io/navigation-timing/#dfn-create-the-navigation-timing-entry
   createNavigationTimingEntry(navigationParams: NavigationParams): void {
     const controller = navigationParams.fetchController;
-    if (controller === null) {
-      // TODO(HTML §7.5.1): Synthetic and supplied-response navigations need their own timing entry.
-      // HTML PR #12890 proposes fallback timing; source startTime alone cannot reconstruct an earlier network fetch.
-      return;
-    }
-    const fetchTimingInfo = controller.extractFullTimingInfo();
-    const request = navigationParams.request;
-    if (request === null) throw new InternalError('Navigation timing requires the Fetch request');
     const response = navigationParams.response;
+    let fetchTimingInfo: FetchTimingInfo;
     let redirectCount = 0;
-    // SPEC_CLASH(navigation-redirect-count): Follow HTML's same-origin bypass and client/referrer-aware TAO check.
-    // Firefox hides foreign chains even with TAO; WebKit also hides same-origin no-referrer chains;
-    // Chromium's cross-origin check requires a referrer even without an initiating client.
-    if (response.redirectTaint === 'same-origin' || (request.client === null || request.referrer !== null) &&
-      !response.isNavigationTimingBlocked(navigationParams.origin)) {
-      redirectCount = request.redirectCount;
+    if (controller === null) {
+      // SPEC_CLASH(navigation-timing-fallback): Follow HTML PR #12890's entry and zero unavailable fetch phases. Chromium measures loader completion, Firefox uses the name "document", and WebKit omits synthetic entries.
+      fetchTimingInfo = new FetchTimingInfo();
+      fetchTimingInfo.startTime = this.loadTimingInfo.navigationStartTime;
+      // TODO(HTML §7.4/§7.5): Supplied network responses need their original timing forwarded by
+      // object/embed/multipart producers. Synthetic response completion needs its loader observation.
+    } else {
+      fetchTimingInfo = controller.extractFullTimingInfo();
+      const request = navigationParams.request;
+      if (request === null) throw new InternalError('Navigation timing requires the Fetch request');
+      // SPEC_CLASH(navigation-redirect-count): Follow HTML's same-origin bypass and client/referrer-aware TAO check.
+      // Firefox hides foreign chains even with TAO; WebKit also hides same-origin no-referrer chains;
+      // Chromium's cross-origin check requires a referrer even without an initiating client.
+      if (response.redirectTaint === 'same-origin' || (request.client === null || request.referrer !== null) &&
+        !response.isNavigationTimingBlocked(navigationParams.origin)) {
+        redirectCount = request.redirectCount;
+      }
     }
-    // PROVISIONAL(Navigation Timing): retain live inputs without exposing a
-    // PerformanceNavigationTiming object before its lifecycle/filtering integration exists.
-    // SPEC_CLASH(html-navigation-response-timing): Use controller timing and the params' navigation type once;
+    // SPEC_CLASH(html-navigation-response-timing): Use the selected timing and the params' navigation type once;
     // HTML's second creation call reads removed response timing and an out-of-scope redirectCount (HTML PR #12890).
-    // TODO(Navigation Timing): Create/buffer the entry and apply Resource Timing's relative-time and exposure rules.
-    // HTML also omits the consumer's cacheMode and Critical-CH restart arguments; cacheUsage is retained raw below,
-    // while a Critical-CH restart producer and the response's public status/body filtering remain unfinished.
-    // TODO(Navigation Timing): Entry creation must capture this.notRestoredReasons as a realm-owned
-    // NotRestoredReasonsImpl; its public getter retains that value. Resource Timing entries and Timeline delivery
-    // now exist, but Navigation Timing must connect its own lifecycle timestamps, filtering, and load-event queueing.
-    this.navigationTimingEntry = {
+    // SPEC_CLASH(navigation-timing-destination-exposure): Follow HTML's full-timing handoff and Chromium/Firefox: expose the destination response even after a foreign redirect. WebKit also hides its timing/body/Server-Timing details. Redirect history remains gated above.
+    // Keep the initiating client's MIME/header selections untouched; only byte counts and clocks stay shared.
+    const mimeType = response.headerList.extractMIMEType();
+    const contentType = mimeType === null ? '' :
+      minimizeSupportedMIMEType(mimeType, (type) => this.env.userAgent.supportsMIMEType(type));
+    const performance = this.env.getWindowOrWorkerGlobalScopeMixin().performance;
+    // SPEC_CLASH(navigation-timing-fallback-transfer): Without transport measurements expose zero, as Chromium/Firefox do for synthetic entries, instead of Resource Timing's implicit 300-byte transfer estimate.
+    this.navigationTimingEntry = performance.createNavigationTimingEntry(this, {
       type: navigationParams.navigationTimingType,
       redirectCount,
       fetchTimingInfo,
       bodyInfo: response.bodyInfo,
+      contentType,
+      serverTimingHeaders: this.env.isSecureContext ? response.headerList.getDecodeAndSplit('Server-Timing') ?? [] : [],
       documentTimingInfo: this.loadTimingInfo,
       previousDocumentUnloadTiming: this.previousDocumentUnloadTiming,
       serviceWorkerTimingInfo: response.serviceWorkerTimingInfo,
       cacheUsage: response.cacheUsage,
       responseStatus: response.status,
-    };
+    }, controller !== null, navigationParams.notRestoredReasons);
+  }
+
+  /** Notify performance observers after load without buffering the navigation entry a second time. */
+  // https://w3c.github.io/navigation-timing/#dfn-queue-the-navigation-timing-entry
+  queueNavigationTimingEntry(): void {
+    // Initial about:blank intentionally has no entry; see BrowsingContext.create().
+    const entry = this.navigationTimingEntry;
+    if (entry === undefined) return;
+    // Soft Navigations owns the ID captured at creation; Timeline's obsolete id reassignment is not used.
+    this.env.getWindowOrWorkerGlobalScopeMixin().performance.queueEntry(entry);
   }
 
   /** Wait until navigation permits scripts in the newly created document. */

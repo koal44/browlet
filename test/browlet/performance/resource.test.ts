@@ -99,7 +99,7 @@ describe('Resource Timing entries', () => {
   it('preserves opaque duration while unavailable details are zero or empty', () => {
     const { env, timing } = fixture();
     const implementation = new PerformanceResourceTimingImpl(
-      'fetch', 'https://foreign.test/resource', timing.createOpaque(), '', new ResponseBodyInfo(), 0, '', false, env,
+      'fetch', 'https://foreign.test/resource', timing.createOpaque(), '', new ResponseBodyInfo(), 0, '', false, [], env,
     );
     const entry = getBindingContext(env.realm).project(PerformanceResourceTimingImpl, implementation) as PerformanceResourceTiming;
     expect(entry.startTime).toBe(1);
@@ -179,7 +179,7 @@ function fixture({
     encodedSize: 20, decodedSize: 40, contentType: 'text/plain', contentEncoding: 'gzip',
   });
   const implementation = new PerformanceResourceTimingImpl(
-    'fetch', 'https://example.test/resource', timing, cacheMode, body, 201, deliveryType, allowTransferSize, env,
+    'fetch', 'https://example.test/resource', timing, cacheMode, body, 201, deliveryType, allowTransferSize, timing.serverTimingHeaders, env,
   );
   const entry = getBindingContext(env.realm).project(PerformanceResourceTimingImpl, implementation) as PerformanceResourceTiming;
   return { window, env, timing, body, implementation, entry };

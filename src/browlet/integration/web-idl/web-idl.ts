@@ -38,6 +38,7 @@ import {
 import { trustedTypesIDLDefinitions } from '../../browsing/policy/trusted-types/index';
 import { selectionIDLDefinitions } from '../../interaction/selection/index';
 import { historyIDL, scrollRestorationIDL } from '../../browsing/history/index';
+import { notRestoredReasonDetailsIDL, notRestoredReasonsIDL } from '../../browsing/navigation/diagnostics/index';
 import {
   htmlDocumentIDL, documentReadyStateIDL, documentVisibilityStateIDL, htmlOrSVGScriptElementIDL,
   htmlDocumentOrShadowRootIDL, htmlAllCollectionIDL, documentIncludesGlobalEventHandlersIDL,
@@ -67,7 +68,6 @@ import {
 } from '../../environment/index';
 import { structuredSerializeOptionsIDL } from '../../scripting/structured-data/index';
 import { serviceWorkerIDL } from '../../workers/index';
-import { notRestoredReasonDetailsIDL, notRestoredReasonsIDL } from '../../browsing/navigation/index';
 import { elementPointerCaptureIDL, navigatorPointerEventsIDL, pointerLockIDLDefinitions } from '../../interaction/index';
 import { renderingIDLDefinitions } from '../../rendering/index';
 import { progressEventIDL, progressEventInitIDL } from '../xhr/index';

@@ -38,6 +38,10 @@ describe('navigation manual redirects', () => {
     old.everPopulated = old.reloadPending = true;
     old.navigableTargetName = 'retained-name';
     old.nestedHistories.push({ id: Symbol('child'), entries: [] });
+    const diagnostics = old.notRestoredReasons = {
+      src: null, id: null, name: null, url: sourceDocument.url,
+      reasons: [{ reason: 'masked' }], children: [],
+    };
     const peer = env.createSessionHistoryEntry(parseURL('https://source.test/start#peer').url!, old);
     entry.classicHistoryAPIState = env.serializeForStorage({ old: true });
     const navigationState = entry.navigationAPIState = env.serializeForStorage({ keep: true });
@@ -60,6 +64,8 @@ describe('navigation manual redirects', () => {
     expect(state.navigableTargetName).toBe('retained-name');
     expect(state.document).toBeNull();
     expect(state.nestedHistories).toEqual([]);
+    expect(state.notRestoredReasons).toBeNull();
+    expect(peer.documentState.notRestoredReasons).toBe(diagnostics);
     expect(state.reloadPending).toBe(false);
     expect(old.reloadPending).toBe(true);
     expect(old.nestedHistories).toHaveLength(1);

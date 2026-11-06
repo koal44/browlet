@@ -1,7 +1,7 @@
-import { defineInterface, frozenArray, idlType, impl, nullable, op, reference, roAttr, xattr } from '../../../web-idl/core/index';
-import { serializeURL, type URLRecord } from '../../../url/index';
+import { defineInterface, frozenArray, idlType, impl, nullable, op, reference, roAttr, xattr } from '../../../../web-idl/core/index';
+import { serializeURL, type URLRecord } from '../../../../url/index';
 
-import type { BrowletEnvironment } from '../../environment/index';
+import type { BrowletEnvironment } from '../../../environment/index';
 
 /** One exposed blocking reason, retaining its specification record. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#create-a-notrestoredreasondetails-object
@@ -34,7 +34,6 @@ export const notRestoredReasonDetailsIDL = defineInterface({
 
 /** Public diagnostic tree created from an already collected and origin-filtered history record. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#create-a-notrestoredreasons-object
-// TODO(Navigation Timing): Create and retain this value when constructing PerformanceNavigationTiming; its getter returns it.
 export class NotRestoredReasonsImpl implements NotRestoredReasons {
   /** Environment shared by this diagnostic and every recursively created child/detail. */
   env: BrowletEnvironment;

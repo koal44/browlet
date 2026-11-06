@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { Navigable, type NavigableContainer } from '../../../../src/browlet/browsing/navigation/navigable';
-import { NotRestoredReasonsImpl } from '../../../../src/browlet/browsing/navigation/not-restored-reasons';
+import { NotRestoredReasonsImpl } from '../../../../src/browlet/browsing/navigation/diagnostics/index';
 import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElement, NotRestoredReasons } from '../../../../src/browlet/platform';

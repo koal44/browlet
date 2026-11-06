@@ -22,7 +22,7 @@ export class PerformanceResourceTimingImpl extends PerformanceEntryImpl {
   timingInfo: FetchTimingInfo;
   resourceInfo: ResponseBodyInfo;
   responseStatus: HTTPStatus;
-  /** Retain Fetch's combined TAO/CORS permission; zero byte counts alone cannot identify a hidden response. */
+  /** Whether transfer size is available and may be exposed; zero body sizes cannot establish either. */
   allowTransferSize: boolean;
   /** Parsed metrics from Fetch's secure-context and timing-allow filtered headers. */
   // https://w3c.github.io/server-timing/#dom-performanceresourcetiming-servertiming
@@ -32,11 +32,13 @@ export class PerformanceResourceTimingImpl extends PerformanceEntryImpl {
   /** Set up an entry without inserting it into the timeline or delivering it to observers. */
   // https://w3c.github.io/resource-timing/#setup-the-resource-timing-entry
   // Fetch supplies filtered timing/body records and response status; this does not run TAO or CORS checks.
-  // The extra exposure flag is needed for transferSize, whose specified inputs lose the TAO decision.
+  // The extra flag retains Fetch's TAO/CORS permission and suppresses estimates without navigation transport data.
+  // Server-Timing fields are selected separately so Navigation can retain live Fetch records
+  // without inheriting or overwriting the initiating client's header visibility.
   constructor(
     initiatorType: string, requestedURL: string, timingInfo: FetchTimingInfo, cacheMode: CacheUsage | '',
     bodyInfo: ResponseBodyInfo, responseStatus: HTTPStatus, deliveryType = '',
-    allowTransferSize: boolean, env: BrowletEnvironment,
+    allowTransferSize: boolean, serverTimingHeaders: string[], env: BrowletEnvironment,
   ) {
     super(
       PerformanceResourceTimingImpl.convertFetchTimestamp(timingInfo.startTime, env), 'resource', requestedURL,
@@ -52,9 +54,8 @@ export class PerformanceResourceTimingImpl extends PerformanceEntryImpl {
     this.allowTransferSize = allowTransferSize;
     // SPEC_CLASH(server-timing-cross-origin): Honor TAO like Chromium/Firefox; WebKit exercises the specification's permission to keep foreign metrics hidden.
     // The filtered header list, not allowTransferSize, carries that decision independently of CORS.
-    // TODO(Navigation Timing / Server Timing): Initialize navigation metrics when final response
-    // headers are available; an early navigation entry must not freeze the initial empty list.
-    for (const field of timingInfo.serverTimingHeaders) {
+    // Navigation supplies destination-visible headers separately from Fetch's initiator-visible list.
+    for (const field of serverTimingHeaders) {
       const metric = PerformanceServerTimingImpl.parse(field, env);
       if (metric !== null) this.serverTiming.push(metric);
     }

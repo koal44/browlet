@@ -15,6 +15,16 @@ import { obtainURLOrigin, parseURL, serializeOrigin, serializeURL } from '../../
 import { unwrap } from '../../../support/browlet-binding';
 
 describe('initial browsing-context inheritance', () => {
+  it.each([false, true])('does not create or inherit a timing entry for an initial Document (embedded: %s)', async (embedded) => {
+    const { document: creator, group } = await fixture();
+    expect(creator.navigationTimingEntry).toBeDefined();
+    const embedder = embedded ? creator.createElement('iframe') as HTMLIFrameElementImpl : null;
+    const [, document] = BrowsingContext.create(creator, embedder, group);
+    expect(document.isInitialAboutBlank).toBe(true);
+    expect(document.navigationTimingEntry).toBeUndefined();
+    expect(document.env.getWindowOrWorkerGlobalScopeMixin().performance.getEntriesByType('navigation')).toEqual([]);
+  });
+
   it('inherits the creator origin, base, cookie URL, settings, and virtual group without registering a top-level context', async () => {
     const { document: creator, context: parent, group } = await fixture();
     parent.virtualBrowsingContextGroupID = 19;

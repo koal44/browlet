@@ -9,12 +9,15 @@ import type { CacheUsage, FetchTimingInfo, ResponseBodyInfo } from '../../fetch/
 
 import { EventTargetImpl } from '../dom/events/index';
 import { EventHandlerMap, type EventHandlerCallback } from '../scripting/index';
+import { NotRestoredReasonsImpl, type NotRestoredReasons } from '../browsing/navigation/diagnostics/index';
+import type { DocumentImpl } from '../dom/nodes/index';
 import type { BrowletEnvironment } from '../environment/index';
 
 import { PerformanceEntryBuffer, type PerformanceEntryImpl, type PerformanceEntryType } from './timeline';
 import type { PerformanceObserverImpl, PerformanceObserverCallbackOptions } from './observer';
 import { PerformanceObserverEntryListImpl } from './observer-entry-list';
 import { PerformanceResourceTimingImpl } from './resource';
+import { PerformanceNavigationTimingImpl, type NavigationTimingInit } from './navigation';
 
 /** Exposes this global's coarsened timestamps and retained performance entries. */
 // https://w3c.github.io/hr-time/#the-performance-interface
@@ -29,7 +32,7 @@ export class PerformanceImpl extends EventTargetImpl {
   registeredObservers = new Set<PerformanceObserverImpl>();
   /** Implemented producers for this global; Binding projects the retained list as a frozen array. */
   // Add other types only after their producers and delivery paths exist.
-  supportedEntryTypes: PerformanceEntryType[] = ['resource'];
+  supportedEntryTypes: PerformanceEntryType[];
   /** Current Window timing association, retained with this global; zero outside Window. */
   // https://wicg.github.io/soft-navigations/#navigation-id
   // TODO(Soft Navigations §§2.1, 5): Detect soft navigations and advance this ID at their emission.
@@ -46,6 +49,7 @@ export class PerformanceImpl extends EventTargetImpl {
 
   constructor(env: BrowletEnvironment) {
     super(env);
+    this.supportedEntryTypes = env.isWindow ? ['navigation', 'resource'] : ['resource'];
     // Each Window gets an independent initial value, without waiting for a completed navigation entry.
     this.currentNavigationId = env.isWindow ? randomInteger(100, 10001) : 0;
   }
@@ -97,10 +101,27 @@ export class PerformanceImpl extends EventTargetImpl {
   ): void {
     const entry = new PerformanceResourceTimingImpl(
       initiatorType, requestedURL, timingInfo, cacheMode, bodyInfo, responseStatus, deliveryType,
-      allowTransferSize, this.env,
+      allowTransferSize, timingInfo.serverTimingHeaders, this.env,
     );
     this.queueEntry(entry);
     this.addResourceTimingEntry(entry);
+  }
+
+  /** Retain a Document's navigation entry immediately, without notifying observers. */
+  // https://w3c.github.io/navigation-timing/#dfn-create-the-navigation-timing-entry
+  // The existing init groups prepared response data and the Document's live timing records.
+  // The flag distinguishes retained response data from available transport measurements;
+  // history population supplies diagnostics while this Document is still inactive.
+  createNavigationTimingEntry(
+    document: DocumentImpl, inputs: NavigationTimingInit, allowTransferSize: boolean,
+    reasons: NotRestoredReasons | null,
+  ): PerformanceNavigationTimingImpl {
+    // SPEC_GAP(navigation-timing-null-reasons): HTML's creation operation requires a record but Document diagnostics can be null. Retain null, otherwise construct in this entry's realm.
+    const diagnostics = reasons === null ? null : new NotRestoredReasonsImpl(reasons, this.env);
+    // TODO(Critical-CH): Supply the observed restart timestamp once navigation implements that producer.
+    const entry = new PerformanceNavigationTimingImpl(document.URL, inputs, 0, diagnostics, allowTransferSize, this.env);
+    this.getEntryBuffer('navigation').entries.push(entry);
+    return entry;
   }
 
   /** Clear retained resource entries without changing the limit or pending observer records. */
@@ -158,7 +179,7 @@ export class PerformanceImpl extends EventTargetImpl {
     return buffer;
   }
 
-  /** Queue a completed entry for observers and storage; resource storage uses addResourceTimingEntry(). */
+  /** Notify observers and buffer entries whose producer does not own insertion. */
   // https://w3c.github.io/performance-timeline/#dfn-queue-a-performanceentry
   queueEntry(entry: PerformanceEntryImpl): void {
     if (entry.env !== this.env) throw new InternalError('Cannot queue a performance entry owned by another global');
@@ -175,7 +196,8 @@ export class PerformanceImpl extends EventTargetImpl {
     for (const observer of interestedObservers) observer.observerBuffer.push(entry);
     // SPEC_CLASH(resource-timing-double-insertion): Resource Timing's mark operation calls both queueEntry and addResourceTimingEntry. Retain resources only in the latter, matching browsers' single insertion.
     // SPEC_CLASH(resource-timing-overflow-observer-delivery): Queue observers before overflow handling, as the specification and Chromium/Firefox do; WebKit defers secondary entries until its full-buffer task.
-    if (entryType !== 'resource') {
+    // SPEC_CLASH(navigation-timing-double-insertion): Navigation Timing inserts at creation, but Timeline inserts again at completion. Keep creation as the sole insertion point, matching all browsers.
+    if (entryType !== 'resource' && entryType !== 'navigation') {
       const buffer = this.getEntryBuffer(entryType);
       // Admission precedes capacity: entries ineligible for storage must not count as dropped.
       if (entry.shouldAdd() && !buffer.isFull()) buffer.entries.push(entry);

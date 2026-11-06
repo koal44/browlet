@@ -14,7 +14,7 @@ that timing alongside browser events and lifecycle observations.
   High Resolution Time and Fetch's connection timestamps share the stateless
   `coarsenTime()` calculation in Timing. Fetch's transport already supplies
   connection observations; Resource Timing entries consume prepared observations,
-  while automatic timing production remains deferred.
+  and Fetch supplies automatic resource entries.
 - [`timing/high-resolution-time.ts`](../../timing/high-resolution-time.ts) owns the
   estimated monotonic Unix epoch, relative and shared time, and environment-settings
   time origins. It selects the
@@ -32,17 +32,26 @@ that timing alongside browser events and lifecycle observations.
   the three synchronous queries and shared observer-delivery task. `observer.ts`
   owns registration, buffered replay, and record retrieval; `observer-entry-list.ts`
   owns queries over a delivered batch. Entry queueing and initial navigation-ID
-  association are present. Timing producers remain unfinished; registry rows do
-  not advertise producer support.
+  association are present. Resource production and Document navigation
+  delivery are connected; Window advertises those two entry types. Other globals
+  advertise resource only, and registry rows do not advertise unfinished producers.
 - Realm-created Events, navigation timing records, and Document load timing
   use this shared clock and the relevant Window's time origin. Each new Window
   realm gets one stable, replaceable `Performance` platform object.
-- `navigation.ts` provisionally defines `NavigationTimingRecord`.
-  `Document.createNavigationTimingEntry()` retains live Fetch timing, body
-  information, selected redirect counts, response worker/cache inputs, and
-  Document load/unload milestones for network navigation. This is
-  internal input storage, not a projected PerformanceNavigationTiming entry.
-  Source-only navigation without a FetchController creates no placeholder entry.
+- `navigation.ts` supplies `PerformanceNavigationTimingImpl`, its Window-only
+  interface, and the navigation type enum. It retains live load/unload records,
+  overrides Resource Timing's redirect/worker getters and PerformanceEntry's
+  duration, and retains supplied restoration diagnostics. Confidence calculation
+  is present, with an explicit unfinished host measurement hook.
+  `Document.createNavigationTimingEntry()` selects controller-backed or fallback inputs;
+  Performance constructs and buffers the real entry before loader callbacks.
+  Fetch timing/body sizes and Document milestones stay live. Destination metadata
+  and redirect exposure are selected independently. Load completion notifies
+  observers without inserting a second entry into the timeline.
+  Without a FetchController, entries retain response metadata and the Document's
+  navigation start; unavailable fetch phases and transfer size remain zero.
+  Initial about:blank intentionally has no entry, following HTML/WebKit; later
+  explicit navigations to about:blank use the shared Document factory and have one.
 
 [Navigation Timing §5](https://w3c.github.io/navigation-timing/#dfn-create-the-navigation-timing-entry)
 associates the entry with a Document and creates it using that Document's realm,
@@ -50,7 +59,7 @@ URL, load/unload timing, and restoration information.
 
 The entry model belongs here because it produces Performance Timeline data.
 Browsing/navigation owns when creation happens and supplies navigation state.
-Performance will own entry construction and buffering.
+Performance owns entry construction and buffering.
 Browser examples are Blink's
 [`WindowPerformance::CreateNavigationTimingInstance`](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/timing/window_performance.cc),
 Gecko's [`PerformanceMainThread::CreateNavigationTimingEntry`](https://github.com/mozilla-firefox/firefox/blob/main/dom/performance/PerformanceMainThread.cpp),
@@ -89,27 +98,372 @@ creation in current HTML, its out-of-scope locals, and the removed response
 timing field. Browlet selects controller timing and the params' navigation type
 once. [HTML PR #12890](https://github.com/whatwg/html/pull/12890) proposes that
 correction, supplies the omitted cache/restart arguments, and adds a
-no-controller fallback, but remains open. This slice preserves the existing
-no-controller boundary: Chromium/Firefox exposed one srcdoc entry in the probe
-(with differing name/end-time data), while WebKit exposed none. The fallback
-and any recovery of prior network timing for supplied responses need a separate
-choice; no public entry or synthetic Fetch timestamps are introduced here.
+no-controller fallback, but remains open. The approved fallback below now supplies
+that entry. Prior network timing for supplied responses and synthetic-loader
+completion observations still need their producers; no measurements are invented.
 
-The remaining consumer dependencies are explicit in
-`Document.createNavigationTimingEntry()`: navigation-specific construction,
-lifecycle timestamps and exposure filtering, load-event queuing, and retained
-restoration diagnostics. PerformanceEntry/ResourceTiming construction, realm
-ownership, timestamp conversion, and Timeline delivery are now available.
+The automatic-creation and delivery slices below connect navigation-specific
+construction, exposure selection, buffering, available diagnostic allocation,
+and load-event queuing. The target history state's diagnostic handoff is now connected below.
 HTML does not pass Navigation Timing's cacheMode or Critical-CH
 restart arguments. The raw Fetch cache classification is retained for that
 consumer; Critical-CH restart measurement has no producer yet. Previous-Document
 unload timestamps likewise retain their unfinished lifecycle producer. The
-current input record is deliberately not an implementation of the Navigation
-Timing §5 callable signature.
+reviewed grouped input shape is documented at the Performance factory.
 
-Worker exposure is already declared. It becomes observable when Browlet gains
+## Navigation Timing: automatic creation
+
+Document creation now retains one `navigationTimingEntry` and
+inserts it into the destination Performance buffer before Early Hints callbacks.
+Queries project that same entry throughout loading; timestamps, byte counts,
+and Document milestones continue to update through retained records. Creation
+does not notify observers. Load completion now queues observer delivery after
+`loadEventEnd` without inserting the already-buffered entry again.
+
+`Performance.createNavigationTimingEntry(document, inputs, allowTransferSize)` owns allocation and
+buffering. Its reviewed signature groups Navigation Timing §5's inputs
+into the existing `NavigationTimingInit`, including response status and selected
+MIME/Server-Timing metadata. The fallback slice adds the final transfer-exposure
+flag, described below. Resource construction also receives the selected
+Server-Timing fields separately, as reviewed, avoiding
+copies of live Fetch records or writes to the initiating client's header list.
+Both interfaces remain ordinary Binding
+projections; no new realm or UserAgent factory hook is involved.
+
+`SPEC_CLASH(navigation-timing-destination-exposure)` follows HTML's full-timing
+handoff and Chromium/Firefox: the destination sees its own response status, body
+sizes, request/response timings, and Server-Timing even after a foreign redirect.
+The redirect count/start/end still use HTML's independent gate above. WebKit
+hides most final-response details as well after such redirects. Blink's
+[`DocumentLoader`](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/loader/document_loader.cc)
+explicitly marks the response timing-allowed for its own Document. Browlet
+minimizes MIME metadata for the destination and uses its secure-context status
+for Server-Timing, leaving the initiating client's metadata unchanged.
+
+`SPEC_GAP(navigation-fetch-completion)` repairs the live controller handoff:
+[Fetch finale](https://fetch.spec.whatwg.org/#fetch-finale) captures body-end time
+but assigns it only within optional Resource Timing reporting. A navigation
+with no such report therefore retained zero indefinitely. The regression first
+observed zero instead of `100.5`; navigation now records completion at body end
+using Fetch's existing coarsening precision. Ordinary resource report-time
+coarsening and entry-realm conversion are unchanged.
+
+The browser-only `node-compat/experimental/navigation-timing-creation.mjs` probe
+ran on Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2. All expose one stable
+entry during parsing, update its completion data, and deliver that same entry
+once after load. Chromium/Firefox expose final-response details after foreign
+redirects; WebKit suppresses detailed phases, byte sizes, and Server-Timing.
+All retain zero redirect history without permission. WebKit lacks the
+tested public responseStatus/contentType fields; that is distinct from its
+timing/size observations. Findings are retained beside the probe.
+
+Remaining owners are explicit in code: missing producer timing for supplied and synthetic responses;
+previous-Document unload and origin filtering;
+Critical-CH restart measurements; and the confidence measurement hook. The
+target-history diagnostic handoff is now connected below. MIME support policy remains
+the existing UserAgent dependency (with its previously approved text/plain
+expected failure); JSON minimization exercises the destination selection without
+pretending that policy is complete. Fetch completion, real HTTP loading, realm
+identity, metadata isolation, and available diagnostic capture have regressions.
+
+Validation: 323 cases pass with the one existing approved MIME-support expected
+failure on Node 24.19.0, 26.8.1, and custom 27.0.0-pre, with and without the addon.
+The 112 import-hierarchy cases also pass. TypeScript/generated declarations,
+type contracts, changed-file ESLint, import boundaries, and whitespace checks
+pass. The package builds with the same seven existing circular-import warnings;
+ESM, CJS, and platform-declaration artifact checks pass. Experimental commit
+`d3e6730` retains the browser probe and findings. No new failure classifications
+or native changes were needed.
+
+## Navigation Timing: load-event delivery
+
+`Document.queueNavigationTimingEntry()` forwards its retained entry to the
+existing Performance observer queue after `loadEventEnd` and complete-loading
+bookkeeping. The entry keeps its creation-time navigation ID. No new task source,
+scheduler, or promise is needed. `supportedEntryTypes` now includes navigation
+for Window; the retained frozen array and its realm ownership are unchanged.
+
+- `SPEC_CLASH(navigation-timing-double-insertion)`: [Navigation Timing creates and
+  buffers the entry early](https://w3c.github.io/navigation-timing/#dfn-create-the-navigation-timing-entry),
+  then its load-time queue delegates to [Performance Timeline's navigation queue](https://w3c.github.io/performance-timeline/#dfn-queue-a-navigation-performanceentry),
+  whose generic operation inserts it again. All three browsers retain one entry.
+  Creation owns storage; completion only selects observers and queues delivery.
+- `SPEC_CLASH(navigation-timing-buffered-replay)`: follow Timeline, Chromium,
+  and Firefox. A buffered observer can receive the live entry before load, receive
+  it again at completion, and request a later buffered replay. WebKit suppresses
+  completion and later replays once that observer has seen the navigation entry.
+  A fresh observer still receives it. Observer buffers can therefore contain the
+  same live entry twice while the global timeline contains it only once.
+
+Eric approved both choices. The browser-only
+`node-compat/experimental/navigation-timing-delivery.mjs` probe held a subresource
+until early replay finished, then released load and requested another replay.
+Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2 all delivered to ordinary
+and load-listener observers after load/pageshow, with populated `loadEventEnd`,
+stable entry identity, and one timeline entry. Blink's
+[`Performance::NotifyNavigationTimingToObservers`](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/timing/performance.cc)
+notifies without reinserting; Gecko's
+[`PerformanceMainThread::QueueNavigationTimingEntry`](https://github.com/mozilla-firefox/firefox/blob/main/dom/performance/PerformanceMainThread.cpp)
+queues its retained entry; WebKit's
+[`Performance`](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/page/Performance.cpp)
+tracks whether each observer has already seen navigation timing.
+
+The focused regressions first observed zero completion callbacks instead of one
+and two timeline entries instead of one. They now cover load-listener microtasks,
+early/coalesced/later buffered delivery, captured navigation IDs, dropped-count
+metadata, `takeRecords()`, and disconnection. The streamed HTTP loader regression
+also observes the retained entry after load with completion data populated.
+
+The provisional loader still needs HTML's separate parser tasks, deferred scripts
+and load delays, initial `pageshow`, and BiDi load-complete notification. Its source
+explicitly retains those steps and their ordering before timing delivery. This
+slice supplies neither those lifecycle producers nor missing producer timing,
+previous-Document unload measurements, Critical-CH, or confidence host instrumentation.
+The target-history diagnostic handoff is now connected below.
+
+Validation: the 335-case Performance, Document creation/lifecycle, navigation
+params, streamed loader, and Fetch timing suite passes on all six runtimes.
+Each addon run has 334 passes and the existing MIME-support expected failure;
+each stock run has 331 passes and that same failure plus the three existing
+native-global expected failures. The microtask-order test uses the established
+`runInHostTask()` helper to enter outside Vitest's own Promise job; its strict
+ordering assertion is unchanged. TypeScript/generated declarations, type
+contracts, changed-file ESLint, import boundaries, and whitespace checks pass.
+The package builds with the same seven existing circular-import warnings; ESM,
+CJS, and platform-declaration artifacts pass. Experimental commit `c2fe081`
+retains the browser probe and findings. No native changes or new failure
+classifications were needed.
+
+## Navigation Timing: creation without a Fetch controller
+
+HTML §7.5.1 now creates an entry even when `NavigationParams.fetchController`
+is null. This covers srcdoc, javascript: string replacements, and supplied/local
+responses that reach the shared Document factory. The fallback `FetchTimingInfo`
+retains the Document's navigation start and leaves unavailable fetch phases zero.
+The entry uses the Document URL and keeps supplied body sizes, cache classification,
+service-worker timing, status, MIME/Server-Timing metadata, and live Document milestones.
+It is buffered before loader callbacks and uses the existing load/observer delivery.
+
+Eric approved two continuing differences:
+
+- `SPEC_CLASH(navigation-timing-fallback)` follows the fallback in
+  [HTML PR #12890](https://github.com/whatwg/html/pull/12890), still open at
+  `7e3de40d78d297fb14eeada4fcef660603b29026`. Chromium/Firefox create synthetic
+  entries; WebKit omits them. Firefox names them `document` and keeps responseEnd
+  zero. Chromium uses the Document URL and measures completion in its loader.
+  Browlet uses the URL and retains zero for unavailable completion timing.
+- `SPEC_CLASH(navigation-timing-fallback-transfer)` suppresses transferSize when
+  there are no transport measurements, matching Chromium/Firefox's synthetic
+  entries. Resource Timing's ordinary formula would invent at least 300 bytes
+  for an uncached supplied response. Supplied body sizes and cache classification
+  remain independent; a missing controller does not imply a cache hit.
+
+The Performance factory receives a final `allowTransferSize` flag and passes it
+to the entry's existing exposure flag. This reviewed arrangement adds no state
+or host hook; the flag controls the public estimate, not Fetch or transport behavior.
+
+The browser-only `node-compat/experimental/navigation-timing-fallback.mjs` probe
+ran on Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2. It compares initial
+and explicit about:blank, srcdoc, javascript: replacement, and a network control.
+For srcdoc/javascript:, Chromium/Firefox deliver the retained entry after load;
+WebKit creates no entry or notification. All three expose the network control.
+Blink's [DocumentLoader](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/loader/document_loader.cc)
+records response completion separately from Fetch; WebKit's
+[DocumentLoader](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/loader/DocumentLoader.cpp)
+creates navigation timing only when it has a main resource.
+
+The focused regressions first observed no entry before Early Hints callbacks.
+They now cover zero phases, live supplied response data across cache modes,
+destination realm identity, actual srcdoc params, and local-route observer delivery.
+The old-Window retention test now expects the new Window's navigation entry while
+still forbidding leakage of the old Window's entries.
+
+Remaining dependencies are explicit: original fetch timing from object/embed/multipart supplied-response
+producers; and synthetic-loader response-completion observations. Load-event
+completion does not substitute for responseEnd. The earlier unload, Critical-CH,
+confidence measurement, and full-loader dependencies remain. The target-history
+diagnostic handoff is now connected below.
+
+Validation: the 340-case Performance, Document creation/lifecycle, navigation
+params, loader, and Fetch timing suite passes on all six runtimes. Each addon run
+has 339 passes and the existing MIME-support expected failure; each stock run
+has 336 passes and the same four existing expected failures. TypeScript/generated
+declarations, type contracts, changed-file ESLint, import boundaries, and whitespace
+checks pass. The package builds with the seven existing circular-import warnings;
+ESM, CJS, and platform-declaration artifacts pass. Experimental commit `d53ce3b`
+retains the browser probe and findings. No new failure classifications or native
+changes were needed.
+
+### Initial about:blank is a separate creation path
+
+`SPEC_CLASH(initial-blank-navigation-timing)` keeps the initial Document's entry
+unset, following HTML/WebKit. This corrects the earlier roadmap's missing-producer
+TODO: [Navigation Timing issue #155](https://github.com/w3c/navigation-timing/issues/155)
+closed with that interpretation. HTML's §7.3.2.1 operation does not invoke the
+entry factory; §7.5.1 explicitly excludes initial about:blank Documents.
+[HTML issue #7031](https://github.com/whatwg/html/issues/7031) distinguishes that
+initial creation from a later navigation that can reuse its Window.
+
+The existing fallback probe on Chromium 156.0.8078.4 and Firefox 157.0 observes
+one initial entry; WebKit 27.2 observes none. The historical issue recorded older
+Chromium behavior, so its conclusion must not be presented as today's Chromium
+result. [WPT PR #30295](https://github.com/web-platform-tests/wpt/pull/30295) proposes
+the no-entry expectation but remains open. Eric approved following HTML/WebKit.
+
+The regressions cover top-level, embedded, and creator-owned initial Documents,
+empty buffered observation, and one entry after explicit about:blank navigation
+reuses the initial Window and Performance. The old initial Document retains no
+entry. This is a documented behavior choice, with no runtime change.
+
+Validation: 104 creation, browsing-context, and delivery cases pass on each of
+Node 24.19.0, Node 26.8.1, and custom Node 27.0.0-pre, with and without the addon.
+TypeScript/generated declarations, type contracts, changed-file ESLint, import
+boundaries, and whitespace checks pass. There are no new failure classifications.
+Experimental commit `7e0d0ae` retains the upstream clarification beside the probe.
+
+Performance's Worker exposure is already declared. It becomes observable when Browlet gains
 `WorkerGlobalScope`; no second clock or Worker-specific `Performance`
 implementation should be introduced then.
+
+## Navigation Timing: entry foundation
+
+The [Navigation Timing draft](https://w3c.github.io/navigation-timing/) at
+`48c0048` was refreshed on 5 November 2026. This slice implements the core entry
+in §§3.1–3.3.1: the interface, enum, inherited JSON, and live getters. The constructor
+reuses the existing input shape (now named `NavigationTimingInit`), accepts prepared public data and the
+retained diagnostic implementation, and does not execute §5's Document creation
+or buffering algorithm. All init fields are consumed. The automatic-creation
+factory now replaces the temporary input record with `navigationTimingEntry`;
+no second timing record or scheduler is introduced.
+
+`startTime` is zero; `duration` follows `loadEventEnd`, remaining zero while the
+load event runs. Document milestones are already relative to the incoming
+Document's time origin and are returned directly. Fetch timestamps are on the
+shared clock and use Resource Timing's conversion. A zero selected redirect
+count hides both redirect timestamps without changing the retained Fetch record.
+The entry captures its Performance navigation ID before any later queueing.
+
+Live Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2 agree on the retained
+entry, zero start time, unfinished duration during load, final duration equal to
+loadEventEnd, interface inheritance, illegal author construction, and the full
+URL name including its fragment. All three allocate borrowed `toJSON()` results
+in the method's realm and preserve navigation duration through a borrowed
+PerformanceEntry getter. The reproducible browser-only probe and findings are
+`node-compat/experimental/navigation-timing-entry.mjs` and
+`NAVIGATION-TIMING-ENTRY.md`.
+
+- `SPEC_CLASH(navigation-timing-worker-clock)`: the draft's worker overrides
+  return Service Workers' shared timestamps without conversion. Convert available
+  observations once in the entry's realm, as approved by Eric. Chromium/WebKit's
+  controlled-page probes expose small Document-relative times; Firefox reports
+  workerStart zero in this probe. A null worker record uses the inherited
+  Resource Timing getters; a supplied zero observation remains zero.
+- `SPEC_CLASH(navigation-timing-reasons-identity)`: retain the specified diagnostic
+  object in the entry's realm, as approved by Eric. Chromium's history-restoration
+  probe returns a new non-null object on each read; Firefox/WebKit do not expose
+  the API. The source agrees:
+  [Blink's getter](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/timing/performance_navigation_timing.cc)
+  rebuilds from its DocumentLoader. Binding projects the supplied implementation;
+  entry getters do not create diagnostics or re-read current history state.
+
+Remaining dependencies are deliberate:
+
+- **Confidence measurements:** the interface and randomization are implemented
+  [below](#navigation-timing-confidence). Host instrumentation remains explicit;
+  without a real assessment the getter returns null.
+- **Document integration:** controller-backed and fallback creation, response exposure,
+  nullable diagnostic allocation, single insertion, and load-time observer
+  delivery are connected; Window advertises navigation. Initial about:blank has no
+  entry by the approved choice above. Supplied/synthetic responses still need their
+  missing timing measurements. History population must supply the incoming target
+  entry's diagnostics before activation.
+- **Lifecycle measurements:** readiness and the provisional `finishLoading()`
+  route already record Document-relative times. Full parser scheduling and unload
+  production remain elsewhere. Unload integration must preserve origin/redirect
+  privacy and update the record retained by an already-created entry; HTML's
+  later assignment to `previousDocumentUnloadTiming` needs attention at that
+  handoff. Critical-CH restart measurement still has no producer. Do not synthesize
+  these observations in getters.
+- **Other contributions:** Server Timing now uses the final navigation response.
+  Legacy `performance.timing` / `performance.navigation`
+  remain unaudited in this specification's obsolete §8. Prerender's
+  `activationStart` is a separate contribution and requires its own lifecycle.
+
+Validation covers 17 new Navigation Timing cases and 53 existing Resource/Server
+Timing cases on all six supported runtimes. All 70 pass in each run. The tests
+exercise real binding projection, live records, redirect hiding, zero sentinels,
+borrowed getter/JSON realms, diagnostic identity, inherited metrics, and early
+navigation-ID capture. The broader Node 26/addon Performance, Document creation,
+navigation params, loader, and loading-status run has 272 passes and the one
+previously approved MIME-support expected failure. No new failures are classified
+or skipped. Generated declarations, TypeScript, type contracts, changed-file ESLint,
+and the import audit pass. The Browlet package builds with its seven existing
+circular-dependency warnings; ESM, CJS, and declaration artifact checks pass.
+
+## Navigation Timing: confidence
+
+The confidence getter in §3.3 and the interface/enum in §§3.3.2–3.3.3 are now
+implemented. Before the Document is interactive, the getter returns null without
+requesting a measurement or consuming randomness. Afterward it asks
+`UserAgent.getUnderlyingNavigationTimingConfidence(entry)` for the unrandomized
+assessment. That explicit host-measurement dependency currently returns null.
+It must eventually assess **that navigation's interval**, not conditions when an
+author happens to read the getter. No startup heuristic or default high/low answer
+is introduced. The draft permits transient startup/load/pressure observations
+and prohibits static hardware/profile characteristics.
+
+Once an assessment exists, the entry creates and retains one
+`PerformanceTimingConfidenceImpl` in its own realm. Browlet uses a fixed 50%
+noise trigger: half the time it keeps the assessment, and half the time it
+substitutes a fair random high/low answer. Up to two native cryptographic coin tosses
+implement that distribution without a configurable random source. The result
+is never randomized again, including across JSON calls. Default Web IDL JSON
+supplies the two readonly fields and the called method's allocation realm.
+
+Eric approved these continuing draft conflicts:
+
+- `SPEC_CLASH(navigation-confidence-nullability)`: follow the getter's null return
+  and Chromium's observable behavior rather than the draft's nonnullable IDL.
+- `SPEC_CLASH(navigation-confidence-json)`: apply the default JSON algorithm
+  required by the prose, adding the `[Default]` annotation missing from its IDL.
+- `SPEC_CLASH(navigation-confidence-lifetime)`: assign the newly created object
+  to the retained field that the getter checks but never writes. This honors the
+  once-per-entry note. Chromium retains randomized scalar values but creates a
+  fresh confidence object on every read; Browlet retains the object too.
+
+The 5 November browser probe confirms Chromium's illegal author constructor,
+readonly fields, entry-realm confidence object, method-realm JSON, and stable
+randomized values across fresh objects. Its observed trigger rate is 0.4994798.
+The result arrives asynchronously after interactive, sometimes after the first
+post-load timer; its child frame returns null. Firefox/WebKit do not expose this
+API in the tested builds. The reproducible probe remains in Experimental.
+
+Chromium's [navigation request](https://github.com/chromium/chromium/blob/main/content/browser/renderer_host/navigation_request.cc)
+selects low confidence when browser startup is incomplete. Its
+[interactive notification](https://github.com/chromium/chromium/blob/main/content/browser/renderer_host/render_frame_host_impl.cc)
+randomizes the stored assessment for the primary main frame; the
+[randomization helper](https://github.com/chromium/chromium/blob/main/content/browser/renderer_host/randomized_confidence_utils.cc)
+derives the noise rate from its configured privacy parameter. Browlet has no
+equivalent startup signal. These are separate host-policy choices, not a reason
+to mark the first top-level load as startup. The [upstream design discussion](https://github.com/w3c/navigation-timing/pull/210)
+also confirms the transient-only constraint and entry-realm allocation.
+Extractlet captured that discussion with the warning
+`[xlet: commit status checks not loaded; load on GitHub]`; the discussion and
+source text used here were available.
+
+Automatic controller-backed navigation-entry creation, filtering, buffering,
+and observer delivery are now connected. Confidence availability still requires
+the explicitly unfinished UserAgent measurement producer.
+
+Validation: 12 confidence cases cover unavailable and delayed assessments,
+each randomization branch, retained identity, readonly projection, JSON, and
+borrowed getter/method realms. The 82 Navigation/Resource/Server Timing cases
+pass on all six supported runtimes. The broader Node 26/addon run passes 284
+tests with the existing MIME-support expected failure unchanged. TypeScript,
+type contracts, generated declarations, changed-file ESLint, and the import audit
+pass. The Browlet build retains its seven existing circular-dependency warnings;
+ESM, CJS, and platform-declaration artifact checks pass. No new failure
+classifications or skips were introduced.
 
 ## Performance Timeline: entries, buffers, and synchronous queries
 
@@ -168,7 +522,8 @@ Explicit remaining dependencies:
   §§5.1–5.2 and 5.7 is superseded as described below.
 - Resource/Navigation Timing: the slices below supply the resource entry,
   conversion, overflow protocol, and Fetch production/privacy filtering.
-  Navigation Timing's entry/lifecycle integration remains unfinished.
+  Navigation Timing also supplies entry creation and load-time observer delivery;
+  remaining lifecycle measurements are listed in its integration audit above.
 - User Timing and other producers remain absent. Test fixtures supply completed
   internal entry fields and retained buffers through real Browlet bindings;
   they do not simulate observer delivery or claim producer acceptance coverage.
@@ -220,8 +575,9 @@ Observer batches include observer-only types;
 takeRecords() transfers the pending list without sorting and Binding returns a
 fresh author array. Entry identity and ownership remain unchanged.
 
-`supportedEntryTypes` advertises only completed producers: Fetch integration
-below adds resource, while registry names alone do not qualify. The internal tests provide completed producer
+`supportedEntryTypes` advertises connected producers: Fetch supplies resource and
+controller-backed Document loading supplies navigation for Window. Registry names
+alone do not qualify. The internal tests provide completed producer
 metadata and pending entries to exercise registration and projection, without
 simulating entry queueing. The delivery slice below implements supported buffered
 subscriptions over retained records. Unsupported buffered subscriptions return normally.
@@ -407,13 +763,13 @@ Explicit remaining dependencies:
 - Soft Navigations detection, interaction/paint attribution, emission, navigation
   counts, and ID advancement remain unfinished. The currentNavigationId field
   names that boundary. A URL update alone must not advance it.
-- Producers that expose entries before queueing, including Navigation Timing and
-  directly constructed User Timing marks, must capture the ID earlier. Delayed
-  measurements may also need an earlier ID; queueing preserves those captured
-  values. The entry field names this integration dependency.
-- The slices below complete Resource Timing's producer, secondary buffer, and
-  buffer-full event; supportedEntryTypes now includes resource. Navigation/User/
-  Visibility and other timing producers remain absent. Event Timing admission
+- Producers that expose entries before queueing must capture the ID earlier.
+  Navigation Timing now does so; directly constructed User Timing marks and
+  other delayed measurements still need their producer integration. Queueing
+  preserves captured values.
+- Resource Timing's producer, secondary buffer, and buffer-full event are present,
+  as is controller-backed Navigation Timing. Window advertises both entry types.
+  User/Visibility and other timing producers remain absent. Event Timing admission
   still throws.
 - Worker construction/exposure needs integration with Pip's Worker machinery;
   the non-Window regression uses a real sandbox, not a pretend Worker global.
@@ -678,7 +1034,7 @@ adapts Fetch's absent cache classification; its retained Performance constructs
 the entry, queues observers, and inserts it through the resource overflow
 protocol. A response therefore produces one retained entry and the same
 realm-owned object in observer delivery. `supportedEntryTypes` advertises
-`resource`. Other producer names remain unadvertised.
+`resource`, alongside `navigation` for Window. Unfinished producers remain unadvertised.
 
 The final implementation-only boolean is now named `allowTransferSize`: it
 carries both TAO and CORS permission. The timing record independently preserves
@@ -748,7 +1104,7 @@ the real CORS regression exercises JSON. Eric approved retaining the strict
 implemented; the required assertion is not replaced by the current empty result.
 The Server Timing slice below supplies parsing and the resource partial over
 Fetch's existing filtering. Worker producer acceptance, service-worker timestamps, early navigation-ID capture,
-and Navigation Timing lifecycle integration remain separate dependencies.
+and the remaining Navigation Timing lifecycle measurements remain separate dependencies.
 
 Validation: the 183 focused Performance, Fetch-handoff, and connection-timing
 cases run on Node 24.19.0, 26.8.1, and custom 27.0.0-pre, with and without the
@@ -823,9 +1179,9 @@ and [WebKit](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/loader/Se
 - HTTP trailers are not delivered by the transport. Fetch's header-capture point
   has an explicit TODO to retain Server-Timing trailers before resource entry
   publication; the example in Server Timing does not make that path implemented.
-- Navigation Timing must initialize metrics when final response headers are ready.
-  Its early entry must not freeze an initial empty list; the resource constructor
-  calls out this lifecycle dependency. The public navigation entry is still absent.
+- Navigation Timing now initializes metrics from the final response headers
+  during Document creation, selecting the destination's secure-context status.
+  Trailer delivery remains with Fetch's unfinished transport hook.
 - Worker exposure is declared, but actual worker-produced entry acceptance and
   service-worker response/timing production remain with those lifecycle owners.
 - No separate observer type or buffer is added: server metrics belong to the
@@ -842,33 +1198,71 @@ The Browlet package builds with the same seven existing circular-import warnings
 ESM, CJS, and platform-declaration artifact checks pass. No new failures are
 classified or skipped.
 
-## Restoration diagnostics dependency
+## Restoration diagnostics handoff
 
-HTML §7.2.8 now supplies `NotRestoredReasonsImpl` and its recursive creation from
-history records. The missing consumer is Navigation Timing's
-[entry-creation algorithm](https://w3c.github.io/navigation-timing/#dfn-create-the-navigation-timing-entry):
-create the diagnostic object while creating the entry and retain that object;
+HTML §7.2.8 supplies `NotRestoredReasonsImpl` and recursive creation from history
+records in the lower `browsing/navigation/diagnostics/` folder. Navigation Timing's
+[entry-creation algorithm](https://w3c.github.io/navigation-timing/#dfn-create-the-navigation-timing-entry)
+creates the diagnostic object with the entry and retains that object;
 `PerformanceNavigationTiming.notRestoredReasons` returns the retained value.
 It must not re-read the current Document/history entry on every getter call.
 
-The existing `Document.createNavigationTimingEntry()` is still a provisional
-input recorder. Its source and `NavigationTimingRecord` explicitly mark this
-missing creation step. There is no projected PerformanceNavigationTiming entry
-on which to install a getter stub until navigation-entry creation exists.
+History population supplies the target `DocumentState.notRestoredReasons` through
+the existing `NavigationParams`, after Fetch redirects and MIME preparation, just
+before loading the Document. Only a top-level traversable supplies diagnostics;
+child states contain raw collection records and yield null for their own entries.
+The Document forwards this nullable input to Performance's creation operation as
+an additional final argument. Performance
+constructs and retains the public implementation in the new entry's realm before
+Early Hints commit or parser callbacks. It never reads the departing entry.
+
+`SPEC_GAP(navigation-timing-history-input)`: [Navigation Timing creation](https://w3c.github.io/navigation-timing/#dfn-create-the-navigation-timing-entry)
+reads the incoming Document's diagnostics, but [HTML's accessor](https://html.spec.whatwg.org/multipage/nav-history-apis.html#concept-document-nrr)
+requires its node navigable's active entry. During §7.5.1 creation the incoming
+Document is still inactive, and the accessor returns null. Neither specification
+passes the target history state through this interval. The explicit input closes
+that handoff without activating the Document early or adding retained Document
+state. Null remains null; the approved retained-object and frozen-array identity
+rules are unchanged. Fetch's existing redirect reset replaces the DocumentState
+and drops its diagnostics before this handoff, leaving neighboring entries alone.
+
+The extended browser-only `node-compat/experimental/navigation-timing-entry.mjs`
+probe on 5 November 2026 confirms Chromium 156.0.8078.4 exposes the history return's
+diagnostics already in its first parser script, then through DOMContentLoaded and
+load. Firefox 157.0 and WebKit 27.2 do not expose the attribute. Blink's
+[`PerformanceNavigationTiming::notRestoredReasons()`](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/timing/performance_navigation_timing.cc)
+reads its loader/frame's retained diagnostics and excludes child frames; it does
+not depend on HTML's incoming-Document accessor. Its fresh-object behavior remains
+the separately approved `navigation-timing-reasons-identity` disagreement.
+
+The focused regression first failed with null instead of the incoming record in
+the loader callback. Coverage now includes that callback boundary, the departing
+Document remaining active, null and child records, owning realms, masked children,
+frozen arrays and retained identity, real Fetch delivery, and redirect resets.
+
+Validation: all 109 focused history-population, redirect, and Navigation Timing
+creation cases pass on Node 24.19.0, 26.8.1, and custom 27.0.0-pre, with and without
+the addon, with no expected failures. TypeScript/generated declarations, type
+contracts, changed-file ESLint, import boundaries, and whitespace checks pass.
+The Browlet package builds with the seven existing circular-import warnings;
+ESM, CJS, and platform-declaration artifact checks pass.
+
 Resource Timing entries and generic entry queueing are available. `Document.buildNotRestoredReasonsForDocumentState()`
 now collects the unfiltered Document tree, including shadow-tree containers.
 `TopLevelTraversable.buildNotRestoredReasons()` completes origin masking and
 retains the root's generic `masked` detail for hidden blockers. Unloading/cache
 eviction must invoke that builder before destroying the documents whose
 diagnostics are needed; raw collected records are not public timing data.
+Those lifecycle producers, cache decisions, and the unfinished inline/error-page
+loaders remain explicit dependencies. The new handoff covers the shared response
+Document factory and does not implement those producers.
 
 `SPEC_GAP(navigation-timing-null-reasons)`: the refreshed Navigation Timing source
 at `48c0048` (refreshed 4 November 2026) invokes HTML's creation operation with nullable Document diagnostics,
 although that operation requires a non-null backing record and a realm. It
-does not describe the null case or pass that realm. Resolve the null case with
-browser evidence when implementing this consumer; allocation belongs to the
-new entry's realm. No behavior choice or placeholder public entry is introduced
-by the diagnostic-interface slice. The
+does not describe the null case or pass that realm. Retain null when there is
+no record, matching Chromium's ordinary-navigation result; otherwise allocate
+in the new entry's realm. Firefox/WebKit do not expose the attribute. The
 [HTML audit](../browsing/navigation/ROADMAP.md#html-728-notrestoredreasons) records
 the separate collection conflicts and remaining reason producers.
 
@@ -901,10 +1295,10 @@ clock alone would not implement those hooks.
 
 | Planned source | Contract | Specification |
 | --- | --- | --- |
-| `timeline.ts`, `observer.ts`, `observer-entry-list.ts` | Entries, buffers, queries, queueing, and observer delivery present; actual producers remain | Performance Timeline |
-| `navigation.ts` | Document navigation and unload timing entries sourced from lifecycle records | Navigation Timing and HTML §3.1.5 |
+| `timeline.ts`, `observer.ts`, `observer-entry-list.ts` | Entries, buffers, queries, queueing, and observer delivery present; resource and navigation producers are connected | Performance Timeline |
+| `navigation.ts`, `confidence.ts` | Controller-backed and fallback entry creation/exposure/buffering/delivery, target-history diagnostic handoff, and confidence calculation present; missing producer/unload measurements, diagnostic lifecycle callers, and host measurements remain | Navigation Timing and HTML §3.1.5 |
 | `resource.ts`, `performance.ts` | Entries, buffers, overflow delivery, and Fetch production/exposure handoff present | Resource Timing and Fetch |
-| `server.ts` | Header parsing and retained PerformanceServerTiming values on resource entries present; trailers and navigation lifecycle remain | Server Timing |
+| `server.ts` | Header parsing and retained metrics on resource and navigation entries present; trailers remain | Server Timing |
 | `user.ts` | Marks, measures, detail cloning, and buffer management | User Timing |
 | `event.ts` only after trusted input dispatch exists | Event timing, interaction grouping, and first-input entries | Event Timing |
 | `visibility.ts` | `VisibilityStateEntry` creation and timeline exposure sourced from HTML's Document visibility transitions | HTML §6.2 and Performance Timeline |
@@ -979,12 +1373,13 @@ Reference specifications and their local checkout paths:
    entry/observer regression and cache/exposure decisions. The MIME support
    policy and worker-producer acceptance remain explicit owner dependencies.
 3. Server-Timing header parsing and resource-entry projection are present.
-   Trailer delivery and navigation-entry initialization remain explicit dependencies.
+   Navigation-entry initialization is connected; trailer delivery remains explicit.
 4. Connect Navigation Timing to actual loader/navigation/unload records when
    those lifecycles exist; do not manufacture missing lifecycle timestamps.
-   Replace the provisional retained record with the real entry, preserving
-   time-origin conversion, exposure restrictions, and Timeline delivery. The
-   loader test already verifies that later Fetch byte counts reach the record.
+   Controller-backed and fallback creation retain the entry, response data, live
+   milestones, and destination exposure. Load-event observer delivery is connected.
+   Initial about:blank deliberately has no entry. Missing supplied/synthetic timing and the remaining
+   lifecycle producers stay explicit.
 
 **Exit proof:** real Fetch completion creates the expected resource entry;
 cross-origin restrictions, redirects, cache results, byte sizes, buffering,
@@ -1002,7 +1397,11 @@ then. The shared Timing extraction precedes those remaining slices; it changes
 ownership and imports without changing clock behavior or completing a producer.
 The buffer-management API, secondary-buffer insertion, and automatic buffer-full
 task/event, Fetch production/exposure handoff, and Server Timing header metrics
-are present. The next bounded slice starts Navigation Timing's entry/lifecycle work.
+are present. Navigation Timing's entry/getter foundation and confidence calculation
+are present, as are controller-backed/fallback creation, buffering, and load-event
+observer delivery. The legacy API audit and remaining lifecycle inputs are tracked
+above; initial about:blank intentionally has no entry. The confidence host
+measurement policy remains an explicit dependency, returning null until available.
 
 Shared Timing extraction and environment-ownership validation: 157 timing,
 Fetch-timing, Performance, Temporal, timer, event-loop-pause, and input cases

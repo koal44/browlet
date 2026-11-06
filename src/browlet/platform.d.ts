@@ -25,6 +25,10 @@ export type SecurityPolicyViolationEventDisposition = "enforce" | "report";
 
 export type RenderBlockingStatusType = "blocking" | "non-blocking";
 
+export type NavigationTimingType = "navigate" | "reload" | "back_forward";
+
+export type PerformanceTimingConfidenceValue = "high" | "low";
+
 export type ShadowRootMode = "open" | "closed";
 
 export type SlotAssignmentMode = "manual" | "named";
@@ -2956,6 +2960,39 @@ export interface PerformanceServerTimingConstructor {
   [Symbol.hasInstance](value: unknown): value is PerformanceServerTiming;
 }
 
+export interface PerformanceNavigationTiming extends PerformanceResourceTiming {
+  readonly unloadEventStart: number;
+  readonly unloadEventEnd: number;
+  readonly domInteractive: number;
+  readonly domContentLoadedEventStart: number;
+  readonly domContentLoadedEventEnd: number;
+  readonly domComplete: number;
+  readonly loadEventStart: number;
+  readonly loadEventEnd: number;
+  readonly type: NavigationTimingType;
+  readonly redirectCount: number;
+  readonly criticalCHRestart: number;
+  readonly notRestoredReasons: NotRestoredReasons | null;
+  readonly confidence: PerformanceTimingConfidence | null;
+  toJSON(): object;
+}
+
+export interface PerformanceNavigationTimingConstructor extends Ctor<PerformanceResourceTimingConstructor> {
+  readonly prototype: PerformanceNavigationTiming;
+  [Symbol.hasInstance](value: unknown): value is PerformanceNavigationTiming;
+}
+
+export interface PerformanceTimingConfidence {
+  readonly randomizedTriggerRate: number;
+  readonly value: PerformanceTimingConfidenceValue;
+  toJSON(): object;
+}
+
+export interface PerformanceTimingConfidenceConstructor {
+  readonly prototype: PerformanceTimingConfidence;
+  [Symbol.hasInstance](value: unknown): value is PerformanceTimingConfidence;
+}
+
 export interface Navigator {
   readonly permissions: Permissions;
   readonly clipboard: Clipboard;
@@ -3387,6 +3424,8 @@ export interface Window extends EventTarget {
   PerformanceObserverEntryList: PerformanceObserverEntryListConstructor;
   PerformanceResourceTiming: PerformanceResourceTimingConstructor;
   PerformanceServerTiming: PerformanceServerTimingConstructor;
+  PerformanceNavigationTiming: PerformanceNavigationTimingConstructor;
+  PerformanceTimingConfidence: PerformanceTimingConfidenceConstructor;
   Navigator: NavigatorConstructor;
   ErrorEvent: ErrorEventConstructor;
   MessageEvent: MessageEventConstructor;

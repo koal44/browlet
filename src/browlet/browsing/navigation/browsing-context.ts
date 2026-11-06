@@ -117,6 +117,9 @@ export class BrowsingContext {
     document.initializeLoadTimingInfo(
       unsafeContextCreationTime.coarsen(env.crossOriginIsolatedCapability).milliseconds,
     );
+    // SPEC_CLASH(initial-blank-navigation-timing): Follow HTML/WebKit and leave the timing entry unset.
+    // This creation path does not run §7.5.1; Chromium/Firefox expose an entry here.
+    // https://github.com/w3c/navigation-timing/issues/155
     document.isInitialAboutBlank = true;
     document.aboutBaseURL = creatorBaseURL;
     // SPEC_CLASH(document-cookie-averse): initial blank documents inherit the creator's cookie lookup URL.

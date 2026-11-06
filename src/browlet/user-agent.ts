@@ -35,6 +35,7 @@ import { PolicyContainer, HSTSStore, EmbedderPolicy, type SandboxingFlagSet } fr
 import { CSPList } from './browsing/policy/csp/index';
 import type { IntersectionObserverMargin } from './dom/intersection-observer/index';
 import type { DocumentImpl, ElementImpl } from './dom/nodes/index';
+import type { PerformanceNavigationTimingImpl, PerformanceTimingConfidenceValue } from './performance/index';
 import type { BroadcastChannelImpl } from './communication/index';
 import type { StorageImpl } from './storage/index';
 import type { SourceSnapshotParams } from './browsing/navigation/state/index';
@@ -222,6 +223,16 @@ export class UserAgent implements
     if (lock === null) return;
     const target = lock.target;
     if (target !== null && !target.isConnected) lock.exitPointerLock(target);
+  }
+
+  /** Obtain an unrandomized assessment of this navigation's transient conditions, or null if unavailable. */
+  // https://w3c.github.io/navigation-timing/#performancenavigationtiming-underlying-confidence-value
+  getUnderlyingNavigationTimingConfidence(_entry: PerformanceNavigationTimingImpl): PerformanceTimingConfidenceValue | null {
+    // TODO(Navigation Timing host measurements): Capture startup completion, temporary CPU/memory
+    // pressure, or other transient observations for this entry's navigation interval. Static device
+    // characteristics are forbidden. There is no host instrumentation for this yet; do not infer
+    // high confidence from its absence or substitute the current conditions when the getter runs.
+    return null;
   }
 
   /** Recheck live results after a decision or feature-specific constraint changes. */

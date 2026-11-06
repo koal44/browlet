@@ -6,12 +6,16 @@ import {
 import { performanceObserverEntryListIDL } from './observer-entry-list';
 import { resourceTimingPerformanceIDL, performanceResourceTimingIDL, renderBlockingStatusTypeIDL } from './resource';
 import { performanceServerTimingIDL, serverTimingResourceIDL } from './server';
+import { performanceNavigationTimingIDL, navigationTimingTypeIDL } from './navigation';
+import { performanceTimingConfidenceIDL, performanceTimingConfidenceValueIDL } from './confidence';
 
-/** High Resolution Time, Performance Timeline, Resource/Server Timing, and the Soft Navigations amendment. */
+/** High Resolution Time, Performance Timeline, its timing families, and the Soft Navigations amendment. */
 export const performanceIDLDefinitions = [
   performanceIDL, performanceEntryIDL, performanceEntryListIDL, performanceEntryNavigationIDL, performanceTimelineIDL,
   performanceObserverIDL, performanceObserverInitIDL, performanceObserverCallbackIDL, performanceObserverCallbackOptionsIDL,
   performanceObserverEntryListIDL,
   resourceTimingPerformanceIDL, performanceResourceTimingIDL, renderBlockingStatusTypeIDL,
   performanceServerTimingIDL, serverTimingResourceIDL,
+  performanceNavigationTimingIDL, navigationTimingTypeIDL,
+  performanceTimingConfidenceIDL, performanceTimingConfidenceValueIDL,
 ];

@@ -26,11 +26,11 @@ describe('PerformanceObserver registration and records', () => {
     expect(Object.prototype.toString.call(observer)).toBe('[object PerformanceObserver]');
   });
 
-  it('advertises the implemented resource producer and retains a frozen array per global', () => {
+  it('advertises the implemented Window producers and retains a frozen array per global', () => {
     const first = fixture();
     const second = fixture();
     const types = first.browser.window.PerformanceObserver.supportedEntryTypes;
-    expect(types).toEqual(['resource']);
+    expect(types).toEqual(['navigation', 'resource']);
     expect(Object.isFrozen(types)).toBe(true);
     expect(first.browser.window.PerformanceObserver.supportedEntryTypes).toBe(types);
     expect(second.browser.window.PerformanceObserver.supportedEntryTypes).not.toBe(types);

@@ -75,6 +75,9 @@ describe('Document creation Window selection', () => {
     const top = fixture();
     const initial = top.activeDocument!;
     const window = top.activeWindow!;
+    const performance = window.env.getWindowOrWorkerGlobalScopeMixin().performance;
+    expect(initial.navigationTimingEntry).toBeUndefined();
+    expect(performance.getEntriesByType('navigation')).toEqual([]);
     const params = suppliedParams('about:blank?replacement');
     params.origin = initial.origin;
     if (hasReservation) params.reservedEnv = reserve(top, params, false);
@@ -90,6 +93,11 @@ describe('Document creation Window selection', () => {
     expect(params.reservedEnv).toBe(reserved);
     expect(reserved?.id).toBe(id);
     expect(createWindow).not.toHaveBeenCalled();
+    expect(window.env.getWindowOrWorkerGlobalScopeMixin().performance).toBe(performance);
+    expect(document.navigationTimingEntry).toBeDefined();
+    expect(document.navigationTimingEntry!.name).toBe('about:blank?replacement');
+    expect(performance.getEntriesByType('navigation')).toEqual([document.navigationTimingEntry]);
+    expect(initial.navigationTimingEntry).toBeUndefined();
   });
 
   it('creates a fresh Window for a later same-origin Document, preserving its proxy handle', () => {
@@ -253,6 +261,12 @@ describe('Document creation Window selection', () => {
     expect(document.policyContainer).toBe(params.policyContainer);
     expect(document.aboutBaseURL).toBe(state.aboutBaseURL);
     expect(document.env.topLevelOrigin).toBe(top.activeDocument!.env.topLevelOrigin);
+    expect(document.navigationTimingEntry).toMatchObject({
+      name: 'about:srcdoc', entryType: 'navigation', redirectCount: 0,
+      responseEnd: 0, transferSize: 0,
+    });
+    expect(document.navigationTimingEntry!.timingInfo.startTime).toBe(params.startTime);
+    expect(document.navigationTimingEntry!.env).toBe(document.env);
   });
 });
 
@@ -527,21 +541,21 @@ describe('Document creation Navigation Timing inputs', () => {
 
     expect(createEntry).toHaveBeenCalledOnce();
     expect(inputs).toMatchObject({
-      type, redirectCount: 0, responseStatus: 203, cacheUsage: 'validated', serviceWorkerTimingInfo: workerTiming,
+      type, redirectCount: 0, responseStatus: 203, cacheMode: 'validated', serviceWorkerTimingInfo: workerTiming,
     });
-    expect(inputs?.fetchTimingInfo).toBe(fetchTimingInfo);
+    expect(inputs?.timingInfo).toBe(fetchTimingInfo);
     expect(inputs?.documentTimingInfo).toBe(document.loadTimingInfo);
     expect(inputs?.previousDocumentUnloadTiming).toBe(document.previousDocumentUnloadTiming);
     expect(inputs?.serviceWorkerTimingInfo).toBe(workerTiming);
-    expect(inputs?.bodyInfo).toBe(response.bodyInfo);
+    expect(inputs?.resourceInfo).toBe(response.bodyInfo);
     // The public Resource Timing getters must apply their own exposure rules; do not erase the shared Fetch data here.
     expect(fetchTimingInfo.redirectStartTime).toBe(11);
     expect(fetchTimingInfo.redirectEndTime).toBe(21);
     fetchTimingInfo.endTime = 50;
     response.bodyInfo.decodedSize = 75;
     document.loadTimingInfo.domInteractiveTime = 60;
-    expect(inputs?.fetchTimingInfo.endTime).toBe(50);
-    expect(inputs?.bodyInfo.decodedSize).toBe(75);
+    expect(inputs?.timingInfo.endTime).toBe(50);
+    expect(inputs?.resourceInfo.decodedSize).toBe(75);
     expect(inputs?.documentTimingInfo.domInteractiveTime).toBe(60);
   });
 

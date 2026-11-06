@@ -148,6 +148,7 @@ describe('Performance Timeline entry queueing', () => {
   it('uses zero for a non-Window global through the same queueing and projection machinery', () => {
     const env = createSandboxEnvironment();
     const performance = new PerformanceImpl(env);
+    expect(performance.supportedEntryTypes).toEqual(['resource']);
     const entry = new PerformanceEntryImpl(1, 'mark', 'non-window', 0, env);
     expect(performance.currentNavigationId).toBe(0);
     performance.queueEntry(entry);
@@ -184,7 +185,11 @@ describe('Performance Timeline entry queueing', () => {
     oldPerformance.queueEntry(oldEntry);
     expect(oldPlatform.getEntriesByName('old-global')[0]!.navigationId).toBe(123);
     expect(getRelevantRealm(oldPlatform.getEntries()[0]!)).toBe(oldEnv.realm);
-    expect(browser.window.performance.getEntries()).toEqual([]);
+    expect(browser.window.performance.getEntriesByName('old-global')).toEqual([]);
+    const currentEntries = browser.window.performance.getEntries();
+    expect(currentEntries).toHaveLength(1);
+    expect(currentEntries[0]!.entryType).toBe('navigation');
+    expect(getRelevantRealm(currentEntries[0]!)).toBe(currentPerformance.env.realm);
     expect(currentPerformance.currentNavigationId).toBe(456);
   });
 });

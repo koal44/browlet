@@ -181,7 +181,7 @@ function fixture() {
   const performance = env.getWindowOrWorkerGlobalScopeMixin().performance;
   function entry(name: string) {
     return new PerformanceResourceTimingImpl(
-      'fetch', `https://example.test/${name}`, new FetchTimingInfo(), '', new ResponseBodyInfo(), 200, '', true, env,
+      'fetch', `https://example.test/${name}`, new FetchTimingInfo(), '', new ResponseBodyInfo(), 200, '', true, [], env,
     );
   }
   function retain(name: string) { performance.getEntryBuffer('resource').entries.push(entry(name)); }

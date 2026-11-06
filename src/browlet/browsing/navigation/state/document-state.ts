@@ -3,8 +3,8 @@ import type { Origin, URLRecord } from '../../../../url/index';
 import type { ReferrerPolicy } from '../../../../fetch/index';
 
 import type { PolicyContainer } from '../../policy/index';
+import type { NotRestoredReasons } from '../diagnostics/index';
 import type { DocumentImpl } from '../../../dom/nodes/index';
-import type { NotRestoredReasons } from '../not-restored-reasons';
 
 import type { NestedHistory } from './session-history';
 

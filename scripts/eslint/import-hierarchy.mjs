@@ -67,6 +67,8 @@ export const layers = [
   ['browlet/html/reflection/'],
   // Documents own History state; History queries Document/navigation through retained types.
   ['browlet/browsing/history/'],
+  // Collected navigation diagnostics are consumed by Document and Performance without loading navigation.
+  ['browlet/browsing/navigation/diagnostics/'],
   ['browlet/dom/abort/', 'browlet/dom/nodes/'],
   ['browlet/dom/', 'browlet/performance/', 'browlet/navigator/'],
   ['browlet/communication/', 'browlet/storage/'],

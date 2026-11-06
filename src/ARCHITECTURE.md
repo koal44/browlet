@@ -1454,9 +1454,9 @@ time origin. Missing observations remain zero; borrowing another Window's getter
 does not select another clock. Fetch retains the completion timestamp on the
 shared clock and preserves overall duration when hiding detailed timing. An
 explicit timing-exposure flag controls the entry's transfer-size result; it does
-not replace Fetch's TAO/CORS filtering. Resource creation is separate from
-queueing, buffer management, and observer delivery. The environment's provisional
-reporting seam remains disconnected until those producer rules are implemented.
+not replace Fetch's TAO/CORS filtering. The environment forwards completed Fetch
+records to its retained Performance, which owns resource storage, overflow, and
+observer delivery.
 
 Document lazily owns `LegacyMouseProcessor` in `interaction/mouse/legacy/`, a foundation
 that uses event machinery and type-only node references without loading higher

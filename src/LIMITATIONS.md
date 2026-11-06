@@ -1642,10 +1642,23 @@ HTML/WebKit's secure-context gate where Chromium/Firefox honor an HTTPS child's
 header beneath an insecure parent. The null-reservation input remains a documented
 specification gap, not an unfinished implementation. The local-route response-policy
 adapter remains until that producer supplies complete params. Navigation Timing
-now retains controller-backed inputs and the redirect count selected by HTML's
-taint/client/referrer/TAO rules. It still exposes no PerformanceNavigationTiming
-entry: navigation-specific construction, exposure filtering, diagnostic capture,
-and producer integration are absent. Resource Timing now supplies its derived
+now creates and buffers entries before loader callbacks, with
+live completion/body/milestone data, destination-visible response metadata, and
+HTML's separate taint/client/referrer/TAO redirect gate. Load completion notifies
+observers without inserting the entry again; early and later buffered replays
+retain that live entry. Full parser task sequencing, initial pageshow, and BiDi
+load-complete ordering remain explicit loader dependencies. Without a Fetch
+controller, the entry retains supplied response metadata while unavailable fetch
+phases and transferSize remain zero. Initial about:blank intentionally has no entry,
+following HTML/WebKit; Chromium/Firefox expose one. Explicit later about:blank
+navigations receive entries. Original fetch timing for supplied network responses and synthetic
+loader-completion measurements remain explicit. Target-history diagnostics before activation,
+previous-Document unload, and Critical-CH measurements remain explicit.
+Available diagnostics are captured in the entry's realm. The confidence API retains one randomized
+result with a fixed 50% noise trigger, but the explicit UserAgent measurement
+hook has no host instrumentation yet: confidence remains null until a real
+assessment of that navigation is available after interactive. Window now advertises
+navigation and resource in supportedEntryTypes. Resource Timing supplies its derived
 entry, getters, default JSON, and time-origin conversion for prepared Fetch inputs.
 Its buffer controls clear retained resource entries and resize the per-global limit.
 Resource-specific insertion retains overflow entries until a coalesced Timeline
@@ -1658,7 +1671,7 @@ classification remains provisional: the explicit UserAgent support-policy stub
 means text/plain contentType is empty; its strict regression is an approved
 expected failure. Server Timing now parses captured response headers into retained
 metrics and a frozen resource-entry array, with Fetch's secure-context and TAO
-filtering. HTTP trailer delivery, navigation-entry initialization, and worker-producer
+filtering. HTTP trailer delivery and worker-producer
 acceptance remain dependencies. Body completion still belongs to Fetch's consumption and
 cancellation lifecycle; timing delivery does not force inaccessible bodies to drain.
 Performance Timeline now supplies
@@ -1667,9 +1680,9 @@ registration/record retrieval, buffered replay, observer-list queries, and share
 task delivery, entry insertion, and initial navigation-ID association. The withdrawn
 numeric PerformanceEntry.id is omitted, following upstream issue #218 and browsers;
 navigationId follows the newer Soft Navigations model. Early producer capture and
-soft-navigation ID advancement remain explicit dependencies. No timing producer
-other than Fetch resources populates those buffers yet; supportedEntryTypes
-advertises resource only.
+soft-navigation ID advancement remain explicit dependencies. Fetch resources and
+Document navigation populate those buffers; other producers
+are not advertised. Outside Window, supportedEntryTypes retains resource only.
 Synthetic and supplied-response
 navigations without a controller still need fallback timing; retained start time
 does not reconstruct prior network measurements. Response-header processing and
@@ -1909,13 +1922,15 @@ typings use `any` for this one inherited property to preserve Event assignabilit
 the runtime still converts and stores a string.
 `NotRestoredReasons` and `NotRestoredReasonDetails` expose their nonconstructible
 interfaces and support recursive creation from retained records, including
-realm-owned frozen arrays and default JSON behavior. No public accessor produces
-these diagnostics yet: Navigation Timing, history-lifecycle callers,
-and back/forward-cache decisions remain unfinished. Document collects tree
+realm-owned frozen arrays and default JSON behavior. Navigation Timing now
+captures the incoming top-level history entry's masked diagnostics before Document
+activation and loader callbacks. Child entries retain null; redirected entries
+drop the old diagnostics with their replaced DocumentState. History-lifecycle
+callers, unfinished inline/error-page loaders, and back/forward-cache decisions
+remain unfinished. Document collects tree
 records into active history state, including shadow-tree frames;
 TopLevelTraversable masks foreign subtrees and retains a generic root reason
-for hidden blockers. The provisional navigation-timing factory still marks its
-missing entry-creation step. Approved collection/masking corrections are in the
+for hidden blockers. Approved collection/masking corrections are in the
 [masking audit](browlet/browsing/navigation/ROADMAP.md#html-7462-masking-not-restored-reasons).
 Document `hidden` and `visibilityState` expose retained state, initially hidden
 for newly constructed Documents. Navigable initialization and the existing

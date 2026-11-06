@@ -7,6 +7,7 @@ import {
 } from '../../../fetch/index';
 
 import { PolicyContainer, OpenerPolicy, SandboxingFlagSet } from '../policy/index';
+import type { NotRestoredReasons } from './diagnostics/index';
 import type { DocumentImpl } from '../../dom/nodes/index';
 import { HTMLIFrameElementImpl } from '../../dom/nodes/html/embedded/index';
 import type { NavigationTimingType } from '../../performance/index';
@@ -50,6 +51,8 @@ export class NavigationParams {
   openerPolicy = new OpenerPolicy();
   /** Kind of navigation recorded by Navigation Timing. */
   navigationTimingType: NavigationTimingType = 'navigate';
+  /** Masked target-history diagnostics supplied before Document creation; null outside top-level restoration. */
+  notRestoredReasons: NotRestoredReasons | null = null;
   /** Inherited base for an about:blank or srcdoc document, when applicable. */
   aboutBaseURL: URLRecord | null = null;
   /** Cookie lookup URL selected for the destination document. */

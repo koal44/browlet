@@ -136,7 +136,7 @@ describe('completed Fetch navigation parameters', () => {
     expect(params.request!.referrer).not.toBeNull();
     expect(params.response.redirectTaint).toBe('cross-site');
     expect(document.navigationTimingEntry?.redirectCount).toBe(allowed ? 2 : 0);
-    expect(document.navigationTimingEntry?.fetchTimingInfo).toBe(params.fetchController!.extractFullTimingInfo());
+    expect(document.navigationTimingEntry?.timingInfo).toBe(params.fetchController!.extractFullTimingInfo());
   });
 
   it('delivers the completed parameters on the target task before saving a returned Document', async () => {

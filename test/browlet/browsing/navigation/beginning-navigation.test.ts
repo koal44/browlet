@@ -326,6 +326,10 @@ async function fixture() {
   const browser = new Browlet({ route: () => '' });
   await browser.navigate('https://example.test/page#before');
   const document = unwrap<DocumentImpl>(browser.document);
+  // Finish loading/Performance delivery before tests advance their own operation by one turn.
+  await runInHostTask(() => {
+    while (document.env.responsibleEventLoop.runTaskTurn()) { /* Drain loading tasks. */ }
+  });
   const navigable = document.getNodeNavigable()!;
   const turns: (() => void)[] = [];
   vi.spyOn(document.env.userAgent, 'runInParallel').mockImplementation((steps) => { turns.push(steps); });

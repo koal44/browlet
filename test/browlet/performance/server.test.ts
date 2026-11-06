@@ -105,7 +105,7 @@ describe('Server Timing metrics', () => {
   it('uses the filtered header list independently of body-size visibility', () => {
     const { env, timing } = fixture(['db;dur=2']);
     const makeEntry = (input: FetchTimingInfo) => getBindingContext(env.realm).project(PerformanceResourceTimingImpl,
-      new PerformanceResourceTimingImpl('fetch', 'https://foreign.test/', input, '', new ResponseBodyInfo(), 0, '', false, env),
+      new PerformanceResourceTimingImpl('fetch', 'https://foreign.test/', input, '', new ResponseBodyInfo(), 0, '', false, input.serverTimingHeaders, env),
     ) as PerformanceResourceTiming;
     expect(makeEntry(timing).serverTiming).toHaveLength(1);
     expect(makeEntry(timing.createOpaque()).serverTiming).toEqual([]);
@@ -118,7 +118,9 @@ function fixture(fields: string[]) {
   const window = env.realm.globalObject as Window & typeof globalThis;
   const timing = new FetchTimingInfo();
   timing.serverTimingHeaders = new FetchHeaders(fields.map((value) => ['Server-Timing', value])).getDecodeAndSplit('Server-Timing') ?? [];
-  const implementation = new PerformanceResourceTimingImpl('fetch', 'https://example.test/resource', timing, '', new ResponseBodyInfo(), 200, '', true, env);
+  const implementation = new PerformanceResourceTimingImpl(
+    'fetch', 'https://example.test/resource', timing, '', new ResponseBodyInfo(), 200, '', true, timing.serverTimingHeaders, env,
+  );
   const entry = getBindingContext(env.realm).project(PerformanceResourceTimingImpl, implementation) as PerformanceResourceTiming;
   return { env, window, timing, entry };
 }

@@ -128,6 +128,14 @@ Revisit these decisions when the specification or implementation evidence change
 
 ### Completion and execution
 
+- **`navigation-fetch-completion` (gap):** Fetch finale assigns end time only
+  within optional Resource Timing reporting, leaving controller-backed
+  navigation timing at zero when no resource report is requested. Record
+  completion at body end for navigation requests, using the fetch's existing
+  coarsening precision. The regression failed with zero instead of `100.5`;
+  all three browsers update their navigation entry without an extra resource
+  report. Ordinary resource reporting retains its report-time precision and
+  later entry-realm conversion. See the [creation audit](../browlet/performance/ROADMAP.md#navigation-timing-automatic-creation).
 - **`navigation-fetch-full-timing`:** [Fetch finale](https://fetch.spec.whatwg.org/#fetch-finale)
   retains controller timing only for destination document, but HTML's child
   navigation requests use iframe/frame/object/embed and need that timing when

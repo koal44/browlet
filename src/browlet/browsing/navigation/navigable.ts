@@ -960,6 +960,10 @@ export class Navigable {
               completionSteps?.();
               return;
             }
+            // SPEC_GAP(navigation-timing-history-input): The incoming Document has no node navigable yet.
+            // Forward its target state's already-masked diagnostics after redirects, before loader callbacks.
+            // Child states hold raw collection data and must not be exposed through their own timing entries.
+            params.notRestoredReasons = this.isTopLevelTraversable ? entry.documentState.notRestoredReasons : null;
             entry.documentState.document = this.loadDocument(params, sourceSnapshotParams, entry.documentState.initiatorOrigin, resource);
             complete();
           }), taskOptions), fail);
