@@ -111,6 +111,16 @@ The addon detects the forwarding export in the
 selected headers; builds without it retain classic/static module execution but
 reject dynamic-import callback options.
 
+The patch also backports the production change from
+[V8 commit 1cdea338](https://github.com/v8/v8/commit/1cdea338fd59d4700b1b311feb76e6a57c679844).
+Module evaluation clears its consumed exception before rejecting its completion
+Promise, so a native call from a Promise hook does not report the module failure
+again. The included Node regression,
+`test/parallel/test-vm-module-promise-hook-native-call.js`, checks rejection
+identity, absence of duplicate reports, and separate reporting of genuine hook
+failures using public Node APIs. This is an engine fix; rebuilding only the addon
+does not apply it.
+
 Build on Windows:
 
 ```powershell

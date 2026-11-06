@@ -3159,3 +3159,84 @@ index cab1dc76dcc751d572305bf9297ab2ad8151030d..668ca71d5b131ad5d5d8a46cd0f9ae0c
  }  // namespace node
  
  #endif  // defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS
+diff --git a/deps/v8/src/objects/source-text-module.cc b/deps/v8/src/objects/source-text-module.cc
+index 101373b83..703156b26 100644
+--- a/deps/v8/src/objects/source-text-module.cc
++++ b/deps/v8/src/objects/source-text-module.cc
+@@ -913,8 +913,18 @@ MaybeDirectHandle<Object> SourceTextModule::Evaluate(
+   if (InnerModuleEvaluation(isolate, module, &stack, &dfs_index).is_null()) {
+     if (!module->MaybeHandleEvaluationException(isolate, &stack)) return {};
+     CHECK(try_catch.HasCaught());
++
++    // We are clearing the internal exception here because JSPromise::Reject can
++    // call Isolate::ReportPromiseReject that will trap to a host defined hook
++    // and given we are already registering this exception on promise
++    // capability, we shouldn't keep it as pending on isolate. This is important
++    // because host might have paths that call `Isolate::ReportPendingMessages`
++    // while `AllowExceptions::IsAllowed` is `false` and leaving such exception
++    // pending will cause a DCHECK failure.
++    isolate->clear_internal_exception();
+     // d. Perform ! Call(capability.[[Reject]], undefined,
+     //                   «result.[[Value]]»).
++
+     JSPromise::Reject(capability, direct_handle(module->exception(), isolate));
+   } else {  // 10. Else,
+     // a. Assert: module.[[Status]] is either EVALUATING-ASYNC or EVALUATED.
+diff --git a/test/parallel/test-vm-module-promise-hook-native-call.js b/test/parallel/test-vm-module-promise-hook-native-call.js
+new file mode 100644
+--- /dev/null
++++ b/test/parallel/test-vm-module-promise-hook-native-call.js
+@@ -0,0 +1,53 @@
++'use strict';
++
++// Flags: --experimental-vm-modules
++
++const common = require('../common');
++const assert = require('assert');
++const { SourceTextModule, createContext } = require('vm');
++const { getHeapStatistics, promiseHooks } = require('v8');
++
++const reports = [];
++process.on('uncaughtException', (error) => reports.push(error));
++
++(async () => {
++  // Calling a native API must not expose the exception being converted into
++  // this module's rejected completion promise as a failure of the hook itself.
++  const stop = promiseHooks.onSettled(() => getHeapStatistics());
++  const failure = new Error('module rejection');
++  const context = createContext({ failure });
++  try {
++    const warm = new SourceTextModule('export const value = 1;', { context });
++    await warm.link(common.mustNotCall());
++    for (let i = 0; i < 20000; i++) await warm.evaluate();
++
++    const module = new SourceTextModule('throw failure;', { context });
++    await module.link(common.mustNotCall());
++    for (let i = 0; i < 2; i++) {
++      await assert.rejects(module.evaluate(), (error) => error === failure);
++    }
++    assert.deepStrictEqual(reports, []);
++  } finally {
++    stop();
++  }
++
++  // A genuine hook failure is reported separately, without replacing the
++  // module's original rejection or losing either exception's identity.
++  const hookFailure = new Error('settlement hook failure');
++  const module = new SourceTextModule('throw failure;', { context });
++  await module.link(common.mustNotCall());
++  const stopThrowing = promiseHooks.onSettled(() => {
++    stopThrowing();
++    getHeapStatistics();
++    throw hookFailure;
++  });
++  try {
++    await assert.rejects(module.evaluate(), (error) => error === failure);
++    assert.deepStrictEqual(reports, [hookFailure]);
++  } finally {
++    stopThrowing();
++  }
++})().then(common.mustCall(), (error) => {
++  console.error(error);
++  process.exitCode = 1;
++});
