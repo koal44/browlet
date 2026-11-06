@@ -176,7 +176,9 @@ export const htmlElementIDL = defineInterface({
     attr('dir', idlType.DOMString, xattr('CEReactions')),
     attr('inert', idlType.boolean, xattr('CEReactions', reflect())),
     attr('accessKey', idlType.DOMString, xattr('CEReactions', reflect())),
-    // TODO(HTML): interaction/editing owns hidden, click, accessKeyLabel, draggable, spellcheck,
+    // TODO(HTML §6.5): click() still needs disabled-form-control policy and its
+    // click-in-progress flag before calling fireSyntheticPointerEvent('click', true).
+    // TODO(HTML): interaction/editing owns hidden, accessKeyLabel, draggable, spellcheck,
     // writingSuggestions, autocapitalize, and autocorrect. Reflection alone does not implement inertness.
     // TODO(HTML): §3.2.7 owns innerText/outerText; custom elements own attachInternals.
     // TODO(HTML): popover state, show/hide/toggle operations, and popover reflection belong to §6.12.

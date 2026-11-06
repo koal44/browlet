@@ -132,6 +132,12 @@ export class MouseEventImpl extends UIEventImpl {
     return this.#modifiers.getModifierState(keyArg);
   }
 
+  /** Retain an immutable modifier snapshot and set the four basic modifier attributes. */
+  setModifierState(modifiers: EventModifierState): void {
+    this.#modifiers = modifiers;
+    this.#altKey = modifiers.getModifierState('Alt');
+  }
+
   /** Initialize producer data; the producer establishes trust after DOM initialization. */
   // https://w3c.github.io/pointerevents/#dfn-initialize-a-mouseevent
   // Native coordinates and device state are explicit inputs, not ambient globals.
@@ -143,9 +149,9 @@ export class MouseEventImpl extends UIEventImpl {
     this.screenY = Math.floor(input.screenY);
     this.clientX = Math.floor(input.clientX);
     this.clientY = Math.floor(input.clientY);
-    this.#modifiers = input.modifiers;
+    this.setModifierState(input.modifiers);
     // "Set mouse event modifiers" keeps Alt and AltGraph distinct, but either sets altKey.
-    this.#altKey = input.modifiers.getModifierState('Alt') || input.modifiers.getModifierState('AltGraph');
+    this.#altKey ||= input.modifiers.getModifierState('AltGraph');
     this.button = 0;
     this.buttons = input.buttons;
     this.initializePointerLockAttributes();

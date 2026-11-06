@@ -14,7 +14,7 @@ import type { LinkStyleMixin } from '../../style/index';
 import { DOMTokenListImpl, type TokenListAttribute } from '../lists/index';
 import type { EventImpl } from '../events/index';
 import type { TaskSource } from '../../scripting/index';
-import type { PointerId } from '../../interaction/events/index';
+import { PointerEventImpl, type PointerId } from '../../interaction/events/index';
 import { PermissionsPolicy, type PermissionsPolicyDirective } from '../../browsing/policy/index';
 import { getTrustedTypeDataForAttribute, type TrustedTypeValue } from '../../browsing/policy/trusted-types/index';
 import type { IntersectionObserverRegistration } from '../intersection-observer/index';
@@ -218,6 +218,33 @@ export class ElementImpl extends NodeImpl {
   // https://html.spec.whatwg.org/multipage/webappapis.html#queue-an-element-task
   queueTask(source: TaskSource, steps: () => void): void {
     this.env.realm.queueGlobalTask(source, steps);
+  }
+
+  /** Dispatch a synthetic pointer event, returning false when a listener cancels it. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#fire-a-synthetic-pointer-event
+  fireSyntheticPointerEvent(name: string, notTrusted = false): boolean {
+    const document = this.nodeDocument;
+    // Adoption retains the element's realm; firing uses its current node Document's realm.
+    const event = document.createTrustedEvent(PointerEventImpl);
+    event.type = name;
+    event.bubbles = event.cancelable = event.composed = true;
+    if (notTrusted) event.isTrusted = false;
+    // SPEC_CLASH(synthetic-pointer-modifiers): Follow HTML's current device state even when untrusted; browsers clear modifiers for HTMLElement.click().
+    event.setModifierState(document.env.userAgent.keyboardInput.modifiers);
+    // A detached element still has its Document's Window. An inert Document has none.
+    // SPEC_CLASH(synthetic-pointer-detached-view): Follow HTML/Chromium/WebKit; Firefox uses null for detached elements.
+    event.view = document.browsingContext === null ? null : document.getRelevantGlobalObject();
+    // Pointer Events reserves -1 for events generated without a pointing device.
+    // https://w3c.github.io/pointerevents/#dom-pointerevent-pointerid
+    event.pointerId = -1;
+    // SPEC_CLASH(pointer-activation-defaults): Retain the specified defaults like Chromium; Firefox/WebKit set isPrimary for synthetic clicks.
+    return this.dispatch(event);
+  }
+
+  /** Fire HTML's trusted non-pointer click through ordinary DOM dispatch and activation. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#fire-a-click-event
+  fireClick(): boolean {
+    return this.fireSyntheticPointerEvent('click');
   }
 
   /** Request the UserAgent's native pointer lock using this element's owning environment. */

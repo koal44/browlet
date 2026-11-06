@@ -226,8 +226,10 @@ processing and the HTML owners above.
 Next native integration must choose its concrete OS clipboard/format contract
 before replacing those throwing dependencies.
 CSSOM View remains deferred.
-HTML §8.1.8.3's synthetic pointer-event operation still needs its hookup. Input producers retain
-their HTML, editing, and layout owners.
+HTML §8.1.8.3's synthetic pointer/click firing is connected on Element, using
+UserAgent keyboard modifiers and DOM dispatch. This is Vin's consolidation
+checkpoint. HTMLElement.click() and keyboard activation still need HTML §6.5's
+caller policies; input producers retain their HTML, editing, and layout owners.
 Source/deferred imports and the HTML Wasm parser remain explicit boundaries.
 Later host-hook algorithms must be connected before judging
 the complete model; the uncertain cross-realm observer test is skipped.

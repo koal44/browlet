@@ -2489,13 +2489,15 @@ six Node 24/26/custom stock/addon configurations. Typechecking, declaration
 contracts, touched-file ESLint, and diff checks pass. No new failure was
 reclassified or skipped.
 
-§8.1.8.2's declarations and inclusions are connected. §8.1.8.3 defines synthetic
-pointer/click firing; DOM's generic `fireEvent()` is already implemented, but it
-does not supply that algorithm. UIEvent, MouseEvent, and PointerEvent objects
-are now implemented in interaction/events; live modifier-state input still needs
-its host owner. The synthetic-pointer-event hookup remains unfinished. See the
-[interaction event roadmap](../interaction/events/ROADMAP.md) for the completed
-constructor boundaries and remaining input dependencies.
+§8.1.8.2's declarations and inclusions are connected. §8.1.8.3 is now implemented
+by Element.fireSyntheticPointerEvent() and fireClick(), using PointerEvent,
+UserAgent's current keyboard modifier snapshot, and DOM's existing dispatch and
+activation hooks. The event is allocated in the current node Document's realm,
+is trusted unless requested otherwise, and returns dispatch's cancellation result.
+HTMLElement.click() and keyboard activation still need their HTML §6.5 caller
+policies; this does not implement disabled controls, focus, or element actions.
+See the [event-firing audit](../interaction/events/ROADMAP.md#html-8183-synthetic-pointer-and-click-firing)
+for the approved browser conflicts, validation, and consolidation stopping point.
 
 ### HTML §8.1.8.1: beforeunload handler processing
 

@@ -62,6 +62,8 @@ export class KeyboardInputProcessor {
   // https://w3c.github.io/uievents/#event-type-keydown
   // TODO(HTML §§6.5–6.8 / Input Events / Clipboard): classify native shortcuts;
   // invoke Tab traversal, element activation, clipboard commands, or editing.
+  // Eligible element activation calls Element.fireClick(); key/element policy
+  // remains here, separate from HTML §8.1.8.3's completed firing operation.
   // Recognized clipboard shortcuts call SystemClipboard.runAction(type, document, 'user')
   // in this keydown task; queueAction is for menu entry and could run after an already queued keyup.
   // Editing must deliver beforeinput -> edit -> input with its own cancellation.

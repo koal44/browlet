@@ -4,6 +4,11 @@ This owner provides key-value selection, key/code vocabularies, and a UserAgent-
 KeyboardInputProcessor for queued presses/releases. Native layout/classification,
 HTML focus and activation, editing/default actions, and IME effects remain explicit
 dependencies. KeyboardEvent itself stays in the shared [event foundation](../events/ROADMAP.md).
+HTML §8.1.8.3's Element.fireClick() now provides the firing operation for eligible
+non-pointer activation and reads this processor's current modifier snapshot.
+applyDefaultAction() retains its named throwing dependency until HTML defines
+which keys/elements activate and their concrete actions; this slice supplies no
+shortcut, focus, or editing policy.
 
 ## Section 4 keyboard mapping and cancellation audit
 

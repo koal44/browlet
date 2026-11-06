@@ -975,10 +975,14 @@ with an empty pointer type. This does not detect clicks or implement default act
 the mouse adapter now supplies menu timing explicitly. Keyboard-triggered menus
 still need the keyboard/focus owners' current target, modifiers, and UI placement;
 the mouse entry requires actual input rather than substituting zero coordinates.
-HTML's synthetic-pointer-event operation and
-HTMLElement.click()/keyboard activation still need current modifier input and
-their calling algorithms; the factory's required input makes that dependency
-explicit. CSSOM View's unimplemented page/offset coordinates remain unexposed.
+HTML §8.1.8.3 now supplies Element.fireSyntheticPointerEvent()/fireClick(),
+including current UserAgent keyboard modifiers and the optional untrusted flag.
+The approved HTML rule retains modifiers even for untrusted firing, unlike the
+three browsers' HTMLElement.click(). HTMLElement.click() itself remains unexposed:
+HTML §6.5 still owns disabled-control handling and the click-in-progress guard.
+KeyboardInputProcessor.applyDefaultAction() still throws for the missing focus,
+activation and editing policies; concrete element activation remains with HTML.
+CSSOM View's unimplemented page/offset coordinates remain unexposed.
 
 Pointer Events §3.2 now provides internal event initialization and creation.
 The reached MouseEvent initializer requires mapped coordinates and a button/modifier

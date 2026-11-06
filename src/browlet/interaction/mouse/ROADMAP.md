@@ -209,10 +209,12 @@ restoration do not replace the retained interaction target.
 
 DOM dispatch already calls the target's activation behavior after an uncanceled
 click. The producer adds no duplicate default-action continuation. Concrete HTML
-element actions remain HTML §6.5 work. §11.2.15's null-native HTMLElement.click()
-and keyboard callers remain explicit TODOs at `PointerEventImpl.createActivation`:
-they need HTML's synthetic firing/trust policy and current modifier input, not a
-fabricated mouse source. This slice completes the native-input path only.
+element actions remain HTML §6.5 work. §11.2.15's null-native callers now have
+[HTML §8.1.8.3's Element firing operations](../events/ROADMAP.md#html-8183-synthetic-pointer-and-click-firing),
+which use current keyboard modifiers without fabricating mouse input.
+HTMLElement.click() and keyboard activation remain explicit caller dependencies:
+disabled-control/reentry policy, key eligibility, and concrete element actions
+belong to HTML §6.5. The mouse producer continues to use measured pointer input.
 
 `SPEC_CLASH(pointer-activation-chord-pairing)` records the approved extension of
 §3.3.12's pointerdown/up-only description: a chorded release produces pointermove,

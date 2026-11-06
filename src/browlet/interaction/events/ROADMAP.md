@@ -1043,3 +1043,66 @@ orders focus before focusin and blur before focusout. The
 orders focusin before focus and focusout before blur. No focus producer is being
 chosen in this audit. Check HTML's focus update steps and browser evidence, then
 review the conflict with Eric before connecting that producer.
+
+## HTML §8.1.8.3: synthetic pointer and click firing
+
+Reviewed [HTML's event-firing subsection](https://html.spec.whatwg.org/multipage/webappapis.html#event-firing)
+on 2026-11-05 at local revision 5955a33, refreshed from upstream. Pointer Events
+was also refreshed and remains at 7affe62. Element.fireSyntheticPointerEvent()
+implements the named operation; fireClick() calls it with click and default trust.
+Both return DOM dispatch's cancellation result. This actor-to-instance placement
+keeps PointerEvent above DOM's generic EventTarget machinery without adding a
+registry, environment service, input processor, or second dispatcher.
+
+The event is allocated through the current node Document, including after adoption.
+Its creation realm supplies its timestamp and platform object; the element retains
+its own original realm. Bubbles, cancelable, and composed are true; the optional
+not-trusted flag clears the creation operation's default trust. The current
+UserAgent keyboard snapshot supplies all modifier states. No input device has
+reported state initially, so every modifier is false. Native AltGraph-to-altKey
+mapping remains in native MouseEvent initialization; synthetic firing describes
+Alt and AltGraph independently. The immutable snapshot survives later device input
+and reentrant firing without a per-event copy.
+
+The node Document supplies view, including for a detached element; a Document
+without a browsing context supplies null. Pointer Events' reserved non-pointer
+identity is -1 with an empty pointerType. Other pointer and mouse fields retain
+their specified defaults. No pointer stream is registered, no mouse position is
+updated, and no keyboard event is fabricated. DOM dispatch continues to own
+shadow retargeting, listeners, cancellation, and click activation.
+
+Eric approved the following evidence-based choices. The browser-only
+[probe](../../../../node-compat/experimental/input-delivery/synthetic-pointer.mjs)
+and [findings](../../../../node-compat/experimental/input-delivery/SYNTHETIC-POINTER.md)
+use public HTMLElement.click() and browser keyboard activation to observe the
+internal operation; they do not claim that Browlet exposes HTMLElement.click().
+
+- SPEC_CLASH(synthetic-pointer-modifiers): HTML requires current device state for
+  both trusted and untrusted firing. All three browsers clear modifiers for
+  HTMLElement.click(), including from a keydown listener; Firefox also omitted
+  Shift on the probed keyboard activation. Follow HTML and the approved current
+  UserAgent state. Real OS key mapping remains the adapter's responsibility.
+- SPEC_CLASH(synthetic-pointer-detached-view): Firefox gives detached elements a
+  null view. Follow HTML and Chromium/WebKit's node-Document Window, while all
+  three give an inert Document null. All three allocate adopted-target events in
+  the current Document's realm and use its Window.
+- Existing SPEC_CLASH(pointer-activation-defaults): retain the specified defaults
+  as Chromium does; Firefox/WebKit set isPrimary=true. WebKit also supplies target
+  coordinates on keyboard activation, while HTML leaves them at their defaults.
+  All three use pointerId=-1 and pointerType empty.
+
+This completes the local §8.1.8.3 operation and is Vin's consolidation checkpoint.
+HTML §6.5 still owns HTMLElement.click()'s disabled-form-control check and
+click-in-progress guard; its declaration remains an explicit TODO rather than an
+incomplete public method. KeyboardInputProcessor.applyDefaultAction() still
+throws until key eligibility, focus, and element activation policy are implemented;
+eligible non-pointer callers will use fireClick(). Concrete control/link actions
+remain with their HTML implementations. Synthetic firing itself needs neither
+layout nor an OS adapter, and does not perform those missing effects.
+
+Validation: all 287 cases in 19 event/keyboard/DOM suites pass on Node 24.19.0,
+26.8.1, and custom, each in stock and compat mode; no expected failures or skips.
+The ten new cases cover trust/defaults, named firing, cancellation/activation,
+shared modifier snapshots, reentrancy, AltGraph, cross-realm adoption, inert and
+detached targets, and closed-shadow dispatch. Typechecking, declaration contracts,
+scoped ESLint, import hierarchy, and diff checks complete the slice.

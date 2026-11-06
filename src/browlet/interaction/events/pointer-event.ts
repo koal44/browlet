@@ -107,10 +107,10 @@ export class PointerEventImpl extends MouseEventImpl {
   // supplies its retained ID/type; keyboard/voice activation keeps -1 and "".
   // The producer supplies MouseEvent input (including modifiers and click count),
   // rather than reading an ambient input device or inferring data from event names.
-  // TODO(HTML §8.1.8.3 / keyboard input): connect §11.2.15's null-native callers
-  // through synthetic pointer-event firing with current modifiers and its optional
-  // not-trusted flag. HTMLElement.click()
-  // and keyboard activation remain their owners' callers, not automatic dispatch here.
+  // HTML §8.1.8.3's non-pointer firing uses Element.fireSyntheticPointerEvent()
+  // directly. This factory copies measured mouse input for the pointer stream.
+  // TODO(HTML §6.5 / keyboard default actions): connect HTMLElement.click() and
+  // keyboard activation to Element's firing operations once their policies exist.
   static createActivation(type: PointerActivationEventType, target: NodeImpl, source: MouseEventImpl): PointerEventImpl {
     const event = target.createTrustedEvent(PointerEventImpl);
     event.#initializeFromMouseEvent(type, source, true, true, target);
