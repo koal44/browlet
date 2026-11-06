@@ -1185,28 +1185,46 @@ getType() and supports() now operate on author-supplied data. MIME names are
 parsed/serialized, custom types stay distinct, strings become UTF-8 Blobs, and
 supplied Blobs retain their identity/realm. supports() recognizes the specified
 format vocabulary; it does not establish native adapter availability.
-SystemClipboard.readItems(document, unsanitizedTypes) explicitly throws pending
-native format enumeration and lazy item creation: generation checks, per-type
-cached reads, custom mappings and sanitization. Secure-Window Navigator.clipboard
+Appendix A.3/A.4 standard format mappings and A.7/A.8 custom-format names now
+exist for Windows, macOS, Linux, ChromeOS and Android. They are pure translation
+helpers. A.5 custom-map decoding and A.6 validated map/payload preparation now
+exist, including malformed-map recovery and rejection above 100 custom formats.
+A.2 writeItems now combines standard formats and custom batches per item,
+preserving styles and binary Blobs. Platform selection (getPlatform), optional
+format mapping (getAdditionalFormat, including text/uri-list omitted by A.3),
+and OS encoding/registration/collective commit (writeFormats) still throw.
+Actual format enumeration and payload reading likewise remain unfinished.
+SystemClipboard.readItems(document, unsanitizedTypes) now creates metadata-only
+system clipboard items with generation/lifetime checks, shared concurrent reads and cached
+promises, and item-realm Blob delivery on the clipboard task source. Native
+format enumeration, byte access and HTML/SVG preparation still throw from
+readFormatSnapshot, readItemBytes and prepareReadData. readItemMetadata now maps
+standard/custom formats and each item retains its selected OS formats. PNG, permitted
+unsanitized HTML and custom bytes bypass rich-format preparation. Secure-Window Navigator.clipboard
 and Clipboard now exist; read() validates options, captures §9.1 permission facts,
 and delivers through the permissions/clipboard task sources. Real reads still
 reject at named unfinished dependencies: Document focus, Window transient
-activation, SystemClipboard.isPasteInteraction(), or readItems(). readText() now
+activation, SystemClipboard.isPasteInteraction(), or readFormatSnapshot(). readText() now
 shares that admission flow, resolves absent text as empty, preserves DOMStrings,
-and decodes Blob bytes through File's UTF-8 reader. Its native readTextData()
-snapshot operation remains an explicit throwing dependency, so real system
-clipboard access is still unavailable. write() now implements §9.2 permission
+and decodes Blob bytes through File's UTF-8 reader. readTextData() now selects
+the first standard text format from the shared format snapshot without fetching
+the custom map, then uses readItemBytes(). The captured generation and original
+Document are checked through final delivery, including absent-text results.
+OS enumeration, text decoding to UTF-8 at the adapter boundary, payload access
+and generation queries still throw from readFormatSnapshot(), readItemBytes()
+and readChangeState(); real system clipboard access remains unavailable.
+write() now implements §9.2 permission
 admission, representation joining/validation, item grouping, format preparation
 and queued commit delivery. Its native Cut/Copy provenance, multi-item support,
-rich-format preparation and asynchronous item writer remain throwing dependencies;
-HTML/SVG sanitization, image decoding, OS custom-format mappings and final native
+rich-format preparation and asynchronous OS format writer remain throwing dependencies;
+HTML/SVG sanitization, image decoding, OS format registration and final native
 writes are not implemented. The registered clipboard-write descriptors use the
 existing store and prompt hook, whose default denies consent. writeText() now
 shares write admission and native commit, encoding a text/plain;charset=utf-8
 Blob and normalizing Windows line endings. It reaches the same throwing native
 writer; real OS clipboard writes remain unavailable. The §§10–11/Appendix A
-audit retains native format/JSON-map encoding, lazy getType reads and HTML paste
-processing as unfinished work at those throwing methods. Paste source provenance
+audit retains OS encoding/registration and collective writing, lazy-read byte
+access and HTML paste processing as unfinished work at those throwing methods. Paste source provenance
 and referenced-file restrictions, read-side image preservation, and native
 size/count rejection are required before the adapter can supply real effects.
 The Clipboard task source follows HTML activity gating and Document destruction;

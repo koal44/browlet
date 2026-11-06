@@ -1,8 +1,10 @@
 import { InternalError, internalType, type InternalPromise } from '../../../infra/index';
 import { computeHash, randomUUID } from '../../../js-engine/index';
+import { DOMExceptionImpl, DOMExceptionNames } from '../../../web-idl/core/index';
 import { utf8Encode } from '../../../encoding/index';
 import { StorageKey } from '../../../storage/index';
-import type { BlobImpl } from '../../../file/index';
+import { serializeMIMEType } from '../../../mime/index';
+import { BlobData, BlobImpl } from '../../../file/index';
 
 import { userInteractionTaskSource } from '../../scripting/index';
 import type { DragDataItem } from '../drag-drop/index';
@@ -11,8 +13,10 @@ import type { DocumentImpl, ElementImpl } from '../../dom/nodes/index';
 import { ClipboardChangeEventImpl } from './change-event';
 import { ClipboardEventImpl } from './event';
 import { ClipboardDataTransferImpl } from './event-data';
-import type { ClipboardItemImpl, ClipboardWriteItem } from './item';
+import { ClipboardItemImpl, type ClipboardWriteItem, type PresentationStyle } from './item';
 import { clipboardWritePermission } from './permission';
+import { getWellKnownFormat, getWellKnownMIMEType, type ClipboardFormat, type ClipboardPlatform } from './formats';
+import { prepareCustomFormats, readCustomFormats, type ClipboardCustomWrite } from './custom-formats';
 
 /** System clipboard algorithms and native effects, owned by one UserAgent. */
 // https://w3c.github.io/clipboard-apis/#clipboard-event-clipboardchange
@@ -184,10 +188,22 @@ export class SystemClipboard {
     throw new InternalError('Native clipboard paste decoding and HTML processing are not implemented');
   }
 
-  /** Check a captured paste entry; copy/cut use independent empty stores, as browser producers do. */
+  /** Check whether a captured clipboard generation is still current. */
   isCurrentEntry(entry: Uint8Array): boolean {
     const current = this.readChangeState().token;
     return current.length === entry.length && current.every((byte, index) => byte === entry[index]);
+  }
+
+  /** Require an active, focused Document and, when captured, the same clipboard generation. */
+  validateRead(entry: Uint8Array | null, document: DocumentImpl): void {
+    // SPEC_GAP(clipboard-native-read-lifetime): Retain the approved lifetime/generation
+    // checks before access and delivery. A null entry is only for admission before a snapshot.
+    if (!document.isFullyActive() || !document.hasFocus()) {
+      throw new DOMExceptionImpl('Clipboard access requires an active, focused Document', DOMExceptionNames.notAllowed);
+    }
+    if (entry !== null && !this.isCurrentEntry(entry)) {
+      throw new DOMExceptionImpl('Clipboard contents have changed', DOMExceptionNames.invalidState);
+    }
   }
 
   /** Consult existing synchronous command permission; neither transient activation nor change-listener consent grants paste. */
@@ -349,24 +365,70 @@ export class SystemClipboard {
     throw new InternalError('Rich clipboard write preparation is not implemented');
   }
 
-  /** Commit all prepared items together; resolve whether clipboard contents changed. */
+  /** Prepare each item's OS formats and commit all items together; resolve whether contents changed. */
   // https://w3c.github.io/clipboard-apis/#to-write-blobs-to-clipboard
-  writeItems(_items: ClipboardWriteItem[], _document: DocumentImpl): InternalPromise<boolean> {
-    // TODO(Clipboard host): native standard/custom format mapping by MIME essence
-    // (writeText supplies text/plain;charset=utf-8), custom-format limits,
-    // platform text conventions and binary image encoding, presentation styles, and
-    // one collective OS commit.
-    // SPEC_CLASH(clipboard-appendix-binary): A.2 UTF-8-decodes every payload, conflicting
-    // with §6.4 image/png support. The approved writer contract preserves binary data.
-    // Appendix A.3–A.8 cover native standard names and custom JSON map/index names.
-    // Check the draft's 101-entry custom-format loop against native capacity before registration. §10.4
-    // also requires graceful size/count failures; validate native limits before mutation.
+  // The approved entry retains per-item styles and custom identity, then returns the host's
+  // completion result instead of performing A.2's separate writes while preparing representations.
+  writeItems(items: ClipboardWriteItem[], document: DocumentImpl): InternalPromise<boolean> {
+    if (items.length === 0) return document.env.userAgent.HostPromise.resolve(false, internalType<boolean>());
+    const platform = this.getPlatform();
+    const prepared: ClipboardFormatWriteItem[] = [];
+    for (const item of items) {
+      const standard: ClipboardFormatData[] = [];
+      const custom: BlobImpl[] = [];
+      const formats = new Set<ClipboardFormat>();
+      for (const { data, isCustom } of item.representations) {
+        // Custom text/plain and image/png remain opaque custom formats, even though
+        // their Blob types also have standard mappings. No Blob or payload is rewritten.
+        if (isCustom) { custom.push(data); continue; }
+        let format = getWellKnownFormat(data.type, platform);
+        if (format === '') format = this.getAdditionalFormat(data.type, platform);
+        if (format === '') throw new DOMExceptionImpl('Unsupported clipboard OS format', DOMExceptionNames.notAllowed);
+        // SPEC_GAP(clipboard-standard-format-collision): A.2 does not define colliding
+        // standard formats. Reject within an item; separate items keep their own formats.
+        if (formats.has(format)) throw new DOMExceptionImpl('Duplicate standard clipboard format', DOMExceptionNames.notAllowed);
+        formats.add(format);
+        standard.push({ format, data });
+      }
+      // SPEC_CLASH(clipboard-appendix-binary): A.2 UTF-8-decodes every payload,
+      // conflicting with image/png and opaque custom data. Retain the supplied Blobs.
+      prepared.push({
+        standard, custom: custom.length === 0 ? null : prepareCustomFormats(custom, platform, document.env),
+        presentationStyle: item.presentationStyle,
+      });
+    }
+    return this.writeFormats(prepared, platform, document);
+  }
+
+  /** Select the platform of this clipboard provider without registering formats or writing data. */
+  getPlatform(): ClipboardPlatform {
+    // TODO(Clipboard host): supply the selected provider's platform explicitly.
+    throw new InternalError('Clipboard platform selection is not implemented');
+  }
+
+  /** Map an admitted standard type omitted by A.3; an empty name means unsupported. */
+  getAdditionalFormat(_type: string, _platform: ClipboardPlatform): ClipboardFormat {
+    // TODO(Clipboard host / §6.5): supply optional text/uri-list mapping and its OS
+    // representation policy. A.3 has no entry for it; do not guess or treat it as custom.
+    // This lookup must not register a format or mutate the clipboard.
+    throw new InternalError('Additional clipboard format mapping is not implemented');
+  }
+
+  /** Write every prepared item, including its custom map and payloads, in one collective commit. */
+  writeFormats(_items: ClipboardFormatWriteItem[], _platform: ClipboardPlatform, _document: DocumentImpl): InternalPromise<boolean> {
+    // TODO(Clipboard host): resolve/register format names, preserving predefined Windows IDs;
+    // apply standard OS text/binary encodings, and retain opaque custom bytes exactly.
+    // Each item's custom map and indexed names belong to that item; do not merge items
+    // or overwrite another item's payload when their format names coincide.
+    // Read all Blobs and validate host size/count limits before any clipboard mutation.
+    // Empty custom batches are null: do not write a fabricated empty custom map.
     // SPEC_GAP(clipboard-native-target): A.2 leaves selection among OS clipboards undefined;
-    // the native adapter must establish that policy before implementing this effect.
-    // Recheck the Document immediately before the effect if native preparation suspends.
-    // Resolve only after completion; reject native failures. The caller queues change
-    // notification, so the adapter must not echo that write to its initiating Document.
-    throw new InternalError('Native asynchronous clipboard item writing is not implemented');
+    // the adapter must establish that policy and the platform's atomic commit mechanism.
+    // Recheck the original Document's activity/focus immediately before mutation if
+    // encoding or Blob reads suspend. No partially prepared result may be published.
+    // Resolve only after completion, reporting whether contents changed; reject failures.
+    // The caller queues change notification, so suppress the adapter's echo to that Document.
+    throw new InternalError('OS clipboard format writing is not implemented');
   }
 
   /** Whether the current script runs from a UA/OS Paste control, not a synthetic paste event. */
@@ -376,32 +438,107 @@ export class SystemClipboard {
     throw new InternalError('Native Paste interaction provenance is not implemented');
   }
 
-  /** Supply native lazy items after the async Clipboard reader has admitted access. */
+  /** Create lazy items from metadata after Clipboard has admitted this Document's read. */
   // https://w3c.github.io/clipboard-apis/#dom-clipboard-read
-  // TODO(Clipboard §§7.2–7.3.1): enumerate native formats without reading payloads;
-  // retain the originating item and change count, then implement getType's stale-data
-  // rejection (even for cached data), concurrent read sharing, custom mapping and unsanitized policy.
-  // Appendix A.4/A.5 supply native-name and JSON-map discovery without eager payload reads.
-  // SPEC_GAP(clipboard-custom-map-failures): A.5 omits malformed JSON/map-value handling;
-  // resolve that policy at native discovery before producing author-visible items.
-  // §7.2.3 settles native getType reads on the clipboard task source with item-realm Blobs/errors;
-  // permitted unsanitized text/html and image/png bypass sanitization. Preserve image metadata
-  // on reads (§10.3); write-side decoding/transcoding is not a read-side fallback.
-  // ClipboardImpl owns permission admission and clipboard-task delivery.
-  // Author ClipboardItem construction must not be used as a fallback native snapshot.
-  readItems(_document: DocumentImpl, _unsanitizedTypes: string[]): InternalPromise<ClipboardItemImpl[]> {
-    throw new InternalError('Native lazy ClipboardItem reading is not implemented');
+  readItems(document: DocumentImpl, unsanitizedTypes: string[]): InternalPromise<ClipboardItemImpl[]> {
+    // Retain the request's policy before a delayed metadata result; never read payloads here.
+    const unsanitized = [...unsanitizedTypes];
+    return this.readItemMetadata(document).then((snapshot) => {
+      const items: ClipboardItemImpl[] = [];
+      for (const item of snapshot.items) {
+        if (item.formats.size !== 0) items.push(ClipboardItemImpl.create(item, snapshot.entry, unsanitized, document));
+      }
+      return items;
+    }, undefined, internalType<ClipboardItemImpl[]>());
   }
 
-  /** Read the first standard text/plain representation from one admitted native snapshot. */
+  /** Map one generation to standard/custom MIME keys without reading representation payloads. */
+  // https://w3c.github.io/clipboard-apis/#dom-clipboard-read
+  readItemMetadata(document: DocumentImpl): InternalPromise<ClipboardReadSnapshot> {
+    return this.readFormatSnapshot(document, true).then((snapshot) => {
+      const items: ClipboardReadItem[] = [];
+      for (const item of snapshot.items) {
+        const formats = new Map<string, ClipboardFormat>();
+        for (const format of item.formats) {
+          const mimeType = getWellKnownMIMEType(format, snapshot.platform);
+          if (mimeType !== null) formats.set(serializeMIMEType(mimeType), format);
+        }
+        if (formats.size !== 0) items.push({ index: item.index, formats, presentationStyle: item.presentationStyle });
+      }
+      if (snapshot.customMap !== null) {
+        const custom = readCustomFormats(snapshot.customMap, document.env);
+        if (custom.size !== 0) {
+          const first = items[0];
+          if (first) {
+            for (const [type, format] of custom) first.formats.set(type, format);
+          } else {
+            // Retain §7.3.1's custom-only item with no originating system item.
+            items.push({ index: null, formats: custom, presentationStyle: 'unspecified' });
+          }
+        }
+      }
+      return { entry: new Uint8Array(snapshot.entry), items };
+    }, undefined, internalType<ClipboardReadSnapshot>());
+  }
+
+  /** Enumerate one generation; read its custom JSON map only when includeCustomMap is true. */
+  // TODO(Clipboard host): select the platform, retain original item indices and styles,
+  // resolve registered format IDs to canonical names and preserve predefined Windows IDs.
+  // When requested, read the format named by getCustomFormatMapName from this generation
+  // as UTF-8 bytes (null if absent). Otherwise return customMap=null without reading it.
+  // Never read representation payloads or combine different generations.
+  // Enforce host metadata size/count limits before allocation and report failures explicitly (§10.4).
+  readFormatSnapshot(_document: DocumentImpl, _includeCustomMap: boolean): InternalPromise<ClipboardFormatSnapshot> {
+    throw new InternalError('System clipboard format snapshot reading is not implemented');
+  }
+
+  /** Read owned bytes for exactly this generation, item and canonical type; null means absent data. */
+  // TODO(Clipboard host / §7.2.3): validate the generation at OS access and read the selected
+  // format retained from discovery. Resolve/register names at the OS boundary; do not reload
+  // the custom map. Return owned bytes and never substitute a newer clipboard entry.
+  // Standard text must use UTF-8. Custom types (web prefix), binary data and image/png retain
+  // their bytes/metadata; the MIME key distinguishes interpretation from the OS format name.
+  // Throw/reject native failures; ClipboardItem keeps them observable on the clipboard task source.
+  readItemBytes(
+    _index: number, _type: string, _format: ClipboardFormat, _entry: Uint8Array, _document: DocumentImpl,
+  ): InternalPromise<Uint8Array | null> {
+    throw new InternalError('System clipboard representation bytes are not implemented');
+  }
+
+  /** Prepare standard HTML/SVG bytes before exposing a system clipboard read; never mutate the supplied bytes. */
+  // TODO(Clipboard formats / §7.2.3): supply the read-side HTML/SVG policy through their owners.
+  // ClipboardItem bypasses this operation for permitted unsanitized text/html, PNG and opaque
+  // custom formats. Write-side image decoding/transcoding is not a read-side fallback (§10.3).
+  prepareReadData(_data: Uint8Array, _type: string, _document: DocumentImpl): InternalPromise<Uint8Array> {
+    throw new InternalError('Rich clipboard read preparation is not implemented');
+  }
+
+  /** Select the first standard plain-text representation, retaining its generation through delivery. */
   // https://w3c.github.io/clipboard-apis/#dom-clipboard-readtext
-  readTextData(_document: DocumentImpl): InternalPromise<ClipboardTextData> {
-    // TODO(Clipboard host): select by mapped MIME essence, excluding custom web formats;
-    // capture the clipboard generation and return null only when plain text is absent.
-    // Decode OS-specific text to a DOMString or supply a Blob of UTF-8 bytes. Retain
-    // snapshot consistency until completion; reject if advertised text cannot be read.
-    // This operation must not fetch unrelated formats or use author ClipboardItems.
-    throw new InternalError('Native clipboard text snapshot reading is not implemented');
+  readTextData(document: DocumentImpl): InternalPromise<ClipboardTextSnapshot> {
+    const env = document.env;
+    const P = env.userAgent.HostPromise;
+    this.validateRead(null, document);
+    return P.try(() => this.readFormatSnapshot(document, false), internalType<ClipboardFormatSnapshot>()).then((snapshot) => {
+      const entry = new Uint8Array(snapshot.entry);
+      this.validateRead(entry, document);
+      // Match A.3/A.4's standard text format directly, once per snapshot. Custom web
+      // formats and their JSON map do not participate in plain-text selection.
+      const format = getWellKnownFormat('text/plain', snapshot.platform);
+      for (const item of snapshot.items) {
+        if (!item.formats.includes(format)) continue;
+        const index = item.index;
+        return P.try(() => this.readItemBytes(index, 'text/plain', format, entry.slice(), document), internalType<Uint8Array | null>()).then((bytes) => {
+          this.validateRead(entry, document);
+          if (bytes === null) throw new DOMExceptionImpl('Clipboard text is unavailable', DOMExceptionNames.notFound);
+          // Own the returned bytes before Blob decoding or queued result delivery.
+          // The OS adapter supplies UTF-8; File retains BOM and malformed-input rules.
+          const data = BlobData.fromBytes(bytes);
+          return { entry, data: BlobImpl.create(data, 'text/plain', data.captureSnapshotState(), env) };
+        }, undefined, internalType<ClipboardTextSnapshot>());
+      }
+      return { entry, data: null };
+    }, undefined, internalType<ClipboardTextSnapshot>());
   }
 
   #isEligible(document: DocumentImpl): boolean {
@@ -429,7 +566,49 @@ export class SystemClipboard {
   }
 }
 
-/** Native standard text data; null distinguishes absent text from a failed read. */
+/** One prepared item; its standard representations and custom batch retain their own order. */
+export interface ClipboardFormatWriteItem {
+  standard: ClipboardFormatData[];
+  custom: ClipboardCustomWrite | null;
+  presentationStyle: PresentationStyle;
+}
+export interface ClipboardFormatData {
+  format: ClipboardFormat;
+  data: BlobImpl;
+}
+
+/** OS format discovery and the optional custom-map bytes, captured in one generation. */
+export interface ClipboardFormatSnapshot {
+  platform: ClipboardPlatform;
+  entry: Uint8Array;
+  items: ClipboardFormatItem[];
+  customMap: Uint8Array | null;
+}
+export interface ClipboardFormatItem {
+  index: number;
+  formats: ClipboardFormat[];
+  presentationStyle: PresentationStyle;
+}
+
+/** Metadata from one clipboard generation; canonical MIME keys preserve discovery order. */
+export interface ClipboardReadSnapshot {
+  entry: Uint8Array;
+  items: ClipboardReadItem[];
+}
+export interface ClipboardReadItem {
+  /** Original native index; null denotes the draft's custom item with no originating system item. */
+  index: number | null;
+  formats: Map<string, ClipboardFormat>;
+  presentationStyle: PresentationStyle;
+}
+
+/** Standard text data and its captured generation, retained until the author result is delivered. */
+export interface ClipboardTextSnapshot {
+  entry: Uint8Array;
+  data: ClipboardTextData;
+}
+
+/** Standard text data; null distinguishes absent text from a failed read. */
 export type ClipboardTextData = string | BlobImpl | null;
 
 /** Native snapshot; types are canonical MIME names, and token equality identifies one clipboard write. */

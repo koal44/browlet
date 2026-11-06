@@ -1251,19 +1251,57 @@ Promises supplied by Binding. Its environment owns result promises and newly
 created Blobs; supplied Blobs keep their original identity and realm. MIME parsing
 and UTF-8 encoding use their existing subsystem owners. There is no new registry,
 callback adapter or native clipboard state in an author item. SystemClipboard's
-throwing readItems(document, unsanitizedTypes) entry reserves the distinct native
-lazy-item path. Navigator lazily owns ClipboardImpl, an EventTarget in the same
-environment. Clipboard.read captures the calling task's §9.1 permission facts,
+readItems(document, unsanitizedTypes) now creates system clipboard items from one
+metadata snapshot. Each item owns a copied generation token, original item index
+and Document, MIME-to-OS-format map, read policy, and pending/settled typed promises. A null
+index retains the draft's missing-origin case and rejects on lazy access. The
+internal create factory allocates without author promises; the projected
+constructor still requires a nonempty converted record. Full canonical MIME keys
+keep parameters and custom formats distinct. For system clipboard items, getType
+checks generation and Document focus/activity before cache reuse, byte access and
+result delivery. It uses parallel work and the existing clipboard task source.
+Result Blobs/promises belong to the item realm, while Binding owns projection
+and exceptions. These items reuse their reads when written. readItemMetadata maps
+one generation-bound format snapshot, appending decoded custom types to the first
+eligible item. readFormatSnapshot takes a required includeCustomMap flag: item
+metadata requests the map; plain-text reads do not. readFormatSnapshot,
+readItemBytes and prepareReadData remain explicit throwing operations for the
+adapter and rich-format owners. Lazy access passes
+the saved OS format with its MIME key rather than looking up a new custom map;
+no live OS handles or reverse registry enter Binding.
+Clipboard format algorithms take an explicit ClipboardPlatform. ClipboardFormat
+represents predefined Windows IDs or format names; registered OS IDs remain with
+the adapter. Standard MIME translation and complete custom-format names are pure
+algorithms in interaction/clipboard/formats.ts, with no implicit OS selection,
+format registration or clipboard access. custom-formats.ts decodes A.5 maps and
+prepares A.6 payload/name pairs plus UTF-8 JSON through the owning environment’s
+captured JSON operations. Write preparation validates canonical MIME uniqueness
+and the 100-format limit before returning a batch. SystemClipboard.writeItems
+now selects one explicit platform and assembles standard representations plus a
+custom batch for each selected item, retaining its presentation style and Blob
+identities. Standard format collisions reject within an item; separate items may
+reuse formats. getPlatform and optional getAdditionalFormat remain throwing host
+queries. writeFormats receives all prepared items together and still throws for
+OS encoding, format registration, capacity validation and the collective commit.
+Navigator lazily owns ClipboardImpl, an EventTarget in the same environment. Clipboard.read captures the calling task's §9.1 permission facts,
 uses the environment's parallel queue, and settles on the existing permissions
 source for denied access or the new clipboard source for native completion.
 Focus/activity checks retain the original Document before access and delivery.
 The native Paste provenance query remains a throwing SystemClipboard dependency;
 there is no new permission registry or implied persistent read grant.
-Clipboard.readText shares the same admission/delivery helper. Its separate
-SystemClipboard.readTextData(document) dependency selects one native plain-text
-snapshot, returning string/Blob data or null for absence. Clipboard preserves
-strings and reuses File's Blob.text UTF-8 decoding before delivering the result;
-permission failures and unreadable data remain distinct errors.
+Clipboard.readText shares the same admission/delivery helper. Its
+SystemClipboard.readTextData(document) operation now selects the first standard
+text/plain format from readFormatSnapshot(document, false), preserving the item's
+original index. It reads only that payload through readItemBytes; no custom map
+or ClipboardItem is needed. ClipboardTextSnapshot retains the copied generation
+alongside string/Blob data or null for absence. The byte path copies data into a
+Blob in the receiver's environment; Clipboard preserves strings and reuses File's Blob.text
+UTF-8 decoding. SystemClipboard.validateRead shares the lazy-item activity/focus
+and generation checks before access and after bytes arrive. The final clipboard
+task rechecks the original Document and generation after decoding, even for absent
+text. Stale data rejects InvalidStateError, lifetime loss rejects NotAllowedError,
+and unreadable text rejects NotFoundError. Missing owner dependencies remain
+observable rather than becoming data failures.
 Clipboard.write captures §9.2 activation/native Cut-or-Copy facts during the
 calling task and requests consent through the existing Permissions subsystem.
 ClipboardWritePermission supplies the two descriptor levels and their relationship;
@@ -1274,7 +1312,7 @@ throws. ClipboardItem.getWriteData resolves author representations without routi
 through getType's different rejection policy. Clipboard keeps item grouping,
 presentation style and custom-format identity, joins all selected data, prepares
 rich formats, and commits once. SystemClipboard.supportsMultipleItems,
-prepareWriteData and writeItems are explicit throwing dependencies for the native
+prepareWriteData and writeFormats are explicit throwing dependencies for the
 item model, sanitization/codecs, and OS writing. Clipboard tasks recheck the
 original Document's activity/focus before preparation, commit and delivery;
 the adapter must also recheck immediately before an asynchronous native effect.
@@ -1284,8 +1322,8 @@ shares the write admission helper and commit method. It creates one
 text/plain;charset=utf-8 Blob with unspecified presentation, using existing UTF-8
 encoding and File's native line-ending conversion on CRLF hosts. Non-Windows
 line endings are preserved. It does not require ClipboardItem representation
-promises or rich-format preparation; SystemClipboard.writeItems remains the same
-explicit native boundary.
+promises or rich-format preparation; SystemClipboard.writeItems maps its
+parameterized plain-text Blob before reaching the same writeFormats host boundary.
 
 Document lazily owns `SelectionImpl` in `interaction/selection/`, below DOM nodes.
 Selection retains one public live Range and, only for cross-root spans, two internal

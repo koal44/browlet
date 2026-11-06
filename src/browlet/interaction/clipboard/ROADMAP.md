@@ -997,3 +997,444 @@ pass. This audit changes dependency comments and roadmap/status notes, not
 runtime behavior; it adds no tests, expected failures or skips. The approved
 writeText slice's six-runtime validation is recorded above and was not repeated
 for these comment/documentation edits. The audit was reviewed and approved before check-in.
+
+## §§7.2.3/7.3.1 lazy system clipboard items, 2026-11-05
+
+The approved audit is committed as c8b8a266. The official Clipboard checkout was
+refreshed with a fast-forward-only pull and remains at 6201fd15cf28. This slice
+implements system clipboard item creation and the lazy branch of
+[getType](https://w3c.github.io/clipboard-apis/#dom-clipboarditem-gettype), reached
+through the existing admitted [read](https://w3c.github.io/clipboard-apis/#dom-clipboard-read)
+flow. Eric approved the metadata/byte-reader split and the lifetime/cache choices.
+
+### Ownership and callable shape
+
+SystemClipboard.readItems is now local implementation. Its readItemMetadata
+native dependency supplies one ClipboardReadSnapshot: a generation token and
+item records containing canonical unique MIME types, presentation style and the
+original native index. This adapts the draft's implicit originating system item
+into an explicit generation/index pair. Empty type lists are omitted without
+renumbering native indices. The draft's custom-only item lacking an originating
+system item retains a null index and rejects InvalidStateError when read.
+
+ClipboardItemImpl.create copies the token, type list and unsanitized policy;
+it records the Document and index rather than retaining mutable host records.
+The internal factory allocates the class without author promises, then installs
+system clipboard metadata. Binding's public constructor still requires a nonempty
+record;
+its argument conversion and validation did not change. Both forms use the same
+ClipboardItem binding and frozen type projection, without a second platform
+interface, native-handle registry, or synthetic author-promise placeholders.
+
+The factory is named create; its read() reference identifies the algorithm that
+creates and initializes the item, not a separate specification algorithm named
+after this helper. The lazy helpers are readRepresentation and validateRead;
+ClipboardReadState retains the originating system item, policy and cached
+promises. Blink similarly uses ReadRepresentationFromClipboardReader and
+HasClipboardChangedSinceClipboardRead; WebKit uses an overloaded create and
+ClipboardItemPasteboardDataSource. These names describe source and operation
+rather than labeling the local algorithm native.
+
+### Lazy reads and delivery
+
+- For system clipboard items, getType matches the canonical full MIME key. It validates the original
+  Document's activity/focus and clipboard generation before using its cache.
+  Each pending or settled read retains one typed item-realm Promise, so concurrent
+  calls and later cached calls share Promise and Blob identity. Failed reads stay
+  cached; missing advertised data rejects NotFoundError. Unknown types do not
+  access the native reader, and invalid syntax retains the existing method-realm
+  TypeError behavior.
+- A first read enters the existing parallel queue, rechecks lifetime/generation,
+  and calls readItemBytes(index, type, entry, document). The type includes the
+  custom prefix when appropriate; the supplied entry is a copy. The adapter must
+  verify that generation at the actual native access and must never substitute
+  data from a newer entry. It returns owned bytes, null for missing data, or an
+  explicit failure. Native text bytes use UTF-8; binary data remains binary.
+- Standard HTML/SVG reaches prepareReadData before Blob creation. Standard PNG,
+  plain text, URI lists, opaque custom data and admitted unsanitized text/html do
+  not use that rich-format operation. The payload is copied before asynchronous
+  preparation/result delivery, and the result Blob's MIME type omits web.
+- The clipboard task rechecks activity/focus/generation and creates the Blob in
+  the item's environment. Errors are delivered through the same task source;
+  early cache-admission failures use rejected item-realm promises. Existing HTML
+  task activity/destruction gates still apply; no extra lifetime registry or
+  forced author callbacks in destroyed Documents were introduced.
+- getWriteData uses the lazy getType path when an admitted write receives a
+  read-backed item. Author-backed write data retains its existing conversion and
+  NotAllowedError policy. Item style, representation order and cached Blob
+  data survive the read/write round trip.
+
+### Approved conflicts and implementation evidence
+
+SPEC_CLASH(clipboard-native-cache-key): the draft matches full MIME records but
+keys its read cache by MIME essence, which can alias parameter-distinct custom
+representations. Keep the already approved serialized-MIME equality for cache
+keys too, including parameters and the web discriminator.
+
+SPEC_CLASH(clipboard-native-promise-identity): retain the draft's shared pending
+and settled Promise, as Blink's lazy ClipboardItem::getType does. Gecko's GetType
+allocates a new Promise on every call while sharing its entry data. Author-created
+items retain their previous per-call Promise behavior.
+
+SPEC_GAP(clipboard-native-read-lifetime): the draft checks generation at invocation
+but omits the later race and Document-lifetime checks. Eric approved repeating
+both checks before byte access and data delivery, extending the existing original-
+Document policy. WebKit's getType also rechecks its active pasteboard session's
+generation before resolving data; this is source evidence, not a live OS probe.
+
+Sources inspected: the current local draft; Blink
+[clipboard_item.cc](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/modules/clipboard/clipboard_item.cc)
+(getType, HasClipboardChangedSinceClipboardRead); Gecko
+[ClipboardItem.cpp](https://github.com/mozilla/gecko-dev/blob/master/dom/events/ClipboardItem.cpp)
+(GetType, ItemEntry::ReactGetTypePromise); WebKit
+[Clipboard.cpp](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/Modules/async-clipboard/Clipboard.cpp)
+(getType, updateSessionValidity), and
+[ClipboardItemPasteboardDataSource.cpp](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/Modules/async-clipboard/ClipboardItemPasteboardDataSource.cpp).
+No real OS clipboard was read or modified.
+
+### Explicit remaining dependencies and validation
+
+readItemMetadata throws for native format enumeration, well-known/custom mapping,
+JSON-map policy and stable generation/index discovery. readItemBytes throws for
+actual generation-bound payload access. prepareReadData throws for standard
+HTML/SVG read preparation. readChangeState remains the existing throwing current-
+generation source. Native custom-map malformed-data policy, OS clipboard selection,
+format limits and HTML paste processing retain the audit's pending boundaries.
+HTML focus/activation and native Paste provenance remain explicit dependencies
+before read admission. This slice does not supply an OS adapter or sanitizer.
+
+A bounded follow-on is Appendix A.3–A.8 format translation and custom-format
+map processing, tested with supplied format names and bytes. Actual OS format
+registration, generation-bound reads and writes remain adapter dependencies.
+Malformed-map handling and platform-format disagreements need review before
+implementation. A.10 HTML paste processing also remains; that work reaches
+the parser/serializer and source-qualified file-access owners, in addition to
+the unfinished HTML editing and rendered-selection connections.
+
+The new tests enter through real navigator.clipboard.read and Binding, controlling
+only unfinished native/focus/activation dependencies. They cover metadata-only
+creation, native index/style retention, buffer and record snapshots, per-item and
+parameter/custom cache isolation, pending/settled Promise identity, cached failures,
+stale generations before/during/after reads, focus/activity at delivery, preparation
+policy, byte preservation, borrowed-method realms and writing read-backed items.
+
+Validation: 31 new native-item cases pass. All 275 Clipboard tests in 12 files
+pass on custom Node 27, Node 24.19.0 and Node 26.8.1, each stock and compat
+(1,650 case executions). There are no new expected failures or skips. Full
+implementation/platform typechecking, binding-contract typechecking, scoped ESLint,
+repository import checks and patch whitespace checks pass. Platform declarations
+remain current; no Web IDL surface changed. The slice was reviewed and approved for check-in.
+
+Naming review: renamed the creation/read/validation helpers and their retained
+state without changing the algorithms. All 275 Clipboard tests pass again on
+custom Node 27 with compat; full typechecking, scoped ESLint and patch whitespace
+checks pass. The six-runtime behavioral run above was not repeated for this
+naming-only edit. Eric reviewed and approved the naming cleanup for check-in.
+
+## Appendix A.3/A.4/A.7/A.8 format identifiers, 2026-11-05
+
+The reviewed lazy system-item slice is committed as 634b690f. The clean official
+Clipboard checkout was refreshed with a fast-forward-only pull and remains at
+6201fd15cf28. This bounded slice implements four deterministic algorithms in
+[formats.ts](formats.ts):
+
+- [A.3](https://w3c.github.io/clipboard-apis/#to-os-specific-well-known-format):
+  getWellKnownFormat parses the supplied Blob.type with MIME and maps its essence.
+  Parameters do not change the standard OS format. Invalid or unlisted types
+  produce the specified empty string; a custom web-prefixed type is not standard.
+- [A.4](https://w3c.github.io/clipboard-apis/#to-well-known-mime-type-from-os-specific-format):
+  getWellKnownMIMEType recognizes the four specified standard formats and returns
+  a fresh MIME record, or null for an unrecognized format. It does not guess that
+  an arbitrary OS name is a MIME type or share mutable parameter maps.
+- [A.7](https://w3c.github.io/clipboard-apis/#to-os-specific-custom-map-name):
+  getCustomFormatMapName supplies the platform name for the custom JSON map.
+- [A.8](https://w3c.github.io/clipboard-apis/#to-os-specific-custom-name):
+  getCustomFormatName supplies a complete indexed custom-payload name.
+
+### Reviewed representation and platform evidence
+
+Eric approved an explicit ClipboardPlatform parameter rather than ambient OS
+detection. Windows, macOS, Linux, ChromeOS and Android remain separate inputs,
+with the latter three sharing the specified MIME-name mappings. The algorithms
+return or accept ClipboardFormat, a predefined Windows numeric ID or an OS format
+name. Runtime-assigned registered IDs must be resolved by the adapter; they are
+not stable values in these tables. No platform object, realm state, registry or
+OS handle is introduced.
+
+SPEC_CLASH(clipboard-windows-text-format): A.3 names CF_UNICODETEXT while A.4
+instead compares the descriptive string UnicodeText. Follow the approved ID/name
+representation: Windows text is predefined ID 13. HTML Format, PNG and
+image/svg+xml are registered names. The Windows SDK 10.0.26100.0 WinUser.h and
+UrlMon.h confirm CF_UNICODETEXT=13 and CFSTR_MIME_SVG_XML=image/svg+xml;
+[Microsoft's format table](https://learn.microsoft.com/en-us/windows/win32/dataxchg/standard-clipboard-formats)
+and Blink use the same predefined-versus-registered distinction.
+
+SPEC_CLASH(clipboard-linux-custom-name): A.8 has incomplete quoting in its
+Linux-family prefix. Eric approved constructing the complete name with A.6's
+index inside the quotes, matching Chromium: application/web;type="custom/format0".
+The helper therefore takes the zero-based index before its implementation-only
+platform argument. Windows and macOS likewise return complete indexed names.
+This does not choose A.6's unresolved format-count policy or validate a write.
+
+Browser source evidence: Blink
+[Windows](https://github.com/chromium/chromium/blob/main/ui/base/clipboard/clipboard_format_type_win.cc),
+[macOS](https://github.com/chromium/chromium/blob/main/ui/base/clipboard/clipboard_format_type_mac.mm),
+and [Aura/Linux](https://github.com/chromium/chromium/blob/main/ui/base/clipboard/clipboard_format_type_aura.cc)
+format implementations were read through Extractlet without capture warnings.
+Apple's [UTF-8 text](https://developer.apple.com/documentation/uniformtypeidentifiers/uttypeutf8plaintext),
+[HTML](https://developer.apple.com/documentation/uniformtypeidentifiers/uttypehtml),
+[PNG](https://developer.apple.com/documentation/uniformtypeidentifiers/uttypepng),
+and [SVG](https://developer.apple.com/documentation/uniformtypeidentifiers/uttypesvg)
+references confirm their identifier strings. This is source inspection, not a
+live clipboard interoperability probe; no OS clipboard was read or modified.
+
+### Explicit stopping point
+
+The helpers are ready for the adapter/format layer; live read/write operations
+still throw. readItemMetadata must enumerate a stable generation, choose its
+platform, resolve registered IDs and decode the A.5 custom map. readItemBytes
+must perform generation-bound access and map custom types through that map.
+writeItems still needs A.6 JSON-map/payload assembly, format registration, actual
+size/count limits, OS encoding and the approved collective commit. These named
+throwing dependencies now point to the completed translation helpers.
+
+A.5/A.6 are the next local slice. Malformed JSON/map values, conflicting
+canonical MIME keys, duplicate format references and the draft's 101-entry loop
+need a reviewed policy before map processing is connected. HTML/SVG preparation,
+HTML paste processing, editing/focus/activation and actual OS effects remain
+with their existing owners. supports() remains vocabulary recognition, not a
+claim that a host can provide every recognized format.
+
+Validation: 42 new format cases pass; all 317 Clipboard tests in 13 files pass
+on custom Node 27 with compat. Full implementation/platform typechecking, scoped
+ESLint, import-boundary checks and patch whitespace checks pass. There are no
+new expected failures or skips. These are pure algorithms with no changes to
+realm ownership, scheduling or engine fallbacks, so the six-runtime matrix was
+not repeated. Eric reviewed and approved this slice for check-in.
+
+## Appendix A.5/A.6 custom-format maps, 2026-11-05
+
+The reviewed format identifiers are committed as 5fa4942a. The official checkout
+was refreshed with a fast-forward-only pull and remains at 6201fd15cf28.
+This slice implements [A.5 decoding](https://w3c.github.io/clipboard-apis/#to-read-web-custom-format)
+and [A.6 preparation](https://w3c.github.io/clipboard-apis/#to-write-web-custom-formats)
+in [custom-formats.ts](custom-formats.ts), and connects decoding to §7.3.1 metadata
+mapping. OS clipboard access is still unavailable.
+
+### Approved contracts
+
+- readCustomFormats receives the map bytes from one clipboard generation and
+  returns canonical web-prefixed MIME keys with their OS format names. It reads
+  no representation payloads. UTF-8/JSON processing uses the existing environment
+  and captured realm operations; there is no new parser or registry.
+- readFormatSnapshot(document) is the throwing host dependency for one platform,
+  generation token, original item indices/styles, OS formats and optional custom
+  map bytes. It must resolve registered IDs and enforce host metadata limits.
+  readItemMetadata now maps standard formats, omits unrecognized items without
+  renumbering, and appends custom entries to the first eligible item. The draft's
+  custom-only item retains a null originating index and rejects lazy access.
+- Each ClipboardItem copies its MIME-to-format map. readItemBytes receives the
+  selected format alongside the MIME key, originating index, generation and
+  Document. This preserves standard text versus custom-byte interpretation even
+  when two MIME keys name the same OS format. The lazy path does not rediscover
+  mappings after the clipboard changes.
+- prepareCustomFormats receives custom Blobs and an explicit platform. It returns
+  ordered Blob/name pairs, the map's OS name and UTF-8 JSON bytes. It preserves
+  payload identity and does not perform OS writes. The later writer must commit
+  that map and payload batch with the standard formats collectively.
+
+### Approved recovery and disagreement choices
+
+SPEC_GAP(clipboard-custom-map-failures): A.5 does not define malformed/non-object
+JSON, invalid value types, empty names or canonical duplicate MIME keys. Ignore
+unusable maps, skip invalid entries and keep the first valid canonical MIME key.
+Different MIME keys may share an OS format. Exact duplicate JSON properties
+follow the existing JSON parser's last-value rule before MIME canonicalization.
+Only JSON syntax failures are swallowed; other dependency failures propagate.
+Blink similarly ignores malformed/non-object maps and non-string values, but its
+low-level reader also accepts empty strings; Browlet skips those unusable names.
+
+SPEC_CLASH(clipboard-custom-map-mime): A.5 parses MIME keys. Retain full canonical
+keys including parameters, consistent with the approved ClipboardItem cache;
+Blink's reader strips parameters. Browlet uses the existing strict JSON operation,
+while Blink enables Chromium JSON extensions. Both differences were reviewed.
+
+SPEC_CLASH(clipboard-custom-format-count): A.6 writes an entry, increments its
+index, then breaks above 100, allowing 101 and silently truncating larger input.
+Reject more than 100 with NotAllowedError before producing a write batch, matching
+Blink's public write admission. Any lower OS limit remains the adapter's duty.
+
+SPEC_CLASH(clipboard-custom-write-duplicates): A.6 can overwrite a duplicate JSON
+map key while retaining both payload writes; Blink's lower-level writer keeps the
+first payload. Reject duplicate canonical MIME keys with NotAllowedError so no
+requested payload is silently lost. Parameter order remains part of the existing
+serialized MIME identity. Invalid Blob MIME types also reject before any result.
+
+Source evidence was inspected in Blink's
+[custom map reader](https://github.com/chromium/chromium/blob/main/ui/base/clipboard/clipboard.cc),
+[custom writer](https://github.com/chromium/chromium/blob/main/ui/base/clipboard/scoped_clipboard_writer.cc),
+and [public write admission](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/modules/clipboard/clipboard_promise.cc).
+The first two were read through Extractlet without capture warnings; the third
+was inspected in the local Chromium checkout. This is source evidence, not a
+live OS clipboard probe; the user's clipboard was neither read nor modified.
+
+### Stopping point
+
+A.5 decoding is in the metadata read path. A.6 preparation is available for the
+later OS writer, whose writeItems method still throws and names that dependency.
+readFormatSnapshot, readItemBytes, readTextData, readForPaste, native replacement/
+clearing and rich-format preparation likewise remain explicit throwing methods.
+Format registration, host capacity and atomicity, HTML/SVG sanitization, image
+handling, HTML focus/activation, editing and native permission provenance still
+belong to their stated owners. No in-memory clipboard or automatic OS adapter is
+substituted for those dependencies.
+
+Validation: 41 new cases cover map recovery/canonicalization, all five platform
+names, payload identity, the 100-format boundary, captured JSON operations,
+standard/custom metadata integration, original indices, retained format/generation
+snapshots and observable dependency failures. All 358 Clipboard tests in 14 files
+pass on Node 24.19.0, 26.8.1 and custom 27, each stock/compat (2,148 executions).
+There are no expected failures or skips. Full implementation/platform typechecking,
+scoped ESLint, import-boundary checks and patch whitespace checks pass.
+Eric reviewed and approved this A.5/A.6 slice for check-in.
+
+## Appendix A.2 grouped write preparation, 2026-11-05
+
+The reviewed A.5/A.6 maps are committed as 5c1cbb58. The official Clipboard checkout
+was refreshed with a fast-forward-only pull and remains at 6201fd15cf28.
+[Appendix A.2](https://w3c.github.io/clipboard-apis/#to-write-blobs-to-clipboard)
+is now implemented through writeItems' format preparation, followed by a named
+throwing OS writer. Eric requested this integration with item grouping, binary
+data and missing OS dependencies preserved.
+
+### Implemented flow and contracts
+
+- The existing writeItems(items, document) signature and InternalPromise<boolean>
+  result remain. Public write retains permission, rich preparation and item-model
+  selection; writeText uses the same path for its parameterized plain-text Blob.
+- getPlatform selects one ClipboardPlatform for the complete batch. It remains a
+  throwing host query; format preparation does not infer a platform from Node.
+- Each prepared ClipboardFormatWriteItem contains standard format/Blob pairs,
+  an optional ClipboardCustomWrite batch and its presentationStyle. A.3 maps the
+  prepared Blob.type; the existing separate isCustom flag takes precedence so
+  custom text/plain and image/png cannot become standard data.
+- Standard representations retain their relative order. Each item's custom
+  representations use A.6 in their relative order, with their own map and indexed
+  format names. Different items may use the same names without sharing payloads
+  or maps. All selected items remain ordered; no cross-item flattening occurs.
+- writeFormats(items, platform, document) receives the entire prepared list only
+  after all items validate. It returns the host's completion/changed result;
+  Clipboard retains promise delivery and change notification. Empty internal
+  writes resolve false without selecting a platform or calling the writer.
+- Blob identities and bytes are retained without text decoding, mutation or eager
+  reads. Prepared item/representation arrays are independent of the input arrays.
+  The existing SPEC_CLASH(clipboard-appendix-binary) continues to reject A.2's
+  blanket UTF-8 decoding in favor of required PNG and opaque custom bytes.
+
+### Approved collision policy
+
+SPEC_GAP(clipboard-standard-format-collision): A.2 does not specify what happens
+when two standard representations map to one OS format. Different admitted item
+entries can carry Blobs of the same actual type under our approved Blob-type rule.
+Eric approved NotAllowedError for collisions within one item, consistent with
+custom-map duplicate rejection; the same format in separate items remains valid.
+This includes a collision returned by the optional-format mapper. A duplicate or
+oversized custom batch in a later item prevents the entire OS writer call, so no
+earlier item is partially committed. Existing A.6 MIME/count policies are unchanged.
+
+### Explicit host boundary
+
+getAdditionalFormat(type, platform) throws for admitted standard formats absent
+from A.3, currently text/uri-list from §6.5. This is an unresolved mapping, not
+permission to guess an OS name or reclassify the data as custom. A supplied mapper
+may return an empty name for unsupported data, which rejects NotAllowedError.
+Both mapping queries must remain free of registration and clipboard mutation.
+
+writeFormats still throws. The adapter must choose the OS clipboard, register
+formats, encode standard text/images, retain custom bytes exactly, read every
+Blob and validate platform size/count limits before mutation. It must preserve
+per-item custom-map namespaces, commit all data together, recheck the original
+Document's activity/focus after any suspended preparation and immediately before
+mutation, report whether contents changed, and suppress duplicate notifications
+for the initiating Document. SPEC_GAP(clipboard-native-target) remains open.
+
+The existing supportsMultipleItems, rich read/write preparation, format snapshot
+and byte access, plain-text snapshot, paste, permission provenance and HTML
+focus/activation/editing dependencies remain explicit. No OS clipboard is read or
+modified by this implementation or its tests, and the spec is not claimed to be
+usable end to end without those owners.
+
+Validation: 28 new cases exercise standard/custom format preparation on all five
+platform families, per-item grouping, unchanged binary payloads and Blob identity,
+optional mapping, collisions, oversized custom batches, writeText, delayed commits
+and explicit dependency failures. All 386 Clipboard tests in 15 files pass on
+Node 24.19.0, 26.8.1 and custom 27, each stock/compat (2,316 executions).
+There are no expected failures or skips. Full implementation/platform typechecking,
+Web IDL type contracts, scoped ESLint, import-boundary checks and patch whitespace
+checks pass. Eric reviewed and approved this A.2 slice for check-in.
+
+## Plain-text format snapshot reading, 2026-11-05
+
+The reviewed A.2 write preparation is committed as 07a41124. The official
+Clipboard checkout was refreshed with a fast-forward-only pull and remains at
+6201fd15cf28. This slice connects [§7.3.2 readText](https://w3c.github.io/clipboard-apis/#dom-clipboard-readtext)
+to the same format snapshot and generation-bound byte ports used by lazy items.
+
+### Implemented flow and approved contracts
+
+- readFormatSnapshot(document, includeCustomMap) now requires the flag Eric
+  approved. Item metadata passes true; readTextData passes false. The host must
+  return customMap=null without reading the custom map when false.
+- readTextData maps text/plain through A.3/A.4 once, selects the first item
+  advertising that standard OS format, and retains its original index. Custom
+  text/plain entries do not qualify. No other representation, custom map,
+  rich-format preparation or ClipboardItem is read/created.
+- The selected representation goes through readItemBytes with the captured
+  generation and format. The returned bytes are copied into a Blob in the
+  original Document's environment. File supplies UTF-8 decoding, including BOM
+  removal and malformed-sequence replacement; line endings and NULs are preserved.
+- ClipboardTextSnapshot retains a copied entry token alongside the existing
+  string/Blob/null data contract. Null means absent text, which resolves empty;
+  advertised text that cannot be read rejects rather than trying a later item.
+- SystemClipboard.validateRead shares the existing lazy-item lifetime checks:
+  original Document activity/focus before discovery, then activity/focus and
+  generation before byte access and after byte completion. Clipboard keeps the
+  token through decoding and rechecks it in the final clipboard delivery task.
+  Absent-text results retain the same generation checks. Concurrent reads own
+  separate captured tokens and results.
+- SPEC_GAP(clipboard-readtext-validation-errors): §7.3.2 does not define how
+  delayed generation/lifetime failures interact with its unreadable-text error.
+  Eric approved preserving InvalidStateError for a changed clipboard and
+  NotAllowedError for lost activity/focus, reserving NotFoundError for unreadable
+  text. Existing InternalError owner diagnostics remain visible. No new browser
+  policy is inferred; this extends our approved lazy-item validation policy.
+  SPEC_GAP(clipboard-native-read-lifetime) and the existing readText empty/error/
+  settlement SPEC_CLASH choices remain in force.
+
+### Explicit stopping point
+
+There is no OS clipboard implementation in this slice. readFormatSnapshot,
+readItemBytes and readChangeState still throw and name the missing enumeration,
+payload and generation effects. The byte port must validate the generation at
+OS access and provide standard text as UTF-8; clipboard code does not guess native
+encodings. The adapter still owns format registration/resolution, consistent
+snapshots, size/count limits and failure reporting. HTML focus/activation and
+native Paste provenance remain explicit dependencies. Rich HTML/SVG processing,
+paste decoding/editing, optional format mapping and collective OS writing remain
+with their existing owners.
+
+### Regression evidence
+
+Before changing error handling, two focused expectations reproduced readText
+turning InvalidStateError and NotAllowedError into NotFoundError. Both remain as
+ordinary passing regressions. The additional format-path tests exercise all five
+platform families, first-item selection, custom-only exclusion, absent/empty/
+unreadable text, UTF-8 decoding, Buffer ownership, delayed discovery/bytes/File
+decoding/final task delivery, independent concurrent generations, and visible OS
+dependency failures. Existing lazy-item tests cover the shared validation helper.
+
+Validation: all 421 Clipboard tests in 16 files pass on Node 24.19.0, 26.8.1
+and custom 27, each stock/compat (2,526 executions). There are no expected
+failures or skips. Implementation/platform typechecking, Web IDL type contracts,
+scoped ESLint, import-boundary checks and patch whitespace checks pass.
+Eric reviewed and approved this plain-text read slice for check-in.

@@ -47,10 +47,13 @@ export class ClipboardImpl extends EventTargetImpl {
   readText(): InternalPromise<string> {
     const env = this.env;
     const result = env.InternalPromise.withResolvers(idlType.DOMString);
+    const system = env.userAgent.systemClipboard;
+    let entry: Uint8Array;
     this.#runRead(result, (document) => {
-      // The native owner selects a stable text representation; readText does not
-      // create ClipboardItems or touch unrelated payloads through read().
-      return env.userAgent.systemClipboard.readTextData(document).then<string>((data) => {
+      // The system owner selects one standard text representation without ClipboardItems.
+      return system.readTextData(document).then<string>((snapshot) => {
+        entry = new Uint8Array(snapshot.entry);
+        const { data } = snapshot;
         // SPEC_CLASH(clipboard-readtext-empty): Firefox/WebKit return an empty string
         // when no plain text exists; the draft unconditionally rejects NotFoundError.
         if (data === null) return '';
@@ -58,11 +61,18 @@ export class ClipboardImpl extends EventTargetImpl {
         // File already implements the specified UTF-8 decoding, including BOM removal
         // and malformed-sequence replacement, independent of Blob.type/charset.
         return data.text();
-      }, undefined, idlType.DOMString).catch(() => {
+      }, undefined, idlType.DOMString).catch((error) => {
+        // SPEC_GAP(clipboard-readtext-validation-errors): Preserve stale-generation and
+        // lifetime failures, as getType does. Missing owner dependencies stay explicit.
+        if (error instanceof InternalError || error instanceof DOMExceptionImpl &&
+          (error.name === DOMExceptionNames.invalidState || error.name === DOMExceptionNames.notAllowed)) throw error;
         // SPEC_CLASH(clipboard-readtext-data-failure): Keep the draft's NotFoundError
         // for unreadable data; Gecko routes native data failures through NotAllowedError.
         throw new DOMExceptionImpl('Clipboard text could not be read', DOMExceptionNames.notFound);
       });
+    }, () => {
+      // #runRead checks the original Document here, after decoding and the task delay.
+      if (!system.isCurrentEntry(entry)) throw new DOMExceptionImpl('Clipboard contents have changed', DOMExceptionNames.invalidState);
     });
     return result.promise;
   }
@@ -193,7 +203,10 @@ export class ClipboardImpl extends EventTargetImpl {
   // SPEC_CLASH(clipboard-readtext-settlement): §7.3.2 tests uninitialized representation
   // fields and rejects without waiting for data. Await the selected text and decoding,
   // then settle in the clipboard task, as native read completion does in browsers.
-  #runRead<T>(result: InternalPromiseWithResolvers<T>, readData: (document: DocumentImpl) => InternalPromise<T>): void {
+  #runRead<T>(
+    result: InternalPromiseWithResolvers<T>, readData: (document: DocumentImpl) => InternalPromise<T>,
+    validateResult?: () => void,
+  ): void {
     const env = this.env;
     try {
       const realm = env.realm;
@@ -217,6 +230,7 @@ export class ClipboardImpl extends EventTargetImpl {
             env.queueTask('clipboard', () => {
               try {
                 this.#requireFocusedDocument(document);
+                validateResult?.();
                 result.resolve(value);
               } catch (error) { result.reject(error); }
             });

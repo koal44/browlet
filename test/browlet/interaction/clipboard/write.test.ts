@@ -265,7 +265,7 @@ describe('Clipboard §7.3.3: write', () => {
   it.each(['prepare', 'write'] as const)('keeps the missing %s dependency explicit', async (dependency) => {
     const f = await createFixture(); f[dependency].mockRestore();
     expect(await writeString(f.browser, dependency === 'prepare' ? 'text/html' : 'text/plain')).toMatchObject({
-      message: dependency === 'prepare' ? 'Rich clipboard write preparation is not implemented' : 'Native asynchronous clipboard item writing is not implemented',
+      message: dependency === 'prepare' ? 'Rich clipboard write preparation is not implemented' : 'Clipboard platform selection is not implemented',
     });
   });
 

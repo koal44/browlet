@@ -385,7 +385,7 @@ describe('Clipboard §7.2: author-created ClipboardItem', () => {
     })).toEqual([true, true, true, true, true, false]);
   });
 
-  it('does not use native clipboard hooks and leaves native lazy reading explicitly unavailable', async () => {
+  it('does not use native clipboard hooks and keeps native metadata discovery explicit', async () => {
     const browser = await secureBrowser();
     const read = vi.spyOn(SystemClipboard.prototype, 'readChangeState');
     const write = vi.spyOn(SystemClipboard.prototype, 'replaceNativeContents');
@@ -397,7 +397,7 @@ describe('Clipboard §7.2: author-created ClipboardItem', () => {
     expect(browser.window.ClipboardItem.supports('text/plain')).toBe(true);
     expect(read).not.toHaveBeenCalled(); expect(write).not.toHaveBeenCalled();
     const doc = getRelevantRealm(browser.window).env.window.getAssociatedDocument();
-    expect(() => new SystemClipboard().readItems(doc, [])).toThrow('Native lazy ClipboardItem reading is not implemented');
+    expect(() => new SystemClipboard().readItems(doc, [])).toThrow('System clipboard format snapshot reading is not implemented');
   });
 });
 

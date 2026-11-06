@@ -8,20 +8,28 @@ import { utf8Encode } from '../../../encoding/index';
 import { parseMIMEType, serializeMIMEType } from '../../../mime/index';
 import { BlobData, BlobImpl } from '../../../file/index';
 
+import type { DocumentImpl } from '../../dom/nodes/index';
 import type { BrowletEnvironment } from '../../environment/index';
 
-/** Author-supplied representations; native lazy items enter through SystemClipboard.readItems(). */
+import type { ClipboardReadItem } from './system-clipboard';
+import type { ClipboardFormat } from './formats';
+
+/** Author-supplied promises or one system clipboard item retained from an admitted read. */
 // https://w3c.github.io/clipboard-apis/#clipboard-item-interface
 export class ClipboardItemImpl {
   #env: BrowletEnvironment;
   #presentationStyle: PresentationStyle;
-  #types: string[];
-  /** Serialized MIME keys include the web prefix, keeping native and custom representations distinct. */
+  #types: string[] = [];
+  /** Serialized MIME keys include the web prefix, keeping standard and custom representations distinct. */
   #representations = new Map<string, ClipboardItemData>();
+  /** Present only for items read from the system clipboard; retains generation and cached reads. */
+  #clipboardRead: ClipboardReadState | null = null;
 
-  constructor(items: Record<string, ClipboardItemData>, options: ClipboardItemOptions, env: BrowletEnvironment) {
+  constructor(items: Record<string, ClipboardItemData> | undefined, options: ClipboardItemOptions, env: BrowletEnvironment) {
     this.#env = env;
     this.#presentationStyle = options.presentationStyle;
+    // System clipboard allocation has no author promises. Binding always supplies a converted record.
+    if (items === undefined) return;
     for (const [type, data] of Object.entries(items)) {
       const key = normalizeType(type);
       if (this.#representations.has(key)) throw new TypeError('Duplicate ClipboardItem representation');
@@ -31,6 +39,20 @@ export class ClipboardItemImpl {
     // SPEC_CLASH(clipboard-item-types-identity): Keep the specified frozen value, like Firefox;
     // Chromium and WebKit allocate a new array on each access.
     this.#types = [...this.#representations.keys()];
+  }
+
+  /** Create an item from a system clipboard snapshot without reading its payload. */
+  // https://w3c.github.io/clipboard-apis/#dom-clipboard-read
+  // The read() algorithm creates and initializes each item from enumerated metadata.
+  // The snapshot identifies its originating system clipboard item by generation and index.
+  static create(item: ClipboardReadItem, entry: Uint8Array, unsanitizedTypes: string[], document: DocumentImpl): ClipboardItemImpl {
+    const result = new ClipboardItemImpl(undefined, { presentationStyle: item.presentationStyle }, document.env);
+    result.#types = [...item.formats.keys()];
+    result.#clipboardRead = {
+      document, index: item.index, formats: new Map(item.formats), entry: entry.slice(),
+      unsanitized: new Set(unsanitizedTypes), reads: new Map(),
+    };
+    return result;
   }
 
   // https://w3c.github.io/clipboard-apis/#dom-clipboarditem-supports
@@ -56,15 +78,13 @@ export class ClipboardItemImpl {
     // for results, but invalid syntax throws in the method realm through Binding.
     // Chromium uses the method realm for missing-type errors; WebKit also allocates successful results there.
     const key = normalizeType(type);
+    if (this.#clipboardRead && this.#types.includes(key)) return this.#readRepresentation(key);
     const result = this.#env.InternalPromise.withResolvers(reference(BlobImpl));
     const data = this.#representations.get(key);
     if (!data) {
       result.reject(new DOMExceptionImpl('ClipboardItem has no matching representation', DOMExceptionNames.notFound));
       return result.promise;
     }
-    // This is the author-constructed branch. SystemClipboard.readItems() must supply
-    // the separate native branch with generation checks, cached reads and sanitization;
-    // its throwing dependency prevents native reads from masquerading as author data.
     // SPEC_CLASH(clipboard-item-data-conversion): Web IDL converts at each reaction, like Chromium;
     // Firefox caches conversion and WebKit rejects non-string/non-Blob fulfillment values.
     // SPEC_GAP(clipboard-item-conversion-failure): The draft leaves p pending when IDL conversion
@@ -88,10 +108,13 @@ export class ClipboardItemImpl {
     }, result.reject);
     return result.promise;
   }
-  /** Resolve author representations for §7.3.3 without getType's NotFoundError policy. */
+
+  /** Resolve write representations; author promises retain §7.3.3's distinct rejection policy. */
   getWriteData(): InternalPromise<ClipboardWriteItem> {
     const P = this.#env.userAgent.HostPromise;
-    const representations = [...this.#representations].map(([key, data]) => {
+    const representations = this.#types.map((key) => {
+      // Items from the system clipboard use the same generation/cache/lifetime checks when written.
+      const data = this.#clipboardRead ? this.getType(key) : this.#representations.get(key)!;
       const result = P.withResolvers(internalType<ClipboardWriteRepresentation>());
       const isCustom = key.startsWith('web ');
       data.observe((value) => {
@@ -122,9 +145,63 @@ export class ClipboardItemImpl {
       undefined, internalType<ClipboardWriteItem>(),
     );
   }
+
+  /** Read or reuse a representation after validating the retained clipboard snapshot. */
+  #readRepresentation(key: string): InternalPromise<BlobImpl> {
+    const env = this.#env;
+    const read = this.#clipboardRead!;
+    const system = env.userAgent.systemClipboard;
+    try { system.validateRead(read.entry, read.document); }
+    catch (error) { return env.InternalPromise.reject(error, reference(BlobImpl)); }
+    // SPEC_CLASH(clipboard-native-cache-key): The draft caches by MIME essence after matching full types.
+    // Retain parameters and the web prefix so distinct representations never share a payload.
+    // SPEC_CLASH(clipboard-native-promise-identity): Follow the draft/Blink's shared promise;
+    // Gecko allocates a new promise for each getType call even when it shares the underlying read.
+    const cached = read.reads.get(key);
+    if (cached) return cached;
+    const result = env.InternalPromise.withResolvers(reference(BlobImpl));
+    read.reads.set(key, result.promise);
+    const type = key.startsWith('web ') ? key.slice(4) : key;
+    const essence = type.split(';', 1)[0]!;
+    const prepare = !key.startsWith('web ') &&
+      (essence === 'text/html' || essence === 'image/svg+xml') && !read.unsanitized.has(essence);
+    const P = env.userAgent.HostPromise;
+    env.runInParallel(() => {
+      P.try(() => {
+        system.validateRead(read.entry, read.document);
+        if (read.index === null) throw new DOMExceptionImpl('Clipboard item has no originating system clipboard item', DOMExceptionNames.invalidState);
+        return system.readItemBytes(read.index, key, read.formats.get(key)!, read.entry.slice(), read.document);
+      }, internalType<Uint8Array | null>()).then((data) => {
+        system.validateRead(read.entry, read.document);
+        if (data === null) throw new DOMExceptionImpl('Clipboard representation is unavailable', DOMExceptionNames.notFound);
+        // Own the bytes before asynchronous preparation or queued result delivery.
+        const bytes = data.slice();
+        return prepare ? system.prepareReadData(bytes, type, read.document) : bytes;
+      }, undefined, internalType<Uint8Array>()).observe((bytes) => {
+        const data = BlobData.fromBytes(bytes);
+        env.queueTask('clipboard', () => {
+          try {
+            system.validateRead(read.entry, read.document);
+            result.resolve(BlobImpl.create(data, type, data.captureSnapshotState(), env));
+          } catch (error) { result.reject(error); }
+        });
+      }, (error) => { env.queueTask('clipboard', () => { result.reject(error); }); });
+    });
+    return result.promise;
+  }
 }
 
-/** One resolved item, retaining the native/custom distinction independently of Blob.type. */
+/** The originating system clipboard item, read policy and pending or settled representation promises. */
+interface ClipboardReadState {
+  document: DocumentImpl;
+  index: number | null;
+  formats: Map<string, ClipboardFormat>;
+  entry: Uint8Array;
+  unsanitized: Set<string>;
+  reads: Map<string, InternalPromise<BlobImpl>>;
+}
+
+/** One resolved item, retaining the standard/custom distinction independently of Blob.type. */
 export interface ClipboardWriteItem {
   representations: ClipboardWriteRepresentation[];
   presentationStyle: PresentationStyle;

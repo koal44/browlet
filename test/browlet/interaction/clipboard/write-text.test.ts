@@ -189,7 +189,7 @@ describe('Clipboard §7.3.4: writeText', () => {
 
   it('keeps the native writer dependency explicit', async () => {
     const f = await createFixture(); f.write.mockRestore();
-    expect(await outcome(f.browser)).toMatchObject({ message: 'Native asynchronous clipboard item writing is not implemented' });
+    expect(await outcome(f.browser)).toMatchObject({ message: 'Clipboard platform selection is not implemented' });
     expect(f.change).not.toHaveBeenCalled();
   });
 });

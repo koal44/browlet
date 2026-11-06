@@ -194,12 +194,25 @@ rendered selection, editing and script-paste permission remain explicit throwing
 dependencies; keyboard/menu/execCommand callers still need their owners. §§6.4–6.5
 format requirements are recorded at those effects; §6.6 informs later async read
 options. §7.2 now supplies author-created ClipboardItem data, promised Blob access,
-MIME validation and format recognition. Native lazy item reading remains the
-throwing SystemClipboard.readItems() dependency. §§7.1/7.3.1–7.3.2 now expose the
+MIME validation and format recognition. Appendix A.3/A.4 standard MIME/OS
+translation and A.7/A.8 custom-format names are implemented as pure helpers.
+A.5 map decoding and A.6 validated JSON/payload preparation are implemented.
+A.2 writeItems consumes those helpers, preserving each item’s standard/custom
+data and style before one writeFormats call. Platform selection and additional
+standard-format mapping remain explicit host dependencies.
+Metadata mapping retains the selected OS format for each MIME key; OS enumeration,
+registration, byte access and collective writing remain explicit dependencies.
+Items read from the system clipboard now retain metadata,
+generation and original-Document state, sharing cached getType reads and delivering
+item-realm results. OS format discovery, byte access and rich read
+preparation remain separate throwing SystemClipboard dependencies. §§7.1/7.3.1–7.3.2 now expose the
 Navigator-owned Clipboard and asynchronous read/readText admission and task flow,
-with §9.1's strict Paste-interaction permission rule. readText preserves strings
-and reuses Blob UTF-8 decoding. Focus, activation, native provenance, item
-metadata and plain-text snapshots remain explicit dependencies. §§7.3.3/9.2 now
+with §9.1's strict Paste-interaction permission rule. readText selects the first
+standard plain-text format through the shared snapshot/byte ports, skips custom
+map access, and reuses Blob UTF-8 decoding. Generation and original-Document
+checks continue through its final task, including absent text. Focus, activation,
+native provenance, OS format/byte access and generation queries remain explicit
+dependencies. §§7.3.3/9.2 now
 provide asynchronous write admission through Permissions, promised representation
 joining, format validation and collective commit flow. Native Cut/Copy provenance,
 item-model support, rich-format preparation and OS item writing remain explicit
@@ -207,9 +220,11 @@ throwing dependencies. §7.3.4 writeText now shares write admission and native
 commit, with UTF-8 text and Windows newline preparation. The §§10–11/Appendix A
 audit maps each algorithm to local behavior or a named throwing dependency,
 including paste-origin restrictions, image preservation and native size/count
-limits. Native Clipboard support remains incomplete. Next: a bounded native
-ClipboardItem lazy-read slice, with byte access and format processing still
-owned by explicit host dependencies.
+limits. Local lazy reads and Appendix A format processing are complete within
+these boundaries; actual Clipboard support still requires its adapter, rich-format
+processing and the HTML owners above.
+Next native integration must choose its concrete OS clipboard/format contract
+before replacing those throwing dependencies.
 CSSOM View remains deferred.
 HTML §8.1.8.3's synthetic pointer-event operation still needs its hookup. Input producers retain
 their HTML, editing, and layout owners.
