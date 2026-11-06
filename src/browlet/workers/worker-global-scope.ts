@@ -186,8 +186,15 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
   // https://html.spec.whatwg.org/multipage/workers.html#run-a-worker
   // Extracted final onComplete steps, after the event-loop processing step.
   finishRunning(): void {
-    this.env.getWindowOrWorkerGlobalScopeMixin().timers.clear();
+    // TODO(HTML §10.2.4): Connect Fetch cancellation to shared-service owners;
+    // local cleanup cannot release requests retained in another isolate.
+    const resources = this.env.getWindowOrWorkerGlobalScopeMixin();
+    resources.timers.clear();
     for (const port of this.ports) port.disentangle();
+    // SPEC_GAP(worker-eventsource-shutdown): HTML's worker tail omits EventSource disposal.
+    // Blink closes EventSources on context destruction. Reuse the same local
+    // close path here to abort requests, cancel retries, and release retention.
+    for (const source of resources.eventSources) source.close();
     this.ownerSet.clear();
   }
 

@@ -14,6 +14,7 @@ import {
 } from '../../../src/browlet/integration/host/index';
 import { createWindowEnvironment, createWorkerEnvironment } from '../../../src/browlet/integration/web-idl/index';
 import type { BrowletEnvironment } from '../../../src/browlet/environment/index';
+import type { StructuredSerializeWithTransferResult } from '../../../src/browlet/scripting/structured-data/index';
 import {
   AgentCluster, DedicatedWorkerAgent, EventLoop, WindowAgent, createTaskSource, domManipulationTaskSource,
 } from '../../../src/browlet/scripting/index';
@@ -21,7 +22,7 @@ import { UserAgent } from '../../../src/browlet/user-agent';
 import { BrowsingContext, DocumentState, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
 import { MessageChannelImpl, MessagePortImpl } from '../../../src/browlet/communication/index';
 import { WorkerImpl } from '../../../src/browlet/workers/index';
-import type { ErrorEvent, MessageEvent, MessagePort, Window, Worker } from '../../../src/browlet/platform';
+import type { ErrorEvent, MessageChannel, MessageEvent, MessagePort, Window, Worker } from '../../../src/browlet/platform';
 import { PolicyContainer } from '../../../src/browlet/browsing/policy/index';
 import { ContentSecurityPolicy, CSPList } from '../../../src/browlet/browsing/policy/csp/index';
 import {
@@ -29,6 +30,7 @@ import {
   type Origin,
 } from '../../../src/url/index';
 import { createManualEventLoop } from '../../support/browlet-agent';
+import { unwrap } from '../../support/browlet-binding';
 import { mockHTTPTransport } from '../../fetch/transport-fixture';
 
 // Production owns a fixed entry. Redirect only the native loader in these
@@ -745,6 +747,434 @@ describe('Worker error transport', { timeout: 30_000 }, () => {
   });
 });
 
+describe('Structured data across worker isolates', { timeout: 30_000 }, () => {
+  it('round-trips cycles, repeated values, and transferred buffers through the existing HTML serializer', async () => {
+    const creatorEnv = createCreatorEnvironment();
+    const buffer = new ArrayBuffer(3);
+    new Uint8Array(buffer).set([1, 2, 3]);
+    let reads = 0;
+    const value = {
+      get buffer() { reads++; return buffer; },
+      map: new Map<object, object>(),
+      repeated: [buffer, buffer],
+    };
+    value.map.set(value, value);
+    const serialized = creatorEnv.serializeWithTransfer(value, [buffer]);
+    expect(buffer.byteLength).toBe(0);
+    const { thread, request } = createThread({ kind: 'dedicated', data: {}, creatorEnv });
+    await thread.ready;
+
+    const reply = await request({ type: 'round-trip-structured-data', serialized }) as StructuredDataReply;
+    expect(reply.inspection).toEqual({ realm: true });
+    const clone = creatorEnv.deserializeWithTransfer(reply.serialized).deserialized as typeof value;
+
+    expect(reads).toBe(1);
+    expect(clone).not.toBe(value);
+    expect(clone.map.get(clone)).toBe(clone);
+    expect(clone.repeated[0]).toBe(clone.buffer);
+    expect(clone.repeated[1]).toBe(clone.buffer);
+    expect(Object.getPrototypeOf(clone)).toBe(creatorEnv.realm.objectPrototype);
+    expect(clone.buffer).toBeInstanceOf(creatorEnv.realm.ArrayBuffer);
+    expect([...new Uint8Array(clone.buffer)]).toEqual([1, 2, 3]);
+  });
+
+  it.each(['dedicated', 'shared'] as const)('enforces the shared-memory cluster restriction in a %s isolate', async (kind) => {
+    const { creatorEnv } = createTerminationWorker();
+    creatorEnv.realm.agent.agentCluster!.crossOriginIsolationMode = 'concrete';
+    creatorEnv.realm.crossOriginIsolated = true;
+    expect(creatorEnv.crossOriginIsolatedCapability).toBe(true);
+    const buffer = new SharedArrayBuffer(4);
+    const transferred = new ArrayBuffer(6);
+    const serialized = creatorEnv.serializeWithTransfer({ buffer, repeated: buffer, transferred }, [transferred]);
+    const { thread, request } = createThread({ kind, data: {}, creatorEnv });
+    await thread.ready;
+
+    const reply = await request({ type: 'round-trip-structured-data', kind: 'shared-memory', serialized });
+    if (kind === 'shared') {
+      expect(reply).toMatchObject({ error: { name: 'DataCloneError' }, transferByteLengths: [6] });
+      expect(new Uint8Array(buffer)[0]).toBe(0);
+      return;
+    }
+    const received = reply as StructuredDataReply;
+    expect(received.inspection).toEqual({ realm: true });
+    const clone = creatorEnv.deserializeWithTransfer(received.serialized).deserialized as { buffer: SharedArrayBuffer; repeated: SharedArrayBuffer; };
+    expect(clone.buffer).not.toBe(buffer);
+    expect(clone.repeated).toBe(clone.buffer);
+    expect(clone.buffer).toBeInstanceOf(creatorEnv.realm.SharedArrayBuffer);
+    expect(new Uint8Array(buffer)[0]).toBe(77);
+    new Uint8Array(clone.buffer)[1] = 88;
+    expect(new Uint8Array(buffer)[1]).toBe(88);
+  });
+
+  it.each(['dedicated', 'shared'] as const)('enforces the Wasm Module cluster restriction in a %s isolate', async (kind) => {
+    const { creatorEnv } = createTerminationWorker();
+    const wasm = (creatorEnv.global as unknown as Window & typeof globalThis).WebAssembly;
+    // (module (func (export "read") (result i32) i32.const 7))
+    const module = new wasm.Module(new Uint8Array([
+      0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 127,
+      3, 2, 1, 0, 7, 8, 1, 4, 114, 101, 97, 100, 0, 0,
+      10, 6, 1, 4, 0, 65, 7, 11,
+    ]));
+    const serialized = creatorEnv.serializeWithTransfer({ module, repeated: module }, []);
+    const { thread, request } = createThread({ kind, data: {}, creatorEnv });
+    await thread.ready;
+
+    const reply = await request({ type: 'round-trip-structured-data', kind: 'wasm', serialized });
+    if (kind === 'shared') {
+      expect(reply).toMatchObject({ error: { name: 'DataCloneError' } });
+      return;
+    }
+    const received = reply as StructuredDataReply;
+    expect(received.inspection).toEqual({ realm: true, result: 7 });
+    const clone = creatorEnv.deserializeWithTransfer(received.serialized).deserialized as { module: WebAssembly.Module; repeated: WebAssembly.Module; };
+    expect(clone.module).not.toBe(module);
+    expect(clone.repeated).toBe(clone.module);
+    expect(clone.module).toBeInstanceOf(wasm.Module);
+    const read = Reflect.get(new wasm.Instance(clone.module).exports, 'read') as () => number;
+    expect(read()).toBe(7);
+  });
+});
+
+describe('Dedicated worker message channel across isolates', { timeout: 30_000 }, () => {
+  it('retains messages posted before native readiness and inside-global composition', async () => {
+    const { implementation, worker, messages, drain } = createTerminationWorker();
+    const { thread, request } = createThread({ kind: 'dedicated', data: {}, worker: implementation });
+    thread.connectMessagePort();
+    worker.postMessage({ early: true });
+    await thread.ready;
+    await request({ type: 'prepare-worker-messages' });
+    await request({ type: 'start-worker-messages' });
+    await vi.waitFor(() => { drain(); expect(messages).toHaveLength(2); });
+    expect(messages[0]).toMatchObject({ value: { early: true } });
+  });
+
+  it('keeps both HTML queues disabled until startup enables them, then preserves FIFO and checkpoints', async () => {
+    const outside = createTerminationWorker(false);
+    const { implementation, worker, creatorEnv, messages, drain } = outside;
+    const { thread, request } = createThread({ kind: 'dedicated', data: {}, worker: implementation });
+    await thread.ready;
+    expect(await request({ type: 'prepare-worker-messages' })).toBe('prepared');
+    thread.connectMessagePort();
+    const value = { number: 1 };
+    worker.postMessage(value);
+    value.number = 99;
+    worker.postMessage({ number: 2 });
+    expect(await request({ type: 'inspect-worker-messages' })).toBe(0);
+
+    const queue = vi.spyOn(creatorEnv.realm, 'queueGlobalTask');
+    expect(await request({ type: 'start-worker-messages' })).toBe(0);
+    await vi.waitFor(() => { expect(queue).toHaveBeenCalledTimes(4); });
+    drain();
+    expect(messages).toEqual([]);
+    implementation.outsidePort.start();
+    drain();
+    expect(messages).toEqual([
+      { value: { number: 1 }, trusted: true, target: true, realm: true, bufferRealm: true },
+      { checkpoint: 1 },
+      { value: { number: 2 }, trusted: true, target: true, realm: true, bufferRealm: true },
+      { checkpoint: 2 },
+    ]);
+    expect(Object.getPrototypeOf(messages[0])).toBe(creatorEnv.realm.objectPrototype);
+  });
+
+  it('transfers ArrayBuffers synchronously and reconstructs repeated references in each receiving realm', async () => {
+    const { worker, creatorEnv, messages, receive } = await createMessagingWorker();
+    const buffer = new ArrayBuffer(3);
+    new Uint8Array(buffer).set([4, 5, 6]);
+    worker.postMessage({ buffer, alias: buffer }, [buffer]);
+    expect(buffer.byteLength).toBe(0);
+    await receive(2);
+    const reply = messages[0] as { value: { buffer: ArrayBuffer; alias: ArrayBuffer; }; bufferRealm: boolean; };
+    expect(reply.bufferRealm).toBe(true);
+    expect(reply.value.alias).toBe(reply.value.buffer);
+    expect(reply.value.buffer).toBeInstanceOf(creatorEnv.realm.ArrayBuffer);
+    expect([...new Uint8Array(reply.value.buffer)]).toEqual([4, 5, 6]);
+  });
+
+  it('reports synchronous serialization failures without damaging the connected channel', async () => {
+    const { worker, messages, receive } = await createMessagingWorker();
+    expect(() => worker.postMessage(() => {})).toThrow(expect.objectContaining({ name: 'DataCloneError' }));
+    worker.postMessage({ after: 'failure' });
+    await receive(2);
+    expect(messages[0]).toMatchObject({ value: { after: 'failure' } });
+  });
+
+  it('delivers messageerror through the worker global when the message carries a different cluster restriction', async () => {
+    const outside = createTerminationWorker();
+    const { worker, messages, receive } = await createMessagingWorker(outside);
+    const foreign = createCreatorEnvironment();
+    foreign.realm.agent.agentCluster!.crossOriginIsolationMode = 'concrete';
+    foreign.realm.crossOriginIsolated = true;
+    // Feed a real record from a different serialization owner through the pipe.
+    // Native SAB support must not bypass HTML's receiving restriction.
+    vi.spyOn(outside.creatorEnv, 'serializeWithTransfer').mockImplementation((value, transfer) =>
+      foreign.serializeWithTransfer(value, transfer));
+    worker.postMessage({ buffer: new SharedArrayBuffer(4) });
+    await receive(1);
+    expect(messages).toEqual(['messageerror']);
+  });
+
+  it('preserves trusted outside events and runs their callbacks only on the creator HTML loop', async () => {
+    const { worker, creatorEnv, messages, drain, request } = await createMessagingWorker();
+    const events: MessageEvent[] = [];
+    worker.addEventListener('message', (event) => { events.push(event as MessageEvent); });
+    const queue = vi.spyOn(creatorEnv.realm, 'queueGlobalTask');
+    expect(await request({ type: 'send-worker-messages', values: ['one', 'two'] })).toBe('sent');
+    await vi.waitFor(() => { expect(queue).toHaveBeenCalledTimes(2); });
+    expect(messages).toEqual([]);
+    drain();
+    expect(messages).toEqual(['one', 'two']);
+    for (const event of events) {
+      expect(event).toBeInstanceOf((creatorEnv.global as unknown as Window).MessageEvent);
+      expect(event).toMatchObject({ isTrusted: true, target: worker, source: null, origin: '', ports: [] });
+    }
+  });
+
+  it('discards queued and in-flight outside messages when terminated', async () => {
+    const { worker, creatorEnv, messages, drain, request, thread, implementation } = await createMessagingWorker();
+    const queue = vi.spyOn(creatorEnv.realm, 'queueGlobalTask');
+    expect(await request({ type: 'send-worker-messages', values: Array.from({ length: 100 }, (_, i) => i) })).toBe('sent');
+    await vi.waitFor(() => { expect(queue).toHaveBeenCalled(); });
+    worker.terminate();
+    await thread.closed;
+    drain();
+    expect(messages).toEqual([]);
+    expect(implementation.outsidePort.isEntangledOutsideGlobal()).toBe(false);
+  });
+
+  it('delivers messages sent before cooperative close and releases the native channel', async () => {
+    const { thread, messages, receive, implementation } = await createMessagingWorker();
+    thread.send({ type: 'close-worker-messages' });
+    await thread.closed;
+    await receive(1);
+    expect(messages).toEqual(['before close']);
+    expect(implementation.outsidePort.isEntangledOutsideGlobal()).toBe(false);
+  });
+});
+
+describe('MessagePort transfer across isolates', { timeout: 30_000 }, () => {
+  it('moves queued and in-flight messages, retaining start gating and receiving-realm identity', async () => {
+    const { worker, creatorEnv, messages, receive, drain } = await createMessagingWorker(undefined, true);
+    const { port1, port2 } = creatorEnv.project(new MessageChannelImpl(creatorEnv)) as MessageChannel;
+    const original: unknown[] = [];
+    port2.onmessage = (event) => { original.push((event as MessageEvent).data); };
+    port1.postMessage('before transfer');
+    worker.postMessage({ type: 'hold', name: 'moved', port: port2 }, [port2]);
+    port1.postMessage('in flight');
+    port2.close();
+    await receive(1);
+    expect(messages).toEqual([{ type: 'held', name: 'moved', identity: true, realm: true, frozenPorts: true }]);
+    expect(original).toEqual([]);
+    worker.postMessage({ type: 'start', name: 'moved' });
+    await receive(6);
+    expect(messages).toEqual([
+      expect.objectContaining({ type: 'held' }),
+      { type: 'started', name: 'moved' },
+      { type: 'port-message', name: 'moved', value: 'before transfer', trusted: true, target: true, realm: true, nestedIdentity: true },
+      { type: 'checkpoint', name: 'moved' },
+      { type: 'port-message', name: 'moved', value: 'in flight', trusted: true, target: true, realm: true, nestedIdentity: true },
+      { type: 'checkpoint', name: 'moved' },
+    ]);
+    const replies: unknown[] = [];
+    port1.onmessage = (event) => { replies.push((event as MessageEvent).data); };
+    worker.postMessage({ type: 'send', name: 'moved', value: 'reply' });
+    await vi.waitFor(() => { drain(); expect(replies).toEqual(['reply']); });
+    port1.close();
+  });
+
+  it('can return a disabled port with queued messages and then transfer it again', async () => {
+    const { worker, creatorEnv, messages, receive, drain } = await createMessagingWorker(undefined, true);
+    const { port1, port2 } = creatorEnv.project(new MessageChannelImpl(creatorEnv)) as MessageChannel;
+    const events: MessageEvent[] = [];
+    worker.addEventListener('message', (event) => { events.push(event as MessageEvent); });
+    port1.postMessage('before first trip');
+    worker.postMessage({ type: 'hold', name: 'first', port: port2 }, [port2]);
+    await receive(1);
+    port1.postMessage('while held');
+    worker.postMessage({ type: 'return', name: 'first' });
+    await receive(2);
+    const returned = events[1]!.ports[0]!;
+    expect(events[1]!.data).toEqual({ type: 'returned', port: returned });
+    expect(returned).toBeInstanceOf((creatorEnv.global as unknown as Window).MessagePort);
+    const original: unknown[] = [];
+    returned.addEventListener('message', (event) => { original.push((event as MessageEvent).data); });
+    drain();
+    expect(original).toEqual([]);
+    worker.postMessage({ type: 'hold', name: 'again', port: returned }, [returned]);
+    port1.postMessage('third trip');
+    worker.postMessage({ type: 'start', name: 'again' });
+    await receive(10);
+    expect(messages.filter((message) => (message as { type: string; }).type === 'port-message')).toEqual([
+      expect.objectContaining({ value: 'before first trip' }),
+      expect.objectContaining({ value: 'while held' }),
+      expect.objectContaining({ value: 'third trip' }),
+    ]);
+    expect(original).toEqual([]);
+    port1.close();
+  });
+
+  it('moves nested transferred ports and buffers inside a pending port queue', async () => {
+    const { worker, creatorEnv, messages, receive, drain } = await createMessagingWorker(undefined, true);
+    const outer = creatorEnv.project(new MessageChannelImpl(creatorEnv)) as MessageChannel;
+    const inner = creatorEnv.project(new MessageChannelImpl(creatorEnv)) as MessageChannel;
+    const buffer = new ArrayBuffer(3);
+    new Uint8Array(buffer).set([7, 8, 9]);
+    const events: MessageEvent[] = [];
+    worker.addEventListener('message', (event) => { events.push(event as MessageEvent); });
+    inner.port1.postMessage('nested before transfer');
+    outer.port1.postMessage({ port: inner.port2, buffer }, [inner.port2, buffer]);
+    expect(buffer.byteLength).toBe(0);
+    worker.postMessage({ type: 'hold', name: 'outer', port: outer.port2 }, [outer.port2]);
+    inner.port1.postMessage('nested in flight');
+    worker.postMessage({ type: 'start', name: 'outer' });
+    await receive(4);
+    expect(messages[2]).toMatchObject({ type: 'port-message', nestedIdentity: true });
+    const nested = events[2]!.ports[0]!;
+    const value = (events[2]!.data as { value: { port: MessagePort; buffer: ArrayBuffer; }; }).value;
+    expect(value.port).toBe(nested);
+    expect(value.buffer).toBeInstanceOf(creatorEnv.realm.ArrayBuffer);
+    expect([...new Uint8Array(value.buffer)]).toEqual([7, 8, 9]);
+    const received: unknown[] = [];
+    nested.addEventListener('message', (event) => { received.push((event as MessageEvent).data); });
+    drain();
+    expect(received).toEqual([]);
+    nested.start();
+    await vi.waitFor(() => { drain(); expect(received).toEqual(['nested before transfer', 'nested in flight']); });
+    inner.port1.close();
+    nested.close();
+    outer.port1.close();
+  });
+
+  it('keeps both transferred endpoints paired and updates ownership when they return to one global', async () => {
+    const { worker, creatorEnv, messages, receive, drain } = await createMessagingWorker(undefined, true);
+    const { port1, port2 } = creatorEnv.project(new MessageChannelImpl(creatorEnv)) as MessageChannel;
+    const events: MessageEvent[] = [];
+    worker.addEventListener('message', (event) => { events.push(event as MessageEvent); });
+    worker.postMessage({ type: 'pair', ports: [port1, port2] }, [port1, port2]);
+    await receive(3);
+    expect(messages).toEqual([
+      { type: 'pair', identities: true },
+      expect.objectContaining({ type: 'port-message', value: 'both ends arrived' }),
+      { type: 'checkpoint', name: 'receiver' },
+    ]);
+    worker.postMessage({ type: 'return', name: 'sender' });
+    await receive(4);
+    const sender = events[3]!.ports[0]!;
+    const senderImpl = unwrap<MessagePortImpl>(sender);
+    expect(senderImpl.isEntangledOutsideGlobal()).toBe(true);
+    worker.postMessage({ type: 'return', name: 'receiver' });
+    await receive(5);
+    const receiver = events[4]!.ports[0]!;
+    const receiverImpl = unwrap<MessagePortImpl>(receiver);
+    await vi.waitFor(() => {
+      expect(senderImpl.isEntangledOutsideGlobal()).toBe(false);
+      expect(receiverImpl.isEntangledOutsideGlobal()).toBe(false);
+    });
+    const received: unknown[] = [];
+    receiver.onmessage = (event) => { received.push((event as MessageEvent).data); };
+    sender.postMessage('back together');
+    await vi.waitFor(() => { drain(); expect(received).toEqual(['back together']); });
+    // HTML serializes and detaches the target, but deliberately drops this message.
+    const buffer = new ArrayBuffer(1);
+    sender.postMessage({ receiver, buffer }, [receiver, buffer]);
+    expect(buffer.byteLength).toBe(0);
+    await vi.waitFor(() => { expect(senderImpl.isEntangledOutsideGlobal()).toBe(false); });
+    drain();
+    expect(received).toEqual(['back together']);
+    sender.close();
+  });
+
+  it('receives worker-created ports and preserves their queue through a local structured clone', async () => {
+    const { worker, creatorEnv, receive, drain } = await createMessagingWorker(undefined, true);
+    const events: MessageEvent[] = [];
+    worker.addEventListener('message', (event) => { events.push(event as MessageEvent); });
+    worker.postMessage({ type: 'create' });
+    await receive(1);
+    const original = events[0]!.ports[0]!;
+    const window = creatorEnv.global as unknown as Window;
+    const moved = window.structuredClone(original, { transfer: [original] });
+    expect(moved).not.toBe(original);
+    expect(moved).toBeInstanceOf(window.MessagePort);
+    original.close();
+    const received: unknown[] = [];
+    moved.onmessage = (event) => { received.push((event as MessageEvent).data); };
+    await vi.waitFor(() => { drain(); expect(received).toEqual(['queued in worker', 'sent after transfer']); });
+    moved.close();
+  });
+
+  it('keeps a port usable after a failed serialization and disconnects it when its worker terminates', async () => {
+    const { worker, creatorEnv, receive, thread, drain } = await createMessagingWorker(undefined, true);
+    const { port1, port2 } = creatorEnv.project(new MessageChannelImpl(creatorEnv)) as MessageChannel;
+    expect(() => worker.postMessage({ port: port2, bad: () => {} }, [port2])).toThrow(
+      expect.objectContaining({ name: 'DataCloneError' }),
+    );
+    worker.postMessage({ type: 'hold', name: 'working', port: port2 }, [port2]);
+    await receive(1);
+    const impl = unwrap<MessagePortImpl>(port1);
+    expect(impl.isEntangledOutsideGlobal()).toBe(true);
+    const received: unknown[] = [];
+    port1.addEventListener('message', (event) => { received.push((event as MessageEvent).data); });
+    const queue = vi.spyOn(creatorEnv.realm, 'queueGlobalTask');
+    worker.postMessage({ type: 'send', name: 'working', value: 'queued before termination' });
+    await vi.waitFor(() => { expect(queue).toHaveBeenCalledTimes(2); });
+    await thread.terminate();
+    await vi.waitFor(() => { expect(impl.isEntangledOutsideGlobal()).toBe(false); });
+    drain();
+    expect(received).toEqual([]);
+    port1.start();
+    drain();
+    expect(received).toEqual(['queued before termination']);
+    port1.close();
+  });
+
+  it('forwards an endpoint between two worker isolates without routing its messages through the creator', async () => {
+    const first = await createMessagingWorker(undefined, true);
+    const second = await createMessagingWorker(undefined, true);
+    const events: MessageEvent[] = [];
+    first.worker.addEventListener('message', (event) => { events.push(event as MessageEvent); });
+    first.worker.postMessage({ type: 'create' });
+    await first.receive(1);
+    const port = events[0]!.ports[0]!;
+    second.worker.postMessage({ type: 'hold', name: 'forwarded', port }, [port]);
+    second.worker.postMessage({ type: 'start', name: 'forwarded' });
+    await second.receive(6);
+    expect(second.messages).toEqual([
+      expect.objectContaining({ type: 'held', identity: true, realm: true }),
+      { type: 'started', name: 'forwarded' },
+      expect.objectContaining({ type: 'port-message', value: 'queued in worker' }),
+      { type: 'checkpoint', name: 'forwarded' },
+      expect.objectContaining({ type: 'port-message', value: 'sent after transfer' }),
+      { type: 'checkpoint', name: 'forwarded' },
+    ]);
+    first.worker.postMessage({ type: 'start', name: 'created' });
+    await first.receive(2);
+    second.worker.postMessage({ type: 'send', name: 'forwarded', value: 'between isolates' });
+    await first.receive(4);
+    expect(first.messages[2]).toMatchObject({ type: 'port-message', value: 'between isolates' });
+  });
+
+  it('releases transferred endpoints when receiving HTML rejects the message', async () => {
+    const outside = createTerminationWorker();
+    const { worker, creatorEnv, messages, receive } = await createMessagingWorker(outside, true);
+    const { port1, port2 } = creatorEnv.project(new MessageChannelImpl(creatorEnv)) as MessageChannel;
+    const foreign = createCreatorEnvironment();
+    foreign.realm.agent.agentCluster!.crossOriginIsolationMode = 'concrete';
+    foreign.realm.crossOriginIsolated = true;
+    // Use an actual incompatible cluster restriction, not a mocked deserializer.
+    const serialize = vi.spyOn(creatorEnv, 'serializeWithTransfer').mockImplementation((value, transfer) =>
+      foreign.serializeWithTransfer(value, transfer));
+    worker.postMessage({ port: port2, buffer: new SharedArrayBuffer(4) }, [port2]);
+    serialize.mockRestore();
+    await receive(1);
+    expect(messages).toEqual(['messageerror']);
+    await vi.waitFor(() => { expect(unwrap<MessagePortImpl>(port1).isEntangledOutsideGlobal()).toBe(false); });
+    port1.close();
+    worker.postMessage({ type: 'create' });
+    await receive(2);
+    expect(messages[1]).toMatchObject({ type: 'created' });
+  });
+});
+
 describe('Creator environment snapshot', () => {
   it('copies URL and tuple-origin records without sharing their mutable data', () => {
     const env = createCreatorEnvironment('https://[::1]:8443/page#fragment');
@@ -847,6 +1277,12 @@ interface NestedInspection {
   child: ThreadInspection;
 }
 
+/** Fixture response containing HTML serialization records after a native transport round trip. */
+interface StructuredDataReply {
+  inspection: { realm: boolean; result?: number; };
+  serialized: StructuredSerializeWithTransferResult;
+}
+
 function createThread(initialization: WorkerThreadInit = { kind: 'dedicated', data: {} }) {
   const messages = new EventEmitter();
   const thread = new WorkerThread(initialization, (message) => { messages.emit('message', message); });
@@ -867,7 +1303,7 @@ function createThread(initialization: WorkerThreadInit = { kind: 'dedicated', da
 }
 
 /** Real outside Worker and controlled HTML deliveries; native execution still uses the isolate fixture. */
-function createTerminationWorker() {
+function createTerminationWorker(enablePort = true) {
   const creatorEnv = createCreatorEnvironment();
   const document = creatorEnv.window.document;
   document.browsingContext = new BrowsingContext(creatorEnv.realm.windowProxy);
@@ -877,12 +1313,27 @@ function createTerminationWorker() {
   const worker = creatorEnv.project(implementation) as Worker;
   const producer = new MessagePortImpl(creatorEnv);
   producer.entangle(implementation.outsidePort);
-  implementation.outsidePort.start();
+  if (enablePort) implementation.outsidePort.start();
   const messages: unknown[] = [];
   worker.onmessage = (event) => { messages.push((event as MessageEvent).data); };
   return {
     traversable, creatorEnv, producer, implementation, worker, messages,
     drain: () => { while (creatorEnv.responsibleEventLoop.runTaskTurn()) { /* Drain runnable outside work. */ } },
+  };
+}
+
+/** Compose only the existing messaging facilities; production shared services remain unfinished. */
+async function createMessagingWorker(outside = createTerminationWorker(), portTransfers = false) {
+  const { thread, request } = createThread({ kind: 'dedicated', data: {}, worker: outside.implementation });
+  await thread.ready;
+  await request({ type: 'prepare-worker-messages', portTransfers });
+  thread.connectMessagePort();
+  await request({ type: 'start-worker-messages' });
+  return {
+    ...outside, thread, request,
+    async receive(this: void, count: number): Promise<void> {
+      await vi.waitFor(() => { outside.drain(); expect(outside.messages).toHaveLength(count); });
+    },
   };
 }
 

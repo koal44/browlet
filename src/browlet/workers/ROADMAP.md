@@ -6,6 +6,42 @@ by `scripting/`, `loader/`, and `communication/`. They must reuse those
 boundaries instead of creating a worker-specific scheduler, script loader, or
 structured-clone implementation.
 
+## Current stopping point
+
+The document-order review has reached **§10.2.6.3, the dedicated Worker
+interface**. §§10.1–10.2.6.2 have been reviewed with dependencies recorded below;
+this does not mean the processing model is fully connected. The dedicated global,
+environment composition, real isolate, initial-script handoff, execution,
+termination, and error reporting have focused coverage. Public `new Worker()`
+still rejects successful startup until environment/shared-service composition
+connects those pieces.
+
+The hidden dedicated-worker channel and author-created MessagePorts now cross
+real isolates, including pending HTML deliveries and further endpoint transfers.
+Current implementation work follows those §9/§10 dependencies; an ordered audit
+of both chapters will follow once their production connections are in place.
+SharedWorker construction/discovery (§10.2.6.4),
+concurrent hardware (§10.2.7), and the §10.3 API review still follow. In particular,
+`importScripts()` remains an explicit stub; WorkerLocation was brought forward,
+while WorkerNavigator still lacks its contributing APIs.
+
+The [communication integration sweep](../communication/ROADMAP.md#worker-integration-checkpoint)
+tracks the remaining worker connections in §9 separately from its earlier local
+realm implementation.
+
+BroadcastChannel now uses worker closing/suspendability checks, and cooperative
+dedicated/shared worker shutdown closes locally owned EventSources after the final
+checkpoint. Focused tests cover both worker kinds. Cross-isolate channel discovery
+and remote Fetch cancellation remain shared-service transport dependencies.
+
+The current §9.4 transfer slice promotes a local endpoint pair to native transport
+only when a message crosses isolates. Its interface-owned transfer record carries
+the handle and pending HTML queue; receipt installs the queue disabled, in the
+receiving realm. Nested transferred ports/buffers, repeated transfers, both-end
+transfer, direct worker-to-worker delivery, and failure/termination cleanup have
+real-isolate coverage. This does not connect public startup or a SharedWorker
+manager, transport other transferable interfaces, or supply remote owner monitoring.
+
 ## Document-order review
 
 The first slice reviews HTML §10.1 in full: scope, classic/module examples,
@@ -571,6 +607,9 @@ clear its timers, disentangle its external ports (including a peer in transit),
 and empty its owner set. Outgoing messages already queued on other loops remain
 deliverable. Local-only channels are not in HTML's list of the worker's ports.
 The final task and its microtasks retain these resources until they finish.
+It also closes locally owned EventSources, canceling requests and retry timers;
+the [communication roadmap](../communication/ROADMAP.md#92-eventsource) records
+HTML's omission of that cleanup and Blink's matching context-destruction behavior.
 
 This supplies cooperative HTML-loop cleanup. Forced termination uses the separate
 outside execution owner described below. Natural native isolate teardown must
@@ -833,6 +872,101 @@ Node 26.8.1, and the custom build, with and without the add-on (558 passes).
 The two previously approved script-selection skips remain unchanged in each
 configuration. Type checking, focused ESLint, import boundaries, and diff checks pass.
 
+### Structured data across isolates (HTML §2.7 startup dependency)
+
+The hidden port needs portable serialization records before it can carry author
+messages. Records and transfer holders now retain the existing agent-cluster ID,
+instead of the live cluster and its agents. Receiving checks compare that ID to
+the target cluster's ID, including the preflight before transfer consumption.
+
+Real dedicated/shared isolates test ordinary graphs, transferred ArrayBuffers,
+shared memory, and Wasm Modules through HTML serialization and reconstruction.
+Dedicated workers accept their inherited restriction; shared workers reject it.
+Fixtures supply the existing worker environment composition and isolation state.
+No Node, V8, or add-on change is needed.
+
+This established the serialization prerequisite. The subsequent channel slices
+connect hidden and author MessagePorts; production environment/shared-service
+composition and successful public `new Worker()` startup remain unfinished.
+Continue these dependencies before moving to SharedWorker discovery.
+
+All seven new cases pass in all six runtime configurations. The broader
+154-case selection retains its two existing iterator/length-tracking expected
+failures where those native capabilities are unavailable; custom/addon passes
+all 154 cases. Type checking, focused ESLint, import boundaries, and diff checks pass.
+
+### Transferable native channels (HTML §10.2.6.3 startup dependency)
+
+JS Engine's `JSMessageChannel` and `JSMessagePort` now supply the missing native
+transport. Ports wrap their native backing and expose native transfer handles.
+The handle type aliases Node's MessagePort; JS Engine owns its operations.
+Thread startup and both directions of thread/channel sends accept
+explicit endpoint/ArrayBuffer transfer lists. Native queues and peer connections
+survive transfer; two worker isolates can communicate without a creator relay.
+The old owner removes its receiver before moving a handle. The receiving owner
+wraps it locally and chooses when to install its host receiver.
+
+The HTML requirements come from [§10.2.4's port setup](https://html.spec.whatwg.org/multipage/workers.html#run-a-worker)
+and [§9.4.4's transfer-receiving and post-message steps](https://html.spec.whatwg.org/multipage/web-messaging.html#message-ports).
+The latter move queued HTML tasks to the receiving port's initially disabled
+queue, then deserialize and fire events when those tasks run. Native messages
+waiting for a host receiver are a separate queue; preserving them does not move
+HTML tasks that have already been queued. Removing a native listener is an
+internal handoff operation, not an HTML operation to disable a started port.
+
+Real-isolate tests cover queued messages before/during/after transfer, repeated
+transfer of an active endpoint, nested endpoint and ArrayBuffer transfer,
+failed-send ownership, direct worker-to-worker traffic, and peer closure after
+normal close or native termination. No add-on, Node, or V8 change is needed.
+
+All ten channel cases, the thread type contract, and the 59 existing worker
+cases pass in all six configurations (420 passes, no failures or skips).
+Type checking, focused ESLint, import boundaries, and diff checks pass.
+
+This primitive is connected to the implicit dedicated-worker channel below and
+to the author-port handoff described in the current stopping point.
+
+### Dedicated worker message channel across isolates
+
+`WorkerThread.connectMessagePort()` creates a native channel, transfers its inside
+endpoint on the private control channel, and associates the other endpoint with
+the retained outside Worker's hidden MessagePort. This can happen before native
+readiness, retaining messages posted immediately after construction. The inside
+runtime holds its endpoint until environment composition calls
+`connectMessagePort()`; either the endpoint or the global can arrive first.
+The startup caller must run the initial script before enabling the queues.
+Connection does not imply HTML execution readiness.
+
+`MessagePortImpl.entangleRemote()` supplies the corresponding remote connection.
+HTML still serializes synchronously and queues every delivery on the receiving
+environment, selecting its realm, activity checks, MessageEvent target, and
+microtask checkpoint. ArrayBuffer transfer holders move through the native pipe;
+the detached author buffer is not retained or exposed there. Both HTML queues
+remain disabled until explicitly started, even while the host pipe is receiving.
+
+Native closure releases the hidden endpoint's global retention while preserving
+already queued HTML deliveries. Forced termination disconnects host delivery
+before clearing the outside queue, preventing native in-flight records from
+refilling it. Cooperative close preserves previously sent messages.
+
+Real-isolate tests cover messages posted before startup, queue activation,
+FIFO/checkpoints, synchronous cloning and transfer, receiving-realm identity,
+trusted targets, messageerror, termination,
+and delivery before cooperative exit. Fixtures supply the existing environment
+composition; they do not supply a production shared UserAgent service transport.
+No add-on, Node, or V8 change is needed.
+
+Author-created MessagePorts subsequently gained native handle handoff and pending
+HTML task migration, described in the current stopping point and communication
+roadmap. Public Worker startup, remote owner monitoring, and shared services remain
+unfinished; this is not yet an end-to-end public `new Worker()` test.
+
+Validation covers Node 24.19.0, Node 26.8.1, and custom Node 27, stock and add-on.
+The eight new cases pass; the broader communication/lifetime/worker selection
+retains only its four existing stock-Node incumbent-attribution expected failures.
+The early-startup correction was retested separately on configurations whose
+broader run preceded it. Type checking, focused lint, and import checks pass.
+
 ## Present
 
 - `service-worker.ts` supplies a non-constructible, secure-context ServiceWorker
@@ -852,7 +986,7 @@ configuration. Type checking, focused ESLint, import boundaries, and diff checks
 - `WorkerEnvironment.completeScriptFetch()` handles failed-load notification/discard
   and successful port setup, then calls `runScript()` for execution and activation;
   public startup still needs to connect these steps on composed environments.
-- `WorkerGlobalImpl.finishRunning()` releases timers, external ports, and owners
+- `WorkerGlobalImpl.finishRunning()` releases timers, external ports, local EventSources, and owners
   after the closing worker's event loop has emptied and finished its checkpoint.
   Native thread teardown and forced termination are still separate dependencies.
 - `WorkerGlobalImpl` supplies the common state and declared surface above.

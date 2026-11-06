@@ -4,6 +4,9 @@ export type {
 } from './modules';
 export type { JSEnvironment } from './environment';
 export { JSThread, JSThreadEndpoint, type JSThreadExit, type JSThreadProtocol } from './threads';
+export {
+  JSMessageChannel, JSMessagePort, type JSMessagePortHandle, type JSMessagePortHandlers, type JSTransferable,
+} from './message-channel';
 export { NodePromise } from './node-promise';
 export { addon } from './node-addons';
 export {

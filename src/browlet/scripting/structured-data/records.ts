@@ -2,10 +2,11 @@ import { InternalError } from '../../../infra/index';
 import type { JSWasmModule } from '../../../js-engine/index';
 import type { BufferViewTypeName, StructuredData } from '../../../web-idl/core/index';
 
-import type { AgentCluster } from '../agents';
 import type { BrowletEnvironment } from '../../environment/index';
 
-/** Serialized graph node; a null cluster means the value is unrestricted. */
+/** Serialized graph node; a null cluster ID means the value is unrestricted. */
+// Store the existing cluster identity, not its isolate-local AgentCluster object.
+// This keeps the restriction portable without retaining agents, realms, or tasks.
 export type SerializedRecord =
   | SerializedPrimitive
   | SerializedBoxedPrimitive
@@ -30,26 +31,26 @@ export type StructuredDeserializeMemory = Map<SerializedRecord, unknown>;
 export type SerializedPrimitive = {
   type: 'primitive';
   value: undefined | null | boolean | number | bigint | string;
-  cluster: null;
+  agentClusterId: null;
 };
 
 export type SerializedBoxedPrimitive =
-  | { type: 'Boolean'; value: boolean; cluster: AgentCluster | null; }
-  | { type: 'Number'; value: number; cluster: AgentCluster | null; }
-  | { type: 'BigInt'; value: bigint; cluster: AgentCluster | null; }
-  | { type: 'String'; value: string; cluster: AgentCluster | null; };
+  | { type: 'Boolean'; value: boolean; agentClusterId: string | null; }
+  | { type: 'Number'; value: number; agentClusterId: string | null; }
+  | { type: 'BigInt'; value: bigint; agentClusterId: string | null; }
+  | { type: 'String'; value: string; agentClusterId: string | null; };
 
 export type SerializedDate = {
   type: 'Date';
   value: number;
-  cluster: AgentCluster | null;
+  agentClusterId: string | null;
 };
 
 export type SerializedRegExp = {
   type: 'RegExp';
   source: string;
   flags: string;
-  cluster: AgentCluster | null;
+  agentClusterId: string | null;
 };
 
 export type SerializedArrayBuffer = {
@@ -58,7 +59,7 @@ export type SerializedArrayBuffer = {
   byteLength: number;
   /** Present only for resizable buffers. */
   maxByteLength?: number;
-  cluster: AgentCluster | null;
+  agentClusterId: string | null;
 };
 
 export type SerializedSharedArrayBuffer = {
@@ -68,7 +69,7 @@ export type SerializedSharedArrayBuffer = {
   byteLength: number;
   /** Present only for growable buffers. */
   maxByteLength?: number;
-  cluster: AgentCluster | null;
+  agentClusterId: string | null;
 };
 
 export type SerializedArrayBufferView = {
@@ -78,20 +79,20 @@ export type SerializedArrayBufferView = {
   byteLength: number | 'auto';
   byteOffset: number;
   arrayLength?: number | 'auto';
-  cluster: AgentCluster | null;
+  agentClusterId: string | null;
 };
 
 /** Native compiled-code token; author properties and the original Module identity are not retained. */
 export type SerializedWasmModule = {
   type: 'WebAssembly.Module';
   module: JSWasmModule;
-  cluster: AgentCluster | null;
+  agentClusterId: string | null;
 };
 
 export type SerializedMap = {
   type: 'Map';
   entries: SerializedMapEntry[];
-  cluster: AgentCluster | null;
+  agentClusterId: string | null;
 };
 
 export type SerializedMapEntry = {
@@ -102,7 +103,7 @@ export type SerializedMapEntry = {
 export type SerializedSet = {
   type: 'Set';
   entries: SerializedRecord[];
-  cluster: AgentCluster | null;
+  agentClusterId: string | null;
 };
 
 export type SerializedError = {
@@ -111,7 +112,7 @@ export type SerializedError = {
   message: string | undefined;
   stack: string;
   cause?: SerializedRecord;
-  cluster: AgentCluster | null;
+  agentClusterId: string | null;
 };
 
 export type SerializedErrorName = typeof serializedErrorNames[number];
@@ -126,13 +127,13 @@ export type SerializedArray = {
   type: 'Array';
   length: number;
   properties: SerializedProperty[];
-  cluster: AgentCluster | null;
+  agentClusterId: string | null;
 };
 
 export type SerializedObject = {
   type: 'Object';
   properties: SerializedProperty[];
-  cluster: AgentCluster | null;
+  agentClusterId: string | null;
 };
 
 export type SerializedProperty = {
@@ -144,13 +145,13 @@ export type SerializedPlatformObject = {
   type: 'platform-object';
   interfaceName: string;
   data: StructuredData;
-  cluster: AgentCluster | null;
+  agentClusterId: string | null;
 };
 
 /** Graph reference whose value is supplied by transfer memory. */
 export type SerializedTransferPlaceholder = {
   type: 'transfer-placeholder';
-  cluster: AgentCluster | null;
+  agentClusterId: string | null;
 };
 
 export type TransferDataHolder =
@@ -164,7 +165,7 @@ export type ArrayBufferTransferDataHolder = {
   byteLength: number;
   /** Present only for resizable buffers. */
   maxByteLength?: number;
-  cluster: AgentCluster | null;
+  agentClusterId: string | null;
 };
 
 export type PlatformObjectTransferDataHolder = {
@@ -172,14 +173,14 @@ export type PlatformObjectTransferDataHolder = {
   placeholder: SerializedTransferPlaceholder;
   interfaceName: string;
   data: StructuredData;
-  cluster: AgentCluster | null;
+  agentClusterId: string | null;
 };
 
 export type StructuredSerializeWithTransferResult = {
   serialized: SerializedRecord;
   transferDataHolders: TransferDataHolder[];
   interfaceNames: Set<string>;
-  cluster: AgentCluster | null;
+  agentClusterId: string | null;
 };
 
 export type StructuredDeserializeWithTransferResult = {
@@ -193,12 +194,13 @@ const serializedErrorNames = [
 ] as const;
 
 // https://html.spec.whatwg.org/multipage/structured-data.html#restrict-to-the-same-agent-cluster
+// Represent the cluster by its existing ID; each isolate keeps its own members.
 export function restrictToSameAgentCluster(
-  record: { cluster: AgentCluster | null; },
+  record: { agentClusterId: string | null; },
   env: BrowletEnvironment,
 ): void {
   const cluster = env.realm.agent.agentCluster;
   // An unassociated agent cannot supply a restriction: null would mean unrestricted.
   if (cluster === null) throw new InternalError('Realm agent has no agent cluster');
-  record.cluster = cluster;
+  record.agentClusterId = cluster.id;
 }

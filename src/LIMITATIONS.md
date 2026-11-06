@@ -1278,25 +1278,28 @@ and [Clipboard event slice](browlet/interaction/clipboard/ROADMAP.md).
   Binding has cross-origin invocation checks and
   caller-bound descriptor lookup and Get. Native WindowProxy access now selects
   that binding automatically; stock Node still lacks the caller boundary.
-  WindowEventHandlers remain unimplemented. MessagePort transfer is implemented. See the
+  Window message handlers and MessagePort transfer are implemented. See the
   [§9.3 dependencies](browlet/communication/ROADMAP.md#93-cross-document-messaging).
 
-- **BroadcastChannel supports Window realms in one UserAgent.** Worker eligibility
-  remains explicit unfinished work, with worker closing/suspension and cross-thread
-  delivery still absent. Routing uses the existing origin-based StorageKey; it does
-  not add browser-specific privacy partitioning. See the
+- **BroadcastChannel supports local Window/worker realms in one UserAgent.** Worker
+  eligibility uses closing/suspendability checks; cross-isolate discovery and
+  delivery still need shared-service transport. Routing uses the existing
+  origin-based StorageKey; it does not add browser-specific privacy partitioning. See the
   [§9.5 dependencies](browlet/communication/ROADMAP.md#95-broadcastchannel).
 
-- **Channel messaging uses modeled agents in one isolate.** MessageChannel,
+- **Channel messaging now includes isolate transport.** MessageChannel,
   MessagePort transfer, queued-message migration, and document cleanup work with
-  existing Window realms. Worker/AudioWorklet globals, shutdown, and cross-thread
-  transport remain separate integrations. Entangled ports and pending tasks are
+  existing Window realms. Dedicated-worker tests also cover native endpoint
+  handoff, nested pending transfers, and shutdown across real isolates. Public
+  worker startup, SharedWorker discovery, AudioWorklet lifecycle, and remote owner
+  monitoring remain separate integrations. Entangled ports and pending tasks are
   retained conservatively; see [§9.4](browlet/communication/ROADMAP.md#94-channel-messaging).
 
 - **EventSource lifetime is conservative.** Active sources remain retained until
-  `close()` or permanent Document cleanup; listener-sensitive collection is not
-  implemented. Worker globals and navigation-driven destruction remain separate
-  integration gates. See the [communication roadmap](browlet/communication/ROADMAP.md#92-eventsource).
+  `close()`, permanent Document cleanup, or cooperative worker shutdown;
+  listener-sensitive collection is not implemented. Shared-service Fetch routing,
+  remote cancellation after forced termination, and navigation-driven destruction
+  remain separate integration gates. See the [communication roadmap](browlet/communication/ROADMAP.md#92-eventsource).
 
 - **HTML element identities do not imply complete element APIs.** All specified
   HTML names now select their concrete or intentionally generic interface,
@@ -2045,9 +2048,9 @@ work and provisional consumer hooks stay in its [single roadmap](fetch/ROADMAP.m
 `document.domain` now validates and records relaxation, and origin-keyed clusters
 suppress valid assignments. This does not implement WindowProxy/Location's
 cross-origin access enforcement. The OAC header and `originAgentCluster` expose
-modeled cluster selection, without native execution isolation. WebAssembly.Module
-cloning and MessagePort delivery now enforce those modeled clusters within the
-current runtime; worker transport across isolates remains unfinished.
+modeled cluster selection, without native execution isolation. Structured data
+enforces cluster IDs, including Wasm Module and shared-memory transport across
+real test isolates. MessagePort transport is connected; public worker startup remains unfinished.
 `Origin.from()` supports strings, URL, Origin, and Window
 objects, including WindowProxy and entry-origin access checks. Direct host calls
 without an HTML entry use the operation environment. Worker globals remain
@@ -2110,7 +2113,18 @@ Copied URL records omit cached Blob registrations; resolving Blob URLs still
 requires access to the original UserAgent's store.
 The bootstrap rejects commands at that unfinished
 boundary; it does not create a worker global or fetch/execute author code yet.
-Its internal Node-cloned messages are not HTML MessagePort transport.
+Its internal Node-cloned messages are not HTML MessagePort transport. HTML
+serialization records now carry cluster IDs and survive that channel for ordinary
+graphs, transferred ArrayBuffers, shared memory, and native Wasm Module tokens.
+Real-isolate tests reconstruct them with the existing HTML/Binding operations;
+Other interface-owned resources require their own transport support.
+The dedicated worker's hidden channel now connects native endpoints to HTML
+MessagePort delivery, including disabled startup queues, receiving-realm
+reconstruction, messageerror, and cleanup. Author-created MessagePorts now carry
+native endpoints and pending HTML deliveries across isolates, including nested
+transfers and repeated handoff. Real-isolate tests supply
+environment composition, so they do not establish successful public `new Worker()`
+startup. Shared UserAgent services remain a separate dependency.
 The host adapter can now fetch a prepared initial-script request in the creator
 isolate and hand its consumed response to an explicit worker networking-task
 consumer. Fetch retains the original stores and client; host-owned body streams
@@ -2139,8 +2153,8 @@ the outside Worker's retained WorkerThread. Local-agent interface tests
 exercise existing ports and script completion, not cross-isolate transport.
 The dedicated/shared worker event-loop tail now performs cooperative shutdown:
 after closing, all queues must empty and the final checkpoint must finish before
-timers, external ports, and owners are released. Already-sent outgoing messages
-remain deliverable. Later tasks, microtasks, and spinning continuations cannot
+timers, external ports, local EventSources, and owners are released. Already-sent
+outgoing messages remain deliverable. Later tasks, microtasks, and spinning continuations cannot
 restart that HTML loop. This does not abort a blocking script or dispose its native
 isolate; owner-driven closure/suspension, worker rendering,
 and Service Worker teardown remain separate dependencies.
@@ -2150,7 +2164,7 @@ exit, even if Fetch cleanup fails. Actual HTML classic/module runner tests verif
 interruption without catch/finally or pending reactions through the public
 Worker method. Native exit releases its host association. The public constructor
 must supply the outside Worker before returning, and production inside settings,
-shared-service/MessagePort transport, and shared-worker connection cleanup remain
+shared-service transport, and shared-worker connection cleanup remain
 unimplemented. Natural native exit preserves already-queued outside deliveries.
 Dedicated runtime errors now cross the native channel as diagnostics, without
 the original exception. Outside Worker delivery and uncanceled reporting through

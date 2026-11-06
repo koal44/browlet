@@ -1,8 +1,10 @@
 import { assert, describe, expect, it, vi } from 'vitest';
 
-import { parseURL } from '../../../src/url/index';
+import { parseURL, serializeURL } from '../../../src/url/index';
+import { utf8Encode } from '../../../src/encoding/index';
+import { FetchHeaders, type HTTPTransportListener } from '../../../src/fetch/index';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
-import { MessagePortImpl } from '../../../src/browlet/communication/index';
+import { EventSourceImpl, MessagePortImpl } from '../../../src/browlet/communication/index';
 import { createWorkerEnvironment } from '../../../src/browlet/integration/web-idl/index';
 import {
   AgentCluster, ClassicScript, DedicatedWorkerAgent, ScriptFetchOptions, SharedWorkerAgent,
@@ -150,7 +152,89 @@ describe('Worker event-loop shutdown (HTML §§8.1.7.3, 10.2.4)', () => {
     expect(env.getWindowOrWorkerGlobalScopeMixin().messagePorts).toEqual(new Set([localFirst, localSecond]));
     expect(() => { received.postMessage('no recipient'); }).not.toThrow();
   }));
+
+  it.each([false, true])('closes worker-owned EventSources after the final checkpoint (shared: %s)', async (shared) => {
+    const { env, loop, scope, outsideEnv } = createWorker(shared);
+    env.markExecutionReady();
+    const exchanges = new Map<string, EventSourceExchange>();
+    const dispatch = vi.spyOn(env.userAgent.httpTransport, 'dispatch').mockImplementation((request, listener) => {
+      const abort = vi.fn();
+      exchanges.set(serializeURL(request.url), { listener, abort });
+      return { pause() {}, resume() {}, abort };
+    });
+    const retries: { steps: () => void; canceled: boolean; }[] = [];
+    const schedule = vi.spyOn(env.userAgent.timerHost, 'scheduleTimeout').mockImplementation((_delay, steps) => {
+      const timer = { steps, canceled: false };
+      retries.push(timer);
+      return { remove() { timer.canceled = true; } };
+    });
+    const active = new scope.EventSource('https://worker.test/active');
+    const retrying = new scope.EventSource('https://worker.test/retry');
+    const connecting = new scope.EventSource('https://worker.test/connecting');
+    const parent = new EventSourceImpl('https://worker.test/parent', { withCredentials: false }, outsideEnv);
+    try {
+      await vi.waitFor(() => {
+        while (loop.runTaskTurn()) { /* Deliver Fetch preparation. */ }
+        while (outsideEnv.responsibleEventLoop.runTaskTurn()) { /* Prepare the creator's independent request. */ }
+        expect(exchanges.size).toBe(4);
+      });
+      const activeExchange = exchanges.get(active.url)!;
+      const retryExchange = exchanges.get(retrying.url)!;
+      for (const exchange of [activeExchange, retryExchange]) {
+        const headers = new FetchHeaders();
+        headers.append('Content-Type', 'text/event-stream');
+        headers.append('Access-Control-Allow-Origin', '*');
+        exchange.listener.onHeaders(200, 'OK', headers, true);
+      }
+      retryExchange.listener.onEnd();
+      await vi.waitFor(() => {
+        while (loop.runTaskTurn()) { /* Deliver open and reconnection work. */ }
+        expect(active.readyState).toBe(active.OPEN);
+        expect(retrying.readyState).toBe(retrying.CONNECTING);
+        expect(retries.filter((timer) => !timer.canceled)).toHaveLength(1);
+      });
+      const lateMessage = vi.fn();
+      active.onmessage = lateMessage;
+      const states: number[][] = [];
+      // Stock Node cannot drain its shared microtask queue recursively from
+      // this async test's Promise job. Use the same host boundary as the other shutdown tests.
+      await runInHostTask(() => {
+        env.queueTask('dom-manipulation', () => {
+          scope.close();
+          states.push([active.readyState, retrying.readyState, connecting.readyState]);
+          loop.queueMicrotask(() => { states.push([active.readyState, retrying.readyState, connecting.readyState]); });
+        });
+        loop.runTaskTurn();
+        expect(states).toEqual([[1, 0, 0], [1, 0, 0]]);
+      });
+      expect([active.readyState, retrying.readyState, connecting.readyState]).toEqual([2, 2, 2]);
+      expect(activeExchange.abort).toHaveBeenCalledOnce();
+      expect(exchanges.get(connecting.url)!.abort).toHaveBeenCalledOnce();
+      expect(retries.every((timer) => timer.canceled)).toBe(true);
+      expect(env.getWindowOrWorkerGlobalScopeMixin().eventSources.size).toBe(0);
+      expect(parent.readyState).toBe(0);
+      expect(exchanges.get(parent.url)!.abort).not.toHaveBeenCalled();
+      activeExchange.listener.onData(utf8Encode('data: too late\n\n'));
+      for (const timer of retries) timer.steps();
+      await runInHostTask(() => {});
+      expect(dispatch).toHaveBeenCalledTimes(4);
+      expect(lateMessage).not.toHaveBeenCalled();
+    } finally {
+      active.close();
+      retrying.close();
+      connecting.close();
+      parent.close();
+      dispatch.mockRestore();
+      schedule.mockRestore();
+    }
+  });
 });
+
+/** Controlled wire callbacks and cancellation, while the production Fetch/EventSource machinery runs. */
+interface EventSourceExchange {
+  listener: HTTPTransportListener;
+  abort: () => void;
+}
 
 /** Real worker environments and ports, with host turns retained for deterministic shutdown boundaries. */
 function createWorker(shared = false) {

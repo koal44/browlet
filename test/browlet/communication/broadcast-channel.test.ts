@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { createWindowEnvironment } from '../../../src/browlet/integration/web-idl/index';
+import { createWindowEnvironment, createWorkerEnvironment } from '../../../src/browlet/integration/web-idl/index';
+import type { BrowletEnvironment } from '../../../src/browlet/environment/index';
 import { BrowsingContext, TopLevelTraversable, DocumentState } from '../../../src/browlet/browsing/navigation/index';
 import { BroadcastChannelImpl } from '../../../src/browlet/communication/index';
-import type { BroadcastChannel, MessageEvent } from '../../../src/browlet/platform';
-import { AgentCluster, WindowAgent } from '../../../src/browlet/scripting/agents';
+import type { BroadcastChannel, DedicatedWorkerGlobalScope, MessageEvent, SharedWorkerGlobalScope } from '../../../src/browlet/platform';
+import { AgentCluster, DedicatedWorkerAgent, SharedWorkerAgent, WindowAgent } from '../../../src/browlet/scripting/agents';
 import { navigationAndTraversalTaskSource } from '../../../src/browlet/scripting/tasks';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { createOpaqueOrigin, obtainURLOrigin, parseURL, type Origin } from '../../../src/url/index';
@@ -417,10 +418,114 @@ describe('BroadcastChannel (§9.5)', () => {
   });
 });
 
+describe('BroadcastChannel worker eligibility (§9.5)', () => {
+  it.each([false, true])('exchanges messages with an active worker on its own HTML loop (shared: %s)', (shared) => {
+    const page = createWindow();
+    const worker = createWorker(page.env, shared);
+    const sender = new page.window.BroadcastChannel('news');
+    const receiver = new worker.scope.BroadcastChannel('news');
+    const sent = collect(sender);
+    const received = collect(receiver);
+    sender.postMessage({ items: [1] });
+    page.drain();
+    expect(received).toEqual([]);
+    worker.drain();
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBeInstanceOf(worker.scope.MessageEvent);
+    expect(received[0]).toMatchObject({ data: { items: [1] }, origin: 'https://example.test', isTrusted: true, target: receiver });
+    expect(Object.getPrototypeOf(received[0]!.data)).toBe(worker.env.realm.objectPrototype);
+    receiver.postMessage('reply');
+    expect(sent).toEqual([]);
+    page.drain();
+    expect(sent[0]!.data).toBe('reply');
+    sender.close();
+    receiver.close();
+  });
+
+  it.each([false, true])('excludes suspendable workers before cloning or checking a closed channel (shared: %s)', (shared) => {
+    const owner = createWindow();
+    const page = createWindow(owner.env.userAgent);
+    const worker = createWorker(owner.env, shared);
+    const sender = new page.window.BroadcastChannel('news');
+    const receiver = new worker.scope.BroadcastChannel('news');
+    const closed = new worker.scope.BroadcastChannel('closed');
+    closed.close();
+    const received = collect(receiver);
+    const context = owner.document.browsingContext;
+    owner.document.browsingContext = null;
+    expect(worker.global.isSuspendable()).toBe(true);
+    expect(() => receiver.postMessage(() => {})).not.toThrow();
+    expect(() => closed.postMessage(() => {})).not.toThrow();
+    sender.postMessage('excluded');
+    worker.drain();
+    expect(received).toEqual([]);
+    owner.document.browsingContext = context;
+    expect(worker.global.isSuspendable()).toBe(false);
+    expect(() => receiver.postMessage(() => {})).toThrow(expect.objectContaining({ name: 'DataCloneError' }));
+    expect(() => closed.postMessage(0)).toThrow(expect.objectContaining({ name: 'InvalidStateError' }));
+    sender.postMessage('eligible again');
+    worker.drain();
+    expect(received.map((event): unknown => event.data)).toEqual(['eligible again']);
+    sender.close();
+    receiver.close();
+  });
+
+  it.each([false, true])('suppresses sends and queued deliveries when the worker closes (shared: %s)', (shared) => {
+    const page = createWindow();
+    const worker = createWorker(page.env, shared);
+    const sender = new page.window.BroadcastChannel('news');
+    const receiver = new worker.scope.BroadcastChannel('news');
+    const received = collect(receiver);
+    sender.postMessage('queued before close');
+    worker.scope.close();
+    expect(worker.global.closing).toBe(true);
+    expect(() => receiver.postMessage(() => {})).not.toThrow();
+    sender.postMessage('after close');
+    worker.drain();
+    expect(received).toEqual([]);
+    sender.close();
+    receiver.close();
+  });
+
+  it('uses suspendability rather than requiring a fully active Document owner', () => {
+    const page = createWindow();
+    const worker = createWorker(page.env, false);
+    worker.global.ownerSet.clear();
+    // The orphan monitor will eventually close this worker. Until then, lack of
+    // an owner alone is not the BroadcastChannel eligibility rule.
+    expect(worker.global.isActivelyNeeded()).toBe(false);
+    expect(worker.global.isSuspendable()).toBe(false);
+    const sender = new worker.scope.BroadcastChannel('news');
+    const receiver = new page.window.BroadcastChannel('news');
+    const received = collect(receiver);
+    sender.postMessage('before closing');
+    page.drain();
+    expect(received[0]!.data).toBe('before closing');
+    sender.close();
+    receiver.close();
+  });
+});
+
 function collect(channel: BroadcastChannel): MessageEvent[] {
   const events: MessageEvent[] = [];
   channel.onmessage = (event) => { events.push(event as MessageEvent); };
   return events;
+}
+
+/** Compose a real worker global with a local UserAgent; shared-service transport is not part of eligibility. */
+function createWorker(outsideEnv: BrowletEnvironment, shared: boolean) {
+  const agent = shared ? new SharedWorkerAgent(createManualEventLoop()) : new DedicatedWorkerAgent(createManualEventLoop());
+  (shared ? new AgentCluster() : outsideEnv.realm.agent.agentCluster!).add(agent);
+  const env = createWorkerEnvironment({
+    agent, outsideEnv, url: parseURL('https://example.test/worker.js').url!, unsafeWorkerCreationTime: 0,
+    type: 'classic', name: 'broadcast test', credentials: 'same-origin', extendedLifetime: false,
+  });
+  env.markExecutionReady();
+  return {
+    env, global: env.globalImplementation,
+    scope: env.global as unknown as DedicatedWorkerGlobalScope | SharedWorkerGlobalScope,
+    drain() { while (agent.eventLoop.runTaskTurn()) { /* Drain this worker's HTML tasks. */ } },
+  };
 }
 
 /** Real Window bindings, with explicit UserAgent ownership and manual task turns. */

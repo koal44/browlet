@@ -1798,9 +1798,11 @@ each other configuration. No new expected failures were added.
 All three full native suites pass: 378 tests on Node 24/26, and 377 passes plus
 one existing skip on the custom build. Typechecking and affected-file lint pass.
 
-The compiled token is an in-process representation. Real worker transport across
-isolates and HTML Wasm/ESM loading remain explicit dependencies. This slice stops
-before §4's developer-facing display conventions.
+The compiled token is an in-process representation. Worker tests now carry it
+across native isolates and reconstruct realm-owned Modules through HTML and
+Binding, preserving graph identity and enforcing cluster IDs. Production worker
+MessagePort transport remains unfinished. HTML Wasm/ESM loading is covered below.
+This slice stops before §4's developer-facing display conventions.
 
 ### §§4–7 and closing material reviewed
 
@@ -2172,7 +2174,7 @@ pass. No ordinary failures remain in this selection.
 | [Fetch](../../fetch/ROADMAP.md) | Response records, headers, CORS filtering, body consumption, and cancellation exist. Use them directly; Node's own Response acceptance does not establish support for Browlet Responses. |
 | [Scheduling](../scripting/EVENT-LOOP-ARCHITECTURE.md) | All addon bases deliver native completion through the owning HTML task and Document lifetime, selecting networking for response compilation. Stock mode supplies automatic progress without HTML task ownership. |
 | [CSP](../browsing/policy/csp/ROADMAP.md#wasm-compilation-consumer-451) | §4.5.1 is connected: live policy/reporting, realm-correct CompileError, browser byte/response APIs, and native entry points/HTML Wasm parsing on all addon bases. Stock Node checks Browlet's entry points only. No Node/V8 patch; Node's own checks remain intact. URL/Fetch policy remains separate; worker startup and global violation reporting retain their owners. |
-| [Structured data](../scripting/structured-data/ROADMAP.md) | Module graph serialization/deserialization, target-realm cloning, storage rejection, cluster checks, and MessagePort delivery are implemented in Web API §3. Cross-isolate worker transport remains a separate dependency. |
+| [Structured data](../scripting/structured-data/ROADMAP.md) | Module graph serialization/deserialization, target-realm cloning, storage rejection, cluster checks, and MessagePort delivery are implemented in Web API §3. Real-isolate tests now cover native token transport and reconstruction; production worker MessagePort transport remains a separate dependency. |
 | [Module loading](../scripting/module-loading.ts) | Ordinary fetched Wasm graphs and source-phase URL imports are connected. Static source imports need the addon; dynamic source imports also need the existing forwarding export. Deferred phases remain throwing boundaries. §10.6 source-object lookup and `import(moduleObject)` are reviewed and deferred above. |
 | [Workers](../workers/ROADMAP.md) and native isolation | Worker startup, cross-thread transport, and correspondence between modeled Agents and native execution domains remain separate dependencies. Window integration can proceed; its tests do not certify cross-agent Wasm behavior. |
 

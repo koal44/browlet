@@ -64,7 +64,7 @@ export class EventSourceImpl extends EventTargetImpl {
   get onerror(): EventHandlerCallback | null { return this.eventHandlers.get('onerror'); }
   set onerror(callback: EventHandlerCallback | null) { this.eventHandlers.set('onerror', callback); }
 
-  /** Also used by HTML's forcibly-close steps during permanent document cleanup. */
+  /** Abort the request and retry timer; also used for permanent Document and worker cleanup. */
   // https://html.spec.whatwg.org/multipage/server-sent-events.html#dom-eventsource-close
   close(): void {
     if (this.readyState === EventSourceState.Closed) return;

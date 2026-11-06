@@ -35,7 +35,7 @@ export class WindowOrWorkerGlobalScopeMixin {
   /** WebTransports registered for cleanup in this global. */
   // PROVISIONAL: WebTransport creation and registration are not implemented.
   webTransports: { cleanup(): void; }[] = [];
-  /** Active EventSources, retained until close or permanent document cleanup. */
+  /** Active EventSources, retained until close or permanent Document/worker cleanup. */
   eventSources = new Set<EventSourceImpl>();
   /** Named Reporting destinations configured by this global's resource response. */
   reportingEndpoints: ReportingEndpoint[] = [];

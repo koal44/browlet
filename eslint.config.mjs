@@ -79,6 +79,8 @@ export default defineConfig(
       parser: tseslint.parser,
       parserOptions: {
         projectService: true,
+        // Inspecting dependencies can load another checkout's config in the same editor process.
+        tsconfigRootDir: import.meta.dirname,
       },
     },
     extends: [

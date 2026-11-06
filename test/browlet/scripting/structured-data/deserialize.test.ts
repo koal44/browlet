@@ -457,11 +457,11 @@ describe('HTML structured deserialization', () => {
       type: 'platform-object',
       interfaceName: 'MissingInterface',
       data: new StructuredData(),
-      cluster: null,
+      agentClusterId: null,
     };
     expectDataCloneError(() => structuredDeserialize(missing, target));
 
-    const record: SerializedRecord = { type: 'Object', properties: [], cluster: null };
+    const record: SerializedRecord = { type: 'Object', properties: [], agentClusterId: null };
     const remembered = {};
     const memory = new Map<SerializedRecord, unknown>([[record, remembered]]);
     expect(structuredDeserialize(record, target, memory)).toBe(remembered);

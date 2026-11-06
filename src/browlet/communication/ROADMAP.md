@@ -5,6 +5,34 @@ machinery becomes foundational as soon as Browlet adds child navigables or
 workers. It is also the first public consumer that must prove structured
 transfer and cross-agent task delivery together.
 
+## Worker integration checkpoint
+
+The §9 APIs were implemented for local realms. The §10 integration sweep on
+2026-11-05 distinguishes those algorithms from their cross-isolate dependencies:
+
+- **MessageEvent and Window messaging:** implementation, Binding, local port
+  transfer, and Window handler attributes are connected. Earlier notes saying
+  `Window.onmessage` is missing are obsolete.
+- **MessagePort / dedicated workers:** the hidden inside/outside channel now
+  carries HTML serialization records across isolates. Delivery remains on HTML
+  task queues, including disabled startup queues, target-realm reconstruction,
+  microtask checkpoints, messageerror, and shutdown cleanup. Author-created
+  ports also move between isolates, carrying pending HTML deliveries and nested
+  ports/buffers. The public Worker startup connection remains unfinished.
+- **BroadcastChannel:** worker eligibility uses the existing closing/suspendable
+  checks. The UserAgent-owned registry is still local; discovery, delivery, and
+  cleanup across isolates require the shared-service transport.
+- **EventSource:** cooperative worker shutdown closes owned sources after the
+  final checkpoint, aborting local requests and canceling retries. Shared-service
+  Fetch routing and remote cancellation after forced termination remain deferred.
+- **ServiceWorker and AudioWorklet:** their actual lifecycles and communication
+  remain dependencies of their respective specifications.
+
+This is a connection inventory, not a second completed review of every §9
+algorithm. Follow dependencies between §§9 and 10 during implementation, then
+audit both chapters in document order once connected. Revisit worker exposure
+and cleanup at their production owners and retain local-realm regressions.
+
 ## §9.1 MessageEvent
 
 [MessageEventImpl](message-event.ts) implements the constructor, initialization
@@ -44,11 +72,12 @@ queuing and retain their trusted flag when delivered.
 
 Dependencies and remaining limits:
 
-- The global's existing cleanup collection now holds actual EventSources.
-  Permanent Document destruction closes connections and cancels pending retries.
+- The global's existing cleanup collection holds active EventSources.
+  Permanent Document destruction and cooperative dedicated/shared worker shutdown
+  close connections and cancel pending retries.
   Navigation's invocation of destruction remains a browsing-lifecycle dependency.
-- Window exposure works. Worker exposure is declared but awaits Worker globals
-  and their shutdown integration.
+- Window and Worker exposure work. Shared-service Fetch routing and remote
+  cancellation after forced termination remain worker integration dependencies.
 - Active sources are conservatively retained until close or permanent cleanup.
   Listener-sensitive collection and abort-on-GC are not implemented.
 
@@ -68,6 +97,17 @@ callback, so all consumed messages are queued before the disconnect notification
 Fetch with controlled transport/clock inputs, plus an actual HTTP redirect and
 stream. They cover fragmented UTF-8 and line endings, parsing, credentials/CORS,
 final-response origin, event ordering, retry headers, closure, and document cleanup.
+
+`SPEC_GAP(worker-eventsource-shutdown)`: HTML's
+[worker shutdown tail](https://html.spec.whatwg.org/multipage/workers.html#run-a-worker)
+does not mention EventSource disposal; the
+[forcible-close text](https://html.spec.whatwg.org/multipage/server-sent-events.html#forcibly-close-an-eventsource)
+explicitly covers permanent Document removal. Browlet reuses `close()` when the
+worker loop ends, matching Blink's
+[`ContextDestroyed()`](https://chromium.googlesource.com/chromium/src/+/1136757f47c7e2b6cc593f871a5d79fc0e9834b4/third_party/blink/renderer/modules/eventsource/event_source.cc#368).
+[Worker shutdown tests](../../../test/browlet/workers/shutdown.test.ts) cover open
+and unanswered requests, pending retries, late transport callbacks, final-checkpoint
+ordering, and preservation of the creator's independent source.
 
 ## §9.3 Cross-document messaging
 
@@ -111,9 +151,9 @@ Dependencies and remaining limits:
   unfinished; this implementation does not replace that machinery.
 - **Ports:** MessagePort and ArrayBuffer transfer work. Transferred ports retain
   queued messages and are projected in the receiving Window's realm.
-- **Handlers:** use `addEventListener('message', ...)` or `messageerror`.
-  Window's `onmessage`/`onmessageerror` await the WindowEventHandlers mixin and
-  global-handler composition; EventSource's own handlers are independent.
+- **Handlers:** `addEventListener`, Window's `onmessage`/`onmessageerror`, and
+  their WindowEventHandlers composition are connected. EventSource's own
+  handlers are independent.
 
 [Focused tests](../../../test/browlet/communication/window-messaging.test.ts)
 cover overload conversion, origin/default/opaque checks, serialization timing,
@@ -149,6 +189,29 @@ belong to the same global, neither is in its worker-port list. Closing the local
 end during transfer disconnects the channel, and receipt cannot revive it.
 No previous owner is retained. See the [§10.2.3 review](../workers/ROADMAP.md#document-order-review).
 
+Cross-isolate sends promote local pairs to native channels only when necessary.
+The transferred endpoint carries ordered pending HTML deliveries separately from
+its native handle, whose queue retains messages not yet received by the host.
+Receipt queues the saved deliveries before resuming host reception, without
+enabling the HTML queue. A later local or cross-isolate transfer repeats this
+handoff; author objects never expose native handles. Endpoint IDs preserve peer
+identity for the doomed-target transfer check. Private owner notifications update
+the last known peer environment; an unknown/in-transit owner remains external.
+These notifications are not the unfinished remote worker-owner monitor.
+
+The [real-isolate tests](../../../test/browlet/workers/thread.test.ts) cover
+disabled queues, FIFO/checkpoints, source detachment, receiving-realm/event port
+identity, repeated transfers, nested port/buffer queues, both endpoints moving,
+worker-created ports, direct communication between two workers, clone failure,
+and shutdown. Ordinary local channels continue using their existing task path.
+Other transferable interfaces need their own portable resource handling; this
+does not supply stream transfer or shared UserAgent discovery.
+
+The eight new real-isolate cases pass on Node 24.19.0, Node 26.8.1, and custom
+Node 27, both stock and with the add-on. The 66 existing local-channel/lifetime
+cases and eight hidden-worker-channel cases also pass. Type checking, focused
+ESLint, import boundaries, and diff checks pass; no engine/add-on change is needed.
+
 `clearOutgoingMessages()` supplies the dedicated-worker termination queue step
 (HTML §10.2.4). It clears only the currently entangled endpoint's pending deliveries,
 including messages in transit, without altering connection or enabled state.
@@ -181,10 +244,15 @@ permits global retention. Unlike the older local HTML snapshot, it does not
 require close events or GC-triggered disentanglement. Pending tasks are retained
 conservatively until delivery, transfer, or Document destruction.
 
-Worker and AudioWorklet exposure is declared; actual globals, worker channels,
-shutdown, and cross-thread transport remain their owners' work. This implementation
-communicates across Browlet's modeled agents in one isolate. No Node/V8 changes
-or messaging stubs were added. §9.3 owns the separate native incumbent integration.
+Local channels communicate across Browlet's modeled agents without native pipes;
+cross-isolate handoff uses the endpoint transport described above. AudioWorklet
+execution remains its owner's work. §9.3 owns the separate incumbent integration.
+
+The dedicated worker's unexposed endpoints now also support a native connection
+through `entangleRemote()`. This is an implementation equivalent of entangling
+ports that cannot hold references to one another across isolates. Ordinary
+MessagePort transfer now supplies the separate author-endpoint handoff.
+See the [worker channel slice](../workers/ROADMAP.md#dedicated-worker-message-channel-across-isolates).
 
 [Tests](../../../test/browlet/communication/message-channel.test.ts) cover queue
 activation, shared FIFO order, microtask checkpoints, payload/port identity,
@@ -196,8 +264,9 @@ errors, closure, and global cleanup. Window messaging has an end-to-end port tes
 [BroadcastChannel](broadcast-channel.ts) serializes once and queues independent
 target-realm reconstructions on the DOM manipulation task source. Discovery uses
 the existing non-storage StorageKey operation and equality, exact channel names,
-and fully active Documents. It excludes the sender and preserves creation order
-within each agent. Close suppresses queued deliveries; reconstruction failures
+and eligible globals: fully active Documents, or workers that are neither closing
+nor suspendable. It excludes the sender and preserves creation order within each
+agent. Close suppresses queued deliveries; reconstruction failures
 produce messageerror with the captured source origin.
 
 Each UserAgent owns a weak, creation-ordered channel registry. Separate UserAgents
@@ -207,16 +276,20 @@ once, abort signals, and handler attributes. Closing releases that retention and
 discovery. Queued tasks retain their destinations until delivery or Document
 destruction removes those tasks; inactive Documents follow normal task gating.
 
-Window realms and modeled agents in one isolate are supported. Worker exposure
-is declared, but eligibility throws explicitly until worker settings, closing,
-and suspendable state exist. Worker shutdown and actual cross-thread transport
-remain §10 dependencies. StorageKey currently compares origins, including opaque
+Window and composed worker realms in one isolate are supported. Sender eligibility
+is checked before serialization and the closed-channel error. Destination discovery
+also excludes ineligible workers. Closing workers discard queued deliveries through their
+existing task-queue cleanup. Cross-isolate discovery/delivery still needs the
+shared UserAgent service. StorageKey currently compares origins, including opaque
 identity; additional browser privacy partitioning remains Storage policy work.
 No Node/V8 changes or new cloning/binding adapters are needed.
 
 [Tests](../../../test/browlet/communication/broadcast-channel.test.ts) cover
 author-code delivery, storage/UserAgent isolation, target-realm identity, ordering,
 serialization reentrancy, activity, closure, messageerror, and listener retention.
+Dedicated/shared worker cases cover their own task loops, target-realm values,
+suspendability and recovery, closure, and the distinction between suspendability
+and simply lacking an active Document owner.
 
 ## Constraints to preserve early
 
@@ -271,8 +344,8 @@ later sections and the parallel browsing/scripting work.
    incumbent, WindowProxy, handler, and port dependencies above.
 4. **§9.4 Channel messaging.** Implemented for existing Window realms and modeled
    agents. Worker/AudioWorklet integration and actual cross-thread delivery remain.
-5. **§9.5 Broadcasting.** Implemented for Window realms using existing storage
-   keys. Worker eligibility/lifecycle and actual cross-thread delivery remain.
+5. **§9.5 Broadcasting.** Implemented for local Window/worker realms using existing
+   storage keys and worker lifetime checks. Shared-service transport remains.
 
 The WebSockets interface has moved to the separate WebSockets Standard. It may
 reuse `MessageEvent`, but it is not owned by this directory.

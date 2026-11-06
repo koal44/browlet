@@ -15,6 +15,32 @@ import {
 } from '../../../../src/web-idl/index';
 
 describe('HTML same-agent-cluster structured data', () => {
+  it.each(['serialization', 'transfer'] as const)('retains cluster restrictions after transporting %s records', (mode) => {
+    const { source, register, create, foreign, receive, restore } = createContexts();
+    const cluster = source.realm.agent.agentCluster!;
+    const target = register(new AgentCluster(cluster.crossOriginIsolationMode, cluster.id));
+    const value = create('ClusterResource');
+
+    expect(target.realm.agent.agentCluster).not.toBe(cluster);
+    expect(target.realm.agent.agentCluster!.id).toBe(cluster.id);
+    if (mode === 'serialization') {
+      const serialized = structuredClone(structuredSerialize(value, source));
+      const clone = structuredDeserialize(serialized, target);
+      expect(target.unwrap(clone, ResourceImpl)?.value).toBe(42);
+      restore.mockClear();
+      expect(() => structuredDeserialize(serialized, foreign)).toThrow(dataCloneError);
+      expect(restore).not.toHaveBeenCalled();
+    } else {
+      const serialized = structuredClone(structuredSerializeWithTransfer(value, [value], source));
+      const result = structuredDeserializeWithTransfer(serialized, target);
+      expect(target.unwrap(result.deserialized, ResourceImpl)?.value).toBe(42);
+      receive.mockClear();
+      expect(() => structuredDeserializeWithTransfer(serialized, foreign))
+        .toThrow(dataCloneError);
+      expect(receive).not.toHaveBeenCalled();
+    }
+  });
+
   it('reconstructs a marked object in another agent of the same cluster', () => {
     const { source, peer, create } = createContexts();
     const value = create('ClusterResource');
@@ -150,7 +176,7 @@ describe('HTML same-agent-cluster structured data', () => {
     const serialized = structuredSerializeWithTransfer([hidden, frame, hidden, port], [port], source);
 
     expect([...serialized.interfaceNames]).toEqual(['Resource', 'HiddenResource', 'ClusterResource']);
-    expect(serialized.cluster).toBe(source.realm.agent.agentCluster);
+    expect(serialized.agentClusterId).toBe(source.realm.agent.agentCluster!.id);
   });
 
   it.each(['cluster', 'exposure'] as const)('does not consume buffer holders on a %s rejection', (reason) => {
@@ -237,7 +263,7 @@ function createContexts() {
   const source = register();
   return {
     source, peer: register(), foreign: register(new AgentCluster('concrete')),
-    hidden: register(cluster, ['ResourceTest']), save, restore, transfer, receive,
+    hidden: register(cluster, ['ResourceTest']), save, restore, transfer, receive, register,
     create: (name: string, restricted = false) => {
       const record = source.createPlatformRecord(name)!;
       source.unwrap(record.platformObject, ResourceImpl)!.restricted = restricted;

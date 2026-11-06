@@ -16,6 +16,7 @@ the [roadmap](ROADMAP.md) identifies remaining engine/HTML integration work.
 | [realm.ts](realm.ts) | `JSRealm`, captured built-ins, JSON, classic compilation/evaluation, function/object allocation, buffers, and global-object integration |
 | [runtime.ts](runtime.ts) | Isolate associations, microtask queues, realm lookup, Promise observation, and host-hook adaptation |
 | [threads.ts](threads.ts) | Independent execution, private native message endpoints, startup data, and native teardown |
+| [message-channel.ts](message-channel.ts) | Transferable native channel endpoints and local host receivers |
 | [node-promise.ts](node-promise.ts) | Internal completions on the isolate's Node host queue, independent of browser realms |
 | [node-addons.ts](node-addons.ts) | Typed optional backend operations, bound once when loaded |
 | [environment.ts](environment.ts) | Portable realm, internal Promise, and scheduling requirements on existing environments |
@@ -30,7 +31,8 @@ the [roadmap](ROADMAP.md) identifies remaining engine/HTML integration work.
 per loaded engine copy. In a matching child, it schedules the host setup after
 module evaluation. JS Engine owns file-URL decoding, the private native startup
 envelope, and its entry-identity check; ordinary imports in unrelated workers
-do not run setup. `new JSThread(data, onMessage)` then needs no path argument.
+do not run setup. `new JSThread(data, onMessage, transferList)` then needs no path argument;
+the optional transfer list moves native endpoints or ArrayBuffers in the startup data.
 `JSThreadEndpoint` supplies the inside connection and original host data without
 exposing Node's Worker, parentPort, workerData, MessagePort, or startup envelope.
 Native errors and exit are retained in `closed`; `terminate()` interrupts blocked
@@ -48,6 +50,26 @@ that contract; the native receive boundary still trusts the cloned value's
 type. This is trusted internal transport, not runtime schema validation.
 Browlet exhaustively switches on the declared kinds with `assertNever`, while
 leaving payloads nested as data.
+
+`JSMessageChannel` creates two `JSMessagePort` endpoints. Each port wraps its
+native backing and provides send, listen, and close operations. Its native
+`handle` can appear in internal message data and an explicit `JSTransferable`
+list. Thread startup and both directions of thread/channel sends accept that
+list. The receiving isolate constructs a local `JSMessagePort` over the moved
+handle; native queues and the peer connection survive. There is no endpoint
+registry or creator-mediated relay. `JSMessagePortHandle` aliases the native
+MessagePort type, and `JSTransferable` admits only that handle or ArrayBuffer.
+TypeScript checks those lists against Node's API without casts. The declarations explicitly
+reference Node's types; callers use JS Engine's operations on these internal handles.
+
+Stop the old host receiver before forwarding a handle. The cleanup function
+returned by `listen()` removes its callbacks without closing the endpoint;
+removing the last message receiver pauses native delivery. Reading a handle
+does not transfer it, and synchronous serialization failure does not detach it.
+Receivers run on their isolate's host queue, with optional native close and
+message-error notifications. Native listening keeps the endpoint alive until
+the owner removes its receiver or closes it. HTML port task activation,
+pending-task migration, entanglement, and lifetime still belong to Browlet.
 
 These facilities have no browser readiness handshake, Agent kind, task policy,
 or HTML structured-cloning semantics. Browlet owns its worker setup protocol and

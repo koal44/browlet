@@ -72,8 +72,7 @@ describe.each([false, true])('Worker runtime errors (HTML §10.2.5), shared: %s'
     void script.run();
     env.responsibleEventLoop.performMicrotaskCheckpoint();
 
-    expect(errors).toHaveLength(1);
-    expect(errors[0]!.message).toContain('module failed');
+    expect(errors.map((event) => event.message)).toEqual([expect.stringContaining('module failed')]);
     expect(errors[0]!.error).toBeInstanceOf(env.realm.Error);
     expect(consoleError).not.toHaveBeenCalled();
     expect(env.globalImplementation.inErrorReportingMode).toBe(false);

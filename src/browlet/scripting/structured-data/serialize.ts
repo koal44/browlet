@@ -82,14 +82,14 @@ class StructuredSerializer {
     if (remembered !== undefined) return remembered;
 
     const serialized = this.#serializeValue(value, record);
-    if (this.#forStorage && serialized.cluster !== null) {
+    if (this.#forStorage && serialized.agentClusterId !== null) {
       throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
     }
     return serialized;
   }
 
   #serializeValue(value: unknown, record: PlatformRecord | undefined): SerializedRecord {
-    if (isPrimitive(value)) return { type: 'primitive', value, cluster: null };
+    if (isPrimitive(value)) return { type: 'primitive', value, agentClusterId: null };
     if (typeof value === 'symbol') throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
     if (!record && isProxyObject(value)) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
 
@@ -98,25 +98,25 @@ class StructuredSerializer {
       serialized = {
         type: 'Boolean',
         value: getBooleanData(value),
-        cluster: null,
+        agentClusterId: null,
       };
     } else if (hasNumberData(value)) {
       serialized = {
         type: 'Number',
         value: getNumberData(value),
-        cluster: null,
+        agentClusterId: null,
       };
     } else if (hasBigIntData(value)) {
       serialized = {
         type: 'BigInt',
         value: getBigIntData(value),
-        cluster: null,
+        agentClusterId: null,
       };
     } else if (hasStringData(value)) {
       serialized = {
         type: 'String',
         value: getStringData(value),
-        cluster: null,
+        agentClusterId: null,
       };
     } else if (hasSymbolData(value)) {
       throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
@@ -124,7 +124,7 @@ class StructuredSerializer {
       serialized = {
         type: 'Date',
         value: getDateValue(value),
-        cluster: null,
+        agentClusterId: null,
       };
     } else if (hasRegExpMatcher(value)) {
       const { flags, source } = getRegExpData(value);
@@ -132,7 +132,7 @@ class StructuredSerializer {
         type: 'RegExp',
         source,
         flags,
-        cluster: null,
+        agentClusterId: null,
       };
     } else if (isAnyArrayBuffer(value)) {
       serialized = this.#serializeBuffer(value);
@@ -151,7 +151,7 @@ class StructuredSerializer {
       // https://webassembly.github.io/spec/web-api/#serialization
       if (this.#forStorage) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
       const module = record?.implInst instanceof WasmModuleImpl ? record.implInst.serialize() : copyWebAssemblyModule(value as JSWasmModule);
-      serialized = { type: 'WebAssembly.Module', module, cluster: null };
+      serialized = { type: 'WebAssembly.Module', module, agentClusterId: null };
       restrictToSameAgentCluster(serialized, this.#ctx.getEnvironment());
     } else if (record) {
       return this.#serializePlatformObject(record);
@@ -160,7 +160,7 @@ class StructuredSerializer {
       if (typeof length !== 'number') {
         throw new InternalError('An Array exotic object has no numeric length');
       }
-      return this.#serializeProperties(value, { type: 'Array', length, properties: [], cluster: null });
+      return this.#serializeProperties(value, { type: 'Array', length, properties: [], agentClusterId: null });
     } else if (typeof value === 'function') {
       throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
     } else if (hasUnsupportedInternalSlots(value)) {
@@ -170,7 +170,7 @@ class StructuredSerializer {
       if (nativeCloneRejectsPropertylessObject(value, keys)) {
         throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
       }
-      return this.#serializeProperties(value, { type: 'Object', properties: [], cluster: null }, keys);
+      return this.#serializeProperties(value, { type: 'Object', properties: [], agentClusterId: null }, keys);
     }
 
     this.#memory.set(record?.implInst ?? value, serialized);
@@ -192,14 +192,14 @@ class StructuredSerializer {
           type: 'SharedArrayBuffer',
           buffer: value,
           byteLength,
-          cluster: null,
+          agentClusterId: null,
         }
         : {
           type: 'GrowableSharedArrayBuffer',
           buffer: value,
           byteLength,
           maxByteLength,
-          cluster: null,
+          agentClusterId: null,
         };
       restrictToSameAgentCluster(serialized, this.#ctx.getEnvironment());
       return serialized;
@@ -208,13 +208,13 @@ class StructuredSerializer {
     if (isDetachedArrayBuffer(value)) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
     const bytes = getBufferSourceCopy(value);
     return maxByteLength === undefined
-      ? { type: 'ArrayBuffer', bytes, byteLength, cluster: null }
+      ? { type: 'ArrayBuffer', bytes, byteLength, agentClusterId: null }
       : {
         type: 'ResizableArrayBuffer',
         bytes,
         byteLength,
         maxByteLength,
-        cluster: null,
+        agentClusterId: null,
       };
   }
 
@@ -235,14 +235,14 @@ class StructuredSerializer {
       buffer: bufferSerialized,
       byteOffset: getArrayBufferViewByteOffset(value),
       ...serializeArrayBufferViewLengths(value),
-      cluster: null,
+      agentClusterId: null,
     };
   }
 
   // StructuredSerializeInternal: deep serialization of [[MapData]].
   // https://html.spec.whatwg.org/multipage/structured-data.html#structuredserializeinternal
   #serializeMap(value: Map<unknown, unknown>): SerializedMap {
-    const serialized: SerializedMap = { type: 'Map', entries: [], cluster: null };
+    const serialized: SerializedMap = { type: 'Map', entries: [], agentClusterId: null };
     this.#memory.set(value, serialized);
     const copiedEntries = copyMapData(value);
     for (const [key, entryValue] of copiedEntries) {
@@ -254,7 +254,7 @@ class StructuredSerializer {
   // StructuredSerializeInternal: deep serialization of [[SetData]].
   // https://html.spec.whatwg.org/multipage/structured-data.html#structuredserializeinternal
   #serializeSet(value: Set<unknown>): SerializedSet {
-    const serialized: SerializedSet = { type: 'Set', entries: [], cluster: null };
+    const serialized: SerializedSet = { type: 'Set', entries: [], agentClusterId: null };
     this.#memory.set(value, serialized);
     const copiedEntries = copySetData(value);
     for (const entry of copiedEntries) {
@@ -274,7 +274,7 @@ class StructuredSerializer {
       : undefined;
     const stackValue = readErrorStack(value, this.#ctx.realm);
     const stack = typeof stackValue === 'string' ? stackValue : '';
-    const serialized: SerializedError = { type: 'Error', name, message, stack, cluster: null };
+    const serialized: SerializedError = { type: 'Error', name, message, stack, agentClusterId: null };
     this.#memory.set(value, serialized);
 
     const descriptor = Reflect.getOwnPropertyDescriptor(value, 'cause');
@@ -296,7 +296,7 @@ class StructuredSerializer {
       type: 'platform-object',
       interfaceName: record.assembled.name,
       data: new StructuredData(),
-      cluster: null,
+      agentClusterId: null,
     };
     serialized.data.shouldRestrict = record.assembled.hasExtendedAttribute('SameAgentCluster', false);
     if (serialized.data.shouldRestrict) {
@@ -318,7 +318,7 @@ class StructuredSerializer {
       },
       steps,
     );
-    if (serialized.data.shouldRestrict && serialized.cluster === null) {
+    if (serialized.data.shouldRestrict && serialized.agentClusterId === null) {
       restrictToSameAgentCluster(serialized, this.#ctx.getEnvironment());
     }
     return serialized;

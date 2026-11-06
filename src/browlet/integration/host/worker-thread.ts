@@ -1,5 +1,8 @@
 import { assertNever, InternalError, internalType, type InternalPromise } from '../../../infra/index';
-import { JSThread, JSThreadEndpoint, NodePromise, type JSThreadExit, type JSThreadProtocol } from '../../../js-engine/index';
+import {
+  JSMessageChannel, JSMessagePort, JSThread, JSThreadEndpoint, NodePromise,
+  type JSMessagePortHandle, type JSThreadExit, type JSThreadProtocol,
+} from '../../../js-engine/index';
 import { copyOrigin, copyURL, type Origin, type URLRecord } from '../../../url/index';
 import type { HTTPStatus } from '../../../http/index';
 import { fetch, FetchResponse, isFilteredResponse, type FetchController, type FetchRequest, type ResponseType } from '../../../fetch/index';
@@ -10,6 +13,7 @@ import {
   type CrossOriginIsolationMode,
 } from '../../scripting/index';
 import { PolicyContainer, type PolicyContainerSnapshot } from '../../browsing/policy/index';
+import type { MessagePortTransportMessage } from '../../communication/index';
 import type { BrowletEnvironment } from '../../environment/index';
 import { WorkerGlobalImpl, type WorkerImpl, type WorkerOwner } from '../../workers/index';
 
@@ -18,9 +22,9 @@ import { queueNodeTask } from './node';
 /** Host execution owner for a worker isolate; entry is trusted host code, not a fetched worker script. */
 // HTML §10.2.4 requires execution independently of the creating agent.
 // https://html.spec.whatwg.org/multipage/workers.html#run-a-worker
-// The engine transport clones internal messages. HTML structured cloning,
-// transferred MessagePorts and UserAgent services still
-// need their own transport. Do not expose this endpoint to author code.
+// The engine transport clones internal messages, including HTML serialization
+// records. Author messaging uses its separate MessagePort channel; UserAgent
+// service transport remains pending. Do not expose this control endpoint to author code.
 export class WorkerThread {
   /** Live creator environment, retained locally for later service/report delivery. */
   creatorEnv: BrowletEnvironment | null;
@@ -138,6 +142,24 @@ export class WorkerThread {
     this.#thread.send({ type: 'message', data: message });
   }
 
+  /** Establish the dedicated worker's implicit channel, including before inside startup finishes. */
+  // HTML §10.2.4 entangles before running the initial script. Queue enablement
+  // remains with that algorithm; neither the control acknowledgement nor this
+  // connection permits author message callbacks to run early.
+  connectMessagePort(): void {
+    if (this.#state === 'stopping' || this.#state === 'closed') throw new InternalError('Worker thread is not running');
+    if (this.#worker === null) throw new InternalError('Message channel requires its outside Worker');
+    const channel = new JSMessageChannel<MessagePortTransportMessage>();
+    try {
+      this.#thread.send({ type: 'connect-port', handle: channel.port2.handle }, [channel.port2.handle]);
+      this.#worker.outsidePort.entangleRemote(channel.port1);
+    } catch (error) {
+      channel.port1.close();
+      channel.port2.close();
+      throw error;
+    }
+  }
+
   /** Fetch a prepared initial-script request beside its creator, then deliver the consumed response to the isolate. */
   // https://html.spec.whatwg.org/multipage/workers.html#run-a-worker
   // Request setup remains with HTML's script-fetch algorithm, including its outside
@@ -187,6 +209,9 @@ export class WorkerThread {
       // tasks and microtasks without author catch/finally or script cleanup.
       // Host Fetch cleanup runs after exit so it cannot prevent this request.
       void this.#thread.terminate();
+      // Stop host delivery too: records still in the native pipe must not refill
+      // the outside HTML queue after its termination cleanup.
+      this.#worker?.outsidePort.disentangle();
       this.#worker?.outsidePort.clearMessageQueue();
     }
     return this.closed;
@@ -207,7 +232,10 @@ export class WorkerThreadRuntime {
   #endpoint: JSThreadEndpoint<WorkerThreadProtocol>;
   /** Host setup must finish before input can become tasks. */
   #started = false;
+  /** Native messages can wait here before startup has composed the inside global. */
+  #messagePort: JSMessagePort<MessagePortTransportMessage> | null = null;
 
+  /** Read the host startup envelope and allocate this isolate's agent, loop, and cluster membership. */
   constructor() {
     this.#endpoint = new JSThreadEndpoint<WorkerThreadProtocol>();
     const initialization = this.#endpoint.data;
@@ -232,6 +260,13 @@ export class WorkerThreadRuntime {
     this.#started = true;
     this.#endpoint.listen((message) => {
       switch (message.type) {
+        case 'connect-port':
+          this.agent.eventLoop.queueTask(workerHostTaskSource, null, () => {
+            this.#messagePort?.close();
+            this.#messagePort = new JSMessagePort(message.handle);
+            this.connectMessagePort();
+          });
+          break;
         case 'message':
           this.agent.eventLoop.queueTask(workerHostTaskSource, null, () => { onMessage(message.data); });
           break;
@@ -260,6 +295,16 @@ export class WorkerThreadRuntime {
     this.#endpoint.send({ type: 'ready' });
   }
 
+  /** Attach the waiting native endpoint once startup has supplied the dedicated global. */
+  // Call after environment composition; the endpoint may arrive before or after it.
+  // Neither attachment nor host reception enables the inside HTML message queue.
+  connectMessagePort(): void {
+    const global = this.agent instanceof DedicatedWorkerAgent ? this.agent.globalScope : undefined;
+    if (this.#messagePort === null || global === undefined) return;
+    global.insidePort.entangleRemote(this.#messagePort);
+    this.#messagePort = null;
+  }
+
   /** Return internal data; the receiver must enter its own HTML task when delivering author-visible results. */
   send(data: unknown): void {
     this.#endpoint.send({ type: 'message', data });
@@ -273,13 +318,17 @@ export class WorkerThreadRuntime {
 
   /** Release the native control channel; remaining tasks/resources determine natural thread exit. */
   disconnect(): void {
+    this.#messagePort?.close();
+    this.#messagePort = null;
     this.#endpoint.disconnect();
   }
 }
 
 /** Parent-side inputs; the live creator environment stays in its own isolate. */
 export interface WorkerThreadInit {
+  /** Selects a dedicated agent in the creator's cluster or a shared agent in a new cluster. */
   kind: 'dedicated' | 'shared';
+  /** Caller-owned startup data; native transport clones it without author-facing HTML conversion. */
   data: unknown;
   /** Creator for shared or agent-only startup; a dedicated outside Worker supplies its own environment. */
   creatorEnv?: BrowletEnvironment;
@@ -298,15 +347,25 @@ export interface CreatorEnvironmentSnapshot {
   environmentId: string;
   /** Dedicated workers inherit this cluster; shared workers get a new one. */
   agentClusterId: string;
+  /** Cluster-wide isolation mode, separate from the creator environment's effective capability. */
   crossOriginIsolationMode: CrossOriginIsolationMode;
+  /** Whether the inherited cluster is keyed by origin rather than site. */
   isOriginKeyed: boolean;
+  /** Creator's original creation URL, not the new worker's script URL. */
   creationURL: URLRecord;
+  /** Creator's current base URL for resolving API inputs. */
   apiBaseURL: URLRecord;
+  /** Retained top-level creation URL, or null when the creator has no such association. */
   topLevelCreationURL: URLRecord | null;
+  /** Creator origin, including the portable identity of an opaque origin. */
   origin: Origin;
+  /** Top-level origin used for inherited ancestry and policy decisions; may be absent. */
   topLevelOrigin: Origin | null;
+  /** Creator's secure-context result at capture time. */
   isSecureContext: boolean;
+  /** Whether the creator's ancestry contains a cross-site boundary. */
   hasCrossSiteAncestor: boolean;
+  /** Creator's effective capability, which may be narrower than its cluster's isolation mode. */
   crossOriginIsolatedCapability: boolean;
   /** Policy values only; no live owner, report queue, or Blob registration. */
   policyContainer: PolicyContainerSnapshot;
@@ -314,8 +373,11 @@ export interface CreatorEnvironmentSnapshot {
 
 /** Data cloned into the new isolate before any Browlet realm or global exists. */
 interface WorkerThreadStartup {
+  /** Agent kind selected by the outside startup owner. */
   kind: 'dedicated' | 'shared';
+  /** Internal startup payload copied from WorkerThreadInit. */
   data: unknown;
+  /** Portable creator values; null only for agent-only startup without an HTML environment. */
   creatorEnvSnapshot: CreatorEnvironmentSnapshot | null;
 }
 
@@ -334,6 +396,7 @@ type WorkerThreadMessage = { type: 'ready'; } | { type: 'message'; data: unknown
 export interface WorkerScriptResponse {
   /** Unfiltered metadata needed for URL, MIME, status and response-policy checks; body stays separate. */
   response: FetchResponse;
+  /** Consumed bytes, null for an absent body, or failure when body consumption failed. */
   bodyBytes: Uint8Array | null | 'failure';
   /** Blob creator policies captured before removing the live registration from the URL. */
   blobPolicyContainer: PolicyContainer | null;
@@ -347,14 +410,18 @@ interface WorkerScriptResponseSnapshot {
   status: HTTPStatus;
   statusMessage: string;
   headers: [string, string][];
+  /** Preserve the distinction between an absent body and a failed body read across transport. */
   bodyBytes: Uint8Array | null | 'failure';
+  /** Blob creator policy values copied while its registration was still available locally. */
   blobPolicyContainer: PolicyContainerSnapshot | null;
 }
 
 /** Private creator-to-worker messages, distinguished before choosing the receiving task source. */
 type WorkerThreadInput = { type: 'message'; data: unknown; } |
+  { type: 'connect-port'; handle: JSMessagePortHandle; } |
   { type: 'script-response'; snapshot: WorkerScriptResponseSnapshot; };
 
+/** Internal startup/control tasks, separate from author-message delivery on the port's task source. */
 const workerHostTaskSource = createTaskSource('worker host control');
 
 // Name Browlet's entry once. JS Engine owns its native path, private startup

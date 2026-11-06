@@ -5,6 +5,7 @@ import { InternalError } from '../infra/internal-error';
 import { internalType, type InternalPromise } from '../infra/promises';
 
 import { NodePromise } from './node-promise';
+import type { JSTransferable } from './message-channel';
 
 /** Independent execution using a trusted host entry, with native cloning and teardown. */
 // The Node backend creates a thread and V8 isolate using the current executable,
@@ -28,11 +29,17 @@ export class JSThread<Protocol extends JSThreadProtocol> {
    * Reload the initialized host entry in a new isolate with cloneable input data.
    * Native loading failures are retained in closed; initialize() must run first.
    */
-  constructor(data: Protocol['startup'], onMessage: (message: Protocol['fromThread']) => void) {
+  constructor(
+    data: Protocol['startup'],
+    onMessage: (message: Protocol['fromThread']) => void,
+    transferList: JSTransferable[] = [],
+  ) {
     const entryURL = JSThread.#entryURL;
     if (entryURL === null) throw new InternalError('Thread entry has not been initialized');
     const startup: JSThreadStartup<Protocol['startup']> = { jsThreadEntry: entryURL, data };
-    this.#worker = new Worker(fileURLToPath(entryURL), { workerData: startup });
+    this.#worker = new Worker(fileURLToPath(entryURL), {
+      workerData: startup, transferList,
+    });
     // Node's listener is untyped. This annotation trusts the shared host
     // protocol; native cloning does not validate it.
     this.#worker.on('message', (message: Protocol['fromThread']) => {
@@ -60,10 +67,10 @@ export class JSThread<Protocol extends JSThreadProtocol> {
   /** Resolves on native exit, or rejects if termination fails; an uncaught entry failure is part of the result. */
   get closed(): InternalPromise<JSThreadExit> { return this.#closed.promise; }
 
-  /** Clone internal data to the thread; the consumer owns readiness and task admission. */
-  send(message: Protocol['toThread']): void {
+  /** Clone internal data and move listed resources; the consumer owns readiness and task admission. */
+  send(message: Protocol['toThread'], transferList: JSTransferable[] = []): void {
     if (this.#stopping || this.#exited) throw new InternalError('Execution thread is closed');
-    this.#worker.postMessage(message);
+    this.#worker.postMessage(message, transferList);
   }
 
   /** Interrupt even blocked execution and return the same internal completion as closed. */
@@ -96,9 +103,9 @@ export class JSThreadEndpoint<Protocol extends JSThreadProtocol> {
     this.#port.on('message', onMessage);
   }
 
-  /** Clone internal data to the creator; this is not HTML structured serialization. */
-  send(message: Protocol['fromThread']): void {
-    this.#port.postMessage(message);
+  /** Clone internal data and move listed resources to the creator; this is not HTML structured serialization. */
+  send(message: Protocol['fromThread'], transferList: JSTransferable[] = []): void {
+    this.#port.postMessage(message, transferList);
   }
 
   /** Release the connection; remaining native resources determine natural thread exit. */

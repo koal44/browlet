@@ -9,12 +9,35 @@ consumer; history and worker integrations remain unfinished.
 
 WebAssembly Web API §3 adds a native Module record to the same traversal.
 It snapshots compiled code without source-object expandos, rejects storage use,
-records the serializing cluster, and allocates a fresh destination-owned Module.
+records the serializing cluster ID, and allocates a fresh destination-owned Module.
 Transfer preflight includes its interface name and cluster; Modules themselves
 are not transferable. Native immutable slots cannot use ordinary interface
 allocate-then-restore hooks. The existing Binding record still tracks the result;
 see [the WebAssembly review](../../webassembly/ROADMAP.md#3-implemented-module-serialization).
-The token currently stays within one runtime; worker transport remains open.
+The native token can cross isolates through the host channel. Worker MessagePort
+transport remains open; the tests below exercise the serializer directly.
+
+## Worker transport prerequisite
+
+Restricted records and transfer results retain the existing `AgentCluster.id`,
+not the local cluster object. An isolate has its own cluster representation and
+membership set; comparing object identities would reject the same logical
+cluster after transport. Retaining the live object also prevented native cloning
+by pulling in agents and their Symbol identities. The regression reproduced that
+`DataCloneError` before the change. Storage and receiving restrictions are unchanged.
+
+Real-isolate tests carry HTML records over the private worker channel and
+reconstruct them through the existing environment operations. They cover cycles,
+repeated references, getter invocation, ArrayBuffer detachment, realm ownership,
+shared-memory writes, and executable Wasm Modules. Dedicated workers preserve
+the creator's cluster ID; a shared worker's distinct ID rejects restricted values
+before consuming unrelated transferred buffers. Interface serialization and
+transfer also have focused tests using distinct representations of the same cluster.
+
+This does not make every interface payload portable. MessagePort endpoints and
+other implementation-owned resources still need their own transport. Native
+cloning carries internal records only; it does not replace HTML traversal,
+exposure checks, receiving order, or Binding projection.
 
 ## October 2026 audit checkpoint
 

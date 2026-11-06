@@ -38,8 +38,29 @@ function startFixture() {
   const realm = new BrowletRealm({ agent: runtime.agent });
   realm.initialize();
   const followupTaskSource = createTaskSource('worker fixture continuation');
+  let messagingEnv;
   runtime.start((message) => {
     switch (message.type) {
+      case 'prepare-worker-messages':
+        messagingEnv = prepareWorkerMessages(runtime, message.portTransfers);
+        runtime.send('prepared');
+        break;
+      case 'start-worker-messages':
+        messagingEnv.globalImplementation.insidePort.start();
+        runtime.send(messagingEnv.global.messageCount);
+        break;
+      case 'inspect-worker-messages':
+        runtime.send(messagingEnv.global.messageCount);
+        break;
+      case 'send-worker-messages':
+        for (const value of message.values) messagingEnv.global.postMessage(value);
+        runtime.send('sent');
+        break;
+      case 'close-worker-messages':
+        messagingEnv.global.postMessage('before close');
+        messagingEnv.global.close();
+        runtime.disconnect();
+        break;
       case 'inspect':
         runtime.send({
           threadId, isMainThread, pid: process.pid,
@@ -113,6 +134,9 @@ function startFixture() {
         runtime.reportError({ ...message.errorInfo, error: () => 'must not be cloned' });
         runtime.send('reported');
         break;
+      case 'round-trip-structured-data':
+        roundTripStructuredData(runtime, message);
+        break;
       case 'fail':
         throw new Error('worker host task failed');
       case 'disconnect':
@@ -132,6 +156,132 @@ function startFixture() {
       scriptRan: realm.globalObject.scriptRan === true,
     });
   });
+}
+
+function prepareWorkerMessages(runtime, portTransfers = false) {
+  const { ClassicScript, ScriptFetchOptions } = loadTypeScript('../../../../src/browlet/scripting/index.ts', __filename);
+  const env = createFixtureWorkerEnvironment(runtime, 'https://creator.test/messages.js');
+  runtime.connectMessagePort();
+  env.markExecutionReady();
+  // Author callbacks run in the real worker realm and through HTML's script runner.
+  const source = portTransfers ? portTransferScript() : `
+    globalThis.messageCount = 0;
+    onmessage = event => {
+      ++messageCount;
+      const value = event.data;
+      const transfer = value.buffer instanceof ArrayBuffer ? [value.buffer] : [];
+      postMessage({
+        value, trusted: event.isTrusted, target: event.target === self,
+        realm: Object.getPrototypeOf(value) === Object.prototype,
+        bufferRealm: value.buffer === undefined || value.buffer instanceof ArrayBuffer,
+      }, transfer);
+      Promise.resolve().then(() => postMessage({ checkpoint: messageCount }));
+    };
+    onmessageerror = () => postMessage('messageerror');
+  `;
+  const script = new ClassicScript(source, env, env.apiBaseURL, new ScriptFetchOptions());
+  script.run();
+  return env;
+}
+
+/** Author-side control of transferred ports, without bypassing their HTML queues or bindings. */
+function portTransferScript() {
+  return `
+    globalThis.messageCount = 0;
+    const ports = new Map();
+    function hold(name, port) {
+      ports.set(name, port);
+      port.addEventListener('message', event => {
+        const value = event.data;
+        const transfer = [...event.ports];
+        if (value?.buffer instanceof ArrayBuffer) transfer.push(value.buffer);
+        postMessage({
+          type: 'port-message', name, value, trusted: event.isTrusted,
+          target: event.target === port, realm: event instanceof MessageEvent,
+          nestedIdentity: event.ports.length === 0 || value.port === event.ports[0],
+        }, transfer);
+        Promise.resolve().then(() => postMessage({ type: 'checkpoint', name }));
+      });
+      port.onmessageerror = () => postMessage({ type: 'port-error', name });
+    }
+    onmessage = event => {
+      ++messageCount;
+      const command = event.data;
+      switch (command.type) {
+        case 'hold':
+          hold(command.name, command.port);
+          postMessage({ type: 'held', name: command.name,
+            identity: command.port === event.ports[0], realm: command.port instanceof MessagePort,
+            frozenPorts: Object.isFrozen(event.ports) });
+          break;
+        case 'start':
+          ports.get(command.name).start();
+          postMessage({ type: 'started', name: command.name });
+          break;
+        case 'send':
+          ports.get(command.name).postMessage(command.value);
+          postMessage({ type: 'sent', name: command.name });
+          break;
+        case 'return': {
+          const port = ports.get(command.name);
+          ports.delete(command.name);
+          postMessage({ type: 'returned', port }, [port]);
+          break;
+        }
+        case 'pair':
+          hold('sender', command.ports[0]);
+          hold('receiver', command.ports[1]);
+          command.ports[1].start();
+          command.ports[0].postMessage('both ends arrived');
+          postMessage({ type: 'pair', identities: command.ports.every((port, i) => port === event.ports[i]) });
+          break;
+        case 'create': {
+          const channel = new MessageChannel();
+          hold('created', channel.port1);
+          channel.port1.postMessage('queued in worker');
+          postMessage({ type: 'created', port: channel.port2 }, [channel.port2]);
+          channel.port1.postMessage('sent after transfer');
+          break;
+        }
+        case 'close':
+          ports.get(command.name).close();
+          ports.delete(command.name);
+          postMessage({ type: 'closed', name: command.name });
+          break;
+      }
+    };
+    onmessageerror = () => postMessage('messageerror');
+  `;
+}
+
+function roundTripStructuredData(runtime, message) {
+  const env = createFixtureWorkerEnvironment(runtime, 'https://creator.test/clone.js');
+  // Fixture-only response capability; production COEP/Permissions Policy setup
+  // remains responsible for this decision before serializing shared memory.
+  env.realm.crossOriginIsolated = runtime.creatorEnvSnapshot.crossOriginIsolatedCapability &&
+    runtime.agent.agentCluster.crossOriginIsolationMode === 'concrete';
+  try {
+    const { deserialized: value } = env.deserializeWithTransfer(message.serialized);
+    let inspection;
+    if (message.kind === 'shared-memory') {
+      const view = new env.realm.Uint8Array(value.buffer);
+      view[0] = 77;
+      inspection = { realm: value.buffer instanceof env.realm.SharedArrayBuffer };
+    } else if (message.kind === 'wasm') {
+      const wasm = env.global.WebAssembly;
+      inspection = { realm: value.module instanceof wasm.Module, result: new wasm.Instance(value.module).exports.read() };
+    } else {
+      inspection = { realm: Object.getPrototypeOf(value) === env.realm.objectPrototype };
+    }
+    runtime.send({ inspection, serialized: env.serializeWithTransfer(value, []) });
+  } catch (error) {
+    runtime.send({
+      error: { name: error.name, message: error.message },
+      transferByteLengths: message.serialized.transferDataHolders
+        .filter((holder) => holder.type === 'ArrayBuffer' || holder.type === 'ResizableArrayBuffer')
+        .map((holder) => holder.buffer.byteLength),
+    });
+  }
 }
 
 async function runNestedWorkerError(runtime) {

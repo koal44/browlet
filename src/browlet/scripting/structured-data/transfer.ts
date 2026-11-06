@@ -55,14 +55,14 @@ export function structuredSerializeWithTransfer(
     memory,
   );
   const result: StructuredSerializeWithTransferResult = {
-    serialized, transferDataHolders: [], interfaceNames: new Set(), cluster: null,
+    serialized, transferDataHolders: [], interfaceNames: new Set(), agentClusterId: null,
   };
 
   for (const prepared of preparedTransfers) {
     const dataHolder = performTransfer(prepared, ctx);
     result.transferDataHolders.push(dataHolder);
     if (dataHolder.type === 'platform-object') result.interfaceNames.add(dataHolder.interfaceName);
-    if (dataHolder.cluster !== null) result.cluster = dataHolder.cluster;
+    if (dataHolder.agentClusterId !== null) result.agentClusterId = dataHolder.agentClusterId;
   }
 
   // Transfer holders precede graph records in the specification's ordered memory.
@@ -70,7 +70,7 @@ export function structuredSerializeWithTransfer(
   for (const record of memory.values()) {
     if (record.type === 'platform-object') result.interfaceNames.add(record.interfaceName);
     else if (record.type === 'WebAssembly.Module') result.interfaceNames.add('Module');
-    if (record.cluster !== null) result.cluster = record.cluster;
+    if (record.agentClusterId !== null) result.agentClusterId = record.agentClusterId;
   }
   return result;
 }
@@ -80,7 +80,7 @@ export function structuredDeserializeWithTransfer(
   result: StructuredSerializeWithTransferResult,
   ctx: BindingContext<BrowletEnvironment>,
 ): StructuredDeserializeWithTransferResult {
-  if (result.cluster !== null && result.cluster !== ctx.realm.agent.agentCluster) {
+  if (result.agentClusterId !== null && result.agentClusterId !== ctx.realm.agent.agentCluster?.id) {
     throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
   }
   for (const interfaceName of result.interfaceNames) {
@@ -114,7 +114,7 @@ function prepareTransfer(
   if (!isObject(value)) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
   const placeholder: SerializedTransferPlaceholder = {
     type: 'transfer-placeholder',
-    cluster: null,
+    agentClusterId: null,
   };
   if (isArrayBuffer(value)) {
     return {
@@ -155,7 +155,7 @@ function performTransfer(
       buffer: ctx.realm.transferArrayBuffer(prepared.value),
       byteLength,
       ...(maxByteLength === undefined ? {} : { maxByteLength }),
-      cluster: null,
+      agentClusterId: null,
     };
   }
 
@@ -167,12 +167,12 @@ function performTransfer(
     placeholder: prepared.placeholder,
     interfaceName: prepared.interfaceName,
     data: new StructuredData(),
-    cluster: null,
+    agentClusterId: null,
   };
   dataHolder.data.shouldRestrict = prepared.sameAgentCluster;
   if (dataHolder.data.shouldRestrict) restrictToSameAgentCluster(dataHolder, ctx.getEnvironment());
   prepared.steps.transferSteps(prepared.implInst, dataHolder.data);
-  if (dataHolder.data.shouldRestrict && dataHolder.cluster === null) {
+  if (dataHolder.data.shouldRestrict && dataHolder.agentClusterId === null) {
     restrictToSameAgentCluster(dataHolder, ctx.getEnvironment());
   }
   DetachedTransferableStamper.stamp(prepared.implInst);

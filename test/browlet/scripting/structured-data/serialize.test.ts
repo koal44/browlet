@@ -27,7 +27,7 @@ describe('HTML structured serialization', () => {
 
     for (const value of primitives) {
       const serialized = structuredSerialize(value, ctx);
-      expect(serialized).toEqual({ type: 'primitive', value, cluster: null });
+      expect(serialized).toEqual({ type: 'primitive', value, agentClusterId: null });
       if (Object.is(value, -0)) {
         expect(Object.is(serializedValue(serialized), -0)).toBe(true);
       }
@@ -48,22 +48,22 @@ describe('HTML structured serialization', () => {
     ]`, 'structured-serialize-builtins.js') as object[];
 
     expect(structuredSerialize(values[0], ctx)).toEqual({
-      type: 'Boolean', value: false, cluster: null,
+      type: 'Boolean', value: false, agentClusterId: null,
     });
     const number = structuredSerialize(values[1], ctx);
     expect(number.type).toBe('Number');
     expect(Object.is(recordValue(number), -0)).toBe(true);
     expect(structuredSerialize(values[2], ctx)).toEqual({
-      type: 'BigInt', value: 2n, cluster: null,
+      type: 'BigInt', value: 2n, agentClusterId: null,
     });
     expect(structuredSerialize(values[3], ctx)).toEqual({
-      type: 'String', value: 'text', cluster: null,
+      type: 'String', value: 'text', agentClusterId: null,
     });
     expect(structuredSerialize(values[4], ctx)).toEqual({
-      type: 'Date', value: 1234, cluster: null,
+      type: 'Date', value: 1234, agentClusterId: null,
     });
     expect(structuredSerialize(values[5], ctx)).toEqual({
-      type: 'RegExp', source: 'a+', flags: 'dgimsy', cluster: null,
+      type: 'RegExp', source: 'a+', flags: 'dgimsy', agentClusterId: null,
     });
     expectDataCloneError(
       () => structuredSerialize(realm.evaluate(
@@ -84,13 +84,13 @@ describe('HTML structured serialization', () => {
     expect(structuredSerialize(map, ctx)).toMatchObject({
       type: 'Map',
       entries: [{
-        key: { type: 'primitive', value: 1, cluster: null },
-        value: { type: 'primitive', value: 2, cluster: null },
+        key: { type: 'primitive', value: 1, agentClusterId: null },
+        value: { type: 'primitive', value: 2, agentClusterId: null },
       }],
     });
     expect(structuredSerialize(set, ctx)).toMatchObject({
       type: 'Set',
-      entries: [{ type: 'primitive', value: 3, cluster: null }],
+      entries: [{ type: 'primitive', value: 3, agentClusterId: null }],
     });
     expect(structuredSerialize(buffer, ctx)).toMatchObject({
       type: 'ArrayBuffer', byteLength: 4,
@@ -219,7 +219,7 @@ describe('HTML structured serialization', () => {
       type: 'SharedArrayBuffer',
       buffer,
       byteLength: 4,
-      cluster: agentCluster,
+      agentClusterId: agentCluster.id,
     });
     const growable = new SharedArrayBuffer(4, { maxByteLength: 8 });
     expect(structuredSerialize(growable, isolated)).toMatchObject({
@@ -227,7 +227,7 @@ describe('HTML structured serialization', () => {
       buffer: growable,
       byteLength: 4,
       maxByteLength: 8,
-      cluster: agentCluster,
+      agentClusterId: agentCluster.id,
     });
     expectDataCloneError(() => structuredSerialize(buffer, unisolated));
     expectDataCloneError(() => structuredSerializeForStorage(buffer, isolated));
@@ -271,7 +271,7 @@ describe('HTML structured serialization', () => {
       length: 4,
       properties: [
         { key: '2' },
-        { key: 'extra', value: { type: 'primitive', value: 3, cluster: null } },
+        { key: 'extra', value: { type: 'primitive', value: 3, agentClusterId: null } },
       ],
     });
     if (serializedSparse.type !== 'Array') {
@@ -396,9 +396,9 @@ describe('HTML structured serialization', () => {
       type: 'Object',
       properties: [{
         key: 'visible',
-        value: { type: 'primitive', value: 2, cluster: null },
+        value: { type: 'primitive', value: 2, agentClusterId: null },
       }],
-      cluster: null,
+      agentClusterId: null,
     });
 
     const failure = Object.defineProperty({}, 'value', {
@@ -427,8 +427,8 @@ describe('HTML structured serialization', () => {
 
     expect(structuredSerialize(source, ctx)).toEqual({
       type: 'Object',
-      properties: [{ key: 'first', value: { type: 'primitive', value: 'first', cluster: null } }],
-      cluster: null,
+      properties: [{ key: 'first', value: { type: 'primitive', value: 'first', agentClusterId: null } }],
+      agentClusterId: null,
     });
     expect(reads).toBe(1);
   });
@@ -484,7 +484,7 @@ describe('HTML structured serialization', () => {
     expect(structuredSerialize(impostor, ctx)).toEqual({
       type: 'Object',
       properties: [],
-      cluster: null,
+      agentClusterId: null,
     });
   });
 

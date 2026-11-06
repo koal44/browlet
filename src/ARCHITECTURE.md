@@ -961,8 +961,11 @@ Nested capture therefore preserves inherited identity without a weak table or
 new UserAgent, agent, or owner tokens. The control channel connects the worker to
 its parent; identity alone grants no access to remote services. Connecting the
 snapshot to environment composition still requires policy and UserAgent service
-transport. HTML structured-clone records also still contain local cluster/object
-references and need their own transport; startup snapshots do not replace it.
+transport. HTML structured-clone records retain the existing cluster ID rather
+than the local cluster object. The private host channel can carry ordinary
+graphs, shared buffers, and native Wasm Module tokens for target-realm
+reconstruction through HTML and Binding. Interface-owned resources require their
+own transport; MessagePort now supplies it below. Startup snapshots do not replace it.
 Host readiness and native termination are
 separate from HTML execution readiness and termination cleanup.
 JS Engine owns `NodePromise` and exposes one internal thread completion with a
@@ -970,6 +973,26 @@ private implementation result. Browlet chains local cleanup onto that completion
 readiness and cleanup use the creating isolate's host queue, independently of
 page or worker activity. Native termination Promises stay inside JS Engine.
 Only messages cross isolates; these Promises and their resolvers stay local.
+
+JS Engine also owns transferable native channels. `JSMessagePort` wraps a
+native endpoint locally and exposes its native handle for internal transport;
+`JSThread` and channel sends take explicit transfer lists. Moving the handle
+retains its native queue and peer connection, including between two worker
+isolates without a creator relay. Host receivers are removed before handoff,
+and new receivers run on the destination's host queue. These handles must remain
+private to implementations. The worker host establishes a native pair before
+inside startup finishes, retaining immediate posts. The inside runtime attaches
+its endpoint when the dedicated global has been composed. Native
+receivers only enqueue HTML work: Browlet retains serialization, queue enablement,
+activity/realm selection, event targets, and cleanup. Forced termination removes
+host receivers before clearing pending outside deliveries. MessagePort owns its
+transfer record: local channels stay local until crossing isolates, when the pair
+is promoted to native endpoints. Ordered HTML deliveries travel separately from
+the native pending queue, including nested transferred resources. Receipt installs
+those deliveries before host reception resumes, with HTML delivery still disabled.
+Endpoint IDs and private owner notifications retain peer identity across handoff;
+unknown/in-transit owners count as external. No general Binding transport hook or
+creator relay is needed. Remote worker-owner monitoring remains separate work.
 
 Fetch makes three separate choices: the request's client supplies policy and
 lifetime state; `FetchParams.env` supplies execution; the callback destination
@@ -1002,7 +1025,8 @@ lifetime monitors remain explicit dependencies.
 After a dedicated/shared global starts closing, its event loop finishes all
 queued tasks and the final microtask checkpoint before becoming destroyed. The
 global's `finishRunning()` continuation clears timers, disconnects external ports,
-and empties its owners. `close()` requests a loop wake-up after clearing queues;
+closes local EventSources (including retry timers), and empties its owners.
+`close()` requests a loop wake-up after clearing queues;
 new or resumed work cannot revive the destroyed loop. This is cooperative cleanup,
 independent of native thread teardown.
 

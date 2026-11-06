@@ -81,7 +81,7 @@ describe('WebAssembly Web API serialization', () => {
     }
     const message = structuredSerializeWithTransfer({ module }, [], source);
     expect(message.interfaceNames.has('Module')).toBe(true);
-    expect(message.cluster).toBe(source.realm.agent.agentCluster);
+    expect(message.agentClusterId).toBe(source.realm.agent.agentCluster!.id);
     expect(() => structuredDeserializeWithTransfer(message, target)).toThrow(DOMExceptionImpl);
   });
 
@@ -90,7 +90,7 @@ describe('WebAssembly Web API serialization', () => {
     const source = getBindingContext(getRelevantRealm(fixture().window));
     const module: unknown = Reflect.construct(original.realm.WebAssemblyModule, [new Uint8Array(moduleBytes)]);
     const serialized = structuredSerialize(module, source);
-    expect(serialized.cluster).toBe(source.realm.agent.agentCluster);
+    expect(serialized.agentClusterId).toBe(source.realm.agent.agentCluster!.id);
     expect(structuredDeserialize(serialized, source)).not.toBe(module);
     expect(() => structuredDeserialize(serialized, original)).toThrow(DOMExceptionImpl);
   });

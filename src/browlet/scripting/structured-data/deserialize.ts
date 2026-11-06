@@ -39,7 +39,7 @@ class StructuredDeserializer {
   deserialize(serialized: SerializedRecord): unknown {
     if (this.#memory.has(serialized)) return this.#memory.get(serialized);
     const { realm } = this.#ctx;
-    if (serialized.cluster !== null && serialized.cluster !== realm.agent.agentCluster) {
+    if (serialized.agentClusterId !== null && serialized.agentClusterId !== realm.agent.agentCluster?.id) {
       throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
     }
 

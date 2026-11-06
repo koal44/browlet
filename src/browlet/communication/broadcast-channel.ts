@@ -1,4 +1,3 @@
-import { InternalError } from '../../infra/index';
 import {
   arg, atArg, ctor, defineInterface, DOMExceptionImpl, idlType, impl, op, roAttr,
 } from '../../web-idl/core/index';
@@ -22,9 +21,12 @@ export class BroadcastChannelImpl extends EventTargetImpl {
   name: string;
   /** Message handlers backed by this channel's listener registrations. */
   override eventHandlers: EventHandlerMap = new EventHandlerMap(this, BroadcastChannelImpl.#handlerDefinitions);
+  /** Closing prevents subsequent sends and delivery of previously queued messages. */
   #closed = false;
+  /** Weak discovery entry owned by this channel's UserAgent. */
   #reference = new WeakRef(this);
 
+  /** Register this channel for discovery by globals using the same local UserAgent. */
   constructor(name: string, env: BrowletEnvironment) {
     super(env);
     this.name = name;
@@ -41,8 +43,8 @@ export class BroadcastChannelImpl extends EventTargetImpl {
   // https://html.spec.whatwg.org/multipage/web-messaging.html#eligible-for-messaging
   get isEligibleForMessaging(): boolean {
     if (this.env.realm.isWindow()) return this.env.realm.getAssociatedDocument().isFullyActive();
-    // TODO(HTML §10): Worker closing and suspendable state, with real worker settings.
-    throw new InternalError('BroadcastChannel worker eligibility is not implemented');
+    const global = this.env.globalImplementation;
+    return EventTargetImpl.is(global) && global.isWorkerGlobal() && !global.closing && !global.isSuspendable();
   }
 
   /** Serialize once, then queue a separate reconstruction for each destination. */
@@ -56,6 +58,7 @@ export class BroadcastChannelImpl extends EventTargetImpl {
 
     // The weak registry preserves creation order across the user agent, which
     // also supplies the required oldest-first order within each agent.
+    // TODO(HTML §§9.5, 10): Discover and deliver to other isolates through the shared UserAgent service.
     for (const destination of this.env.userAgent.broadcastChannels.values()) {
       if (destination === this || destination.name !== this.name || !destination.isEligibleForMessaging) continue;
       if (!StorageKey.obtainForNonStoragePurposes(destination.env).equals(sourceStorageKey)) continue;
@@ -86,6 +89,7 @@ export class BroadcastChannelImpl extends EventTargetImpl {
     this.env.getWindowOrWorkerGlobalScopeMixin().broadcastChannels.delete(this);
   }
 
+  /** Retain listening channels for their global's lifetime, independently of weak discovery. */
   protected override eventListenerListChanged(type: string): void {
     if (this.#closed || (type !== 'message' && type !== 'messageerror')) return;
     const channels = this.env.getWindowOrWorkerGlobalScopeMixin().broadcastChannels;
