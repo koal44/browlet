@@ -124,10 +124,18 @@ The first observed queue installs one native callback through Node's public
 [`promiseHooks.onSettled()`](https://nodejs.org/api/v8.html#promisehooksonsettledsettled)
 multiplexer. It coexists with application/Node hooks rather than replacing them.
 Node retains the observer for its environment's lifetime; it owns no queues and
-ignores unregistered Promise owners. No `.then()` observation, Promise/Atomics
-replacement, polling timer, or new Node/V8 patch is involved. This supplies
+ignores unregistered Promise owners. Registration uses existing Node APIs, with
+no `.then()` observation, Promise/Atomics replacement, or polling timer. This supplies
 ordinary completion progress on official addon bases; HTML generic/timeout task
 ownership and active-time waiting still require the custom enqueue hooks.
+
+The custom engine also carries the
+[upstream V8 module-evaluation fix](https://github.com/v8/v8/commit/1cdea338fd59d4700b1b311feb76e6a57c679844)
+described in [BUILDING.md](../BUILDING.md#v8-patches). Without it, a native call
+inside a Promise settlement hook can report a module's evaluation failure twice.
+The failure reproduces on official Node 26.8.1 with public Node APIs and no addon;
+the addon is one way to expose it. The maintained engine patch includes a Node
+regression. Its runtime reproduction on Node 24 has not been established.
 
 `createContextHandle()` creates a native V8 context registered with Node;
 `runInContext()` evaluates there. These are not `node:vm` Contextify objects.
