@@ -19,7 +19,9 @@ NavigatorContentUtils supplies secure-Window methods and shared parameter valida
 The UserAgent registry retains registration decisions, removes exact pairs, and
 prepares invocation URLs; WebDriver supplies the registration-mode command body.
 Consent, automation sessions, persistence, handler selection, and navigation retain
-explicit owner dependencies. The other HTML capability families remain pending.
+explicit owner dependencies. NavigatorCookies reports the existing UserAgent cookie
+policy on Window. NavigatorPlugins supplies PDF compatibility reporting and the
+legacy plugin/MIME collections, using navigation's existing support decision.
 
 | Source | Contract | Specification |
 | --- | --- | --- |
@@ -29,8 +31,8 @@ explicit owner dependencies. The other HTML capability families remain pending.
 | `online.ts` | Implemented `NavigatorOnLineMixin`, live Fetch state, and per-global connectivity events | HTML §8.10.1.3 |
 | `protocol-handler.ts` | Implemented secure-Window operations, shared normalization, and parallel registration/removal entries | HTML §8.10.1.4 |
 | `protocol-handler-registry.ts` | Implemented exact-pair decisions and invocation URL preparation; consent, persistence, selection, and navigation dependencies remain | HTML §8.10.1.4 |
-| `cookies.ts` | `NavigatorCookies.cookieEnabled` over actual cookie policy/state | HTML §8.10.1.5 |
-| `plugins.ts` | PDF-viewer compatibility objects and legacy plugin/MIME-type collections | HTML §8.10.1.6 |
+| `cookies.ts` | Implemented `NavigatorCookiesMixin.cookieEnabled` over the UserAgent policy shared by Fetch and Document cookies | HTML §8.10.1.5 |
+| `plugins.ts` | Implemented `NavigatorPluginsMixin`, PluginArray, MimeTypeArray, Plugin, and MimeType; actual PDF viewing remains with navigation/rendering | HTML §8.10.1.6 |
 | `hardware.ts` | `NavigatorConcurrentHardware`, host logical-processor capability, implementation limits, and fingerprinting reduction | HTML §10.2.7 |
 | `worker-navigator.ts` | `WorkerNavigator` assembled from the ID, language, online, and concurrent-hardware mixins without Window-only state | HTML §§10.2.1.1 and 10.3.2 |
 | `web-idl.ts` | Navigator, mixins, legacy collections, and Window contributions | HTML §8.10 |
@@ -513,12 +515,115 @@ This closing pass changes documentation and dependency comments only; it retains
 the passing focused validation above without repeating runtime tests. No new
 browser policy, expected failure, skip, or callable contract was introduced.
 
-Next is [§8.10.1.5](https://html.spec.whatwg.org/multipage/system-state.html#cookies):
-expose `NavigatorCookies.cookieEnabled` through the existing
-`UserAgent.cookiesEnabled` policy already shared by Fetch and `Document.cookie`,
-with focused projection/policy tests. This does not require finishing custom
-handler hosts. §8.10.1.6's PDF compatibility objects follow; actual PDF rendering
-remains a separate dependency.
+## Cookies
+
+[§8.10.1.5](https://html.spec.whatwg.org/multipage/system-state.html#cookies)
+was audited against the same HTML revision on 2026-11-06. `NavigatorCookiesMixin`
+reads `env.userAgent.cookiesEnabled`, the existing policy used by Fetch's request
+and response cookie processing and `Document.cookie`. Navigator composes and
+forwards the mixin; its IDL adds the readonly boolean only to Window's Navigator.
+There is no second flag, mixin constructor, new configuration option, or queued
+notification. Changes to the existing policy are visible immediately.
+
+The default remains true. The value describes cookie handling being enabled; it
+does not promise that a particular Document or cookie can store data. Existing
+cookie-averse, origin, Secure, domain/path, expiry, and SameSite rules still apply
+at their owners. The getter does not try writing a test cookie. Disabling the
+policy continues to preserve the store while suppressing sending/acceptance.
+
+`SPEC_CLASH(navigator-cookies-detached)`: Eric approved retaining the live
+UserAgent policy for a Navigator after context detachment, following HTML's
+browser-wide wording and Firefox. Chromium and WebKit instead return false after
+the frame is removed. The [browser-only probe](../../../node-compat/experimental/browser-probes/html/navigator-cookies.mjs)
+and [results](../../../node-compat/experimental/browser-probes/html/NAVIGATOR-COOKIES-RESULTS.json)
+record Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2. All three expose the
+ordinary readonly getter in HTTP and HTTPS pages and report true on the tested
+data URL even though its cookie assignment does not store a cookie. Their getter
+descriptors and absent mixin constructor agree. This probe does not emulate
+browser-specific cookie settings or establish third-party/permission policy.
+
+Nine focused cases cover exposure, readonly/receiver checks, live policy changes
+shared with Document and Fetch, independent UserAgents and borrowed getter realms,
+retained receivers, navigation, cookie-averse Documents, and dedicated/shared
+worker exclusion. The detachment case supplies the missing lifecycle owner's
+state directly; it does not claim to implement iframe startup or recursive
+destruction. All 64 tests in the focused Navigator/Document/Fetch run pass on
+Node 26.8.1 compat. This getter adds no engine, scheduler, or native dependency;
+no runtime matrix repetition, expected failures, or skips were added.
+
+This slice stopped before §8.10.1.6; the subsequent compatibility implementation
+is described below.
+
+## PDF compatibility
+
+[§8.10.1.6](https://html.spec.whatwg.org/multipage/system-state.html#pdf-viewing-support)
+is implemented against HTML revision `5fcc2318395821db61e353705e6368ad9a000af5`.
+The local reference is clean and matches the official standard's 6 November
+update. This section describes capability reporting and legacy compatibility
+objects; it does not supply a PDF reader or renderer.
+
+`NavigatorPluginsMixin` retains one PluginArray and one MimeTypeArray for the
+Window Navigator. `pdfViewerEnabled` reads the existing `UserAgent.pdfViewerSupported`
+flag used by document dispatch; `javaEnabled()` returns false. The default flag
+remains false, yielding empty collections. Window owns the specified five plugin
+objects and two MIME objects when support is configured. All lookup paths share
+those objects, and every MIME object's enabledPlugin is the generic PDF Viewer.
+Ordinary Web IDL provides conversion, nonconstructible Window-only interfaces,
+indexed properties, unenumerable named properties, iteration, and realm identity.
+No plugin discovery, host registry, or parallel task was introduced.
+
+Approved choices and evidence:
+
+- `SPEC_CLASH(navigator-pdf-mime-identity)`: Follow HTML/Firefox's shared Window
+  MIME objects. Chromium returns fresh objects on repeated plugin reads and ties
+  enabledPlugin to that plugin; WebKit retains separate MIME objects per plugin.
+- `SPEC_CLASH(navigator-plugins-detached)`: Keep the Navigator's SameObject
+  collections after frame removal, following HTML/Chromium/WebKit. Firefox
+  replaces the collection objects; it does not return null. Previously retained
+  collections and entries remain usable in all three engines.
+- `SPEC_CLASH(navigator-pdf-detached)`: Keep reporting the UserAgent's support
+  value after removal, following HTML/Firefox/WebKit. Chromium reports false
+  while its retained collections remain populated.
+- `SPEC_CLASH(navigator-plugins-refresh)`: Follow HTML's zero-argument no-op.
+  Chromium still accepts an optional reload argument. The initial probe's truthy
+  argument reloaded the page and destroyed its evaluation context; this was not
+  a browser crash. Blink's `DOMPluginArray::refresh(bool)` confirms that path.
+- `SPEC_GAP(navigator-pdf-preference-lifetime)`: Configure support before creating
+  a Window, and retain its lists for that Window's lifetime. HTML provides no
+  notification or refresh algorithm for a live preference change. Eric approved
+  this boundary; a future host preference-update contract must address existing
+  Windows. The boolean getter still reads the UserAgent flag.
+
+The [browser-only probe](../../../node-compat/experimental/browser-probes/html/navigator-plugins.mjs),
+[results](../../../node-compat/experimental/browser-probes/html/NAVIGATOR-PLUGINS-RESULTS.json),
+and [initial run](../../../node-compat/experimental/browser-probes/html/NAVIGATOR-PLUGINS-INITIAL-RESULTS.json)
+preserve the evidence. Versions were Chromium 156.0.8078.4, Firefox 157.0, and
+WebKit 27.2. Chromium's headless shell reports no viewer; full Chromium's headless
+mode exposes the populated branch. Firefox was probed with pdfjs.disabled both
+false and true. No actual PDF navigation or rendering was exercised by the probe.
+
+Fourteen focused tests cover HTTP/HTTPS exposure, empty/populated collections,
+fixed metadata, lookup identity, legacy property descriptors, Web IDL conversion,
+invalid receivers, no-op refresh, retained receivers, replacement Windows,
+borrowed-method realms, and dedicated/shared worker exclusion. The detachment
+test supplies the lifecycle state directly; it does not implement iframe
+destruction. The compatibility tests and existing navigation-dispatch tests pass
+together (59 tests per run) on Node 26.8.1 stock and compat. Typecheck and focused
+lint pass. This slice reuses Binding's existing legacy-property and projection
+machinery; no engine, scheduler, or addon implementation changed.
+
+The remaining dependencies are already explicit:
+
+- `Navigable.createDocumentForInlineContent()` still throws. It owns the missing
+  inline document, PDF decoding/rendering, and loader completion path; setting
+  the support flag does not supply that implementation.
+- External PDF handling still reaches UserAgent's throwing external-software
+  handoff. No viewer installation or OS integration is inferred from these APIs.
+- A live PDF preference-change mechanism remains with the future host. There is
+  no public BrowletConfig viewer option or automatic refresh of existing Windows.
+
+This closes the local §8.10.1.6 compatibility surface. The next HTML section is
+§8.11 Images; NavigatorConcurrentHardware remains with the worker/hardware owner.
 
 ## Removal condition
 

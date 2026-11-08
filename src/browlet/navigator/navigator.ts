@@ -3,19 +3,21 @@ import type { PermissionsImpl } from '../../permissions/index';
 import type { StorageManagerImpl } from '../../storage/index';
 
 import { ClipboardImpl } from '../interaction/clipboard/index';
-import type { BrowletEnvironment } from '../environment/index';
+import type { BrowletEnvironment, WindowEnvironment } from '../environment/index';
 
 import { NavigatorIDMixin } from './identification';
 import { NavigatorLanguageMixin } from './language';
 import { NavigatorOnLineMixin } from './online';
 import { NavigatorContentUtilsMixin } from './protocol-handler';
+import { NavigatorCookiesMixin } from './cookies';
+import { NavigatorPluginsMixin, type PluginArrayImpl, type MimeTypeArrayImpl } from './plugins';
 
 /** Stable Window navigator identity; independent specifications contribute its capabilities. */
 // https://html.spec.whatwg.org/multipage/system-state.html#the-navigator-object
-// TODO(HTML §8.10): Cookies and plugins; protocol handler registration has explicit owner dependencies.
+// TODO(HTML §8.10): Protocol handler registration retains explicit owner dependencies.
 export class NavigatorImpl {
   /** Relevant settings, shared with this Navigator's owning Window. */
-  env: BrowletEnvironment;
+  env: WindowEnvironment;
   /** Identification behavior composed with this Navigator's relevant settings. */
   #navigatorIDMixin: NavigatorIDMixin;
   /** Published language snapshot and its global-task notifications. */
@@ -24,14 +26,20 @@ export class NavigatorImpl {
   #navigatorOnLineMixin: NavigatorOnLineMixin;
   /** Custom scheme validation and browser-owned registration requests. */
   #navigatorContentUtilsMixin: NavigatorContentUtilsMixin;
+  /** Cookie handling follows the shared browser policy without retaining a second flag. */
+  #navigatorCookiesMixin: NavigatorCookiesMixin;
+  /** Stable PDF compatibility collections and the shared viewer-support decision. */
+  #navigatorPluginsMixin: NavigatorPluginsMixin;
   #clipboard: ClipboardImpl | null = null;
 
-  constructor(env: BrowletEnvironment) {
+  constructor(env: WindowEnvironment) {
     this.env = env;
     this.#navigatorIDMixin = new NavigatorIDMixin(env);
     this.#navigatorLanguageMixin = new NavigatorLanguageMixin(env);
     this.#navigatorOnLineMixin = new NavigatorOnLineMixin(env);
     this.#navigatorContentUtilsMixin = new NavigatorContentUtilsMixin(env);
+    this.#navigatorCookiesMixin = new NavigatorCookiesMixin(env);
+    this.#navigatorPluginsMixin = new NavigatorPluginsMixin(env);
   }
 
   get appCodeName(): string { return this.#navigatorIDMixin.appCodeName; }
@@ -48,6 +56,12 @@ export class NavigatorImpl {
   get languages(): readonly string[] { return this.#navigatorLanguageMixin.languages; }
 
   get onLine(): boolean { return this.#navigatorOnLineMixin.onLine; }
+
+  get cookieEnabled(): boolean { return this.#navigatorCookiesMixin.cookieEnabled; }
+
+  get plugins(): PluginArrayImpl { return this.#navigatorPluginsMixin.plugins; }
+  get mimeTypes(): MimeTypeArrayImpl { return this.#navigatorPluginsMixin.mimeTypes; }
+  get pdfViewerEnabled(): boolean { return this.#navigatorPluginsMixin.pdfViewerEnabled; }
 
   /** Stable Clipboard object belonging to this Navigator's Window environment. */
   // https://w3c.github.io/clipboard-apis/#h-navigator-clipboard
@@ -91,6 +105,8 @@ export class NavigatorImpl {
   unregisterProtocolHandler(scheme: string, url: string): void {
     this.#navigatorContentUtilsMixin.unregisterProtocolHandler(scheme, url);
   }
+
+  javaEnabled(): boolean { return this.#navigatorPluginsMixin.javaEnabled(); }
 }
 
 // [Exposed=Window] interface Navigator { };

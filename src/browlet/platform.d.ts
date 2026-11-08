@@ -3023,6 +3023,11 @@ export interface Navigator {
   readonly onLine: boolean;
   registerProtocolHandler(scheme: string, url: string): void;
   unregisterProtocolHandler(scheme: string, url: string): void;
+  readonly cookieEnabled: boolean;
+  readonly plugins: PluginArray;
+  readonly mimeTypes: MimeTypeArray;
+  javaEnabled(): boolean;
+  readonly pdfViewerEnabled: boolean;
   readonly storage: StorageManager;
 }
 
@@ -3046,6 +3051,61 @@ export interface WorkerNavigator {
 export interface WorkerNavigatorConstructor {
   readonly prototype: WorkerNavigator;
   [Symbol.hasInstance](value: unknown): value is WorkerNavigator;
+}
+
+export interface PluginArray {
+  refresh(): void;
+  readonly length: number;
+  item(index: number): Plugin | null;
+  namedItem(name: string): Plugin | null;
+  readonly [index: number]: Plugin | null | undefined;
+  [Symbol.iterator](): IterableIterator<Plugin | null>;
+}
+
+export interface PluginArrayConstructor {
+  readonly prototype: PluginArray;
+  [Symbol.hasInstance](value: unknown): value is PluginArray;
+}
+
+export interface MimeTypeArray {
+  readonly length: number;
+  item(index: number): MimeType | null;
+  namedItem(name: string): MimeType | null;
+  readonly [index: number]: MimeType | null | undefined;
+  [Symbol.iterator](): IterableIterator<MimeType | null>;
+}
+
+export interface MimeTypeArrayConstructor {
+  readonly prototype: MimeTypeArray;
+  [Symbol.hasInstance](value: unknown): value is MimeTypeArray;
+}
+
+export interface Plugin {
+  readonly name: string;
+  readonly description: string;
+  readonly filename: string;
+  readonly length: number;
+  item(index: number): MimeType | null;
+  namedItem(name: string): MimeType | null;
+  readonly [index: number]: MimeType | null | undefined;
+  [Symbol.iterator](): IterableIterator<MimeType | null>;
+}
+
+export interface PluginConstructor {
+  readonly prototype: Plugin;
+  [Symbol.hasInstance](value: unknown): value is Plugin;
+}
+
+export interface MimeType {
+  readonly type: string;
+  readonly description: string;
+  readonly suffixes: string;
+  readonly enabledPlugin: Plugin;
+}
+
+export interface MimeTypeConstructor {
+  readonly prototype: MimeType;
+  [Symbol.hasInstance](value: unknown): value is MimeType;
 }
 
 export interface ErrorEvent extends Event {
@@ -3697,6 +3757,10 @@ export interface Window extends EventTarget {
   PerformanceNavigationTiming: PerformanceNavigationTimingConstructor;
   PerformanceTimingConfidence: PerformanceTimingConfidenceConstructor;
   Navigator: NavigatorConstructor;
+  PluginArray: PluginArrayConstructor;
+  MimeTypeArray: MimeTypeArrayConstructor;
+  Plugin: PluginConstructor;
+  MimeType: MimeTypeConstructor;
   ErrorEvent: ErrorEventConstructor;
   MessageEvent: MessageEventConstructor;
   MessagePort: MessagePortConstructor;

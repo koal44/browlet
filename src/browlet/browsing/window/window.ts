@@ -22,7 +22,7 @@ import { selectionGlobalEventHandlers, type SelectionImpl } from '../../interact
 import type { HistoryImpl } from '../history/index';
 import { HTMLCollectionImpl, type DocumentImpl, type ElementImpl } from '../../dom/nodes/index';
 import type { PerformanceImpl } from '../../performance/index';
-import { NavigatorImpl } from '../../navigator/index';
+import { NavigatorImpl, PluginImpl, MimeTypeImpl, pdfViewerPluginNames, pdfViewerMimeTypes } from '../../navigator/index';
 import { windowPostMessage, type WindowPostMessageOptions } from '../../communication/index';
 import { WindowSessionStorageMixin, WindowLocalStorageMixin, type StorageImpl } from '../../storage/index';
 import type { SessionHistoryEntry } from '../navigation/state/index';
@@ -75,6 +75,12 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   readonly toolbar: BarPropImpl;
   /** Stable Navigator object for this Window and its clientInformation alias. */
   readonly navigator: NavigatorImpl;
+  /** PDF compatibility aliases retained by this Window, empty when no viewer is available. */
+  // https://html.spec.whatwg.org/multipage/system-state.html#pdf-viewer-plugin-objects
+  pdfViewerPluginObjects: PluginImpl[];
+  /** PDF MIME objects shared by all aliases and navigator.mimeTypes in this Window. */
+  // https://html.spec.whatwg.org/multipage/system-state.html#pdf-viewer-mime-type-objects
+  pdfViewerMimeTypeObjects: MimeTypeImpl[];
   /** Navigation API object retained for this Window's lifetime. */
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#window-navigation-api
   navigation: NavigationImpl;
@@ -116,6 +122,9 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
     this.scrollbars = new BarPropImpl(env);
     this.statusbar = new BarPropImpl(env);
     this.toolbar = new BarPropImpl(env);
+    // SPEC_GAP(navigator-pdf-preference-lifetime): Snapshot configured support for this Window; HTML supplies no live refresh steps.
+    this.pdfViewerPluginObjects = env.userAgent.pdfViewerSupported ? pdfViewerPluginNames.map((name) => new PluginImpl(name, env)) : [];
+    this.pdfViewerMimeTypeObjects = env.userAgent.pdfViewerSupported ? pdfViewerMimeTypes.map((type) => new MimeTypeImpl(type, env)) : [];
     this.navigator = new NavigatorImpl(env);
     this.navigation = new NavigationImpl(env);
     this.idleCallbacks = new WindowIdleCallbacks(env);

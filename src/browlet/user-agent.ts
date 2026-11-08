@@ -80,9 +80,9 @@ export class UserAgent implements
   /** Configured document handling by MIME essence; XML/JSON entries count as explicitly supported types. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#loading-a-document
   documentTypeHandlers = new Map<MIMETypeEssence, 'inline' | 'external'>();
-  /** Whether a PDF viewer is available; Browlet currently has no viewer. */
+  /** Whether a PDF viewer is available; configure before creating Windows. Browlet currently has no viewer. */
   // https://html.spec.whatwg.org/multipage/system-state.html#pdf-viewer-supported
-  // TODO(HTML §8.10.1.6): Navigator's PDF/plugin compatibility objects must use this same support decision.
+  // TODO: A PDF host must supply inline viewing; live support changes also need an explicit Window-list refresh policy.
   pdfViewerSupported = false;
   /** Discover live broadcast channels in creation order without retaining their globals. */
   broadcastChannels = new WeakOrderedSet<BroadcastChannelImpl>();

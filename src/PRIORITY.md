@@ -252,9 +252,12 @@ has reached §8.10.1.4: shared Window/worker identification, language preference
 online state, and the local custom-handler algorithms are implemented. Handler
 consent/UI, durable storage, selection/navigation, and WebDriver sessions/transport
 remain explicit dependencies; worker service transport remains with its owner.
-Next is §8.10.1.5's `NavigatorCookies.cookieEnabled` over the existing shared cookie
-policy, followed by §8.10.1.6's PDF compatibility objects. This does not begin a
-PDF renderer or expand the deferred CSSOM View work.
+§8.10.1.5's [NavigatorCookies.cookieEnabled](browlet/navigator/ROADMAP.md#cookies)
+now reads the existing shared cookie policy. §8.10.1.6's
+[PDF compatibility objects](browlet/navigator/ROADMAP.md#pdf-compatibility) now
+reuse navigation's support flag, defaulting to no viewer. Actual PDF rendering,
+external handoff, live viewer-preference updates, and the deferred CSSOM View work
+remain separate. The next document-order section is §8.11 Images.
 Source/deferred imports and the HTML Wasm parser remain explicit boundaries.
 Later host-hook algorithms must be connected before judging
 the complete model; the uncertain cross-realm observer test is skipped.

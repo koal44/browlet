@@ -2148,6 +2148,19 @@ events on each affected global's networking task source. Its producer supplies
 complete recipients and previous effective state for scoped emulation updates.
 OS network monitoring, BiDi connectivity change routing, and cross-isolate
 notifications remain explicit dependencies; the default assumes connectivity.
+Window's [NavigatorCookies](browlet/navigator/ROADMAP.md#cookies) reads the live
+UserAgent cookie policy already used by Fetch and `Document.cookie`. True does
+not guarantee that a particular Document or cookie can store data. Retained
+Navigators keep reporting that browser policy after context detachment, following
+the approved HTML/Firefox rule. WorkerNavigator does not expose this member.
+Window's [PDF compatibility objects](browlet/navigator/ROADMAP.md#pdf-compatibility)
+share navigation's `UserAgent.pdfViewerSupported` flag. It defaults to false,
+so `pdfViewerEnabled` is false and `plugins`/`mimeTypes` are empty. Configured
+support creates HTML's fixed compatibility objects for each new Window; this
+does not implement PDF viewing. Inline document creation/rendering and external
+software handoff remain throwing dependencies. Live preference changes have no
+Window-list refresh contract yet. Retained collections preserve their identity;
+MIME objects are shared across all plugin aliases with the generic enabledPlugin.
 Secure Window Navigators expose
 [NavigatorContentUtils](browlet/navigator/ROADMAP.md#custom-scheme-handlers): both
 protocol-handler methods synchronously validate and normalize their arguments,
