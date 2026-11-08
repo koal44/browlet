@@ -243,7 +243,10 @@ The [user-prompts slice](browlet/scripting/ROADMAP.md#html-user-prompts-simple-d
 (§8.8 at that checkpoint, now §8.9) supplies alert(), confirm(), and prompt(),
 including conversion, dialog admission, text preparation, automation routing,
 and the existing host-pause boundary. Actual display and response UI remain
-explicit throwing dependencies. Printing is next.
+explicit throwing dependencies. [Printing](browlet/scripting/ROADMAP.md#html-user-prompts-printing)
+now supplies Window.print(), deferred Document tasks, and synchronous frame-tree
+notifications. Print-state capture, print media/layout, preview/PDF, and printer UI
+remain explicit dependencies; the full parser task ordering stays with Ged.
 Source/deferred imports and the HTML Wasm parser remain explicit boundaries.
 Later host-hook algorithms must be connected before judging
 the complete model; the uncertain cross-realm observer test is skipped.

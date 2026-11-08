@@ -17,3 +17,7 @@ const promptedUndefined: string | null = window.prompt(undefined, undefined);
 window.confirm(1);
 // @ts-expect-error prompt defaults use DOMString
 window.prompt('message', 1);
+
+const printed: void = window.print();
+// @ts-expect-error print has no declared arguments
+window.print('document');

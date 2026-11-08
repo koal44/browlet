@@ -3399,6 +3399,7 @@ export interface Window extends EventTarget {
   alert(message: string): void;
   confirm(message?: string): boolean;
   prompt(message?: string, default_?: string): string | null;
+  print(): void;
   postMessage(message: any, targetOrigin: string, transfer?: Iterable<object>): void;
   postMessage(message: any, options?: WindowPostMessageOptions): void;
   getSelection(): Selection | null;

@@ -194,6 +194,8 @@ export class UserAgent implements
   #pointerLock: PointerLock | null = null;
   /** System clipboard notification identity belongs to this UserAgent and is allocated only when used. */
   #systemClipboard: SystemClipboard | null = null;
+  /** Suppress another print operation while print events or the print host are running. */
+  #printing = false;
 
   get sandbox(): BrowletEnvironment {
     return this.#sandbox ??= createSandboxEnvironment(this);
@@ -526,6 +528,37 @@ export class UserAgent implements
     // TODO(HTML simple dialogs): Compose a UI host port, using the supplied default text.
     // Treat message LF as a line break; wait inside the pause without running author code.
     throw new InternalError('Text prompt display and response UI are not implemented');
+  }
+
+  /** Run printing from a script or UI task, retaining the invoking Document's event-loop pause. */
+  // https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html#printing-steps
+  runPrintingSteps(document: DocumentImpl): void {
+    // HTML permits ignoring a print request. Suppress reentrant requests across this UserAgent.
+    if (this.#printing || !this.#isActivePrintTarget(document) || document.unloadCounter > 0) return;
+    if (document.activeSandboxingFlagSet.has('sandboxed-modals')) return;
+
+    this.#printing = true;
+    try {
+      this.#firePrintEvent(document, 'beforeprint');
+      // SPEC_GAP(print-document-lifetime): Recheck activity and unloading after author callbacks before entering the host.
+      if (!this.#isActivePrintTarget(document) || document.unloadCounter > 0) return;
+      const env = document.env;
+      env.responsibleEventLoop.pauseUntil(() => {
+        this.obtainPhysicalForm(document);
+      }, env);
+      this.#firePrintEvent(document, 'afterprint');
+    } finally {
+      this.#printing = false;
+    }
+  }
+
+  /** Offer printing or a physical-form representation using document state at this invocation. */
+  // https://html.spec.whatwg.org/multipage/rendering.html#obtain-a-physical-form
+  obtainPhysicalForm(_document: DocumentImpl): void {
+    // TODO(HTML printing/CSS/host): Capture the relevant documents now, apply print media and paged layout,
+    // and offer preview, PDF, or printer output. A delayed output must retain that captured state.
+    // Run synchronously inside the invoking event loop's pause; do not execute author code or wait on its tasks.
+    throw new InternalError('Physical-form capture, print layout, and print UI are not implemented');
   }
 
   /** Generate a fresh canonical UUID for browser-owned registrations. */
@@ -926,6 +959,32 @@ export class UserAgent implements
     if (url.scheme === 'about' && (url.path === 'blank' || url.path === 'srcdoc')) return true;
     if (url.scheme === 'data') return true;
     return this.isOriginPotentiallyTrustworthy(obtainURLOrigin(url));
+  }
+
+  /** Notify the current print subtree, preserving each phase's target snapshot across author callbacks. */
+  #firePrintEvent(document: DocumentImpl, type: 'beforeprint' | 'afterprint'): void {
+    // SPEC_CLASH(print-event-descendants): HTML names children only; follow Blink's recursive, synchronous phases.
+    // SPEC_GAP(print-event-snapshots): Snapshot each phase separately and skip removed/replaced Documents before delivery.
+    const documents = [document, ...document.getDescendantNavigables().map((navigable) => navigable.activeDocument!)];
+    for (const target of documents) {
+      if (!this.#isActivePrintTarget(document)) return;
+      if (!this.#isActivePrintTarget(target, document)) continue;
+      target.getRelevantGlobalObject()!.fireEvent(type);
+    }
+  }
+
+  /** Check live embedding ancestry while removed-frame destruction remains an unfinished lifecycle step. */
+  #isActivePrintTarget(target: DocumentImpl, root = target): boolean {
+    if (!target.isFullyActive()) return false;
+    let document = target;
+    let includesRoot = false;
+    for (;;) {
+      if (document === root) includesRoot = true;
+      const container = document.getNodeNavigable()!.container;
+      if (container === null) return includesRoot;
+      if (!container.isConnected) return false;
+      document = container.nodeDocument;
+    }
   }
 
   /** Allocate the agent and its cluster; its caller must still create and start the global. */

@@ -100,7 +100,7 @@ if (unknown instanceof window.Node) { const narrowed: Node = unknown; }
 // @ts-expect-error the Window platform object has no internal environment
 window.env;
 // @ts-expect-error generated interfaces do not claim unimplemented lib.dom members
-window.print();
+window.focus();
 // @ts-expect-error readonly document attribute
 window.document = document;
 // @ts-expect-error forwarded assignment uses Location.href

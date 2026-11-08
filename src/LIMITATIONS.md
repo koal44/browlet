@@ -1282,8 +1282,20 @@ and [Clipboard event slice](browlet/interaction/clipboard/ROADMAP.md).
   gates, automation routing, and task pause. Ordinary calls reach the throwing
   UserAgent.showAlert(), showConfirm(), or showPrompt() dependency until a host
   can display the dialog and synchronously await its response. BiDi sessions
-  remain unfinished. Printing is not yet exposed. See the
+  remain unfinished. See the
   [user-prompts audit](browlet/scripting/ROADMAP.md#html-user-prompts-simple-dialogs).
+
+- **Printing has no renderer or output host yet.** Window.print() implements
+  active/unload admission and pending-load requests. UserAgent runs beforeprint
+  and afterprint through the requested frame subtree, suppresses reentrant printing,
+  and pauses at the throwing obtainPhysicalForm() dependency. That boundary must
+  capture the relevant document state, apply print media/paged layout, and supply
+  preview/PDF or printer UI. A host failure stops before afterprint and restores
+  the pause/reentrancy state. Deferred requests use a Document-owned DOM-manipulation
+  task because the convenience loader can finish in a Promise checkpoint. Full
+  stop-parsing task order and child-context destruction remain their existing
+  lifecycle dependencies; printing checks connected frame ancestry locally.
+  See the [printing audit](browlet/scripting/ROADMAP.md#html-user-prompts-printing).
 
 - **Temporal's HTML clock requires custom Node with the addon.** Windows in every
   isolation mode install their environment's live, precision-limited wall clock. Stock mode and

@@ -247,6 +247,9 @@ export class DocumentImpl extends NodeImpl {
   completelyLoadedTime: number | null = null;
   /** Whether tasks that depend on loading completion may proceed. */
   readyForPostLoadTasks = false;
+  /** Whether a script requested printing before post-load tasks were available. */
+  // https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html#print-when-loaded
+  printWhenLoaded = false;
   /** Whether this Document has been shown without a subsequent pagehide. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#page-showing
   // TODO(HTML §7.5): Initial pageshow and unloading must also maintain this flag.
@@ -1549,6 +1552,16 @@ export class DocumentImpl extends NodeImpl {
     // initial pageshow dispatch, and their specified ordering before timing delivery.
     this.completelyFinishLoading();
     this.queueNavigationTimingEntry();
+    // PROVISIONAL: the full stop-parsing task ordering remains with the parser lifecycle owner.
+    // SPEC_GAP(print-load-task): This loader can finish in a Promise checkpoint; printing must enter a pausable task.
+    if (this.printWhenLoaded) {
+      env.queueTask('dom-manipulation', () => {
+        if (!this.printWhenLoaded) return;
+        // SPEC_GAP(print-pending-request-consumption): Consume once, before rechecking admission through Window.print().
+        this.printWhenLoaded = false;
+        window.print();
+      }, { discardSteps: () => { this.printWhenLoaded = false; } });
+    }
   }
 
   /** Record that this document has completely finished loading. */

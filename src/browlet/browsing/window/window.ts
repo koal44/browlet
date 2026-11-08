@@ -520,6 +520,20 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
     return result;
   }
 
+  /** Print this Window's active Document, deferring a request made before loading completes. */
+  // https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html#dom-print
+  print(): void {
+    const document = this.getAssociatedDocument();
+    if (!document.isFullyActive() || document.unloadCounter > 0) return;
+    if (document.readyForPostLoadTasks) {
+      // SPEC_GAP(print-pending-request-consumption): A ready request consumes any pending one, including from a load listener.
+      document.printWhenLoaded = false;
+      this.env.userAgent.runPrintingSteps(document);
+    } else {
+      document.printWhenLoaded = true;
+    }
+  }
+
   /** Apply sandbox restrictions and this user agent's optional dialog suppression. */
   // https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html#cannot-show-simple-dialogs
   cannotShowSimpleDialogs(): boolean {
@@ -934,6 +948,7 @@ export const windowIDL = defineInterface<BrowletEnvironment>({
         arg('default', idlType.DOMString, { optional: true, default: '' }),
       ],
     ),
+    op('print', idlType.undefined),
     op('postMessage', idlType.undefined,
       [
         arg('message', idlType.any), arg('targetOrigin', idlType.USVString),
