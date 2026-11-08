@@ -227,9 +227,19 @@ Next native integration must choose its concrete OS clipboard/format contract
 before replacing those throwing dependencies.
 CSSOM View remains deferred.
 HTML §8.1.8.3's synthetic pointer/click firing is connected on Element, using
-UserAgent keyboard modifiers and DOM dispatch. This is Vin's consolidation
-checkpoint. HTMLElement.click() and keyboard activation still need HTML §6.5's
-caller policies; input producers retain their HTML, editing, and layout owners.
+UserAgent keyboard modifiers and DOM dispatch. HTMLElement.click() and keyboard
+activation still need HTML §6.5's caller policies; input producers retain their
+HTML, editing, and layout owners. Input Events Level 2 and trusted composition
+preparation are complete within their recorded scope; editing and IME sessions
+remain explicit dependencies. Vin's audit has returned to HTML §§8.2–8.3 with the
+[global origin getter](browlet/scripting/ROADMAP.md#html-82-global-settings-origin)
+and [Base64 utility methods](browlet/scripting/ROADMAP.md#html-83-base64-utility-methods).
+Eric deferred §§8.4–8.6 (dynamic markup insertion, DOM parsing/serialization,
+and the timer audit) to Ged. §8.7's
+[microtask-queuing audit](browlet/scripting/ROADMAP.md#html-87-microtask-queuing)
+uses the existing callback/checkpoint machinery and preserves the Window Document
+on queued microtasks. It needs no unfinished work from those deferred sections.
+§8.8's user prompts are next.
 Source/deferred imports and the HTML Wasm parser remain explicit boundaries.
 Later host-hook algorithms must be connected before judging
 the complete model; the uncertain cross-realm observer test is skipped.

@@ -2624,6 +2624,124 @@ the successful rerun does not establish that this native failure is fixed.
 An earlier full run also hit the recorded dynamic-import reporting intermittency;
 that case passed both its isolated rerun and the next full run.
 
+## HTML §8.2: global settings origin
+
+The local HTML reference was refreshed from upstream on 2026-11-06 at
+`5fcc2318395821db61e353705e6368ad9a000af5`.
+[§8.2](https://html.spec.whatwg.org/multipage/webappapis.html#windoworworkerglobalscope-mixin)
+now exposes Window's missing origin attribute through the existing
+[WindowOrWorkerGlobalScopeMixin](../environment/global-scope.ts). The getter
+serializes its environment's current origin with URL's existing serializer;
+Window forwards to that owner. It adds no origin cache or mutable security state.
+
+Web IDL's existing Replaceable binding lets assignment install an ordinary own
+property without string conversion. A retained getter still returns the settings
+origin, and author replacement does not affect extractOrigin() or access checks.
+Inherited about:blank origins can therefore differ from location.origin. Opaque
+origins serialize as "null"; document.domain relaxation does not replace the
+serialized host/port. Borrowed getters retain the receiver's settings and the
+existing Window same-origin-domain guard.
+
+The [browser probe](../../../node-compat/experimental/browser-probes/html/global-origin.mjs)
+agrees on Chromium 156.0.8078.4, Firefox 157.0 and WebKit 27.2 for opaque and
+inherited origins, replacement descriptors and identity, the retained getter,
+and rejected foreign/non-Window receivers. It does not exercise the existing
+document.domain policy or native navigation teardown. The focused regression
+initially failed with ReferenceError because origin was absent.
+
+This is a bounded getter/exposure slice. §8.2's existing isSecureContext,
+crossOriginIsolated and extract-origin operations retain their current owners.
+The mixin's reportError, timers, microtasks and structuredClone forward to their
+already implemented algorithms and recorded dependencies. Its remaining members
+refer to later sections: §8.3's atob/btoa are covered below; createImageBitmap
+still needs the image/graphics owner, its source types and decoding. Worker global inclusion
+and forwarding remain the worker composition owner's explicit dependency; this
+slice neither adds worker exposure nor changes Pip's startup work.
+
+Nine new [origin cases](../../../test/browlet/scripting/global-origin.test.ts)
+and eight existing global-scope cases pass in all six Node 24.19.0/26.8.1/custom
+stock/compat configurations. No expected failures or skips were introduced.
+
+## HTML §8.3: Base64 utility methods
+
+The clean local HTML reference was refreshed from upstream on 2026-11-06 and
+remains at `5fcc2318395821db61e353705e6368ad9a000af5`.
+[§8.3](https://html.spec.whatwg.org/multipage/webappapis.html#base64-utility-methods)
+now has its shared algorithms on WindowOrWorkerGlobalScopeMixin and explicit
+Window forwarding. btoa() rejects characters above U+00FF with
+InvalidCharacterError, converts the binary string to bytes, and uses Infra's
+forgiving Base64 encoder. atob() uses Infra's forgiving decoder, throws
+InvalidCharacterError on failure, and converts the bytes to a binary string
+through JS Engine's existing isomorphic decoder.
+
+Web IDL owns DOMString argument conversion, receiver checks, and exception
+realization in the method's realm. The atob() ByteString result uses the existing
+string representation; no new conversion contract is needed. Generated platform
+declarations expose both methods with a required string argument.
+
+The [browser probe](../../../node-compat/experimental/browser-probes/html/base64.mjs)
+agrees on Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2 for byte values,
+Unicode rejection, omitted padding, ASCII whitespace, unused trailing bits,
+malformed input, coercion, receivers, descriptors, and borrowed-method exception
+realms. No specification conflict was found. The new exposure regression first
+failed because both methods were absent.
+
+Eleven [Base64 cases](../../../test/browlet/scripting/base64.test.ts), eight
+existing global-scope cases, and 23 Infra codec cases pass in all six Node
+24.19.0/26.8.1/custom stock/compat configurations. No expected failures or skips
+were introduced. Platform type contracts cover both signatures.
+
+This slice needs no OS, editing, or layout dependency. Worker-global inclusion
+and forwarding remain the worker composition owner's explicit dependency, as
+recorded in §8.2. Eric subsequently deferred §§8.4–8.6 to Ged and moved Vin's
+audit to §8.7 below.
+
+## HTML §8.7: microtask queuing
+
+The [section's normative operation](https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html#microtask-queuing)
+queues the supplied callback, invokes it with no arguments, and reports any
+exception. The rest of the section explains ordering and gives examples; it
+adds no timer, parsing, rendering, or editing requirement. The local reference
+remains the refreshed `5fcc2318395821db61e353705e6368ad9a000af5` source.
+
+Window already forwards queueMicrotask() to WindowOrWorkerGlobalScopeMixin.
+Binding's VoidFunction conversion requires a callable, supplies undefined as
+the callback receiver, ignores its return value, and uses the declared report
+exception behavior. EventLoop owns the existing shared queue, nested-checkpoint
+guard, current-task state, and host wake-up.
+
+The mixin previously queued directly on EventLoop without the Window Document.
+It now uses the existing realm queueMicrotask() helper, which carries that
+association (null for non-Window realms). The focused regression first failed
+because the queued task's document was null. Document activity does not gate
+the initial checkpoint; retaining it matters if an internal algorithm later
+spins that microtask into an ordinary task. This does not extend the existing
+continuation-based spin API to suspend arbitrary author callbacks.
+
+The [new tests](../../../test/browlet/scripting/queue-microtask.test.ts) cover
+empty callback arguments, undefined receiver/return, ignored thenable results,
+required callable arguments, and retained task Document/activity metadata.
+Existing global-scope and checkpoint regressions cover Promise/DOM interleaving,
+nested FIFO delivery, receiver conversion, callback failure reporting, and
+continuing the queue after a failure. The 14 focused cases pass in all six
+Node 24.19.0/26.8.1/custom stock/compat configurations, without new expected
+failures or skips.
+
+The [browser probe](../../../node-compat/experimental/browser-probes/html/microtask-queuing.mjs)
+agrees in Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2 on an HTTPS
+Document: invocation, ignored results, ordering, and reported exception identity.
+An initial blank-page probe exposed a WebKit error-reporting context difference;
+using an ordinary same-origin Document removed it without changing expectations.
+The probe does not inspect browsers' internal task metadata.
+
+Worker-global inclusion/forwarding remains with the worker composition owner.
+The [checkpoint audit](#html-8173-microtask-checkpoint-audit) retains the missing
+IndexedDB transaction cleanup and Long Animation Frames timing consumers, and
+the native checkpoint limitations remain in
+[LIMITATIONS](../../LIMITATIONS.md#scheduling-and-callback-context).
+Those are existing owner dependencies, not prerequisites from §§8.4–8.6.
+Eric has left those three sections with Ged; §8.8 user prompts is next for Vin.
+
 ## Present
 
 | Source | Current responsibility |
@@ -2680,14 +2798,14 @@ evaluation and automation do not acquire this gate automatically.
 | Event handlers | Form-owner discovery, source locations, worker error handlers, and later event producers; content-attribute compilation, the global handler declarations, beforeunload conversion/return-value behavior, and Window/body/frameset targeting are connected |
 | DOM checkpoint consumers | Custom-element reactions; MutationObserver and signal-slot delivery already use the existing checkpoint |
 | Task routing/lifecycle | Worker restrictions and complete loop teardown; element-task routing through the retained relevant global is implemented |
-| Global utilities/timers | Origin/base64/image APIs and isolation exposure; worker suspension; handler timing; TrustedScript/CSP/classic-script string timers |
+| Global utilities/timers | Image APIs; worker-global inclusion/forwarding and suspension; handler timing; TrustedScript/CSP/classic-script string timers |
 | Rendering/idle | Idle API, callback delivery, timeouts, and cleanup are connected; AnimationFrameProvider and the production rendering/refresh host remain |
 | Workers/worklets | Real globals/settings, production callers of Agent allocation, execution readiness, termination, and engine enforcement |
 
-Secure-context exposure, structured cloning, Fetch, reportError, and function timers already
-have their reached Window implementations. Origin/base64 and the other global
-utilities above still need public implementations, even where their underlying
-records or primitives exist.
+Secure-context/isolation exposure, origin, Base64, structured cloning, Fetch,
+reportError, and function timers already have their reached Window implementations.
+The remaining global utilities above still need public implementations, even
+where their underlying records or primitives exist.
 
 The ordinary IDL-handler core used by onabort already exists. Extend it with the
 actual HTML consumers above; event-handler storage is not a task scheduler.

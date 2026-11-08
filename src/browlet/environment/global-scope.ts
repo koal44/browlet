@@ -1,10 +1,11 @@
-import type { InternalPromise } from '../../infra/index';
-import type { JSFunction } from '../../js-engine/index';
+import { forgivingBase64Decode, forgivingBase64Encode, type InternalPromise } from '../../infra/index';
+import { isomorphicDecode, type JSFunction } from '../../js-engine/index';
 import {
   arg, onError, defineInterfaceMixin, definePartialInterfaceMixin, defineTypedef,
+  DOMExceptionImpl, DOMExceptionNames,
   emptyDictionary, idlType, integer, op, reference, roAttr, tsType, union, xattr, type VoidFunction,
 } from '../../web-idl/core/index';
-import { areSameOriginDomain, type Origin } from '../../url/index';
+import { areSameOriginDomain, serializeOrigin, type Origin } from '../../url/index';
 import { fetchForGlobal, type FetchRequestInfo, type FetchRequestInit, type FetchResponse, type ResponseImpl } from '../../fetch/index';
 
 import { GlobalTimers, type TimerAction } from '../scripting/index';
@@ -64,6 +65,12 @@ export class WindowOrWorkerGlobalScopeMixin {
     });
   }
 
+  /** Serialized origin of this global's settings, independent of author replacement. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#dom-origin
+  get origin(): string {
+    return serializeOrigin(this.env.origin);
+  }
+
   /** Security classification of this global's environment. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#dom-issecurecontext
   get isSecureContext(): boolean {
@@ -78,6 +85,28 @@ export class WindowOrWorkerGlobalScopeMixin {
   // https://html.spec.whatwg.org/multipage/webappapis.html#windoworworkerglobalscope
   extractOrigin(entryEnv: BrowletEnvironment): Origin | null {
     return areSameOriginDomain(this.env.origin, entryEnv.origin) ? this.env.origin : null;
+  }
+
+  /** Encode a binary string whose code points each represent one byte. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#dom-btoa
+  btoa(data: string): string {
+    const bytes = new Uint8Array(data.length);
+    for (let index = 0; index < data.length; index++) {
+      const value = data.charCodeAt(index);
+      if (value > 0xff) {
+        throw new DOMExceptionImpl('The string contains a character outside U+0000–U+00FF', DOMExceptionNames.invalidCharacter);
+      }
+      bytes[index] = value;
+    }
+    return forgivingBase64Encode(bytes);
+  }
+
+  /** Decode forgiving Base64 into a string with one code point per byte. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#dom-atob
+  atob(data: string): string {
+    const bytes = forgivingBase64Decode(data);
+    if (bytes === null) throw new DOMExceptionImpl('The string is not valid Base64', DOMExceptionNames.invalidCharacter);
+    return isomorphicDecode(bytes);
   }
 
   setTimeout(
@@ -100,8 +129,11 @@ export class WindowOrWorkerGlobalScopeMixin {
     this.timers.clearTimer(id);
   }
 
+  /** Queue a converted callback with no arguments; Binding reports its exceptions. */
+  // https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html#dom-queuemicrotask
   queueMicrotask(callback: VoidFunction): void {
-    this.env.responsibleEventLoop.queueMicrotask(() => { callback(); });
+    // Preserve this global's Document if the microtask later spins into a task.
+    this.env.realm.queueMicrotask(() => { callback(); });
   }
 
   structuredClone(
@@ -236,9 +268,12 @@ export const timerHandlerIDL = defineTypedef({
 export const windowOrWorkerGlobalScopeIDL = defineInterfaceMixin({
   name: 'WindowOrWorkerGlobalScope',
   members: [
+    roAttr('origin', idlType.USVString, xattr('Replaceable')),
     roAttr('isSecureContext', idlType.boolean),
     roAttr('crossOriginIsolated', idlType.boolean),
     op('reportError', idlType.undefined, [arg('e', idlType.any)]),
+    op('btoa', idlType.DOMString, [arg('data', idlType.DOMString)]),
+    op('atob', idlType.ByteString, [arg('data', idlType.DOMString)]),
     op('setTimeout', idlType.long, [
       arg('handler', reference('TimerHandler'), onError('report')),
       arg('timeout', idlType.long, { default: integer(0), optional: true }),

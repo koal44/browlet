@@ -3403,9 +3403,13 @@ export interface Window extends EventTarget {
   requestIdleCallback(callback: IdleRequestCallback, options?: IdleRequestOptions): number;
   cancelIdleCallback(handle: number): void;
   getComputedStyle(elt: Element, pseudoElt?: string | null): CSSStyleProperties;
+  get origin(): string;
+  set origin(value: unknown);
   readonly isSecureContext: boolean;
   readonly crossOriginIsolated: boolean;
   reportError(e: any): void;
+  btoa(data: string): string;
+  atob(data: string): string;
   setTimeout(handler: string | Function, timeout?: number, ...arguments_: Array<any>): number;
   clearTimeout(id?: number): void;
   setInterval(handler: string | Function, timeout?: number, ...arguments_: Array<any>): number;

@@ -207,6 +207,11 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
     return (navigable.parent ?? navigable).activeWindowProxy;
   }
 
+  /** Serialized origin of this Window's environment. */
+  get origin(): string {
+    return this.getWindowOrWorkerGlobalScopeMixin().origin;
+  }
+
   /** Whether this Window's environment is a secure context. */
   get isSecureContext(): boolean {
     return this.getWindowOrWorkerGlobalScopeMixin().isSecureContext;
@@ -367,6 +372,16 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
     }
 
     return this.getAssociatedDocument().getStyleEngine().getComputedStyle(element);
+  }
+
+  /** Encode a binary string through the shared global-scope owner. */
+  btoa(data: string): string {
+    return this.getWindowOrWorkerGlobalScopeMixin().btoa(data);
+  }
+
+  /** Decode Base64 through the shared global-scope owner. */
+  atob(data: string): string {
+    return this.getWindowOrWorkerGlobalScopeMixin().atob(data);
   }
 
   /** Schedule a one-shot timer; Web IDL has already converted and defaulted the delay. */
