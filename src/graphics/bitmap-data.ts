@@ -1,6 +1,7 @@
 import { InternalError } from '../infra/index';
 import { getBufferSourceView, type JSEnvironment } from '../js-engine/index';
 import { DOMExceptionImpl, DOMExceptionNames } from '../web-idl/core/index';
+import type { MIMEType } from '../mime/index';
 
 import type { ImageBitmapCrop, ImageBitmapOptions, ResizeQuality } from './image-bitmap';
 import type { ImageDataPixelFormat, PredefinedColorSpace } from './image-data';
@@ -41,11 +42,7 @@ export class BitmapData {
   static create(
     source: BitmapDataSource, options: ImageBitmapOptions, crop: ImageBitmapCrop | undefined, env: JSEnvironment,
   ): BitmapData {
-    if (crop && (crop.sw === 0 || crop.sh === 0)) throw new env.realm.RangeError('ImageBitmap crop dimensions must be nonzero');
-    if (options.resizeWidth === 0 || options.resizeHeight === 0) {
-      throw new DOMExceptionImpl('ImageBitmap resize dimensions must be nonzero', DOMExceptionNames.invalidState);
-    }
-
+    BitmapData.validateDimensions(options, crop, env);
     const input = source.prepareBitmapData();
     const { sx, sy, sw, sh } = crop ?? { sx: 0, sy: 0, sw: input.width, sh: input.height };
     const width = Math.abs(sw);
@@ -69,6 +66,34 @@ export class BitmapData {
       output = output.convertAlpha(premultipliedAlpha, env);
     }
     return output;
+  }
+
+  /**
+   * Decode a complete image byte sequence and return independently owned, formatted pixels.
+   * mimeType is the image-context sniffing result; undefined means no type was identified.
+   * Unsupported/corrupt data or unavailable natural dimensions must fail with InvalidStateError.
+   */
+  // https://html.spec.whatwg.org/multipage/imagebitmap-and-animations.html#dom-createimagebitmap
+  static decode(
+    bytes: Uint8Array, _mimeType: MIMEType | undefined, options: ImageBitmapOptions,
+    crop: ImageBitmapCrop | undefined, env: JSEnvironment,
+  ): BitmapData {
+    BitmapData.validateDimensions(options, crop, env);
+    if (bytes.byteLength === 0) throw new DOMExceptionImpl('An empty Blob is not an image', DOMExceptionNames.invalidState);
+    // TODO(HTML §8.11.2, Blob source): Select a supported codec and the default animation image
+    // (or first frame), obtain natural dimensions, and apply source orientation, crop, resize,
+    // imageOrientation, colorSpaceConversion, and alpha formatting. Return origin-clean pixels
+    // with storage allocated through env.realm. A format signature alone is not successful decoding.
+    throw new InternalError('Image decoding and encoded-image formatting are not implemented (HTML §8.11.2)');
+  }
+
+  /** Validate converted dimensions before accessing any source or starting a Blob read. */
+  // https://html.spec.whatwg.org/multipage/imagebitmap-and-animations.html#dom-createimagebitmap
+  static validateDimensions(options: ImageBitmapOptions, crop: ImageBitmapCrop | undefined, env: JSEnvironment): void {
+    if (crop && (crop.sw === 0 || crop.sh === 0)) throw new env.realm.RangeError('ImageBitmap crop dimensions must be nonzero');
+    if (options.resizeWidth === 0 || options.resizeHeight === 0) {
+      throw new DOMExceptionImpl('ImageBitmap resize dimensions must be nonzero', DOMExceptionNames.invalidState);
+    }
   }
 
   /** Produce plain transportable state, retaining the pixel storage; cloning must copy those bytes. */

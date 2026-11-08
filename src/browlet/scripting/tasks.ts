@@ -35,6 +35,9 @@ export const permissionsTaskSource = createTaskSource('permissions');
 // https://w3c.github.io/clipboard-apis/#clipboard-task-source
 export const clipboardTaskSource = createTaskSource('clipboard');
 
+// https://html.spec.whatwg.org/multipage/imagebitmap-and-animations.html#bitmap-task-source
+export const bitmapTaskSource = createTaskSource('bitmap');
+
 // Reporting leaves the task source unnamed; WebKit likewise gives it a distinct source.
 export const reportingTaskSource = createTaskSource('reporting');
 
@@ -59,6 +62,7 @@ export const taskSources: Record<TaskSourceKey, TaskSource> = {
   storage: storageTaskSource,
   permissions: permissionsTaskSource,
   clipboard: clipboardTaskSource,
+  bitmap: bitmapTaskSource,
   report: reportingTaskSource,
   'performance-timeline': performanceTimelineTaskSource,
   automation: automationTaskSource,

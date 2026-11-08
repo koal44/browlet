@@ -1,4 +1,6 @@
-import { forgivingBase64Decode, forgivingBase64Encode, type InternalPromise } from '../../infra/index';
+import {
+  forgivingBase64Decode, forgivingBase64Encode, internalType, type InternalPromise, type InternalPromiseWithResolvers,
+} from '../../infra/index';
 import { isomorphicDecode, type JSFunction } from '../../js-engine/index';
 import {
   arg, onError, defineInterfaceMixin, definePartialInterfaceMixin, defineTypedef,
@@ -6,6 +8,9 @@ import {
   emptyDictionary, idlType, integer, op, reference, roAttr, tsType, union, xattr, type VoidFunction,
 } from '../../web-idl/core/index';
 import { areSameOriginDomain, serializeOrigin, type Origin } from '../../url/index';
+import { maximumResourceHeaderLength, parseMIMEType, sniffMIMETypeInImageContext } from '../../mime/index';
+import { BlobImpl } from '../../file/index';
+import { BitmapData, ImageBitmapImpl, type ImageDataImpl, type ImageBitmapCrop, type ImageBitmapOptions } from '../../graphics/index';
 import { fetchForGlobal, type FetchRequestInfo, type FetchRequestInit, type FetchResponse, type ResponseImpl } from '../../fetch/index';
 
 import { GlobalTimers, type TimerAction } from '../scripting/index';
@@ -136,6 +141,34 @@ export class WindowOrWorkerGlobalScopeMixin {
     this.env.realm.queueMicrotask(() => { callback(); });
   }
 
+  /**
+   * Snapshot an in-memory source now, or read a Blob in parallel; deliver through this global's bitmap task.
+   * The optional crop record carries the second overload's four converted longs.
+   * Internal only until the complete ImageBitmapSource union and its remaining owners are connected.
+   */
+  // https://html.spec.whatwg.org/multipage/imagebitmap-and-animations.html#dom-createimagebitmap
+  createImageBitmap(
+    image: ImageDataImpl | ImageBitmapImpl | BlobImpl, options: ImageBitmapOptions, crop?: ImageBitmapCrop,
+  ): InternalPromise<ImageBitmapImpl> {
+    const env = this.env;
+    const result = env.InternalPromise.withResolvers(reference(ImageBitmapImpl));
+    try {
+      if (BlobImpl.is(image)) {
+        BitmapData.validateDimensions(options, crop, env);
+        this.#createImageBitmapFromBlob(image, options, crop, result);
+        return result.promise;
+      }
+      // Preparation validates crop/resize dimensions before accessing the source's live pixels.
+      const bitmap = ImageBitmapImpl.create(BitmapData.create(image, options, crop, env), env);
+      // SPEC_CLASH(imagebitmap-task-delivery): Follow HTML/Chromium/Firefox's queued fulfillment; WebKit fulfills in-memory reads immediately.
+      env.queueTask('bitmap', () => { result.resolve(bitmap); });
+    } catch (error) {
+      // HTML returns an already rejected Promise for invalid in-memory sources or dimensions.
+      result.reject(error);
+    }
+    return result.promise;
+  }
+
   structuredClone(
     value: unknown,
     options: StructuredSerializeOptions = { transfer: [] },
@@ -221,6 +254,37 @@ export class WindowOrWorkerGlobalScopeMixin {
   setAssociatedDocument(document: DocumentImpl): void {
     this.timers.setAssociatedDocument(document);
   }
+
+  /** Read retained Blob bytes without involving its source global's file-reading task queue. */
+  // https://html.spec.whatwg.org/multipage/imagebitmap-and-animations.html#dom-createimagebitmap
+  #createImageBitmapFromBlob(
+    image: BlobImpl, options: ImageBitmapOptions, crop: ImageBitmapCrop | undefined,
+    result: InternalPromiseWithResolvers<ImageBitmapImpl>,
+  ): void {
+    const env = this.env;
+    const data = image.data;
+    const suppliedType = parseMIMEType(image.type) ?? undefined;
+    const capturedOptions = { ...options };
+    const capturedCrop = crop === undefined ? undefined : { ...crop };
+    const reject = (error: unknown): void => { env.queueTask('bitmap', () => { result.reject(error); }); };
+    const readFailed = (): void => {
+      reject(new DOMExceptionImpl('The Blob could not be read as an image', DOMExceptionNames.invalidState));
+    };
+    env.runInParallel(() => {
+      try {
+        const P = env.userAgent.HostPromise;
+        // BlobData.read() returns a typed host Promise; this only selects host continuation ownership.
+        P.fromNative(data.read(), (bytes) => bytes as Uint8Array, internalType<Uint8Array>()).observe((bytes) => {
+          try {
+            const mimeType = sniffMIMETypeInImageContext(suppliedType, bytes.subarray(0, maximumResourceHeaderLength));
+            const pixels = BitmapData.decode(bytes, mimeType, capturedOptions, capturedCrop, env);
+            const bitmap = ImageBitmapImpl.create(pixels, env);
+            env.queueTask('bitmap', () => { result.resolve(bitmap); });
+          } catch (error) { reject(error); }
+        }, readFailed);
+      } catch { readFailed(); }
+    });
+  }
 }
 
 /** Converted timer callback or source text. */
@@ -255,10 +319,10 @@ export const timerHandlerIDL = defineTypedef({
  *
  *   undefined queueMicrotask(VoidFunction callback);
  *
- *   TODO: Shared graphics supplies ImageBitmap lifetime and in-memory source
- *   cropping/flip/alpha conversion and all four resize qualities. The factory still needs
- *   the complete source union/adapters and bitmap-task settlement
- *   (see ../graphics/ROADMAP.md).
+ *   TODO: The mixin implements in-memory creation, Blob reads, and bitmap-task settlement.
+ *   Encoded-image decoding/formatting remains an explicit BitmapData.decode dependency.
+ *   Author exposure still needs the complete ImageBitmapSource union, overload
+ *   conversion, and source adapters (see ../graphics/ROADMAP.md).
  *   Promise<ImageBitmap> createImageBitmap(ImageBitmapSource image,
  *     optional ImageBitmapOptions options = {});
  *   Promise<ImageBitmap> createImageBitmap(ImageBitmapSource image,

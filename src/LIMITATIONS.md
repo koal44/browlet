@@ -1280,7 +1280,12 @@ worker forwarding of the public structuredClone API remains HTML §10.3 work.
 dimensions, close, cloning, and transfer for prepared owned pixels. Closed and
 tainted bitmaps reject cloning/transfer; successful transfer clears the sender.
 There is no author constructor, and createImageBitmap remains unexposed until
-its source and formatting flow is implemented. Internal preparation supports
+its complete source union and adapters are available. The global mixin's internal
+ImageData/ImageBitmap entry snapshots during the call and delivers a typed Promise
+on the receiving global's bitmap task source. Its Blob branch now reads bytes in
+parallel, sniffs the image MIME type, and queues result delivery, but nonempty
+inputs reach the named throwing BitmapData.decode dependency. Empty inputs and
+backing-read failures reject with InvalidStateError. Internal preparation supports
 ImageData/ImageBitmap snapshots, cropping, transparent padding, and vertical
 flipping, all four resize qualities, and unorm8/float16 alpha conversion with
 the approved sampling, rounding, and zero-alpha rules. Format/color/origin-clean

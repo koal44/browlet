@@ -36,7 +36,7 @@ is internal; its author-facing factory remains separate work.
 | Work | Contract to establish |
 | --- | --- |
 | ImageData | Implemented pixel storage, dimensions, formats, color-space labels, constructor validation, and cloning; canvas consumers remain separate |
-| ImageBitmap | Implemented lifetime and in-memory cropping/flip; resizing, alpha conversion, other source owners, and async creation remain pending |
+| ImageBitmap | Implemented lifetime, in-memory cropping/flip/resize/alpha conversion, and internal async creation/Blob reading; decoder, other source owners, and public factory exposure remain pending |
 | Geometry | Reuse [geometry](../geometry/ROADMAP.md) for coordinate/matrix operations; no independent DOMMatrix family |
 | Color/output | Keep CSS value computation in Stylelet; image/output color conversion, supported profiles, and rasterization need explicit consumers/backend capabilities |
 | Painting/compositing | Define drawing inputs and retained output only when a concrete renderer/canvas consumer exists; this folder does not establish a complete paint pipeline |
@@ -328,10 +328,18 @@ source preservation, and resize-before-alpha integration.
 
 ## Next implementation and checks
 
-The next work is the author-facing creation flow: review the complete source
-union, then connect conversion, source usability/extraction, and bitmap-task
-settlement to their actual owners. ImageData/ImageBitmap pixel preparation is
-available; element, canvas, video, and Blob decoding dependencies remain below.
+The [global mixin's internal creation flow](../browlet/graphics/ROADMAP.md#internal-in-memory-creation)
+now connects ImageData/ImageBitmap preparation to typed Promises and bitmap-task
+settlement. The [Blob branch](../browlet/graphics/ROADMAP.md#blob-reading-and-decoder-boundary)
+also connects byte reading and MIME sniffing to the named throwing
+BitmapData.decode dependency. This method must eventually select/decode the
+default image/frame, obtain natural dimensions, and apply orientation, color,
+crop, resize and alpha formatting; it does not currently decode nonempty input.
+The complete source-union review found SVGImageElement, OffscreenCanvas,
+and VideoFrame absent, alongside missing image/canvas/media pixel extraction.
+Next agree those source adapters and interface dependencies before exposing the
+author-facing overloads. Choose the first supported format and decoder/backend
+before replacing the decoding dependency.
 Do not expose a reduced ImageBitmapSource union as though it were the complete IDL.
 
 The [Browlet dependency map](../browlet/graphics/ROADMAP.md#imagebitmap-creation-dependencies)
