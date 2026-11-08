@@ -17,6 +17,7 @@ import { Duration } from '../../../src/timing/clock';
 import { BlobImpl } from '../../../src/file/blob';
 import { parseURL } from '../../../src/url/index';
 import { createManualUserAgent } from '../../support/browlet-agent';
+import { collectGarbage } from '../../support/garbage-collection';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -71,6 +72,7 @@ describe('Document destruction', () => {
     expect(document.browsingContext).toBeNull();
     expect(traversable.activeDocument).toBeNull();
     expect(document.isFullyActive()).toBe(false);
+    expect(env.realm.agent.windowObjects.has(env.window)).toBe(false);
     expect(global.reportingObservers.size).toBe(0);
     expect(global.reportBuffer).toEqual([]);
     expect(global.reports).toEqual([]);
@@ -99,6 +101,16 @@ describe('Document destruction', () => {
     expect(traversable.activeDocument).toBe(current);
     expect(currentEntry.document).toBe(current);
     expect(current.isFullyActive()).toBe(true);
+  });
+
+  it('collects a destroyed Document while its replacement remains alive', async () => {
+    const { traversable, collected } = createCollectibleHistoryDocument();
+
+    await collectGarbage(collected);
+
+    expect(collected.every((target) => target.deref() === undefined)).toBe(true);
+    expect(traversable.activeDocument!.URL).toBe('https://example.test/next');
+    expect(traversable.activeDocument!.isFullyActive()).toBe(true);
   });
 
   it('clears shared retained state even when the latest entry now references a replacement state', () => {
@@ -155,6 +167,7 @@ describe('Document destruction', () => {
     expect(retired.browsingContext).toBeNull();
     expect(initialEntry.document).toBeNull();
     expect(traversable.activeDocument).toBe(current);
+    expect(env.realm.agent.windowObjects.has(env.window)).toBe(true);
     expect(canceled).not.toHaveBeenCalled();
     expect(destroyed).not.toHaveBeenCalled();
     expect(disentangle).not.toHaveBeenCalled();
@@ -165,6 +178,7 @@ describe('Document destruction', () => {
     expect(work).toHaveBeenCalledOnce();
     env.queueTask('navigation-and-traversal', { run: () => current.destroy() });
     while (loop.runTaskTurn()) { /* Retiring the final Document does destroy the global. */ }
+    expect(env.realm.agent.windowObjects.has(env.window)).toBe(false);
     expect(destroyed).toHaveBeenCalledOnce();
     expect(disentangle).toHaveBeenCalledOnce();
     expect(global.timers.hasOutstandingTimers()).toBe(false);
@@ -375,6 +389,17 @@ function createHistoryDocuments() {
   const currentEntry = traversable.createHistoryEntry(current, nextParams);
   traversable.finalizeCrossDocumentNavigation('push', nextParams.userInvolvement, currentEntry);
   return { traversable, retired, firstEntry, current, currentEntry };
+}
+
+function createCollectibleHistoryDocument() {
+  const { traversable, retired } = createHistoryDocuments();
+  const loop = retired.env.responsibleEventLoop;
+  loop.queueTask(navigationAndTraversalTaskSource, null, { run: () => retired.destroy() });
+  loop.runTaskTurn();
+  return {
+    traversable,
+    collected: [new WeakRef(retired), new WeakRef(retired.env), new WeakRef(retired.env.realm)],
+  };
 }
 
 const corpBody = {

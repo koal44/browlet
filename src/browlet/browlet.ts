@@ -150,6 +150,8 @@ export class Browlet {
     // Document initialization has attached the Window selected for this navigation.
     const realm = document.getRelevantGlobalObject()!.env.realm;
     const historyEntry = this.#traversable.createHistoryEntry(document, navigationParams, source);
+    // TODO(HTML §7.4 / §7.5): Connect outgoing unload/cache/destruction coordination.
+    // This convenience path commits directly and retains replaced Documents.
     this.#traversable.finalizeCrossDocumentNavigation(
       historyHandling,
       navigationParams.userInvolvement,

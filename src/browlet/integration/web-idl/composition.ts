@@ -54,6 +54,9 @@ export function createWindowEnvironment(
     agent, userAgent, creationURL, origin, parent, topLevelCreationURL, topLevelOrigin,
     reservedEnv = null, previousRealm,
   } = initialization;
+  // Retain the shared proxy, not the previous realm, in composition closures.
+  // Otherwise the installed event-handler factory keeps every earlier page alive.
+  const previousWindowProxy = previousRealm?.windowProxy;
   // An existing reservation carries the fixed security decision; without one,
   // share the incoming-Window calculation used before agent selection.
   const baseEnv = reservedEnv ?? new BrowletEnvironmentBase({
@@ -128,7 +131,7 @@ export function createWindowEnvironment(
       });
     },
     createGlobalThisValue: () => {
-      realm.windowProxy = previousRealm?.windowProxy ?? new WindowProxyHandle(
+      realm.windowProxy = previousWindowProxy ?? new WindowProxyHandle(
         realm.globalAllocation ? realm.globalProxy : undefined,
       );
       return realm.windowProxy.platform;
@@ -151,6 +154,9 @@ export function createWindowEnvironment(
   }
   if (reservedEnv !== null) reservedEnv.id = '';
   realm.windowImplementation.setWindowOrWorkerGlobalScopeMixin(new WindowOrWorkerGlobalScopeMixin(env));
+  // Initial about:blank replacement keeps the global alive; only its final
+  // Document runs these steps and retires the Agent registration.
+  env.addDestructionSteps(() => { agent.windowObjects.delete(realm.windowImplementation); });
   installRealmHostHooks(env, getCodeForEval);
   installWasmIntrinsics(context);
   return env;
