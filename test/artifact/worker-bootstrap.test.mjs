@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { join, resolve, sep } from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { Worker } from 'node:worker_threads';
+import { MessageChannel, Worker } from 'node:worker_threads';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 // Relocate only published files. Installed dependencies are available above this
@@ -35,15 +35,8 @@ for (const extension of ['mjs', 'cjs']) {
   });
 
   for (const kind of ['dedicated', 'shared']) {
-    test(`relocated ${extension} package is its own ${kind} worker entry`, { timeout: 30_000 }, async (t) => {
-      const { thread, errors } = start(t, entryPath, { jsThreadEntry: entryURL, data: { kind, data: undefined, creatorEnvSnapshot: null, script: null } });
-      assert.deepEqual(await once(thread, 'message'), [{ type: 'ready' }]);
-      assert.equal(await thread.terminate(), 1);
-      assert.deepEqual(errors, []);
-    });
-
-    test(`relocated ${extension} package composes its ${kind} inside environment`, { timeout: 30_000 }, async (t) => {
-      const { thread, errors } = start(t, entryPath, { jsThreadEntry: entryURL, data: configuredStartup(kind) });
+    test(`relocated ${extension} package is its own ${kind} worker entry and composes its environment`, { timeout: 30_000 }, async (t) => {
+      const { thread, errors } = start(t, entryPath, { jsThreadEntry: entryURL, data: configuredStartup(t, kind) });
       // Readiness is emitted only after production realm/environment composition.
       // There is no source fixture or replacement Window/UserAgent in this isolate.
       assert.deepEqual(await once(thread, 'message'), [{ type: 'ready' }]);
@@ -53,7 +46,7 @@ for (const extension of ['mjs', 'cjs']) {
   }
 
   test(`${extension} production startup requests its root and reports a rejected response`, { timeout: 30_000 }, async (t) => {
-    const { thread, errors } = start(t, entryPath, { jsThreadEntry: entryURL, data: configuredStartup('dedicated') });
+    const { thread, errors } = start(t, entryPath, { jsThreadEntry: entryURL, data: configuredStartup(t, 'dedicated') });
     const messages = on(thread, 'message');
     t.after(async () => { await messages.return(); });
     assert.deepEqual((await messages.next()).value, [{ type: 'ready' }]);
@@ -72,7 +65,7 @@ for (const extension of ['mjs', 'cjs']) {
   });
 
   test(`${extension} production startup retains the accepted-response service dependency`, { timeout: 30_000 }, async (t) => {
-    const startup = configuredStartup('dedicated');
+    const startup = configuredStartup(t, 'dedicated');
     const { thread, exited } = start(t, entryPath, { jsThreadEntry: entryURL, data: startup });
     const messages = on(thread, 'message');
     t.after(async () => { await messages.return(); });
@@ -94,7 +87,7 @@ for (const extension of ['mjs', 'cjs']) {
   });
 
   test(`${extension} startup can be cancelled before host readiness`, { timeout: 30_000 }, async (t) => {
-    const { thread, errors } = start(t, entryPath, { jsThreadEntry: entryURL, data: { kind: 'dedicated', creatorEnvSnapshot: null, script: null } });
+    const { thread, errors } = start(t, entryPath, { jsThreadEntry: entryURL, data: configuredStartup(t, 'dedicated') });
     const messages = [];
     thread.on('message', (message) => { messages.push(message); });
     // Native cancellation before any execution may report normal exit rather
@@ -105,7 +98,7 @@ for (const extension of ['mjs', 'cjs']) {
   });
 
   test(`${extension} worker reports the unfinished service/execution boundary`, { timeout: 30_000 }, async (t) => {
-    const { thread, exited } = start(t, entryPath, { jsThreadEntry: entryURL, data: configuredStartup('dedicated') });
+    const { thread, exited } = start(t, entryPath, { jsThreadEntry: entryURL, data: configuredStartup(t, 'dedicated') });
     await once(thread, 'message');
     const failure = once(thread, 'error');
     thread.postMessage({ type: 'message', data: { type: 'start', url: 'https://example.test/worker.js' } });
@@ -116,7 +109,7 @@ for (const extension of ['mjs', 'cjs']) {
 
   for (const message of [{ type: 'unexpected' }, {}]) {
     test(`${extension} worker diagnoses unknown input kind: ${JSON.stringify(message)}`, { timeout: 30_000 }, async (t) => {
-      const { thread, exited } = start(t, entryPath, { jsThreadEntry: entryURL, data: { kind: 'dedicated', creatorEnvSnapshot: null, script: null } });
+      const { thread, exited } = start(t, entryPath, { jsThreadEntry: entryURL, data: configuredStartup(t, 'dedicated') });
       await once(thread, 'message');
       const failure = once(thread, 'error');
       // Deliberately bypass the typed host sender to test the receive boundary.
@@ -142,7 +135,17 @@ for (const extension of ['mjs', 'cjs']) {
 }
 
 /** Supply only the private wire records; the relocated bundle must construct all implementations itself. */
-function configuredStartup(kind) {
+function configuredStartup(t, kind) {
+  const channel = new MessageChannel();
+  const state = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
+  t.after(() => { channel.port1.close(); channel.port2.close(); });
+  // These bundle tests exercise startup, not browser services. Fail a surprise
+  // synchronous service request explicitly instead of leaving the worker waiting.
+  channel.port1.on('message', (message) => {
+    channel.port1.postMessage({ type: 'response', result: null, error: `Unexpected artifact service request: ${message.type}` });
+    Atomics.store(state, 0, 2); // The private service protocol's replied state.
+    Atomics.notify(state, 0);
+  });
   const host = { kind: 'domain', value: 'creator.test' };
   const origin = { kind: 'tuple', scheme: 'https', host, port: null, domain: null };
   const url = {
@@ -150,9 +153,12 @@ function configuredStartup(kind) {
     path: ['worker.js'], query: null, fragment: null, blobURLEntry: null,
   };
   return {
-    kind, data: undefined,
-    scriptingPolicy: new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)).fill(1),
-    script: { url, type: 'classic', credentials: 'same-origin', name: 'artifact', environmentId: 'worker-client', extendedLifetime: false },
+    kind, data: undefined, ownerState: 'active',
+    userAgent: {
+      port: channel.port2, state,
+      scriptingPolicy: new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)).fill(1),
+    },
+    script: { url, origin, type: 'classic', credentials: 'same-origin', name: 'artifact', environmentId: 'worker-client', extendedLifetime: false },
     creatorEnvSnapshot: {
       environmentId: 'creator-client', agentClusterId: 'creator-cluster', crossOriginIsolationMode: 'none', isOriginKeyed: false,
       creationURL: url, apiBaseURL: url, topLevelCreationURL: url, origin, topLevelOrigin: origin,
@@ -170,7 +176,8 @@ function configuredStartup(kind) {
 function start(t, entryPath, workerData) {
   // No eval, source checkout, TypeScript loader, or caller-supplied bootstrap in
   // the production entry. The foreign-worker test uses its own ordinary file.
-  const thread = new Worker(entryPath, { workerData });
+  const transferList = workerData.data?.userAgent === undefined ? [] : [workerData.data.userAgent.port];
+  const thread = new Worker(entryPath, { workerData, transferList });
   const errors = [];
   thread.on('error', (error) => { errors.push(error); });
   const exited = new Promise((resolveExit) => { thread.once('exit', resolveExit); });

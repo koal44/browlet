@@ -18,7 +18,10 @@ The §9 APIs were implemented for local realms. The §10 integration sweep on
   task queues, including disabled startup queues, target-realm reconstruction,
   microtask checkpoints, messageerror, and shutdown cleanup. Author-created
   ports also move between isolates, carrying pending HTML deliveries and nested
-  ports/buffers. The public Worker startup connection remains unfinished.
+  ports/buffers. Configured dedicated startup now establishes this transport
+  automatically before returning to its creator, retaining immediate messages.
+  Production queue enablement and public Worker startup still require owner
+  monitoring and initial script execution.
 - **BroadcastChannel:** worker eligibility uses the existing closing/suspendable
   checks. The UserAgent-owned registry is still local; discovery, delivery, and
   cleanup across isolates require the shared-service transport.

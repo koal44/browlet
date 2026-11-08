@@ -62,11 +62,11 @@ export class WorkerImpl extends EventTargetImpl {
     const workerURL = this.env.encodingParseURL(compliantScriptURL);
     if (workerURL === null) throw new DOMExceptionImpl('Invalid Worker URL', 'SyntaxError');
     // TODO(HTML §§10.2.4, 10.2.6.3): Run a worker in parallel with workerURL, this.env,
-    // this.outsidePort, and options. The production isolate now composes its environment
-    // and handles network/policy rejection, but still needs shared UserAgent services,
-    // script creation/execution, and owner monitoring. Connect the hidden message channel
-    // before execution. Supply this Worker to
-    // WorkerThread before returning from construction so immediate termination can reach it.
+    // this.outsidePort, and options. The host now composes the inside environment,
+    // loads the script graph, and connects the hidden channel. Owner monitoring,
+    // script execution, and later queue enablement remain required. Supply this
+    // Worker and the script inputs to WorkerThread before returning so immediate
+    // postMessage() and terminate() reach the same execution owner.
     throw new InternalError('Dedicated worker startup is not implemented');
   }
 

@@ -3272,6 +3272,23 @@ export interface WorkerGlobalScope extends EventTarget {
   ononline: EventHandlerNonNull | null;
   onrejectionhandled: EventHandlerNonNull | null;
   onunhandledrejection: EventHandlerNonNull | null;
+  get origin(): string;
+  set origin(value: unknown);
+  readonly isSecureContext: boolean;
+  readonly crossOriginIsolated: boolean;
+  reportError(e: any): void;
+  btoa(data: string): string;
+  atob(data: string): string;
+  setTimeout(handler: string | Function, timeout?: number, ...arguments_: Array<any>): number;
+  clearTimeout(id?: number): void;
+  setInterval(handler: string | Function, timeout?: number, ...arguments_: Array<any>): number;
+  clearInterval(id?: number): void;
+  queueMicrotask(callback: VoidFunction): void;
+  structuredClone<T = any>(value: T, options?: StructuredSerializeOptions): T;
+  get performance(): Performance;
+  set performance(value: unknown);
+  readonly trustedTypes: TrustedTypePolicyFactory;
+  fetch(input: Request | string, init?: RequestInit): Promise<Response>;
 }
 
 export interface WorkerGlobalScopeConstructor extends Ctor<EventTargetConstructor> {

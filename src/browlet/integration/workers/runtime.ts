@@ -27,13 +27,13 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
   /** Actual execution agent and local cluster membership owned by this isolate. */
   agent: DedicatedWorkerAgent | SharedWorkerAgent;
   /** Copied creator values, not the new worker's own environment or a remote Environment. */
-  creatorEnvSnapshot: CreatorEnvironmentSnapshot | null;
+  creatorEnvSnapshot: CreatorEnvironmentSnapshot;
   /** Creator policies reconstructed locally; response processing still selects the worker's own policies. */
-  creatorPolicyContainer: PolicyContainer | null;
+  creatorPolicyContainer: PolicyContainer;
   /** Initial script inputs and reserved identity; no live Fetch client crosses isolates. */
-  script: WorkerScriptStartup | null;
-  /** Real inside settings for configured script startup; null for agent-only startup. */
-  environment: WorkerEnvironment | null;
+  script: WorkerScriptStartup;
+  /** Real inside environment, composed before the runtime accepts any input. */
+  environment: WorkerEnvironment;
   /** Cloneable inputs selected by the startup caller. */
   data: unknown;
   /** Private channel to the creator's host execution owner. */
@@ -50,43 +50,35 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
   #nextModuleFetchId = 0;
   /** Local response consumers, never cloned into the creator isolate. */
   #moduleResponses = new Map<number, ModuleScriptResponseConsumer>();
-  /** Native messages can wait here before startup has composed the inside global. */
+  /** Received native endpoint retained until the dedicated global takes ownership. */
   #messagePort: JSMessagePort<MessagePortTransportMessage> | null = null;
   /** Private access to the browser owner; close it before disconnecting the control endpoint. */
-  #userAgent: WorkerUserAgent | null = null;
+  #userAgent: WorkerUserAgent;
 
   /** Read the host startup envelope and allocate this isolate's agent, loop, and cluster membership. */
-  constructor(createEnvironment: (initialization: WorkerEnvironmentSnapshotInit) => WorkerEnvironment) {
+  constructor(createEnvironment: (init: WorkerEnvironmentSnapshotInit) => WorkerEnvironment) {
     const unsafeWorkerCreationTime = unsafeSharedCurrentTime().milliseconds;
     this.#endpoint = new JSThreadEndpoint<WorkerThreadProtocol>();
-    const initialization = this.#endpoint.data;
-    const loop = new EventLoop({ requestTurn: queueNodeTask });
-    this.agent = initialization.kind === 'shared' ? new SharedWorkerAgent(loop) : new DedicatedWorkerAgent(loop);
-    this.creatorEnvSnapshot = initialization.creatorEnvSnapshot;
-    this.script = initialization.script;
-    this.creatorPolicyContainer = this.creatorEnvSnapshot === null
-      ? null : PolicyContainer.fromSnapshot(this.creatorEnvSnapshot.policyContainer);
-    if (this.creatorEnvSnapshot !== null) {
-      const creator = this.creatorEnvSnapshot;
-      const shared = this.agent instanceof SharedWorkerAgent;
-      const cluster = shared ? new AgentCluster() : new AgentCluster(creator.crossOriginIsolationMode, creator.agentClusterId);
-      cluster.isOriginKeyed = shared || creator.isOriginKeyed;
-      cluster.add(this.agent);
-    }
-    this.data = initialization.data;
-    if (this.script === null) {
-      this.environment = null;
-    } else {
-      if (this.creatorEnvSnapshot === null) throw new InternalError('Worker environment requires its creator snapshot');
-      if (initialization.userAgent === null) throw new InternalError('Worker environment requires its browser service connection');
-      this.#userAgent = new WorkerUserAgent(initialization.userAgent);
-      this.environment = createEnvironment({
-        ...this.script, agent: this.agent, creatorEnvSnapshot: this.creatorEnvSnapshot, unsafeWorkerCreationTime,
-        userAgent: this.#userAgent,
-      });
-      if (this.agent instanceof DedicatedWorkerAgent) {
-        this.agent.globalScope!.reportErrorToOwner = (errorInfo) => this.reportError(errorInfo);
-      }
+    const init = this.#endpoint.data;
+    const loop = new EventLoop({ requestTurn: queueNodeTask, onWorkerFinish: () => this.disconnect() });
+    this.agent = init.kind === 'shared' ? new SharedWorkerAgent(loop) : new DedicatedWorkerAgent(loop);
+    this.creatorEnvSnapshot = init.creatorEnvSnapshot;
+    this.script = init.script;
+    this.creatorPolicyContainer = PolicyContainer.fromSnapshot(this.creatorEnvSnapshot.policyContainer);
+    const creator = this.creatorEnvSnapshot;
+    const shared = this.agent instanceof SharedWorkerAgent;
+    const cluster = shared ? new AgentCluster() : new AgentCluster(creator.crossOriginIsolationMode, creator.agentClusterId);
+    cluster.isOriginKeyed = shared || creator.isOriginKeyed;
+    cluster.add(this.agent);
+    this.data = init.data;
+    this.#userAgent = new WorkerUserAgent(init.userAgent);
+    this.environment = createEnvironment({
+      ...this.script, agent: this.agent, creatorEnvSnapshot: this.creatorEnvSnapshot, unsafeWorkerCreationTime,
+      userAgent: this.#userAgent,
+    });
+    this.environment.globalImplementation.remoteOwnerState = init.ownerState;
+    if (this.agent instanceof DedicatedWorkerAgent) {
+      this.agent.globalScope!.reportErrorToOwner = (errorInfo) => this.reportError(errorInfo);
     }
   }
 
@@ -109,15 +101,16 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
       throw new InternalError('Worker shared services and script execution are not implemented');
     }, (result) => this.loadScript(result, (script) => {
       if (script === null || script.errorToRethrow !== null) {
-        this.environment!.discard();
+        this.environment.discard();
         this.#endpoint.send({ type: 'script-fetch-failed' });
         return;
       }
-      // TODO(HTML §10.2.4): Connect owner monitoring and remaining shared services
+      // TODO(HTML §§7.5, 10.2.4): Connect execution suspension and shared/nested
+      // ownership, alongside the remaining shared services,
       // before setting execution readiness and running the prepared script.
       throw new InternalError('Worker script execution requires owner monitoring and shared services');
     }));
-    if (this.script !== null) this.fetchScript();
+    this.fetchScript();
   }
 
   /** Admit internal commands through this agent's task loop, then acknowledge completed host setup. */
@@ -127,6 +120,18 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
     this.#onScriptResponse = onScriptResponse;
     this.#endpoint.listen((message) => {
       switch (message.type) {
+        case 'owner-activity':
+          // This updates lifetime eligibility, not execution suspension. The
+          // backend must still stop running script as well as queued callbacks.
+          this.environment.globalImplementation.remoteOwnerState = message.fullyActive ? 'active' : 'inactive';
+          break;
+        case 'owner-removed':
+          // Orphan closing sets the flag without discarding already queued work.
+          // The existing loop tail performs cleanup after its final checkpoint.
+          this.environment.globalImplementation.remoteOwnerState = null;
+          this.environment.globalImplementation.closing = true;
+          this.agent.eventLoop.notifyTaskRunnabilityChanged();
+          break;
         case 'connect-port':
           this.agent.eventLoop.queueTask(workerHostTaskSource, null, () => {
             this.#messagePort?.close();
@@ -175,7 +180,6 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
     if (!this.#started || this.#onScriptResponse === undefined) {
       throw new InternalError('Worker script response consumer is not connected');
     }
-    if (this.script === null) throw new InternalError('Worker initial script is not configured');
     if (this.#scriptRequested) throw new InternalError('Worker initial script was already requested');
     this.#scriptRequested = true;
     this.#endpoint.send({ type: 'fetch-script' });
@@ -186,7 +190,6 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
   loadScript(result: WorkerScriptResponse, onComplete: (script: Script | null) => void): void {
     const env = this.environment;
     const startup = this.script;
-    if (env === null || startup === null) throw new InternalError('Worker script response requires its inside environment and startup');
     const response = env.initializeScriptResponse(result);
     if (response.type === 'error') { onComplete(null); return; }
     if (startup.type === 'classic') {
@@ -232,7 +235,7 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
     this.#moduleResponses.set(id, { callback: onResponse, entry });
     const url = copyURL(request.url);
     url.blobURLEntry = null;
-    const blobEntryId = this.#userAgent?.getBlobEntryId(entry) ?? null;
+    const blobEntryId = this.#userAgent.getBlobEntryId(entry);
     try { this.#endpoint.send({ type: 'fetch-module', id, request: { ...request, url, blobEntryId } }); }
     catch (error) {
       this.#moduleResponses.delete(id);
@@ -240,8 +243,7 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
     }
   }
 
-  /** Attach the waiting native endpoint once startup has supplied the dedicated global. */
-  // Call after environment composition; the endpoint may arrive before or after it.
+  /** Attach the received native endpoint to the composed dedicated global. */
   // Neither attachment nor host reception enables the inside HTML message queue.
   connectMessagePort(): void {
     const global = this.agent instanceof DedicatedWorkerAgent ? this.agent.globalScope : undefined;
@@ -263,7 +265,7 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
 
   /** Release the native control channel; remaining tasks/resources determine natural thread exit. */
   disconnect(): void {
-    this.#userAgent?.close();
+    this.#userAgent.close();
     this.#moduleRootResponse = null;
     this.#moduleResponses.clear();
     this.#messagePort?.close();

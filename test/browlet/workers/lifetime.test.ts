@@ -407,6 +407,23 @@ describe('Worker extended lifetime and active need (HTML §10.2.3)', () => {
 });
 
 describe('Worker protection, permission, and suspension (HTML §10.2.3)', () => {
+  it('propagates remote active need through local owners and clears it at shutdown', () => {
+    const parent = createWorker();
+    const child = createWorker();
+    child.global.ownerSet.add(parent.global);
+    parent.global.remoteOwnerState = 'active';
+    parent.global.setTimeout(() => {}, 100);
+    expect(parent.global.isProtected()).toBe(true);
+    expect(child.global.isActivelyNeeded()).toBe(true);
+    parent.global.remoteOwnerState = 'inactive';
+    expect(parent.global.isProtected()).toBe(false);
+    expect(parent.global.isSuspendable()).toBe(true);
+    expect(child.global.isActivelyNeeded()).toBe(false);
+    parent.global.finishRunning();
+    expect(parent.global.isPermissible()).toBe(false);
+    expect(parent.global.isSuspendable()).toBe(false);
+  });
+
   it('does not keep an ownerless dedicated worker permissible just because it has ports or timers', () => {
     const { global, env } = createWorker();
     const other = createWorker();

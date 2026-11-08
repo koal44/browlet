@@ -1,4 +1,5 @@
-export { WorkerGlobalImpl, type WorkerOwner, type WorkerType } from './worker-global-scope';
+export { WorkerGlobalImpl, type WorkerOwner, type WorkerOwnerState, type WorkerType } from './worker-global-scope';
+export { WorkerOwnerSet } from './owner-set';
 export { WorkerLocationImpl } from './worker-location';
 export { workerIDLDefinitions } from './web-idl';
 export { AbstractWorkerMixin } from './abstract-worker';

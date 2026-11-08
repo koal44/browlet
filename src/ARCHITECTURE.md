@@ -1087,19 +1087,36 @@ queued tasks and the final microtask checkpoint before becoming destroyed. The
 global's `finishRunning()` continuation clears timers, disconnects external ports,
 closes local EventSources (including retry timers), and empties its owners.
 `close()` requests a loop wake-up after clearing queues;
-new or resumed work cannot revive the destroyed loop. This is cooperative cleanup,
-independent of native thread teardown.
+new or resumed work cannot revive the destroyed loop. `EventLoopInit.onWorkerFinish`
+then releases the runtime's control and service endpoints so the isolate can exit
+naturally. The callback also runs if local cleanup throws; the failure still
+escapes to the host. Configured dedicated isolates also close when their original
+Document loses ownership. The creating host registers an observable owner set in
+that Document's existing `ownedWorkers` list; `Document.destroy()` removes the
+Document and the host forwards this transition to the inside global. This sets
+the closing flag without clearing queued work. Native exit releases the local
+registration and subscription. The Document itself never crosses the isolate
+boundary, and Window reuse does not change its identity. Its activity observer
+also sends updates through the private control channel; startup carries the
+initial state. The inside global's `remoteOwnerState` supplies the remote owner's
+contribution to lifetime predicates without placing a substitute Document in the
+local owner set. Native exit releases both subscriptions. Actual execution
+suspension, shared/nested ownership, and forced stopping of an orphan blocked in
+JavaScript remain separate startup dependencies.
 
 The dedicated outside `WorkerImpl` retains its `WorkerThread` in the creating
 isolate. Host startup accepts that Worker, derives its creator environment/port,
 and installs the association after native creation succeeds, before readiness.
+When script inputs are configured, it also establishes native channel transport
+before returning to the creator, retaining immediate messages while both HTML
+queues remain disabled. A failed channel handoff terminates the created isolate.
 Public `terminate()` forwards to the host and returns undefined; host completion
 stays on its internal promise. The host interrupts blocked native execution
 without scheduling inside work and clears pending outside deliveries. Native
 exit disconnects the port and releases the association, including when Fetch
 cleanup throws. Natural exit preserves messages sent before closing. Production
 startup must still supply the Worker before its constructor returns and connect
-the inside environment and services; a local Agent is not a cross-isolate handle.
+execution suspension and initial script execution; a local Agent is not a cross-isolate handle.
 
 Dedicated error reporting uses a narrow `reportErrorToOwner` callback on the
 inside global. The runtime sends only diagnostic attributes, with a null error

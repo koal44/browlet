@@ -14,8 +14,33 @@ dependencies recorded below;
 this does not mean the processing model is fully connected. The dedicated global,
 environment composition, real isolate, initial-script handoff, execution,
 termination, and error reporting have focused coverage. Public `new Worker()`
-still rejects successful startup until shared services and the production
-script driver connect those pieces.
+still rejects successful startup until execution suspension and the remaining
+shared services are connected to the production script driver.
+
+WorkerGlobalScope now includes `WindowOrWorkerGlobalScope` through ordinary
+Web IDL. The dedicated/shared globals forward to their environment's existing
+common-global owner: origin and security getters, Base64 methods, error reporting,
+microtasks, cloning, timer handles, Fetch, Performance, and Trusted Types. This
+reuses main's completed origin/Base64 implementation and its realm-based
+microtask queuing, including the Document association needed by Windows. No
+second global-resource owner or worker-specific binding path is introduced.
+
+Timer allocation and cancellation are connected; elapsed non-suspended worker
+time is not. Timer advancement still needs suspension/resumption integration,
+and string handlers share Window's pending Trusted Types/CSP/script preparation.
+The public Fetch method uses the existing Fetch algorithm; general Fetch/shared
+browser-service transport remains separate from the startup-script handoff.
+ImageBitmap APIs and WorkerNavigator capabilities remain their existing owner
+dependencies. Exposing these common members does not finish §10.3 or public
+worker startup.
+
+Common-global validation: 46 focused cases pass on Node 24.19.0, Node 26.8.1,
+and custom Node 27, each stock and with the add-on. They include real-isolate
+`queueMicrotask()` delivery after `close()` and browser-service access through
+the final checkpoint, plus the formerly failing Fetch-exposure regression.
+The 37 existing worker-global cases pass on Node 26 with
+the add-on; typecheck, changed-file ESLint, import boundaries, and diff checks
+also pass.
 
 The startup host now accepts a parsed root URL/options, reserves its Fetch client,
 and sends that client's ID to the isolate. The production bootstrap now requests this
@@ -23,6 +48,104 @@ initial classic/module script through the creator's real UserAgent and receives
 the response on its networking queue. This connects the request side of the
 existing handoff. Configured startup now composes the real inside environment
 before host readiness, but does not execute the downloaded script.
+
+Configured dedicated startup now connects its hidden message channel before the
+host constructor returns. Native transport is prepared early so immediate
+`postMessage()` calls retain their cloned data and transferred buffers; the inside
+runtime attaches the waiting endpoint to its real composed global. Both HTML
+message queues remain disabled. Handler assignment and native host readiness do
+not enable delivery or advance execution readiness. Failed channel handoff stops
+the isolate; bootstrap, fetch, and script failures use the existing port/reservation
+cleanup. Transport fixtures supply complete startup inputs and use the same
+environment composition and automatic channel connection as production.
+Execution suspension, initial script execution, and subsequent queue enablement remain
+the next processing-model connections; public `new Worker()` remains unfinished.
+
+Validation: 14 focused startup/channel cases pass on Node 24.19.0, Node 26.8.1,
+and the custom Node 27 build, each stock and with the add-on. The broader Node 26
+add-on selection passes all 43 messaging and root/descendant failure cases.
+Typecheck, changed-file ESLint, and import-boundary checks pass.
+
+Natural isolate shutdown now follows HTML-loop completion. After the final
+checkpoint and `finishRunning()` cleanup, the loop's `onWorkerFinish` callback
+releases the runtime's private control and browser-service connections. The
+outside host observes normal native exit and performs its existing Fetch,
+reservation, and Worker-association cleanup. Outbound messages survive; a final
+author microtask can still use shared browser services. Cleanup failures still
+escape to the host, while the connection-release callback runs once.
+
+Configured dedicated isolates now register their original Document in its
+existing `ownedWorkers` list. `Document.destroy()` removes that membership;
+`WorkerOwnerSet` observers forward the removal to the isolate, which sets its
+closing flag and uses the existing final-checkpoint/cleanup tail. Orphan closing
+does not discard already queued work. Native exit releases the registration and
+subscription on ordinary exit, explicit termination, and startup failure. Window
+reuse does not transfer the worker to the replacement Document.
+
+This connection leaves Document lifecycle algorithms unchanged. Abort and
+inactivity retain ownership. `Document.observeFullyActiveState()` now forwards
+the original Document's activity through the private host protocol. The inside
+global's `remoteOwnerState` contributes to its existing actively-needed,
+permissible, and suspendable checks. Initial state travels with startup; later
+updates remain ordered with other control messages, including changes before
+readiness. Native exit releases this subscription alongside owner membership.
+The local owner set contains only actual local objects; no Document is cloned.
+
+Owner-activity validation: eight focused cases pass on all six runtime
+configurations. They cover initial state, updates before readiness, deactivation
+and reactivation, Window reuse, cleanup on exit, and transitive active need.
+The existing owner-removal cases retain their recursive-destruction expected
+failure; 60 lifetime, shutdown, and Document-destruction cases pass on Node 26
+with the add-on. Typecheck, changed-file ESLint, and import-boundary checks pass.
+
+This identifies when suspension is required but does not yet suspend execution
+or advance timers by non-suspended time. Chromium's `WorkerThread::PauseOrFreeze`
+combines task scheduling with a V8 interrupt so it can stop non-yielding script;
+our thread backend has no matching pause/resume operation yet. Task gating alone
+would also miss already-running Promise reactions, so public execution stays
+blocked on that backend dependency. See Blink's
+`third_party/blink/renderer/core/workers/worker_thread.cc`, especially
+`PauseOrFreeze()` and `PauseOrFreezeOnWorkerThread()`.
+
+Every worker runtime now requires its inside environment. Startup records carry
+the creator snapshot, initial script, and browser service connection without an
+agent-only alternative. Test helpers supply real owners and script selections;
+the runtime no longer needs environment assertions or missing-environment paths.
+Validation: seven focused startup/cleanup cases and 22 relocated-package cases
+pass on all six runtime configurations. Node 26 add-on ownership, messaging,
+error, and termination checks also pass, retaining the existing recursive
+Document-destruction expected failure. Typecheck, ESLint, and import checks pass.
+
+The 2026-11-06 suspension experiment now confirms full Chromium resumes the
+same busy-loop stack and preserves pending Promise reactions after a BFCache
+restore. Firefox/WebKit automation did not restore these pages, so their
+runtime results are inconclusive; their suspension implementations were reviewed
+separately. A public-V8-API add-on probe passes six cases on all six runtime
+configurations. It needs no Node/V8 patch, but its native wait blocks private
+control delivery and requires coordinated wakeup before native thread teardown.
+This is not yet production suspension. See the shared Experimental repository's
+`worker-script-suspension/README.md` for browser evidence and remaining boundaries.
+
+Shared-worker and nested-worker ownership require their pending
+managers/surviving connections.
+Owner removal cannot interrupt JavaScript that blocks receipt of the control
+message; the host's discretionary forced-stop policy remains explicit. Public
+script startup stays gated on these remaining dependencies.
+
+The recursive-destruction regression remains an expected failure, authorized for
+the explicit HTML §7.5.10 `destroyAndDescendants()` dependency. It retains the
+required worker-exit assertion and detects an unexpected pass when that owner
+algorithm is supplied; direct `Document.destroy()` is tested normally.
+
+Owner-lifecycle validation: eight focused cases pass on Node 24.19.0, Node 26.8.1,
+and custom Node 27, each stock and with the add-on; the one recursive-destruction
+case fails as expected in each. All 59 existing lifetime, shutdown, and Document
+destruction cases pass on Node 26 with the add-on. Typecheck, changed-file ESLint,
+import boundaries, and diff checks pass.
+
+Shutdown validation: 17 focused cases pass on all six runtime configurations;
+39 task, checkpoint, and event-loop spinning cases pass on Node 26 with the
+add-on. Typecheck, changed-file ESLint, import boundaries, and diff checks pass.
 
 The response handoff now resolves the worker's complete policy container and the
 creator-owned COEP inheritance check before transport. The receiving
@@ -143,17 +266,17 @@ worker's own client and a separate service route.
 Runtime probes find two explicit service dependencies: worker-created Blob
 registration needs backing transport, and BroadcastChannel needs the browser's
 shared registry. Both throw through the public worker API without killing the
-worker or breaking subsequent URL resolution. `fetch` fails earlier: the worker
-global has not yet received WindowOrWorkerGlobalScope API forwarding (§10.3).
-Keep its new exposure regression as an ordinary failure. This does not require
-changing the UserAgent contract or treating the missing API as supported.
+worker or breaking subsequent URL resolution. The common-global inclusion now
+supplies `fetch`; its formerly failing exposure regression remains an ordinary
+assertion. General Fetch service transport is still an explicit dependency of
+the worker UserAgent connection.
 
 Validation: 15 focused connection, module-resolution, and explicit-dependency
 cases pass on Node 24.19.0, 26.8.1, and custom Node 27, stock and compat. The added
 Blob-URL trust regression also passes in all six configurations; the final Node
 26 compat run passes all 16 cases together. The separate fetch-exposure regression
-remains a known ordinary failure on Node 26 compat:
-`typeof workerGlobal.fetch` is `"undefined"`, expected `"function"`. Typechecking,
+originally failed because `workerGlobal.fetch` was undefined; the current
+common-global inclusion fixes that missing surface. Typechecking,
 focused ESLint, and import-boundary checks pass. No Node or V8 changes were made.
 
 Initial module graphs now use the ordinary loader and inside module map. The
@@ -525,8 +648,8 @@ UserAgent agent allocation still creates loops on its own thread.
 Connecting script fetching to that host, channel entanglement/enablement, shared
 connection delivery, execution readiness, automatic suspension/termination, and
 cleanup remain pending. Worker timer advancement must follow running/suspended
-time. The WindowOrWorkerGlobalScope resource mixin exists internally, but its
-worker API forwarding is still a §10.3 dependency. No addon or Node/V8 patch was made.
+time. WindowOrWorkerGlobalScope API forwarding was a dependency at this checkpoint;
+the current stopping point above records its completed connection. No addon or Node/V8 patch was made.
 
 The next §10.2.4 slice supplies `WorkerEnvironment.fetchScript(outsideEnv,
 credentials, onComplete)`, extracting the processing model's fetching portion.
@@ -828,10 +951,11 @@ It also closes locally owned EventSources, canceling requests and retry timers;
 the [communication roadmap](../communication/ROADMAP.md#92-eventsource) records
 HTML's omission of that cleanup and Blink's matching context-destruction behavior.
 
-This supplies cooperative HTML-loop cleanup. Forced termination uses the separate
-outside execution owner described below. Natural native isolate teardown must
-still be connected when startup owns the
-composed environment. Owner-derived closing/suspension monitoring, worker timer
+This supplies cooperative HTML-loop cleanup. The runtime now disconnects its
+native control and service endpoints through `EventLoopInit.onWorkerFinish`,
+after local cleanup, so the isolate exits naturally. Forced termination uses
+the separate outside execution owner described below. Owner-derived
+closing/suspension monitoring, worker timer
 advancement, rendering, and the Service Workers processing model remain explicit
 dependencies. Future lifetime monitors must wake the loop after changing closing
 state; no polling or owner observer registry is introduced here.
@@ -1031,10 +1155,10 @@ remain explicit dependencies even with both outside interfaces declared.
 ### Outside execution association and terminate (HTML §10.2.6.3)
 
 `WorkerThreadInit.worker` replaces its bare `outsidePort` input. A dedicated
-Worker supplies its own creator environment and hidden port. The host retains
+Worker's environment is supplied explicitly alongside its hidden port. The host retains
 that outside object locally, and installs the reciprocal `WorkerImpl.thread`
-only after native creation succeeds. Shared and agent-only fixtures still supply
-`creatorEnv` directly; no implementation objects cross the startup channel.
+only after native creation succeeds. All startup callers supply `creatorEnv`
+and script inputs; no implementation objects cross the startup channel.
 
 Public `terminate()` forwards to this host and returns undefined. The existing
 host path interrupts even blocked execution, clears pending outside deliveries,
@@ -1158,8 +1282,8 @@ to the author-port handoff described in the current stopping point.
 
 `WorkerThread.connectMessagePort()` creates a native channel, transfers its inside
 endpoint on the private control channel, and associates the other endpoint with
-the retained outside Worker's hidden MessagePort. This can happen before native
-readiness, retaining messages posted immediately after construction. The inside
+the retained outside Worker's hidden MessagePort. Configured dedicated startup
+calls it before returning, retaining messages posted immediately after construction. The inside
 runtime holds its endpoint until environment composition calls
 `connectMessagePort()`; either the endpoint or the global can arrive first.
 The startup caller must run the initial script before enabling the queues.
@@ -1177,11 +1301,12 @@ already queued HTML deliveries. Forced termination disconnects host delivery
 before clearing the outside queue, preventing native in-flight records from
 refilling it. Cooperative close preserves previously sent messages.
 
-Real-isolate tests cover messages posted before startup, queue activation,
+Real-isolate tests cover automatic configured-startup connection, messages posted before startup, queue activation,
 FIFO/checkpoints, synchronous cloning and transfer, receiving-realm identity,
 trusted targets, messageerror, termination,
-and delivery before cooperative exit. Fixtures supply the existing environment
-composition; they do not supply a production shared UserAgent service transport.
+and delivery before cooperative exit. All transport and messaging fixtures use
+the production-composed inside environment.
+Tests explicitly enable delivery while production still awaits owner monitoring.
 No add-on, Node, or V8 change is needed.
 
 Author-created MessagePorts subsequently gained native handle handoff and pending
@@ -1257,7 +1382,8 @@ and wake-up suites also pass on each (60 native checks).
   public startup still needs to connect these steps on composed environments.
 - `WorkerGlobalImpl.finishRunning()` releases timers, external ports, local EventSources, and owners
   after the closing worker's event loop has emptied and finished its checkpoint.
-  Native thread teardown and forced termination are still separate dependencies.
+  The runtime then releases its native connections. Forced termination uses the
+  outside execution owner; owner-derived closing/suspension remains unfinished.
 - `WorkerGlobalImpl` supplies the common state and declared surface above.
   `DedicatedWorkerGlobalImpl`
   implements the §7.1.4 owner-policy check and inheritance reports; the base

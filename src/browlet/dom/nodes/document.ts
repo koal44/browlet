@@ -66,6 +66,7 @@ import type { LocationImpl, WindowImpl, WindowProxyHandle } from '../../browsing
 import type { BrowletEnvironment } from '../../environment/index';
 import type { DocumentParser } from '../../html/parser/index';
 import type { SerializedRecord } from '../../scripting/structured-data/index';
+import type { WorkerOwner } from '../../workers/index';
 import type {
   BrowsingContext, Navigable, NavigableContainer, NavigationParams, HistoryHandlingBehavior,
   SessionHistoryEntry, UserNavigationInvolvement,
@@ -172,9 +173,9 @@ export class DocumentImpl extends NodeImpl {
   activeParserWasAborted = false;
   /** Associated parser, retained through readiness timing and released when loading finishes. */
   parser: DocumentParser | null = null;
-  /** Worker globals whose owner sets contain this document. */
-  // PROVISIONAL: worker creation and ownership registration are not implemented.
-  ownedWorkers: { ownerSet: Set<DocumentImpl>; }[] = [];
+  /** Local worker globals or isolate-host registrations whose owner sets contain this Document. */
+  // TODO(HTML workers): Shared-worker discovery and nested startup must register their owners too.
+  ownedWorkers: { ownerSet: Set<WorkerOwner>; }[] = [];
   /** Worklet globals whose lifetime is tied to this document. */
   // PROVISIONAL: worklet creation and registration are not implemented.
   workletGlobalScopes: { terminate(): void; }[] = [];

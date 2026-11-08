@@ -604,9 +604,8 @@ export class EventLoop {
     if (global === null) return;
     this.#destroyed = true;
     this.#rejectedPromiseEnvironments.clear();
-    global.finishRunning();
-    // TODO(HTML §10.2.4): Connect native isolate teardown when startup owns this
-    // environment. This stops the HTML loop; it does not abort running script.
+    try { global.finishRunning(); }
+    finally { this.#init.onWorkerFinish?.(); }
     // Service Worker shutdown belongs to its own processing model.
   }
 
@@ -704,6 +703,8 @@ export class EventLoop {
 export type EventLoopInit = {
   /** Request a later host turn; never invoke the steps synchronously. */
   requestTurn: (this: void, steps: () => void) => void;
+  /** Release the dedicated/shared worker's execution host after HTML cleanup, including failed cleanup. */
+  onWorkerFinish?: (this: void) => void;
   selectTaskQueue?: TaskQueueSelector;
   longTaskReporter?: LongTaskReporter;
   taskTiming?: TaskTimingHooks;

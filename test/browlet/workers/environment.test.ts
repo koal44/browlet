@@ -9,18 +9,123 @@ import { DocumentState } from '../../../src/browlet/browsing/navigation/state/in
 import { PolicyContainer } from '../../../src/browlet/browsing/policy/index';
 import type { BrowletEnvironment } from '../../../src/browlet/environment/index';
 import { createWindowEnvironment, createWorkerEnvironment } from '../../../src/browlet/integration/web-idl/index';
-import { PerformanceImpl } from '../../../src/browlet/performance/index';
 import {
-  AgentCluster, createTaskSource, DedicatedWorkerAgent, SharedWorkerAgent, WindowAgent,
+  AgentCluster, ClassicScript, createTaskSource, DedicatedWorkerAgent, ScriptFetchOptions, SharedWorkerAgent, WindowAgent,
 } from '../../../src/browlet/scripting/index';
 import { UnsafeMoment, monotonicClock } from '../../../src/timing/index';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { DedicatedWorkerGlobalImpl, SharedWorkerGlobalImpl } from '../../../src/browlet/workers/index';
-import type { DedicatedWorkerGlobalScope, SharedWorkerGlobalScope, Performance, PerformanceEntry } from '../../../src/browlet/platform';
+import type { DedicatedWorkerGlobalScope, SharedWorkerGlobalScope, ErrorEvent, PerformanceEntry } from '../../../src/browlet/platform';
 import { createManualEventLoop, createManualUserAgent } from '../../support/browlet-agent';
-import { getBindingContext } from '../../support/browlet-binding';
+import { runInHostTask } from '../../support/tasks';
 
 describe('Worker realm and settings setup (HTML §10.2.4 and §10.2.6.2)', () => {
+  it.each([false, true])('exposes the common global facilities through Web IDL, shared: %s', (shared) => {
+    const env = createWorker(createOutsideEnvironment(), shared);
+    for (const name of [
+      'queueMicrotask', 'structuredClone', 'reportError', 'btoa', 'atob',
+      'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'fetch',
+    ]) {
+      expect(typeof Reflect.get(env.global, name), name).toBe('function');
+    }
+    expect(Reflect.get(env.global, 'origin')).toBe('https://creator.test');
+    expect(Reflect.get(env.global, 'isSecureContext')).toBe(true);
+    expect(Reflect.get(env.global, 'crossOriginIsolated')).toBe(false);
+  });
+
+  it.each([false, true])('owns replaceable origin and stable trusted values, shared: %s', (shared) => {
+    const outsideEnv = createOutsideEnvironment();
+    const env = createWorker(outsideEnv, shared);
+    const scope = env.global as unknown as DedicatedWorkerGlobalScope | SharedWorkerGlobalScope;
+    const other = createWorker(outsideEnv, shared).global as unknown as DedicatedWorkerGlobalScope | SharedWorkerGlobalScope;
+    expect(scope.trustedTypes).toBe(scope.trustedTypes);
+    expect(scope.trustedTypes).not.toBe(other.trustedTypes);
+    expect(scope.trustedTypes.isHTML(scope.trustedTypes.emptyHTML)).toBe(true);
+    expect(String(scope.trustedTypes.emptyHTML)).toBe('');
+    scope.origin = 'author replacement';
+    expect(scope.origin).toBe('author replacement');
+    expect(other.origin).toBe('https://creator.test');
+    expect(env.globalImplementation.origin).toBe('https://creator.test');
+    expect(Reflect.set(scope, 'isSecureContext', false)).toBe(false);
+    expect(scope.isSecureContext).toBe(true);
+  });
+
+  it.each([false, true])('uses the shared Base64 algorithms with worker-realm exceptions, shared: %s', (shared) => {
+    const env = createWorker(createOutsideEnvironment(), shared);
+    const scope = env.global as unknown as DedicatedWorkerGlobalScope | SharedWorkerGlobalScope;
+    expect(scope.btoa('\u0000\u00ff')).toBe('AP8=');
+    expect(scope.atob(' A P 8\n')).toBe('\u0000\u00ff');
+    expect(() => scope.btoa('\u0100')).toThrow(scope.DOMException);
+    expect(() => scope.atob('!')).toThrow(expect.objectContaining({ name: 'InvalidCharacterError' }));
+    expect(() => scope.atob(Symbol('invalid') as never)).toThrow(env.realm.TypeError);
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- exercise the generated operation with an invalid receiver
+    expect(() => Reflect.apply(scope.btoa, {}, ['text'])).toThrow(env.realm.TypeError);
+  });
+
+  it.each([false, true])('clones and transfers into the worker realm, shared: %s', (shared) => {
+    const env = createWorker(createOutsideEnvironment(), shared);
+    const scope = env.global as unknown as DedicatedWorkerGlobalScope | SharedWorkerGlobalScope;
+    const bytes = new Uint8Array([4, 2]).buffer;
+    const original = { bytes, values: [42] };
+    const clone = scope.structuredClone(original, { transfer: [bytes] });
+    expect(bytes.byteLength).toBe(0);
+    expect(clone).not.toBe(original);
+    expect(clone).toBeInstanceOf(env.realm.Object);
+    expect(clone.values).toBeInstanceOf(env.realm.Array);
+    expect(clone.bytes).toBeInstanceOf(env.realm.ArrayBuffer);
+    expect(Array.from(new Uint8Array(clone.bytes))).toEqual([4, 2]);
+    expect(() => scope.structuredClone(() => {})).toThrow(scope.DOMException);
+  });
+
+  it.each([false, true])('orders global microtasks and reports errors without abandoning later callbacks, shared: %s', (shared) => runInHostTask(() => {
+    const env = createWorker(createOutsideEnvironment(), shared);
+    const scope = env.global as unknown as DedicatedWorkerGlobalScope | SharedWorkerGlobalScope;
+    const trace: unknown[] = [];
+    const exception = {};
+    scope.addEventListener('error', (event) => {
+      event.preventDefault();
+      trace.push((event as ErrorEvent).error);
+    });
+    Reflect.set(env.global, 'trace', trace);
+    Reflect.set(env.global, 'exception', exception);
+    const script = new ClassicScript(`
+      'use strict';
+      queueMicrotask(function(...args) { trace.push([this, args]); });
+      queueMicrotask(() => { throw exception; });
+      queueMicrotask(() => { trace.push('last microtask'); });
+      reportError('reported explicitly');
+      trace.push('synchronous');
+    `, env, env.apiBaseURL, new ScriptFetchOptions());
+    env.realm.queueGlobalTask(createTaskSource('common worker API test'), () => { script.run(); });
+    expect(trace).toEqual([]);
+    env.responsibleEventLoop.runTaskTurn();
+    expect(trace).toEqual(['reported explicitly', 'synchronous', [undefined, []], exception, 'last microtask']);
+    expect(env.responsibleEventLoop.executionContextStack).toEqual([]);
+    expect(env.responsibleEventLoop.backupIncumbentEnvironmentStack).toEqual([]);
+    expect(() => scope.queueMicrotask(null as never)).toThrow(env.realm.TypeError);
+  }));
+
+  it.each([false, true])('allocates and cancels timers in the worker owner, shared: %s', (shared) => {
+    const outsideEnv = createOutsideEnvironment();
+    const env = createWorker(outsideEnv, shared);
+    const scope = env.global as unknown as DedicatedWorkerGlobalScope | SharedWorkerGlobalScope;
+    const resources = env.getWindowOrWorkerGlobalScopeMixin();
+    const timeout = scope.setTimeout(() => {}, 1000);
+    const interval = scope.setInterval(() => {}, 2000);
+    expect(timeout).toBeGreaterThan(0);
+    expect(interval).toBeGreaterThan(0);
+    expect(timeout).not.toBe(interval);
+    expect(resources.timers.hasOutstandingTimers()).toBe(true);
+    expect(outsideEnv.getWindowOrWorkerGlobalScopeMixin().timers.hasOutstandingTimers()).toBe(false);
+    // The two clearing methods share an ID map. Timer advancement still requires
+    // worker suspension/resumption integration, so this test covers ownership only.
+    scope.clearInterval(timeout);
+    expect(resources.timers.hasOutstandingTimers()).toBe(true);
+    scope.clearTimeout(interval);
+    expect(resources.timers.hasOutstandingTimers()).toBe(false);
+    resources.timers.clear();
+  });
+
   it.each([false, true])('composes the %s shared global with its own realm, resources, and initial owner', (shared) => {
     const outsideEnv = createOutsideEnvironment();
     const env = createWorker(outsideEnv, shared);
@@ -216,8 +321,9 @@ describe('Worker realm and settings setup (HTML §10.2.4 and §10.2.6.2)', () =>
     const outsideEnv = createOutsideEnvironment();
     const env = createWorker(outsideEnv, shared);
     const scope = env.global as unknown as DedicatedWorkerGlobalScope | SharedWorkerGlobalScope;
-    // Public worker-global forwarding remains §10.3 work; exercise the retained owner's actual binding.
-    const performance = getBindingContext(env.realm).project(PerformanceImpl, env.getWindowOrWorkerGlobalScopeMixin().performance) as Performance;
+    const performance = scope.performance;
+    expect(performance).toBe(scope.performance);
+    expect(performance).toBeInstanceOf(scope.Performance);
     const received: PerformanceEntry[] = [];
     const callbackOwners: boolean[] = [];
     const observer = new scope.PerformanceObserver((list) => {

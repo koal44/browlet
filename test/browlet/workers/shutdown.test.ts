@@ -45,7 +45,8 @@ describe('Worker event-loop shutdown (HTML §§8.1.7.3, 10.2.4)', () => {
   }));
 
   it('drains old tasks when only the closing flag is set, then releases resources', () => runInHostTask(() => {
-    const { env, loop, global } = createWorker();
+    const finish = vi.fn();
+    const { env, loop, global } = createWorker(false, finish);
     const trace: string[] = [];
     env.queueTask('network', () => { trace.push('first'); });
     env.queueTask('timer', () => { trace.push('second'); });
@@ -53,10 +54,25 @@ describe('Worker event-loop shutdown (HTML §§8.1.7.3, 10.2.4)', () => {
     env.queueTask('network', () => { trace.push('discarded'); });
     expect(loop.runTaskTurn()).toBe(true);
     expect(global.ownerSet.size).toBe(1);
+    expect(finish).not.toHaveBeenCalled();
     expect(loop.runTaskTurn()).toBe(true);
     expect(trace).toEqual(['first', 'second']);
     expect(global.ownerSet.size).toBe(0);
+    expect(finish).toHaveBeenCalledOnce();
     expect(loop.runTaskTurn()).toBe(false);
+    expect(finish).toHaveBeenCalledOnce();
+  }));
+
+  it.each([false, true])('releases its host once when worker cleanup throws (shared: %s)', (shared) => runInHostTask(() => {
+    const finish = vi.fn();
+    const { loop, global } = createWorker(shared, finish);
+    const failure = new Error('Worker resource cleanup failed');
+    vi.spyOn(global, 'finishRunning').mockImplementationOnce(() => { throw failure; });
+    global.closing = true;
+    expect(() => loop.runTaskTurn()).toThrow(failure);
+    expect(finish).toHaveBeenCalledOnce();
+    expect(loop.runTaskTurn()).toBe(false);
+    expect(finish).toHaveBeenCalledOnce();
   }));
 
   it('can clear a dedicated worker’s pending outside deliveries before shutdown disentangles it', () => runInHostTask(() => {
@@ -77,16 +93,19 @@ describe('Worker event-loop shutdown (HTML §§8.1.7.3, 10.2.4)', () => {
   }));
 
   it('waits for a disabled port queue instead of treating no runnable tasks as an empty loop', () => runInHostTask(() => {
-    const { loop, global, insidePort, outside } = createWorker();
+    const finish = vi.fn();
+    const { loop, global, insidePort, outside } = createWorker(false, finish);
     outside.postMessage('waiting');
     global.closing = true;
     expect(loop.runTaskTurn()).toBe(false);
     expect(global.ownerSet.size).toBe(1);
     expect(global.ports).toHaveLength(1);
+    expect(finish).not.toHaveBeenCalled();
     insidePort.start();
     expect(loop.runTaskTurn()).toBe(true);
     expect(global.ownerSet.size).toBe(0);
     expect(global.ports).toEqual([]);
+    expect(finish).toHaveBeenCalledOnce();
   }));
 
   it('wakes an idle loop for close without destroying it synchronously', () => runInHostTask(() => {
@@ -237,12 +256,12 @@ interface EventSourceExchange {
 }
 
 /** Real worker environments and ports, with host turns retained for deterministic shutdown boundaries. */
-function createWorker(shared = false) {
+function createWorker(shared = false, onWorkerFinish?: () => void) {
   const userAgent = createManualUserAgent();
   const traversable = TopLevelTraversable.create(userAgent, null, '');
   const outsideEnv = traversable.activeWindow!.env;
   const turns: (() => void)[] = [];
-  const loop = createManualEventLoop({ requestTurn: (steps) => { turns.push(steps); } });
+  const loop = createManualEventLoop({ requestTurn: (steps) => { turns.push(steps); }, onWorkerFinish });
   const agent = shared ? new SharedWorkerAgent(loop) : new DedicatedWorkerAgent(loop);
   (shared ? new AgentCluster() : outsideEnv.realm.agent.agentCluster!).add(agent);
   const env = createWorkerEnvironment({

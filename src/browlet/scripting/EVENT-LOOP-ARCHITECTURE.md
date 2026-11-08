@@ -60,9 +60,11 @@ still count. The loop then calls the global's `finishRunning()` continuation to
 clear timers, disconnect its external ports, and empty its owner set. New tasks,
 microtasks, host wake-ups, and resumed spinning tasks cannot restart a destroyed
 loop. `close()` requests a wake-up when needed; later owner monitors must also
-wake the loop after changing closing state. This is cooperative HTML cleanup;
-native thread teardown, forced script abortion, suspension, worker rendering,
-and the Service Workers lifecycle retain their own integration dependencies.
+wake the loop after changing closing state. After local cleanup, the optional
+`onWorkerFinish` host callback releases the runtime's native connections for
+natural exit. It runs once, even when cleanup throws, without consuming that
+failure. Forced script abortion, suspension, worker rendering, and the Service
+Workers lifecycle retain their own integration dependencies.
 
 Microtasks queued through `EventLoop.queueMicrotask()` outside an HTML
 task/checkpoint request a coalesced host wake-up. That wake-up drains the same

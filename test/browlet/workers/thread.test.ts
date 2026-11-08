@@ -6,7 +6,7 @@ import { threadId, type WorkerOptions } from 'node:worker_threads';
 import type * as WorkerThreads from 'node:worker_threads';
 import { afterEach, assert, beforeEach, describe, expect, inject, it, vi } from 'vitest';
 
-import { addon, type JSThreadExit } from '../../../src/js-engine/index';
+import { addon, JSThread, type JSThreadExit } from '../../../src/js-engine/index';
 import { utf8Encode } from '../../../src/encoding/index';
 import { BlobData, BlobImpl } from '../../../src/file/index';
 import { FetchHeaders, type FetchRequest } from '../../../src/fetch/index';
@@ -29,7 +29,7 @@ import {
   areSameOrigin, copyOrigin, createOpaqueOrigin, obtainURLOrigin, parseURL, serializeOrigin, serializeURL,
   type Origin,
 } from '../../../src/url/index';
-import { createManualEventLoop } from '../../support/browlet-agent';
+import { createManualEventLoop, createManualUserAgent } from '../../support/browlet-agent';
 import { unwrap } from '../../support/browlet-binding';
 import { mockHTTPTransport } from '../../fetch/transport-fixture';
 
@@ -86,10 +86,206 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
     const result = await request({ type: 'inspect' });
     expect(result).toMatchObject({
       isMainThread: false, pid: process.pid, kind, canBlock: true,
-      hasEnvironment: false, ownsTask: true, separateRealm: true,
+      hasEnvironment: true, ownsTask: true, separateRealm: true,
       addon: typeof addon.createContextHandle === 'function', nodeBase: process.env.NODE_BASE,
     });
     expect((result as { threadId: number; }).threadId).not.toBe(threadId);
+  });
+
+  describe('Document owner lifecycle', () => {
+    it.each([false, true])('closes a dedicated isolate when its original Document is destroyed, ready: %s', async (ready) => {
+      const document = TopLevelTraversable.create(createManualUserAgent(), null, '').activeDocument!;
+      const creatorEnv = document.env;
+      const { thread } = createThread({
+        kind: 'dedicated', creatorEnv, data: {},
+        script: { url: parseURL('https://creator.test/worker.js').url!, type: 'classic', credentials: 'same-origin', name: '' },
+      });
+      expect(document.ownedWorkers).toHaveLength(1);
+      expect(document.ownedWorkers[0]!.ownerSet.has(document)).toBe(true);
+      if (ready) await thread.ready;
+
+      creatorEnv.queueTask('dom-manipulation', () => { document.destroy(); });
+      expect(creatorEnv.responsibleEventLoop.runTaskTurn()).toBe(true);
+
+      expect(await thread.closed).toEqual({ code: 0, error: undefined, terminated: false });
+      expect(document.ownedWorkers).toEqual([]);
+      expect(thread.reservedEnv.discarded).toBe(true);
+    });
+
+    it('removes every dedicated isolate owned by a destroyed Document', async () => {
+      const document = TopLevelTraversable.create(createManualUserAgent(), null, '').activeDocument!;
+      const creatorEnv = document.env;
+      const workers = [0, 1].map(() => createThread({
+        kind: 'dedicated', creatorEnv, data: {},
+        script: { url: parseURL('https://creator.test/worker.js').url!, type: 'classic', credentials: 'same-origin', name: '' },
+      }).thread);
+      await Promise.all(workers.map((thread) => thread.ready));
+      expect(document.ownedWorkers).toHaveLength(2);
+
+      creatorEnv.queueTask('dom-manipulation', () => { document.destroy(); });
+      creatorEnv.responsibleEventLoop.runTaskTurn();
+
+      expect(await Promise.all(workers.map((thread) => thread.closed)))
+        .toEqual(workers.map(() => ({ code: 0, error: undefined, terminated: false })));
+      expect(document.ownedWorkers).toEqual([]);
+    });
+
+    it('keeps the original Document registration when its Window is reused', async () => {
+      const creatorEnv = createCreatorEnvironment();
+      const document = creatorEnv.window.document;
+      const { thread } = createThread({
+        kind: 'dedicated', creatorEnv, data: {},
+        script: { url: parseURL('https://creator.test/worker.js').url!, type: 'classic', credentials: 'same-origin', name: '' },
+      });
+      await thread.ready;
+      const replacement = creatorEnv.createDocument();
+      creatorEnv.window.setAssociatedDocument(replacement);
+      expect(document.ownedWorkers).toHaveLength(1);
+      expect(replacement.ownedWorkers).toEqual([]);
+      // Exercise the same removal used by destroy(); inactive history Document
+      // destruction itself remains a separate §7.5 dependency.
+      document.ownedWorkers[0]!.ownerSet.delete(document);
+      expect(await thread.closed).toEqual({ code: 0, error: undefined, terminated: false });
+      expect(document.ownedWorkers).toEqual([]);
+    });
+
+    it.each(['abort', 'inactive'] as const)('retains ownership across Document %s and releases it on explicit termination', async (change) => {
+      const document = TopLevelTraversable.create(createManualUserAgent(), null, '').activeDocument!;
+      const creatorEnv = document.env;
+      const { thread } = createThread({
+        kind: 'dedicated', creatorEnv, data: {},
+        script: { url: parseURL('https://creator.test/worker.js').url!, type: 'classic', credentials: 'same-origin', name: '' },
+      });
+      await thread.ready;
+      if (change === 'abort') {
+        creatorEnv.queueTask('dom-manipulation', () => { document.abort(); });
+        creatorEnv.responsibleEventLoop.runTaskTurn();
+      } else {
+        document.browsingContext = null;
+        document.notifyFullyActiveStateChanged();
+      }
+      // Activity will drive suspension, not membership removal. This test makes
+      // no claim that author script execution is already suspended.
+      expect(document.ownedWorkers).toHaveLength(1);
+      expect(document.ownedWorkers[0]!.ownerSet.has(document)).toBe(true);
+      expect(await thread.terminate()).toMatchObject({ terminated: true, error: undefined });
+      expect(document.ownedWorkers).toEqual([]);
+    });
+
+    it('releases Document ownership on natural native exit', async () => {
+      const creatorEnv = createCreatorEnvironment();
+      const document = creatorEnv.window.document;
+      const { thread } = createThread({
+        kind: 'dedicated', creatorEnv, data: {},
+        script: { url: parseURL('https://creator.test/worker.js').url!, type: 'classic', credentials: 'same-origin', name: '' },
+      });
+      await thread.ready;
+      expect(document.ownedWorkers).toHaveLength(1);
+      thread.send({ type: 'close' });
+      expect(await thread.closed).toEqual({ code: 0, error: undefined, terminated: false });
+      expect(document.ownedWorkers).toEqual([]);
+    });
+
+    // Expected dependency failure: HTML §7.5.10 destroyAndDescendants() still
+    // throws its explicit stub. Keep the worker-exit assertion for its implementation.
+    it.fails('closes dedicated isolates through recursive Document destruction', async () => {
+      const document = TopLevelTraversable.create(new UserAgent(), null, '').activeDocument!;
+      const creatorEnv = document.env;
+      const { thread } = createThread({
+        kind: 'dedicated', creatorEnv, data: {},
+        script: { url: parseURL('https://creator.test/worker.js').url!, type: 'classic', credentials: 'same-origin', name: '' },
+      });
+      await thread.ready;
+      document.destroyAndDescendants();
+      expect(await thread.closed).toEqual({ code: 0, error: undefined, terminated: false });
+      expect(document.ownedWorkers).toEqual([]);
+    });
+  });
+
+  describe('Document owner activity', () => {
+    it.each([true, false])('tracks initial activity and subsequent changes across isolates, active: %s', async (active) => {
+      const document = TopLevelTraversable.create(createManualUserAgent(), null, '').activeDocument!;
+      const creatorEnv = document.env;
+      const browsingContext = document.browsingContext;
+      if (!active) document.browsingContext = null;
+      const { thread, request } = createThread({
+        kind: 'dedicated', creatorEnv, data: {},
+        script: { url: parseURL('https://creator.test/worker.js').url!, type: 'classic', credentials: 'same-origin', name: '' },
+      });
+      await thread.ready;
+      expect(await request({ type: 'inspect-lifetime' })).toEqual({
+        activelyNeeded: active, permissible: true, suspendable: !active,
+      });
+
+      for (const fullyActive of [!active, active]) {
+        document.browsingContext = fullyActive ? browsingContext : null;
+        document.notifyFullyActiveStateChanged();
+        expect(await request({ type: 'inspect-lifetime' })).toEqual({
+          activelyNeeded: fullyActive, permissible: true, suspendable: !fullyActive,
+        });
+      }
+      expect(document.ownedWorkers).toHaveLength(1);
+    });
+
+    it('retains activity changes sent before native readiness', async () => {
+      const document = TopLevelTraversable.create(createManualUserAgent(), null, '').activeDocument!;
+      const creatorEnv = document.env;
+      const { thread, request } = createThread({
+        kind: 'dedicated', creatorEnv, data: {},
+        script: { url: parseURL('https://creator.test/worker.js').url!, type: 'classic', credentials: 'same-origin', name: '' },
+      });
+      document.browsingContext = null;
+      document.notifyFullyActiveStateChanged();
+      await thread.ready;
+      expect(await request({ type: 'inspect-lifetime' })).toEqual({
+        activelyNeeded: false, permissible: true, suspendable: true,
+      });
+    });
+
+    it('observes the original Document when its Window is reused', async () => {
+      const traversable = TopLevelTraversable.create(createManualUserAgent(), null, '');
+      const document = traversable.activeDocument!;
+      const creatorEnv = document.env;
+      const { thread, request } = createThread({
+        kind: 'dedicated', creatorEnv, data: {},
+        script: { url: parseURL('https://creator.test/worker.js').url!, type: 'classic', credentials: 'same-origin', name: '' },
+      });
+      await thread.ready;
+      const replacement = creatorEnv.createDocument();
+      replacement.browsingContext = document.browsingContext;
+      traversable.activeSessionHistoryEntry.documentState.document = replacement;
+      document.getRelevantGlobalObject()!.setAssociatedDocument(replacement);
+      document.notifyFullyActiveStateChanged();
+      expect(replacement.isFullyActive()).toBe(true);
+      replacement.notifyFullyActiveStateChanged();
+      expect(await request({ type: 'inspect-lifetime' })).toEqual({
+        activelyNeeded: false, permissible: true, suspendable: true,
+      });
+      expect(document.ownedWorkers).toHaveLength(1);
+      expect(replacement.ownedWorkers).toEqual([]);
+    });
+
+    it.each(['natural exit', 'termination', 'bootstrap failure'])('releases activity monitoring after %s', async (exit) => {
+      const document = TopLevelTraversable.create(createManualUserAgent(), null, '').activeDocument!;
+      const creatorEnv = document.env;
+      const { thread } = createThread({
+        kind: 'dedicated', creatorEnv, data: exit === 'bootstrap failure' ? { mode: 'throw-before-ready' } : {},
+        script: { url: parseURL('https://creator.test/worker.js').url!, type: 'classic', credentials: 'same-origin', name: '' },
+      });
+      if (exit === 'bootstrap failure') {
+        await expect(thread.ready).rejects.toThrow('bootstrap failed');
+      } else {
+        await thread.ready;
+        if (exit === 'termination') await thread.terminate();
+        else thread.send({ type: 'close' });
+      }
+      await thread.closed;
+      const send = vi.spyOn(JSThread.prototype, 'send');
+      document.browsingContext = null;
+      document.notifyFullyActiveStateChanged();
+      expect(send).not.toHaveBeenCalled();
+      expect(document.ownedWorkers).toEqual([]);
+    });
   });
 
   it('clones startup data without sharing ordinary creator objects', async () => {
@@ -397,7 +593,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
       });
       await started.promise;
       if (ending === 'terminate') void thread.terminate();
-      else thread.send({ type: 'disconnect' });
+      else thread.send({ type: 'close' });
       expect(await thread.closed).toMatchObject({ error: undefined, terminated: ending === 'terminate' });
       for (const abort of aborts) expect(abort).toHaveBeenCalledOnce();
       for (const respond of lateResponses) respond();
@@ -462,7 +658,6 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
       const script = { url, type, credentials: 'omit', name: 'root' } as const;
       const { thread, request } = createThread({ kind, creatorEnv, data: {}, script });
       const reservation = thread.reservedEnv;
-      assert(reservation !== null);
       const fetchScript = vi.spyOn(thread, 'fetchScript');
       await thread.ready;
       expect(transport).not.toHaveBeenCalled();
@@ -550,7 +745,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
       await dispatched.promise;
       await thread.terminate();
       expect(abort).toHaveBeenCalledOnce();
-      expect(thread.reservedEnv?.discarded).toBe(true);
+      expect(thread.reservedEnv.discarded).toBe(true);
     });
 
     it('discards the reserved client when the isolate fails before acknowledging startup', async () => {
@@ -561,7 +756,8 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
       });
       await expect(thread.ready).rejects.toThrow('bootstrap failed');
       await thread.closed;
-      expect(thread.reservedEnv?.discarded).toBe(true);
+      expect(thread.reservedEnv.discarded).toBe(true);
+      expect(creatorEnv.window.document.ownedWorkers).toEqual([]);
     });
   });
 
@@ -605,12 +801,11 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
         kind: 'dedicated', worker: implementation, data: { mode: 'run-startup' },
         script: { url: creatorEnv.parseURL('https://creator.test/worker.js')!, type, credentials: 'same-origin', name: '' },
       });
-      thread.connectMessagePort();
       await thread.ready;
       expect(await thread.closed).toMatchObject({ error: undefined, terminated: true });
       expect(errors).toEqual([]);
-      expect(thread.reservedEnv?.discarded).toBe(true);
-      expect(thread.reservedEnv?.executionReady).toBe(false);
+      expect(thread.reservedEnv.discarded).toBe(true);
+      expect(thread.reservedEnv.executionReady).toBe(false);
       expect(implementation.thread).toBeNull();
       expect(implementation.outsidePort.isEntangledOutsideGlobal()).toBe(false);
       drain();
@@ -639,7 +834,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
       });
       await thread.ready;
       expect(await thread.closed).toMatchObject({ error: undefined, terminated: true });
-      expect(thread.reservedEnv?.discarded).toBe(true);
+      expect(thread.reservedEnv.discarded).toBe(true);
     });
 
     it.each([
@@ -664,7 +859,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
         },
         terminated: false,
       });
-      expect(thread.reservedEnv?.discarded).toBe(true);
+      expect(thread.reservedEnv.discarded).toBe(true);
       drain();
       expect(errors).not.toHaveBeenCalled();
     });
@@ -687,7 +882,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
       worker.terminate();
       expect(await thread.closed).toMatchObject({ error: undefined, terminated: true });
       expect(abort).toHaveBeenCalledOnce();
-      expect(thread.reservedEnv?.discarded).toBe(true);
+      expect(thread.reservedEnv.discarded).toBe(true);
       drain();
       expect(errors).not.toHaveBeenCalled();
     });
@@ -846,11 +1041,10 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
           kind: 'dedicated', worker: implementation, data: { mode: 'run-startup' },
           script: { url: creatorEnv.parseURL('https://creator.test/root.js')!, type: 'module', credentials: 'same-origin', name: '' },
         });
-        thread.connectMessagePort();
         await thread.ready;
         expect(await thread.closed).toMatchObject({ error: undefined, terminated: true });
-        expect(thread.reservedEnv?.discarded).toBe(true);
-        expect(thread.reservedEnv?.executionReady).toBe(false);
+        expect(thread.reservedEnv.discarded).toBe(true);
+        expect(thread.reservedEnv.executionReady).toBe(false);
         expect(implementation.thread).toBeNull();
         expect(implementation.outsidePort.isEntangledOutsideGlobal()).toBe(false);
         drain();
@@ -886,7 +1080,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
       worker.terminate();
       expect(await thread.closed).toMatchObject({ error: undefined, terminated: true });
       expect(abort).toHaveBeenCalledOnce();
-      expect(thread.reservedEnv?.discarded).toBe(true);
+      expect(thread.reservedEnv.discarded).toBe(true);
       drain();
       expect(errors).not.toHaveBeenCalled();
     });
@@ -910,7 +1104,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
       await thread.ready;
       const result = await request({ type: 'inspect-environment' });
       expect(result).toMatchObject({
-        id: thread.reservedEnv!.id, origin: creatorOrigin, topLevelOrigin: creatorOrigin,
+        id: thread.reservedEnv.id, origin: creatorOrigin, topLevelOrigin: creatorOrigin,
         creationURL: 'https://creator.test/worker.js', topLevelCreationURL: null,
         isSecureContext: true, hasCrossSiteAncestor, realmAttached: true,
         globalNames: ['Worker', kind === 'shared' ? 'SharedWorker' : 'DedicatedWorker'],
@@ -921,8 +1115,8 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
       });
       expect(result).toHaveProperty('currentTime', expect.any(Number));
       expect(result).toHaveProperty('clusterId', kind === 'shared' ? expect.not.stringMatching(clusterId) : clusterId);
-      expect(thread.reservedEnv!.id).not.toBe(creatorEnv.id);
-      expect(thread.reservedEnv!.executionReady).toBe(false);
+      expect(thread.reservedEnv.id).not.toBe(creatorEnv.id);
+      expect(thread.reservedEnv.executionReady).toBe(false);
     });
 
     it('gives a data worker a fresh opaque origin while retaining creator ancestry', async () => {
@@ -934,7 +1128,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
       await thread.ready;
       const result = await request({ type: 'inspect-environment' });
       expect(result).toMatchObject({
-        id: thread.reservedEnv!.id, origin: { kind: 'opaque' },
+        id: thread.reservedEnv.id, origin: { kind: 'opaque' },
         topLevelOrigin: creatorEnv.topLevelOrigin, hasCrossSiteAncestor: true,
         url: 'data:text/javascript,', isSecureContext: true, executionReady: false,
       });
@@ -987,7 +1181,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
       expect(await request({ type: 'capture-module-url', url })).toEqual({ captured: true });
       expect(await request({ type: 'revoke-blob', url })).toBe('revoked');
       expect(creatorEnv.userAgent.blobURLStore.resolve(parseURL(url).url!)).not.toBeNull();
-      expect(await request({ type: 'inspect-environment' })).toMatchObject({ origin: thread.reservedEnv!.origin });
+      expect(await request({ type: 'inspect-environment' })).toMatchObject({ origin: thread.reservedEnv.origin });
     });
 
     it.each(['dedicated', 'shared'] as const)('resolves %s worker imports through its UserAgent without the creator import map', async (kind) => {
@@ -1084,7 +1278,6 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
       script: { url: creatorEnv.parseURL('https://creator.test/root.js')!, type: 'module', credentials: 'same-origin', name: '' },
     });
     await thread.ready;
-    // TODO(HTML §10.3): Forward the existing WindowOrWorkerGlobalScope mixin to workers.
     expect(await request({ type: 'inspect-fetch-exposure' })).toBe('function');
   });
 
@@ -1371,7 +1564,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
       thread.fetchScript(createScriptRequest(creatorEnv));
       await dispatched.promise;
       const rejection = expect(thread.closed).rejects.toBe(failure);
-      thread.send({ type: 'disconnect' });
+      thread.send({ type: 'close' });
       await rejection;
       expect(abort).toHaveBeenCalledOnce();
       expect(thread.terminate()).toBe(thread.closed);
@@ -1384,6 +1577,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
 
   it('stops a worker even when canceling its script fetch throws', async () => {
     const { creatorEnv, producer, implementation, worker, messages, drain } = createTerminationWorker();
+    producer.postMessage('pending delivery', []);
     const dispatched = Promise.withResolvers<void>();
     const failure = new Error('Fetch cleanup failed during termination');
     const abort = vi.fn(() => { throw failure; });
@@ -1401,7 +1595,6 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
       await dispatched.promise;
       expect(await request({ type: 'block', state })).toBe('entering loop');
       await vi.waitFor(() => { expect(Atomics.load(state, 0)).toBe(1); }, { timeout: 5000 });
-      producer.postMessage('pending delivery', []);
       const outcome = Promise.resolve(thread.closed).then((exit) => exit, (error: unknown) => error);
       expect(worker.terminate()).toBeUndefined();
       expect(await outcome).toBe(failure);
@@ -1426,24 +1619,24 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
     document.origin = origin;
     creatorEnv.topLevelOrigin = { ...origin };
     const { thread, request } = createThread({ kind, data: {}, creatorEnv });
-    const snapshot = structuredClone(thread.creatorEnvSnapshot!);
+    const snapshot = structuredClone(thread.creatorEnvSnapshot);
     // Mutating both the original environment and the local snapshot after posting
     // cannot change the worker's copy. The retained owner is the old Document.
     const replacement = creatorEnv.createDocument();
     replacement.origin = createOpaqueOrigin();
     creatorEnv.window.setAssociatedDocument(replacement);
     creatorEnv.topLevelOrigin = replacement.origin;
-    thread.creatorEnvSnapshot!.apiBaseURL.host = { kind: 'domain', value: 'changed.test' };
+    thread.creatorEnvSnapshot.apiBaseURL.host = { kind: 'domain', value: 'changed.test' };
     await thread.ready;
     expect(thread.owner).toBe(document);
     expect(thread.creatorEnv).toBe(creatorEnv);
     const result = await request({ type: 'inspect' }) as ThreadInspection;
     expect(result).toMatchObject({
-      creatorEnvSnapshot: snapshot, hasEnvironment: false, cluster: { localMembers: 1 },
+      creatorEnvSnapshot: snapshot, hasEnvironment: true, cluster: { localMembers: 1 },
     });
-    expect(result.cluster!.id === snapshot.agentClusterId).toBe(kind === 'dedicated');
-    expect(areSameOrigin(result.creatorEnvSnapshot!.origin, origin)).toBe(true);
-    expect(serializeURL(result.creatorEnvSnapshot!.apiBaseURL)).toBe('https://creator.test/');
+    expect(result.cluster.id === snapshot.agentClusterId).toBe(kind === 'dedicated');
+    expect(areSameOrigin(result.creatorEnvSnapshot.origin, origin)).toBe(true);
+    expect(serializeURL(result.creatorEnvSnapshot.apiBaseURL)).toBe('https://creator.test/');
     // Navigation replaces the origin, but not the environment or its cluster.
     const next = WorkerThread.captureCreatorEnvironment(creatorEnv);
     expect(next.environmentId).toBe(snapshot.environmentId);
@@ -1482,7 +1675,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
     const { thread, request } = createThread({ kind: 'dedicated', data: {}, creatorEnv });
     await thread.ready;
     const result = await request({ type: 'inspect' }) as ThreadInspection;
-    const snapshot = result.creatorEnvSnapshot!;
+    const snapshot = result.creatorEnvSnapshot;
     for (const copy of [snapshot.creationURL, snapshot.apiBaseURL, snapshot.topLevelCreationURL!]) {
       expect(copy).toEqual({ ...url, blobURLEntry: null });
       expect(serializeURL(copy)).toBe('blob:https://creator.test/registered-blob');
@@ -1507,8 +1700,8 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
     expect(result.retainedOwner).toBe(true);
     expect(result.parentEnvSnapshot.environmentId).not.toBe(creatorEnv.id);
     expect(result.child.creatorEnvSnapshot).toEqual(result.parentEnvSnapshot);
-    expect(areSameOrigin(result.child.creatorEnvSnapshot!.origin, origin)).toBe(true);
-    expect(areSameOrigin(result.child.creatorEnvSnapshot!.topLevelOrigin!, origin)).toBe(true);
+    expect(areSameOrigin(result.child.creatorEnvSnapshot.origin, origin)).toBe(true);
+    expect(areSameOrigin(result.child.creatorEnvSnapshot.topLevelOrigin!, origin)).toBe(true);
     expect(result.child.cluster).toEqual({
       id: result.parentEnvSnapshot.agentClusterId,
       crossOriginIsolationMode: kind === 'dedicated' ? 'logical' : 'none',
@@ -1524,13 +1717,13 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
     const { thread, request } = createThread({ kind: 'dedicated', data: {}, creatorEnv });
     await thread.ready;
     const result = await request({ type: 'nested', url: 'data:text/javascript,' }) as NestedInspection;
-    const creator = result.child.creatorEnvSnapshot!;
+    const creator = result.child.creatorEnvSnapshot;
     expect(creator.origin.kind).toBe('opaque');
     expect(areSameOrigin(creator.origin, creatorEnv.origin)).toBe(false);
     expect(areSameOrigin(creator.origin, result.parentEnvSnapshot.origin)).toBe(true);
     expect(areSameOrigin(creator.topLevelOrigin!, creatorEnv.origin)).toBe(true);
     expect(creator.hasCrossSiteAncestor).toBe(true);
-    expect(result.child.cluster!.id).toBe(creatorEnv.realm.agent.agentCluster!.id);
+    expect(result.child.cluster.id).toBe(creatorEnv.realm.agent.agentCluster!.id);
     // The data worker has a fresh origin, but inherited CSP still interprets
     // 'self' against the original resource origin through the next isolate hop.
     expect(creator.policyContainer).toEqual(creatorEnv.policyContainer.toSnapshot());
@@ -1578,14 +1771,14 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
 
   it.each(['classic', 'module'])('Worker.terminate() aborts the HTML %s runner and clears its outside delivery queue', async (scriptType) => {
     const { creatorEnv, producer, implementation, worker, messages, drain } = createTerminationWorker();
+    // Queue a real outside delivery before startup replaces the fixture's local
+    // peer with its native endpoint. Entanglement preserves that pending task.
+    producer.postMessage('pending delivery', []);
     const state = new Int32Array(new SharedArrayBuffer(20));
     const { thread, request } = createThread({ kind: 'dedicated', data: {}, worker: implementation });
     await thread.ready;
     expect(await request({ type: 'block-worker-script', scriptType, state })).toBe('entering worker script');
     await vi.waitFor(() => { expect(Atomics.load(state, 0)).toBe(1); }, { timeout: 5000 });
-    // Real HTML deliveries already queued in the creator. Cross-isolate port
-    // transport remains separate; no mock replaces the queue or native stop.
-    producer.postMessage('pending delivery', []);
     const other = new MessageChannelImpl(creatorEnv);
     const unrelated = creatorEnv.project(other.port2) as MessagePort;
     const received: unknown[] = [];
@@ -1608,13 +1801,13 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
 
   it.each(['callback', 'reaction'] as const)('Worker.terminate() abandons an active %s and the worker\'s remaining work', async (entry) => {
     const { producer, implementation, worker, messages, drain } = createTerminationWorker();
+    producer.postMessage('queued before termination', []);
     const state = new Int32Array(new SharedArrayBuffer(24));
     const { thread, request } = createThread({ kind: 'dedicated', data: {}, worker: implementation });
     await thread.ready;
     expect(await request({ type: 'block-worker-script', scriptType: 'classic', entry, state })).toBe('entering worker script');
     await vi.waitFor(() => { expect(Atomics.load(state, 0)).toBe(1); }, { timeout: 5000 });
 
-    producer.postMessage('queued before termination', []);
     expect(worker.terminate()).toBeUndefined();
     expect(await thread.closed).toEqual({ code: 1, error: undefined, terminated: true });
     drain();
@@ -1631,10 +1824,10 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
 
   it('can terminate while host startup is still blocked', async () => {
     const { producer, implementation, worker, messages, drain } = createTerminationWorker();
+    producer.postMessage('pending before readiness', []);
     const state = new Int32Array(new SharedArrayBuffer(8));
     const { thread } = createThread({ kind: 'dedicated', data: { mode: 'wait-before-ready', state }, worker: implementation });
     await vi.waitFor(() => { expect(Atomics.load(state, 0)).toBe(1); }, { timeout: 5000 });
-    producer.postMessage('pending before readiness', []);
     const rejection = expect(thread.ready).rejects.toThrow('terminated during startup');
     expect(worker.terminate()).toBeUndefined();
     expect(await thread.closed).toMatchObject({ code: 1, terminated: true });
@@ -1667,8 +1860,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
 
   it('reports a missing bootstrap file through readiness and teardown', async () => {
     entry.path = resolve(__dirname, 'fixtures/missing-worker-bootstrap.cjs');
-    const thread = new WorkerThread({ kind: 'dedicated', data: {} }, () => {});
-    threads.add(thread);
+    const { thread } = createThread();
     await expect(thread.ready).rejects.toMatchObject({ code: 'MODULE_NOT_FOUND' });
     expect(await thread.closed).toMatchObject({
       code: 1, error: { code: 'MODULE_NOT_FOUND' }, terminated: false,
@@ -1691,17 +1883,35 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
   it('releases the control channel and observes normal native teardown', async () => {
     const { thread } = createThread();
     await thread.ready;
-    thread.send({ type: 'disconnect' });
+    thread.send({ type: 'close' });
     expect(await thread.closed).toEqual({ code: 0, error: undefined, terminated: false });
+    expect(() => thread.send({ type: 'inspect' })).toThrow('not running');
+  });
+
+  it.each(['dedicated', 'shared'] as const)('releases configured %s startup services only after the final closing checkpoint', async (kind) => {
+    const creatorEnv = createCreatorEnvironment();
+    const blobURL = creatorEnv.userAgent.blobURLStore.add(new BlobImpl(['retained'], {}, creatorEnv), creatorEnv);
+    const messages: unknown[] = [];
+    const thread = new WorkerThread({
+      kind, creatorEnv, data: {},
+      script: { url: creatorEnv.parseURL('https://creator.test/worker.js')!, type: 'classic', credentials: 'same-origin', name: '' },
+    }, (message) => { messages.push(message); });
+    threads.add(thread);
+    await thread.ready;
+    thread.send({ type: 'close-configured-worker', blobURL });
+    expect(await thread.closed).toEqual({ code: 0, error: undefined, terminated: false });
+    expect(messages).toEqual(['before close', 'after close', 'final microtask']);
+    expect(creatorEnv.userAgent.blobURLStore.resolve(parseURL(blobURL).url!)).toBeNull();
+    expect(thread.reservedEnv.discarded).toBe(true);
     expect(() => thread.send({ type: 'inspect' })).toThrow('not running');
   });
 
   it('preserves queued outside deliveries on natural exit while disconnecting the channel', async () => {
     const { producer, implementation, worker, messages, drain } = createTerminationWorker();
+    producer.postMessage('sent before closing', []);
     const { thread } = createThread({ kind: 'dedicated', data: {}, worker: implementation });
     await thread.ready;
-    producer.postMessage('sent before closing', []);
-    thread.send({ type: 'disconnect' });
+    thread.send({ type: 'close' });
     expect(await thread.closed).toEqual({ code: 0, error: undefined, terminated: false });
     expect(worker.terminate()).toBeUndefined();
     producer.postMessage('after exit', []);
@@ -1946,6 +2156,71 @@ describe('Structured data across worker isolates', { timeout: 30_000 }, () => {
 });
 
 describe('Dedicated worker message channel across isolates', { timeout: 30_000 }, () => {
+  it.each(['classic', 'module'] as const)('connects the configured %s startup channel before returning, without enabling delivery', async (type) => {
+    const { implementation, worker, creatorEnv, messages, drain } = createTerminationWorker(false);
+    const { thread, request } = createThread({
+      kind: 'dedicated', worker: implementation, data: {},
+      script: { url: creatorEnv.parseURL('https://creator.test/worker.js')!, type, credentials: 'same-origin', name: '' },
+    });
+    expect(implementation.outsidePort.isEntangledOutsideGlobal()).toBe(true);
+    const buffer = new ArrayBuffer(2);
+    new Uint8Array(buffer).set([4, 7]);
+    worker.postMessage({ number: 1, buffer }, [buffer]);
+    expect(buffer.byteLength).toBe(0);
+    worker.postMessage({ number: 2 });
+    await thread.ready;
+    expect(await request({ type: 'inspect-environment' })).toMatchObject({ executionReady: false });
+    await request({ type: 'prepare-worker-messages' });
+    expect(await request({ type: 'inspect-worker-messages' })).toBe(0);
+
+    const queue = vi.spyOn(creatorEnv.realm, 'queueGlobalTask');
+    expect(await request({ type: 'start-worker-messages' })).toBe(0);
+    await vi.waitFor(() => { expect(queue).toHaveBeenCalledTimes(4); });
+    drain();
+    expect(messages).toEqual([]);
+    implementation.outsidePort.start();
+    drain();
+    expect(messages).toMatchObject([
+      { value: { number: 1 }, bufferRealm: true }, { checkpoint: 1 },
+      { value: { number: 2 } }, { checkpoint: 2 },
+    ]);
+    const reply = messages[0] as { value: { buffer: ArrayBuffer; }; };
+    expect([...new Uint8Array(reply.value.buffer)]).toEqual([4, 7]);
+    await thread.terminate();
+    expect(implementation.outsidePort.isEntangledOutsideGlobal()).toBe(false);
+    expect(implementation.thread).toBeNull();
+  });
+
+  it('releases the isolate and reservation when startup channel delivery fails', async () => {
+    const { implementation, creatorEnv } = createTerminationWorker(false);
+    const failure = new Error('Channel handoff failed');
+    vi.spyOn(JSThread.prototype, 'send').mockImplementationOnce(() => { throw failure; });
+    expect(() => createThread({
+      kind: 'dedicated', worker: implementation, data: {},
+      script: { url: creatorEnv.parseURL('https://creator.test/worker.js')!, type: 'classic', credentials: 'same-origin', name: '' },
+    })).toThrow(failure);
+    const thread = implementation.thread;
+    assert(thread !== null);
+    expect(await thread.closed).toMatchObject({ terminated: true, error: undefined });
+    expect(thread.reservedEnv.discarded).toBe(true);
+    expect(implementation.thread).toBeNull();
+    expect(implementation.outsidePort.isEntangledOutsideGlobal()).toBe(false);
+  });
+
+  it('disconnects the automatic startup channel when the bootstrap fails before readiness', async () => {
+    const { implementation, creatorEnv } = createTerminationWorker(false);
+    const { thread } = createThread({
+      kind: 'dedicated', worker: implementation, data: { mode: 'throw-before-ready' },
+      script: { url: creatorEnv.parseURL('https://creator.test/worker.js')!, type: 'classic', credentials: 'same-origin', name: '' },
+    });
+    expect(implementation.outsidePort.isEntangledOutsideGlobal()).toBe(true);
+    await expect(thread.ready).rejects.toThrow('bootstrap failed');
+    expect(await thread.closed).toMatchObject({ error: { message: 'bootstrap failed' }, terminated: false });
+    expect(thread.reservedEnv.discarded).toBe(true);
+    expect(implementation.thread).toBeNull();
+    expect(implementation.outsidePort.isEntangledOutsideGlobal()).toBe(false);
+  });
+
   it('retains messages posted before native readiness and inside-global composition', async () => {
     const { implementation, worker, messages, drain } = createTerminationWorker();
     const { thread, request } = createThread({ kind: 'dedicated', data: {}, worker: implementation });
@@ -2054,11 +2329,15 @@ describe('Dedicated worker message channel across isolates', { timeout: 30_000 }
 
   it('delivers messages sent before cooperative close and releases the native channel', async () => {
     const { thread, messages, receive, implementation } = await createMessagingWorker();
+    const closed = vi.fn();
+    thread.closed.observe(closed, closed);
     thread.send({ type: 'close-worker-messages' });
-    await thread.closed;
-    await receive(1);
-    expect(messages).toEqual(['before close']);
+    await vi.waitFor(() => { expect(closed).toHaveBeenCalledOnce(); });
+    expect(await thread.closed).toEqual({ code: 0, error: undefined, terminated: false });
+    await receive(4);
+    expect(messages).toEqual(['before close', 'after close', 'explicit microtask', 'final microtask']);
     expect(implementation.outsidePort.isEntangledOutsideGlobal()).toBe(false);
+    expect(implementation.thread).toBeNull();
   });
 });
 
@@ -2376,8 +2655,8 @@ describe('Creator environment snapshot', () => {
 /** Diagnostic replies from the private host fixture, never author messages. */
 interface ThreadInspection {
   threadId: number;
-  creatorEnvSnapshot: CreatorEnvironmentSnapshot | null;
-  cluster: { id: string; crossOriginIsolationMode: string; isOriginKeyed: boolean; localMembers: number; } | null;
+  creatorEnvSnapshot: CreatorEnvironmentSnapshot;
+  cluster: { id: string; crossOriginIsolationMode: string; isOriginKeyed: boolean; localMembers: number; };
 }
 
 interface NestedInspection {
@@ -2401,9 +2680,16 @@ function createModuleRequest(url: string, options: Partial<WorkerModuleScriptReq
   };
 }
 
-function createThread(initialization: WorkerThreadInit = { kind: 'dedicated', data: {} }) {
+/** Supply a real creator and script even when the case only exercises native transport. */
+function createThread(init: Partial<WorkerThreadInit> = {}) {
   const messages = new EventEmitter();
-  const thread = new WorkerThread(initialization, (message) => { messages.emit('message', message); });
+  const creatorEnv = init.worker?.env ?? init.creatorEnv ?? createCreatorEnvironment();
+  const thread = new WorkerThread({
+    kind: 'dedicated', data: {}, ...init, creatorEnv,
+    script: init.script ?? {
+      url: creatorEnv.parseURL('https://creator.test/worker.js')!, type: 'classic', credentials: 'same-origin', name: '',
+    },
+  }, (message) => { messages.emit('message', message); });
   threads.add(thread);
   return {
     thread,
@@ -2457,7 +2743,6 @@ async function createMessagingWorker(outside = createTerminationWorker(), portTr
   const { thread, request } = createThread({ kind: 'dedicated', data: {}, worker: outside.implementation });
   await thread.ready;
   await request({ type: 'prepare-worker-messages', portTransfers });
-  thread.connectMessagePort();
   await request({ type: 'start-worker-messages' });
   return {
     ...outside, thread, request,

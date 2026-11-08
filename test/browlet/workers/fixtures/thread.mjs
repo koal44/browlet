@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { WorkerThread, WorkerThreadRuntime } from '../../../../src/browlet/integration/workers/index.ts';
 import {
-  AgentCluster, BrowletRealm, ClassicScript, EventLoop, JavaScriptModuleScript, ScriptFetchOptions,
+  AgentCluster, ClassicScript, EventLoop, JavaScriptModuleScript, ScriptFetchOptions,
   SharedWorkerAgent, WindowAgent, createTaskSource, networkingTaskSource,
 } from '../../../../src/browlet/scripting/index.ts';
 import { addon, JSThread } from '../../../../src/js-engine/index.ts';
@@ -64,10 +64,7 @@ function startFixture() {
     return;
   }
 
-  // Configured startup now supplies the real inside environment. Agent-only
-  // transport tests still allocate a bare realm without inventing HTML settings.
-  const realm = runtime.environment?.realm ?? new BrowletRealm({ agent: runtime.agent });
-  if (runtime.environment === null) realm.initialize();
+  const realm = runtime.environment.realm;
   const followupTaskSource = createTaskSource('worker fixture continuation');
   let messagingEnv;
   let capturedModuleURL;
@@ -89,9 +86,10 @@ function startFixture() {
         runtime.send('sent');
         break;
       case 'close-worker-messages':
-        messagingEnv.global.postMessage('before close');
-        messagingEnv.global.close();
-        runtime.disconnect();
+        closeWorkerMessages(messagingEnv);
+        break;
+      case 'close-configured-worker':
+        closeConfiguredWorker(runtime, message.blobURL);
         break;
       case 'inspect':
         runtime.send({
@@ -113,6 +111,15 @@ function startFixture() {
           creatorEnvSnapshot: runtime.creatorEnvSnapshot,
         });
         break;
+      case 'inspect-lifetime': {
+        const global = runtime.environment.globalImplementation;
+        runtime.send({
+          activelyNeeded: global.isActivelyNeeded(),
+          permissible: global.isPermissible(),
+          suspendable: global.isSuspendable(),
+        });
+        break;
+      }
       case 'inspect-environment': {
         const env = runtime.environment;
         const { serializeURL } = loadTypeScript('../../../../src/url/index.ts', __filename);
@@ -239,7 +246,7 @@ function startFixture() {
               hasBlobEntry: response.urlList.some((url) => url.blobURLEntry !== null),
               headers: [...response.headerList], bodyBytes,
               scriptRan: realm.globalObject.scriptRan === true,
-              environment: runtime.environment === null ? null : {
+              environment: {
                 url: serializeURL(runtime.environment.apiBaseURL),
                 policyContainer: runtime.environment.policyContainer.toSnapshot(),
               },
@@ -282,16 +289,16 @@ function startFixture() {
         break;
       case 'fail':
         throw new Error('worker host task failed');
-      case 'disconnect':
-        runtime.disconnect();
+      case 'close':
+        runtime.environment.globalImplementation.close();
         break;
     }
   }, (result) => {
     const { response, bodyBytes, policyContainer, embedderPolicyAllowed } = result;
     let initialized;
     if (runtime.data.initializeScriptResponse) {
-      // Use the production-composed environment. It has no UserAgent or local
-      // Blob registrations, so response initialization must use the handoff.
+      // The production-composed environment reaches the original UserAgent
+      // through its service connection; policies still come from this handoff.
       const env = runtime.environment;
       const accepted = env.initializeScriptResponse(result);
       initialized = {
@@ -319,8 +326,9 @@ function startFixture() {
 }
 
 function prepareWorkerMessages(runtime, portTransfers = false) {
-  const env = createFixtureWorkerEnvironment(runtime, 'https://creator.test/messages.js');
-  runtime.connectMessagePort();
+  const env = runtime.environment;
+  // This fixture enables script entry explicitly; production still requires
+  // owner monitoring before execution readiness and initial script execution.
   env.markExecutionReady();
   // Author callbacks run in the real worker realm and through HTML's script runner.
   const source = portTransfers ? portTransferScript() : `
@@ -341,6 +349,39 @@ function prepareWorkerMessages(runtime, portTransfers = false) {
   const script = new ClassicScript(source, env, env.apiBaseURL, new ScriptFetchOptions());
   script.run();
   return env;
+}
+
+/** Exercise author close and its final checkpoint without manually disconnecting the native host. */
+function closeWorkerMessages(env) {
+  const { ClassicScript, ScriptFetchOptions } = loadTypeScript('../../../../src/browlet/scripting/index.ts', __filename);
+  const script = new ClassicScript(`
+    postMessage('before close');
+    close();
+    postMessage('after close');
+    queueMicrotask(() => postMessage('explicit microtask'));
+    Promise.resolve().then(() => postMessage('final microtask'));
+  `, env, env.apiBaseURL, new ScriptFetchOptions());
+  script.run(true);
+}
+
+/** Keep the real browser service connection usable through the final author microtask. */
+function closeConfiguredWorker(runtime, blobURL) {
+  const { ClassicScript, ScriptFetchOptions } = loadTypeScript('../../../../src/browlet/scripting/index.ts', __filename);
+  const env = runtime.environment;
+  // Only the fixture advances readiness; production still awaits owner monitoring.
+  env.markExecutionReady();
+  Reflect.set(env.global, 'record', (value) => runtime.send(value));
+  Reflect.set(env.global, 'revocationURL', blobURL);
+  const script = new ClassicScript(`
+    record('before close');
+    close();
+    record('after close');
+    queueMicrotask(() => {
+      URL.revokeObjectURL(revocationURL);
+      record('final microtask');
+    });
+  `, env, env.apiBaseURL, new ScriptFetchOptions());
+  script.run(true);
 }
 
 /** Author-side control of transferred ports, without bypassing their HTML queues or bindings. */
@@ -451,7 +492,10 @@ async function runNestedWorkerError(runtime) {
   const events = [];
   env.global.addEventListener('error', (event) => { events.push({ message: event.message, error: event.error }); });
   const worker = new WorkerImpl(env);
-  const child = new WorkerThread({ kind: 'dedicated', data: { traceTiming }, worker }, () => {});
+  const child = new WorkerThread({
+    kind: 'dedicated', data: { traceTiming }, creatorEnv: env, worker,
+    script: { url: env.parseURL('https://creator.test/child.js'), type: 'classic', credentials: 'same-origin', name: '' },
+  }, () => {});
   traceWorker('child created');
   env.globalImplementation.reportErrorToOwner = (errorInfo) => {
     traceWorker('parent forwards child error');
@@ -544,7 +588,10 @@ function runBlockingWorkerScript(runtime, state, scriptType, entry = 'script') {
 async function inspectNestedWorker(runtime, url) {
   const creatorEnv = createFixtureWorkerEnvironment(runtime, url);
   const reply = Promise.withResolvers();
-  const child = new WorkerThread({ kind: 'dedicated', data: {}, creatorEnv }, reply.resolve);
+  const child = new WorkerThread({
+    kind: 'dedicated', data: {}, creatorEnv,
+    script: { url: creatorEnv.parseURL('https://creator.test/child.js'), type: 'classic', credentials: 'same-origin', name: '' },
+  }, reply.resolve);
   let result;
   try {
     await child.ready;

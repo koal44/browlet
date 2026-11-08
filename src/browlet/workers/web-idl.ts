@@ -1,4 +1,4 @@
-import { workerGlobalScopeIDL } from './worker-global-scope';
+import { workerGlobalScopeIDL, workerIncludesWindowOrWorkerGlobalScopeIDL } from './worker-global-scope';
 import { workerLocationIDL } from './worker-location';
 import { abstractWorkerIDL } from './abstract-worker';
 import { dedicatedWorkerGlobalScopeIDL, dedicatedWorkerIncludesMessageEventTargetIDL } from './dedicated-worker-global-scope';
@@ -12,6 +12,7 @@ import { sharedWorkerIDL, sharedWorkerOptionsIDL, sharedWorkerIncludesAbstractWo
 /** Worker declarations; concrete global setup remains with the worker processing model. */
 export const workerIDLDefinitions = [
   workerGlobalScopeIDL,
+  workerIncludesWindowOrWorkerGlobalScopeIDL,
   dedicatedWorkerGlobalScopeIDL,
   dedicatedWorkerIncludesMessageEventTargetIDL,
   sharedWorkerGlobalScopeIDL,

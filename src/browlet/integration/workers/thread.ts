@@ -5,9 +5,10 @@ import { fetch, isFilteredResponse, isLocalURL, type FetchController, type Fetch
 
 import { createWorkerScriptRequest, createModuleScriptRequest, ScriptFetchOptions } from '../../scripting/index';
 import type { PolicyContainer } from '../../browsing/policy/index';
+import { DocumentImpl } from '../../dom/nodes/index';
 import type { MessagePortTransportMessage } from '../../communication/index';
 import { WorkerEnvironmentBase, type BrowletEnvironment, type CreatorEnvironmentSnapshot } from '../../environment/index';
-import { WorkerGlobalImpl, type WorkerImpl, type WorkerOwner } from '../../workers/index';
+import { WorkerGlobalImpl, WorkerOwnerSet, type WorkerImpl, type WorkerOwner } from '../../workers/index';
 
 import type {
   WorkerThreadProtocol, WorkerThreadStartup, WorkerScriptInit, WorkerScriptStartup,
@@ -23,15 +24,15 @@ import { WorkerUserAgent, WorkerUserAgentConnection } from './user-agent';
 // Do not expose the control or service endpoints to author code.
 export class WorkerThread {
   /** Live creator environment, retained locally for later service/report delivery. */
-  creatorEnv: BrowletEnvironment | null;
+  creatorEnv: BrowletEnvironment;
   /** Original Document or worker global, even if the creating Window navigates. */
-  owner: WorkerOwner | null;
+  owner: WorkerOwner;
   /** Value snapshot sent to the isolate; no live owners or service stores. */
-  creatorEnvSnapshot: CreatorEnvironmentSnapshot | null;
+  creatorEnvSnapshot: CreatorEnvironmentSnapshot;
   /** Creator-side Fetch client reservation; the inside environment must retain this ID. */
-  reservedEnv: WorkerEnvironmentBase | null = null;
+  reservedEnv: WorkerEnvironmentBase;
   /** Browser-side endpoint released on native exit, including startup failure. */
-  #userAgentConnection: WorkerUserAgentConnection | null = null;
+  #userAgentConnection: WorkerUserAgentConnection;
   /** Engine-owned execution and native transport. */
   #thread: JSThread<WorkerThreadProtocol>;
   /** Host startup acknowledgement, distinct from Node's earlier 'online' event. */
@@ -39,7 +40,7 @@ export class WorkerThread {
   /** Host-owned completion after native exit and local cleanup, independent of page/worker queues. */
   #closed: InternalPromise<JSThreadExit>;
   /** Admission state for host messages; a stopped isolate cannot receive more work. */
-  #state: 'starting' | 'running' | 'stopping' | 'closed' = 'starting';
+  #state: 'starting' | 'running' | 'closing' | 'stopping' | 'closed' = 'starting';
   /** Initial script fetch owned by the creator's UserAgent; canceled when this execution owner closes. */
   #scriptFetch: FetchController | null = null;
   /** Concurrent initial-graph descendant fetches, canceled together when the isolate exits. */
@@ -48,48 +49,48 @@ export class WorkerThread {
   #initialScriptRequest: FetchRequest | null = null;
   /** Dedicated outside object and its hidden port, retained locally until native exit. */
   #worker: WorkerImpl | null;
+  /** Remove the original Document's membership record and lifetime subscriptions on native exit. */
+  #releaseDocumentOwner: (() => void) | null = null;
 
   /** Reload this Browlet bundle in a new isolate; the caller supplies no executable entry. */
-  constructor(initialization: WorkerThreadInit, onMessage: (message: unknown) => void) {
-    this.#worker = initialization.worker ?? null;
-    this.creatorEnv = this.#worker?.env ?? initialization.creatorEnv ?? null;
-    this.owner = this.creatorEnv === null ? null : WorkerGlobalImpl.getRelevantOwner(this.creatorEnv);
-    this.creatorEnvSnapshot = this.creatorEnv === null ? null : WorkerThread.captureCreatorEnvironment(this.creatorEnv);
-    let script: WorkerScriptStartup | null = null;
-    if (initialization.script !== undefined) {
-      const env = this.creatorEnv;
-      if (env === null) throw new InternalError('Worker script startup requires a creator environment');
-      const input = initialization.script;
-      // Reserve only the Fetch-facing environment here. Its UserAgent stays in
-      // this isolate; the full inside environment is still composed separately.
-      this.reservedEnv = new WorkerEnvironmentBase({
-        userAgent: env.userAgent, creationURL: copyURL(input.url), topLevelCreationURL: null,
-        topLevelOrigin: env.topLevelOrigin, targetBrowsingContext: null, isSecureContext: env.isSecureContext,
-      }, input.url.scheme === 'data' ? createOpaqueOrigin() : copyOrigin(env.origin));
-      if (env.userAgent instanceof WorkerUserAgent) {
-        throw new InternalError('Nested worker startup requires a direct connection to the browser owner');
-      }
-      this.#initialScriptRequest = createWorkerScriptRequest(
-        copyURL(input.url), env, initialization.kind === 'shared' ? 'sharedworker' : 'worker', input.type, input.credentials,
-      );
-      this.#initialScriptRequest.reservedClient = this.reservedEnv;
-      script = {
-        ...input, url: WorkerThread.#copySnapshotURL(input.url), environmentId: this.reservedEnv.id,
-        origin: this.reservedEnv.origin,
-        extendedLifetime: initialization.kind === 'shared' && (input.extendedLifetime ?? false),
-      };
-      this.#userAgentConnection = new WorkerUserAgentConnection(env.userAgent, this.reservedEnv);
+  constructor(init: WorkerThreadInit, onMessage: (message: unknown) => void) {
+    this.#worker = init.worker ?? null;
+    this.creatorEnv = init.creatorEnv;
+    this.owner = WorkerGlobalImpl.getRelevantOwner(this.creatorEnv);
+    this.creatorEnvSnapshot = WorkerThread.captureCreatorEnvironment(this.creatorEnv);
+    const env = this.creatorEnv;
+    const input = init.script;
+    if (env.userAgent instanceof WorkerUserAgent) {
+      throw new InternalError('Nested worker startup requires a direct connection to the browser owner');
     }
+    // Reserve only the Fetch-facing environment here. Its UserAgent stays in
+    // this isolate; the full inside environment is still composed separately.
+    this.reservedEnv = new WorkerEnvironmentBase({
+      userAgent: env.userAgent, creationURL: copyURL(input.url), topLevelCreationURL: null,
+      topLevelOrigin: env.topLevelOrigin, targetBrowsingContext: null, isSecureContext: env.isSecureContext,
+    }, input.url.scheme === 'data' ? createOpaqueOrigin() : copyOrigin(env.origin));
+    this.#initialScriptRequest = createWorkerScriptRequest(
+      copyURL(input.url), env, init.kind === 'shared' ? 'sharedworker' : 'worker', input.type, input.credentials,
+    );
+    this.#initialScriptRequest.reservedClient = this.reservedEnv;
+    const script: WorkerScriptStartup = {
+      ...input, url: WorkerThread.#copySnapshotURL(input.url), environmentId: this.reservedEnv.id,
+      origin: this.reservedEnv.origin,
+      extendedLifetime: init.kind === 'shared' && (input.extendedLifetime ?? false),
+    };
+    this.#userAgentConnection = new WorkerUserAgentConnection(env.userAgent, this.reservedEnv);
     // The caller can terminate during startup and inspect closed without awaiting
     // ready. Retain ready's rejection without producing an unhandled host Promise.
     this.#ready.promise.observe(() => {}, () => {});
     const startup: WorkerThreadStartup = {
-      kind: initialization.kind, data: initialization.data, creatorEnvSnapshot: this.creatorEnvSnapshot, script,
-      userAgent: this.#userAgentConnection?.init ?? null,
+      kind: init.kind, data: init.data, creatorEnvSnapshot: this.creatorEnvSnapshot, script,
+      userAgent: this.#userAgentConnection.init,
+      ownerState: init.kind === 'dedicated' && this.owner instanceof DocumentImpl
+        ? this.owner.isFullyActive() ? 'active' : 'inactive' : null,
     };
     try {
       this.#thread = new JSThread<WorkerThreadProtocol>(startup, (message) => {
-        if (this.#state === 'stopping' || this.#state === 'closed') return;
+        if (this.#state === 'closing' || this.#state === 'stopping' || this.#state === 'closed') return;
         switch (message.type) {
           case 'ready':
             this.#state = 'running';
@@ -125,10 +126,10 @@ export class WorkerThread {
           default:
             assertNever(message, 'Unknown worker thread output message kind');
         }
-      }, startup.userAgent === null ? [] : [startup.userAgent.port]);
+      }, [startup.userAgent.port]);
     } catch (error) {
-      this.#userAgentConnection?.close();
-      this.reservedEnv?.discard();
+      this.#userAgentConnection.close();
+      this.reservedEnv.discard();
       throw error;
     }
     // Chaining retains the engine's host queue and propagates cleanup failures.
@@ -137,9 +138,11 @@ export class WorkerThread {
         this.#ready.reject(exit.error ?? new InternalError('Worker thread exited before completing startup'));
       }
       this.#state = 'closed';
-      this.#userAgentConnection?.close();
+      this.#releaseDocumentOwner?.();
+      this.#releaseDocumentOwner = null;
+      this.#userAgentConnection.close();
       this.#initialScriptRequest = null;
-      if (this.reservedEnv !== null && !this.reservedEnv.executionReady) this.reservedEnv.discard();
+      if (!this.reservedEnv.executionReady) this.reservedEnv.discard();
       try {
         this.#terminateScriptFetches();
       } finally {
@@ -156,7 +159,14 @@ export class WorkerThread {
     });
     // Publish the association only after native creation succeeds. It is available
     // immediately, before readiness, and neither the Worker nor its port is cloned.
-    if (this.#worker !== null) this.#worker.thread = this;
+    if (this.#worker !== null) {
+      this.#worker.thread = this;
+      // Prepare transport before the creator can post a message. Both HTML
+      // queues stay disabled until the processing model runs the initial script.
+      try { this.connectMessagePort(); }
+      catch (error) { void this.terminate(); throw error; }
+    }
+    if (init.kind === 'dedicated') this.#registerDocumentOwner();
   }
 
   /** Copy the creator's environment data before startup, preserving origin and cluster identities. */
@@ -212,12 +222,14 @@ export class WorkerThread {
     this.#thread.send({ type: 'message', data: message });
   }
 
-  /** Establish the dedicated worker's implicit channel, including before inside startup finishes. */
+  /** Establish the implicit channel; configured startup calls this before returning to its creator. */
   // HTML §10.2.4 entangles before running the initial script. Queue enablement
   // remains with that algorithm; neither the control acknowledgement nor this
   // connection permits author message callbacks to run early.
   connectMessagePort(): void {
-    if (this.#state === 'stopping' || this.#state === 'closed') throw new InternalError('Worker thread is not running');
+    if (this.#state === 'closing' || this.#state === 'stopping' || this.#state === 'closed') {
+      throw new InternalError('Worker thread is not running');
+    }
     if (this.#worker === null) throw new InternalError('Message channel requires its outside Worker');
     const channel = new JSMessageChannel<MessagePortTransportMessage>();
     try {
@@ -242,7 +254,6 @@ export class WorkerThread {
     if (this.#scriptFetch !== null) throw new InternalError('Worker initial script fetch is already pending');
     const env = this.creatorEnv;
     const owner = this.owner;
-    if (env === null || owner === null) throw new InternalError('Worker script fetching requires a creator environment');
     // Body streams need a host execution owner too: changing only callback
     // delivery would leave their Promise jobs on the inactive creator's loop.
     // The request's client still supplies origin, credentials, CSP and partition.
@@ -254,7 +265,7 @@ export class WorkerThread {
         this.#scriptFetch = null;
         if (this.#state !== 'running') return;
         if (isFilteredResponse(response)) response = response.internalResponse;
-        if (request.reservedClient === this.reservedEnv && this.reservedEnv !== null && response.url !== null) {
+        if (request.reservedClient === this.reservedEnv && response.url !== null) {
           this.reservedEnv.creationURL = response.url;
         }
         // HTML initializes local non-Blob workers from their retained owner;
@@ -268,7 +279,7 @@ export class WorkerThread {
           if (url === null) throw new InternalError('Worker script response requires a URL');
           policyContainer = isLocalURL(url) && url.scheme !== 'blob'
             ? owner.policyContainer.clone()
-            : env.userAgent.createPolicyContainerFromResponse(response, this.reservedEnv ?? env);
+            : env.userAgent.createPolicyContainerFromResponse(response, this.reservedEnv);
           if (request.destination === 'worker') {
             embedderPolicyAllowed = policyContainer.embedderPolicy.checkWorkerInheritance(response, env);
           }
@@ -302,18 +313,56 @@ export class WorkerThread {
     return this.closed;
   }
 
+  /** Register the original Document with its existing destruction algorithm, without cloning that owner. */
+  #registerDocumentOwner(): void {
+    const document = this.owner;
+    const env = this.creatorEnv;
+    // Shared/nested ownership still belongs to their manager and surviving browser connection.
+    if (!(document instanceof DocumentImpl)) return;
+    const ownerSet = new WorkerOwnerSet(env);
+    ownerSet.add(document);
+    const registration = { ownerSet };
+    document.ownedWorkers.push(registration);
+    const stopObserving = ownerSet.observe(() => {
+      if (ownerSet.size === 0) this.#closeOrphan();
+    });
+    const stopObservingActivity = document.observeFullyActiveState((fullyActive) => {
+      if (this.#state !== 'starting' && this.#state !== 'running') return;
+      this.#thread.send({ type: 'owner-activity', fullyActive });
+    });
+    this.#releaseDocumentOwner = () => {
+      stopObserving();
+      stopObservingActivity();
+      const index = document.ownedWorkers.indexOf(registration);
+      if (index !== -1) document.ownedWorkers.splice(index, 1);
+      ownerSet.clear();
+    };
+  }
+
+  /** Close at the loss of permissibility; inactive Documents remain owners and do not take this path. */
+  // https://html.spec.whatwg.org/multipage/workers.html#step-closing-orphan-workers
+  #closeOrphan(): void {
+    if (this.#state !== 'starting' && this.#state !== 'running') return;
+    this.#state = 'closing';
+    this.#ready.reject(new InternalError('Worker owner was destroyed during startup'));
+    // Existing turns finish before native exit. Explicit terminate() can still
+    // interrupt this closing isolate through the separate native execution owner.
+    // TODO(HTML terminate-rampant-workers): Supply the host's forced-stop policy
+    // when a running script cannot return to receive this orphan notification.
+    this.#thread.send({ type: 'owner-removed' });
+  }
+
   /** Fetch an initial module-graph dependency using the live creator client, without replacing root policies. */
   // HTML's initial worker graph retains fetchClient for every descendant.
   // https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-worklet/module-worker-script-graph
   #fetchModuleScript(id: number, input: WorkerModuleScriptFetch): void {
     const env = this.creatorEnv;
-    if (env === null) throw new InternalError('Worker module fetching requires its creator environment');
     const url = copyURL(input.url);
     // Preserve the inside parser's captured registration, including a failed lookup.
     // The original entry can remain valid after the public URL has been revoked.
     if (url.scheme === 'blob') {
       url.blobURLEntry = input.blobEntryId === null
-        ? null : this.#userAgentConnection?.getBlobEntry(input.blobEntryId) ?? null;
+        ? null : this.#userAgentConnection.getBlobEntry(input.blobEntryId);
     }
     const options = new ScriptFetchOptions();
     options.credentialsMode = input.credentials;
@@ -353,10 +402,10 @@ export interface WorkerThreadInit {
   kind: 'dedicated' | 'shared';
   /** Caller-owned startup data; native transport clones it without author-facing HTML conversion. */
   data: unknown;
-  /** Creator for shared or agent-only startup; a dedicated outside Worker supplies its own environment. */
-  creatorEnv?: BrowletEnvironment;
-  /** Dedicated outside object, retained only in the creating isolate; omitted for shared or agent-only startup. */
+  /** Live creation environment; use the outside Worker's environment for dedicated startup. */
+  creatorEnv: BrowletEnvironment;
+  /** Dedicated outside object, retained only in the creating isolate; absent for shared startup. */
   worker?: WorkerImpl;
-  /** Parsed initial URL and converted options; omitted for agent-only startup. */
-  script?: WorkerScriptInit;
+  /** Parsed initial URL and converted options. */
+  script: WorkerScriptInit;
 }

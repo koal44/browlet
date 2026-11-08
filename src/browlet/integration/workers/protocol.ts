@@ -6,7 +6,7 @@ import type { Destination, ReferrerPolicy, RequestCredentials, ResponseType } fr
 import type { ErrorInformation } from '../../dom/events/index';
 import type { PolicyContainerSnapshot } from '../../browsing/policy/index';
 import type { CreatorEnvironmentSnapshot } from '../../environment/index';
-import type { WorkerOptions } from '../../workers/index';
+import type { WorkerOptions, WorkerOwnerState } from '../../workers/index';
 
 import type { WorkerUserAgentInit } from './user-agent';
 
@@ -38,15 +38,17 @@ export interface WorkerScriptStartup extends WorkerScriptInit {
 /** Data cloned into the new isolate before any Browlet realm or global exists. */
 export interface WorkerThreadStartup {
   /** Dedicated service endpoint selecting the original browser's shared stores. */
-  userAgent: WorkerUserAgentInit | null;
+  userAgent: WorkerUserAgentInit;
   /** Agent kind selected by the outside startup owner. */
   kind: 'dedicated' | 'shared';
   /** Internal startup payload copied from WorkerThreadInit. */
   data: unknown;
-  /** Portable creator values; null only for agent-only startup without an HTML environment. */
-  creatorEnvSnapshot: CreatorEnvironmentSnapshot | null;
-  /** Null for agent-only startup; its URL has no live Blob registration. */
-  script: WorkerScriptStartup | null;
+  /** Portable creator values needed to compose the inside environment. */
+  creatorEnvSnapshot: CreatorEnvironmentSnapshot;
+  /** Initial script selection; its URL has no live Blob registration. */
+  script: WorkerScriptStartup;
+  /** Original Document activity for dedicated startup; its live identity stays with the creator. */
+  ownerState: WorkerOwnerState;
 }
 
 /** Private acknowledgement and outbound data; never HTML MessageEvents. */
@@ -106,6 +108,8 @@ export interface WorkerModuleScriptFetch extends WorkerModuleScriptRequest {
 
 /** Private creator-to-worker messages, distinguished before choosing the receiving task source. */
 type WorkerThreadInput = { type: 'message'; data: unknown; } |
+  { type: 'owner-removed'; } |
+  { type: 'owner-activity'; fullyActive: boolean; } |
   { type: 'connect-port'; handle: JSMessagePortHandle; } |
   { type: 'script-response'; snapshot: WorkerScriptResponseSnapshot; } |
   { type: 'module-response'; id: number; snapshot: ScriptResponseSnapshot; };

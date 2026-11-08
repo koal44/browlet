@@ -2347,9 +2347,9 @@ The dedicated/shared worker event-loop tail now performs cooperative shutdown:
 after closing, all queues must empty and the final checkpoint must finish before
 timers, external ports, local EventSources, and owners are released. Already-sent
 outgoing messages remain deliverable. Later tasks, microtasks, and spinning continuations cannot
-restart that HTML loop. This does not abort a blocking script or dispose its native
-isolate; owner-driven closure/suspension, worker rendering,
-and Service Worker teardown remain separate dependencies.
+restart that HTML loop. The final cleanup now disconnects the runtime's private
+endpoints so its native isolate can exit. This does not abort a blocking script;
+worker suspension, rendering, and Service Worker teardown remain dependencies.
 `WorkerThread.terminate()` now connects native interruption to dedicated outside
 port cleanup: it clears pending deliveries immediately and disconnects on native
 exit, even if Fetch cleanup fails. Actual HTML classic/module runner tests verify
@@ -2364,8 +2364,14 @@ live owners use HTML tasks and the normal ErrorEvent binding. Production startup
 must attach the inside global's reporter. Propagation through terminated parents
 still needs a route that survives their isolates; source filename/line/column
 extraction remains the existing diagnostic metadata dependency.
-Worker API mixin forwarding, event producers, cross-thread
-messaging, and independent execution remain pending. Inheritance
+Worker common-global API forwarding is connected through Web IDL, including
+microtasks, structured cloning, Base64, security getters, Performance, and
+Trusted Types. Timer IDs can be allocated and canceled, but elapsed worker time
+still requires suspension/resumption; string timer handlers require Trusted
+Types/CSP/script preparation. General Fetch needs the remaining worker browser
+services. Cross-thread messaging and separate-isolate execution have focused
+coverage; production startup still needs suspension support before advancing
+execution readiness. Worker event producers remain separate dependencies. Inheritance
 reports omit CORP's destination member and preserve local observation even with
 an empty endpoint or outbound delivery disabled. Private Network Access and
 Opaque Response Blocking remain absent; the
@@ -2379,10 +2385,23 @@ actively-needed decisions are implemented. Protected/permissible/suspendable
 checks now use owners, external ports, uncanceled timers, pending Fetch completion,
 EventSources, and loading navigables. IndexedDB transactions and WebSocket/WebTransport
 activity remain explicit inputs to add when those subsystems exist. Worker timer
-advancement, automatic startup/additional shared-owner registration, shutdown/suspension,
+advancement, automatic startup/additional shared-owner registration, suspension,
 and Service Worker enforcement of the shared no-client lifetime ceiling remain
 pending; see the
 [worker lifetime review](browlet/workers/ROADMAP.md#document-order-review).
+
+Configured dedicated isolates now retain an ownership registration in their
+original Document. `Document.destroy()` removes that owner and requests orphan
+closing through the existing loop cleanup; native exit releases the registration
+even on startup failure. Aborting a Document or making it inactive does not remove
+membership. Document activity now reaches the inside lifetime predicates through
+the private control channel, including initial activity and updates before native
+readiness. Execution suspension/resumption and non-suspended timer advancement
+remain backend dependencies; updating eligibility does not freeze author code.
+Recursive destruction still stops at the explicit HTML §7.5.10 stub;
+its worker-exit regression is an expected failure with unexpected-pass detection.
+Shared/nested owner monitoring and the forced-stop policy for an orphan blocked
+in JavaScript remain pending. No Document lifecycle algorithm is replaced here.
 
 Sandbox parsing, iframe attribute state, and creation-flag propagation exist,
 but complete sandbox enforcement does not. Navigation admission and named lookup

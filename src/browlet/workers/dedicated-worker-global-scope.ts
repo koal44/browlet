@@ -14,8 +14,8 @@ import { WorkerGlobalImpl, type WorkerType } from './worker-global-scope';
 
 /** Inside global of a dedicated worker, communicating through its hidden channel endpoint. */
 // https://html.spec.whatwg.org/multipage/workers.html#dedicatedworkerglobalscope
-// TODO(HTML §10.2.4): Startup must use worker environment composition, entangle the inside port,
-// and enable delivery after script execution. Independent execution remains pending.
+// TODO(HTML §10.2.4): Connect owner monitoring and initial script execution before
+// enabling delivery. Configured isolate startup already composes and entangles this global.
 export class DedicatedWorkerGlobalImpl extends WorkerGlobalImpl {
   /** Common worker handlers plus the MessageEventTarget mixin's two handlers. */
   static #handlerDefinitions = new Map([
