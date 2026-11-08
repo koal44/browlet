@@ -281,9 +281,11 @@ describe('pending navigation history', () => {
     expect(finalize).toHaveBeenCalledExactlyOnceWith('replace', 'none', entry);
   });
 
-  it('connects population Fetch to HTML loading while recursive abortion remains explicit', async () => {
+  it('connects population Fetch to HTML loading and delivers recursive abortion on the owning task', async () => {
     const { document, navigable, env, turns, populate, abort } = fixture();
     populate.mockRestore();
+    abort.mockRestore();
+    const singleAbort = vi.spyOn(document, 'abort');
     const queue = vi.spyOn(env, 'queueTask');
     const load = vi.spyOn(navigable, 'loadHTMLDocument');
     mockHTTPTransport(env.userAgent, (_, listener) => {
@@ -306,8 +308,7 @@ describe('pending navigation history', () => {
     });
     expect(load).toHaveBeenCalledOnce();
     expect(load.mock.results[0]!.value).toMatchObject({ URL: 'https://example.test/next', contentType: 'text/html' });
-    abort.mockRestore();
-    expect(() => document.abortAndDescendants()).toThrow('Document and descendant abortion is not implemented');
+    expect(singleAbort).toHaveBeenCalledOnce();
   });
 });
 

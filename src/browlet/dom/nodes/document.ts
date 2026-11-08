@@ -1,6 +1,6 @@
 import {
   type InternalPromise, type InternalPromiseWithResolvers, type TaskHandle, asciiLower, HTML_NAMESPACE, SVG_NAMESPACE,
-  stripAndCollapseASCIIWhitespace, toScalarValueString, isAsciiWhitespace, TextCursor, InternalError,
+  stripAndCollapseASCIIWhitespace, toScalarValueString, isAsciiWhitespace, TextCursor, InternalError, internalType,
 } from '../../../infra/index';
 import { addon, isomorphicDecode, isomorphicEncode } from '../../../js-engine/index';
 import {
@@ -8,7 +8,7 @@ import {
   defineTypedef, dictMember, emptyDictionary, idlType, impl, integer, nullable, onError, op, roAttr, reference, union,
   DOMExceptionNames, DOMExceptionImpl, xattr,
 } from '../../../web-idl/core/index';
-import { currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../../timing/index';
+import { coarsenTime, currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../../timing/index';
 import { createSelectlet, type Selectlet } from '../../../selectlet/index';
 import { decode, getEncoding, utf8DecodeWithoutBOM, utf8Encode, type Encoding } from '../../../encoding/index';
 import {
@@ -231,7 +231,6 @@ export class DocumentImpl extends NodeImpl {
   isInitialAboutBlank = false;
   /** Number of active unload operations that prohibit starting another navigation. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#unload-counter
-  // Beforeunload maintains this counter; TODO(HTML §7.5.9): also bracket document unloading.
   unloadCounter = 0;
   /** Whether cross-origin redirects occurred while creating this document. */
   wasCreatedViaCrossOriginRedirects = false;
@@ -252,7 +251,7 @@ export class DocumentImpl extends NodeImpl {
   domLoadingTime: DOMHighResTimeStamp = 0;
   /** Unload timestamps inherited from the document replaced by this navigation. */
   // https://html.spec.whatwg.org/multipage/dom.html#previous-document-unload-timing
-  // TODO(HTML navigation): capture and pass the departing document's unload timing.
+  // Keep this record stable: the Navigation Timing entry retains it before the previous Document unloads.
   previousDocumentUnloadTiming: DocumentUnloadTimingInfo = {
     unloadEventStartTime: 0,
     unloadEventEndTime: 0,
@@ -278,7 +277,7 @@ export class DocumentImpl extends NodeImpl {
   printWhenLoaded = false;
   /** Whether this Document has been shown without a subsequent pagehide. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#page-showing
-  // TODO(HTML §7.5): Initial pageshow and unloading must also maintain this flag.
+  // TODO(HTML stop-parsing): Initial pageshow must also maintain this flag.
   pageShowing = false;
   /** Whether the rendering reveal step has run for this activation. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#has-been-revealed
@@ -290,7 +289,7 @@ export class DocumentImpl extends NodeImpl {
   /** Whether user scrolling should stop attempts to restore this Document's saved scroll positions. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#has-been-scrolled-by-the-user
   // TODO(Input/CSSOM View): Set on actual user scrolling, not from script or synthetic scroll events.
-  // TODO(HTML §7.5.9): Reset during unloading; same-document restoration needs the scroll producer's lifecycle audit.
+  // Same-document restoration still needs the scroll producer's lifecycle audit.
   hasBeenScrolledByUser = false;
   /** Elements whose pending work delays rendering, independently of script-blocking stylesheets. */
   // https://html.spec.whatwg.org/multipage/dom.html#render-blocking-element-set
@@ -310,6 +309,10 @@ export class DocumentImpl extends NodeImpl {
 
   /** Associated browsing context, or null for a detached document. */
   #browsingContext: BrowsingContext | null = null;
+  /** Shared completion for recursive destruction, including a retained failure. */
+  #destructionPromise: InternalPromise<void> | null = null;
+  /** Whether single-Document teardown has completed, including through unloading. */
+  #destroyed = false;
   /** Accepted Refresh and its current wake-up or queued task; absent after cancellation or dispatch. */
   #pendingDeclarativeRefresh: { seconds: bigint; url: URLRecord; metaInsertionTime?: number; handle?: TaskHandle; } | null = null;
   /** Page visibility, initially hidden until navigable initialization or history activation. */
@@ -1682,13 +1685,16 @@ export class DocumentImpl extends NodeImpl {
 
   /**
    * Release traversal ownership and start unloading, after any outgoing transition capture.
-   * Enter from parallel history application; unloading owns the supplied completion.
+   * Enter from the session history traversal queue.
+   * Return the promise to retain the current queue operation when unloading starts immediately.
+   * A void result releases that operation: capture will append unloading to the queue later.
+   * In both paths, afterPotentialUnloads signals completion on the Document's loop.
    */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#deactivate-a-document-for-a-cross-document-navigation
   deactivateForCrossDocumentNavigation(
     userInvolvement: UserNavigationInvolvement, targetEntry: SessionHistoryEntry,
     navigationType: NavigationType, afterPotentialUnloads: () => void,
-  ): void {
+  ): void | InternalPromise<void> {
     const navigable = this.getNodeNavigable();
     if (navigable === null) throw new InternalError('Document deactivation requires a node navigable');
     const targetDocument = targetEntry.document;
@@ -1701,19 +1707,18 @@ export class DocumentImpl extends NodeImpl {
       const firePageSwapBeforeUnload = () => { window.firePageSwapEvent(targetEntry, navigationType, null); };
       // History application runs in parallel; the displayed Document's environment is not the caller's Agent.
       navigable.setOngoingNavigation(null);
-      this.unloadAndDescendants(targetDocument, afterPotentialUnloads, firePageSwapBeforeUnload);
-      return;
+      return this.unloadAndDescendants(targetDocument, afterPotentialUnloads, firePageSwapBeforeUnload);
     }
 
     const activeWindow = navigable.activeWindow;
     if (activeWindow === null) throw new InternalError('Transition setup requires an active Window');
     // TODO(HTML §7.4.6.1 coordinator): Forward setup/capture/unload failures and task discard to the waiting operation.
-    // Unloading and CSS capture still need their completion/failure contracts before that wait can be connected.
+    // Recursive unloading supplies a completion promise; CSS capture still needs its failure contract.
     activeWindow.env.queueTask('navigation-and-traversal', () => {
       const proceedAfterCapture = () => {
         navigable.traversable.appendSessionHistoryTraversalSteps(() => {
           navigable.setOngoingNavigation(null);
-          this.unloadAndDescendants(targetDocument, afterPotentialUnloads);
+          return this.unloadAndDescendants(targetDocument, afterPotentialUnloads);
         });
       };
       // SPEC_CLASH(cross-document-transition-setup-inputs): HTML also passes navigationType; CSS setup does not take it.
@@ -1753,29 +1758,158 @@ export class DocumentImpl extends NodeImpl {
     throw new InternalError('Inbound cross-document view transition resolution is not implemented');
   }
 
-  /** Start unloading from the traversal queue; complete after the descendants and this Document unload. */
+  /** Unload this Document on its owning loop, retaining it only after cache admission. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#unload-a-document
+  // Keep the incoming Document's shared timing record and copy into it; unavailable timing uses its zero defaults.
+  // Timer suspension uses GlobalTimers' existing per-timer activity bookkeeping, as reactivation does.
+  unload(newDocument: DocumentImpl | null = null): void {
+    const unloadTimingInfo = this.#beginUnloading(newDocument);
+    try {
+      this.hasBeenScrolledByUser = false;
+      this.runUnloadingCleanup();
+      if (this.getNodeNavigable()?.isTopLevelTraversable) this.buildNotRestoredReasons();
+    } catch (error) {
+      this.unloadCounter--;
+      throw error;
+    }
+    this.#finishUnloading(newDocument, unloadTimingInfo);
+  }
+
+  /** Keep the traversal queue occupied until every selected subtree and the completion steps finish. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#unload-a-document-and-its-descendants
+  // The UserAgent-owned InternalPromise survives Document destruction and rejects on task failure or discard.
   unloadAndDescendants(
-    _newDocument: DocumentImpl | null = null, _afterAllUnloads?: () => void, _firePageSwapSteps?: () => void,
-  ): void {
-    // TODO(HTML §7.5.9): Require traversal-queue ownership, queue recursive child unloading, wait for completion,
-    // then queue page-swap steps, single-document unloading, and the continuation on this Document's Window.
-    // Single-document unloading still needs pagehide/unload/visibility events, timing, bfcache decisions,
-    // and resetting hasBeenScrolledByUser before unload cleanup.
-    throw new InternalError('Document and descendant unloading is not implemented');
+    newDocument: DocumentImpl | null = null, afterAllUnloads?: () => void, firePageSwapSteps?: () => void,
+  ): InternalPromise<void> {
+    const navigable = this.getNodeNavigable();
+    if (navigable === null) throw new InternalError('Document unloading requires a node navigable');
+    const queue = navigable.traversable.sessionHistoryTraversalQueue;
+    if (!queue.isExecuting) throw new InternalError('Recursive unloading must begin in its session history traversal queue');
+    const P = queue.userAgent.HostPromise;
+    const resultType = internalType<void>();
+    const completion = P.withResolvers(resultType);
+    const pending = new Map<DocumentImpl, DocumentUnloadTimingInfo | null>();
+    const stopObserving: Map<DocumentImpl, () => void> = new Map();
+    const cleanupOrder: DocumentImpl[] = [];
+    let pendingTask: TaskHandle | undefined;
+    const fail = (error: unknown): void => {
+      if (completion.isResolved) return;
+      completion.reject(error);
+      pendingTask?.remove();
+      for (const stop of stopObserving.values()) stop();
+      stopObserving.clear();
+      for (const document of pending.keys()) document.unloadCounter--;
+      pending.clear();
+    };
+    const queueSteps = (document: DocumentImpl, steps: () => void): InternalPromise<void> => {
+      if (completion.isResolved) return P.reject(new InternalError('Document unloading has already ended'), resultType);
+      const taskCompletion = P.withResolvers(resultType);
+      try {
+        pendingTask = document.env.queueTask('navigation-and-traversal', () => {
+          pendingTask = undefined;
+          try { steps(); taskCompletion.resolve(); } catch (error) { taskCompletion.reject(error); }
+        }, { discardSteps: () => { taskCompletion.reject(new InternalError('Document unload task was discarded')); } });
+      } catch (error) { taskCompletion.reject(error); }
+      return taskCompletion.promise;
+    };
+
+    const prepare = (document: DocumentImpl): InternalPromise<void> => {
+      let children: Navigable[];
+      return queueSteps(document, () => {
+        const current = document.getNodeNavigable();
+        if (current === null) throw new InternalError('Recursive unloading requires an active Document');
+        // SPEC_GAP(unload-document-children): HTML defines child navigables on Navigable, not Document.
+        // Select this Document's containers, including shadow trees, without taking another retained Document's children.
+        children = [...current.childNavigables].filter((child) => child.containerDocument === document);
+        stopObserving.set(document, document.observeFullyActiveState(() => {
+          if (document.browsingContext === null) fail(new InternalError('Document was destroyed during recursive unloading'));
+        }));
+        if (document === this) firePageSwapSteps?.();
+        if (completion.isResolved) return;
+        // SPEC_CLASH(unload-descendant-event-order): HTML unloads children first; all three browsers fire parent events first.
+        const timing = document.#beginUnloading(document === this ? newDocument : null);
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Dismissal callbacks can destroy the Document and reject completion.
+        if (completion.isResolved) { document.unloadCounter--; return; }
+        pending.set(document, timing);
+      }).then(() => {
+        // SPEC_GAP(unload-sibling-order): HTML leaves sibling order unspecified.
+        // SPEC_CLASH(unload-sibling-order): Follow Firefox's retained order, including after state-preserving moves.
+        // Chromium follows current tree order; WebKit reverses siblings.
+        let childrenComplete = P.resolve(undefined, resultType);
+        for (const child of children) {
+          childrenComplete = childrenComplete.then(() => {
+            const childDocument = child.activeDocument;
+            if (childDocument !== null) return prepare(childDocument);
+          }, undefined, resultType);
+        }
+        return childrenComplete;
+      }, undefined, resultType).then(() => queueSteps(document, () => {
+        // GlobalTimers already suspends each timer when full activity changes; do not adjust deadlines twice.
+        document.hasBeenScrolledByUser = false;
+        document.runUnloadingCleanup();
+        // SPEC_GAP(unload-diagnostic-lifetime): HTML's child destruction removes Documents its later collector needs.
+        // Keep the tree alive through every cleanup, then collect diagnostics before destroying any of it.
+        if (document === this && navigable.isTopLevelTraversable) document.buildNotRestoredReasons();
+        cleanupOrder.push(document);
+      }), undefined, resultType);
+    };
+    prepare(this).then(() => {
+      let finished = P.resolve(undefined, resultType);
+      for (const document of cleanupOrder) {
+        finished = finished.then(() => queueSteps(document, () => {
+          stopObserving.get(document)!();
+          stopObserving.delete(document);
+          const timing = pending.get(document)!;
+          pending.delete(document); // The finishing operation now owns releasing this Document's counter.
+          document.#finishUnloading(document === this ? newDocument : null, timing);
+          if (document === this) afterAllUnloads?.();
+        }), undefined, resultType);
+      }
+      return finished;
+    }, undefined, resultType).observe(() => { completion.resolve(); }, fail);
+    return completion.promise;
   }
 
-  /** Start recursive teardown, running the optional continuation after every Document is destroyed. */
+  /** Share recursive teardown; each optional continuation runs on this Document's loop after completion. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#destroy-a-document-and-its-descendants
-  destroyAndDescendants(_afterAllDestruction?: () => void): void {
-    // TODO(HTML §7.5.10): Run in parallel, mark inactive documents unsalvageable and collect diagnostics,
-    // select child navigables, then wait for recursive child teardown before queuing destroy() and the continuation.
-    // Release the destroyed children's parent-owned navigable associations without discarding children of other retained Documents.
-    // Inactive-document ownership, repeated requests for shared Documents, and runnable teardown tasks need their lifecycle audit.
-    throw new InternalError('Recursive Document destruction is not implemented');
+  destroyAndDescendants(afterAllDestruction?: () => void): InternalPromise<void> {
+    const userAgent = this.env.userAgent;
+    const P = userAgent.HostPromise;
+    const resultType = internalType<void>();
+    if (this.#destructionPromise === null) {
+      const completion = P.withResolvers(resultType);
+      this.#destructionPromise = completion.promise;
+      userAgent.runInParallel(() => {
+        let children: Navigable[] = [];
+        this.#queueDestructionSteps(() => {
+          if (this.#destroyed) return;
+          const navigable = this.browsingContext?.navigable;
+          if (navigable === null || navigable === undefined) {
+            throw new InternalError('Recursive destruction requires its retained navigable');
+          }
+          if (!this.isFullyActive()) {
+            // HTML's default when no more specific eviction reason is supplied by the browser.
+            this.makeUnsalvageable('masked');
+            if (navigable.isTopLevelTraversable) this.buildNotRestoredReasons();
+          }
+          children = [...navigable.childNavigables].filter((child) => child.containerDocument === this);
+        }).then(() => {
+          // HTML leaves child order open. Finish each retained child subtree before starting the next.
+          let finished = P.resolve(undefined, resultType);
+          for (const child of children) {
+            finished = finished.then(() => child.activeDocument?.destroyAndDescendants(), undefined, resultType);
+          }
+          return finished;
+        }).then(() => this.#queueDestructionSteps(() => { this.destroy(); }))
+          .observe(() => { completion.resolve(); }, completion.reject);
+      });
+    }
+    if (afterAllDestruction === undefined) return this.#destructionPromise;
+    // A caller's continuation can fail independently of the shared, completed teardown.
+    return this.#destructionPromise.then(() => this.#queueDestructionSteps(afterAllDestruction));
   }
 
-  /** Destroy an active document from a task on its owning event loop. */
+  /** Destroy an active or retained Document from a task on its owning event loop. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#destroy-a-document
   destroy(): void {
     const env = this.env;
@@ -1783,14 +1917,18 @@ export class DocumentImpl extends NodeImpl {
     if (eventLoop.currentlyRunningTask === null) {
       throw new InternalError('Document destruction requires a task on its owning event loop');
     }
+    if (this.#destroyed) return;
 
-    // PROVISIONAL: inactive history destruction needs the retained document state;
-    // using the navigable's current active entry would clear a different document.
-    const navigable = this.getNodeNavigable();
-    if (navigable === null) {
-      throw new InternalError('Inactive document destruction needs session-history ownership');
+    // The browsing context retains its navigable after this Document stops being active.
+    const navigable = this.browsingContext?.navigable;
+    if (navigable === undefined || navigable === null) {
+      throw new InternalError('Document destruction requires its retained navigable');
     }
-    const documentState = navigable.activeSessionHistoryEntry.documentState;
+    if (env.getAssociatedDocument() !== this) {
+      // TODO(HTML §7.5.10): Separate Document-owned teardown from reused-Window resources before
+      // destroying a superseded initial about:blank Document whose environment now belongs to its replacement.
+      throw new InternalError('Destruction after Window reuse is not implemented');
+    }
     const global = env.getWindowOrWorkerGlobalScopeMixin();
 
     this.abort();
@@ -1807,24 +1945,46 @@ export class DocumentImpl extends NodeImpl {
     global.handoffReports();
     global.clearReportingState();
 
+    const wasActive = navigable.activeDocument === this;
     this.browsingContext = null;
-    documentState.document = null;
-    for (const evaluation of env.userAgent.pageEvaluations.get(navigable) ?? []) {
-      evaluation.activeDocumentChanged();
+    // SPEC_CLASH(document-destruction-history-state): HTML clears the active entry after detaching its Document.
+    // Retained Documents have no node navigable; clear only their own references, as cache teardown requires.
+    navigable.clearDocumentFromHistory(this);
+    navigable.releaseDestroyedChildNavigables(this);
+    if (wasActive) {
+      for (const evaluation of env.userAgent.pageEvaluations.get(navigable) ?? []) {
+        evaluation.activeDocumentChanged();
+      }
+      env.userAgent.pageEvaluations.delete(navigable);
     }
-    env.userAgent.pageEvaluations.delete(navigable);
     this.notifyFullyActiveStateChanged();
 
     for (const worker of this.ownedWorkers) worker.ownerSet.delete(this);
     for (const worklet of this.workletGlobalScopes) worklet.terminate();
+    this.#destroyed = true;
   }
 
   /** Abort this Document in its owning task and queue abortion of the active descendant Documents. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#abort-a-document-and-its-descendants
   abortAndDescendants(): void {
-    // TODO(HTML §7.5.11): Snapshot descendants, queue abort() on each active Window, and propagate unsalvageability.
-    // HTML leaves descendant ordering open; audit it before connecting recursive cancellation.
-    throw new InternalError('Document and descendant abortion is not implemented');
+    if (this.env.responsibleEventLoop.currentlyRunningTask === null) {
+      throw new InternalError('Recursive Document abortion requires a task on its owning event loop');
+    }
+    // SPEC_GAP(abort-descendant-order): HTML leaves ordering open; enqueue in its descendant collection's tree order.
+    const descendants = this.getDescendantNavigables();
+    for (const descendant of descendants) {
+      const window = descendant.activeWindow;
+      if (window === null) throw new InternalError('Descendant abortion requires an active Window');
+      // SPEC_CLASH(abort-descendant-task): Follow HTML's queued handoff, including within one Agent.
+      // Chromium stops local child parsers synchronously; each Browlet task stays on its owning loop.
+      window.env.queueTask('navigation-and-traversal', () => {
+        const document = descendant.activeDocument;
+        if (document === null) throw new InternalError('Descendant abortion requires an active Document');
+        document.abort();
+        if (!document.salvageable) this.salvageable = false;
+      });
+    }
+    this.abort();
   }
 
   /** Stop this document's fetches and active parser from its owning event-loop task. */
@@ -1836,6 +1996,8 @@ export class DocumentImpl extends NodeImpl {
     }
     // SPEC_CLASH(refresh-abort): Cancel pending Refresh like Chromium/Firefox; WebKit keeps it after stop().
     this.cancelDeclarativeRefresh();
+    // TODO(HTML §7.5.11 / Fetch): Group cancellation must stop transport and selectively discard
+    // queued Fetch delivery and further bytes; cancel() remains explicit provisional behavior.
     if (env.fetchGroup.cancel()) this.makeUnsalvageable('fetch');
 
     const navigationID = this.duringLoadingNavigationID;
@@ -2082,7 +2244,6 @@ export class DocumentImpl extends NodeImpl {
   }
 
   /** Cancel an accepted refresh without allowing a later directive to replace it. */
-  // TODO(HTML §7.5.11): The unfinished stop-loading/recursive-abortion path must reach abort().
   cancelDeclarativeRefresh(): void {
     const refresh = this.#pendingDeclarativeRefresh;
     this.#pendingDeclarativeRefresh = null;
@@ -2545,11 +2706,11 @@ export class DocumentImpl extends NodeImpl {
     this.salvageable = false;
   }
 
-  /** Collect and mask diagnostics for this active top-level Document and its descendants. */
+  /** Collect and mask diagnostics for this active or retained top-level Document and its descendants. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#build-not-restored-reasons-for-a-top-level-traversable-and-its-descendants
   buildNotRestoredReasons(): void {
-    const navigable = this.getNodeNavigable();
-    if (!navigable?.isTopLevelTraversable) throw new InternalError('Restoration diagnostics require an active top-level Document');
+    const navigable = this.browsingContext?.navigable;
+    if (!navigable?.isTopLevelTraversable) throw new InternalError('Restoration diagnostics require a top-level Document');
     this.buildNotRestoredReasonsForDocumentState();
     const hiddenDocuments = new Set<DocumentImpl>();
     let hiddenBlocker = false;
@@ -2572,15 +2733,17 @@ export class DocumentImpl extends NodeImpl {
     if (hiddenBlocker) {
       this.makeUnsalvageable('masked');
       // SPEC_CLASH(not-restored-reasons-collection): Include masked in the collected root report, like Chromium; HTML adds it only after copying that list.
-      navigable.activeSessionHistoryEntry.documentState.notRestoredReasons!.reasons = [...this.bfcacheBlockingDetails];
+      for (const state of navigable.getDocumentStates(this)) {
+        state.notRestoredReasons!.reasons = [...this.bfcacheBlockingDetails];
+      }
     }
   }
 
   /** Collect raw diagnostics recursively; the top-level Document masks the complete tree before exposure. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#build-not-restored-reasons-for-document-state
   buildNotRestoredReasonsForDocumentState(): void {
-    const navigable = this.getNodeNavigable();
-    if (navigable === null) throw new InternalError('Restoration-diagnostic collection requires a node navigable');
+    const navigable = this.browsingContext?.navigable;
+    if (navigable === null || navigable === undefined) throw new InternalError('Restoration-diagnostic collection requires a retained navigable');
     const children: NotRestoredReasons[] = [];
     // SPEC_CLASH(not-restored-reasons-collection): Initialize children as a list and read collected child history records, like Chromium; HTML appends to null and reads a top-level-only accessor.
     const reasons: NotRestoredReasons = {
@@ -2606,7 +2769,8 @@ export class DocumentImpl extends NodeImpl {
       // Recursive collection has initialized this state; Document.notRestoredReasons is null for children.
       children.push(child.activeSessionHistoryEntry.documentState.notRestoredReasons!);
     }
-    navigable.activeSessionHistoryEntry.documentState.notRestoredReasons = reasons;
+    // Retained Documents no longer own the active entry. Use the same identity check as destruction.
+    for (const state of navigable.getDocumentStates(this)) state.notRestoredReasons = reasons;
   }
 
   /** Copy the selected restrictions into the document's existing flag set. */
@@ -2878,6 +3042,80 @@ export class DocumentImpl extends NodeImpl {
   /** Root moves can change prolog membership without DOM children-changed steps. */
   protected override childrenMoved(): void {
     this.#updateStyleSheetProlog();
+  }
+
+  /** Run browser-owned teardown on this Document's loop, rejecting if the task cannot complete. */
+  #queueDestructionSteps(steps: () => void): InternalPromise<void> {
+    const completion = this.env.userAgent.HostPromise.withResolvers(internalType<void>());
+    try {
+      // SPEC_CLASH(document-destruction-task-activity): HTML's global task is gated on full activity,
+      // stranding inactive-page teardown. Only browser cleanup bypasses that gate, on the owning loop.
+      this.env.responsibleEventLoop.queueTask(taskSources['navigation-and-traversal'], null, () => {
+        try { steps(); completion.resolve(); }
+        catch (error) { completion.reject(error); }
+      }, { discardSteps: () => { completion.reject(new InternalError('Document destruction task was discarded')); } });
+    } catch (error) { completion.reject(error); }
+    return completion.promise;
+  }
+
+  /** Dispatch dismissal events and retain the unload counter until final cleanup or coordinator failure. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#unload-a-document
+  #beginUnloading(newDocument: DocumentImpl | null): DocumentUnloadTimingInfo | null {
+    const env = this.env;
+    const eventLoop = env.responsibleEventLoop;
+    if (eventLoop.currentlyRunningTask === null) {
+      throw new InternalError('Document unloading requires a task on its owning event loop');
+    }
+    const window = this.getRelevantGlobalObject();
+    if (window === null) throw new InternalError('Document unloading requires a Window');
+    const unloadTimingInfo: DocumentUnloadTimingInfo | null =
+      newDocument !== null && newDocument.env.responsibleEventLoop === eventLoop
+        ? { unloadEventStartTime: 0, unloadEventEndTime: 0 } : null;
+    // Cache admission must include the complete descendant tree; salvageability alone does not admit a page.
+    const intendToKeepInBfcache = this.salvageable && env.userAgent.shouldKeepDocumentInBfcache(this);
+    eventLoop.terminationNestingLevel++;
+    this.unloadCounter++;
+    try {
+      if (!intendToKeepInBfcache) this.salvageable = false;
+      if (this.pageShowing) {
+        this.pageShowing = false;
+        window.firePageTransitionEvent('pagehide', this.salvageable);
+        this.updateVisibilityState('hidden');
+      }
+      if (!this.salvageable) {
+        // SPEC_CLASH(unload-timing-without-event): HTML timestamps the retained path too. Follow
+        // verified Chromium caching and WebKit's dispatch code: no unload event means zero timing.
+        if (unloadTimingInfo !== null) {
+          unloadTimingInfo.unloadEventStartTime = coarsenTime(
+            newDocument!.env.currentHighResolutionTime().toTimestamp(), env.crossOriginIsolatedCapability,
+          );
+        }
+        // SPEC_CLASH(unload-event-cancelable): Follow HTML/Chromium/WebKit's non-cancelable event;
+        // Firefox marks it cancelable, although cancellation does not prevent navigation.
+        window.fireEvent('unload', EventImpl, undefined, true);
+        if (unloadTimingInfo !== null) {
+          unloadTimingInfo.unloadEventEndTime = coarsenTime(
+            newDocument!.env.currentHighResolutionTime().toTimestamp(), env.crossOriginIsolatedCapability,
+          );
+        }
+      }
+      return unloadTimingInfo;
+    } catch (error) {
+      this.unloadCounter--;
+      throw error;
+    } finally { eventLoop.terminationNestingLevel--; }
+  }
+
+  /** Finish destruction and timing delivery, releasing the counter retained by the event phase. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#unload-a-document
+  #finishUnloading(newDocument: DocumentImpl | null, unloadTimingInfo: DocumentUnloadTimingInfo | null): void {
+    try {
+      if (!this.salvageable) this.destroy();
+    } finally { this.unloadCounter--; }
+    if (newDocument !== null && !newDocument.wasCreatedViaCrossOriginRedirects && areSameOrigin(newDocument.origin, this.origin)) {
+      Object.assign(newDocument.previousDocumentUnloadTiming,
+        unloadTimingInfo ?? { unloadEventStartTime: 0, unloadEventEndTime: 0 });
+    }
   }
 
   /** Wait from complete loading or a later meta insertion; host wake-ups only queue work. */

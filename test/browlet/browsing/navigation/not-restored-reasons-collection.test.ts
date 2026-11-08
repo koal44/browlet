@@ -183,11 +183,11 @@ describe('Document restoration-diagnostic collection', () => {
     expect(Object.isFrozen(value.children![0]!.children)).toBe(true);
   });
 
-  it('requires an active owning navigable rather than overwriting another Document state', () => {
+  it('requires a retained owning navigable rather than overwriting another Document state', () => {
     const { document } = fixture();
     const detached = document.env.createDocument();
     expect(() => detached.buildNotRestoredReasonsForDocumentState())
-      .toThrow('Restoration-diagnostic collection requires a node navigable');
+      .toThrow('Restoration-diagnostic collection requires a retained navigable');
     expect(document.notRestoredReasons).toBeNull();
   });
 });

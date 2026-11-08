@@ -174,11 +174,14 @@ describe('Document HTTP Refresh scheduling', () => {
     expect(navigationTasks(document)).toHaveLength(0);
   });
 
-  it.each(['abort', 'destroy'] as const)('cancels pending Refresh during Document %s', async (operation) => {
+  it.each(['abort', 'destroy', 'stop'] as const)('cancels pending Refresh during %s', async (operation) => {
     const { document, wakeups, setTime } = fixture();
     document.processDeclarativeRefresh('1;url=/next');
     document.completelyFinishLoading();
-    document.env.queueTask('navigation-and-traversal', () => { document[operation](); });
+    document.env.queueTask('navigation-and-traversal', () => {
+      if (operation === 'stop') (project(document.getRelevantGlobalObject()!) as Window).stop();
+      else document[operation]();
+    });
     await runTurn(document);
     expect(wakeups[0]!.remove).toHaveBeenCalledOnce();
     setTime(2_000);

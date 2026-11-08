@@ -824,8 +824,8 @@ and [Gecko nsMultiMixedConv](https://searchfox.org/mozilla-central/source/netwer
 This is a real first-part loader and later-navigation handoff, not completed
 multipart lifecycle support. Explicit dependencies remain:
 
-- Ordinary navigation's recursive abortion/unloading are still required for fully
-  automatic later replacements. Window transient-activation queries now work;
+- Recursive abortion and unloading coordination are connected; Fetch cancellation
+  and visibility/cache owners still constrain automatic later replacements. Window transient-activation queries now work;
   input/automation notification remains with HTML §6.4.2.
 - Window.stop()/Document-wide abortion and destruction must cancel the outer
   reader even after the current part has closed. Active-body cancellation and
@@ -934,7 +934,7 @@ Local-URL responses retain their existing inherited container. Added part CSP
 remains a throwing dependency there: composition must preserve inherited self
 origins and policy provenance without duplicating earlier restrictions and
 reports. This slice does not complete local-URL policy composition, error-page
-creation, activation notification, recursive abortion/unloading, or parser redesign.
+creation, activation notification, full Fetch cancellation/unload cleanup, or parser redesign.
 The subsequent addon follow-up resolves the separately retained cancellation
 wake-up failure described above.
 
@@ -1128,7 +1128,366 @@ All 14 new completion checks pass in every configuration. Typecheck/generated
 declarations, declaration contracts, changed-file ESLint, import boundaries,
 and whitespace checks pass. No addon or engine code changed.
 
-The next document-order section is §7.5.9, unloading documents.
+The following slice starts §7.5.9, unloading documents.
+
+## HTML §7.5.9: single-Document unloading
+
+`DocumentImpl.unload()` implements the [single-Document operation](https://html.spec.whatwg.org/multipage/document-lifecycle.html#unload-a-document)
+on the old Document's event loop. It brackets dismissal with termination/unload
+counters, clears `pageShowing`, fires pagehide with the retention decision, requests
+hidden visibility, dispatches unload when the Document is not retained, resets the
+user-scroll flag, runs cross-specification cleanup, collects top-level restoration
+diagnostics, and destroys unsalvageable Documents. Counters unwind even when an
+unfinished dependency throws. The existing per-timer activity bookkeeping handles
+suspension and reactivation; a second Document-level timer snapshot would adjust
+the same deadlines twice.
+
+Cache admission is an explicit `UserAgent.shouldKeepDocumentInBfcache()` dependency.
+It must assess the whole descendant tree and own retention/eviction policy;
+`salvageable` alone is not admission. Already-unsalvageable Documents skip that
+decision. Shown Documents still reach the throwing `updateVisibilityState()` owner.
+Tests exercise both boundaries and control only those missing operations when
+checking the later phases. Recursive coordination is implemented in the following
+slice. These operations alone do not provide end-to-end navigation or a
+back/forward cache.
+
+Unload measurements use the incoming Document's time origin and outgoing
+environment's precision. Different event loops leave them unavailable; strict
+origin and cross-origin-redirect checks protect the final handoff. With the reviewed
+record representation, the incoming Document and its already-created
+PerformanceNavigationTiming entry retain the same zero-initialized unload record,
+which unloading updates in place instead of replacing it with a new record or
+null. Missing observations stay zero for both modern and legacy timing.
+
+Browser evidence (2026-11-06), reproduced in Experimental's `document-unload.mjs`
+and `DOCUMENT-UNLOAD.md`:
+
+- Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2 dispatch pagehide, then
+  visibilitychange, then unload. All events are trusted and target Document;
+  unload is dispatched on Window using the legacy target override.
+- `SPEC_CLASH(unload-event-cancelable)`: keep HTML/Chromium/WebKit's non-cancelable
+  unload event. Firefox marks it cancelable, but preventDefault does not stop the
+  navigation. Eric approved the specified flags.
+- `SPEC_CLASH(unload-timing-without-event)`: HTML timestamps the retained path too.
+  Eric approved leaving timings zero when no unload event fires. Chromium's live
+  probe verified persisted pagehide and persisted restoration with zero timing;
+  WebKit's `FrameLoader::dispatchUnloadEvents()` likewise timestamps only actual
+  dispatch. Firefox/WebKit did not cache the probe, so their runs do not establish
+  retained-page timing behavior. Blink's `Document::DispatchUnloadEvents()` also
+  returns before dispatch/timing after persisted pagehide.
+
+The [unload tests](../../../test/browlet/browsing/navigation/document-unload.test.ts)
+cover event payloads/order, counters, cache admission, retained and destroyed
+Documents, timers, live timing-record identity, privacy gates, missing dependencies,
+and automatic event-loop delivery without a manual task turn.
+
+Validation (2026-11-06): all 16 new checks pass across Node 24.19.0, 26.8.1, and
+custom 27.0.0-pre, with and without the matching addon. Eleven focused unload,
+cancellation, reactivation, lifecycle, diagnostics, destruction, timing, and timer
+suites pass: 191 checks per addon run and 188 plus three existing expected failures
+per stock run. Typecheck/generated declarations, declaration contracts, changed-file
+ESLint, import boundaries, and whitespace checks pass. The Chromium probe verifies
+persisted restoration and zero skipped-unload timings. No native code or failure
+classifications changed.
+
+## HTML §7.5.9: recursive Document unloading
+
+`DocumentImpl.unloadAndDescendants()` implements the
+[recursive operation](https://html.spec.whatwg.org/multipage/document-lifecycle.html#unload-a-document-and-its-descendants)
+from the owning session history traversal queue. Each Document's work runs in
+navigation-and-traversal tasks on its own event loop, including foreign-Agent
+children. The parent-owned child collection includes shadow-tree containers;
+selection excludes containers owned by a different retained Document.
+
+The event phase runs parent-first. Each child subtree completes its event and
+cleanup phases before the next sibling. All selected Documents remain alive
+through cleanup and top-level restoration-diagnostic collection; destruction then
+runs from the leaves upward. This preserves child diagnostics, including blockers
+added during cleanup, and keeps the parent's context available during child events.
+The root's pageswap steps precede its dismissal events, and its completion steps
+run after the whole operation on the root's loop.
+
+The operation returns a UserAgent-owned `InternalPromise<void>` instead of only
+invoking a callback. Eric accepted that completion contract.
+`deactivateForCrossDocumentNavigation()` temporarily returns either the immediate
+unload promise or void when capture will append unloading later. Return the promise
+from the current queue operation to retain its wait; void lets that operation
+finish so the capture continuation can run. `afterPotentialUnloads` signals full
+deactivation completion in both paths. Definite closing also returns the unload
+promise. No pending-wait registry is added to the queue. Eric accepted this smaller
+arrangement; move the capture/unload branch into the full history coordinator when
+that caller is implemented, using separate operations with consistent contracts.
+The queue remains occupied through each unload completion callback without running
+Document work on the host or borrowing another Agent's task.
+
+Task failure or discard rejects completion. Unexpected Document destruction
+cancels pending work, detaches activity observers, and releases outstanding unload
+counters. A pageswap callback that destroys the Document cannot dispatch a later
+unload event. The traversal queue owns exception reporting when a caller does not
+consume the failure. Tests exercise the automatic event loops as well as selected
+manual task turns; completion does not require an external microtask checkpoint.
+
+Evidence and choices (2026-11-06; local HTML `5fcc231`):
+
+- `SPEC_CLASH(unload-descendant-event-order)`: HTML recursively unloads descendants
+  before the parent. Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2 all
+  dispatch the parent's pagehide/visibilitychange/unload first. Eric approved
+  following the browsers and separating events from final destruction.
+- `SPEC_GAP/SPEC_CLASH(unload-sibling-order)`: HTML explicitly leaves sibling ordering open.
+  Eric approved retained child order, matching Firefox even after `moveBefore()`
+  changes DOM order. Chromium follows the new DOM order; WebKit reverses sibling
+  order in the unchanged-tree probe. That WebKit build lacks `moveBefore()`, so
+  the reordered probe supplies no WebKit evidence. Each child subtree finishes
+  before the next, rather than interleaving sibling work across loops.
+- `SPEC_GAP(unload-document-children)`: the algorithm names a Document's child
+  navigables, but that collection is defined on Navigable. Select that Navigable's
+  children whose container Document is the Document being unloaded.
+- `SPEC_GAP(unload-diagnostic-lifetime)`: literal child destruction removes active
+  Documents before the parent's restoration collector reads them. The nested-frame
+  regression rejected at that collector before the lifetime correction. Retain
+  the tree through cleanup/collection, then destroy it in postorder.
+
+Experimental retains `recursive-document-unload.mjs` and
+`RECURSIVE-DOCUMENT-UNLOAD.md` with the browser commands and observations. Gecko's
+`nsDocShell::FirePageHideNotificationInternal()` likewise dispatches its own
+PageHide before walking the retained child list. Browsers provide ordering evidence;
+the browser probe does not exercise Browlet's diagnostic collector or cross-loop
+completion representation.
+
+Missing owners remain explicit: bfcache admission/eviction policy, visibility
+processing, CSS transition eligibility/setup/capture, and the full history-apply
+coordinator. The subsequent §7.5.10 slices below add retained-Document destruction
+and recursive teardown, including child-association release.
+This slice adds no native-runtime changes and supplies no successful cache policy.
+The next bounded slice is §7.5.10, destroying Documents.
+
+The recursive-unloading regressions cover nested/foreign-Agent/shadow children,
+state-preserving moves, retained Documents, late cleanup blockers, owning tasks,
+subsequent traversal work, all failure phases, discarded tasks, unexpected
+destruction, and automatic event-loop delivery. Caller tests retain the promise
+contract and exercise the real cache-admission rejection after cancellation checks.
+
+Validation (2026-11-06): all 16 recursive-unloading checks pass across Node 24.19.0,
+26.8.1, and custom 27.0.0-pre, with and without their matching addons. Seventeen
+focused suites pass: 288 checks per addon run and 285 plus the same three existing
+expected failures per stock run. Typecheck/generated declarations, declaration
+contracts, changed-file ESLint, import boundaries, and whitespace checks pass.
+Coverage includes returned queue waits, capture handoff, rejection reporting,
+and real nested history application.
+No native code or failure classifications changed.
+
+## HTML §7.5.10: retained Document destruction
+
+`Document.destroy()` now accepts an active or retained Document, while retaining
+the requirement to execute in a task on its owning event loop. It captures the
+browsing context's retained navigable before detachment. `Navigable.clearDocumentFromHistory()`
+walks the existing history states, including nested histories, and clears only
+states whose Document is the one being destroyed. It also considers active and
+current entries before insertion and the Document's latest committed entry after
+history pruning. Shared states are visited once; entries, origins, policies,
+reload inputs, and diagnostic records are retained. No inverse registry is added.
+
+Destruction keeps the existing abortion, resource cleanup, input-state release,
+task discard, Reporting handoff, worker-owner removal, and worklet termination.
+Only destruction of the displayed Document invalidates its navigable's page
+evaluations. Evicting an older Document must not discard the replacement's
+evaluation context or its queued tasks.
+
+### Accepted specification correction
+
+`SPEC_CLASH(document-destruction-history-state)` records two problems with
+[HTML's destruction steps](https://html.spec.whatwg.org/multipage/document-lifecycle.html#destroy-a-document):
+step 6 clears the browsing context before step 7 reads the node navigable, and an
+inactive retained Document has no node navigable even before detachment. Simply
+substituting its context's navigable would instead clear the replacement page's
+active state. Browlet captures the owner and clears references by Document
+identity, as approved. The latest entry alone is insufficient: a redirected
+reload can replace that entry's state while an earlier entry retains the old one.
+
+Browser source supports teardown of the retained page's own resources:
+Gecko's `SHEntrySharedParentState` destructor destroys its retained frame loader
+(`docshell/shistory/nsSHEntryShared.cpp`, inspected revision `d92a7ec0e622`), and
+WebKit's `CachedFrame::destroy()` operates on its cached Document/Window before
+clearing that cached frame (`Source/WebCore/history/CachedFrame.cpp`, inspected
+revision `713192fa`). These are ownership references, not live evidence for
+Browlet's particular history representation.
+
+### Explicit dependencies and stopping point
+
+- Recursive teardown, inactive-task delivery, repeated requests, and completion
+  are covered by the subsequent slice below.
+- Destruction after initial-Window reuse still throws before cleanup. The old
+  initial about:blank Document must not close resources now owned by its
+  replacement's shared Window/environment. That lifetime separation is unfinished.
+- An incoming Document held only by an uncommitted population operation still
+  needs that operation to release its entry and cancel pending work. Selected
+  current entries are covered here; this does not finish superseded admission.
+- `FetchGroup.cancel()` still discards no Fetch work; real network/body abortion
+  belongs to §7.5.11 and Fetch. Fullscreen, media, service-worker, and lock cleanup
+  retain the named dependencies in `runUnloadingCleanup()`.
+- Automatic cache eviction and browser-context collection remain unfinished. This work does not
+  provide an end-to-end back/forward cache.
+
+The initial three regressions failed at the former inactive-Document guard. They
+now preserve the replacement page while clearing retired/shared history state and
+discarding only the retired Document's tasks. Additional coverage exercises nested
+history, selected entries before activation, and entries pruned from history.
+
+Validation (2026-11-06): all 15 destruction checks pass on Node 24.19.0, 26.8.1,
+and custom 27.0.0-pre with and without their matching addons. The 21 related
+lifecycle, history, input, Reporting, timer, performance, and completion suites
+pass with 317 checks per addon run, or 314 plus the same three existing expected
+failures per stock run. Typecheck/generated declarations, declaration contracts,
+changed-file ESLint, import boundaries, and whitespace checks pass. No native
+code or failure classifications changed.
+
+## HTML §7.5.10: recursive Document destruction
+
+`Document.destroyAndDescendants()` starts through its UserAgent and returns an
+`InternalPromise<void>`. Each Document's preparation and destruction run as tasks
+on its own event loop. Inactive Documents become unsalvageable with HTML's default
+`masked` reason; a retained top-level Document collects its diagnostics before
+child teardown. The existing history walk now serves both diagnostic assignment
+and destruction, selecting states by Document identity rather than writing into
+the replacement page's active entry.
+
+Direct children come from the navigable's retained collection, filtered by the
+container's owning Document. This includes shadow-tree frames and excludes a
+replacement Document's children. HTML leaves child order open; Browlet completes
+each retained child subtree before starting the next, then destroys the parent.
+Destruction releases completed child/container associations while retaining each
+child's parent identity for history work. It does not detach the navigable of a
+Document merely because that Document is replaced by a cross-document navigation.
+
+Repeated requests share one teardown promise. Successful single-Document destruction
+is idempotent, including when unloading already completed it. Each optional
+continuation receives its own final task on the requesting Document's loop, so a
+continuation failure does not undo the shared completed teardown. Task discard or
+cleanup failure rejects the wait; child removal, top-level destruction, and cache
+eviction observe and report failures. Top-level destruction requests each distinct
+retained Document once and still unregisters immediately, as HTML specifies.
+
+### Accepted scheduling and completion arrangement
+
+`SPEC_CLASH(document-destruction-task-activity)` records the approved correction
+to [HTML's recursive destruction](https://html.spec.whatwg.org/multipage/document-lifecycle.html#destroy-a-document-and-its-descendants):
+its global tasks carry a Document full-activity gate, which strands inactive-page
+cleanup. Browser-owned destruction tasks use the responsible event loop with no
+Document activity gate. The off-loop Navigation abortion notification during child
+destruction uses the same route, before cleanup; its regression first failed with
+an unaborted signal after detachment. Ordinary page tasks and ordinary navigation
+abortion retain their existing activity checks.
+
+Source evidence: Gecko's `SHEntrySharedParentState` queues its retained frame
+loader's `AsyncDestroy()` independently of page activity
+(`docshell/shistory/nsSHEntryShared.cpp`, `d92a7ec0e622`); WebKit's
+`CachedFrame::destroy()` destroys its cached frame tree directly
+(`Source/WebCore/history/CachedFrame.cpp`, `713192fa`). Ladybird's recursive
+completion also uses an event-loop task without a Document gate
+(`Libraries/LibWeb/DOM/Document.cpp`). These support cleanup ownership; they are
+not live browser evidence for Browlet's promise or scheduling representation.
+
+HTML returns no result and invokes the
+optional continuation in the destruction task. Browlet returns consistent internal
+completion and queues each caller's continuation after shared teardown. The
+UserAgent owns the promise so destroying a Window does not strand its completion.
+Eric accepted this arrangement; the pending signature marker is removed.
+No author Promise or new event-loop mechanism is introduced.
+
+### Remaining dependencies
+
+Destruction after initial-Window reuse remains an explicit throwing boundary.
+Automatic element removal/startup, full history application, cache admission and
+memory-pressure eviction policy, and automatic browsing-context collection remain
+separate owners. Recursive abortion is connected in the §7.5.11 slice below;
+Fetch cancellation, fullscreen, media, service-worker, and lock cleanup retain their named
+dependencies. This does not claim end-to-end bfcache support or finish cancellation
+of uncommitted population operations.
+
+Regression coverage includes retained diagnostics, inactive eviction, replacement
+isolation, nested/shadow/foreign-loop children, repeated requests, prior destruction,
+cleanup failures, discarded tasks, continuation failures, and automatic event-loop
+delivery. Child and top-level coordinators now exercise real teardown. No native
+code or failure classifications change.
+
+Validation (2026-11-07): 23 lifecycle, history, Navigation-abort, input, Reporting,
+timer, performance, and completion suites pass on Node 24.19.0, 26.8.1, and custom
+27.0.0-pre, with and without matching addons. Each addon configuration passes 358
+checks; each stock configuration passes 355 with the same three existing expected
+failures. All nine new recursive-destruction checks pass in every configuration.
+Typecheck/generated declarations, declaration contracts, changed-file ESLint,
+import boundaries, and whitespace checks pass.
+
+## HTML §7.5.11: recursive abortion and stopping navigation
+
+`Document.abortAndDescendants()` requires a task on the root Document's loop,
+snapshots its descendant navigables (including shadow-tree containers), and queues
+each descendant on its selected Window's navigation-and-traversal task source.
+It then aborts the root immediately. Each queued task aborts the navigable's
+then-active Document and propagates `salvageable = false` to the root when needed,
+without inventing a root blocking reason. Ordinary global-task activity checks
+remain in place; this is not destruction's browser-owned cleanup-task route.
+
+`Navigable.stopLoading()` now connects the existing `Window.stop()` forwarding
+method. It captures the active Document before navigation-abort callbacks, clears
+an ordinary navigation ID through the existing setter, preserves `traversal`, and
+calls recursive abortion. Both operations keep their existing `void` contract:
+HTML queues descendant work without waiting, unlike recursive destruction's
+completion promise. No new queue, promise, or native-runtime mechanism is added.
+
+### Approved browser and ordering decisions
+
+- `SPEC_CLASH(abort-descendant-task)`: follow HTML's queued descendant handoff.
+  Chromium stops local child parsers synchronously before `stop()` returns;
+  Firefox's children reached `interactive` during the call and `complete` later.
+  WebKit retained `loading` in the probe; that readiness value alone does not
+  establish whether its parser continued. Browlet keeps each child's work on its
+  owning loop, including when it shares the parent's Agent.
+- `SPEC_CLASH(stop-during-unload)`: ignore the whole operation while the selected
+  Document's unload counter is nonzero. HTML guards only the navigation-ID reset
+  and still aborts the Document. All three browsers left a streaming Document at
+  `loading` when its beforeunload handler called `stop()`; Blink explicitly guards
+  page-dismissal processing before stopping loaders. Eric approved the early return.
+- `SPEC_GAP(abort-descendant-order)`: HTML leaves descendant order open. Enqueue
+  in the existing descendant collection's shadow-including tree order. This does
+  not impose execution order across different event loops and does not change the
+  separately approved retained-child order for unloading.
+
+Sources: [HTML abortion and stopping algorithms](https://html.spec.whatwg.org/multipage/document-lifecycle.html#aborting-a-document-load)
+(local source and published text checked 2026-11-07),
+[Blink FrameLoader](https://github.com/chromium/chromium/blob/1136757f47/third_party/blink/renderer/core/loader/frame_loader.cc)
+(`StopAllLoaders`, local source snapshot), and Experimental's `document-abort.mjs`
+and `DOCUMENT-ABORT.md`. Live browsers were Chromium 156.0.8078.4, Firefox 157.0,
+and WebKit 27.2. The probe also records differing keepalive cancellation behavior;
+this slice does not choose a Fetch cancellation policy from those results.
+
+### Remaining dependencies and validation
+
+`Document.abort()` still reaches the explicit provisional `FetchGroup.cancel()`
+no-op. The next slice must cancel transport, selectively discard queued Fetch
+delivery and subsequent data, report whether anything was discarded, and connect
+multipart outer-reader cancellation after part EOF. Fetch task scheduling currently
+returns no cancellation handle. Group termination already preserves keepalive
+requests and therefore cannot simply replace Document cancellation. The approved
+expected failure for in-flight Speculation-Rules body cancellation remains enabled.
+
+Browser-UI stopping of a traversal remains separate and unspecified
+([HTML #6905](https://github.com/whatwg/html/issues/6905)); Document.open integration,
+full parser-abort steps, deferred Fetch processing, and other resource-owner cleanup
+retain their existing dependencies. This slice does not complete §7.5.11.
+
+The focused regression covers owning-task assertions, parent/descendant ordering,
+shadow trees, separate and automatic loops, activity gating, snapshot/callback
+changes, unsalvageability, navigation-event cancellation, traversal preservation,
+beforeunload reentrancy, and projected Window.stop(). Existing parallel-navigation
+coverage now exercises real recursive abortion, and Refresh coverage checks stop
+cancellation through the projected Window.
+
+Validation (2026-11-07): all 19 affected lifecycle, navigation, Refresh, and loader
+suites pass on Node 24.19.0, 26.8.1, and custom 27.0.0-pre, stock and with matching
+addons. Each configuration passes 361 checks and retains the same one approved
+Speculation-Rules cancellation expected failure. Typecheck/generated declarations,
+declaration contracts, changed-file ESLint, and import boundaries pass.
 
 ## Removal condition
 

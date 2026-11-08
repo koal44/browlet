@@ -4,6 +4,7 @@ import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation
 import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { PolicyContainer } from '../../../../src/browlet/browsing/policy/index';
 import { UserAgent } from '../../../../src/browlet/user-agent';
+import { internalType } from '../../../../src/infra/index';
 import { parseURL } from '../../../../src/url/index';
 
 afterEach(() => { vi.restoreAllMocks(); });
@@ -58,16 +59,14 @@ describe('Document state', () => {
   it('delegates inactive eviction without clearing the Document before teardown', () => {
     const document = new UserAgent().sandbox.createDocument();
     const state = DocumentState.create(document);
-    const destroy = vi.spyOn(document, 'destroyAndDescendants').mockImplementation(() => {});
+    const destroy = vi.spyOn(document, 'destroyAndDescendants')
+      .mockReturnValue(document.env.userAgent.HostPromise.resolve(undefined, internalType<void>()));
 
     expect(document.isFullyActive()).toBe(false);
     state.evictDocument();
     expect(destroy).toHaveBeenCalledExactlyOnceWith();
     expect(state.document).toBe(document);
 
-    destroy.mockRestore();
-    expect(() => state.evictDocument()).toThrow('Recursive Document destruction is not implemented');
-    expect(state.document).toBe(document);
   });
 
   it('retains each Document\'s latest committed entry independently of the active navigable', () => {

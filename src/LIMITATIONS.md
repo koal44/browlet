@@ -880,7 +880,7 @@ default actions stay with their HTML owners. DOM removal repairs previous
 boundary targets before reinsertion. Individual Document.destroy() silently
 clears its retained pointer references, including capture and click history,
 without retiring the physical source or clearing surviving Documents' state.
-Recursive/inactive destruction remains an explicit HTML §7.5.10 dependency.
+Recursive teardown also runs this cleanup for inactive Documents on their owning loops.
 Author construction and dispatch keep their supplied attributes and do not change
 capture state. Hardware acquisition and measured/predicted sample collection
 remain producer dependencies.
@@ -1549,8 +1549,9 @@ records those boundaries and browser disagreements. This does not supply an XML 
 Document readiness changes and `readystatechange` now run through the shared
 §3.1.5 algorithm. Existing HTML routes deliver DOMContentLoaded and load with
 their corresponding timestamps, but still combine phases that §13 queues
-separately and do not wait for all load-delaying resources. XML parsing and
-previous-document unload timing capture remain missing; see the
+separately and do not wait for all load-delaying resources. XML parsing remains
+missing. Single and recursive Document unloading supply privacy-filtered timing
+around explicit visibility and cache-admission dependencies. See the
 [loading-status audit](browlet/html/ROADMAP.md#section-315-document-loading-status).
 
 Initial iframe and auxiliary contexts now inherit creator state. Automatic child
@@ -1620,10 +1621,10 @@ throws before those changes. The provisional loader retains its existing path;
 the full coordinator must call activation after any required unloading.
 The outgoing `pageswap` producer is implemented, including origin/redirect
 filtering and realm-owned activation. Document deactivation now orchestrates
-its dispatch and the capture-to-unloading continuation, but CSS eligibility/setup
-and recursive unloading remain explicit throwing dependencies. Automatic delivery
-still needs those owners and the full coordinator, including failure/discard
-completion and teardown during capture. The ordinary loader does not yet call
+its dispatch and the capture-to-unloading continuation. Recursive unloading now
+returns completion through the traversal queue; CSS eligibility/setup and the full
+coordinator, including failure/discard completion and teardown during capture,
+remain unfinished. The ordinary loader does not yet call
 this producer.
 Admitted requests still reject explicitly before Document population and activation;
 active entries and the final joint-history step remain unchanged. No successful
@@ -1653,7 +1654,7 @@ complete traversal and scrolling. Classic History-state commits and receiver-rea
 deserialization are implemented. See the
 [entry audit](browlet/browsing/navigation/ROADMAP.md#html-7411-session-history-entries).
 `DocumentState` retains the recreation inputs and guards eviction of fully active
-Documents. Eviction still reaches unfinished recursive destruction; automatic
+Documents. Eviction schedules recursive destruction on owning loops; automatic
 cache selection and complete history restoration remain unfinished. Retained-Document
 reactivation now has its Navigation/event sequence, with selective form reset and
 visibility transitions still throwing. `Document.latestEntry` is maintained by the local commit path and both
@@ -1678,8 +1679,8 @@ synchronously; full finalization/history application must establish those paths.
 See the [low-level audit](browlet/browsing/navigation/ROADMAP.md#html-7414-low-level-operations-on-session-history).
 History-step selection now resolves gaps and selects changing/reloading,
 possible cross-document, and length/index-only navigables. These are foundations
-for the still-unfinished history coordinator; recursive teardown and restoration
-must also maintain the new parent-owned child collection. See the
+for the still-unfinished history coordinator; recursive teardown releases completed
+child associations, while restoration must still maintain that collection. See the
 [selection audit](browlet/browsing/navigation/ROADMAP.md#html-7461-history-step-selection).
 Cross-document finalization now inserts into child and grandchild history lists
 and retains a replacement's Navigation API key only for the same origin. History
@@ -1736,9 +1737,10 @@ adapter hooks also remain unfinished. These internal failures surface after
 aborting the load. The normal empty about:blank path stays synchronous and uses
 quirks mode. Complete encoding selection/restart, parser stop/deferred-script/load
 coordination, and shared Fetch cancellation remain explicit dependencies; the
-source-route script evaluator remains provisional. Initial about:blank completion
-fires load at non-iframe containers; iframes reach a throwing runLoadEventSteps()
-dependency for load flags, resource timing, and Permissions Policy reporting.
+source-route script evaluator remains provisional. Completion queues container load
+events when a node navigable supplies the container, including iframe mute/progress
+flags and Permissions Policy reporting. Pending iframe fallback resource timing
+still throws. Initial empty-iframe notification remains with §4.8.5 attribute processing.
 These internal algorithms do not connect unfinished iframe insertion/loading.
 Shared Document creation now preserves final params' null reservation and inherits
 child Window top-level metadata from the container's environment. Initial Window
@@ -1761,8 +1763,8 @@ attribute changes alone and shadow-tree insertion do not. Removal or adoption do
 not cancel a Refresh already accepted by the original Document.
 Ordinary navigation now captures the actual Window activation state; the strict
 Refresh delivery regression passes without an activation fixture. Existing
-downstream loading/unloading dependencies are unchanged. Other meta
-pragma/name processing, Window.stop()/recursive abortion, full bfcache timer policy,
+downstream loading/unloading dependencies are unchanged. Window.stop() now reaches
+recursive abortion and Refresh cancellation. Other meta pragma/name processing, full bfcache timer policy,
 and optional host preferences/manual redirect UI remain explicit.
 See the [Refresh audit](browlet/browsing/navigation/ROADMAP.md#html-751-refresh-input-preparation).
 Navigation Timing now creates and buffers entries before loader callbacks, with
@@ -1775,8 +1777,10 @@ controller, the entry retains supplied response metadata while unavailable fetch
 phases and transferSize remain zero. Initial about:blank intentionally has no entry,
 following HTML/WebKit; Chromium/Firefox expose one. Explicit later about:blank
 navigations receive entries. Original fetch timing for supplied network responses and synthetic
-loader-completion measurements remain explicit. Target-history diagnostics before activation,
-previous-Document unload, and Critical-CH measurements remain explicit.
+loader-completion measurements remain explicit. Target-history diagnostics before
+activation and Critical-CH measurements remain explicit. Recursive unloading now
+coordinates descendant tasks; unloading updates the shared timing record after privacy checks;
+skipped unloads and unavailable other-loop measurements remain zero.
 The legacy `performance.timing` view exposes whole epoch milliseconds from these
 same measurements; unavailable observations remain zero. It retains recorded values
 after frame removal (Firefox/WebKit; Chromium zeros them), and hides legacy redirect
@@ -1832,7 +1836,8 @@ navigation reserves deferred-fetch quota for container-initiated loads, then ent
 parallel work and waits for unload checks on the relevant Document loops. After that
 check, the coordinator rechecks the navigation ID before queued recursive abortion,
 pending history-entry and supplied-response preparation, and a population completion
-callback that queues finalization. Recursive abortion still throws. Population
+callback that queues finalization. Recursive abortion now queues descendant work
+on each Window's loop and propagates unsalvageability. Population
 now selects its source, assembles srcdoc params, queues target work, and completes
 stale/non-fetch results. Response admission runs CSP, COEP when a reservation
 exists, and X-Frame-Options in order. Failed responses construct an isolated inline
@@ -1874,10 +1879,39 @@ throws, while its navigation inputs, `document.open()`'s mute producer, automati
 container insertion/loading, and the full stop-parsing lifecycle remain explicit
 dependencies. XML loading, unsupported-resource host policy, and external
 handoff also remain throwing boundaries.
+Single-Document unloading now brackets pagehide/visibility/unload with counters,
+records unload timing, runs cleanup, collects top-level restoration diagnostics,
+and destroys unsalvageable Documents. Salvageable candidates still reach an
+explicit UserAgent cache-admission dependency, and shown Documents reach the
+unfinished visibility-update operation. Recursive unloading now dispatches parent
+events first, visits children in retained order, and keeps the selected tree alive
+through cleanup and diagnostic collection before destroying leaves upward. Its
+InternalPromise holds the traversal queue through final completion and rejects on
+task failure, discard, or unexpected destruction. Full history application and cache
+policy remain unfinished; this does not provide an
+end-to-end back/forward cache. See the
+[unloading audit](browlet/loader/ROADMAP.md#html-759-recursive-document-unloading).
+Single-Document destruction now clears only the active or retained Document's
+history references, preserving the replacement page's state, tasks, and evaluation
+context. Recursive destruction now shares completion across repeated requests,
+collects inactive-page diagnostics, destroys children before the parent, and releases
+completed child associations. Browser-owned cleanup and child-destruction abortion
+notifications bypass the Document activity gate on the owning loop; ordinary page
+tasks retain that gate. Destruction after Window reuse remains an explicit throwing boundary;
+Fetch cancellation and the remaining resource-owner cleanup are unfinished. See the
+[destruction audit](browlet/loader/ROADMAP.md#html-7510-recursive-document-destruction).
+Window.stop() now clears an ordinary navigation ID, preserves traversal ownership,
+and invokes recursive abortion; calls during unloading are ignored. Descendant
+abortion retains the ordinary global-task activity gate and does not delay the
+caller's return. FetchGroup.cancel() is still a no-op: stopping transport, discarding
+queued Fetch delivery, and canceling the multipart outer reader after part EOF
+remain explicit dependencies, with the approved in-flight rule-body expected
+failure retained. See the [abortion audit](browlet/loader/ROADMAP.md#html-7511-recursive-abortion-and-stopping-navigation).
 Multipart framing now feeds independently readable part responses into the
 Document loaders. First-part admission and per-part EOF/load delivery work while
 the outer HTTP response stays open; later parts enter replacement navigation.
-That route still requires recursive abortion/unloading and activation. HTTP parts
+That route still requires Fetch cancellation, unloading's visibility/cache owners,
+and activation. HTTP parts
 retain the outer and every earlier part's CSP as independent restrictions,
 including report-only policies. First-part sandbox/origin preparation and
 frame-ancestors checks precede Window creation; later supplied responses carry
@@ -1997,8 +2031,9 @@ the retained activation alone. `navigate()` and `reload()` now perform
 conversion/validation, prepare serialized state, and own commit/completion promises,
 but valid requests still throw at the unfinished Navigable operations. Tracker
 settlement and event acceptance/cancellation are implemented; commit/completion
-producers remain unfinished. Document's unload counter is checked but its lifecycle producers
-are still missing. `traverseTo()`, `back()`, and `forward()` now select destinations,
+producers remain unfinished. Single and recursive unloading maintain Document's
+unload counter, including release after asynchronous failure or task discard.
+`traverseTo()`, `back()`, and `forward()` now select destinations,
 resolve the current-entry case, and reuse pending requests. Their new-request
 path captures the Window's transient activation, then reaches the unfinished history-step
 application within the traversal queue. Source capture and queued failure handling are
@@ -2068,8 +2103,8 @@ popstate, and queue trusted hashchange. Persisted-state restoration now respects
 History's manual mode and Navigation's suppression, and scroll restoration stops
 when the Document's user-scroll flag is set. Actual position capture/restoration
 still throws after popstate and after hashchange is queued. Input production and
-the flag's unload/same-document reset lifecycle remain unconnected; synthetic
-scroll events do not supply that state. Optional form persistence remains absent.
+the flag's same-document reset lifecycle remain unconnected; unloading now clears
+the flag. Synthetic scroll events do not supply that state. Optional form persistence remains absent.
 New-Document initialization
 now orders classic state, persistence, Navigation entries/activation, a provisional
 BiDi committed notification, fragment-scroll scheduling, and parser-script permission.
@@ -2086,7 +2121,8 @@ rendering UI, so hasUAVisualTransition remains false. The Window handler attribu
 are supplied by §8.1.8. See the
 [event-interface audit](browlet/browsing/navigation/events/ROADMAP.md).
 `PageSwapEvent` exposes its nullable activation/transition payloads; its outgoing
-producer is implemented around unfinished CSS/unloading dependencies.
+producer is connected to recursive unloading around unfinished CSS, visibility,
+and cache-admission dependencies.
 `Document.reveal()` now guards once-per-activation delivery, fires PageRevealEvent,
 and wraps transition activation in the existing script/checkpoint boundary.
 The rendering caller remains unconnected. Inbound CSS resolution and transition
@@ -2100,8 +2136,9 @@ unfinished. See the [rendering dependency](browlet/rendering/ROADMAP.md#viewtran
 `PageTransitionEvent` and Window's trusted pageshow/pagehide firing method are
 implemented, including the legacy Document target. Retained-Document reactivation
 now maintains `pageShowing` and calls persisted pageshow around explicit form/visibility
-dependencies. Initial loading and unloading must also maintain that state and supply
-their production calls. Cache-retention decisions remain absent; constructing or
+dependencies. Single and recursive unloading clear the flag and supply pagehide;
+initial pageshow remains unfinished.
+Cache-retention decisions remain absent; constructing or
 firing the event does not provide those lifecycle effects.
 `BeforeUnloadEvent` has its legacy factory and independent string `returnValue`.
 Its special handler processing, automatic dispatch, activation/sandbox admission,
@@ -2138,15 +2175,15 @@ application still throw. Embed's `setup()` also throws explicitly for its missin
 Fetch/content-selection/navigation lifecycle; its retained child state and
 collection integration do not imply automatic loading. See the
 [child-navigable dependencies](browlet/browsing/navigation/ROADMAP.md#html-7313-child-navigables).
-`UserAgent.destroyChildNavigable()` supplies the removal coordinator, but currently
-throws at recursive Document teardown after clearing the container and notifying
-Navigation. Automatic removal is not connected. Teardown scheduling for inactive
-Documents, queued abortion, history application, and BiDi delivery remain explicit
+`UserAgent.destroyChildNavigable()` supplies the removal coordinator and schedules
+recursive teardown after clearing the container and notifying Navigation.
+Automatic removal is not connected. Full history application and BiDi delivery remain explicit
 [destruction dependencies](browlet/browsing/navigation/ROADMAP.md#html-7316-child-navigable-destruction).
 Top-level destruction and closing now have coordinators; unload cancellation waits
-for queued Document checks. Prompt policy/UI, recursive teardown, and descendant
-unloading still throw. The traversal queue
-now executes definite closing's unload request on a later background turn.
+for queued Document checks. Prompt policy/UI still throws;
+descendant unloading coordinates Document tasks around explicit visibility and
+cache-admission dependencies. The traversal queue executes definite closing's
+unload request on a later background turn and retains its asynchronous completion.
 Window's script-closing authorization remains unfinished. UI removal and BiDi
 delivery are provisional hooks. See the
 [top-level audit](browlet/browsing/navigation/ROADMAP.md#html-7316-top-level-destruction-and-closing).

@@ -741,7 +741,7 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
 
   /** Fire a trusted page transition notification; cancellation has no lifecycle effect. */
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#fire-a-page-transition-event
-  // Document reactivation supplies persisted pageshow; initial loading and unloading remain §7.5 dependencies.
+  // Document reactivation/unloading supply pageshow/pagehide; initial pageshow remains a stop-parsing dependency.
   firePageTransitionEvent(eventName: string, persisted: boolean): void {
     this.fireEvent(eventName, PageTransitionEventImpl, (event) => {
       event.persisted = persisted;

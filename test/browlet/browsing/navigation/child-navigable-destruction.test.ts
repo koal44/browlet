@@ -45,6 +45,7 @@ describe('child navigable destruction', () => {
     teardown.mockImplementation(() => {
       expect(notification).toHaveBeenCalledOnce();
       expect(histories).toHaveLength(2);
+      return owner.env.userAgent.HostPromise.resolve(undefined, internalType<void>());
     });
     destroyed.mockImplementation((navigable) => {
       expect(navigable).toBe(child);
@@ -123,21 +124,24 @@ describe('child navigable destruction', () => {
     expect(controller.signal.aborted).toBe(sameAgent);
     expect(queue.size - queuedBefore).toBe(sameAgent ? 0 : 1);
     expect(document.isFullyActive()).toBe(false);
-    // Off-loop delivery is still Document-gated. Teardown's treatment of this task remains §7.5.10 work.
-    childLoop.removeTasksForDocument(document);
+    childLoop.runTaskTurn();
+    expect(controller.signal.aborted).toBe(true);
   });
 
-  it('leaves recursive teardown explicit instead of removing history or reporting success', () => {
-    const { owner, container, child, parent, teardown, queued, destroyed } = fixture();
+  it('requests real teardown after detachment and completes on the child loop', async () => {
+    const { owner, container, document, child, parent, teardown, queued, destroyed } = fixture('iframe', false);
     teardown.mockRestore();
 
-    expect(() => owner.env.userAgent.destroyChildNavigable(container)).toThrow('Recursive Document destruction is not implemented');
+    owner.env.userAgent.destroyChildNavigable(container);
 
     expect(container.contentNavigable).toBeNull();
-    expect(parent.activeSessionHistoryEntry.documentState.nestedHistories.map((history) => history.id)).toEqual([child.id]);
-    expect(parent.childNavigables.has(child)).toBe(true);
-    expect(queued).toEqual([]);
-    expect(destroyed).not.toHaveBeenCalled();
+    expect(parent.activeSessionHistoryEntry.documentState.nestedHistories).toEqual([]);
+    expect(parent.childNavigables.has(child)).toBe(false);
+    expect(queued).toHaveLength(1);
+    expect(destroyed).toHaveBeenCalledExactlyOnceWith(child);
+    await new Promise<void>((resolve, reject) => { document.destroyAndDescendants().observe(resolve, reject); });
+    expect(document.browsingContext).toBeNull();
+    expect(child.activeDocument).toBeNull();
   });
 });
 
@@ -161,8 +165,9 @@ function fixture(tag = 'iframe', sameAgent = true) {
   const child = new Navigable(DocumentState.create(document), parent);
   container.contentNavigable = child;
   parent.activeSessionHistoryEntry.documentState.nestedHistories.push({ id: child.id, entries: [child.activeSessionHistoryEntry] });
-  // Supply only the unfinished recursive teardown and traversal queue; notifications remain real.
-  const teardown = vi.spyOn(document, 'destroyAndDescendants').mockImplementation(() => {});
+  // Isolate teardown and history application when testing the synchronous notification order.
+  const teardown = vi.spyOn(document, 'destroyAndDescendants')
+    .mockReturnValue(owner.env.userAgent.HostPromise.resolve(undefined, internalType<void>()));
   const queued: (() => void)[] = [];
   vi.spyOn(parent, 'appendSessionHistoryTraversalSteps').mockImplementation((steps) => { queued.push(steps); });
   const destroyed = vi.spyOn(owner.env.userAgent, 'webDriverBiDiNavigableDestroyed');

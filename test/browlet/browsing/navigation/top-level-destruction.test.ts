@@ -26,15 +26,15 @@ describe('top-level traversable destruction', () => {
     const retiredEntry = retiredDocument.env.createSessionHistoryEntry(retiredDocument.url, DocumentState.create(retiredDocument));
     const emptyEntry = document.env.createSessionHistoryEntry(retiredEntry.url, new DocumentState());
     const activeEntry = traversable.activeSessionHistoryEntry;
-    // Preserve the per-entry requests, including repeated Document identity; completion belongs to recursive teardown.
+    // Several entries can share one Document; teardown and failure reporting need only one request.
     const otherActiveEntry = document.env.createSessionHistoryEntry(activeEntry.url, activeEntry.documentState);
     traversable.sessionHistoryEntries = [retiredEntry, emptyEntry, activeEntry, otherActiveEntry];
-    const retired = vi.spyOn(retiredDocument, 'destroyAndDescendants').mockImplementation(() => {});
-    const active = vi.spyOn(document, 'destroyAndDescendants').mockImplementation(() => {});
+    const retired = vi.spyOn(retiredDocument, 'destroyAndDescendants').mockReturnValue(userAgent.HostPromise.resolve(undefined, internalType<void>()));
+    const active = vi.spyOn(document, 'destroyAndDescendants').mockReturnValue(userAgent.HostPromise.resolve(undefined, internalType<void>()));
     const ui = vi.spyOn(userAgent, 'removeTopLevelTraversableFromUI').mockImplementation((removed) => {
       expect(removed).toBe(traversable);
       expect(retired).toHaveBeenCalledExactlyOnceWith();
-      expect(active).toHaveBeenCalledTimes(2);
+      expect(active).toHaveBeenCalledOnce();
       expect(context.group).toBeNull();
       expect(traversable.pointerEventStreams.size).toBe(0);
       expect(other.pointerEventStreams.size).toBe(1);
@@ -65,6 +65,7 @@ describe('top-level traversable destruction', () => {
     vi.spyOn(document, 'destroyAndDescendants').mockImplementation(() => {
       document.browsingContext = null;
       traversable.activeSessionHistoryEntry.documentState.document = null;
+      return document.env.userAgent.HostPromise.resolve(undefined, internalType<void>());
     });
 
     traversable.destroy();
@@ -78,7 +79,7 @@ describe('top-level traversable destruction', () => {
     const { userAgent, traversable, document, context, group } = fixture();
     const [otherContext] = BrowsingContext.create(null, null, group);
     group.append(otherContext);
-    vi.spyOn(document, 'destroyAndDescendants').mockImplementation(() => {});
+    vi.spyOn(document, 'destroyAndDescendants').mockReturnValue(userAgent.HostPromise.resolve(undefined, internalType<void>()));
 
     traversable.destroy();
 
@@ -88,19 +89,22 @@ describe('top-level traversable destruction', () => {
     expect(userAgent.browsingContextGroupSet.has(group)).toBe(true);
   });
 
-  it('stops at recursive teardown without unregistering the traversable', () => {
-    const { userAgent, traversable, context, group } = fixture();
+  it('unregisters immediately and completes real Document teardown on its owning loop', async () => {
+    const { userAgent, traversable, document, context } = fixture();
     const session = putSession(traversable);
     const ui = vi.spyOn(userAgent, 'removeTopLevelTraversableFromUI');
     const destroyed = vi.spyOn(userAgent, 'webDriverBiDiNavigableDestroyed');
 
-    expect(() => traversable.destroy()).toThrow('Recursive Document destruction is not implemented');
+    traversable.destroy();
 
-    expect(context.group).toBe(group);
-    expect(userAgent.topLevelTraversableSet.has(traversable)).toBe(true);
-    expect(session.get('saved')).toBe('session');
-    expect(ui).not.toHaveBeenCalled();
-    expect(destroyed).not.toHaveBeenCalled();
+    expect(context.group).toBeNull();
+    expect(userAgent.topLevelTraversableSet.has(traversable)).toBe(false);
+    expect(session.size).toBe(0);
+    expect(ui).toHaveBeenCalledExactlyOnceWith(traversable);
+    expect(destroyed).toHaveBeenCalledExactlyOnceWith(traversable);
+    await new Promise<void>((resolve, reject) => { document.destroyAndDescendants().observe(resolve, reject); });
+    expect(document.browsingContext).toBeNull();
+    expect(traversable.activeDocument).toBeNull();
   });
 });
 
@@ -165,7 +169,7 @@ describe('top-level traversable closing', () => {
     const queued: (() => void)[] = [];
     vi.spyOn(traversable, 'appendSessionHistoryTraversalSteps').mockImplementation((steps) => { queued.push(steps); });
     const originalUnload = vi.spyOn(document, 'unloadAndDescendants');
-    const retired = vi.spyOn(document, 'destroyAndDescendants').mockImplementation(() => {});
+    const retired = vi.spyOn(document, 'destroyAndDescendants').mockReturnValue(userAgent.HostPromise.resolve(undefined, internalType<void>()));
 
     traversable.definitelyClose();
     await runInHostTask(() => {});
@@ -175,11 +179,13 @@ describe('top-level traversable closing', () => {
     const [replacementContext, replacement] = BrowsingContext.createTopLevel(userAgent);
     traversable.activeSessionHistoryEntry = replacement.env.createSessionHistoryEntry(replacement.url, DocumentState.create(replacement));
     traversable.sessionHistoryEntries.push(traversable.activeSessionHistoryEntry);
-    const active = vi.spyOn(replacement, 'destroyAndDescendants').mockImplementation(() => {});
+    const active = vi.spyOn(replacement, 'destroyAndDescendants').mockReturnValue(userAgent.HostPromise.resolve(undefined, internalType<void>()));
     let afterAllUnloads: (() => void) | undefined;
     const unload = vi.spyOn(replacement, 'unloadAndDescendants').mockImplementation((newDocument, after) => {
       expect(newDocument).toBeNull();
-      afterAllUnloads = after;
+      const completion = userAgent.HostPromise.withResolvers(internalType<void>());
+      afterAllUnloads = () => { after?.(); completion.resolve(); };
+      return completion.promise;
     });
     queued.shift()!();
     expect(originalUnload).not.toHaveBeenCalled();
@@ -204,7 +210,11 @@ describe('top-level traversable closing', () => {
     let queued: SessionHistoryTraversalSteps | undefined;
     vi.spyOn(traversable, 'appendSessionHistoryTraversalSteps').mockImplementation((steps) => { queued = steps; });
     let afterAllUnloads: (() => void) | undefined;
-    vi.spyOn(document, 'unloadAndDescendants').mockImplementation((_newDocument, after) => { afterAllUnloads = after; });
+    vi.spyOn(document, 'unloadAndDescendants').mockImplementation((_newDocument, after) => {
+      const completion = userAgent.HostPromise.withResolvers(internalType<void>());
+      afterAllUnloads = () => { after?.(); completion.resolve(); };
+      return completion.promise;
+    });
 
     traversable.close();
     await runInHostTask(() => {});
@@ -231,16 +241,18 @@ describe('top-level traversable closing', () => {
     expect(destroyed).toHaveBeenCalledExactlyOnceWith(traversable);
   });
 
-  it('reaches the explicit unloading dependency after real cancellation checks complete', async () => {
+  it('reports the explicit cache admission dependency after real cancellation checks complete', async () => {
     const { userAgent, traversable, document } = fixture();
     const beforeUnload = vi.spyOn(document, 'fireBeforeUnload');
-    let unload: (() => void) | undefined;
-    vi.spyOn(userAgent, 'runInParallel').mockImplementation((steps) => { unload = steps; });
+    const turns: (() => void)[] = [];
+    vi.spyOn(userAgent, 'runInParallel').mockImplementation((steps) => { turns.push(steps); });
     traversable.close();
-    expect(unload).toBeUndefined();
-    await expect.poll(() => unload !== undefined).toBe(true);
+    expect(turns).toHaveLength(0);
+    await expect.poll(() => turns.length).toBe(1);
     expect(beforeUnload).toHaveBeenCalledExactlyOnceWith(false);
-    expect(() => unload!()).toThrow('Document and descendant unloading is not implemented');
+    turns.shift()!();
+    await expect.poll(() => turns.length).toBe(1);
+    expect(() => turns.shift()!()).toThrow('Back-forward cache admission is not implemented');
   });
 });
 

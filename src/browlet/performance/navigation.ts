@@ -137,7 +137,7 @@ export type NavigationTimingInit = {
   serverTimingHeaders: string[];
   /** Document milestones updated as loading progresses. */
   documentTimingInfo: DocumentLoadTimingInfo;
-  /** Previous-Document milestones; the lifecycle producer remains unfinished. */
+  /** Previous-Document milestones, updated in place by the unload operation after privacy checks. */
   previousDocumentUnloadTiming: DocumentUnloadTimingInfo;
   /** Response-selected worker timings; null when no worker supplied them. */
   serviceWorkerTimingInfo: ServiceWorkerTimingInfo | null;

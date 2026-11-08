@@ -1485,9 +1485,10 @@ pending navigation-state construction; NavigationParams owns its supplied-respon
 factory. BrowsingContext obtains the context for Document creation, associating a
 replacement with its existing Navigable before creation-time consumers need that
 relationship. These operations return their results to the coordinator without
-advancing history or activating the incoming Document. Fragment history application,
-recursive abortion, population, and full history application remain explicit
-dependencies in the navigation roadmap. Unload cancellation now snapshots Documents,
+advancing history or activating the incoming Document. Recursive abortion stops the
+parent in its current task and queues descendants on their owning Window loops,
+without waiting for their completion. Fetch cancellation and remaining history/load
+dependencies are tracked in the navigation and loader roadmaps. Unload cancellation now snapshots Documents,
 queues their checks on the owning globals, and returns a UserAgent-owned HostPromise.
 The UserAgent forwards to Navigable with its scheduling owner; no Document realm
 owns the cross-loop wait. Navigation resumes its parallel steps after completion,
@@ -1527,9 +1528,28 @@ It uses its associated Document and realm, filters the destination activation,
 and dispatches through the existing trusted-event machinery. Document deactivation
 supplies its caller, either through recursive unloading or in the task that sets
 up an outgoing transition. CSS capture's continuation returns unloading to the
-traversal queue before releasing ownership. CSS eligibility/setup and recursive
-unloading still throw explicitly; coordinator failure/discard completion is not
-connected. Event production itself neither unloads nor activates Documents.
+traversal queue before releasing ownership. Recursive unloading returns a
+UserAgent-owned InternalPromise while scheduling Document work on each owning
+loop. It retains the selected tree through dismissal events, cleanup, and
+diagnostic collection, then destroys from the leaves upward. Closing returns that
+completion to retain the traversal queue. Deactivation returns the promise when
+unloading starts immediately, or void when capture will append a later unload
+operation. Its callback signals completion in both paths. The queue uses only
+returned promises for waits; execution admission remains a boolean. The full
+history coordinator should eventually own the capture/unload branch directly. CSS
+eligibility/setup, visibility processing, and cache admission remain explicit;
+the full history coordinator's failure/discard completion is not connected.
+Event production itself neither unloads nor activates Documents.
+Recursive destruction also returns a UserAgent-owned InternalPromise, shared across
+requests for the same Document. Its preparation, cleanup, and optional completion
+callbacks use browser-owned tasks on each responsible loop without a Document
+activity gate; ordinary page tasks keep their gate. Diagnostics and history cleanup
+use retained Document identity, preserving a replacement page. Child selection
+filters the parent-owned navigable collection by container Document, and final
+cleanup releases only completed child associations. Child removal, top-level
+destruction, and cache eviction report failures from this asynchronous coordinator.
+Window-reuse cleanup, full Fetch cancellation, and automatic cache/context collection
+remain explicit dependencies.
 Cross-document finalization inserts into the destination's own retained history,
 including child lists, and preserves replacement keys only across the same origin.
 The provisional history application still receives that destination and entry
@@ -1946,8 +1966,8 @@ keyboard state remain explicit producer responsibilities.
 hit-test callable and caller-realm timestamp. It generates no move event; the
 layout/input owners must arrange invalidation, coalescing, and subsequent passes.
 Mouse registration, queued delivery, DOM-removal recovery and individual
-Document cleanup are connected. Recursive/inactive Document destruction remains
-HTML §7.5.10 work; its lifecycle integration must preserve the existing cleanup.
+Document cleanup are connected. Recursive Document destruction runs the same
+cleanup for inactive Documents on their owning loops.
 Other devices still need ID assignment, registration/retirement and delivery
 through these stream operations.
 

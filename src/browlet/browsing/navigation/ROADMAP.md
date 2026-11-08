@@ -26,12 +26,12 @@ outside consumers use its index, while its modules import each other directly.
 - `UserAgent.destroyChildNavigable()` forwards to `Navigable.destroyChild()`.
   The coordinator detaches the child, notifies Navigation, requests recursive
   teardown, removes nested history, queues its update, and calls the provisional
-  BiDi hook. `Document.destroyAndDescendants()` explicitly throws; automatic
-  element removal remains unconnected until teardown and history queuing work.
+  BiDi hook. Recursive teardown runs on owning loops, including inactive Documents;
+  automatic element removal and complete history application remain unconnected.
 - `TopLevelTraversable.destroy()`, `close()`, and `definitelyClose()` express
   top-level teardown and cancellation/unload coordination. Existing group removal
-  and session-storage cleanup are connected, while cancellation, recursive
-  unloading/destruction, and full history application remain throwing dependencies.
+  and session-storage cleanup are connected, alongside cancellation and recursive
+  unloading/destruction. Prompt/cache/visibility policy and full history application remain explicit dependencies.
   UI removal and BiDi delivery retain explicit provisional UserAgent hooks.
 - Document owns the ancestor, inclusive-ancestor, descendant, inclusive-descendant,
   and document-tree child collections. History-action activation consumption and
@@ -299,9 +299,10 @@ optional eviction rule and the interactive examples remain accounted for above.
 
 Window's [§7.2.2.1 entry points](../window/ROADMAP.md#html-7221-opening-and-closing-windows)
 now expose name/closed state and delegate `stop()` to `Navigable.stopLoading()`.
-That operation is explicitly unfinished: it must use the unload counter and
-ongoing-navigation state, preserve traversals, and abort the active Document
-and its descendants. `isScriptClosable` implements the history/web-creation
+That operation now observes the unload counter, cancels ordinary navigation IDs,
+preserves traversal ownership, and aborts the active Document and its descendants.
+Fetch cancellation remains explicit; see the [§7.5.11 audit](../../loader/ROADMAP.md#html-7511-recursive-abortion-and-stopping-navigation).
+`isScriptClosable` implements the history/web-creation
 predicate, but source snapshots, incumbent-context selection for familiarity,
 sandbox navigation permission, and definite closing remain prerequisites for a
 successful `Window.close()`.
@@ -392,8 +393,9 @@ supply their executing event loop, or null for parallel work; abortion runs on
 the active Window's loop or queues a global navigation-and-traversal task there.
 It repeatedly cancels reentrant NavigateEvents. Child-destruction notification
 also rejects a snapshot of pending traversal trackers. These helpers do not
-implement `stopLoading()` or recursive child teardown. The ongoing-navigation
-state and setter are implemented and re-audited under §7.4.2.5 below.
+own stop-loading or recursive child teardown; their lifecycle callers now connect
+those operations. The ongoing-navigation state and setter are implemented and
+re-audited under §7.4.2.5 below.
 Their exact caller obligations and pending signature review are in the
 [Navigation API audit](./api/ROADMAP.md#seventh-slice-navigable-abortion-and-child-destruction-notifications).
 Revisit the provisional caller-loop parameter when wiring production callers;
@@ -444,10 +446,11 @@ callers. Target selection populates the context's `onePermittedSandboxedNavigato
 and navigation permission consumes it. Activation, external handoff, dialogs,
 and download dependencies remain explicit in the sandbox audit.
 
-Document now retains the §3.1.5 `previousDocumentUnloadTiming` record with zero
-defaults. The unloading/navigation algorithms must capture the old document's
-unload-event start/end times and supply them to the destination document;
-allocation of the record does not implement that producer.
+Document retains the §3.1.5 `previousDocumentUnloadTiming` record with zero
+defaults. The [single-Document unload operation](../../loader/ROADMAP.md#html-759-single-document-unloading)
+now supplies measurements in place after origin/redirect checks, preserving the
+record already retained by PerformanceNavigationTiming. Recursive unloading
+coordination remains unfinished.
 
 Document implements [§3.1.3 ancestor-origin snapshots](../../html/ROADMAP.md#section-313-ancestor-origins).
 Child navigation must populate the navigable/container association and capture
@@ -1065,29 +1068,27 @@ are not cleared by this coordinator.
 
 | Dependency | Current boundary |
 | --- | --- |
-| [Recursive Document destruction](https://html.spec.whatwg.org/multipage/document-lifecycle.html#destroy-a-document-and-its-descendants), §7.5.10 | New `Document.destroyAndDescendants(afterAllDestruction?)` throws. Its full contract requires parallel execution, inactive-document unsalvageability/NotRestoredReasons, child selection and recursive completion, then a task invoking `destroy()` and the optional continuation. Existing `destroy()` requires an owning task and handles only an active Document; retained inactive history ownership is still missing. |
-| Teardown scheduling | Clearing the container makes its child Document not fully active. Existing global-task activity gating therefore blocks queued off-loop abortion and ordinary teardown tasks. Resolve the destruction-task lifecycle and notification ordering during §7.5.10; do not silently bypass activity checks here. |
+| [Recursive Document destruction](https://html.spec.whatwg.org/multipage/document-lifecycle.html#destroy-a-document-and-its-descendants), §7.5.10 | Implemented with a shared InternalPromise, inactive-Document diagnostics, retained child selection, child-before-parent cleanup, and completion on owning loops. Window-reuse cleanup and the remaining resource owners stay explicit. |
+| Teardown scheduling | Browser-owned cleanup and off-loop child-destruction notifications run on the responsible loop without a Document activity gate, under approved `SPEC_CLASH(document-destruction-task-activity)`. Ordinary page tasks retain their gate. |
 | Session-history traversal | The queue executes appended work and waits for `updateForNavigableCreationOrDestruction()`. It selects the current joint-history step without cancellation, then rejects at the unfinished population/activation boundary. |
 | [BiDi destruction](https://w3c.github.io/webdriver-bidi/#webdriver-bidi-navigable-destroyed) | New `UserAgent.webDriverBiDiNavigableDestroyed()` is an explicit provisional hook. Live sessions, navigable-info serialization, parent-related event subscriptions, event delivery, and subscription pruning remain unfinished. |
 | Element lifecycle | Iframe/legacy-frame removal, object fallback/resource changes, and embed removal/display-no-plugin must call their node Document's UserAgent. Source TODOs name the route and the missing startup/teardown/history work. DOM removal does not automatically invoke this unfinished coordinator. |
 
-An unmocked call currently stops at recursive teardown after detachment and
-Navigation notification. It does not remove history, enqueue an update, or
-announce completed destruction. This is a dependency boundary, not an atomic
-operation or a finished iframe-removal implementation.
+The coordinator requests asynchronous teardown, removes history, queues its update,
+and calls the provisional destruction hook. It reports teardown rejection through
+the UserAgent; it does not wait before making these synchronous bookkeeping changes.
+Automatic iframe removal and full history application remain separate dependencies.
 
-### Caller-loop decision remains open
+### Caller-loop handoff
 
 The coordinator obtains the caller loop from `container.nodeDocument.env`; its
 own signature adds no loop parameter. The existing Navigation helper compares
 that loop with the child's active Window loop. Shared-Agent notification aborts
 synchronously, whereas another Agent queues abortion on the child's loop. Both
 reject pending traversal trackers immediately, before document teardown.
-Tests exercise those existing paths with real Navigation state and separate
-Window owners. They do not settle the off-loop delivery problem after detachment.
-Keep `TODO(navigation-abort-caller-loop)` and its pending signature markers until
-automatic removal and recursive teardown establish an end-to-end handoff. A
-parameter-free notification arrangement still needs comparison against that path.
+Tests exercise these paths with real Navigation state and separate Window owners.
+The §7.5.10 follow-up fixes delivery after detachment using the owning-loop cleanup
+route, while the ordinary abortion helper keeps its global-task activity gate.
 
 ### Validation
 
@@ -1110,20 +1111,19 @@ subsection's audit and coordinators, not functional window closing.
 
 | Operation | Implemented sequence and boundary |
 | --- | --- |
-| `TopLevelTraversable.destroy()` | Capture the active browsing context, request recursive destruction for each non-null history Document, remove the captured context from its group, notify UI removal, unregister the traversable/clear its session storage, then notify BiDi. `UserAgent.destroyTopLevelTraversable()` is the browser-owned entry; it does not apply script-closing permission checks. Recursive Document destruction still throws before removal can proceed. |
+| `TopLevelTraversable.destroy()` | Capture the active browsing context, request recursive destruction for each distinct non-null history Document, remove the captured context from its group, notify UI removal, unregister the traversable/clear its session storage, then notify BiDi. `UserAgent.destroyTopLevelTraversable()` is the browser-owned entry; it does not apply script-closing permission checks. Asynchronous teardown failures are reported through the UserAgent. |
 | `TopLevelTraversable.close()` | Return if `isClosing`; otherwise invoke definite closing. It does not itself set `isClosing`. |
 | `TopLevelTraversable.definitelyClose()` | Check unloading cancellation for inclusive descendants, return on either cancellation result, then append traversal steps. Those steps select the then-active Document and browsing context, then unload with null replacement and destruction as the completion callback. The callback retains that context even if unloading destroys the Document. It deliberately does not repeat the `isClosing` guard. |
 | `Navigable.checkIfUnloadingIsCanceled()` | §7.4.2.4 returns a browser-owned completion promise. It snapshots Documents, queues the optional top-level event pair before other checks, and shares prompt state across their Window tasks. Removed check tasks reject the internal wait. Prompt policy/UI and full teardown remain explicit dependencies. |
-| `Document.unloadAndDescendants()` | Explicit §7.5.9 dependency with replacement Document, completion steps, and page-swap steps. Traversal-queue ownership, recursive child tasks/waits, page-swap delivery, and single-document unloading must be implemented together. |
+| `Document.unloadAndDescendants()` | Implements §7.5.9 coordination with replacement Document, completion steps, and page-swap steps. Parent-first events and retained child order run on owning Document loops; the tree survives through diagnostic collection, then destruction runs from leaves upward. Its InternalPromise retains the traversal queue. Cache admission and visibility processing remain explicit dependencies. |
 
 `BrowsingContextGroup.remove()` already removes the UserAgent's empty group while
 preserving groups that still have another context. `removeTopLevelTraversable()`
 already clears retained session-storage maps, including views, without touching
 another tab or local storage. Its contract now says teardown has been requested:
 HTML starts recursive destruction in parallel and does not wait for all of it
-before unregistering the traversable. Repeated Documents in history remain
-per-entry requests; coordinating their destruction belongs to the recursive
-teardown audit rather than an ad hoc deduplication here.
+before unregistering the traversable. The §7.5.10 follow-up requests each distinct
+Document once; repeated requests from other lifecycle callers share its completion.
 
 `UserAgent.removeTopLevelTraversableFromUI()` is an explicit no-op while Browlet
 has no UI host. A future host must connect this removal effect. The existing
@@ -1170,14 +1170,14 @@ Eleven tests cover retained/null/repeated history Documents, capture before
 teardown, context/group and storage isolation, cancellation, the closing guard,
 shadow-tree descendants, queued Document/context selection, and completion after
 real Document destruction.
-The unfinished recursive teardown, cancellation, and unloading
-are supplied only at those boundaries; their unmocked failures stay explicit.
+The original tests supplied recursive teardown, cancellation, and unloading
+at their boundaries. Subsequent lifecycle slices add real teardown coverage.
 Together with creation, storage lifetime, and Document destruction, all 28 tests
 pass on Node 24.19.0, Node 26.8.1, and custom Node 27.0.0-pre, each with and without
 the addon. Typechecking, touched-file ESLint, import
 checks, and whitespace checks pass. No new expected failures or runtime rebuilds.
 
-Recursive teardown, prompt policy/UI, unloading, history application, and BiDi
+Prompt policy/UI, unload cache/visibility policy, history application, and BiDi
 integration remain explicit dependencies.
 
 ## HTML §7.3.1.7: Target names and existing-target lookup
@@ -1406,7 +1406,7 @@ The rest of the preamble maps to these existing owners and explicit dependencies
 | Opener context/origin, popup and auxiliary flags, initial URL, virtual group ID | Existing fields have the specified null/false/0 defaults. Auxiliary identity remains distinct from opener presence; the §7.3.2.1 follow-up initializes it through `createAuxiliary()`. |
 | Popup visibility and optional UI | `BarProp.visible` reads the popup flag. Position/size setup remains the throwing CSSOM View `setUpFeatures()` dependency; browser window/tab UI remains a provisional UserAgent host effect. |
 | Virtual group ID | COOP enforcement already allocates and propagates report-only group identities; reporting delivery dependencies remain in the policy roadmap. |
-| Document's nullable browsing context | Document construction initializes null, including DOMImplementation-created documents. `Document.destroy()` clears the association; recursive destruction and iframe removal callers remain unfinished. |
+| Document's nullable browsing context | Document construction initializes null, including DOMImplementation-created documents. `Document.destroy()` clears the association; recursive teardown is connected, while automatic iframe removal remains unfinished. |
 | Window reuse and initial history replacement | The current response path reuses a same-origin initial about:blank Window. Full navigation/history application must supply replacement handling; this slice does not complete those producers. |
 | Prefer Document/navigable terminology | New behavior stays on those owners unless it needs the context's proxy, active-document slot, group, or agent selection. |
 
@@ -1680,8 +1680,9 @@ detached iframe, or empty current history entry does not establish those conditi
 The group's strong context membership currently also reaches the proxy. Completing
 this rule therefore needs lifetime integration with Document destruction and the
 WindowProxy owner, not merely a finalizer attached to the current object graph.
-`Document.destroyAndDescendants()` and inactive-history teardown remain explicit
-§7.5.10 dependencies. Weak cluster storage does not complete any of those paths.
+`Document.destroyAndDescendants()` now schedules inactive-history teardown and clears
+retained history references; weak cluster storage does not complete automatic
+context collection or WindowProxy lifetime tracking.
 
 The focused regression first failed because the group kept an otherwise
 unreachable cluster alive. It now proves collection of real Window agents without
@@ -1834,10 +1835,13 @@ Document destruction; the live Document owns its environment.
 `state.evictDocument()` represents the optional cache-eviction request in this
 section: no Document is a no-op, a fully active Document is rejected, and an
 inactive Document is passed to `Document.destroyAndDescendants()`. That lifecycle
-operation still throws until §7.5.10 supplies recursive teardown, inactive-history
-ownership, and clearing of the retained Document. The request does not clear the
-state before teardown. No automatic eviction caller or memory-pressure policy is
-implemented; HTML deliberately leaves the choice of when to evict unspecified.
+operation shares completion across requests and runs cleanup on owning loops
+without requiring full activity. The single-Document primitive clears retained history references
+through `Navigable.clearDocumentFromHistory()` without clearing the replacement
+page; see the [destruction audit](../../loader/ROADMAP.md#html-7510-recursive-document-destruction).
+The eviction request does not clear the state before teardown. No automatic
+eviction caller or memory-pressure policy is implemented; HTML deliberately
+leaves the choice of when to evict unspecified.
 
 The [POST resource](https://html.spec.whatwg.org/multipage/browsing-the-web.html#post-resource)
 type retains bytes or failure and the three permitted form content types. Its
@@ -2479,10 +2483,11 @@ Dependencies remain executable boundaries:
   and top-level closing through browser-owned completion. Prompt policy/UI and
   full teardown remain unfinished. Removed check tasks reject their internal wait. No event loop is blocked
   while waiting for another Document's check.
-- **§7.5.11 recursive abortion:** Document.abortAndDescendants explicitly throws.
-  The existing single-Document abort operation is insufficient: descendants need
-  their own Window tasks and unsalvageability propagation. HTML leaves their
-  ordering open; resolve that during the lifecycle audit.
+- **§7.5.11 recursive abortion:** Document.abortAndDescendants now queues each
+  descendant on its Window's loop, in collected tree order, and propagates
+  unsalvageability. Root abortion is immediate; descendant completion is not
+  awaited. Fetch cancellation and selective task/data disposal remain explicit
+  in the [lifecycle audit](../../loader/ROADMAP.md#html-7511-recursive-abortion-and-stopping-navigation).
 - **§7.4.5 population:** Navigable.populateHistoryEntryDocument has the complete
   inputs, with optional arguments grouped into PopulateHistoryEntryOptions
   (pending callable-shape review). Source selection, srcdoc parameter assembly,
@@ -2644,7 +2649,7 @@ same-document-finalization boundaries. It does not complete hash navigation end 
 | --- | --- |
 | Capture destination state | Capture the previous active entry's Navigation state before event callbacks, unless a supplied serialized value overrides it. Serialized undefined/null are explicit values; null as the operation's input means inheritance. |
 | Fire the navigate event | Reuse `firePushReplaceReloadNavigateEvent()` with the history type, same-document flag, involvement, source element, destination URL/state, and method tracker. Its existing abortion, disabled-entry checks, cancellation, and interception remain authoritative. |
-| Stop on cancellation/interception | Return without preparing an entry. A surviving intercepted event records the navigation ID directly, preserving its signal and tracker for later abortion. `window.stop()` and browser-UI cancellation remain unfinished callers. |
+| Stop on cancellation/interception | Return without preparing an entry. A surviving intercepted event records the navigation ID directly, preserving its signal and tracker for later abortion. `window.stop()` now reaches the ongoing-navigation setter; browser-UI cancellation remains unfinished. |
 | Construct the entry | After callbacks, select the live active entry's DocumentState and scroll-restoration mode. Keep Navigation state captured before callbacks, create fresh classic History state (serialized null), and retain the predecessor's key only for replacement. The new entry keeps its fresh ID and pending step. |
 | Synchronous script-visible updates | Push clears History state and computes index + 1 / length = index + 1; replace keeps the current index and length. Publish the Document URL and active entry, then call Document history application with length before index. Neither currentSessionHistoryEntry nor the joint step changes here. |
 | Apply Document history state | `Document.updateForHistoryStepApplication()` has the complete §7.4.6.2 inputs. Its [existing-Document branch](#html-7462-existing-document-history-updates) now maintains latest entry, restores classic state, and produces Navigation/popstate/hashchange notifications. The [new-Document branch](#html-7462-new-document-history-initialization) initializes Navigation and permits parser scripts after its remaining persistence/scroll dependencies. Reactivation and actual BiDi delivery remain unfinished. |
@@ -3964,7 +3969,7 @@ referenced §7.5 loaders or the remaining dependencies recorded throughout this 
 | HTML | Call loadHTMLDocument with the prepared reader. Script-free response loading works; enabled script encounters throw at §4.12.1 preparation unless the controlled integration supplies a handler. |
 | XML | Non-special XML calls loadXMLDocument with the parsed MIME type and reader. XML parser/DOM integration, original-header encoding, Link processing, scripts-may-run, completion, and diagnostics belong to §7.5.3. |
 | Text | JavaScript, non-special JSON, text/css, text/plain, and text/vtt call loadTextDocument. The §7.5.4 orchestration creates the locked no-quirks pre/PLAINTEXT presentation, uses provisional BOM/transport decoding, processes media Link headers, and finishes on networking tasks. Full MIME-specific encoding and parser completion remain explicit. |
-| Multipart | multipart/x-mixed-replace calls loadMultipartDocument with params, source snapshot, initiator, and reader. MIME framing, first-part dispatch and boundary EOF now work. Later parts enter replacement navigation; recursive abortion/unloading and complete cancellation remain explicit §7.5.5 dependencies. |
+| Multipart | multipart/x-mixed-replace calls loadMultipartDocument with params, source snapshot, initiator, and reader. MIME framing, first-part dispatch and boundary EOF now work. Later parts enter replacement navigation; abortion/unload coordination is connected, while Fetch cancellation and visibility/cache cleanup remain explicit dependencies. |
 | Media | Image/audio/video types require UserAgent.supportsMIMEType before loadMediaDocument. §7.5.6 now constructs the HTML tree and host element, hands the reader to its element owner, processes media Links, and gates provisional completion. Element resource adoption/decoding, load-event delays, and application/ogg track selection remain explicit; the support predicate still claims no media support. |
 | PDF | Both application/pdf and text/pdf require UserAgent.pdfViewerSupported. It is false because no viewer exists. When enabled, dispatch selects the inline-content owner with the prepared reader. Navigator's §8.10.1.6 compatibility exposure must share this decision. |
 | Other inline content | A configured inline choice selects createDocumentForInlineContent. Otherwise shouldDisplayUnsupportedResourceInline is an explicit throwing UserAgent dependency for native/error presentation versus external delivery; no default download/error policy is invented. |
@@ -4058,7 +4063,7 @@ The rest of the read algorithms remains explicit:
 | Current-entry writes and successful cross-document Navigation cleanup | Implemented by the current-entry slice below. Selection remains side-effect-free; the coordinator advances current entries, queues cleanup on each Window's loop, and marks traversal ownership. |
 | Population continuations | `populateHistoryEntryDocument()` exists. The history coordinator must supply snapshots/reload inputs, dispatch child traverse events, wait for population, handle non-displayable results, compare origins, and reset classic state/target names where required. |
 | Synchronous queue jumping | `runSynchronousNavigationSteps()` selects eligible pending work, suppresses recursive selection, and propagates selected completion. Coordinator wake-ups, maintenance of the waiting set, and continuation processing remain unfinished. |
-| Deactivation and activation | `Navigable.activateHistoryEntry()` switches the active entry/Window and initializes visibility after saving persisted state. `Window.firePageSwapEvent()` supplies the outgoing event and filtered activation. `Document.unloadAndDescendants()` and `SessionHistoryEntry.savePersistedState()` still throw. Deactivation must coordinate CSS capture and event delivery before unloading, then the coordinator must activate the destination. |
+| Deactivation and activation | `Navigable.activateHistoryEntry()` switches the active entry/Window and initializes visibility after saving persisted state. `Window.firePageSwapEvent()` supplies the outgoing event and filtered activation. Recursive unloading now coordinates tasks and completion around explicit visibility/cache-admission owners. `SessionHistoryEntry.savePersistedState()` still throws. Deactivation coordinates CSS capture and event delivery before unloading; the full coordinator must then activate the destination. |
 | Document updates and final completion | `Document.updateForHistoryStepApplication()` handles existing/new Documents and retained-Document reactivation. Automatic scroll restoration still throws before new-Document script permission; manual and suppressed restoration can continue. Fragment-scroll attempts are scheduled without blocking scripts. Form reset and visibility transitions block full reactivation. The coordinator must run changing and nonchanging Document jobs on their own loops and wait for completion. The later §7.4.6 audits cover revealing and scroll-restoration policy; physical scrolling remains unfinished. |
 
 Two details need close attention when connecting those continuations: HTML's
@@ -4626,9 +4631,11 @@ the populated destination. User involvement becomes the browser-UI boolean for
 CSS eligibility; navigation type remains a separate input.
 
 When CSS declines a transition, deactivation releases ongoing traversal ownership
-and passes the pageswap producer to recursive unloading. That owner must dispatch
+and passes the pageswap producer to recursive unloading. That owner dispatches
 pageswap on the outgoing Window's task before unloading the Document and invoking
-the supplied completion. Deactivation does not itself report completion early.
+the supplied completion. Deactivation returns an InternalPromise for this path;
+the queue's caller must return it to retain the current operation until unloading
+finishes. The completion callback runs on the Document's loop.
 
 When a transition is possible, setup and pageswap run in a navigation-and-traversal
 task on the active Window. A null setup result immediately appends unloading to
@@ -4636,6 +4643,14 @@ the traversal queue. A transition retains that same continuation until CSS captu
 completes or is skipped. Both paths then release ownership and unload without a
 second pageswap. These ownership changes run in parallel: they do not borrow the
 displayed Document's Agent as a caller, and Navigation abortion remains queued.
+Deactivation returns void for this capture path so the current queue operation
+can finish; the later unload operation returns its own promise.
+
+Eric accepted retaining this temporary union with those explicit meanings instead
+of adding a second queue-wait mechanism. When the full history coordinator is
+connected, move the branch there and call separate capture/unload operations with
+consistent return contracts. The current callback remains the completion signal
+in both paths; a void return does not mean deactivation itself has completed.
 
 `SPEC_CLASH(cross-document-transition-setup-inputs)` records that HTML passes four
 inputs to CSS setup, including navigation type, while
@@ -4653,21 +4668,24 @@ Dependencies remain callable and explicit:
 - `Document.setupCrossDocumentViewTransition()` throws until CSS supplies the
   existing-transition cleanup, outgoing allocation/types, capture, transfer,
   rendering suppression, and post-capture continuation lifecycle.
-- `Document.unloadAndDescendants()` still throws. Its descendant ordering,
-  pageswap task, pagehide/unload/visibility events, timing, bfcache decisions, and
-  completion remain §7.5.9 work.
+- `Document.unloadAndDescendants()` now implements descendant ordering, the
+  pageswap task, and completion. Immediate deactivation returns its InternalPromise;
+  the later traversal callback returns it after CSS capture. Single and recursive
+  unloading share dismissal and destruction phases around explicit visibility and
+  bfcache-admission dependencies. See the [§7.5.9 audit](../../loader/ROADMAP.md#html-759-recursive-document-unloading).
 - The full history coordinator still needs the deactivation caller and all its
   completion/failure/discard paths. Errors currently propagate from direct work,
   queued setup, or traversal steps; no waiting coordinator is connected yet.
-  Destruction during capture and late capture callbacks need the CSS/unloading
-  lifecycle contracts before they can release that future wait safely.
+  Destruction during capture and late capture callbacks still need CSS's lifecycle
+  contract before they can release that future wait safely.
 
-Tests control only the unfinished CSS and unloading owners, using actual Window
+Tests control CSS and the asynchronous unloading boundary, using actual Window
 bindings, Agent tasks, and the traversal queue. They cover all four navigation
 types, browser-UI input, release/event/unload order, delayed capture, declined
 setup, queue ordering, outgoing-realm event identity, and explicit dependency
-failures. These are orchestration tests, not an implementation of CSS capture or
-recursive unloading. No provisional-loader path was redirected to this operation.
+failures, including a real recursive-unloading rejection at cache admission.
+These are orchestration tests, not an implementation of CSS capture.
+No provisional-loader path was redirected to this operation.
 
 Validation: all 82 focused tests in five suites pass on Node 24.19.0, 26.8.1,
 and custom 27 with and without the addon, including 15 new deactivation cases.
@@ -5696,8 +5714,8 @@ inspect dispatch without entering a replacement Document.
   every other target and delay. Blink switches after one second, Gecko's source
   uses a 15-second threshold, and WebKit has separate list-lock/event decisions.
 - `SPEC_CLASH(refresh-abort)`: follow Chromium/Firefox on cancellation after stop.
-  The public stop/recursive-abortion owner still throws; it must eventually reach
-  the implemented Document abortion hook, not another independent Refresh flag.
+  The public stop/recursive-abortion route now reaches the existing Document
+  abortion hook and cancels Refresh without another independent flag.
 - `SPEC_CLASH(refresh-ancestor-loading)`: follow HTML/Chromium/Firefox's local
   deadline. WebKit's `ScheduledRedirect::shouldStartTimer()` waits for ancestors.
 - `SPEC_CLASH(refresh-large-delay)`: retain HTML's full integer delay. Blink and
@@ -5718,7 +5736,7 @@ Experimental's `refresh-scheduling.mjs` and `REFRESH-SCHEDULING.md` retain the p
 
 The meta follow-up below supplies the captured insertion timestamp and
 automatic-features check. **Explicit dependencies:** host preferences/manual
-redirect UI, complete parser load-event accounting, recursive abortion/destruction,
+redirect UI, complete parser load-event accounting, Fetch cancellation/resource cleanup,
 and full bfcache Refresh policy retain their existing owners. The strict delivery
 regression originally failed in `Window.hasTransientActivation()` through
 `SourceSnapshotParams`, and was retained as an approved expected failure. The
@@ -5781,9 +5799,9 @@ Experimental retains `meta-refresh-insertion.mjs` and `META-REFRESH-INSERTION.md
 **Stopping point:** Refresh insertion and scheduling are connected. Other pragma
 states (including meta CSP, default-style, and legacy content-language), metadata
 name processing, and parser encoding declarations remain separate §4.2.5/§13
-work; the element's hook explicitly covers only Refresh. The existing activation
-expected failure is retained, with controlled-activation tests for projected
-Navigation events. Complete recursive abortion/destruction, bfcache timer policy,
+work; the element's hook explicitly covers only Refresh. The activation follow-up
+now exercises actual Window activation, and public stop reaches Refresh cancellation.
+Fetch cancellation/resource cleanup, bfcache timer policy,
 load-event accounting, and optional host UI remain at the owners listed above.
 For §7.5.1, Early Hints production, pre-media Link processing, and Speculation-Rules
 remain the next explicit response-initialization dependencies.
@@ -5911,7 +5929,7 @@ and saves the result only while navigation ownership still matches.
 See the [loader audit](../../loader/ROADMAP.md#multipart-loading-document-consumer)
 for the approved response/current-Document/null-request corrections, RFC default,
 browser evidence, and tests. This does not finish automatic multi-Document
-replacement: recursive abortion/unloading, local-URL part CSP, nested multipart, transfer
+replacement: Fetch cancellation, unloading's visibility/cache owners, local-URL part CSP, nested multipart, transfer
 decoding, and stop/destruction after part EOF are still explicit dependencies.
 HTTP multipart CSP now retains cumulative independent policies and applies each
 part's restrictions before admission. First-part sandboxing refreshes the origin

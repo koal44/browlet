@@ -147,8 +147,7 @@ export class Navigable {
     navigable.informNavigationAPIAboutChildNavigableDestruction(env.responsibleEventLoop);
     const document = navigable.activeDocument;
     if (document === null) throw new InternalError('Child destruction requires an active Document');
-    // TODO(HTML §7.5.10): Recursive teardown currently stops at its explicit dependency.
-    document.destroyAndDescendants();
+    document.destroyAndDescendants().observe(() => {}, (error) => { env.userAgent.runInParallel(() => { throw error; }); });
     if (navigable.parent !== null) navigable.parent.#childNavigables.delete(navigable);
     const parentNavigable = container.getNodeNavigable();
     if (parentNavigable === null) throw new InternalError('Child destruction requires the container\'s node navigable');
@@ -398,6 +397,38 @@ export class Navigable {
       }
     }
     throw new InternalError('The navigable has no retained session history');
+  }
+
+  /** Find the retained states belonging to this Document, including shared and not-yet-inserted entries. */
+  getDocumentStates(document: DocumentImpl): DocumentState[] {
+    const matches: DocumentState[] = [];
+    // Include current/active entries before insertion and the last committed entry after history pruning.
+    const states = new Set([this.activeSessionHistoryEntry.documentState, this.currentSessionHistoryEntry.documentState]);
+    if (document.latestEntry !== null) states.add(document.latestEntry.documentState);
+    for (const entry of this.traversable.sessionHistoryEntries) states.add(entry.documentState);
+    for (const state of states) {
+      for (const history of state.nestedHistories) {
+        for (const entry of history.entries) states.add(entry.documentState);
+      }
+      if (state.document === document) matches.push(state);
+    }
+    return matches;
+  }
+
+  /** Release only this Document's history references, preserving entries and their restoration inputs. */
+  // Part of https://html.spec.whatwg.org/multipage/document-lifecycle.html#destroy-a-document
+  clearDocumentFromHistory(document: DocumentImpl): void {
+    for (const state of this.getDocumentStates(document)) state.document = null;
+  }
+
+  /** Release finished child associations belonging to a destroyed parent Document. */
+  releaseDestroyedChildNavigables(document: DocumentImpl): void {
+    for (const child of this.#childNavigables) {
+      if (child.containerDocument !== document || child.activeDocument !== null) continue;
+      child.container!.contentNavigable = null;
+      this.#childNavigables.delete(child);
+      // Retain the parent identity for history and pending lifecycle work.
+    }
   }
 
   /** Select this navigable's entry with the greatest committed step at or before the requested step. */
@@ -1260,11 +1291,22 @@ export class Navigable {
     traversable.appendSessionHistoryTraversalSteps(() => traversable.applyReloadHistoryStep(userInvolvement));
   }
 
-  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#nav-stop
+  /** Stop ordinary navigation and abort loading without canceling a history traversal. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#nav-stop
   stopLoading(): void {
-    // TODO: Respect the active Document's unload counter, cancel ongoing navigation
-    // without stopping traversal, then abort the Document and its descendants.
-    throw new InternalError('Navigation stopping and descendant abortion are not implemented');
+    const document = this.activeDocument;
+    if (document === null) throw new InternalError('Stopping navigation requires an active Document');
+    if (document.env.responsibleEventLoop.currentlyRunningTask === null) {
+      throw new InternalError('Stopping navigation requires a task on its owning event loop');
+    }
+    // SPEC_CLASH(stop-during-unload): HTML only preserves the navigation ID; browsers also leave parsing
+    // untouched during dismissal. Ignore the whole stop while the Document's unload counter is nonzero.
+    if (document.unloadCounter !== 0) return;
+    if (this.ongoingNavigation !== null && this.ongoingNavigation !== 'traversal') {
+      this.setOngoingNavigation(null, document.env);
+    }
+    document.abortAndDescendants();
+    // TODO(HTML #6905): Browser-UI stopping of traversal has a separate, unspecified operation.
   }
 
   /** Notify Navigation before changing the ongoing request; null env denotes host/parallel work. */
@@ -1301,11 +1343,19 @@ export class Navigable {
   /** Notify abortion, then reject the pending traversal requests for the selected child Window. */
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#inform-the-navigation-api-about-child-navigable-destruction
   // SPEC_MISMATCH: inform the navigation API about child navigable destruction(navigable)
-  // TODO(navigation-abort-caller-loop): destroyChild supplies the container's Document loop; revisit when removal and teardown run end to end.
   informNavigationAPIAboutChildNavigableDestruction(callerEventLoop: EventLoop | null): void {
-    this.informNavigationAPIAboutAbortingNavigation(callerEventLoop);
     const navigation = this.activeWindow?.navigation;
     if (navigation === undefined) throw new InternalError('Child destruction notification requires an active Window');
+    const eventLoop = navigation.env.responsibleEventLoop;
+    if (callerEventLoop === eventLoop) {
+      this.informNavigationAPIAboutAbortingNavigation(callerEventLoop);
+    } else {
+      // SPEC_CLASH(document-destruction-task-activity): Detachment must not strand this teardown notification.
+      // Ordinary navigation abortion retains its global-task activity gate.
+      eventLoop.queueTask(taskSources['navigation-and-traversal'], null, () => {
+        this.informNavigationAPIAboutAbortingNavigation(eventLoop);
+      });
+    }
     // HTML queues only the abortion notification when called from another loop.
     const trackers = [...navigation.upcomingTraverseAPIMethodTrackers.values()];
     for (const tracker of trackers) tracker.rejectFinished(new navigation.env.DOMException('', 'AbortError'));
@@ -2241,7 +2291,9 @@ export class Traversable extends Navigable implements FetchPromptTarget {
         // Add each dequeued continuation's navigable to the waiting set before dispatching its activation/update job.
         // Retain displayed-Document ownership through deactivation (HTML #12668); population can replace its shared state.
         // Call Document.deactivateForCrossDocumentNavigation() for cross-document changes before activation.
-        // Its CSS eligibility/setup and recursive-unloading owners still throw explicitly.
+        // Move the capture/unload branch into this coordinator, using separate operations with consistent return contracts.
+        // Until then, deactivation returns the immediate unload wait, or void when capture will append later unloading.
+        // Its CSS eligibility/setup, visibility, and cache-admission owners still throw explicitly.
         // Call activateHistoryEntry() for non-update-only continuations after any required unloading.
         // Connect failureSteps to completion so rejected jobs release the wait without duplicate reporting.
         // Run Document.updateForHistoryStepApplication() on each Document's loop, including classic
@@ -2447,7 +2499,10 @@ export class TopLevelTraversable extends Traversable {
     if (group === null) throw new InternalError('Top-level destruction requires a browsing context group');
     const userAgent = group.userAgent;
     // SPEC_GAP(top-level-destruction-order): HTML leaves entry order open; request teardown in retained-list order.
-    for (const entry of this.sessionHistoryEntries) entry.documentState.document?.destroyAndDescendants();
+    const documents = new Set(this.sessionHistoryEntries.map((entry) => entry.documentState.document));
+    for (const document of documents) {
+      document?.destroyAndDescendants().observe(() => {}, (error) => { userAgent.runInParallel(() => { throw error; }); });
+    }
     this.pointerEventStreams.clear();
     group.remove(browsingContext);
     userAgent.removeTopLevelTraversableFromUI(this);
@@ -2477,7 +2532,7 @@ export class TopLevelTraversable extends Traversable {
         // SPEC_GAP(top-level-close-destroyed-document): HTML retrieves the context after unloading can clear it; retain it before unloading.
         const browsingContext = activeDocument.browsingContext;
         if (browsingContext === null) throw new InternalError('Closing requires a browsing context when unloading begins');
-        activeDocument.unloadAndDescendants(null, () => { this.destroy(browsingContext); });
+        return activeDocument.unloadAndDescendants(null, () => { this.destroy(browsingContext); });
       });
     }, (error) => { userAgent.runInParallel(() => { throw error; }); });
   }

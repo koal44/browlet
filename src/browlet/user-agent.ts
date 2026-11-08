@@ -629,6 +629,13 @@ class BrowletUserAgent implements
     return Navigable.checkIfUnloadingIsCanceled(navigables, traversable, targetStep, userInvolvementForNavigateEvent, this);
   }
 
+  /** Decide whether this Document and its complete descendant tree will remain alive in session history. */
+  shouldKeepDocumentInBfcache(_document: DocumentImpl): boolean {
+    // TODO(HTML §7.5.9): Select cache eligibility and retention/eviction policy. Reject admission if any
+    // descendant is unsalvageable or will not be retained; an otherwise salvageable page is only a candidate.
+    throw new InternalError('Back-forward cache admission is not implemented');
+  }
+
   /** Whether an otherwise eligible unload prompt is unlikely to be annoying, deceptive, or pointless. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#steps-to-fire-beforeunload
   shouldShowBeforeUnloadPrompt(_document: DocumentImpl): boolean {

@@ -113,7 +113,9 @@ and load-event queuing. The target history state's diagnostic handoff is now con
 HTML does not pass Navigation Timing's cacheMode or Critical-CH
 restart arguments. The raw Fetch cache classification is retained for that
 consumer; Critical-CH restart measurement has no producer yet. Previous-Document
-unload timestamps likewise retain their unfinished lifecycle producer. The
+unload timestamps now have the single-Document producer described in the
+[unloading audit](../loader/ROADMAP.md#html-759-single-document-unloading);
+recursive navigation coordination remains unfinished. The
 reviewed grouped input shape is documented at the Performance factory.
 
 ## Navigation Timing: automatic creation
@@ -383,12 +385,12 @@ Remaining dependencies are deliberate:
   missing timing measurements. History population must supply the incoming target
   entry's diagnostics before activation.
 - **Lifecycle measurements:** readiness and the provisional `finishLoading()`
-  route already record Document-relative times. Full parser scheduling and unload
-  production remain elsewhere. Unload integration must preserve origin/redirect
-  privacy and update the record retained by an already-created entry; HTML's
-  later assignment to `previousDocumentUnloadTiming` needs attention at that
-  handoff. Critical-CH restart measurement still has no producer. Do not synthesize
-  these observations in getters.
+  route already record Document-relative times. `Document.unload()` updates the
+  retained unload record in place after strict origin/redirect checks. Skipped
+  unloads and other-event-loop measurements remain zero. Its recursive caller,
+  cache admission, and visibility processing remain explicit lifecycle dependencies,
+  as does full parser scheduling. Critical-CH restart measurement still has no
+  producer. Do not synthesize these observations in getters.
 - **Other contributions:** Server Timing now uses the final navigation response.
   Legacy `performance.timing` and `performance.navigation` are implemented below. Prerender's
   `activationStart` is a separate contribution and requires its own lifecycle.
@@ -449,8 +451,9 @@ The current upstream Navigation Timing source is `48c0048` (2026-11-02);
 HTML is `5955a33` (2026-11-05), both refreshed before implementation.
 
 **Remaining owners:** HTML's initial about:blank loading milestones, full parser
-scheduling, previous-Document unload capture/privacy, and synthetic/supplied-response
+scheduling, recursive unloading coordination, and synthetic/supplied-response
 measurements still belong to their existing lifecycle/loader dependencies. The
+single-Document unload operation now supplies the shared record after privacy checks;
 legacy getters do not fill them in. WorkerGlobalScope's common global-API forwarding
 remains a §10.3 dependency; the legacy interface and partial member are Window-only.
 The following legacy type/count slice completes §8's public surface.

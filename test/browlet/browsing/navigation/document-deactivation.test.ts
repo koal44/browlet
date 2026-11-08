@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable, type UserNavigationInvolvement } from '../../../../src/browlet/browsing/navigation/navigable';
 import type { NavigationType } from '../../../../src/browlet/browsing/navigation/api/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/index';
 import type { PageSwapEvent, Window } from '../../../../src/browlet/platform';
 import { ViewTransitionImpl } from '../../../../src/browlet/rendering/index';
+import { InternalPromise, internalType } from '../../../../src/infra/index';
 import { obtainURLOrigin, parseURL } from '../../../../src/url/index';
 import { createManualUserAgent } from '../../../support/browlet-agent';
 import { project } from '../../../support/browlet-binding';
@@ -14,9 +15,11 @@ afterEach(() => { vi.restoreAllMocks(); });
 
 describe('Document deactivation for cross-document navigation', () => {
   it('releases traversal ownership and lets unloading fire pageswap before completing', async () => {
-    const { document, top, target, eligible, setup, unload, after, order, events } = fixture();
+    const { document, top, target, eligible, setup, unload, after, order, events, turns, deactivate } = fixture();
     const abort = vi.spyOn(top, 'informNavigationAPIAboutAbortingNavigation');
-    document.deactivateForCrossDocumentNavigation('none', target, 'push', after);
+    expect(deactivate('none', 'push')).toBeInstanceOf(InternalPromise);
+    const later = vi.fn(() => { expect(after).toHaveBeenCalledOnce(); });
+    top.appendSessionHistoryTraversalSteps(later);
 
     expect(eligible).toHaveBeenCalledExactlyOnceWith(target.document, 'push', false);
     expect(abort).toHaveBeenCalledExactlyOnceWith(null);
@@ -26,6 +29,8 @@ describe('Document deactivation for cross-document navigation', () => {
     expect(order).toEqual(['unload-start']);
     expect(after).not.toHaveBeenCalled();
     expect(events).toHaveLength(0);
+    expect(later).not.toHaveBeenCalled();
+    expect(turns).toHaveLength(0);
 
     await runTask(document); // Navigation abortion is queued from parallel history work.
     expect(events).toHaveLength(0);
@@ -33,18 +38,21 @@ describe('Document deactivation for cross-document navigation', () => {
     expect(order).toEqual(['unload-start', 'pageswap', 'unload', 'after']);
     expect(events[0]!.viewTransition).toBeNull();
     expect(after).toHaveBeenCalledTimes(1);
+    await expect.poll(() => turns.length).toBe(1);
+    turns.shift()!();
+    expect(later).toHaveBeenCalledOnce();
     expect(top.activeDocument).toBe(document);
     expect(top.activeSessionHistoryEntry).not.toBe(target);
   });
 
   it.each(['none', 'activation', 'browser UI'] as const)('supplies the browser-UI flag for %s involvement', (involvement) => {
-    const { document, target, eligible, after } = fixture();
-    document.deactivateForCrossDocumentNavigation(involvement, target, 'replace', after);
+    const { target, eligible, deactivate } = fixture();
+    deactivate(involvement, 'replace');
     expect(eligible).toHaveBeenCalledExactlyOnceWith(target.document, 'replace', involvement === 'browser UI');
   });
 
   it.each(['push', 'replace', 'reload', 'traverse'] as const)('waits for capture before unloading a %s navigation', async (type: NavigationType) => {
-    const { document, window, top, target, eligible, setup, unload, after, events, order, turns } = fixture();
+    const { document, window, top, target, eligible, setup, unload, after, events, order, turns, deactivate } = fixture();
     const transition = new ViewTransitionImpl(document, window.env);
     eligible.mockReturnValue(true);
     setup.mockImplementation(() => {
@@ -55,7 +63,7 @@ describe('Document deactivation for cross-document navigation', () => {
     const ownershipAtPageSwap: (string | null)[] = [];
     (project(window) as Window).addEventListener('pageswap', () => { ownershipAtPageSwap.push(top.ongoingNavigation); });
 
-    document.deactivateForCrossDocumentNavigation('none', target, type, after);
+    deactivate('none', type);
     expect(eligible).toHaveBeenCalledExactlyOnceWith(target.document, type, false);
     expect(setup).not.toHaveBeenCalled();
     expect(events).toHaveLength(0);
@@ -88,9 +96,9 @@ describe('Document deactivation for cross-document navigation', () => {
   });
 
   it('queues unloading immediately after pageswap when setup declines a transition', async () => {
-    const { document, top, target, eligible, unload, after, order, events, turns } = fixture();
+    const { document, top, target, eligible, unload, after, order, events, turns, deactivate } = fixture();
     eligible.mockReturnValue(true);
-    document.deactivateForCrossDocumentNavigation('activation', target, 'push', after);
+    deactivate('activation', 'push');
     await runTask(document);
     expect(order).toEqual(['setup', 'pageswap']);
     expect(events[0]!.viewTransition).toBeNull();
@@ -108,10 +116,10 @@ describe('Document deactivation for cross-document navigation', () => {
   });
 
   it('appends capture completion behind traversal work already in the queue', async () => {
-    const { document, window, top, target, eligible, setup, unload, after, turns } = fixture();
+    const { document, window, top, eligible, setup, unload, turns, deactivate } = fixture();
     eligible.mockReturnValue(true);
     setup.mockReturnValue(new ViewTransitionImpl(document, window.env));
-    document.deactivateForCrossDocumentNavigation('none', target, 'push', after);
+    deactivate('none', 'push');
     await runTask(document);
     const previousWork = vi.fn(() => {
       expect(top.ongoingNavigation).toBe('traversal');
@@ -125,10 +133,35 @@ describe('Document deactivation for cross-document navigation', () => {
     expect(unload).toHaveBeenCalledTimes(1);
   });
 
+  it('releases the queue during capture and retains the later unloading operation', async () => {
+    const { document, window, top, eligible, setup, unload, after, turns, deactivate } = fixture();
+    eligible.mockReturnValue(true);
+    setup.mockReturnValue(new ViewTransitionImpl(document, window.env));
+    expect(deactivate('none', 'push')).toBeUndefined();
+    const duringCapture = vi.fn(() => { expect(unload).not.toHaveBeenCalled(); });
+    top.appendSessionHistoryTraversalSteps(duringCapture);
+    turns.shift()!();
+    expect(duringCapture).toHaveBeenCalledOnce();
+
+    await runTask(document);
+    setup.mock.calls[0]![1]();
+    turns.shift()!();
+    expect(unload).toHaveBeenCalledOnce();
+    const afterUnloading = vi.fn(() => { expect(after).toHaveBeenCalledOnce(); });
+    top.appendSessionHistoryTraversalSteps(afterUnloading);
+    expect(turns).toHaveLength(0);
+    expect(afterUnloading).not.toHaveBeenCalled();
+    await runTask(document);
+    await runTask(document);
+    await expect.poll(() => turns.length).toBe(1);
+    turns.shift()!();
+    expect(afterUnloading).toHaveBeenCalledOnce();
+  });
+
   it('keeps missing CSS eligibility explicit before releasing traversal ownership', () => {
-    const { document, top, target, eligible, unload, after, events } = fixture();
+    const { top, eligible, unload, after, events, deactivate } = fixture();
     eligible.mockRestore();
-    expect(() => document.deactivateForCrossDocumentNavigation('none', target, 'push', after))
+    expect(() => deactivate('none', 'push'))
       .toThrow('view transition eligibility is not implemented');
     expect(top.ongoingNavigation).toBe('traversal');
     expect(unload).not.toHaveBeenCalled();
@@ -137,10 +170,10 @@ describe('Document deactivation for cross-document navigation', () => {
   });
 
   it('keeps missing transition setup explicit on the outgoing task', async () => {
-    const { document, top, target, eligible, setup, unload, after, events } = fixture();
+    const { document, top, eligible, setup, unload, after, events, deactivate } = fixture();
     eligible.mockReturnValue(true);
     setup.mockRestore();
-    document.deactivateForCrossDocumentNavigation('none', target, 'push', after);
+    deactivate('none', 'push');
     await expect(runTask(document)).rejects.toThrow('view transition setup is not implemented');
     expect(top.ongoingNavigation).toBe('traversal');
     expect(unload).not.toHaveBeenCalled();
@@ -148,28 +181,31 @@ describe('Document deactivation for cross-document navigation', () => {
     expect(events).toHaveLength(0);
   });
 
-  it('does not disguise the missing unloading owner as successful completion', () => {
-    const { document, top, target, unload, after, events } = fixture();
+  it('propagates the missing cache admission dependency through recursive unloading', async () => {
+    const { document, top, unload, after, events, turns, deactivate } = fixture();
     unload.mockRestore();
-    expect(() => document.deactivateForCrossDocumentNavigation('none', target, 'push', after))
-      .toThrow('Document and descendant unloading is not implemented');
+    deactivate('none', 'push');
+    await runTask(document);
+    await runTask(document);
+    await expect.poll(() => turns.length).toBe(1);
+    expect(() => turns.shift()!()).toThrow('Back-forward cache admission is not implemented');
     expect(top.ongoingNavigation).toBeNull();
     expect(after).not.toHaveBeenCalled();
-    expect(events).toHaveLength(0);
+    expect(events).toHaveLength(1);
   });
 
   it.each(['navigable', 'destination'] as const)('requires a %s before checking CSS', (missing) => {
-    const { document, top, target, eligible, after } = fixture();
+    const { document, top, target, eligible, deactivate } = fixture();
     if (missing === 'navigable') document.browsingContext = null;
     else target.documentState.document = null;
-    expect(() => document.deactivateForCrossDocumentNavigation('none', target, 'push', after))
+    expect(() => deactivate('none', 'push'))
       .toThrow(missing === 'navigable' ? 'requires a node navigable' : 'requires a populated destination');
     expect(eligible).not.toHaveBeenCalled();
     expect(top.ongoingNavigation).toBe('traversal');
   });
 });
 
-/** Retain real Window/Agent ownership and control only the unfinished CSS and unloading owners. */
+/** Retain real Window/Agent ownership and control CSS and the asynchronous unloading boundary. */
 function fixture() {
   const userAgent = createManualUserAgent();
   const top = TopLevelTraversable.create(userAgent, null, '');
@@ -201,16 +237,28 @@ function fixture() {
     return null;
   });
   const unload = vi.spyOn(document, 'unloadAndDescendants').mockImplementation((_newDocument, afterAllUnloads, firePageSwap) => {
+    const completion = userAgent.HostPromise.withResolvers(internalType<void>());
     order.push('unload-start');
     document.env.queueTask('navigation-and-traversal', () => {
       firePageSwap?.();
       order.push('unload');
       afterAllUnloads?.();
+      completion.resolve();
     });
+    return completion.promise;
   });
   const turns: (() => void)[] = [];
   vi.spyOn(userAgent, 'runInParallel').mockImplementation((steps) => { turns.push(steps); });
-  return { document, window, top, target, eligible, setup, unload, after, events, order, turns };
+  const deactivate = (involvement: UserNavigationInvolvement, type: NavigationType): void | InternalPromise<void> => {
+    let completion: void | InternalPromise<void> = undefined;
+    top.appendSessionHistoryTraversalSteps(() => {
+      completion = document.deactivateForCrossDocumentNavigation(involvement, target, type, after);
+      return completion;
+    });
+    turns.shift()!();
+    return completion;
+  };
+  return { document, window, top, target, eligible, setup, unload, after, events, order, turns, deactivate };
 }
 
 async function runTask(document: DocumentImpl): Promise<void> {

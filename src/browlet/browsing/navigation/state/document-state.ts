@@ -72,9 +72,10 @@ export class DocumentState {
     const document = this.document;
     if (document === null) return;
     if (document.isFullyActive()) throw new InternalError('A fully active Document cannot be evicted');
-    // TODO(HTML §7.5.10): Recursive destruction must clear this retained state, even for an inactive Document.
     // The lifecycle owner clears the Document after teardown; this request does not clear it early.
-    document.destroyAndDescendants();
+    document.destroyAndDescendants().observe(() => {}, (error) => {
+      document.env.userAgent.runInParallel(() => { throw error; });
+    });
   }
 }
 

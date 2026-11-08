@@ -494,7 +494,7 @@ to the existing `all`, `head`, read-only `body`, `write`, and `defaultView` surf
 | §3.1.2 DocumentOrShadowRoot | HTML partial declaration and shared `activeElement` getter, including retargeting and body/document-element fallback; Selectlet uses the same getter | `Document.focusedArea` is an explicit throwing dependency until §6.6 supplies focus state and its lifecycle. |
 | §3.1.3 ancestor origins | Both list-creation algorithms, referrer-policy masking, retained string snapshots, and explicit parent input before activation | Automatic child lifecycle remains an explicit dependency. `Location.ancestorOrigins` now selects the relevant Document, checks entry-origin access, and preserves the list's realm and identity. |
 | §3.1.4 resource metadata | Referrer, non-HTTP access to the shared cookie store, retained response modification time, and local-time `lastModified` formatting | File navigation must supply filesystem modification times. The source-only route has no response headers; its modification time remains unknown. Cookie-averse browser differences are recorded below. |
-| §3.1.5 loading status | Readiness-update algorithm, `readystatechange` dispatch/handler, HTML/XML parser lifecycle contract, load/unload timing records, and redirect flag | XML parser implementation and previous-document unload capture remain missing. Existing HTML routes use the shared transitions; full §13 completion scheduling remains provisional. |
+| §3.1.5 loading status | Readiness-update algorithm, `readystatechange` dispatch/handler, HTML/XML parser lifecycle contract, load/unload timing records, and redirect flag | XML parsing, recursive unloading coordination, and full §13 completion scheduling remain unfinished. The single-Document unload operation now supplies measurements after privacy checks. |
 | §3.1.6 render blocking | Document blocking set, HTML-content/body eligibility, timeout predicate, element block/unblock operations, disconnection/attribute cleanup, and rendering-opportunity filtering | Element preparation/loading must register and release actual pending work and populate Fetch request flags. Production rendering remains unfinished; script-blocking stylesheets remain a separate mechanism. |
 | §3.1.7 tree accessors | HTML/SVG title, head/body accessors, stable live collections and plugins alias, live name lookup, currentScript state, and Document named properties with object/embed exposure | Object loading must update fallback state; child navigation must populate iframe content navigables; script execution must maintain currentScript. `dir` is defined with the later global attribute. Browser disagreements are recorded below. |
 
@@ -798,9 +798,10 @@ script callback alive. The XML implementation is an explicit missing dependency;
 the lifecycle contract alone does not provide XML parsing.
 
 Both load and previous-document unload records have the specified zero defaults,
-and the cross-origin-redirect flag retains its false default. Navigation must
-still capture the departing document's unload timestamps and supply them to the
-new document. Performance entry exposure remains with the
+and the cross-origin-redirect flag retains its false default. The
+[single-Document unload operation](../loader/ROADMAP.md#html-759-single-document-unloading)
+now updates the incoming Document's retained record after privacy checks; recursive
+unloading coordination remains unfinished. Performance entry exposure remains with the
 [performance roadmap](../performance/ROADMAP.md).
 
 The source and Fetch HTML routes now report interactive at parsing completion,
