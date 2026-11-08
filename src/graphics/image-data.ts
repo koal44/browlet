@@ -1,14 +1,19 @@
 import { InternalError } from '../infra/index';
-import { getArrayBufferViewByteLength, getBufferViewTypeName, type JSEnvironment } from '../js-engine/index';
+import {
+  getArrayBufferViewBuffer, getArrayBufferViewByteLength, getArrayBufferViewByteOffset,
+  getBufferViewTypeName, isDetachedArrayBuffer, type JSEnvironment,
+} from '../js-engine/index';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineInterface, defineTypedef, dictMember,
   DOMExceptionImpl, DOMExceptionNames, emptyDictionary, idlType, impl, implementationType,
   reference, roAttr, union, xattr, type SerialSteps,
 } from '../web-idl/core/index';
 
+import { BitmapData, type BitmapDataSource } from './bitmap-data';
+
 /** Rectangular RGBA storage with explicit pixel format and color-space metadata. */
 // https://html.spec.whatwg.org/multipage/imagebitmap-and-animations.html#the-imagedata-interface
-export class ImageDataImpl {
+export class ImageDataImpl implements BitmapDataSource {
   /** Owner of fresh pixel arrays and allocation failures. */
   env: JSEnvironment;
   /** Initialized by a constructor algorithm or structured deserialization before exposure. */
@@ -82,6 +87,20 @@ export class ImageDataImpl {
     this.height = rows;
     this.pixelFormat = settings.pixelFormat;
     this.colorSpace = settings.colorSpace ?? defaultColorSpace ?? 'srgb';
+  }
+
+  /** Validate the pixel buffer and borrow its intrinsic view for synchronous bitmap preparation. */
+  // https://html.spec.whatwg.org/multipage/imagebitmap-and-animations.html#dom-createimagebitmap
+  prepareBitmapData(): BitmapData {
+    const buffer = getArrayBufferViewBuffer(this.data);
+    if (isDetachedArrayBuffer(buffer)) {
+      throw new DOMExceptionImpl('ImageData pixels are detached', DOMExceptionNames.invalidState);
+    }
+    return new BitmapData({
+      bytes: new Uint8Array(buffer, getArrayBufferViewByteOffset(this.data), getArrayBufferViewByteLength(this.data)),
+      width: this.width, height: this.height, pixelFormat: this.pixelFormat, colorSpace: this.colorSpace,
+      premultipliedAlpha: false, originClean: true,
+    });
   }
 }
 

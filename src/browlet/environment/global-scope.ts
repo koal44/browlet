@@ -255,9 +255,10 @@ export const timerHandlerIDL = defineTypedef({
  *
  *   undefined queueMicrotask(VoidFunction callback);
  *
- *   TODO: ImageBitmap's object lifetime is implemented in shared graphics. The
- *   factory still needs source usability/extraction, crop/format operations,
- *   and settlement on the bitmap task source (see ../graphics/ROADMAP.md).
+ *   TODO: Shared graphics supplies ImageBitmap lifetime and in-memory source
+ *   cropping/flip/alpha conversion and all four resize qualities. The factory still needs
+ *   the complete source union/adapters and bitmap-task settlement
+ *   (see ../graphics/ROADMAP.md).
  *   Promise<ImageBitmap> createImageBitmap(ImageBitmapSource image,
  *     optional ImageBitmapOptions options = {});
  *   Promise<ImageBitmap> createImageBitmap(ImageBitmapSource image,

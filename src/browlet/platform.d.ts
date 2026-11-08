@@ -9,6 +9,14 @@ export type PredefinedColorSpace = "srgb" | "srgb-linear" | "display-p3" | "disp
 
 export type ImageDataPixelFormat = "rgba-unorm8" | "rgba-float16";
 
+export type ImageOrientation = "from-image" | "flipY";
+
+export type PremultiplyAlpha = "none" | "premultiply" | "default";
+
+export type ColorSpaceConversion = "none" | "default";
+
+export type ResizeQuality = "pixelated" | "low" | "medium" | "high";
+
 export type DocumentReadyState = "loading" | "interactive" | "complete";
 
 export type DocumentVisibilityState = "visible" | "hidden";
@@ -139,6 +147,15 @@ export interface QuotaExceededErrorOptions {
 export interface ImageDataSettings {
   colorSpace?: PredefinedColorSpace;
   pixelFormat?: ImageDataPixelFormat;
+}
+
+export interface ImageBitmapOptions {
+  colorSpaceConversion?: ColorSpaceConversion;
+  imageOrientation?: ImageOrientation;
+  premultiplyAlpha?: PremultiplyAlpha;
+  resizeHeight?: number;
+  resizeQuality?: ResizeQuality;
+  resizeWidth?: number;
 }
 
 export interface ShowPopoverOptions {

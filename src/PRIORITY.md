@@ -262,9 +262,11 @@ both pixel formats, all current color-space labels, constructor validation, and
 cloning with preserved buffer aliases. Window and worker exposure use existing
 bindings. §8.11.2's [ImageBitmap lifetime](graphics/ROADMAP.md#imagebitmap-lifetime)
 now supplies owned pixels, dimensions, close, origin-clean checks, cloning, and
-transfer. Next is in-memory source preparation/formatting for createImageBitmap;
-the author factory, decoding, color conversion, and canvas consumers remain
-explicit dependencies.
+transfer. Internal ImageData/ImageBitmap preparation now supplies validation,
+independent crops, transparent padding, all four resize qualities, vertical flip,
+and unorm8/float16 alpha conversion. Next review the full source union for the
+author factory; source extraction, decoding, color conversion, and canvas
+consumers remain explicit dependencies.
 Source/deferred imports and the HTML Wasm parser remain explicit boundaries.
 Later host-hook algorithms must be connected before judging
 the complete model; the uncertain cross-realm observer test is skipped.

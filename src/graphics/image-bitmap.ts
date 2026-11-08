@@ -1,14 +1,15 @@
 import { getBufferSourceCopy, type JSEnvironment } from '../js-engine/index';
 import {
-  atArg, defineInterface, DOMExceptionImpl, DOMExceptionNames, idlType, impl, op, roAttr, xattr,
+  atArg, defineDictionary, defineEnumeration, defineInterface, dictMember,
+  DOMExceptionImpl, DOMExceptionNames, idlType, impl, op, reference, roAttr, xattr,
   type SerialSteps, type StructuredData, type TransferSteps,
 } from '../web-idl/core/index';
 
-import type { ImageDataPixelFormat, PredefinedColorSpace } from './image-data';
+import { BitmapData, type BitmapDataRecord, type BitmapDataSource } from './bitmap-data';
 
 /** An owned bitmap whose pixels can be copied, moved, or released independently of its source. */
 // https://html.spec.whatwg.org/multipage/imagebitmap-and-animations.html#the-imagebitmap-interface
-export class ImageBitmapImpl {
+export class ImageBitmapImpl implements BitmapDataSource {
   env: JSEnvironment;
   /** Null after close/transfer, or during internal allocation before receiving pixels. */
   #bitmapData: BitmapData | null = null;
@@ -30,23 +31,23 @@ export class ImageBitmapImpl {
   static serializationSteps(this: void, value: ImageBitmapImpl, serialized: StructuredData<ImageBitmapFields>): void {
     const bitmapData = value.#requireSerializableBitmap();
     // SPEC_CLASH(imagebitmap-clone-identity): HTML's enclosing serialization memory preserves aliases, as Chromium/Firefox do; WebKit duplicates repeated references.
-    serialized.fields.BitmapData = { ...bitmapData, bytes: getBufferSourceCopy(bitmapData.bytes) };
+    serialized.fields.BitmapData = { ...bitmapData.toRecord(), bytes: getBufferSourceCopy(bitmapData.bytes) };
   }
 
   /** Adopt the independently serialized snapshot in the receiving implementation. */
   static deserializationSteps(this: void, serialized: StructuredData<ImageBitmapFields>, value: ImageBitmapImpl): void {
-    value.#bitmapData = serialized.fields.BitmapData;
+    value.#bitmapData = new BitmapData(serialized.fields.BitmapData);
   }
 
   /** Move the backing data; HTML's enclosing transfer algorithm also marks the sender detached. */
   static transferSteps(this: void, value: ImageBitmapImpl, dataHolder: StructuredData<ImageBitmapFields>): void {
-    dataHolder.fields.BitmapData = value.#requireSerializableBitmap();
+    dataHolder.fields.BitmapData = value.#requireSerializableBitmap().toRecord();
     value.#bitmapData = null;
   }
 
   /** Receive the moved pixels without copying them or retaining the source implementation. */
   static transferReceivingSteps(this: void, dataHolder: StructuredData<ImageBitmapFields>, value: ImageBitmapImpl): void {
-    value.#bitmapData = dataHolder.fields.BitmapData;
+    value.#bitmapData = new BitmapData(dataHolder.fields.BitmapData);
   }
 
   /** Internal source access; callers must handle the detached state explicitly. */
@@ -64,6 +65,14 @@ export class ImageBitmapImpl {
     this.#bitmapData = null;
   }
 
+  /** Validate this source and borrow its pixels for synchronous bitmap preparation. */
+  // https://html.spec.whatwg.org/multipage/canvas.html#check-the-usability-of-the-image-argument
+  prepareBitmapData(): BitmapData {
+    if (this.#bitmapData === null) throw new DOMExceptionImpl('ImageBitmap is detached', DOMExceptionNames.invalidState);
+    // Unlike cloning/transfer, creation may copy a tainted bitmap and retain its origin-clean state.
+    return this.#bitmapData;
+  }
+
   /** Shared guards for copying or moving pixels; failed checks leave the source intact. */
   #requireSerializableBitmap(): BitmapData {
     // SPEC_CLASH(imagebitmap-closed-clone): Follow HTML/Chromium/Firefox's DataCloneError; WebKit cloning throws TypeError.
@@ -73,22 +82,30 @@ export class ImageBitmapImpl {
   }
 }
 
-/**
- * Prepared, tightly packed RGBA storage in row order, owned exclusively by its bitmap.
- * The producer supplies positive dimensions and exactly width * height * bytes-per-pixel bytes.
- * Half-float component bits retain the engine's typed-array representation; labels do not convert them.
- */
-export interface BitmapData {
-  bytes: Uint8Array<ArrayBuffer>;
-  width: number;
-  height: number;
-  pixelFormat: ImageDataPixelFormat;
-  colorSpace: PredefinedColorSpace;
-  premultipliedAlpha: boolean;
-  originClean: boolean;
+/** The optional source rectangle from createImageBitmap's second overload. */
+export interface ImageBitmapCrop {
+  sx: number;
+  sy: number;
+  sw: number;
+  sh: number;
 }
 
-type ImageBitmapFields = { BitmapData: BitmapData; };
+/** Post-conversion options; Web IDL supplies the four enumeration defaults. */
+export interface ImageBitmapOptions {
+  imageOrientation: ImageOrientation;
+  premultiplyAlpha: PremultiplyAlpha;
+  colorSpaceConversion: ColorSpaceConversion;
+  resizeWidth?: number;
+  resizeHeight?: number;
+  resizeQuality: ResizeQuality;
+}
+
+export type ImageOrientation = 'from-image' | 'flipY';
+export type PremultiplyAlpha = 'none' | 'premultiply' | 'default';
+export type ColorSpaceConversion = 'none' | 'default';
+export type ResizeQuality = 'pixelated' | 'low' | 'medium' | 'high';
+
+type ImageBitmapFields = { BitmapData: BitmapDataRecord; };
 
 const imageBitmapSerialSteps = {
   serializationSteps: ImageBitmapImpl.serializationSteps,
@@ -108,5 +125,22 @@ export const imageBitmapIDL = defineInterface<JSEnvironment>({
   members: [
     roAttr('width', idlType.unsignedLong), roAttr('height', idlType.unsignedLong),
     op('close', idlType.undefined),
+  ],
+});
+
+export const imageOrientationIDL = defineEnumeration({ name: 'ImageOrientation', values: ['from-image', 'flipY'] });
+export const premultiplyAlphaIDL = defineEnumeration({ name: 'PremultiplyAlpha', values: ['none', 'premultiply', 'default'] });
+export const colorSpaceConversionIDL = defineEnumeration({ name: 'ColorSpaceConversion', values: ['none', 'default'] });
+export const resizeQualityIDL = defineEnumeration({ name: 'ResizeQuality', values: ['pixelated', 'low', 'medium', 'high'] });
+
+export const imageBitmapOptionsIDL = defineDictionary({
+  name: 'ImageBitmapOptions',
+  members: [
+    dictMember('imageOrientation', reference('ImageOrientation'), { default: 'from-image' }),
+    dictMember('premultiplyAlpha', reference('PremultiplyAlpha'), { default: 'default' }),
+    dictMember('colorSpaceConversion', reference('ColorSpaceConversion'), { default: 'default' }),
+    dictMember('resizeWidth', idlType.unsignedLong, xattr('EnforceRange')),
+    dictMember('resizeHeight', idlType.unsignedLong, xattr('EnforceRange')),
+    dictMember('resizeQuality', reference('ResizeQuality'), { default: 'low' }),
   ],
 });

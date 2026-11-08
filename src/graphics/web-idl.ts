@@ -1,9 +1,11 @@
 import {
   imageDataIDL, imageDataArrayIDL, imageDataPixelFormatIDL, imageDataSettingsIDL, predefinedColorSpaceIDL,
 } from './image-data';
-import { imageBitmapIDL } from './image-bitmap';
+import {
+  imageBitmapIDL, imageOrientationIDL, premultiplyAlphaIDL, colorSpaceConversionIDL, resizeQualityIDL, imageBitmapOptionsIDL,
+} from './image-bitmap';
 
 export const graphicsIDLDefinitions = [
   predefinedColorSpaceIDL, imageDataArrayIDL, imageDataPixelFormatIDL, imageDataSettingsIDL, imageDataIDL,
-  imageBitmapIDL,
+  imageBitmapIDL, imageOrientationIDL, premultiplyAlphaIDL, colorSpaceConversionIDL, resizeQualityIDL, imageBitmapOptionsIDL,
 ];

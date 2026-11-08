@@ -1280,8 +1280,13 @@ worker forwarding of the public structuredClone API remains HTML §10.3 work.
 dimensions, close, cloning, and transfer for prepared owned pixels. Closed and
 tainted bitmaps reject cloning/transfer; successful transfer clears the sender.
 There is no author constructor, and createImageBitmap remains unexposed until
-its source and formatting flow is implemented. Source extraction, decoding,
-canvas readback, and rendering remain explicit in the
+its source and formatting flow is implemented. Internal preparation supports
+ImageData/ImageBitmap snapshots, cropping, transparent padding, and vertical
+flipping, all four resize qualities, and unorm8/float16 alpha conversion with
+the approved sampling, rounding, and zero-alpha rules. Format/color/origin-clean
+metadata and source pixels are preserved. Medium/high use widened triangle/cubic
+filters; byte output clamps overshoot while half-floats retain it, including in
+alpha. Other source extraction, decoding, canvas readback, and rendering remain explicit in the
 [dependency map](browlet/graphics/ROADMAP.md#imagebitmap-creation-dependencies).
 
 ## HTML integration gates

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ImageBitmapImpl, type BitmapData, type ImageDataPixelFormat } from '../../src/graphics/index';
+import { BitmapData, ImageBitmapImpl, type ImageDataPixelFormat } from '../../src/graphics/index';
 import { parseURL } from '../../src/url/index';
 import { Browlet } from '../../src/browlet/browlet';
 import type { BrowletEnvironment } from '../../src/browlet/environment/index';
@@ -57,13 +57,15 @@ describe('ImageBitmap lifetime', () => {
     expect(clone.first).toMatchObject({ width: 2, height: 1 });
   });
 
-  it('moves the owned record on transfer and keeps the destination alive after source close', () => {
+  it('moves the owned pixels on transfer and keeps the destination alive after source close', () => {
     const { browser, env } = prepared();
     const { image, implementation, data } = createBitmap(env);
     const moved = browser.window.structuredClone({ first: image, again: image }, { transfer: [image] });
     expect(moved.first).toBe(moved.again);
     expect(moved.first).not.toBe(image);
-    expect(unwrap<ImageBitmapImpl>(moved.first).bitmapData).toBe(data);
+    const received = unwrap<ImageBitmapImpl>(moved.first).bitmapData!;
+    expect(received).toBeInstanceOf(BitmapData);
+    expect(received.bytes).toBe(data.bytes);
     expect(implementation.bitmapData).toBeNull();
     expect(image).toMatchObject({ width: 0, height: 0 });
     expect(moved.first).toMatchObject({ width: 2, height: 1 });
@@ -126,7 +128,11 @@ describe.each<ImageDataPixelFormat>(['rgba-unorm8', 'rgba-float16'])('ImageBitma
       : env.deserialize(structuredClone(env.serialize(image)));
     expect(received).toBeInstanceOf(browser.window.ImageBitmap);
     if (!(received instanceof browser.window.ImageBitmap)) throw new Error('Expected ImageBitmap');
-    expect(unwrap<ImageBitmapImpl>(received).bitmapData).toEqual(data);
+    const receivedData = unwrap<ImageBitmapImpl>(received).bitmapData!;
+    expect(receivedData).toBeInstanceOf(BitmapData);
+    // A transported plain record must regain its pixel operations in the receiving implementation.
+    receivedData.flipY();
+    expect(receivedData).toEqual(data);
     expect(received).toMatchObject({ width: 2, height: 1 });
     expect(image.width).toBe(transfer ? 0 : 2);
   });
@@ -207,14 +213,14 @@ async function createFixture() {
   return { browser, env: getRelevantRealm(browser.window).env };
 }
 
-/** Supply the prepared pixel record from the future source/formatting owner, then use real bindings. */
+/** Supply prepared pixel storage, then use real bindings. */
 function createBitmap(env: BrowletEnvironment, options: Partial<Pick<BitmapData, 'pixelFormat' | 'colorSpace' | 'premultipliedAlpha' | 'originClean'>> = {}) {
   const pixelFormat = options.pixelFormat ?? 'rgba-unorm8';
   const bytes = Uint8Array.from({ length: pixelFormat === 'rgba-unorm8' ? 8 : 16 }, (_, index) => index * 17);
-  const data: BitmapData = {
+  const data = new BitmapData({
     width: 2, height: 1, bytes, pixelFormat, colorSpace: options.colorSpace ?? 'srgb',
     premultipliedAlpha: options.premultipliedAlpha ?? false, originClean: options.originClean ?? true,
-  };
+  });
   const implementation = ImageBitmapImpl.create(data, env);
   const image = getBindingContext(env.realm).project(ImageBitmapImpl, implementation) as ImageBitmap;
   return { image, implementation, data };

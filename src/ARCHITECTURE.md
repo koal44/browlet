@@ -1136,11 +1136,17 @@ HTML's graph memory, including pixel-view offsets and buffer aliases. Browlet
 composes Window/worker exposure through its ordinary definitions. This does not
 introduce a graphics Environment or select a decoding/rendering backend.
 
-ImageBitmap owns a prepared RGBA byte record with dimensions, format/color/alpha
-metadata, and origin-clean state. Its interface steps copy that record for
-serialization or move it for transfer; close releases it. The record is portable
-data with no source environment or decoder handle. Source extraction, formatting,
-and async factory orchestration remain with the future graphics/HTML producers.
+ImageBitmap owns a BitmapData instance with RGBA bytes, dimensions,
+format/color/alpha metadata, and origin-clean state. Its interface steps copy
+the pixels for serialization or move them for transfer; close releases them.
+Transport uses plain BitmapDataRecord values and reconstructs the class on
+receipt, without a source environment or decoder handle. ImageData and ImageBitmap
+each implement prepareBitmapData for validated source access; BitmapData.create
+and its instance operations supply independent crops, all four resize qualities,
+vertical flips, and alpha conversion using the existing JSEnvironment. Color space
+and pixel format belong to each image.
+Other source extraction and async factory orchestration remain with their
+future graphics/HTML producers.
 
 [Browlet's bindings](browlet/integration/web-idl/composition.ts) and
 [integration modules](browlet/integration/README.md) are explicit composition

@@ -38,19 +38,19 @@ identifies these missing connections; no placeholder fabricates a bitmap.
 
 | Dependency | Existing foundation and remaining work |
 | --- | --- |
-| ImageData/ImageBitmap | Retained pixels and lifetime exist; creation still needs usability/detachment checks and an independent formatted snapshot |
+| ImageData/ImageBitmap | Each implements prepareBitmapData for source validation; shared BitmapData.create returns independent cropped/resized/flipped pixels with optional alpha conversion and all four resize qualities |
 | HTML/SVG images | HTMLImageElement has identity/loading-policy pieces; decoded resources, dimensions, animation-frame selection, and origin-clean extraction need image loading; SVGImageElement integration is absent |
 | Video/VideoFrame | HTMLVideoElement identity exists; readiness, current/visible frame extraction, aspect correction, and VideoFrame integration need media/WebCodecs |
 | Canvas/OffscreenCanvas | HTMLCanvasElement is identity-only; bitmap/context state, origin-clean tracking, and OffscreenCanvas sources need canvas |
 | Blob decoding | Blob reads and MIME image-context sniffing exist; codec selection, decoding failure, dimensions, orientation/color profiles, and default animation frames need a decoder |
-| Formatting | Shared graphics must supply cropping, transparent padding, resize interpolation, vertical flip, and alpha conversion; image/Blob color-conversion policy remains open |
-| Async API | WindowOrWorkerGlobalScope needs the full source union, overloads/options, validation, and Promise settlement on the bitmap task source; worker API forwarding remains §10.3 |
+| Formatting | BitmapData owns cropping, transparent padding, all four resize qualities, vertical flip, and unorm8/float16 alpha conversion; image/Blob color-conversion policy remains open |
+| Async API | Shared ImageBitmapOptions exists; WindowOrWorkerGlobalScope still needs the full source union, overloads, validation, and Promise settlement on the bitmap task source; worker API forwarding remains §10.3 |
 
-Next start with in-memory source preparation and formatting, without selecting a
-decoder or rendering backend. Review missing source types and callable shape
-before exposing the author API. Codec/rendering dependencies must become named
-throwing boundaries when a callable path reaches them; an empty graphics
-environment would not supply those operations.
+The in-memory formatting operations are available. Next review the complete
+source union and callable shape before exposing the author API.
+Codec/rendering dependencies must become named throwing boundaries when a
+callable path reaches them; an empty graphics environment would not supply
+those operations.
 
 ## Removal condition
 

@@ -1,9 +1,9 @@
 # Graphics roadmap
 
 Shared image data, with planned decoding results and graphics operations used by
-CSS images, HTML elements, canvas, and later output. ImageData and ImageBitmap's
-object lifetime are implemented;
-no decoding or rendering backend is selected. [Browlet's graphics integration](../browlet/graphics/ROADMAP.md)
+CSS images, HTML elements, canvas, and later output. ImageData, ImageBitmap's
+object lifetime, and in-memory cropping, alpha conversion, and resizing are implemented; no decoding or
+rendering backend is selected. [Browlet's graphics integration](../browlet/graphics/ROADMAP.md)
 owns HTML source extraction and lifecycle; [layout](../layout/ROADMAP.md) owns
 placement and sizing, while Stylelet owns CSS image/gradient representations.
 
@@ -30,13 +30,13 @@ HTML §8.11 defines [ImageData and ImageBitmap](https://html.spec.whatwg.org/mul
 Their implementation state and neutral declarations belong here, with host
 bindings and HTML source adapters supplied by Browlet. ImageData's constructor,
 initialization, and serialization algorithms are implemented below. ImageBitmap
-supplies dimensions, close, cloning, and transfer; its factory and source
-processing remain separate work.
+supplies dimensions, close, cloning, and transfer. In-memory source preparation
+is internal; its author-facing factory remains separate work.
 
 | Work | Contract to establish |
 | --- | --- |
 | ImageData | Implemented pixel storage, dimensions, formats, color-space labels, constructor validation, and cloning; canvas consumers remain separate |
-| ImageBitmap | Implemented owned pixels, origin-clean state, dimensions, close, clone, and transfer; sources, formatting, and async creation remain pending |
+| ImageBitmap | Implemented lifetime and in-memory cropping/flip; resizing, alpha conversion, other source owners, and async creation remain pending |
 | Geometry | Reuse [geometry](../geometry/ROADMAP.md) for coordinate/matrix operations; no independent DOMMatrix family |
 | Color/output | Keep CSS value computation in Stylelet; image/output color conversion, supported profiles, and rasterization need explicit consumers/backend capabilities |
 | Painting/compositing | Define drawing inputs and retained output only when a concrete renderer/canvas consumer exists; this folder does not establish a complete paint pipeline |
@@ -125,14 +125,16 @@ Closed or non-origin-clean objects fail with DataCloneError. Failed origin-clean
 checks preserve the original bitmap; close and successful transfer release its
 reference and make both dimensions zero.
 
-Eric approved a prepared `BitmapData` record: tightly packed RGBA bytes,
+Eric approved a prepared `BitmapData` class: tightly packed RGBA bytes,
 positive dimensions, pixel format, color space, alpha-premultiplication state,
 and origin-clean status. `ImageBitmapImpl.create(bitmapData, env)` is an internal
 ownership handoff, not HTML's author-facing createImageBitmap algorithm. Its
 producer supplies the complete valid representation and relinquishes mutable
-aliases. The record contains no environment, callback, or decoder handle, so it
-can survive transport of serialization records. Cloning preserves component
-bits and metadata without running a conversion algorithm.
+aliases. BitmapData contains no environment, callback, or decoder handle.
+Serialization and transfer carry its plain `BitmapDataRecord`; receiving steps
+reconstruct the class, preserving its methods after transport. Cloning copies
+component bits and metadata without conversion; transfer hands off the existing
+pixel storage without preserving the internal source class instance.
 
 The absent bitmap represents the object's local detached state. HTML's existing
 generic transfer machinery also stamps successfully transferred implementations.
@@ -161,13 +163,175 @@ and worker destinations. The combined 57 graphics/structured-clone/transfer case
 pass on Node 24.19.0, 26.8.1, and custom 27 in stock and compat modes. These tests
 do not claim source extraction, pixel formatting, or rendering.
 
+## ImageBitmap in-memory preparation
+
+[BitmapData.create](bitmap-data.ts) extracts the ImageData and
+ImageBitmap branches of [createImageBitmap](https://html.spec.whatwg.org/multipage/imagebitmap-and-animations.html#dom-createimagebitmap)
+and its [crop/format algorithm](https://html.spec.whatwg.org/multipage/imagebitmap-and-animations.html#cropped-to-the-source-rectangle-with-formatting).
+Eric approved the internal `BitmapData.create(source, options, crop, env)` contract:
+the optional crop record contains `sx`, `sy`, `sw`, and `sh`; inputs are already
+converted, and the result owns independent pixels. Both ImageDataImpl and
+ImageBitmapImpl implement `BitmapDataSource.prepareBitmapData()`, keeping source
+validation and borrowed-pixel access with each owner. BitmapData supplies the
+shared crop, flip, resize, and alpha operations without a source-class switch.
+The complete source union,
+author-facing Promise, and bitmap-task settlement are not exposed by this helper.
+ImageBitmapOptions and its four enumerations live beside ImageBitmapImpl and
+retain the complete HTML vocabulary, including EnforceRange resize dimensions,
+for that later binding.
+
+The factory checks zero crop dimensions before zero resize dimensions and source
+usability. Detached ImageData buffers and closed/transferred ImageBitmaps reject
+with InvalidStateError. Negative crop dimensions extend the rectangle left/up;
+only `flipY` reverses rows. Cropping copies exact unorm8 or float16 component bits
+through intrinsic-backed byte views, respects ImageData subarray offsets, fills
+exterior pixels with transparent black, and retains color and origin-clean labels.
+Creating from a tainted ImageBitmap preserves taint; the separate cloning/transfer
+guards still reject it. No source pixels or lifetime state are changed.
+
+`SPEC_CLASH(imagebitmap-crop-padding)` follows HTML/Chromium/Firefox's requested
+dimensions and transparent padding. WebKit clips the rectangle to the source,
+returning a 1x1 transparent bitmap when disjoint. Eric approved HTML's behavior.
+The [browser-only probe](../../node-compat/experimental/browser-probes/html/image-bitmap-preparation.mjs)
+and [results](../../node-compat/experimental/browser-probes/html/IMAGE-BITMAP-PREPARATION-RESULTS.json)
+record Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2. All three agree on
+negative crop direction, immediate snapshots, inferred resize dimensions, and
+the tested zero-size/detached-source errors.
+
+`SPEC_CLASH(imagebitmap-default-alpha)` records the approved policy: `default`
+preserves the source's alpha representation. HTML explicitly permits an
+implementation-specific choice. Gecko's ImageData path uses NonPremult unless
+`premultiply` is requested (`dom/canvas/ImageBitmap.cpp`, CreateInternal);
+Blink treats `default` as premultiply (`core/imagebitmap/image_bitmap.cc`,
+ParseOptions). This is source-inspected evidence, not an inference from canvas
+readback, which can itself convert the representation. HTML applies its
+colorSpaceConversion step only to image elements and Blobs; these two in-memory
+sources keep their existing color space for either option value.
+
+`BitmapData.convertAlpha()` now applies HTML's
+[component multiplication/division](https://html.spec.whatwg.org/multipage/canvas.html#premultiplied-alpha-and-the-2d-rendering-context)
+to independently owned pixels in place. The factory converts its copied crop,
+leaving the source unchanged. Alpha bits, dimensions, format, color space, and
+origin-clean state are preserved. Matching modes leave every byte unchanged;
+opaque pixels also retain their exact RGB bits. Byte views with unaligned
+half-float storage use an aligned temporary view and copy back into the original
+storage. No graphics environment or backend is required.
+
+`SPEC_CLASH(imagebitmap-alpha-rounding)` records the approved byte policy:
+multiply RGB by alpha/255 or divide by it, then use Uint8ClampedArray's
+nearest-even rounding and saturation. Chromium agrees in the
+[alpha probe](../../node-compat/experimental/browser-probes/html/image-bitmap-alpha.mjs)
+and [results](../../node-compat/experimental/browser-probes/html/IMAGE-BITMAP-ALPHA-RESULTS.json);
+Firefox/WebKit differ on some components. For example, restoring red=1 at
+alpha=6 gives 42, while restoring green=3 gives 128 in Chromium/Browlet; WebKit
+gives 127 for green. The probe uploads ImageBitmaps to WebGL2 for raw RGBA
+readback, avoiding 2D canvas's additional alpha conversion. It records Chromium
+156.0.8078.4, Firefox 157.0, and WebKit 27.2, with successful upload/readback.
+
+`SPEC_GAP(imagebitmap-alpha-conversion)` records HTML's missing zero-alpha and
+half-float normalization rules. Eric approved zero RGB at either signed zero
+alpha. Other float16 components use their stored values, including negative/HDR
+values and alpha outside 0–1, then round through Float16Array. No extra clamp is
+applied; non-finite arithmetic follows JavaScript/IEEE behavior. Alpha is never
+rewritten, preserving signed zero and NaN payload bits. The browser probe covers
+byte pixels only; the half-float policy is an explicit choice tested locally.
+
+The former alpha expected failures are now ordinary regressions. The focused
+tests retain arithmetic/rounding, source ownership, exact half-float bits,
+padding/flip, validation, detachment, metadata, intrinsic reads, and
+destination-realm allocation coverage.
+
+## ImageBitmap resizing
+
+`BitmapData.resize(width, height, quality, env)` now implements HTML's
+[pixelated rule](https://html.spec.whatwg.org/multipage/imagebitmap-and-animations.html#dom-resizequality-pixelated)
+and bilinear interpolation for `low`. Dimensions are already validated positive
+integers. Changed dimensions produce independent storage in the supplied realm;
+unchanged dimensions return the same bitmap for any quality. Format, color
+space, alpha representation, and origin-clean state are retained. The factory
+keeps HTML's crop, resize, flip, and requested alpha-conversion order.
+
+`SPEC_CLASH(imagebitmap-pixelated-resize)` follows the written two-stage rule:
+choose each axis's closest positive integer multiple, enlarge with nearest
+neighbor, then use bilinear interpolation for the remaining size difference.
+The implementation samples that conceptual enlarged grid directly, avoiding an
+intermediate image allocation. Chromium, Firefox, and WebKit instead use direct
+nearest-neighbor scaling for `pixelated`. With source red values `[0, 100, 250]`
+resized from three to five pixels, Browlet produces `[0, 30, 100, 205, 250]`;
+all three browsers produce `[0, 0, 100, 250, 250]`.
+
+`SPEC_GAP(imagebitmap-resize-sampling)` records the approved details absent from
+HTML's description: choose the larger integer multiple on a tie, sample pixel
+centers, and clamp at the cropped image's edges. `low` uses bilinear directly.
+Interpolation operates on stored RGBA components in the existing color space
+and alpha representation, with double-precision intermediates and rounding only
+when storing into Uint8ClampedArray or Float16Array. It does not introduce color
+conversion or clamp half-floats to 0–1. Zero-weight neighbors do not participate
+in non-finite arithmetic. An exact source-pixel sample copies its component bits,
+including NaN payloads and signed zeros.
+
+`SPEC_CLASH(imagebitmap-resize-components)` records two approved differences.
+Interpolating transparent red with opaque blue gives `[128, 0, 128, 128]` at the
+midpoint, matching Chromium/Firefox; WebKit gives `[255, 0, 255, 128]`. Byte
+rounding retains the existing nearest-even policy: a red midpoint of 62.5 becomes
+62, whereas the three tested browsers produce 63. The
+[resize probe](../../node-compat/experimental/browser-probes/html/image-bitmap-resize.mjs)
+and [results](../../node-compat/experimental/browser-probes/html/IMAGE-BITMAP-RESIZE-RESULTS.json)
+record eight small byte-image cases on Chromium 156.0.8078.4, Firefox 157.0, and
+WebKit 27.2, using WebGL2 readback with successful uploads/reads. Browser sources
+also map pixelated to no/point interpolation in Blink's `image_bitmap.cc`,
+Gecko's `ImageBitmap.cpp`, and WebKit's `ImageBitmap.cpp`. Half-float exceptional
+values are covered locally, not claimed as browser-tested behavior.
+
+`SPEC_GAP(imagebitmap-quality-filters)` records the approved remaining quality
+choices: `medium` uses a triangle filter and `high` uses Catmull–Rom cubic
+convolution (B = 0, C = 1/2). Each axis uses normalized weights and widens its
+filter by the reduction ratio when shrinking. Pixel centers and clamped edge
+samples retain the earlier sampling policy. Weights are precomputed per axis;
+their products sample the source directly, without an intermediate pixel image.
+Clamped contributions to the same edge pixel are combined, and zero-weight
+edges are removed so exact samples retain their raw bits. The
+[WebKit Skia backend](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/platform/graphics/skia/GraphicsContextSkia.cpp)
+also selects Catmull–Rom for high quality. HTML permits these filter choices but
+does not require browsers to use the same kernels, footprints, or precision.
+
+`SPEC_CLASH(imagebitmap-quality-resize)` records the approved reduction policy
+and observed differences. For eight opaque red values
+`[0, 0, 255, 0, 0, 0, 0, 0]` reduced to two pixels, the probe and local regressions
+give:
+
+| Implementation | Medium red values | High red values |
+| --- | --- | --- |
+| Browlet | `[56, 8]` | `[61, 6]` |
+| Chromium | `[64, 0]` | `[143, 0]` |
+| Firefox | `[65, 8]` | `[65, 8]` |
+| WebKit | `[128, 0]` | `[143, 0]` |
+
+The probe also retains a checkerboard reduction. These observations establish
+implementation differences, not a requirement to reproduce one backend's pixels.
+
+`SPEC_GAP(imagebitmap-cubic-range)` records the approved handling of signed
+filter weights. Filtering retains stored RGBA, color space, and alpha
+representation, with double-precision accumulation and rounding only at the
+destination. Uint8ClampedArray clamps and rounds overshoot; Float16Array retains
+negative/HDR output, including alpha outside 0–1. No additional alpha clamp or
+color conversion is inserted. Zero-weight samples are omitted; other non-finite
+arithmetic follows the existing JavaScript/IEEE policy. Exact single-pixel
+contributions copy their component bits without arithmetic.
+
+All four resize qualities are implemented. The former resize and alpha expected
+failures are now ordinary passing regressions. [The focused suite](../../test/graphics/bitmap-data.test.ts)
+passes 73 cases on Node 26.8.1/compat, with no expected failures. Coverage includes
+independent axes, widened reductions, normalized constant images, rounding,
+cubic overshoot, non-finite components, unaligned views, exact half-float copies,
+source preservation, and resize-before-alpha integration.
+
 ## Next implementation and checks
 
-The next bounded work can start with in-memory ImageData/ImageBitmap source
-preparation and formatting. Creation needs specified options/conversions,
-invalid-state checks, independent snapshots, and bitmap-task settlement. Cropping,
-transparent padding, resize, orientation, alpha conversion/default policy, and
-result lifetime must be implemented or explicitly deferred at their call sites.
+The next work is the author-facing creation flow: review the complete source
+union, then connect conversion, source usability/extraction, and bitmap-task
+settlement to their actual owners. ImageData/ImageBitmap pixel preparation is
+available; element, canvas, video, and Blob decoding dependencies remain below.
 Do not expose a reduced ImageBitmapSource union as though it were the complete IDL.
 
 The [Browlet dependency map](../browlet/graphics/ROADMAP.md#imagebitmap-creation-dependencies)
