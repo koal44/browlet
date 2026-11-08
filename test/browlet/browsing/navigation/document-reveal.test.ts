@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { internalType } from '../../../../src/infra/index';
-import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/top-level-traversable';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { HTMLBodyElement, PageRevealEvent, Window } from '../../../../src/browlet/platform';
 import { ViewTransitionImpl } from '../../../../src/browlet/rendering/index';

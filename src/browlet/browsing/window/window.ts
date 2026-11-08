@@ -346,7 +346,7 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-window-close
   close(): void {
     const traversable = this.navigable;
-    if (traversable === null || !traversable.isTopLevelTraversable || traversable.isClosing) return;
+    if (traversable === null || !traversable.isTopLevelTraversable() || traversable.isClosing) return;
     // TODO: Snapshot source params, then require script-closability, incumbent
     // browsing-context familiarity, and sandbox navigation permission before
     // setting isClosing and queueing TopLevelTraversable.definitelyClose() on the DOM manipulation source.

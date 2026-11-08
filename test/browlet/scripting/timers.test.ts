@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createManualEventLoop, createManualUserAgent } from '../../support/browlet-agent';
 import { createTestDocument } from '../../support/dom';
 import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import { Duration } from
   '../../../src/timing/clock';
 import type { EventLoop } from '../../../src/browlet/scripting/event-loop';

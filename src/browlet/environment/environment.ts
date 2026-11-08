@@ -127,7 +127,7 @@ export class BrowletEnvironmentBase implements FetchEnvironmentBase {
     let topLevelCreationURL: URLRecord | null = currentURL;
     let topLevelOrigin: Origin | null = null;
     let embeddingWindowEnv: WindowEnvironment | undefined;
-    if (!navigable.isTopLevelTraversable) {
+    if (!navigable.isTopLevelTraversable()) {
       embeddingWindowEnv = navigable.parent?.activeDocument?.getRelevantGlobalObject()?.env;
       if (embeddingWindowEnv === undefined) throw new InternalError('Child navigation reservation requires an active parent Window');
       topLevelCreationURL = embeddingWindowEnv.topLevelCreationURL;

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FetchHeaders } from '../../../src/fetch/headers';
 import { FetchResponse } from '../../../src/fetch/response';
 import { parseURL, obtainURLOrigin } from '../../../src/url/index';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import { BrowletEnvironmentBase } from '../../../src/browlet/environment/environment';
 import { LinkProcessingOptions } from '../../../src/browlet/loader/links/options';
 import { createManualUserAgent } from '../../support/browlet-agent';

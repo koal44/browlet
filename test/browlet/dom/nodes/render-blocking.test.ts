@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { HTML_NAMESPACE, SVG_NAMESPACE } from '../../../../src/infra/namespaces';
-import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/top-level-traversable';
 import { Duration } from '../../../../src/timing/clock';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { createTestDocument } from '../../../support/dom';

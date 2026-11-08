@@ -1655,7 +1655,10 @@ navigation. The external-handler chooser remains an explicit throwing boundary.
 [`import-hierarchy.mjs`](../scripts/eslint/import-hierarchy.mjs) records the reviewed
 folder order for import layout and dependency review. Every entry ends in `/`
 and names an existing directory; the longest matching folder owns a module.
-Top-level files inherit their containing component. Browlet's UserAgent and browser
+Top-level files inherit their containing component. Navigation's `Navigable`,
+`Traversable`, and `TopLevelTraversable` each have their own module. Type guards
+keep the base independent of subclass constructors; UserAgent forwards new-target
+creation to the top-level class. Browlet's UserAgent and browser
 entry consume `integration/web-idl/` composition, which installs the lower
 `integration/web-idl/bindings/` hooks and consumes host and feature adapters.
 The generic Web IDL subsystem's environment contracts and generator remain in

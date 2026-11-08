@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import { SourceSnapshotParams } from '../../../src/browlet/browsing/navigation/state/index';
 import { DocumentImpl, DocumentMode } from '../../../src/browlet/dom/nodes/document';
 import { HTMLImageElementImpl, HTMLMediaElementImpl } from '../../../src/browlet/dom/nodes/html/embedded/index';

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import { navigationAndTraversalTaskSource } from '../../../src/browlet/scripting/tasks';
 import { StorageBucket, StorageKey, StorageProxyMap, StorageShelf, type StorageShed } from '../../../src/storage/index';
 import { obtainURLOrigin, parseURL } from '../../../src/url/index';

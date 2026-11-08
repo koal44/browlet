@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { utf8Decode } from '../../../src/encoding/index';
 import { getBindingContext, getRelevantRealm } from '../../support/browlet-binding';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import { navigationAndTraversalTaskSource } from '../../../src/browlet/scripting/tasks';
 import { ReportingEndpoint } from '../../../src/browlet/reporting/endpoint';
 import { ReportImpl } from '../../../src/browlet/reporting/report';

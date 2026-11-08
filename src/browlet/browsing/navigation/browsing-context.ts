@@ -15,7 +15,8 @@ import { CustomElementRegistryImpl } from '../../dom/nodes/html/custom-elements/
 import type { WindowProxyHandle, WindowImpl } from '../window/index';
 import type { UserAgent } from '../../user-agent';
 
-import { Traversable, type Navigable, type TopLevelTraversable } from './navigable';
+import type { Navigable } from './navigable';
+import type { TopLevelTraversable } from './top-level-traversable';
 import type { NavigationParams, OpenerPolicyEnforcementResult } from './params';
 
 /** Retains a WindowProxy and the sequence of documents presented through it. */
@@ -258,7 +259,7 @@ export class BrowsingContext {
   /** Whether the active Document is presented by a traversable navigable. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#top-level-browsing-context
   get isTopLevel(): boolean {
-    return this.activeDocument?.getNodeNavigable() instanceof Traversable;
+    return this.activeDocument?.getNodeNavigable()?.isTraversable() ?? false;
   }
 
   /** Top-level traversable presenting the active Document; requires a live node navigable. */

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import type { HistoryStepResult } from '../../../src/browlet/browsing/navigation/navigable';
+import type { HistoryStepResult } from '../../../src/browlet/browsing/navigation/traversable';
 import type { SessionHistoryTraversalSteps } from '../../../src/browlet/browsing/navigation/session-history-traversal-queue';
 import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';

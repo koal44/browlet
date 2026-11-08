@@ -4,7 +4,7 @@ import type { InternalPromise } from '../../../../src/infra/promises';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { getBindingContext, getRelevantRealm } from '../../../support/browlet-binding';
 import { createManualUserAgent } from '../../../support/browlet-agent';
-import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/top-level-traversable';
 import { domManipulationTaskSource, networkingTaskSource } from '../../../../src/browlet/scripting/tasks';
 import { FetchBody } from '../../../../src/fetch/body';
 import { FetchHeaders } from '../../../../src/fetch/headers';

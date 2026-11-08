@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import { UserAgent } from '../../../src/browlet/user-agent';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import { storageTaskSource } from '../../../src/browlet/scripting/tasks';
 import { createManualUserAgent } from '../../support/browlet-agent';
 import { getRelevantRealm } from '../../support/browlet-binding';

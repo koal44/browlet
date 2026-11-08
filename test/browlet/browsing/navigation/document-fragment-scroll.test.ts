@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FetchResponse } from '../../../../src/fetch/index';
 import { parseURL } from '../../../../src/url/index';
-import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/top-level-traversable';
 import { HTMLDocumentParser } from '../../../../src/browlet/html/parser/html-document-parser';
 import { navigationAndTraversalTaskSource } from '../../../../src/browlet/scripting/tasks';
 import { createManualUserAgent } from '../../../support/browlet-agent';

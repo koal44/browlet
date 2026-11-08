@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/top-level-traversable';
 import type { PostResource } from '../../../../src/browlet/browsing/navigation/state/index';
 import { InternalError } from '../../../../src/infra/index';
 import { parseURL } from '../../../../src/url/index';
@@ -76,8 +77,8 @@ describe('top-level traversable creation', () => {
       expect(this.currentSessionHistoryEntry.step).toBe(0);
       expect(this.targetName).toBe('');
       expect(userAgent.topLevelTraversableSet.has(this as TopLevelTraversable)).toBe(true);
-      expect(options).toEqual({ documentResource: resource });
-      expect(options!.documentResource).toBe(resource);
+      expect(options).toEqual({ documentResource: resource ?? undefined });
+      expect(options!.documentResource).toBe(resource ?? undefined);
     });
 
     const traversable = kind === 'omitted'
@@ -85,7 +86,7 @@ describe('top-level traversable creation', () => {
       : userAgent.createFreshTopLevelTraversable(url, resource);
 
     expect(navigate.mock.contexts).toEqual([traversable]);
-    expect(navigate).toHaveBeenCalledExactlyOnceWith(url, traversable.activeDocument, { documentResource: resource });
+    expect(navigate).toHaveBeenCalledExactlyOnceWith(url, traversable.activeDocument, { documentResource: resource ?? undefined });
     expect(order).toEqual(['created', 'navigate']);
     expect(traversable.isCreatedByWebContent).toBe(false);
   });

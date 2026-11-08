@@ -1,4 +1,6 @@
-import type { Navigable, TopLevelTraversable, Traversable } from '../../../../src/browlet/browsing/navigation/navigable';
+import type { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
+import type { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/top-level-traversable';
+import type { Traversable } from '../../../../src/browlet/browsing/navigation/traversable';
 import type { FetchPromptTarget } from '../../../../src/fetch/index';
 
 // Checked by the ordinary TypeScript build without a separate runtime test.

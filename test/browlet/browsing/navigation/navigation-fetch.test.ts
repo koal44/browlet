@@ -1,6 +1,6 @@
 import { afterEach, assert, describe, expect, it, vi } from 'vitest';
 
-import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/top-level-traversable';
 import { NavigationParams } from '../../../../src/browlet/browsing/navigation/params';
 import { DocumentState, SourceSnapshotParams } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { PolicyContainer } from '../../../../src/browlet/browsing/policy/index';

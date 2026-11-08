@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/top-level-traversable';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { Duration } from '../../../../src/timing/index';
 import { createOpaqueOrigin } from '../../../../src/url/index';

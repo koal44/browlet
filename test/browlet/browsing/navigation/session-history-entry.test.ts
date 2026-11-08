@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/top-level-traversable';
 import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { parseURL } from '../../../../src/url/index';

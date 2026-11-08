@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ImageDataImpl } from '../../../src/graphics/index';
 import { BitmapData, ImageBitmapImpl, type ImageBitmapOptions } from '../../../src/graphics/index';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { createWorkerEnvironment } from '../../../src/browlet/integration/web-idl/index';
 import { bitmapTaskSource, DedicatedWorkerAgent, SharedWorkerAgent } from '../../../src/browlet/scripting/index';

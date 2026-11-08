@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { getRelevantRealm } from '../../support/browlet-binding';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import { ReportingEndpoint } from '../../../src/browlet/reporting/endpoint';
 import { parseURL } from '../../../src/url/url';
 

@@ -810,7 +810,7 @@ export class ElementImpl extends NodeImpl {
       this.reservedDeferredFetchQuota = DeferredFetchQuota.Normal;
       return;
     }
-    if (!document.getNodeNavigable()!.isTopLevelTraversable) return;
+    if (!document.getNodeNavigable()!.isTopLevelTraversable()) return;
     const minimal = PermissionsPolicy.getSupportedFeature('deferred-fetch-minimal')!;
     if (PermissionsPolicy.getInheritedValue(minimal, this, originToNavigateTo) === 'Disabled') return;
     let count = 0;

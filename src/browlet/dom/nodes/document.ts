@@ -413,7 +413,7 @@ export class DocumentImpl extends NodeImpl {
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#concept-document-nrr
   get notRestoredReasons(): NotRestoredReasons | null {
     const navigable = this.getNodeNavigable();
-    return navigable?.isTopLevelTraversable ? navigable.activeSessionHistoryEntry.documentState.notRestoredReasons : null;
+    return navigable?.isTopLevelTraversable() ? navigable.activeSessionHistoryEntry.documentState.notRestoredReasons : null;
   }
 
   /** Inspection object retained for this Document, independent of policy record replacement. */
@@ -1778,7 +1778,7 @@ export class DocumentImpl extends NodeImpl {
     try {
       this.hasBeenScrolledByUser = false;
       this.runUnloadingCleanup();
-      if (this.getNodeNavigable()?.isTopLevelTraversable) this.buildNotRestoredReasons();
+      if (this.getNodeNavigable()?.isTopLevelTraversable()) this.buildNotRestoredReasons();
     } catch (error) {
       this.unloadCounter--;
       throw error;
@@ -1863,7 +1863,7 @@ export class DocumentImpl extends NodeImpl {
         document.runUnloadingCleanup();
         // SPEC_GAP(unload-diagnostic-lifetime): HTML's child destruction removes Documents its later collector needs.
         // Keep the tree alive through every cleanup, then collect diagnostics before destroying any of it.
-        if (document === this && navigable.isTopLevelTraversable) document.buildNotRestoredReasons();
+        if (document === this && navigable.isTopLevelTraversable()) document.buildNotRestoredReasons();
         cleanupOrder.push(document);
       }), undefined, resultType);
     };
@@ -1904,7 +1904,7 @@ export class DocumentImpl extends NodeImpl {
           if (!this.isFullyActive()) {
             // HTML's default when no more specific eviction reason is supplied by the browser.
             this.makeUnsalvageable('masked');
-            if (navigable.isTopLevelTraversable) this.buildNotRestoredReasons();
+            if (navigable.isTopLevelTraversable()) this.buildNotRestoredReasons();
           }
           children = [...navigable.childNavigables].filter((child) => child.containerDocument === this);
         }).then(() => {
@@ -2532,7 +2532,7 @@ export class DocumentImpl extends NodeImpl {
     const normalAllowed = controlDocument.isAllowedToUse('deferred-fetch');
     const minimalAllowed = controlDocument.isAllowedToUse('deferred-fetch-minimal');
     let quota: number;
-    if (navigable.isTopLevelTraversable) {
+    if (navigable.isTopLevelTraversable()) {
       // SPEC_CLASH(deferred-fetch-minimal-disabled): Follow Fetch's 640 KiB pool when minimal
       // delegation is disabled; Chromium instead gives the top-level Document zero capacity.
       quota = !normalAllowed ? 0 : 640 * 1024 - (minimalAllowed ? minimalDeferredFetchQuotaPool : 0);
@@ -2632,7 +2632,7 @@ export class DocumentImpl extends NodeImpl {
   isFullyActive(): boolean {
     const navigable = this.getNodeNavigable();
     if (navigable === null) return false;
-    if (navigable.isTopLevelTraversable) return true;
+    if (navigable.isTopLevelTraversable()) return true;
 
     // The container can still belong to an old Document after its parent navigable changes Documents.
     return navigable.containerDocument?.isFullyActive() ?? false;
@@ -2732,7 +2732,7 @@ export class DocumentImpl extends NodeImpl {
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#build-not-restored-reasons-for-a-top-level-traversable-and-its-descendants
   buildNotRestoredReasons(): void {
     const navigable = this.browsingContext?.navigable;
-    if (!navigable?.isTopLevelTraversable) throw new InternalError('Restoration diagnostics require a top-level Document');
+    if (!navigable?.isTopLevelTraversable()) throw new InternalError('Restoration diagnostics require a top-level Document');
     this.buildNotRestoredReasonsForDocumentState();
     const hiddenDocuments = new Set<DocumentImpl>();
     let hiddenBlocker = false;

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/index';
 import type { Task } from '../../../src/browlet/scripting/event-loop';
 import { networkingTaskSource } from '../../../src/browlet/scripting/tasks';

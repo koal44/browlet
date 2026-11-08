@@ -254,7 +254,7 @@ export class NavigationParams {
         const responseURL = response.url!;
         const responseOrigin = BrowsingContext.determineOrigin(responseURL, finalSandboxFlags, entry.documentState.initiatorOrigin);
         let responseCOOP = new OpenerPolicy();
-        if (navigable.isTopLevelTraversable) {
+        if (navigable.isTopLevelTraversable()) {
           responseCOOP = OpenerPolicy.obtain(response, responseEnv);
           coopEnforcementResult = navigable.activeBrowsingContext!.enforceResponseOpenerPolicy(
             responseURL, responseOrigin, responseCOOP, coopEnforcementResult, request.referrer,

@@ -1,9 +1,8 @@
 import { afterEach, assert, describe, expect, it, vi } from 'vitest';
 
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import {
-  Navigable, TopLevelTraversable, type ChangingNavigableContinuationState, type NavigationRequest,
-} from '../../../../src/browlet/browsing/navigation/navigable';
+import { Navigable, type ChangingNavigableContinuationState, type NavigationRequest } from '../../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/top-level-traversable';
 import { NavigationParams } from '../../../../src/browlet/browsing/navigation/params';
 import { DocumentState, SourceSnapshotParams } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';

@@ -445,7 +445,7 @@ export class NavigationImpl extends EventTargetImpl {
     if (navigable === null) throw new InternalError('Navigate-event dispatch requires a live navigable');
     event.canIntercept = document.canHaveURLRewritten(destination.urlRecord) &&
       (destination.sameDocument || navigationType !== 'traverse');
-    const traverseCanBeCanceled = navigable.isTopLevelTraversable && destination.sameDocument &&
+    const traverseCanBeCanceled = navigable.isTopLevelTraversable() && destination.sameDocument &&
       (userInvolvement !== 'browser UI' || window.hasHistoryActionActivation());
     event.cancelable = navigationType !== 'traverse' || traverseCanBeCanceled;
     event.type = 'navigate';

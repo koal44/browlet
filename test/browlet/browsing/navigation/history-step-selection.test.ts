@@ -1,7 +1,9 @@
 import { assert, describe, expect, it } from 'vitest';
 
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { Navigable, TopLevelTraversable, type Traversable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/top-level-traversable';
+import { type Traversable } from '../../../../src/browlet/browsing/navigation/traversable';
 import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 

@@ -3,7 +3,7 @@ import { createManualUserAgent } from '../../support/browlet-agent';
 import { createTestDocument } from '../../support/dom';
 import { itPassesWith } from '../../test-runtime';
 import { getRelevantRealm } from '../../support/browlet-binding';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
 import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { Duration } from '../../../src/timing/clock';

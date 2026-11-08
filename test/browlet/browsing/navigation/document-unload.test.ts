@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/top-level-traversable';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { Event, PageTransitionEvent, Window } from '../../../../src/browlet/platform';
 import { UserAgent } from '../../../../src/browlet/user-agent';

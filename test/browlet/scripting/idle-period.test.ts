@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createManualEventLoop, createManualUserAgent } from '../../support/browlet-agent';
 import { runInHostTask } from '../../support/tasks';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import type { WindowImpl } from '../../../src/browlet/browsing/window/window';
 import { WindowIdleCallbacks } from '../../../src/browlet/browsing/window/idle-callback';

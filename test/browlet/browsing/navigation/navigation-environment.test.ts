@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/top-level-traversable';
 import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { BrowletEnvironmentBase } from '../../../../src/browlet/environment/index';
 import { createWindowEnvironment } from '../../../../src/browlet/integration/web-idl/index';

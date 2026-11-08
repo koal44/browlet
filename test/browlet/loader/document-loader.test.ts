@@ -5,7 +5,7 @@ import { internalType } from '../../../src/infra/promises';
 import { Browlet } from '../../../src/browlet/browlet';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { createManualUserAgent } from '../../support/browlet-agent';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import { ResourceReader } from '../../../src/browlet/loader/resource-reader';
 import { LinkProcessingOptions } from '../../../src/browlet/loader/links/options';
 import { SourceSnapshotParams } from '../../../src/browlet/browsing/navigation/state/index';

@@ -7,7 +7,7 @@ import type { ImageBitmapImpl } from '../../../src/graphics/index';
 import { BitmapData, type ImageBitmapOptions } from '../../../src/graphics/index';
 import { getMIMETypeEssence } from '../../../src/mime/index';
 import { parseURL } from '../../../src/url/index';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import type { BrowletEnvironment } from '../../../src/browlet/environment/index';
 import { createWorkerEnvironment } from '../../../src/browlet/integration/web-idl/index';

@@ -16,7 +16,7 @@ import {
   domManipulationTaskSource, navigationAndTraversalTaskSource, networkingTaskSource,
   renderingTaskSource, userInteractionTaskSource,
 } from '../../../src/browlet/scripting/tasks';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import {

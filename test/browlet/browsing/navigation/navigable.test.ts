@@ -4,7 +4,9 @@ import { Browlet } from '../../../../src/browlet/browlet';
 import type { Document, DocumentVisibilityState } from '../../../../src/browlet/platform';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { Traversable } from '../../../../src/browlet/browsing/navigation/traversable';
+import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/top-level-traversable';
 import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import { project, unwrap } from '../../../support/browlet-binding';
 import { createTestDocument } from '../../../support/dom';
@@ -136,6 +138,33 @@ describe('traversable foundations', () => {
 
     expect(second.sessionHistoryEntries).toEqual([]);
     expect(second.sessionHistoryTraversalQueue.algorithmSet.size).toBe(0);
+  });
+
+  it('keeps a nested traversal owner distinct from its top-level destination', () => {
+    const top = createTraversable();
+    top.systemVisibilityState = 'hidden';
+    const env = top.activeDocument!.env;
+    const nestedDocument = createTestDocument(env);
+    nestedDocument.browsingContext = new BrowsingContext();
+    nestedDocument.browsingContext.activeDocument = nestedDocument;
+    const nested = new Traversable(DocumentState.create(nestedDocument), top);
+    nested.sessionHistoryEntries.push(nested.activeSessionHistoryEntry);
+    const childDocument = createTestDocument(env);
+    childDocument.browsingContext = new BrowsingContext();
+    childDocument.browsingContext.activeDocument = childDocument;
+    const child = new Navigable(DocumentState.create(childDocument), nested);
+
+    expect(nestedDocument.visibilityState).toBe('visible');
+    expect(childDocument.visibilityState).toBe('visible');
+    expect(nested.getSessionHistoryEntries()).toBe(nested.sessionHistoryEntries);
+    expect(nested.traversable).toBe(nested);
+    expect(child.traversable).toBe(nested);
+    expect(nested.topLevelTraversable).toBe(top);
+    expect(child.topLevelTraversable).toBe(top);
+    expect(nestedDocument.browsingContext.isTopLevel).toBe(true);
+    expect(childDocument.browsingContext.isTopLevel).toBe(false);
+    expect(nested.isScriptClosable).toBe(false);
+    expect(child.isScriptClosable).toBe(false);
   });
 
   it('selects itself or the nearest traversable ancestor through nested child navigables', () => {

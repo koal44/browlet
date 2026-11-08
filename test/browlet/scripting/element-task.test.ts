@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { HTML_NAMESPACE, SVG_NAMESPACE } from '../../../src/infra/index';
 import type { Document } from '../../../src/browlet/platform';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import type { ElementImpl } from '../../../src/browlet/dom/nodes/element';
 import { domManipulationTaskSource } from '../../../src/browlet/scripting/tasks';

@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { Navigable, TopLevelTraversable, type HistoryStepResult } from '../../../../src/browlet/browsing/navigation/navigable';
+import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/top-level-traversable';
+import { type HistoryStepResult } from '../../../../src/browlet/browsing/navigation/traversable';
 import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type {

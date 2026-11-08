@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import type { Task } from '../../../src/browlet/scripting/event-loop';
 import { permissionsTaskSource } from '../../../src/browlet/scripting/tasks';
 import { PermissionFeature, originPermissionKey, PermissionStore } from '../../../src/permissions/index';

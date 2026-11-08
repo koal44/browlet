@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import type { Task } from '../../../src/browlet/scripting/event-loop';
 import { createManualUserAgent } from '../../support/browlet-agent';
 import { getRelevantRealm } from '../../support/browlet-binding';

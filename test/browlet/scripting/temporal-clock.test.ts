@@ -3,7 +3,7 @@ import { itPassesWith } from '../../test-runtime';
 
 import { JSRealm } from '../../../src/js-engine/realm';
 import { Browlet } from '../../../src/browlet/browlet';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import { FetchResponse } from '../../../src/fetch/response';
 import { parseURL } from '../../../src/url/index';
 import { Moment, UnsafeMoment, wallClock } from '../../../src/timing/clock';

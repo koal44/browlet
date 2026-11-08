@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/top-level-traversable';
 import { NavigationHistoryEntryImpl, type NavigationType } from '../../../../src/browlet/browsing/navigation/api/index';
 import type { SessionHistoryEntry } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { WindowImpl } from '../../../../src/browlet/browsing/window/index';

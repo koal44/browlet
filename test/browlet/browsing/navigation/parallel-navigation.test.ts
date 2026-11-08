@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { Navigable, TopLevelTraversable, type NavigateOptions, type UnloadCancellationResult } from '../../../../src/browlet/browsing/navigation/navigable';
+import { Navigable, type NavigateOptions, type UnloadCancellationResult } from '../../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/top-level-traversable';
 import { DocumentState, type PostResource } from '../../../../src/browlet/browsing/navigation/state/index';
 import { CSPList, ContentSecurityPolicy } from '../../../../src/browlet/browsing/policy/csp/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';

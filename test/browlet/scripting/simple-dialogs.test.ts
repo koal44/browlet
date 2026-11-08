@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { domManipulationTaskSource } from '../../../src/browlet/scripting/tasks';

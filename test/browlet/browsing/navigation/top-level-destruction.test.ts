@@ -1,7 +1,8 @@
 import { afterEach, assert, describe, expect, it, vi } from 'vitest';
 
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { Navigable, TopLevelTraversable, type UnloadCancellationResult } from '../../../../src/browlet/browsing/navigation/navigable';
+import { Navigable, type UnloadCancellationResult } from '../../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/top-level-traversable';
 import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { SessionHistoryTraversalSteps } from '../../../../src/browlet/browsing/navigation/session-history-traversal-queue';
 import { navigationAndTraversalTaskSource } from '../../../../src/browlet/scripting/tasks';

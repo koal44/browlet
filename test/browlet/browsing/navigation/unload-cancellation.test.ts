@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { TopLevelTraversable, type UnloadCancellationResult } from '../../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/top-level-traversable';
+import { type UnloadCancellationResult } from '../../../../src/browlet/browsing/navigation/navigable';
 import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { Window } from '../../../../src/browlet/platform';

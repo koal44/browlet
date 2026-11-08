@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { createTestDocument } from '../../support/dom';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { createTaskSource } from '../../../src/browlet/scripting/event-loop';
 

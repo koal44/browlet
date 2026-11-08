@@ -4,7 +4,7 @@ import { vi } from 'vitest';
 import { createBrowletEnvironmentInit } from '../../src/browlet/integration/web-idl/index';
 import { createManualUserAgent, createManualRealm } from '../support/browlet-agent';
 import { getBindingContext, getRelevantRealm } from '../support/browlet-binding';
-import { TopLevelTraversable } from '../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../src/browlet/browsing/navigation/top-level-traversable';
 import { AgentCluster } from '../../src/browlet/scripting/agents';
 import { networkingTaskSource } from '../../src/browlet/scripting/tasks';
 import { fetch, type FetchOptions } from '../../src/fetch/fetch';

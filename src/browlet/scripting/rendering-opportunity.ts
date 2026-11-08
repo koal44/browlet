@@ -86,7 +86,7 @@ export class WindowRenderingController {
       if (run === undefined) continue;
       const topLevelOnly = phase === 'flushAutofocusCandidates';
       for (const document of documents) {
-        if (topLevelOnly && document.getNodeNavigable()?.isTopLevelTraversable !== true) continue;
+        if (topLevelOnly && document.getNodeNavigable()?.isTopLevelTraversable() !== true) continue;
         run({ document, frameTimestamp, unsafeStyleAndLayoutStartTime });
       }
     }

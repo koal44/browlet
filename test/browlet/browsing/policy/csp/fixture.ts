@@ -1,6 +1,6 @@
 import { createManualUserAgent } from '../../../../support/browlet-agent';
 import { getRelevantRealm } from '../../../../support/browlet-binding';
-import { TopLevelTraversable } from '../../../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../../../src/browlet/browsing/navigation/top-level-traversable';
 import { CSPList } from '../../../../../src/browlet/browsing/policy/csp/list';
 import { ContentSecurityPolicy, type CSPDisposition } from '../../../../../src/browlet/browsing/policy/csp/policy';
 import { FetchRequest } from '../../../../../src/fetch/request';

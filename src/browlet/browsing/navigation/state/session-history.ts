@@ -71,7 +71,7 @@ export class SessionHistoryEntry {
     request.referrer = state.requestReferrer;
     request.referrerPolicy = state.requestReferrerPolicy;
     request.traversableForUserPrompts = navigable.topLevelTraversable;
-    if (navigable.isTopLevelTraversable) request.topLevelNavigationInitiatorOrigin = state.initiatorOrigin;
+    if (navigable.isTopLevelTraversable()) request.topLevelNavigationInitiatorOrigin = state.initiatorOrigin;
     if (request.client === null) {
       request.origin = createOpaqueOrigin();
       request.allowServiceWorkerInterception = true;

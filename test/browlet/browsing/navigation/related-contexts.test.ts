@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
-import { Navigable, Traversable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { Navigable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { Traversable } from '../../../../src/browlet/browsing/navigation/traversable';
+import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/top-level-traversable';
 import { DocumentState } from '../../../../src/browlet/browsing/navigation/state/index';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
 import { InternalError } from '../../../../src/infra/index';
@@ -70,7 +72,7 @@ describe('related browsing contexts', () => {
     const child = createChild(root.navigable, undefined, true);
 
     // HTML currently permits only top-level traversables; the context definition is deliberately broader.
-    expect(child.navigable.isTopLevelTraversable).toBe(false);
+    expect(child.navigable.isTopLevelTraversable()).toBe(false);
     expect(child.context.isTopLevel).toBe(true);
     expect(child.context.topLevelBrowsingContext).toBe(root.context);
   });

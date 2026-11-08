@@ -5,7 +5,7 @@ import { Browlet } from '../../../src/browlet/browlet';
 import { ContentSecurityPolicy } from '../../../src/browlet/browsing/policy/csp/policy';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
 import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import { getRelevantRealm, unwrap } from '../../support/browlet-binding';
 import type { HTMLElementImpl } from '../../../src/browlet/dom/nodes/html/index';
 import type { HTMLFormElementImpl } from '../../../src/browlet/dom/nodes/html/forms/index';

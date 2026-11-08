@@ -6,6 +6,11 @@ outside consumers use its index, while its modules import each other directly.
 
 ## Present
 
+- `navigable.ts` owns destinations and Document loading; `traversable.ts` owns
+  joint history; `top-level-traversable.ts` owns browser-window lifetime and input
+  streams. The base uses type-only subclass imports and Node-style type guards;
+  its ancestor lookups remain iterative. UserAgent forwards new-target creation
+  to `TopLevelTraversable.create()`, keeping the base independent of its constructor.
 - `browsing-context.ts` retains context/group relationships and creates the
   initial Window and about:blank document through the UserAgent's factory.
   Its nullable active Document is stored separately from the Window association;

@@ -7,7 +7,7 @@ import { NavigationCurrentEntryChangeEventImpl } from '../../../src/browlet/brow
 import { NavigateEventImpl } from '../../../src/browlet/browsing/navigation/api/navigate-event';
 import { NavigationHistoryEntryImpl } from '../../../src/browlet/browsing/navigation/api/navigation-history-entry';
 import type { NavigationType } from '../../../src/browlet/browsing/navigation/api/navigation';
-import type { HistoryStepResult } from '../../../src/browlet/browsing/navigation/navigable';
+import type { HistoryStepResult } from '../../../src/browlet/browsing/navigation/traversable';
 import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import type { SessionHistoryTraversalSteps } from '../../../src/browlet/browsing/navigation/session-history-traversal-queue';
 import { idlType } from '../../../src/web-idl/core/index';

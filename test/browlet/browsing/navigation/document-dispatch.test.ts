@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/top-level-traversable';
 import { NavigationParams } from '../../../../src/browlet/browsing/navigation/params';
 import { DocumentState, SourceSnapshotParams } from '../../../../src/browlet/browsing/navigation/state/index';
 import { SandboxingFlagSet } from '../../../../src/browlet/browsing/policy/index';

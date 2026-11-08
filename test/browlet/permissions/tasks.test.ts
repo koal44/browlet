@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import { permissionsTaskSource, storageTaskSource } from '../../../src/browlet/scripting/tasks';
 import { createManualUserAgent } from '../../support/browlet-agent';
 

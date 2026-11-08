@@ -2,7 +2,7 @@ import { assert, describe, expect, it } from 'vitest';
 
 import { HTML_NAMESPACE, MATHML_NAMESPACE, SVG_NAMESPACE, XML_NAMESPACE } from '../../../../../../src/infra/index';
 import { Browlet } from '../../../../../../src/browlet/browlet';
-import { TopLevelTraversable } from '../../../../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../../../../src/browlet/browsing/navigation/top-level-traversable';
 import { HTMLElementImpl } from '../../../../../../src/browlet/dom/nodes/html/html-element';
 import { UserAgent } from '../../../../../../src/browlet/user-agent';
 import { FetchResponse } from '../../../../../../src/fetch/response';

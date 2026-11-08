@@ -229,6 +229,8 @@ export class WorkerUserAgent implements UserAgent {
   obtainServiceWorkerAgent(): never { return unconnected('obtainServiceWorkerAgent'); }
   /** Register a group before its initial browsing context and Document are created. Not connected in workers. */
   createBrowsingContextGroup(): never { return unconnected('createBrowsingContextGroup'); }
+  /** Create and register a top-level destination. Not connected in workers. */
+  createTopLevelTraversable(): never { return unconnected('createTopLevelTraversable'); }
   /** Create a new tab/window and request its initial navigation from its own about:blank Document. Not connected in workers. */
   createFreshTopLevelTraversable(): never { return unconnected('createFreshTopLevelTraversable'); }
   /** Create an element's child through the navigation layer. Not connected in workers. */

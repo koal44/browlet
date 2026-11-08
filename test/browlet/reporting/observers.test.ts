@@ -4,7 +4,7 @@ import { getRelevantRealm } from '../../support/browlet-binding';
 import { createManualUserAgent } from '../../support/browlet-agent';
 import { Browlet } from '../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
 import { createWindowEnvironment } from '../../../src/browlet/integration/web-idl/index';
 import { FetchRequest } from '../../../src/fetch/request';

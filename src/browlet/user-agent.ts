@@ -45,7 +45,7 @@ import type { BrowletEnvironment, BrowletEnvironmentBase, WindowEnvironment } fr
 import { WebDriver, type PageEvaluation } from './automation/index';
 import { HTTPAuthenticationStore, type ResourceReader } from './loader/index';
 import {
-  BrowsingContextGroup, Navigable, TopLevelTraversable, type NavigableContainer, type PostResource,
+  BrowsingContextGroup, Navigable, TopLevelTraversable, type BrowsingContext, type NavigableContainer, type PostResource,
   type Traversable, type UnloadCancellationResult, type UserNavigationInvolvement,
 } from './browsing/navigation/index';
 import { ActivePointers, KeyboardInputProcessor, MouseInputProcessor, PointerLock } from './interaction/index';
@@ -451,12 +451,20 @@ class BrowletUserAgent implements
     return group;
   }
 
+  /** Create and register a top-level destination through its navigation owner. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#creating-a-new-top-level-traversable
+  createTopLevelTraversable(
+    opener: BrowsingContext | null, targetName: string, openerNavigableForWebDriver?: Navigable,
+  ): TopLevelTraversable {
+    return TopLevelTraversable.create(this, opener, targetName, openerNavigableForWebDriver);
+  }
+
   /** Create a new tab/window and request its initial navigation from its own about:blank Document. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#create-a-fresh-top-level-traversable
   createFreshTopLevelTraversable(
     initialNavigationURL: URLRecord, initialNavigationPostResource: PostResource | null = null,
   ): TopLevelTraversable {
-    const traversable = TopLevelTraversable.create(this, null, '');
+    const traversable = this.createTopLevelTraversable(null, '');
     const document = traversable.activeDocument;
     if (document === null) throw new InternalError('A fresh traversable needs an active Document');
     // TODO(HTML §7.4): navigate() still stops at its explicit navigation-coordination dependency.
@@ -613,7 +621,7 @@ class BrowletUserAgent implements
     // SPEC_CLASH(external-protocol-sandbox-teams): Follow HTML's general gate; WebKit bypasses it for
     // msteams: from teams.live.com/teams.microsoft.com when site-specific quirks are enabled.
     if (
-      !navigable.isTopLevelTraversable && sandboxFlags.has('sandboxed-custom-protocols-navigation') &&
+      !navigable.isTopLevelTraversable() && sandboxFlags.has('sandboxed-custom-protocols-navigation') &&
       (sandboxFlags.has('sandboxed-top-level-navigation-with-user-activation') || !hasTransientActivation)
     ) return;
     this.requestExternalSoftwareHandoff(resource, navigable, hasTransientActivation, initiatorOrigin, resourceReader);

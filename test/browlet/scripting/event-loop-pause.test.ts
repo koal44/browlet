@@ -1,7 +1,7 @@
 import { Worker } from 'node:worker_threads';
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import { type EventLoop, type EventLoopInit } from '../../../src/browlet/scripting/event-loop';
 import { JSExecutionContext } from '../../../src/browlet/scripting/execution-context';
 import { ClassicScript } from '../../../src/browlet/scripting/script';

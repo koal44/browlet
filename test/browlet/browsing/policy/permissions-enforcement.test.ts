@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/top-level-traversable';
 import { PermissionsPolicy } from '../../../../src/browlet/browsing/policy/permissions-policy/policy';
 import type { Report } from '../../../../src/browlet/platform';
 import { FetchResponse } from '../../../../src/fetch/index';

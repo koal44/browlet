@@ -4,7 +4,7 @@ import { Browlet } from '../../../src/browlet/browlet';
 import { PageEvaluation } from '../../../src/browlet/automation/index';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
 import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import { getRelevantRealm } from '../../support/browlet-binding';
 
 afterEach(() => vi.restoreAllMocks());
