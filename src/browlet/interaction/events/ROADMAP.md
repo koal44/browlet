@@ -14,7 +14,7 @@ their upstream tracking branches on 2026-11-02. Local reference root:
 | --- | --- | --- |
 | UI Events, Editor's Draft dated 2026-02-21 | `uievents`, `main`, `8c1b80982c16b10f28a210e4541ac799dbe39a51` | `index.bs` and its `sections/*.txt` sources |
 | Pointer Events | `pointerevents`, `gh-pages`, `7affe62fa4332543f8b13c56292104e4e9dfa517` | `index.html` (ReSpec source) |
-| Input Events Level 2, referenced extension | `input-events`, `gh-pages`, `e69ef15b60bd4516417bfef5c88e7d0ca007d1cf` | `index.html` (ReSpec source) |
+| Input Events Level 2 | `input-events`, `gh-pages`, `e69ef15b60bd4516417bfef5c88e7d0ca007d1cf` | `index.html` (ReSpec source) |
 | UI Events KeyboardEvent key Values, referenced vocabulary | `uievents-key`, `gh-pages`, `140cae88d6039b3fb1a51787978678115111c433` | `index-source.txt` (Bikeshed source) |
 | UI Events KeyboardEvent code Values, referenced vocabulary | `uievents-code`, `gh-pages`, `b201684d1de0af90bc403814bbdee6aa96647130` | `index-source.txt` (Bikeshed source) |
 | Pointer Lock, §5's referenced owner | `pointerlock`, `gh-pages`, `c2692a6b6016d67dd6b1e311e130f17a384826e8` | `index.html` (ReSpec source) |
@@ -25,9 +25,11 @@ are research material, not a substitute for the main draft. Pointer Events was
 checked for the shared interface dependencies and input-processing boundaries;
 its audit now reaches the WheelEvent interface, with explicit unfinished owner dependencies.
 Pointer Events was rechecked against upstream on 2026-11-04 at the same revision.
-The Input Events reference was cloned on 2026-11-02 and inspected for its
-InputEvent partials, inputType vocabulary, and editing/IME producer boundary;
-this does not constitute an audit of that whole specification.
+The Input Events reference was refreshed from its official upstream with a
+fast-forward-only update on 2026-11-06 and remains at the revision above.
+Sections 1–5 provide the introduction, conformance, definitions, problems, and
+use cases. The [first implementation slice](#input-events-level-2-section-61-event-object-extension)
+adds §6.1's event-object partials; the trusted editing/IME producer remains separate.
 The key/code references were cloned on the same date, then refreshed with
 fast-forward-only updates on 2026-11-04; both remain at the revisions above.
 The [companion-values slice](../keyboard/ROADMAP.md#keyboard-companion-values-2026-11-04)
@@ -249,16 +251,14 @@ production must select an editing host and selection, choose the inputType and
 data, observe composition state, and honor cancellation before applying an edit.
 HTML §6.8 and controls' value/selection algorithms own those effects. Input and
 textarea's current-value dependencies still throw; no replacement editor was
-added to EventTarget. Source TODOs identify the producer and partial-interface
-dependencies directly in input-event.ts.
+added to EventTarget. Source TODOs identify the remaining producer dependencies
+directly in input-event.ts.
 
 The separately referenced [Input Events extension](https://w3c.github.io/input-events/#interface-InputEvent)
-adds dataTransfer and getTargetRanges/targetRanges. Neither is exposed by this
-UI Events slice. StaticRange already exists, but the partial declaration and its
-retained target-range behavior remain to implement with that specification.
-DataTransfer needs HTML §6.11's drag data store and projection. The extension also
-refines producer cancelability, notably during IME composition; a constructor
-must not infer those rules from an author-supplied inputType.
+now supplies dataTransfer and getTargetRanges/targetRanges through separate
+partial declarations, using the existing StaticRange and DataTransfer owners.
+The extension also refines producer cancelability, notably during IME composition;
+a constructor must not infer those rules from an author-supplied inputType.
 
 ### Approved InputEvent string choices
 
@@ -285,6 +285,208 @@ synthetic cancellation, and trusted host-created delivery. All 47 UIEvent,
 FocusEvent, and InputEvent tests pass on all six runtime configurations. The
 broader event integration run has 108 passes and two existing skipped attribution
 tests. No new expected failures or skips were added.
+
+## Input Events Level 2 section 6.1 event-object extension
+
+[§6.1](https://w3c.github.io/input-events/#interface-InputEvent) now contributes
+the InputEvent and InputEventInit partials beside the UI Events declarations.
+InputEventImpl owns the retained DataTransfer and target-range sequence; no
+additional implementation or environment is created for a partial interface.
+Binding converts dictionary members in lexical order, validates DataTransfer
+and StaticRange values, consumes the input sequence once, and creates a fresh
+array for each getTargetRanges() result. The generated platform declarations
+include both initializer fields and public members.
+
+The supplied DataTransfer keeps its identity, realm, and existing access mode.
+The supplied StaticRanges keep their identities and snapshot endpoints, including
+duplicate entries, disconnected nodes, reversed points, and out-of-bounds offsets.
+They are not converted to live Ranges. Author mutations of the initializer's array
+or a returned array do not change the stored sequence. DOM mutations, shadow
+retargeting, cancellation, redispatch, and inherited legacy event initialization
+leave those snapshots intact. Omitted ranges remain empty even when a selection
+exists. These constructor rules apply to beforeinput, input, and other event names;
+the trusted producer's editing-host/inputType tables do not filter author data.
+
+The [browser-only probe](../../../../node-compat/experimental/input-delivery/input-event-level2.mjs)
+and [compact results](../../../../node-compat/experimental/input-delivery/INPUT-EVENT-LEVEL2-RESULTS.json)
+ran on Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2 on 2026-11-06.
+Eric approved these choices:
+
+- `SPEC_CLASH(input-event-transfer-init)`: follow the draft, Chromium, and Firefox
+  by validating and retaining dataTransfer. WebKit ignores that initializer member,
+  including invalid values, and returns null.
+- `SPEC_CLASH(input-event-target-ranges)`: follow the draft and Firefox by retaining
+  the supplied StaticRanges and returning them after dispatch. Chromium creates
+  new snapshots from live-range state, rejects out-of-bounds offsets, collapses a
+  reversed range, and clears its ranges after dispatch. WebKit ignores targetRanges,
+  including invalid values, and returns an empty array.
+- `SPEC_CLASH(input-event-range-array-realm)`: preserve Binding's existing
+  receiver-realm allocation, as Chromium/WebKit do. Firefox uses the borrowed
+  method's realm. Supplied ranges and transfer data keep their own realms.
+
+The [focused extension tests](../../../../test/browlet/interaction/events/input-event-level2.test.ts)
+exercise those rules through the public bindings. The existing UI Events
+dictionary-order regression now includes the two partial members. No producer
+behavior or new expected-failure classification is supplied by this slice.
+
+Validation: all 14 extension cases and 14 existing InputEvent cases pass on
+Node 24.19.0, Node 26.8.1, and custom Node 27, each in stock and compat mode.
+Production/test type contracts, scoped ESLint, and import-boundary checks pass.
+
+## Input Events Level 2 sections 6.1.2–6.2 trusted preparation
+
+[InputEventImpl.create()](input-event.ts) applies the
+[§6.1.2 attribute tables](https://w3c.github.io/input-events/#interface-InputEvent-Attributes),
+[§6.1.3 range table](https://w3c.github.io/input-events/#interface-InputEvent-Methods),
+and §6.2 event flags to an editing owner's supplied facts. This is an implementation
+factory for the tables, not a named specification algorithm or an editing producer.
+Eric approved its explicit `(type, target, input)` contract on 2026-11-06.
+
+The required EditingInput record supplies the host kind, one of the 46 specified
+inputTypes, actual composition-session state, prepared text/format value, prepared
+drag data items, and affected StaticRanges. The owner must select an inputType that
+matches the user's intention and the table's selection/IME preconditions. No focus,
+selection, layout, or OS state is guessed by the factory. EditContext preparation
+throws explicitly. Missing required text or rich-transfer items also throws.
+
+Both events bubble and are composed, with detail zero and target-realm allocation.
+Only beforeinput is cancelable, except for insertCompositionText. isComposing comes
+from the actual session state. The data tables select text/format values or null;
+color serialization, font selection, direction, and link preparation remain required
+producer inputs. For rich insertion, each notification gets a fresh read-only
+DataTransfer containing copied item records, retaining File identities. The producer
+must supply text/html and text/plain representations and file/link items where
+applicable. No rendered HTML/plaintext or clipboard/drag contents are fabricated.
+The normative tables include insertTranspose, which the non-normative overview omits.
+
+Beforeinput on contenteditable retains the supplied StaticRanges and copies their
+sequence, except that historyUndo/historyRedo expose no ranges. Text controls and
+input expose empty sequences. Constructor-created events retain their separately
+implemented author-data rules. Preparation does not dispatch either event, change
+content, or connect keyboard/clipboard default actions.
+
+The [trusted-event browser probe](../../../../node-compat/experimental/input-delivery/input-event-attributes.mjs)
+and [results](../../../../node-compat/experimental/input-delivery/INPUT-EVENT-ATTRIBUTES-RESULTS.json)
+use physical key actions on contenteditable, input, and textarea. Chromium
+156.0.8078.4, Firefox 157.0, and WebKit 27.2 were checked on 2026-11-06. Eric approved:
+
+- `SPEC_CLASH(input-event-trusted-ranges)`: empty input ranges, matching all three
+  browsers, despite the draft's description of ranges affected by input.
+- `SPEC_CLASH(input-event-beforeinput-retention)`: retained beforeinput snapshots
+  after dispatch, matching Firefox/WebKit. Chromium clears them after dispatch.
+- `SPEC_CLASH(input-event-view)`: the target Document's Window through UI Events
+  initialization, matching Firefox/WebKit. Chromium supplies null.
+
+The [preparation tests](../../../../test/browlet/interaction/events/input-event-creation.test.ts)
+cover every inputType for both event types and host kinds, independent composition
+state, cancellation, read-only transfer access, copied producer records, persistent
+snapshots, explicit missing dependencies, and cross-realm event/transfer/range/File
+ownership. No expected failures or skips are added.
+
+Validation: all 36 focused InputEvent cases (including eight preparation cases)
+pass on Node 24.19.0, Node 26.8.1, and custom Node 27, each in stock and compat mode.
+The producer vocabulary matches all 46 values in the current local draft.
+Production/test type checks, scoped ESLint, import-boundary checks, and diff
+whitespace checks pass.
+
+### Next boundary: editing delivery and composition
+
+§6.2's dispatch/edit sequence, §7's composition sequence, and §8's paste ordering
+still need their owning producers. Existing explicit dependencies remain:
+
+- KeyboardInputProcessor.applyDefaultAction() and handleCompositionKey() throw
+  until focus/default actions and the actual IME session are supplied.
+- SystemClipboard.deleteSelectedContents() and insertPasteContents() throw until
+  HTML editing can select the host, honor beforeinput cancellation and Document
+  lifetime, change content, and deliver subsequent input notifications.
+- HTML controls/§6.8, Selection, and layout must identify the affected text or
+  markup, including grapheme/word/line boundaries and rendered selection. DOM
+  Range operations alone do not provide those editing decisions. EditContext
+  editing hosts are another missing owner; no proxy editor is introduced here.
+- Trusted rich input needs prepared HTML/plaintext/file/link representations from
+  the clipboard, drag/drop, or replacement/yank owner. Those sources and any kill
+  buffer must not be inferred from author event data. The factory only packages
+  these prepared items in a read-only store. §7's IME sequencing and §8's paste
+  ordering remain to implement with those producers, as detailed in the audit below.
+
+## Input Events Level 2 closing audit (2026-11-06)
+
+Audited the local draft at `e69ef15b60bd4516417bfef5c88e7d0ca007d1cf`
+([upstream](https://github.com/w3c/input-events/commit/e69ef15b60bd4516417bfef5c88e7d0ca007d1cf))
+against the event objects, trusted preparation, and existing keyboard/clipboard
+entry points. Eric approved deferring automatic editing and composition delivery
+to their actual owners. This closes the event-object/preparation work, not editing
+conformance. There is no additional event interface or IDL fragment left in this
+draft to implement independently of those owners.
+
+| Section | Disposition |
+| --- | --- |
+| §§1–3: introduction, conformance, definitions | Reviewed. Platform actions express editing intentions; they are not a key-to-character shortcut. The kill-buffer definition is non-normative and does not require a new global store here. |
+| §§4–5 and §6.1.1: problems, use cases, overview | Non-normative context. The normative attribute/method tables govern preparation. |
+| §6 and §6.1: hosts and interface | Interface and initializer partials complete. HTML still selects the editing host and whether an input control permits text editing. |
+| §6.1.2: attributes | Vocabulary, cancelability, data and transfer packaging complete for prepared inputs. Intent/selection/IME classification and rendered representations remain producer dependencies. |
+| §6.1.3: ranges | Retained snapshots and host/history exposure rules complete, with the approved trusted-input empty-range choice. Layout/editor calculation of the affected span remains unfinished. |
+| §6.2: beforeinput/input | Event objects and flags complete. Automatic attempted-edit delivery, cancellation, the edit, and subsequent input remain with HTML editing/controls. |
+| §7: composition | CompositionEvent objects exist; session state, active passage replacement, commit/cancel, and event production remain with the IME/editing owners. Ordering conflict remains recorded below. |
+| §8: paste ordering | SystemClipboard.runAction dispatches paste before its explicit insertPasteContents dependency. That dependency must deliver insertFromPaste beforeinput, perform the admitted edit, then input. |
+| §9: privacy/security | Non-normative; no separate permission or exposure mechanism is specified here. |
+
+### Required editing handoff
+
+- HTML §6.8 and controls §§4.10.5/4.10.11/4.10.18 must supply live value and
+  selection state, editability and editing-host selection, actual mutation,
+  undo/redo, and the relevant control validation/change effects. The internal input
+  and textarea current-value getters still throw; assigning textContent or calling
+  Range deletion would not implement that control/editor lifecycle.
+- Layout and the editor must compute affected ranges, including grapheme,
+  word and rendered-line boundaries, and prepare the requested text/HTML/format
+  payload. The event factory accepts these facts; it does not manufacture them.
+- §6.2 requires beforeinput for attempted user editing, independent of whether
+  a default edit ultimately occurs. System/programmatic changes must not enter
+  that producer merely because content changed. Honor cancelable beforeinput
+  before applying the browser edit. Dispatch input immediately after an actual
+  browser-performed edit; canceled/no-op edits and an author's own listener
+  mutation do not themselves supply that edit. Recheck target/Document lifetime
+  and live editing eligibility around author callbacks when implementing it.
+  The draft's contenteditable default-action distinctions, including its reference
+  to contentEditable=typing, and EditContext handling remain editing-owner work.
+- The existing GlobalEventHandlers contribution already includes onbeforeinput
+  and oninput. Neither handler assignment nor synthetic event dispatch supplies
+  an editing producer or starts a composition session.
+
+### Required composition and paste handoff
+
+[UI Events §3.6](https://w3c.github.io/uievents/#events-compositionevents) owns
+the composition event/session requirements, and
+[Input Events §7](https://w3c.github.io/input-events/#input-event-order-during-composition)
+connects those updates to editing. A future adapter entry must accept composition
+actions independently of keyboard events. Its owner needs the active target and
+passage, current text, and commit/cancel lifecycle; isComposing describes that
+session rather than creating it. Native candidate selection and any caret geometry
+connection remain host/layout responsibilities, not responsibilities of event objects.
+
+Input Events' required update sequence is compositionupdate, noncancelable
+beforeinput with insertCompositionText, replacement of the active passage, then
+input with matching composition data; compositionstart/end delimit the session.
+The factory already supplies Input Events' noncancelable fields. The actual
+sequence must still resolve `SPEC_CLASH(composition-input-order)` with UI Events
+§3.6.6, which orders beforeinput before compositionupdate. Real IME evidence is
+needed; constructing CompositionEvents or using an automation text-insertion
+shortcut is not a complete native-session test. The approved empty-range rule
+for trusted input also applies to the §7 composition input notification.
+
+[§8](https://w3c.github.io/input-events/#event-order-when-using-insertfrompaste)
+requires paste before insertFromPaste beforeinput. SystemClipboard retains
+captured item data after its paste event, checks cancellation and Document activity,
+then calls the still-throwing editing dependency. That dependency must not reread
+the OS clipboard or manufacture a second paste event. Keyboard shortcut classification
+and native menu adapters must route through the existing admitted action entries;
+ordinary synthetic dispatch does not gain clipboard access or perform a paste.
+
+Validation for this audit: source/specification trace and whitespace checks.
+Only comments and documentation changed; the preceding 36-case, six-runtime
+preparation validation remains the functional checkpoint. No tests were disabled,
+reclassified, or added to simulate an editor that does not yet exist.
 
 ## Section 3.5 event objects and keyboard ordering
 
@@ -410,8 +612,10 @@ orders beforeinput before compositionupdate and describes canceling the edit.
 [Input Events §7](https://w3c.github.io/input-events/#input-event-order-during-composition)
 orders compositionupdate before beforeinput and makes the composition input pair
 noncancelable, with inputType=insertCompositionText. Both place the edit before
-input. The producer must resolve this conflict with browser IME evidence and Eric
-before implementing that sequence; this event-object slice chooses neither.
+input. The producer must resolve the ordering conflict with browser IME evidence
+and Eric before implementing that sequence. The later Input Events preparation
+slice follows Input Events' noncancelable insertCompositionText fields, while
+automatic session ordering remains deferred by the closing audit above.
 Synthetic dispatch does not fabricate a session, edit text, derive another event's
 isComposing flag, or automatically send an end notification after cancellation.
 
@@ -447,6 +651,42 @@ All 81 interaction-event tests pass on all six runtime configurations. The broad
 event integration run has 142 passes and two existing skipped attribution tests;
 no new expected failures or skips were added. The composition input producer
 remains unfinished.
+
+### Section 3.6.7 trusted CompositionEvent preparation
+
+[CompositionEventImpl.create(type, target, data)](composition-event.ts) prepares
+the three trusted composition notifications from an explicitly selected Element
+and text. This implementation factory combines DOM allocation with §3.6.7's
+event tables. The producer supplies original/selected text for start, current
+text for update, and final text for end; empty strings remain valid. It does not
+derive text from selection, normalize an already selected edit, or find focus.
+
+All three events bubble, are composed and trusted, have detail zero, and use the
+target's environment for allocation/time and its Document's Window for view.
+Only compositionstart is cancelable. Public constructor defaults and arbitrary
+author event names remain unchanged; the CompositionEventType union contains
+start/update/end for the internal factory, which supplies the composition prefix.
+
+`SPEC_CLASH(composition-event-cancelability)` records Eric's approval to follow
+the specification's start-only cancellation. The inspected Blink and WebKit
+constructors make all three events cancelable; Gecko's widget composition events
+make none cancelable. The
+[source and automation evidence](../../../../node-compat/experimental/input-delivery/COMPOSITION-EVENT-ATTRIBUTES.md)
+records revisions and the probe's limits. Event cancelability does not establish
+whether a particular OS input system can actually terminate its session.
+
+The factory does not dispatch, start/end a session, update isComposing on other
+events, or edit content. KeyboardInputProcessor.handleCompositionKey() and the
+existing focus/editing stubs remain explicit. §§3.6.2–3.6.6 and Input Events §7
+still need their producer, lifetime rules, and composition/input ordering decision.
+
+Eight focused [factory cases](../../../../test/browlet/interaction/events/composition-event-creation.test.ts)
+cover every event type's flags, cancellation, time/identity, supplied text, shadow
+dispatch, target-realm ownership, and the preparation-only boundary. Together with
+the 17 existing CompositionEvent cases, all 25 pass on Node 24.19.0, Node 26.8.1,
+and custom Node 27, each in stock and compat mode. Production/test type checks,
+scoped ESLint, import-boundary checks, and whitespace checks pass. No expected
+failures or skips were introduced.
 
 ## Section 5 movement algorithms
 

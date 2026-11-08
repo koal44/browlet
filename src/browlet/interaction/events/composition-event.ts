@@ -4,6 +4,7 @@ import {
 } from '../../../web-idl/core/index';
 import type { DOMHighResTimeStamp } from '../../../timing/index';
 
+import type { ElementImpl } from '../../dom/nodes/index';
 import type { DOMEnvironment } from '../../dom/environment';
 import type { WindowProxyHandle } from '../../browsing/window/index';
 
@@ -15,7 +16,9 @@ import { UIEventImpl, type UIEventInit } from './ui-event';
 // select its focused target (HTML §6.6), and coordinate updates with editing/selection
 // (HTML §6.8 and Input Events). End notification is required even after canceled start;
 // keyboard/input isComposing values must reflect that session, not synthetic dispatch.
-// SPEC_CLASH(composition-input-order): UI Events §3.6.6 puts beforeinput before compositionupdate and allows cancellation; Input Events §7 reverses them and makes composition edits noncancelable. Producer choice remains pending.
+// SPEC_CLASH(composition-input-order): UI Events §3.6.6 puts beforeinput before compositionupdate and allows cancellation; Input Events §7 reverses them and makes composition edits noncancelable.
+// InputEventImpl.create follows Input Events' noncancelable insertCompositionText fields;
+// real session ordering remains pending browser IME evidence and an owner-level decision.
 export class CompositionEventImpl extends UIEventImpl {
   /** Converted text; empty data does not imply an absent or canceled session. */
   data: string;
@@ -23,6 +26,26 @@ export class CompositionEventImpl extends UIEventImpl {
   constructor(type: string, eventInitDict: CompositionEventInit = {}, timeStamp?: DOMHighResTimeStamp) {
     super(type, eventInitDict, timeStamp);
     this.data = eventInitDict.data ?? '';
+  }
+
+  /**
+   * Prepare a trusted notification for the producer's selected target and text.
+   * Supply original text for start, current text for update, or final text for end;
+   * an empty string is valid. Target selection, session state, and editing remain
+   * with the composition producer. Preparation does not dispatch the event.
+   */
+  // https://w3c.github.io/uievents/#event-type-compositionstart
+  // https://w3c.github.io/uievents/#event-type-compositionupdate
+  // https://w3c.github.io/uievents/#event-type-compositionend
+  // This implementation factory combines DOM allocation with §3.6.7's event tables.
+  static create(type: CompositionEventType, target: ElementImpl, data: string): CompositionEventImpl {
+    const event = target.createTrustedEvent(CompositionEventImpl);
+    // SPEC_CLASH(composition-event-cancelability): Follow §3.6.7's start-only cancellation; Blink/WebKit mark all three cancelable, Gecko none.
+    event.initializeUIEvent(`composition${type}`, target, true, type === 'start');
+    event.composed = true;
+    event.isTrusted = true;
+    event.data = data;
+    return event;
   }
 
   /** @deprecated Reinitialize the legacy fields unless this event is being dispatched. */
@@ -42,6 +65,8 @@ export class CompositionEventImpl extends UIEventImpl {
 export interface CompositionEventInit extends UIEventInit {
   data?: string;
 }
+
+export type CompositionEventType = 'start' | 'update' | 'end';
 
 /*
  * [Exposed=Window]

@@ -724,10 +724,20 @@ relatedTarget conversion/retargeting, and legacy event creation are available;
 they do not implement HTML §6.6's automatic focus transitions or event production.
 
 InputEvent exposes UI Events' data/isComposing/inputType constructor data and
-ordinary dispatch. HTML editing, selection, and IME producers remain unfinished;
-synthetic beforeinput/input dispatch does not edit content. The separate Input
-Events extension's dataTransfer and getTargetRanges/targetRanges are not yet
-implemented. See the [event roadmap](browlet/interaction/events/ROADMAP.md#section-34-event-objects-and-producer-boundary).
+Input Events Level 2's dataTransfer and getTargetRanges/targetRanges partials.
+Supplied transfers and StaticRanges retain their identities and realms; ranges
+remain unchanged through DOM mutations and synthetic dispatch. The internal
+trusted-event factory applies the host/inputType attribute tables to explicit
+producer facts and packages supplied rich data in read-only transfers. It does
+not dispatch or edit. HTML editing, affected-range calculation, rendered
+HTML/plaintext extraction, and IME producers remain unfinished; EditContext
+preparation explicitly throws. Existing keyboard/clipboard editing entries still
+throw; synthetic beforeinput/input dispatch does not edit content. See the
+[Input Events preparation slice](browlet/interaction/events/ROADMAP.md#input-events-level-2-sections-61262-trusted-preparation)
+and [closing audit](browlet/interaction/events/ROADMAP.md#input-events-level-2-closing-audit-2026-11-06).
+Automatic edit delivery, real composition sessions and paste-to-edit ordering are
+explicitly deferred to those owners; the composition event-order conflict between
+UI Events and Input Events is still unresolved.
 
 KeyboardEvent construction, all specified modifier queries, legacy initialization,
 and DOM's legacy factory are available. The companion key-selection algorithm
@@ -745,10 +755,12 @@ The [keyboard slice](browlet/interaction/events/ROADMAP.md#section-35-event-obje
 records those dependencies and the approved modifier/legacy browser differences.
 
 CompositionEvent construction, legacy initialization, and DOM's legacy factory
-are available. They do not create an IME session or edit text. Composition
-sequencing and isComposing state need the input producer; UI Events and Input
-Events also disagree on compositionupdate/beforeinput ordering and cancelability.
-That choice remains explicit in the [composition audit](browlet/interaction/events/ROADMAP.md#section-36-event-objects-and-composition-dependencies).
+are available. An internal trusted factory prepares §3.6.7's flags, view and data
+from the producer's selected target and text. It does not dispatch, create an IME
+session or edit text. Composition sequencing and isComposing state need the input
+producer; UI Events and Input Events also disagree on compositionupdate/beforeinput
+ordering and cancelability. Those boundaries remain explicit in the
+[composition audit](browlet/interaction/events/ROADMAP.md#section-36-event-objects-and-composition-dependencies).
 
 TextEvent's legacy factory and initializer are available; its interface has no
 author constructor. Synthetic textInput dispatch delivers listeners/cancellation

@@ -234,6 +234,7 @@ export class SystemClipboard {
   // TODO(HTML editing / Input Events): perform deleteByCut with beforeinput cancellation and lifetime
   // checks, then schedule the resulting input/change/validation events only if an edit took place.
   // This is not Selection.deleteFromDocument(): editing also includes controls, undo and event policy.
+  // InputEventImpl.create prepares the event attributes, not the affected ranges or the deletion.
   deleteSelectedContents(_document: DocumentImpl): void {
     throw new InternalError('Clipboard cutting requires editing, selection collapse and edit-event delivery');
   }
@@ -242,6 +243,9 @@ export class SystemClipboard {
   // TODO(HTML editing / Input Events): select rich/plain content, perform insertFromPaste with its
   // beforeinput and lifetime checks, and schedule resulting events after clipboard dispatch finishes.
   // Data comes from the admitted paste entry; this operation must not reread the native clipboard.
+  // Input Events §8 requires the paste event before insertFromPaste beforeinput; runAction already
+  // dispatches paste before reaching this dependency. The editing owner must preserve that order,
+  // prepare host-specific data/ranges for InputEventImpl.create, and send input only after a change.
   insertPasteContents(_items: DragDataItem[], _document: DocumentImpl): void {
     throw new InternalError('Clipboard pasting requires editing and edit-event delivery');
   }

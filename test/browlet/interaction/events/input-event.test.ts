@@ -49,7 +49,7 @@ describe('UI Events: InputEvent', () => {
       };
     })).toEqual({
       reads: ['bubbles', 'cancelable', 'composed', 'detail', 'view', 'data', 'data.toString',
-        'inputType', 'inputType.toString', 'isComposing'],
+        'dataTransfer', 'inputType', 'inputType.toString', 'isComposing', 'targetRanges'],
       flags: [true, true, true, false], ui: [true, 5], data: ['text', true, 'insertText'], empty: [null, false, ''],
     });
   });

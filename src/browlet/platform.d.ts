@@ -261,8 +261,10 @@ export interface InputEventInit {
   detail?: number;
   view?: Window | null;
   data?: string | null;
+  dataTransfer?: DataTransfer | null;
   inputType?: string;
   isComposing?: boolean;
+  targetRanges?: Iterable<StaticRange>;
 }
 
 export interface EventModifierInit {
@@ -2437,6 +2439,8 @@ export interface InputEvent extends UIEvent {
   readonly data: string | null;
   readonly isComposing: boolean;
   readonly inputType: string;
+  readonly dataTransfer: DataTransfer | null;
+  getTargetRanges(): Array<StaticRange>;
 }
 
 export interface InputEventConstructor extends Ctor<UIEventConstructor> {

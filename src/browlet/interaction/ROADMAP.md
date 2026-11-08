@@ -73,6 +73,14 @@ the specified Window, Document, or UserAgent owner.
 Synthetic construction and dispatch do not themselves supply native input,
 focus changes, editing, pointer capture, or scrolling.
 
+Input Events Level 2's event objects and trusted attribute preparation are complete
+within the recorded browser choices. Its
+[closing audit](events/ROADMAP.md#input-events-level-2-closing-audit-2026-11-06)
+assigns §6.2 automatic delivery to HTML editing/controls, §7 composition sessions
+to the IME/editing producer, and §8 paste ordering to the existing clipboard editing
+dependency. Eric approved that stopping point; it does not claim working typing,
+composition, or cut/paste editing.
+
 UserAgent.keyboardInput now accepts normalized key transitions through the
 [queued keyboard coordinator](keyboard/ROADMAP.md#queued-keyboard-delivery-2026-11-05).
 It captures modifier/layout facts before task delivery, selects current focus for

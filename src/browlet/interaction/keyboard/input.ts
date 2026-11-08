@@ -66,7 +66,10 @@ export class KeyboardInputProcessor {
   // remains here, separate from HTML §8.1.8.3's completed firing operation.
   // Recognized clipboard shortcuts call SystemClipboard.runAction(type, document, 'user')
   // in this keydown task; queueAction is for menu entry and could run after an already queued keyup.
-  // Editing must deliver beforeinput -> edit -> input with its own cancellation.
+  // TODO(Input Events §6.2): identify the editing host and prepared EditingInput, then
+  // use InputEventImpl.create for beforeinput -> edit -> input with its own cancellation.
+  // Dispatch input only when the browser's edit actually changed content; a no-op or
+  // an author's DOM mutation inside beforeinput does not count as that edit.
   // The private input survives author reinitialization of the dispatched event.
   applyDefaultAction(_target: NodeImpl, _input: KeyboardInput): void {
     throw new InternalError('Keyboard input requires focus traversal, activation, clipboard, and editing default actions');
@@ -78,6 +81,9 @@ export class KeyboardInputProcessor {
   // interpret cancellation with the IME, and deliver composition/text effects.
   // A boolean on a KeyboardEvent cannot establish that session. Text commits
   // without key events need a separate adapter entry; do not infer them from key.
+  // Input Events §7 additionally needs the active composition passage, replacement
+  // and commit/cancel effects, and input-event ordering around each actual edit.
+  // Resolve SPEC_CLASH(composition-input-order) before connecting that sequence.
   handleCompositionKey(_target: NodeImpl, _input: KeyboardInput, _canceled: boolean): void {
     throw new InternalError('Keyboard input requires IME composition processing');
   }

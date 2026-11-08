@@ -1,6 +1,6 @@
 import { uiEventIDL, uiEventInitIDL, uiEventInitializersIDL, uiEventLegacyAttributesIDL } from './ui-event';
 import { focusEventIDL, focusEventInitIDL } from './focus-event';
-import { inputEventIDL, inputEventInitIDL } from './input-event';
+import { inputEventIDL, inputEventInitIDL, inputEventLevel2IDL, inputEventLevel2InitIDL } from './input-event';
 import { eventModifierInitIDL } from './event-modifiers';
 import {
   keyboardEventIDL, keyboardEventInitIDL, keyboardEventInitializersIDL,
@@ -19,7 +19,7 @@ import { wheelEventIDL, wheelEventInitIDL } from './wheel-event';
 export const interactionEventIDLDefinitions = [
   uiEventIDL, uiEventInitIDL, uiEventInitializersIDL, uiEventLegacyAttributesIDL,
   focusEventIDL, focusEventInitIDL,
-  inputEventIDL, inputEventInitIDL,
+  inputEventIDL, inputEventInitIDL, inputEventLevel2IDL, inputEventLevel2InitIDL,
   eventModifierInitIDL, keyboardEventIDL, keyboardEventInitIDL,
   keyboardEventInitializersIDL, keyboardEventLegacyAttributesIDL, keyboardEventLegacyInitIDL,
   compositionEventIDL, compositionEventInitIDL, compositionEventInitializersIDL,
