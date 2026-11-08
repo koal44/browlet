@@ -6,7 +6,11 @@ cookies, permissions, or host platform; those subsystems supply its answers.
 
 The implemented surface supplies Window's stable Navigator identity, its
 `clientInformation` alias, a forwarding `storage` getter, and its retained
-`permissions` object. Pointer Events §6 also contributes `maxTouchPoints`, whose
+`permissions` object. HTML §6.4.4 adds `userActivation`, forwarding to the owning
+Window's stable object and live sticky/transient queries. Its separate partial
+declaration remains beside that Window-owned implementation; input notification
+is still explicit in the [interaction roadmap](../interaction/ROADMAP.md#html-641-and-644-activation-state-and-its-public-view).
+Pointer Events §6 also contributes `maxTouchPoints`, whose
 getter selects an environment-scoped BiDi override before querying its UserAgent
 for device capacity. The hardware query explicitly throws until the native input
 host exists; the BiDi selector returns null while there are no active sessions.

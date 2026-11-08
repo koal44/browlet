@@ -824,8 +824,9 @@ and [Gecko nsMultiMixedConv](https://searchfox.org/mozilla-central/source/netwer
 This is a real first-part loader and later-navigation handoff, not completed
 multipart lifecycle support. Explicit dependencies remain:
 
-- Ordinary navigation's recursive abortion/unloading and Window transient
-  activation are still required for fully automatic later replacements.
+- Ordinary navigation's recursive abortion/unloading are still required for fully
+  automatic later replacements. Window transient-activation queries now work;
+  input/automation notification remains with HTML §6.4.2.
 - Window.stop()/Document-wide abortion and destruction must cancel the outer
   reader even after the current part has closed. Active-body cancellation and
   navigation supersession are connected now.
@@ -933,7 +934,7 @@ Local-URL responses retain their existing inherited container. Added part CSP
 remains a throwing dependency there: composition must preserve inherited self
 origins and policy provenance without duplicating earlier restrictions and
 reports. This slice does not complete local-URL policy composition, error-page
-creation, transient activation, recursive abortion/unloading, or parser redesign.
+creation, activation notification, recursive abortion/unloading, or parser redesign.
 The subsequent addon follow-up resolves the separately retained cancellation
 wake-up failure described above.
 

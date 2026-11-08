@@ -170,9 +170,10 @@ describe('Navigation traversal preparation', () => {
 
   it.each(['activation', 'scheduling'] as const)('does not leave a pending request when %s fails before acceptance', async (owner) => {
     const { browser, document, activation, queue, navigation } = await fixture();
-    const error = owner === 'activation' ? 'Window transient activation is not implemented' : 'Host scheduling failed';
+    const error = owner === 'activation' ? 'Activation clock failed' : 'Host scheduling failed';
     if (owner === 'activation') {
       activation.mockRestore();
+      vi.spyOn(document.env, 'currentHighResolutionTime').mockImplementation(() => { throw new Error(error); });
     } else {
       queue.mockRestore();
       vi.spyOn(document.env.userAgent, 'runInParallel').mockImplementation(() => { throw new Error(error); });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../../src/browlet/browlet';
+import type { NavigateEvent } from '../../../../src/browlet/platform';
 
 describe('Location', () => {
   it('exposes URL components and stringification', async () => {
@@ -22,15 +23,19 @@ describe('Location', () => {
     expect(String(location)).toBe(location.href);
   });
 
-  it('leaves document-initiated navigation explicitly unfinished', async () => {
+  it('delivers cancelable document-initiated navigation without an activation fixture', async () => {
     const browser = new Browlet({ route: () => '' });
     await browser.navigate('https://example.test/current');
     const location = browser.window.location;
 
-    expect(() => {
-      location.href = 'https://example.test/next';
-    }).toThrow('Window transient activation is not implemented');
-    expect(() => location.assign('/next'))
-      .toThrow('Window transient activation is not implemented');
+    const urls: string[] = [];
+    browser.window.navigation.addEventListener('navigate', (event) => {
+      urls.push((event as NavigateEvent).destination.url);
+      event.preventDefault();
+    });
+    location.href = 'https://example.test/next';
+    location.assign('/next');
+    expect(urls).toEqual(['https://example.test/next', 'https://example.test/next']);
+    expect(location.href).toBe('https://example.test/current');
   });
 });

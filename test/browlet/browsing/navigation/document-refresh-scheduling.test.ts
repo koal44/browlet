@@ -241,7 +241,6 @@ describe('Document HTTP Refresh scheduling', () => {
     const { document, top } = fixture();
     const window = document.getRelevantGlobalObject()!;
     // Supply the existing §6.4 dependency while exercising real navigation and projected events.
-    vi.spyOn(window, 'hasTransientActivation').mockReturnValue(false);
     const platform = project(window) as Window;
     const events: object[] = [];
     platform.navigation.addEventListener('navigate', (baseEvent) => {
@@ -261,8 +260,7 @@ describe('Document HTTP Refresh scheduling', () => {
     expect(navigationTasks(document)).toHaveLength(0);
   });
 
-  // Eric approved retaining this strict expectation until HTML §6.4 activation is implemented.
-  it.fails('delivers a Refresh navigation without substituting the missing transient-activation owner', async () => {
+  it('delivers a Refresh navigation using the Window\'s actual transient-activation state', async () => {
     const { document } = fixture();
     const platform = project(document.getRelevantGlobalObject()!) as Window;
     const received = vi.fn();
@@ -330,8 +328,6 @@ describe('Meta Refresh insertion and scheduling', () => {
   it.each(['head', 'body'])('accepts parser insertion in %s and waits for load handlers before dispatch', async (parent) => {
     const { document } = fixture();
     const window = document.getRelevantGlobalObject()!;
-    // The same existing activation dependency is isolated in the HTTP Refresh tests above.
-    vi.spyOn(window, 'hasTransientActivation').mockReturnValue(false);
     const platform = project(window) as Window;
     const order: string[] = [];
     platform.addEventListener('load', () => { order.push('load'); });

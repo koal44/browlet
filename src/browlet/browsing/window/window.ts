@@ -36,6 +36,7 @@ import type { ViewTransitionImpl } from '../../rendering/index';
 
 import { LocationImpl } from './location';
 import { BarPropImpl } from './bar-prop';
+import { UserActivationImpl } from './user-activation';
 import type { WindowProxyHandle } from './window-proxy';
 import { WindowIdleCallbacks, type IdleRequestCallback, type IdleRequestOptions } from './idle-callback';
 
@@ -81,6 +82,9 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   /** PDF MIME objects shared by all aliases and navigator.mimeTypes in this Window. */
   // https://html.spec.whatwg.org/multipage/system-state.html#pdf-viewer-mime-type-objects
   pdfViewerMimeTypeObjects: MimeTypeImpl[];
+  /** Associated activation view; its getters read this Window's retained timestamps. */
+  // https://html.spec.whatwg.org/multipage/interaction.html#associated-useractivation
+  readonly userActivation: UserActivationImpl;
   /** Navigation API object retained for this Window's lifetime. */
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#window-navigation-api
   navigation: NavigationImpl;
@@ -126,6 +130,7 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
     this.pdfViewerPluginObjects = env.userAgent.pdfViewerSupported ? pdfViewerPluginNames.map((name) => new PluginImpl(name, env)) : [];
     this.pdfViewerMimeTypeObjects = env.userAgent.pdfViewerSupported ? pdfViewerMimeTypes.map((type) => new MimeTypeImpl(type, env)) : [];
     this.navigator = new NavigatorImpl(env);
+    this.userActivation = new UserActivationImpl(env);
     this.navigation = new NavigationImpl(env);
     this.idleCallbacks = new WindowIdleCallbacks(env);
     this.#windowSessionStorageMixin = new WindowSessionStorageMixin(this);
@@ -292,8 +297,9 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   /** Whether this Window currently has unconsumed transient user activation. */
   // https://html.spec.whatwg.org/multipage/interaction.html#transient-activation
   hasTransientActivation(): boolean {
-    // TODO(HTML §6.4): Supply duration/expiry and activation notification.
-    throw new InternalError('Window transient activation is not implemented');
+    const now = this.env.currentHighResolutionTime().milliseconds;
+    return now >= this.lastActivationTimestamp &&
+      now < this.lastActivationTimestamp + this.env.userAgent.transientActivationDuration;
   }
 
   /** Consume transient activation across this Window's top-level traversable, preserving never-activated timestamps. */

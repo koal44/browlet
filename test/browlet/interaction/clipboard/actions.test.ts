@@ -21,9 +21,12 @@ describe('Clipboard §§5.3, 6 and 8: command admission and action flow', () => 
     expect(choose).not.toHaveBeenCalled(); expect(replace).not.toHaveBeenCalled(); expect(read).not.toHaveBeenCalled();
   });
 
-  it('uses the existing unimplemented activation owner rather than treating sticky activation as sufficient', () => {
+  it('rejects script copy after consumption even though sticky activation remains', () => {
     const { clipboard, document, activation, choose } = createFixture(); activation.mockRestore();
-    expect(() => clipboard.runAction('copy', document, 'script')).toThrow('Window transient activation is not implemented');
+    const window = document.getRelevantGlobalObject()!;
+    window.lastActivationTimestamp = -Infinity;
+    expect(window.hasStickyActivation()).toBe(true);
+    expect(clipboard.runAction('copy', document, 'script')).toBe(false);
     expect(choose).not.toHaveBeenCalled();
   });
 

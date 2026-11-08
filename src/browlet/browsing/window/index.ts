@@ -1,5 +1,6 @@
 export { LocationImpl, locationIDL } from './location';
 export { BarPropImpl, barPropIDL } from './bar-prop';
+export { UserActivationImpl, userActivationIDL, navigatorUserActivationIDL } from './user-activation';
 export { WindowProxyHandle, windowProxyDefinition } from './window-proxy';
 export {
   WindowImpl, windowIDL, windowEventIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,

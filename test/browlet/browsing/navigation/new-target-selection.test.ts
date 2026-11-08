@@ -5,12 +5,27 @@ import { UserAgent } from '../../../../src/browlet/user-agent';
 import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
+import { Duration } from '../../../../src/timing/index';
 import { createOpaqueOrigin } from '../../../../src/url/index';
 import { unwrap } from '../../../support/browlet-binding';
 
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('new navigable target selection', () => {
+  it('admits one popup with real transient activation and blocks the next after consumption', () => {
+    const { source, window, activation, userAgent } = fixture();
+    activation.mockRestore();
+    vi.spyOn(window.env, 'currentHighResolutionTime').mockReturnValue(new Duration(1000));
+    window.lastActivationTimestamp = 1000;
+    const [target, type] = source.chooseNavigable('_blank', false);
+    expect(target).not.toBeNull();
+    expect(type).toBe('new-and-unrestricted');
+    expect(window.hasTransientActivation()).toBe(false);
+    expect(window.hasStickyActivation()).toBe(true);
+    expect(source.chooseNavigable('_blank', false)).toEqual([null, 'existing-or-none']);
+    expect(userAgent.topLevelTraversableSet.size).toBe(2);
+  });
+
   it.each(['new', 'current', 'none'] as const)('blocks an unactivated popup before the %s destination policy', (policy) => {
     const { userAgent, source, window, activation } = fixture();
     userAgent.newNavigablePolicy = policy;
@@ -211,7 +226,7 @@ function fixture() {
   const document = source.activeDocument!;
   const window = source.activeWindow!;
   window.lastActivationTimestamp = 12;
-  // Notification and expiry are unfinished; consumption and creation run their real algorithms.
+  // Most policy cases isolate activation; the first regression uses real timestamps and consumption.
   const activation = vi.spyOn(window, 'hasTransientActivation').mockReturnValue(true);
   return { userAgent, source, document, window, activation };
 }

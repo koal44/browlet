@@ -142,11 +142,11 @@ describe('joint history delta traversal', () => {
     expect(apply).toHaveBeenCalledExactlyOnceWith(4, null, null, 'browser UI');
   });
 
-  it('preserves the explicit source-activation dependency before queuing script traversal', async () => {
+  it('queues script traversal using the real source-activation state', async () => {
     const { browser, activation, apply, turns } = await fixture();
     activation.mockRestore();
-    expect(() => browser.window.history.back()).toThrow('Window transient activation is not implemented');
-    expect(turns).toHaveLength(0);
+    browser.window.history.back();
+    expect(turns).toHaveLength(1);
     expect(apply).not.toHaveBeenCalled();
   });
 

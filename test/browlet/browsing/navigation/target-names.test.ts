@@ -187,16 +187,14 @@ describe('existing navigable target selection', () => {
     createChild(source, '_blank');
     const lookup = vi.spyOn(source, 'findNavigableByTargetName');
 
-    expect(() => source.chooseNavigable('_bLaNk', false)).toThrow('Window transient activation is not implemented');
+    expect(source.chooseNavigable('_bLaNk', false)).toEqual([null, 'existing-or-none']);
     expect(lookup).not.toHaveBeenCalled();
   });
 
-  it('keeps activation explicit while using real familiarity and sandbox permission', () => {
+  it('uses the real activation, familiarity, and sandbox predicates for a named target', () => {
     const { navigable: source } = createRoot();
     const other = createOtherTopLevel(source, 'needle');
 
-    expect(() => source.findNavigableByTargetName('needle')).toThrow('Window transient activation is not implemented');
-    vi.spyOn(source.activeWindow!, 'hasTransientActivation').mockReturnValue(false);
     expect(source.findNavigableByTargetName('needle')).toBe(other);
   });
 

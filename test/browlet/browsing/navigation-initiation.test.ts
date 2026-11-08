@@ -102,10 +102,16 @@ describe('Navigation.navigate preparation', () => {
     expect(document.navigationMustBeReplace(document.url)).toBe(true);
   });
 
-  it('retains the explicit navigation dependency for a valid request', async () => {
+  it('delivers a valid request through real activation capture and rejects it when canceled', async () => {
     const { browser, navigate } = await fixture();
     navigate.mockRestore();
-    expect(() => browser.window.navigation.navigate('/next')).toThrow('Window transient activation is not implemented');
+    const received = vi.fn((event: Event) => { event.preventDefault(); });
+    browser.window.navigation.addEventListener('navigate', received);
+    const result = browser.window.navigation.navigate('/next');
+    expect(received).toHaveBeenCalledOnce();
+    expect(await rejectionReasons(result, browser)).toEqual([
+      expect.objectContaining({ name: 'AbortError' }), expect.objectContaining({ name: 'AbortError' }),
+    ]);
   });
 });
 

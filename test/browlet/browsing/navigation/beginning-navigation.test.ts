@@ -83,11 +83,9 @@ describe('beginning navigation', () => {
     expect(browser.window.location.href).toBe('https://example.test/page#before');
   });
 
-  it('keeps transient activation explicit and proceeds once it is supplied', async () => {
+  it('begins a fragment navigation using the real source-activation state', async () => {
     const { document, navigable, activation, fragment, url } = await fixture();
     activation.mockRestore();
-    expect(() => navigable.navigate(url, document, {}, document.env)).toThrow('Window transient activation is not implemented');
-    vi.spyOn(document.getRelevantGlobalObject()!, 'hasTransientActivation').mockReturnValue(false);
     navigable.navigate(url, document, {}, document.env);
     expect(fragment).toHaveBeenCalledOnce();
   });

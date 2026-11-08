@@ -64,6 +64,69 @@ DOM event dispatch already provides overridable activation methods.
 Section 6 work supplies the HTML element behaviors, commands, and
 user-activation consequences.
 
+## HTML §§6.4.1 and 6.4.4: activation state and its public view
+
+Window now implements transient activation using its retained activation timestamp
+and its environment's current high-resolution time. The interval includes the
+activation timestamp and excludes the expiry timestamp. UserAgent supplies a
+constant 5000 ms lifetime, matching the ordinary Chromium, Firefox, and WebKit
+defaults. Reading the state neither consumes activation nor schedules a timer.
+The existing sticky/history predicates and top-level consumption remain the
+owners of their separate state changes.
+
+Each Window retains one `UserActivationImpl` beside its Navigator and BarProp
+objects. Navigator forwards `userActivation` to that Window; the feature's
+separate partial declaration preserves HTML's `[SameObject]` contract. Both
+read-only booleans query the receiver's Window, including through borrowed
+getters and after replacement. Construction is not exposed to authors, and the
+interface is Window-only, including non-secure Windows.
+
+Sources: [HTML's data model](https://html.spec.whatwg.org/multipage/interaction.html#user-activation-data-model)
+and [UserActivation](https://html.spec.whatwg.org/multipage/interaction.html#the-useractivation-interface);
+[Blink lifetime](https://github.com/chromium/chromium/blob/main/third_party/blink/public/common/frame/user_activation_state.h),
+[Gecko timeout](https://searchfox.org/mozilla-central/source/modules/libpref/init/StaticPrefList.yaml),
+and [WebKit Window](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/page/LocalDOMWindow.cpp).
+
+The three-browser probe observes inactive initial state, stable identity, no
+activation from synthetic mousedown, active state two seconds after a trusted
+click, and expired transient state with sticky state retained after 5.2 seconds.
+Eric approved these lifetime choices on 2026-11-06:
+
+- `SPEC_CLASH(retained-user-activation-state)`: keep HTML's retained timestamps
+  after iframe removal/replacement, matching Firefox/WebKit. Chromium reports
+  both flags false through the old object once its Window loses its frame.
+- `SPEC_CLASH(retained-user-activation-identity)`: retain the old Navigator's
+  associated object, matching HTML/WebKit (and Chromium's identity). Firefox
+  returns a different object through the retained Navigator after replacement.
+
+The source checks agree with the retained-object probe: Blink's UserActivation
+queries its Window's frame; Gecko's object retains the original WindowContext;
+WebKit queries the Navigator's Window. Evidence and the executable browser-only
+probe remain in `node-compat/experimental/USER-ACTIVATION.md` and
+`user-activation.mjs`.
+
+The initial expiry and real Refresh regressions both failed at the old throwing
+predicate. Refresh is now an ordinary passing regression, and its event and
+parser tests no longer substitute activation results. Consumer coverage includes
+captured navigation snapshots, real popup consumption, clipboard rejection after
+consumption, Location history selection, and Navigation/History acceptance.
+
+**Explicit dependencies:** HTML §6.4.2 activation notification must update the
+appropriate ancestor/descendant Windows and notify close watchers. The existing
+keyboard and mouse `notifyUserActivation()` methods still throw at that boundary;
+pointer/touch and automation producers must join the same operation. This slice
+does not synthesize input activation or implement §6.4.5 WebDriver commands.
+Close-watcher state, focus, and subsequent navigation abortion/unloading keep
+their own unfinished owners. No native addon changes are needed for this slice.
+
+Validation (2026-11-06): all 338 tests in the 14 affected activation, navigation,
+Location, Refresh, clipboard, multipart, and Navigator suites pass on Node
+24.19.0, 26.8.1, and custom 27.0.0-pre, both stock and with their matching addons.
+There are no expected failures or skips in this sweep. Generated declarations,
+typecheck, declaration contracts, changed-file ESLint, import boundaries, and
+diff whitespace checks pass. The standalone three-browser probe completes with
+the lifetime differences recorded above.
+
 ## UI and pointer event production
 
 The [UI Events audit](events/ROADMAP.md) places the event hierarchy and bindings

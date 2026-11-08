@@ -927,7 +927,7 @@ the [first slice](#html-724-first-slice-document-association-and-reads) records 
 | Window association and creation | One Location per Window, including a new identity when navigation replaces Window. Window already retains `LocationImpl`, and Binding retains its projected identity. The own intrinsic `valueOf`, own undefined `Symbol.toPrimitive`, and `[[DefaultProperties]]` creation steps are absent. Capture the realm intrinsic before author replacement; eager projection is one possible arrangement, not itself an observable requirement. |
 | `Document.location` / `Window.location` | Document returns its relevant global's Location only while fully active, otherwise null. The Document declaration and getter are absent. Window's retained Location and PutForwards binding already exist. Preserve unforgeability and the nullable Document result. |
 | Relevant Document and URL | Resolve through the owning Window's browsing context to its active Document; null context means null Document and `about:blank`. This is distinct from the Window's own associated Document. The current Node `URL` snapshot has neither relationship. Reuse Browlet's URL records rather than reparsing or retaining another mutable URL. Lifecycle disagreements below must be resolved explicitly. |
-| Location-object navigate | Select the owning Window's navigable, the incumbent global's associated Document as source, and `auto` history handling by default. Use `replace` when the relevant Document is not completely loaded and the incumbent lacks transient activation. Call navigate with exceptions enabled. The navigation stub has the required options; Window activation state and actual document-initiated navigation are missing. |
+| Location-object navigate | Select the owning Window's navigable, the incumbent global's associated Document as source, and `auto` history handling by default. Use `replace` when the relevant Document is not completely loaded and the incumbent lacks transient activation. Call navigate with exceptions enabled. Window activation state and cancelable document-initiated navigation are connected; subsequent loading/unloading retains its dependencies. |
 | All URL component getters | Check the relevant Document against the **entry** environment's origin-domain before serialization; a null relevant Document uses `about:blank`. Existing IDL invocation checks use the invoked function and receiver realms, which does not replace this additional check against the current relevant Document. URL origin is obtained from the URL, not the Document's possibly inherited or sandboxed origin. |
 | `href` setter / `assign` / `replace` | Return for a null relevant Document; encoding-parse against the entry environment; parse failure throws SyntaxError. Only assign adds the entry-origin check; href and replace deliberately allow foreign use. Replace requests replacement history. Current implementations all throw the generic unfinished-navigation error before these steps. |
 | `protocol` setter | Null-Document return, entry-origin check, copy URL, scheme-start parsing with an appended colon, SyntaxError on parse failure, and stop unless the resulting scheme is HTTP(S), then navigate. This is not a direct assignment to the Document URL. |
@@ -1502,7 +1502,7 @@ node scripts/with-node.mjs --base 24.19.0 --runtime stock node test/browlet/prob
 ```
 
 Reload and Location's remaining exotic internal methods are the next slices.
-Actual navigation, transient activation, and automatic caller/engine observation
+Actual navigation, activation notification, and automatic caller/engine observation
 remain the explicit dependencies recorded above. No binaries were built.
 
 Validation on stock Node 24.19.0 passes 48 Window/Location, URL, and Encoding test
@@ -1781,7 +1781,7 @@ shared engine files and integration, rather than transferring Location ownership
 All ten Location internal methods and ordinary HasProperty now connect through
 automatic platform operations on addon backends. The existing URL attributes,
 ancestorOrigins, assign/replace, and reload preparation remain the implementation
-layer. Actual navigation/reload effects and transient activation remain explicit
+layer. Actual navigation/reload effects and activation notification remain explicit
 dependencies with their navigation and Window owners.
 
 `prepareLocationObject()` retains its ordinary IDL allocation as the only property
@@ -1960,8 +1960,9 @@ counters, and prompt admission/UI.
 See the [§9.3 dependencies](../../communication/ROADMAP.md#93-cross-document-messaging).
 Window now owns activation timestamps, the history-action predicate, and
 both history-action and transient consumption across the top-level traversable.
-Input notification, transient expiry, sticky activation, `UserActivation`, and focus remain
-[interaction work](../../interaction/ROADMAP.md).
+Sticky/transient predicates and the Window-owned `UserActivation` view are now
+implemented. Input/automation notification, close watchers, and focus remain
+[interaction work](../../interaction/ROADMAP.md#html-641-and-644-activation-state-and-its-public-view).
 
 ## Removal condition
 

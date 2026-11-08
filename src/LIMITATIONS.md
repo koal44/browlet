@@ -1220,8 +1220,8 @@ including HTML processing. §8 action admission, cancellation/default branching,
 write/clear decisions and queued notifications now exist. Command adapters and
 execCommand callers are not connected. Script paste permission, rendered selection
 extraction, editable-state queries, cut/paste editing/event delivery and native
-replacement/clearing remain named throwing methods. The transient-activation check
-for script copy/cut also retains its existing HTML dependency.
+replacement/clearing remain named throwing methods. Script copy/cut now queries
+the Window's actual transient activation; input notification remains unfinished.
 Secure-Window ClipboardItem construction, presentationStyle, frozen types,
 getType() and supports() now operate on author-supplied data. MIME names are
 parsed/serialized, custom types stay distinct, strings become UTF-8 Blobs, and
@@ -1591,7 +1591,7 @@ their scroll mode. `go/back/forward` perform conversion, activity checks, and
 request preparation. Reload now dispatches its cancelable navigate event and
 queues history application. Delta traversal captures the source and queues
 target selection against the then-current distinct joint-history steps; out-of-range
-requests do nothing. Script source capture still needs transient activation.
+requests do nothing. Script source capture reads the Window's transient activation.
 Reload/traverse history application now checks sandbox permission and waits for
 beforeunload/navigate cancellation, retaining the traversal queue until completion.
 After admission it reselects affected navigables, advances their current entries,
@@ -1711,8 +1711,8 @@ mailto/custom-protocol navigation or launch external applications. See the
 [non-fetch audit](browlet/browsing/navigation/ROADMAP.md#html-74234-non-fetch-schemes-and-external-software).
 Navigation target snapshots retain sandbox/referrer inputs independently of later
 container changes and response CSP. The full navigate algorithm must still capture
-and carry them before parallel loading. Source capture requires the unfinished
-Window transient-activation producer; object/embed/frame target sandbox inheritance,
+and carry them before parallel loading. Source capture reads Window activation;
+input notification remains unfinished. Object/embed/frame target sandbox inheritance,
 complete navigation-param assembly, navigation-ID propagation/BiDi delivery, and hyperlink/form
 activation callers remain explicit dependencies. Event's trusted-click involvement
 helper does not implement those callers. See the
@@ -1759,9 +1759,9 @@ complete loading and checking the captured Document's automatic-features sandbox
 flag when due. Only Document-tree insertion processes it, as HTML/Firefox specify;
 attribute changes alone and shadow-tree insertion do not. Removal or adoption does
 not cancel a Refresh already accepted by the original Document.
-Ordinary navigation still reaches the throwing transient-activation dependency;
-the strict integration expectation remains an approved expected failure. The
-existing downstream loading/unloading dependencies are unchanged. Other meta
+Ordinary navigation now captures the actual Window activation state; the strict
+Refresh delivery regression passes without an activation fixture. Existing
+downstream loading/unloading dependencies are unchanged. Other meta
 pragma/name processing, Window.stop()/recursive abortion, full bfcache timer policy,
 and optional host preferences/manual redirect UI remain explicit.
 See the [Refresh audit](browlet/browsing/navigation/ROADMAP.md#html-751-refresh-input-preparation).
@@ -2000,7 +2000,7 @@ settlement and event acceptance/cancellation are implemented; commit/completion
 producers remain unfinished. Document's unload counter is checked but its lifecycle producers
 are still missing. `traverseTo()`, `back()`, and `forward()` now select destinations,
 resolve the current-entry case, and reuse pending requests. Their new-request
-path still stops at transient activation, then the unfinished history-step
+path captures the Window's transient activation, then reaches the unfinished history-step
 application within the traversal queue. Source capture and queued failure handling are
 implemented, including protection against an obsolete failure deleting a newer
 request. `navigation.transition`, NavigationTransition, and NavigationDestination
@@ -2029,7 +2029,9 @@ navigation before rechecking activity. Disabled Navigation entries skip dispatch
 enabled entries initialize data, dispatch, cancel, or create an intercepted transition.
 History-action and transient activation consumption now cover the top-level traversable,
 including shadow trees and other origins. The sticky predicate uses the Window's
-activation timestamp; input/automation notification and transient expiry remain missing.
+activation timestamp. Transient activation uses a five-second interval, and
+`navigator.userActivation` exposes a stable live view of both states. Input/automation
+notification and its close-watcher integration remain explicit dependencies.
 `hasUAVisualTransition` is false because
 Browlet does not display cached history renderings; adding that UI must supply its
 presentation state. Commit selects URL/history update, same-document reload
@@ -2206,7 +2208,7 @@ with the incumbent source Document, including through a retained
 Location whose old Window is inactive. Disconnected Locations return without
 navigation. The specification gap and browser disagreement are recorded with
 Location. Actual navigation remains unfinished; writes before complete loading
-also require Window transient activation. Reload now returns for a null relevant
+now query Window transient activation. Reload returns for a null relevant
 Document, checks the entry origin, and calls the live Document's navigable.
 Its coordinator now supplies Navigation API cancellation, state/tracker inputs,
 reloadPending, and traversal queuing. The queued reload history application still

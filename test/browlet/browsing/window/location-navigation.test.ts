@@ -155,11 +155,15 @@ describe('Location URL navigation preparation', () => {
     expect(navigate.mock.calls[0]![2]).toEqual({ exceptionsEnabled: true, historyHandling });
   });
 
-  it('leaves transient activation explicit instead of treating every loading write as unactivated', async () => {
+  it('uses the actual activation timestamp for a loading Window', async () => {
     const { browser, document, navigate } = await createTarget();
     document.completelyLoadedTime = null;
-    expect(() => browser.window.location.assign('/next')).toThrow('Window transient activation is not implemented');
-    expect(navigate).not.toHaveBeenCalled();
+    browser.window.location.assign('/next');
+    expect(navigate.mock.calls[0]![2]!.historyHandling).toBe('replace');
+    const window = document.getRelevantGlobalObject()!;
+    window.lastActivationTimestamp = window.env.currentHighResolutionTime().milliseconds;
+    browser.window.location.assign('/next');
+    expect(navigate.mock.calls[1]![2]!.historyHandling).toBe('auto');
   });
 
   it('forwards Window.location and Document.location through href without losing the modeled incumbent', async () => {

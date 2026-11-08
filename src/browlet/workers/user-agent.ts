@@ -145,6 +145,8 @@ export class WorkerUserAgent implements UserAgent {
   get popupBlockerEnabled(): never { return unconnected('popupBlockerEnabled'); }
   /** Destination policy after popup and sandbox checks; existing named targets are unaffected. Not connected in workers. */
   get newNavigablePolicy(): never { return unconnected('newNavigablePolicy'); }
+  /** Window activation remains browser-owned. */
+  get transientActivationDuration(): never { return unconnected('Window activation'); }
   /** Inline Document rendering remains browser-owned. */
   get renderInlineDocument(): never { return unconnected('inline Document rendering'); }
   /** Configured document handling by MIME essence; XML/JSON entries count as explicitly supported types. Not connected in workers. */

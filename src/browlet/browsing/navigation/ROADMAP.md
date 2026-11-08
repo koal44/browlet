@@ -1249,9 +1249,9 @@ an identical early sandbox check from one current probe.
 
 ### Explicit dependencies and stopping point
 
-- `SourceSnapshotParams` calls the existing `Window.hasTransientActivation()`
-  boundary. HTML §6.4 activation duration and notification remain unfinished;
-  lookup does not substitute false. The new-target follow-up implements consumption.
+- `SourceSnapshotParams` captures `Window.hasTransientActivation()` using the
+  Window's clock and five-second lifetime. Input/automation notification remains
+  unfinished; lookup does not substitute false. New-target selection consumes activation.
 - `Navigable.isAllowedBySandboxingToNavigate(target, sourceSnapshotParams)` now
   implements the §7.4.2.4 predicate: ancestry, captured activation/flags, and
   the target's permitted creator. See the [sandbox permission audit](#html-7424-sandbox-navigation-permission)
@@ -1313,9 +1313,9 @@ named lookup still needs that query for its separate source snapshot.
 
 Consumption is a bounded dependency from HTML §6.4, using existing state and
 collections. The sticky predicate now uses the same retained timestamp;
-input/automation notification, transient duration and expiry,
-and UserActivation exposure remain unfinished in the
-[interaction owner](../../interaction/ROADMAP.md#history-action-activation-dependency).
+transient expiry and UserActivation exposure are now implemented. Input/automation
+and close-watcher notification remain unfinished in the
+[interaction owner](../../interaction/ROADMAP.md#html-641-and-644-activation-state-and-its-public-view).
 This does not infer activation from a click or introduce a global activation bit.
 
 ### Browser evidence and approved choices
@@ -1343,8 +1343,8 @@ defaults allow popups; these probes do not measure browser popup-blocker default
 
 ### Remaining dependencies and stopping point
 
-Selection still reaches the unfinished `Window.hasTransientActivation()` when
-popup blocking is enabled. `BrowsingContext.createAuxiliary()` now supplies
+Selection now queries real transient activation when popup blocking is enabled.
+`BrowsingContext.createAuxiliary()` supplies
 creator/opener/group inheritance for a non-null opener. Named lookup now uses
 the §7.4.2.4 sandbox predicate, including the retained permitted creator.
 
@@ -1632,8 +1632,8 @@ argument for transitive opener lookup.
 
 ### Remaining dependencies and validation
 
-Named lookup still reaches `Window.hasTransientActivation()`'s explicit unfinished
-boundary; `Navigable.isAllowedBySandboxingToNavigate()` is implemented.
+Named lookup now queries the Window's transient activation;
+`Navigable.isAllowedBySandboxingToNavigate()` is implemented.
 `Window.close()` must select its incumbent context, take a source snapshot,
 apply familiarity and sandbox permission, and queue the existing closing
 coordinator; implementing the predicate does not complete that caller. Creation,
@@ -1744,7 +1744,7 @@ separate executable algorithm.
 | Linearize child histories into one traversable history | Nested histories and distinct-step counting exist. The traversal queue, creation/destruction history update, and full history application remain explicit dependencies. |
 | Synchronize multiple navigables, event loops, and clusters | The serial queue can wait for an algorithm's completion; the intercepted-traversal resume boundary still throws. Document-population waits, synchronization, and queue jumping remain §7.4.6 work. |
 | 204/205 and attachment responses preserve the active Document | Navigation response selection must handle these outcomes before creating or committing a Document. The `navigate()` stub now names them explicitly. Download navigate-event dispatch alone does not implement download response handling. |
-| Location/Refresh/X-Frame-Options/CSP/COOP headers | Fetch redirect processing and policy components are available, but HTML navigation must coordinate redirects, snapshots, response selection, and X-Frame-Options enforcement. Document creation already applies CSP/COOP and context-group changes. HTTP Refresh parsing and load-relative scheduling exist; meta insertion and ordinary navigation's transient-activation dependency remain explicit. |
+| Location/Refresh/X-Frame-Options/CSP/COOP headers | Fetch redirect processing and policy components are available, but HTML navigation must coordinate redirects, snapshots, response selection, and X-Frame-Options enforcement. Document creation already applies CSP/COOP and context-group changes. HTTP Refresh parsing and load-relative scheduling exist; meta insertion and actual Window activation capture are now connected. |
 | Synchronous fragment and single-page navigation | §7.4.4 connects `Document.updateURLAndHistory()` for History/interception. Fragment navigation uses §7.4.6.2's existing-Document update, reaching the explicit persisted-state restoration boundary. Scrolling and queued joint-history application remain unfinished. |
 | javascript: URLs, srcdoc, and beforeunload | URL/origin and inherited-state foundations exist, but special navigation paths remain unfinished. `checkIfUnloadingIsCanceled()` now coordinates queued beforeunload/navigate checks; prompt policy/UI, history application, and teardown still need their owners. |
 
@@ -1993,7 +1993,7 @@ the supporting helpers do not complete any of those pipelines.
 
 | Concept | Implementation and remaining dependency |
 | --- | --- |
-| Source snapshot and capture | Existing `SourceSnapshotParams` captures activation, active sandbox flags, download permission, the source Fetch client, and a cloned policy container. Null denotes browser UI, with unrestricted fresh defaults. Real Document capture still reaches the explicit §6.4 transient-activation boundary. |
+| Source snapshot and capture | Existing `SourceSnapshotParams` captures activation, active sandbox flags, download permission, the source Fetch client, and a cloned policy container. Null denotes browser UI, with unrestricted fresh defaults. Real Document capture now reads the Window's current transient activation. |
 | Target snapshot and capture | `Navigable.snapshotTargetParams()` now returns the creation sandbox flags and iframe referrer-policy keyword together. It uses the current active browsing context and the container's current node Document, including after adoption. The existing object/embed/frame sandbox-inheritance boundary remains explicit; §7.1.5 refers to an iframe flag set those containers do not define. |
 | Capture before asynchronous work | `createNavigationParams()` can consume an earlier target snapshot. Its local-route default captures immediately. Final sandbox flags are copied before response CSP is added, so later iframe/ancestor changes and response preparation cannot mutate the saved snapshot. `navigate()` captures the source before its Agent handoff; target capture before parallel loading and onward propagation remain in its non-fragment continuation. |
 | Navigation ID | `navigate()` now generates a UUID and supplies it to early cancellation and fragment dispatch. `NavigationParams.id` and Document's loading ID retain their inputs; connecting the generated value to ongoing-navigation and population remains §7.4.2.2 work. Local supplied-response navigation still uses null. |
@@ -2044,7 +2044,7 @@ supplied-response loader or complete end-to-end navigation.
 
 | Steps | Implementation and boundary |
 | --- | --- |
-| 1–6: source preparation and admission | Capture CSP form-submission classification, source policy/activation, initiator origin/base, and enforce the source/user-involvement assertions. Null source uses browser UI defaults; its javascript: case captures the destination origin. The §7.4.2.4 sandbox predicate now runs; rejection returns or throws SecurityError according to exceptionsEnabled. Transient activation still stops at its owner stub. An inactive source without a node navigable is an internal invariant failure; this slice does not invent a permission rule for it. |
+| 1–6: source preparation and admission | Capture CSP form-submission classification, source policy/activation, initiator origin/base, and enforce the source/user-involvement assertions. Null source uses browser UI defaults; its javascript: case captures the destination origin. The §7.4.2.4 sandbox predicate now runs; rejection returns or throws SecurityError according to exceptionsEnabled. Transient activation now uses the Window's current clock and timestamp. An inactive source without a node navigable is an internal invariant failure; this slice does not invent a permission rule for it. |
 | 7–8: identity and Agent handoff | Generate a UUID, retain the source-side values and a shallow copy of option argument values in navigate's local variables, then compare the explicit caller environment's Agent with the destination's. Same Agent continues synchronously; a different Agent or null caller queues on the active Window's navigation-and-traversal task source. No global current-Agent inference or engine changes were added. |
 | 9–12: target admission | Read the active Document when continuation runs, report cancellation for its unload counter, stop an eligible iframe's existing lazy-load observer and clear resumption steps, then apply navigation throttling. The BiDi failure hook is provisional: subscription delivery and waiter resumption are unimplemented. |
 | 13–14: history selection | Extend the existing resolveHistoryBehavior helper with requested history handling and user involvement. Auto compares against the active Document URL, with strict origin equality or browser UI permitting replacement. Explicit push/replace is preserved unless javascript: or initial about:blank mandates replacement. |
@@ -2896,9 +2896,9 @@ GitHub issue discussions without warnings.
 
 ### Remaining dependencies and checks
 
-- `Window.hasTransientActivation()` still throws pending §6.4 input notification
-  and expiry. Tests supply activation; the sandbox predicate and its callers run
-  their actual code.
+- `Window.hasTransientActivation()` now uses the Window's timestamp and clock.
+  Input notification remains with §6.4.2. Sandbox cases can supply activation
+  independently; the predicate and its callers run their actual code.
 - `Navigable.checkIfUnloadingIsCanceled()` now queues Document checks and the
   optional traversal pair, sharing prompt state through browser-owned completion.
   The coordinator audit below records its asynchronous callable shape and the
@@ -5410,7 +5410,7 @@ origin check in both directions.
 | 8–10: Document fields and Window association | Audited below: incoming state is fresh even when the initial Window is reused, and association precedes loader callbacks without activating the Document. Cookie-URL producer/history inputs and the public registry API remain separate dependencies. |
 | 11–14: ancestry, CSP, referrer | Audited below: captured iframe policy and known container initialize ancestry before activation; CSP applies to the incoming Document; referrer consumes Fetch's resolved value. Existing masking/null-request choices remain. CSP's unspecified style-src initialization and Console output remain explicit dependencies. |
 | 15–16: Navigation Timing | Controller-backed creation selects redirect counts using HTML's taint/client/referrer/TAO rule. All shared-factory Documents expose destination metadata and buffer the entry before callbacks, using zero unavailable fetch phases/transfer size without a controller. Target-history diagnostics arrive before activation; child entries retain null. Load completion notifies observers without reinsertion. Initial about:blank intentionally has no entry. Missing producer timing, unload/Critical-CH producers, and diagnostic lifecycle callers remain explicit. |
-| 17–20: response headers | Step 17 performs Refresh decoding, shared parsing, admission, and HTTP/meta scheduling. Ordinary dispatch retains navigation's transient-activation dependency. Invalid inputs do not block Document creation. Early Hints prepares Link options and invokes the retained Document callback. Step 19 selects final-response phases and prepares options from the incoming Document, independently of CSSOM's stylesheet-Link consumer. Nonempty media matching, image source-set construction, and preload/preconnect/modulepreload effects remain explicit throwing dependencies. Step 20 now fetches, validates, decodes, and registers header rule sets through the incoming Document; rule parsing, candidate selection, and shared in-flight cancellation remain explicit dependencies. |
+| 17–20: response headers | Step 17 performs Refresh decoding, shared parsing, admission, and HTTP/meta scheduling. Ordinary dispatch now captures the Window's actual transient activation. Invalid inputs do not block Document creation. Early Hints prepares Link options and invokes the retained Document callback. Step 19 selects final-response phases and prepares options from the incoming Document, independently of CSSOM's stylesheet-Link consumer. Nonempty media matching, image source-set construction, and preload/preconnect/modulepreload effects remain explicit throwing dependencies. Step 20 now fetches, validates, decodes, and registers header rule sets through the incoming Document; rule parsing, candidate selection, and shared in-flight cancellation remain explicit dependencies. |
 | 21: deferred Fetch quota | The existing `potentiallyFreeDeferredFetchQuota()` consumer is connected; full deferred-fetch request/lifetime integration retains its Fetch owner. |
 | §§7.5.2–7.5.11 | HTML production parser/script setup, other Document loaders, finish/unload/destruction/abort coordination remain separate bounded slices. Window allocation does not complete those operations. |
 
@@ -5719,12 +5719,11 @@ Experimental's `refresh-scheduling.mjs` and `REFRESH-SCHEDULING.md` retain the p
 The meta follow-up below supplies the captured insertion timestamp and
 automatic-features check. **Explicit dependencies:** host preferences/manual
 redirect UI, complete parser load-event accounting, recursive abortion/destruction,
-and full bfcache Refresh policy retain their existing owners. Most importantly, ordinary navigation
-still calls the throwing `Window.hasTransientActivation()` through
-`SourceSnapshotParams`. The new strict delivery regression observed that failure;
-Eric approved retaining it as an expected failure. Enabled tests supply that one
-activation result to verify real cancelable replacement/fragment events. Same-URL
-reload reaches its cancelable event without that fixture. Downstream history,
+and full bfcache Refresh policy retain their existing owners. The strict delivery
+regression originally failed in `Window.hasTransientActivation()` through
+`SourceSnapshotParams`, and was retained as an approved expected failure. The
+activation-state follow-up now makes it an ordinary passing test; replacement,
+fragment, and same-URL reload delivery all use actual Window activation. Downstream history,
 unloading, and loading TODOs remain in the existing navigation/reload operations.
 
 Validation: all eleven affected creation, loading, destruction, abortion, reload,

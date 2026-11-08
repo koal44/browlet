@@ -75,6 +75,9 @@ class BrowletUserAgent implements
   /** Reject new-window requests without transient activation, independently of sandbox restrictions. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#popup-blocker
   popupBlockerEnabled = true;
+  /** Fixed activation lifetime in milliseconds, matching the three browser engines' defaults. */
+  // https://html.spec.whatwg.org/multipage/interaction.html#transient-activation-duration
+  readonly transientActivationDuration = 5000;
   /** Destination policy after popup and sandbox checks; existing named targets are unaffected. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#the-rules-for-choosing-a-navigable
   newNavigablePolicy: 'new' | 'current' | 'none' = 'new';

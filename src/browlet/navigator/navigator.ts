@@ -3,6 +3,7 @@ import type { PermissionsImpl } from '../../permissions/index';
 import type { StorageManagerImpl } from '../../storage/index';
 
 import { ClipboardImpl } from '../interaction/clipboard/index';
+import type { UserActivationImpl } from '../browsing/window/index';
 import type { BrowletEnvironment, WindowEnvironment } from '../environment/index';
 
 import { NavigatorIDMixin } from './identification';
@@ -16,7 +17,7 @@ import { NavigatorPluginsMixin, type PluginArrayImpl, type MimeTypeArrayImpl } f
 // https://html.spec.whatwg.org/multipage/system-state.html#the-navigator-object
 // TODO(HTML §8.10): Protocol handler registration retains explicit owner dependencies.
 export class NavigatorImpl {
-  /** Relevant settings, shared with this Navigator's owning Window. */
+  /** Environment shared with this Navigator's owning Window. */
   env: WindowEnvironment;
   /** Identification behavior composed with this Navigator's relevant settings. */
   #navigatorIDMixin: NavigatorIDMixin;
@@ -77,7 +78,7 @@ export class NavigatorImpl {
     return this.env.permissions;
   }
 
-  /** Return the StorageManager associated with this Navigator's relevant settings. */
+  /** Return the StorageManager associated with this Navigator's environment. */
   // https://storage.spec.whatwg.org/#dom-navigatorstorage-storage
   get storage(): StorageManagerImpl {
     return this.env.storageManager;
@@ -109,12 +110,29 @@ export class NavigatorImpl {
   }
 
   javaEnabled(): boolean { return this.#navigatorPluginsMixin.javaEnabled(); }
+  /** Return the live activation view associated with this Navigator's Window. */
+  // https://html.spec.whatwg.org/multipage/interaction.html#dom-navigator-useractivation
+  get userActivation(): UserActivationImpl {
+    return this.env.window.userActivation;
+  }
 }
 
-// [Exposed=Window] interface Navigator { };
+/*
+ * [Exposed=Window]
+ * interface Navigator {
+ *   // objects implementing this interface also implement the interfaces given below
+ * };
+ * Navigator includes NavigatorID;
+ * Navigator includes NavigatorLanguage;
+ * Navigator includes NavigatorOnLine;
+ * Navigator includes NavigatorContentUtils;
+ * Navigator includes NavigatorCookies;
+ * Navigator includes NavigatorPlugins;
+ * Navigator includes NavigatorConcurrentHardware;
+ */
 export const navigatorIDL = defineInterface<BrowletEnvironment>({
   name: 'Navigator',
   exposed: 'Window',
-  implementation: impl(NavigatorImpl, { constructWith: [atArg(0, (env) => env)] }),
+  implementation: impl(NavigatorImpl, { constructWith: [atArg(0, (env) => env as WindowEnvironment)] }),
   members: [],
 });

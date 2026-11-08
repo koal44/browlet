@@ -315,9 +315,9 @@ is insufficient. This protects cleanup; it does not implement traversal cancella
 
 ### Unfinished execution owners
 
-Ordinary requests to a different entry currently stop at Window's explicit
-`hasTransientActivation()` dependency (§6.4). Capture is implemented, but activation
-timestamps, expiry, notification, and consumption are not. Once that input exists,
+Ordinary requests to a different entry now capture Window transient activation.
+Timestamps, expiry, predicates, and consumption are implemented; input/automation
+and close-watcher notification remain with HTML §6.4.2.
 `Traversable.appendSessionHistoryTraversalSteps()` now runs through the browser-owned
 §7.4.1.3 parallel queue. Its serial drain waits for a returned internal completion
 promise; synchronous-navigation queue jumping still needs §7.4.6.1 history application.
@@ -956,8 +956,8 @@ History activation uses Window-owned timestamps and methods; Document's new
 shadow-inclusive descendant-navigable helper supplies consumption across nested
 and cross-origin active Windows. This differs from the light-tree child list used
 for Window indexed access. Input notification, automation, close-watcher
-notification, transient/sticky activation, and the UserActivation interface
-remain in the [interaction inventory](../../../interaction/ROADMAP.md).
+notification remain in the [interaction inventory](../../../interaction/ROADMAP.md).
+Transient/sticky queries and the UserActivation interface are implemented.
 
 Eric approved these two choices, recorded alongside their source branches:
 

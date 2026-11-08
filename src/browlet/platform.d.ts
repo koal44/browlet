@@ -2803,6 +2803,16 @@ export interface BarPropConstructor {
   [Symbol.hasInstance](value: unknown): value is BarProp;
 }
 
+export interface UserActivation {
+  readonly hasBeenActive: boolean;
+  readonly isActive: boolean;
+}
+
+export interface UserActivationConstructor {
+  readonly prototype: UserActivation;
+  [Symbol.hasInstance](value: unknown): value is UserActivation;
+}
+
 export interface Report {
   readonly type: string;
   readonly url: string;
@@ -3123,6 +3133,7 @@ export interface PerformanceNavigationConstructor {
 }
 
 export interface Navigator {
+  readonly userActivation: UserActivation;
   readonly permissions: Permissions;
   readonly clipboard: Clipboard;
   readonly maxTouchPoints: number;
@@ -3900,6 +3911,7 @@ export interface Window extends EventTarget {
   NotRestoredReasons: NotRestoredReasonsConstructor;
   ViewTransition: ViewTransitionConstructor;
   BarProp: BarPropConstructor;
+  UserActivation: UserActivationConstructor;
   ReportBody: ReportBodyConstructor;
   IntegrityViolationReportBody: IntegrityViolationReportBodyConstructor;
   PermissionsPolicy: PermissionsPolicyConstructor;

@@ -60,7 +60,8 @@ import {
 import { webStorageIDLDefinitions } from '../../storage/index';
 import { navigationIDLDefinitions } from '../../browsing/navigation/api/index';
 import {
-  locationIDL, barPropIDL, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
+  locationIDL, barPropIDL, userActivationIDL, navigatorUserActivationIDL,
+  windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
   windowIncludesGlobalEventHandlersIDL, windowIncludesWindowEventHandlersIDL, windowProxyDefinition,
   windowIdleCallbackIDL, idleDeadlineIDL, idleRequestCallbackIDL, idleRequestOptionsIDL,
 } from '../../browsing/window/index';
@@ -105,6 +106,7 @@ export const browletDefinitions = [
   notRestoredReasonDetailsIDL, notRestoredReasonsIDL,
   ...renderingIDLDefinitions,
   barPropIDL,
+  userActivationIDL, navigatorUserActivationIDL,
   reportIDL, reportBodyIDL, integrityViolationReportBodyIDL, testReportBodyIDL,
   coepViolationReportBodyIDL, coepInheritanceViolationReportBodyIDL,
   permissionsPolicyIDL, documentPermissionsPolicyIDL, iframePermissionsPolicyIDL,
