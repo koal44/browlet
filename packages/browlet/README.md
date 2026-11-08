@@ -37,6 +37,23 @@ Calling it in the page returns a page Promise; arguments and results are
 copied, and callbacks remain installed after navigation. Live DOM objects and
 function arguments require handles, which are not implemented yet.
 
+Set `languages` and `platform` at construction to configure Navigator values:
+
+```js
+const browser = new Browlet({
+  route: () => '<!doctype html>',
+  languages: ['fr-CA', 'en-US'],
+  platform: 'MacIntel',
+});
+```
+
+The defaults are `languages: ['en-US']` and `platform: 'Win32'`, independent of
+the host OS. Languages also supply the default HTTP `Accept-Language` list.
+Supply a nonempty array of valid BCP 47 tags; Browlet checks basic tag shape and
+copies the values without changing their spelling or order. It does not perform
+registry validation. Both options persist across navigation; changing the
+original configuration array later does not change the browser's preferences.
+
 ## Platform types
 
 Platform types generated from the registered Web IDL declarations are available

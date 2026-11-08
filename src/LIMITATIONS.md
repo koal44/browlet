@@ -2132,7 +2132,23 @@ creation fields and expose `onconnect`; discovery, automatic connection delivery
 and lifetime monitoring remain pending. Dedicated globals forward messaging
 through a hidden port and can close their agent's task queues; automatic channel
 setup and native thread teardown remain pending. WorkerLocation's read-only URL surface
-is implemented; WorkerNavigator is an identity stub. `importScripts()` throws
+is implemented; WorkerNavigator also supplies
+[NavigatorID](browlet/navigator/ROADMAP.md#client-identification). Identification
+uses the approved Chrome compatibility profile and configurable common `Win32`
+platform, while User-Agent text retains its existing Fetch configuration/emulation
+owner. [NavigatorLanguage](browlet/navigator/ROADMAP.md#language-preferences)
+provides stable frozen lists, scoped initial BiDi selection, and queued per-global
+change notifications. The default list and HTTP Accept-Language are `en-US`;
+configured preference updates share the same ordered list. The producer must
+supply all recipients and valid BCP 47 tags. OS preference watching, complete
+recipient discovery, BiDi change routing, and cross-isolate identification/language
+transport remain explicit dependencies. [NavigatorOnLine](browlet/navigator/ROADMAP.md#browser-state)
+reads Fetch's existing offline state immediately and queues trusted online/offline
+events on each affected global's networking task source. Its producer supplies
+complete recipients and previous effective state for scoped emulation updates.
+OS network monitoring, BiDi connectivity change routing, and cross-isolate
+notifications remain explicit dependencies; the default assumes connectivity.
+Hardware concurrency remains unfinished. `importScripts()` throws
 at its explicit synchronous-loading boundary. Dedicated/shared realm and settings
 composition is available internally, including initial ownership and separate resource
 state. It leaves execution readiness false and still runs on the caller's thread.

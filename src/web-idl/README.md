@@ -180,6 +180,11 @@ overloads differing only by a trailing argument already accepting undefined are
 printed as one optional parameter. Runtime overload resolution and conversion
 remain unchanged; distinct return types or stricter added arguments stay separate.
 
+Unrestricted type generation retains conditional facilities, but a member's global
+exposure must overlap its contributing fragment and including interface. Declared
+global aliases such as Worker/DedicatedWorker can satisfy that overlap; Window-only
+NavigatorID members cannot enter WorkerNavigator. Runtime exposure is unchanged.
+
 There is one record type, `PlatformRecord`, and one lookup name:
 `getPlatformRecord(input, PlatformRecordSource)`. The required source selects
 `Implementation`, `Platform`, `PlatformOrProxy`, or `Stamped` (either direct stamp).

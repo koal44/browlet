@@ -65,7 +65,8 @@ Dependencies encountered in this first interface:
   stringifier as a small dependency. It reads the associated worker's script
   URL, never a creator Window's Location. Startup must assign the final response
   URL before author code can observe it.
-- **§10.3.2 WorkerNavigator:** identity and declaration only. NavigatorID,
+- **§10.3.2 WorkerNavigator:** stable identity and shared
+  [NavigatorID](../navigator/ROADMAP.md#client-identification) are implemented.
   NavigatorLanguage, NavigatorOnLine, and NavigatorConcurrentHardware remain
   explicit dependencies of §§8.10 and 10.2.7. Worker Permissions/Storage
   contributions still need navigator integration; settings composition is now available below.

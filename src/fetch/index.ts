@@ -11,6 +11,7 @@ export type {
 } from './transport';
 export { HTTPCacheStore } from './cache-http';
 export { CORSPreflightCache } from './cache-cors';
+export { isOffline } from './environment';
 export type {
   FetchEnvironment, FetchEnvironmentBase, FetchUserAgent,
   HTTPAuthentication, AuthenticationCredentials, AuthenticationEntry,

@@ -247,6 +247,11 @@ explicit throwing dependencies. [Printing](browlet/scripting/ROADMAP.md#html-use
 now supplies Window.print(), deferred Document tasks, and synchronous frame-tree
 notifications. Print-state capture, print media/layout, preview/PDF, and printer UI
 remain explicit dependencies; the full parser task ordering stays with Ged.
+The next [Navigator slice](browlet/navigator/ROADMAP.md#client-identification)
+supplies §8.10.1.1's shared Window/worker identification, using Fetch's existing
+User-Agent selector and the approved Chrome compatibility profile. Language
+preferences are next; BiDi sessions and worker service transport remain with their
+existing owners.
 Source/deferred imports and the HTML Wasm parser remain explicit boundaries.
 Later host-hook algorithms must be connected before judging
 the complete model; the uncertain cross-realm observer test is skipped.

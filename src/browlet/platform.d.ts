@@ -3009,6 +3009,18 @@ export interface Navigator {
   readonly permissions: Permissions;
   readonly clipboard: Clipboard;
   readonly maxTouchPoints: number;
+  readonly appCodeName: string;
+  readonly appName: string;
+  readonly appVersion: string;
+  readonly platform: string;
+  readonly product: string;
+  readonly productSub: string;
+  readonly userAgent: string;
+  readonly vendor: string;
+  readonly vendorSub: string;
+  readonly language: string;
+  readonly languages: ReadonlyArray<string>;
+  readonly onLine: boolean;
   readonly storage: StorageManager;
 }
 
@@ -3018,7 +3030,15 @@ export interface NavigatorConstructor {
 }
 
 export interface WorkerNavigator {
-
+  readonly appCodeName: string;
+  readonly appName: string;
+  readonly appVersion: string;
+  readonly platform: string;
+  readonly product: string;
+  readonly userAgent: string;
+  readonly language: string;
+  readonly languages: ReadonlyArray<string>;
+  readonly onLine: boolean;
 }
 
 export interface WorkerNavigatorConstructor {

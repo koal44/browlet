@@ -18,7 +18,7 @@ export interface PlatformTypeOptions {
   proxyInterfaces?: Record<string, string | ProxyTypeOptions>;
   /** Writable data properties defined outside Web IDL, keyed by namespace and property name. Values are TypeScript types. */
   namespaceProperties?: Record<string, Record<string, string>>;
-  /** Select one exposure profile; omission describes all declared members and conditional facilities. */
+  /** Select one exposure profile; omission includes conditional facilities but still respects each owner's global scope. */
   exposure?: Pick<WebIDLRealm, 'globalNames' | 'secureContext' | 'crossOriginIsolated'>;
 }
 
@@ -59,6 +59,8 @@ class PlatformTypeGenerator {
   #dictionaryOutputs = new Map<AssembledDictionary, string>();
   /** TypeScript refinements recovered from declarations only for this generation run. */
   #typeRefinements = new Map<IDLType, string>();
+  /** Global-name aliases that can occur together, such as Worker and DedicatedWorker. */
+  #globalNameSets: Set<string>[] = [];
 
   constructor(assembly: DefinitionAssembly, options: PlatformTypeOptions) {
     this.#assembly = assembly;
@@ -71,6 +73,7 @@ class PlatformTypeGenerator {
       for (const name of collection.keys()) this.#names.set(name, this.#reserve(name));
     }
     for (const assembled of assembly.interfaces.values()) {
+      if (assembled.isGlobal()) this.#globalNameSets.push(getGlobalNames(assembled));
       const namespace = assembled.getLegacyNamespace();
       const prefix = namespace ? `${this.#name(namespace)}.` : '';
       this.#names.set(assembled.name, prefix + this.#name(assembled.name));
@@ -164,7 +167,7 @@ class PlatformTypeGenerator {
     const ownNames = new Set<string>();
     let collection: IDLIterable | IDLAsyncIterable | IDLMaplike | IDLSetlike | undefined;
     for (const entry of assembled.members) {
-      if (!this.#exposed(assembled.primary) || !this.#exposed(entry.source) || !this.#exposed(entry.member)) continue;
+      if (!this.#exposed(assembled.primary, entry.source, entry.member)) continue;
       const member = entry.member;
       if ('static' in member && member.static) continue;
       if (member.kind === 'constructor') continue;
@@ -184,7 +187,7 @@ class PlatformTypeGenerator {
       const ancestorMembers = new Map<string, string[]>();
       for (const entry of ancestor.members) {
         const member = entry.member;
-        if (!this.#exposed(ancestor.primary) || !this.#exposed(entry.source) || !this.#exposed(member)) continue;
+        if (!this.#exposed(ancestor.primary, entry.source, member)) continue;
         if (ancestor !== assembled) {
           if ('name' in member && member.name && !('static' in member && member.static)) {
             const signatures = ancestorMembers.get(member.name) ?? [];
@@ -223,7 +226,7 @@ class PlatformTypeGenerator {
       const objectMembers = [`readonly prototype: ${instance};`, `[Symbol.hasInstance](value: unknown): value is ${instance};`];
       for (const entry of assembled.members) {
         const member = entry.member;
-        if (!this.#exposed(assembled.primary) || !this.#exposed(entry.source) || !this.#exposed(member)) continue;
+        if (!this.#exposed(assembled.primary, entry.source, member)) continue;
         if (member.kind === 'constructor') {
           const constructorParameters = member.typeParameters ? (parameters ?? []).concat(member.typeParameters) : parameters;
           objectMembers.push(`new ${this.#typeParameters(constructorParameters)}(${this.#arguments(member.arguments, 'input')}): ${name}${typeArguments(parameters)};`);
@@ -238,7 +241,7 @@ class PlatformTypeGenerator {
         const own = new Map<string, string[]>();
         for (const entry of ancestor.members) {
           const member = entry.member;
-          if (!this.#exposed(entry.source) || !this.#exposed(member)) continue;
+          if (!this.#exposed(ancestor.primary, entry.source, member)) continue;
           if (member.kind !== 'constant' && !('static' in member && member.static)) continue;
           if (!('name' in member) || !member.name) continue;
           const lines = own.get(member.name) ?? [];
@@ -360,7 +363,7 @@ class PlatformTypeGenerator {
     const members: string[] = [];
     const types: string[] = [];
     for (const entry of assembled.members) {
-      if (this.#exposed(assembled.primary) && this.#exposed(entry.source) && this.#exposed(entry.member)) {
+      if (this.#exposed(assembled.primary, entry.source, entry.member)) {
         members.push(...this.#member(entry.member));
       }
     }
@@ -380,13 +383,7 @@ class PlatformTypeGenerator {
   }
 
   #globals(global: AssembledInterface): string[] {
-    const globalNames = new Set<string>();
-    for (const attribute of global.primary.extendedAttributes ?? []) {
-      if (attribute.kind === 'identifier' && attribute.name === 'Global') globalNames.add(attribute.value);
-      if (attribute.kind === 'identifier-list' && attribute.name === 'Global') {
-        for (const name of attribute.values) globalNames.add(name);
-      }
-    }
+    const globalNames = getGlobalNames(global);
     const profile = this.#options.exposure ?? { globalNames, secureContext: true, crossOriginIsolated: true };
     const members: string[] = [];
     for (const assembled of this.#assembly.interfaces.values()) {
@@ -530,8 +527,16 @@ class PlatformTypeGenerator {
     }).join(', ')}>`;
   }
 
-  #exposed(construct: Parameters<typeof matchesExposure>[0]): boolean {
-    return !this.#options.exposure || matchesExposure(construct, this.#options.exposure);
+  #exposed(...constructs: Parameters<typeof matchesExposure>[0][]): boolean {
+    const profile = this.#options.exposure;
+    if (profile) return constructs.every((construct) => matchesExposure(construct, profile));
+    // With no selected realm, include conditionally available features, but omit
+    // contributions that cannot share any global with their including interface.
+    const scopes = constructs.flatMap(({ exposed }) =>
+      exposed === undefined || exposed === '*' ? [] : [typeof exposed === 'string' ? [exposed] : exposed]);
+    if (scopes.length < 2) return true;
+    return scopes[0]!.some((name) => scopes.every((scope) => scope.includes(name))) ||
+      this.#globalNameSets.some((names) => scopes.every((scope) => scope.some((name) => names.has(name))));
   }
 
   #interface(name: string, members: string[], parent?: string): string {
@@ -555,6 +560,18 @@ class PlatformTypeGenerator {
 }
 
 type Direction = 'input' | 'output';
+
+/** Names that identify one declared global, including its aliases. */
+function getGlobalNames(global: AssembledInterface): Set<string> {
+  const names = new Set<string>();
+  for (const attribute of global.primary.extendedAttributes ?? []) {
+    if (attribute.kind === 'identifier' && attribute.name === 'Global') names.add(attribute.value);
+    if (attribute.kind === 'identifier-list' && attribute.name === 'Global') {
+      for (const name of attribute.values) names.add(name);
+    }
+  }
+  return names;
+}
 
 /** Combine signatures differing only by one trailing argument that already accepts undefined. */
 function combineOptionalOverloads(members: string[]): string[] {

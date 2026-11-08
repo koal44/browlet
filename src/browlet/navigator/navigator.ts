@@ -5,17 +5,45 @@ import type { StorageManagerImpl } from '../../storage/index';
 import { ClipboardImpl } from '../interaction/clipboard/index';
 import type { BrowletEnvironment } from '../environment/index';
 
+import { NavigatorIDMixin } from './identification';
+import { NavigatorLanguageMixin } from './language';
+import { NavigatorOnLineMixin } from './online';
+
 /** Stable Window navigator identity; independent specifications contribute its capabilities. */
 // https://html.spec.whatwg.org/multipage/system-state.html#the-navigator-object
-// TODO(HTML §8.10): Identification, language, online state, protocol handlers, cookies, and plugins.
+// TODO(HTML §8.10): Protocol handlers, cookies, and plugins.
 export class NavigatorImpl {
   /** Relevant settings, shared with this Navigator's owning Window. */
   env: BrowletEnvironment;
+  /** Identification behavior composed with this Navigator's relevant settings. */
+  #navigatorIDMixin: NavigatorIDMixin;
+  /** Published language snapshot and its global-task notifications. */
+  #navigatorLanguageMixin: NavigatorLanguageMixin;
+  /** Live connectivity getter and queued transition notifications. */
+  #navigatorOnLineMixin: NavigatorOnLineMixin;
   #clipboard: ClipboardImpl | null = null;
 
   constructor(env: BrowletEnvironment) {
     this.env = env;
+    this.#navigatorIDMixin = new NavigatorIDMixin(env);
+    this.#navigatorLanguageMixin = new NavigatorLanguageMixin(env);
+    this.#navigatorOnLineMixin = new NavigatorOnLineMixin(env);
   }
+
+  get appCodeName(): string { return this.#navigatorIDMixin.appCodeName; }
+  get appName(): string { return this.#navigatorIDMixin.appName; }
+  get appVersion(): string { return this.#navigatorIDMixin.appVersion; }
+  get platform(): string { return this.#navigatorIDMixin.platform; }
+  get product(): string { return this.#navigatorIDMixin.product; }
+  get productSub(): string { return this.#navigatorIDMixin.productSub; }
+  get userAgent(): string { return this.#navigatorIDMixin.userAgent; }
+  get vendor(): string { return this.#navigatorIDMixin.vendor; }
+  get vendorSub(): string { return this.#navigatorIDMixin.vendorSub; }
+
+  get language(): string { return this.#navigatorLanguageMixin.language; }
+  get languages(): readonly string[] { return this.#navigatorLanguageMixin.languages; }
+
+  get onLine(): boolean { return this.#navigatorOnLineMixin.onLine; }
 
   /** Stable Clipboard object belonging to this Navigator's Window environment. */
   // https://w3c.github.io/clipboard-apis/#h-navigator-clipboard
@@ -40,6 +68,16 @@ export class NavigatorImpl {
   get maxTouchPoints(): number {
     const userAgent = this.env.userAgent;
     return userAgent.webDriverBiDiEmulatedMaxTouchPoints(this.env) ?? userAgent.getMaxTouchPoints();
+  }
+
+  /** Queue selected language tags before their preference/emulation source changes. */
+  queueLanguageChange(tags: readonly [string, ...string[]], emulationUpdated = false): void {
+    this.#navigatorLanguageMixin.queueLanguageChange(tags, emulationUpdated);
+  }
+
+  /** Queue a transition after the producer changes the connectivity/emulation source. */
+  queueOnlineStateChange(wasOnline: boolean): void {
+    this.#navigatorOnLineMixin.queueOnlineStateChange(wasOnline);
   }
 }
 

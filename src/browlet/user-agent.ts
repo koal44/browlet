@@ -36,6 +36,7 @@ import { PolicyContainer, HSTSStore, EmbedderPolicy, type SandboxingFlagSet } fr
 import type { IntersectionObserverMargin } from './dom/intersection-observer/index';
 import type { DocumentImpl, ElementImpl } from './dom/nodes/index';
 import type { PerformanceNavigationTimingImpl, PerformanceTimingConfidenceValue } from './performance/index';
+import type { NavigatorImpl, WorkerNavigatorImpl } from './navigator/index';
 import type { BroadcastChannelImpl } from './communication/index';
 import type { StorageImpl } from './storage/index';
 import type { SourceSnapshotParams } from './browsing/navigation/state/index';
@@ -99,8 +100,11 @@ export class UserAgent implements
   /** Default identification header value, shared by this user agent's environments. */
   // https://fetch.spec.whatwg.org/#default-user-agent-value
   defaultUserAgentValue = 'Mozilla/5.0 (compatible; Browlet)';
-  /** Configured language preference; null leaves Accept-Language absent unless supplied or emulated. */
-  defaultAcceptLanguage: string | null = null;
+  /** Common compatibility platform permitted by HTML; no physical OS or architecture is disclosed. */
+  // https://html.spec.whatwg.org/multipage/system-state.html#dom-navigator-platform
+  navigatorPlatform = 'Win32';
+  /** Language preference header; explicit configuration may still suppress it with null. */
+  defaultAcceptLanguage: string | null = 'en-US';
   /** Wire connections outlive individual documents and are closed by their browser owner. */
   connectionPool = new ConnectionPool();
   /** HTTP wire operations using the browser's shared connection pool. */
@@ -176,6 +180,7 @@ export class UserAgent implements
   maxReportingEndpointFailures = 5;
   /** Whether network-dependent work should treat the browser as offline. */
   // PROVISIONAL: assumes connectivity until explicitly changed; host detection is not wired.
+  // Use setOffline() for live changes so affected globals receive their transition events.
   assumeNoInternetConnectivity = false;
   /** Schemes whose tuple origins come from an authenticated protocol implementation. */
   // https://w3c.github.io/webappsec-secure-contexts/#packaged-applications
@@ -196,6 +201,8 @@ export class UserAgent implements
   #systemClipboard: SystemClipboard | null = null;
   /** Suppress another print operation while print events or the print host are running. */
   #printing = false;
+  /** Ordered valid BCP 47 tags; the default is a deliberate plausible-language policy. */
+  #preferredLanguages: readonly [string, ...string[]] = Object.freeze(['en-US']);
 
   get sandbox(): BrowletEnvironment {
     return this.#sandbox ??= createSandboxEnvironment(this);
@@ -216,6 +223,9 @@ export class UserAgent implements
   get systemClipboard(): SystemClipboard {
     return this.#systemClipboard ??= new SystemClipboard();
   }
+
+  /** Preferences for new globals; existing navigators publish changes through their queued tasks. */
+  get preferredLanguages(): readonly [string, ...string[]] { return this.#preferredLanguages; }
 
   /** Shared-worker extension equals the user agent's Service Worker no-client lifetime policy. */
   // https://html.spec.whatwg.org/multipage/workers.html#extended-lifetime-shared-worker-timeout
@@ -248,6 +258,40 @@ export class UserAgent implements
     // characteristics are forbidden. There is no host instrumentation for this yet; do not infer
     // high confidence from its absence or substitute the current conditions when the getter runs.
     return null;
+  }
+
+  /**
+   * Accept ordered, valid BCP 47 tags and all affected Window/worker navigators.
+   * The caller owns tag validation and complete recipient discovery/transport.
+   * Navigator visibility changes in each global's task; future Fetches use the
+   * new default header immediately, unless a request or emulation overrides it.
+   */
+  // https://html.spec.whatwg.org/multipage/system-state.html#language-preferences
+  // TODO(Host preferences/worker transport): supply the full recipient list when
+  // OS preferences change, including workers outside browsing-context groups.
+  setPreferredLanguages(tags: readonly [string, ...string[]], navigators: Iterable<NavigatorImpl | WorkerNavigatorImpl>): void {
+    const languages = Object.freeze<[string, ...string[]]>([...tags]);
+    for (const navigator of navigators) {
+      const emulatedLanguage = this.webDriverBiDiEmulatedLanguage(navigator.env);
+      navigator.queueLanguageChange(emulatedLanguage === null ? languages : [emulatedLanguage]);
+    }
+    this.#preferredLanguages = languages;
+    this.defaultAcceptLanguage = languages.join(',');
+  }
+
+  /**
+   * Update the browser's offline assumption and notify the supplied Window/worker
+   * navigators. The caller supplies all recipients; each environment's emulation
+   * can independently keep its effective state offline.
+   */
+  // https://html.spec.whatwg.org/multipage/system-state.html#navigator.online
+  // TODO(Host connectivity/worker transport): supply actual host observations and
+  // the complete recipient list, including workers outside browsing-context groups.
+  setOffline(offline: boolean, navigators: Iterable<NavigatorImpl | WorkerNavigatorImpl>): void {
+    const previousStates = new Map<NavigatorImpl | WorkerNavigatorImpl, boolean>();
+    for (const navigator of navigators) previousStates.set(navigator, navigator.onLine);
+    this.assumeNoInternetConnectivity = offline;
+    for (const [navigator, wasOnline] of previousStates) navigator.queueOnlineStateChange(wasOnline);
   }
 
   /** Recheck live results after a decision or feature-specific constraint changes. */
@@ -770,6 +814,8 @@ export class UserAgent implements
   // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-network-is-offline
   webDriverBiDiNetworkIsOffline(_env: BrowletEnvironment): boolean {
     // PROVISIONAL: no BiDi sessions; select scoped network conditions when implemented.
+    // TODO(BiDi network updates): capture each affected Navigator's onLine value
+    // before changing emulation, then call queueOnlineStateChange(previousValue).
     return false;
   }
 
@@ -784,6 +830,9 @@ export class UserAgent implements
   // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-emulated-language
   webDriverBiDiEmulatedLanguage(_env: BrowletEnvironment): string | null {
     // PROVISIONAL: no BiDi sessions; select scoped language emulation when implemented.
+    // TODO(BiDi language updates): call each affected Navigator's queueLanguageChange()
+    // with its new effective tags and emulationUpdated=true before changing the
+    // selector's result. Removing an override restores preferredLanguages.
     return null;
   }
 

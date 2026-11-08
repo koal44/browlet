@@ -715,6 +715,48 @@ describe('platform declaration generation', () => {
     `)).toEqual([]);
   });
 
+  it('excludes mixin members whose exposure cannot overlap their including interface', () => {
+    const assembly = new DefinitionAssembly([
+      defineInterface({ name: 'PageGlobal', exposed: 'Window', ...xattr(['Global', 'Window']), members: [] }),
+      defineInterface({
+        name: 'WorkerGlobal', exposed: 'Worker', ...xattr(['Global', ['Worker', 'DedicatedWorker']]), members: [],
+      }),
+      defineInterface({ name: 'PageNavigator', exposed: 'Window', members: [] }),
+      defineInterface({ name: 'WorkerNavigator', exposed: 'Worker', members: [] }),
+      defineInterfaceMixin({
+        name: 'Identification', members: [
+          roAttr('shared', idlType.DOMString),
+          roAttr('windowOnly', idlType.DOMString, { exposed: 'Window' }),
+          roAttr('dedicatedOnly', idlType.DOMString, { exposed: 'DedicatedWorker' }),
+          roAttr('secure', idlType.boolean, xattr('SecureContext')),
+        ],
+      }),
+      definePartialInterfaceMixin({
+        name: 'Identification', exposed: 'Window', members: [roAttr('windowPartial', idlType.boolean)],
+      }),
+      defineIncludes({ interface: 'PageNavigator', mixin: 'Identification' }),
+      defineIncludes({ interface: 'WorkerNavigator', mixin: 'Identification' }),
+    ]);
+    const source = generatePlatformTypes(assembly);
+    expect(compile(source, `
+      import type { PageNavigator, WorkerNavigator } from './platform';
+      declare const page: PageNavigator;
+      declare const worker: WorkerNavigator;
+      const shared: string[] = [page.shared, worker.shared];
+      const windowOnly: string = page.windowOnly;
+      const windowPartial: boolean = page.windowPartial;
+      const dedicatedOnly: string = worker.dedicatedOnly;
+      // Unrestricted generation still describes conditional secure-context members.
+      const secure: boolean[] = [page.secure, worker.secure];
+      // @ts-expect-error Window-only mixin members cannot be installed on WorkerNavigator.
+      worker.windowOnly;
+      // @ts-expect-error The contributing partial's exposure matters too.
+      worker.windowPartial;
+      // @ts-expect-error Worker-only members cannot be installed on PageNavigator.
+      page.dedicatedOnly;
+    `)).toEqual([]);
+  });
+
   it('uses exposure, partials, aliases, and namespaces to describe installed globals', () => {
     const assembly = new DefinitionAssembly([
       defineInterface({ name: 'Host', exposed: 'Window', ...xattr(['Global', 'Window']), members: [] }),

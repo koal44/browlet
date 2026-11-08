@@ -40,6 +40,18 @@ export class Browlet {
       }
       this.#userAgent.defaultUserAgentValue = config.userAgent;
     }
+    if (config.platform !== undefined) {
+      if (typeof config.platform !== 'string') {
+        // eslint-disable-next-line no-restricted-globals -- This is validation of the Node-facing host API.
+        throw new TypeError('platform must be a string');
+      }
+      this.#userAgent.navigatorPlatform = config.platform;
+    }
+    if (config.languages !== undefined) {
+      validateLanguageConfig(config.languages);
+      // No globals exist yet, so configuration needs no languagechange recipients.
+      this.#userAgent.setPreferredLanguages(config.languages, []);
+    }
     this.#userAgent.reportDeliveryEnabled = config.reporting ?? true;
     if (config.authentication) this.#userAgent.httpAuthentication.onPrompt = config.authentication;
     if (config.permissionPrompt) this.#userAgent.onPermissionPrompt = config.permissionPrompt;
@@ -201,6 +213,13 @@ export type BrowletConfig = {
   systemColors?: SystemColorPalette;
   /** Default User-Agent header value; defaults to Mozilla/5.0 (compatible; Browlet). */
   userAgent?: string;
+  /** Navigator compatibility platform, independent of the host OS. Defaults to Win32. */
+  platform?: string;
+  /**
+   * Ordered, nonempty list of valid BCP 47 tags for Navigator and Accept-Language.
+   * Defaults to ["en-US"]. Copied without canonicalization; only basic tag shape is validated.
+   */
+  languages?: readonly string[];
   /** Allow outbound reports; false retains local ReportingObservers. Defaults to true. */
   reporting?: boolean;
   /** Answer HTTP authentication challenges; omitted prompts are declined. */
@@ -210,3 +229,23 @@ export type BrowletConfig = {
   /** Select from feature-provided options; omitted choosers deny selection. */
   permissionChooser?: PermissionChooser;
 };
+
+/** Check host-input shape; callers remain responsible for full BCP 47 validity. */
+function validateLanguageConfig(languages: readonly string[]): asserts languages is readonly [string, ...string[]] {
+  if (!Array.isArray(languages) || languages.length === 0) {
+    // eslint-disable-next-line no-restricted-globals -- This is validation of the Node-facing host API.
+    throw new TypeError('languages must be a nonempty array of language tags');
+  }
+  for (const language of languages) {
+    if (typeof language !== 'string' || !languageTagShapePattern.test(language) || !isHeaderValue(language)) {
+      // eslint-disable-next-line no-restricted-globals -- This is validation of the Node-facing host API.
+      throw new TypeError('languages must contain nonempty hyphen-separated ASCII language tags');
+    }
+  }
+}
+
+// RFC 4647 §2.1's basic language-range shape, excluding wildcard selection.
+// This admits BCP 47 private-use/grandfathered tags without treating Intl's locale
+// parser as a complete validator. Registry checks and canonicalization are not performed.
+// https://www.rfc-editor.org/rfc/rfc4647.html#section-2.1
+const languageTagShapePattern = /^[a-z]{1,8}(?:-[a-z0-9]{1,8})*$/i;
