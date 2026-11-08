@@ -4,10 +4,13 @@ import { Browlet } from '../../../../src/browlet/browlet';
 import { CompositionEventImpl } from '../../../../src/browlet/interaction/events/index';
 import type { ElementImpl } from '../../../../src/browlet/dom/nodes/index';
 import { getRelevantRealm, unwrap } from '../../../support/browlet-binding';
+import { useFixture } from '../../../support/fixture';
 
 describe('UI Events: CompositionEvent', () => {
+  const prepared = useFixture(() => new Browlet({ route: () => '' }));
+
   it.each(['compositionstart', 'compositionupdate', 'compositionend'])('constructs %s with dictionary defaults', async (type) => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate((type) => {
       const event = new CompositionEvent(type);
       return {
@@ -25,7 +28,7 @@ describe('UI Events: CompositionEvent', () => {
   });
 
   it('converts inherited dictionary members before data', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const reads: string[] = [];
       const values = {
@@ -46,7 +49,7 @@ describe('UI Events: CompositionEvent', () => {
   });
 
   it('preserves DOMString text without Unicode normalization or scalar-value replacement', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       return [undefined, null, '', 5, false, 'e\u0301', '\ud800', '\udc00', '\ud83d\ude42'].map((data) =>
         (Reflect.construct(CompositionEvent, ['compositionupdate', { data }]) as CompositionEvent).data);
@@ -54,7 +57,7 @@ describe('UI Events: CompositionEvent', () => {
   });
 
   it('propagates data conversion failures without replacing the exception', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const sentinel = new Error('data conversion');
       const data = { toString() { throw sentinel; } };
@@ -64,7 +67,7 @@ describe('UI Events: CompositionEvent', () => {
   });
 
   it('checks constructor call shape and invalid dictionary inputs in the constructor realm', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const invalid = [[], [Symbol()], ['compositionstart', 1], ['compositionstart', { data: Symbol() }],
         ['compositionstart', { view: {} }]].map((args) => {
@@ -79,7 +82,7 @@ describe('UI Events: CompositionEvent', () => {
   });
 
   it('checks getter and initializer receivers before converting arguments', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const prototype = browser.window.CompositionEvent.prototype;
     const descriptor = Object.getOwnPropertyDescriptor(prototype, 'data')!;
     expect(descriptor).toMatchObject({ enumerable: true, configurable: true, set: undefined });
@@ -94,22 +97,8 @@ describe('UI Events: CompositionEvent', () => {
     }
   });
 
-  it('preserves event ownership and supplied view across borrowed getters and initialization', () => {
-    const owner = new Browlet({ route: () => '' });
-    const other = new Browlet({ route: () => '' });
-    const event = new owner.window.CompositionEvent('compositionstart', { data: 'old', view: other.window });
-    const data = Object.getOwnPropertyDescriptor(other.window.CompositionEvent.prototype, 'data')!;
-    const view = Object.getOwnPropertyDescriptor(other.window.UIEvent.prototype, 'view')!;
-    expect(data.get!.call(event)).toBe('old');
-    expect(view.get!.call(event)).toBe(other.window);
-    other.window.CompositionEvent.prototype.initCompositionEvent.call(event, 'after', false, true, owner.window, 'new');
-    expect(event.data).toBe('new');
-    expect(event.view).toBe(owner.window);
-    expect(getRelevantRealm(event)).toBe(getRelevantRealm(owner.window));
-  });
-
   it('supports author subclasses', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       class Derived extends CompositionEvent {}
       const event = new Derived('compositionupdate', { data: 'text' });
@@ -119,7 +108,7 @@ describe('UI Events: CompositionEvent', () => {
   });
 
   it('creates an uninitialized CompositionEvent using DOM\'s singular legacy name', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = document.createEvent('cOmPoSiTiOnEvEnT') as CompositionEvent;
       let uninitialized = false;
@@ -135,7 +124,7 @@ describe('UI Events: CompositionEvent', () => {
   });
 
   it('uses the specified legacy DOMString default and preserves explicitly supplied text', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = new CompositionEvent('compositionstart', { data: 'old' });
       return [[], [undefined], [null], [''], ['e\u0301'], ['\ud800'], [5]].map((args) => {
@@ -147,7 +136,7 @@ describe('UI Events: CompositionEvent', () => {
   });
 
   it('resets DOM/UI fields and data without changing the timestamp', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = new CompositionEvent('compositionstart', {
         data: 'old', view: window, detail: 7, bubbles: true, cancelable: true, composed: true,
@@ -172,7 +161,7 @@ describe('UI Events: CompositionEvent', () => {
   });
 
   it('converts initializer arguments before the dispatch guard without changing the active event', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const reads: string[] = [];
       const event = new CompositionEvent('compositionupdate', { data: 'old', detail: 5 });
@@ -189,7 +178,7 @@ describe('UI Events: CompositionEvent', () => {
   });
 
   it('retains composition text through inherited initializers', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = new CompositionEvent('compositionupdate', { data: 'text' });
       event.initUIEvent('after', true, true, window, 5);
@@ -199,7 +188,7 @@ describe('UI Events: CompositionEvent', () => {
   });
 
   it('delivers synthetic listeners and cancellation without starting, ending, or editing a composition', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const element = document.createElement('div');
       element.setAttribute('contenteditable', 'true');
@@ -222,7 +211,7 @@ describe('UI Events: CompositionEvent', () => {
   });
 
   it('delivers host-created composition notifications through the existing factory', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     await browser.evaluate(() => {
       document.body.addEventListener('compositionupdate', (event) => {
         Reflect.set(window, 'received', [event instanceof CompositionEvent, event.data, event.view === window,
@@ -237,5 +226,23 @@ describe('UI Events: CompositionEvent', () => {
     })).toBe(true);
     expect(await browser.evaluate(() => Reflect.get(window, 'received') as unknown))
       .toEqual([true, 'text', true, true, true, true, false, true]);
+  });
+});
+
+describe('UI Events: CompositionEvent across environments', () => {
+  const prepared = useFixture(() => [new Browlet({ route: () => '' }), new Browlet({ route: () => '' })] as const);
+
+  it('preserves event ownership and supplied view across borrowed getters and initialization', () => {
+    const owner = prepared()[0];
+    const other = prepared()[1];
+    const event = new owner.window.CompositionEvent('compositionstart', { data: 'old', view: other.window });
+    const data = Object.getOwnPropertyDescriptor(other.window.CompositionEvent.prototype, 'data')!;
+    const view = Object.getOwnPropertyDescriptor(other.window.UIEvent.prototype, 'view')!;
+    expect(data.get!.call(event)).toBe('old');
+    expect(view.get!.call(event)).toBe(other.window);
+    other.window.CompositionEvent.prototype.initCompositionEvent.call(event, 'after', false, true, owner.window, 'new');
+    expect(event.data).toBe('new');
+    expect(event.view).toBe(owner.window);
+    expect(getRelevantRealm(event)).toBe(getRelevantRealm(owner.window));
   });
 });

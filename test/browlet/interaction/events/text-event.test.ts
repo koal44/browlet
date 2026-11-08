@@ -5,10 +5,13 @@ import { TextEventImpl } from '../../../../src/browlet/interaction/events/index'
 import type { ElementImpl } from '../../../../src/browlet/dom/nodes/index';
 import type { TextEvent as TextEventPlatform } from '../../../../src/browlet/platform';
 import { getRelevantRealm, unwrap } from '../../../support/browlet-binding';
+import { useFixture } from '../../../support/fixture';
 
 describe('UI Events §8.4: TextEvent', () => {
+  const prepared = useFixture(() => new Browlet({ route: () => '' }));
+
   it('exposes a nonconstructible interface and creates uninitialized legacy events', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = document.createEvent('TextEvent');
       const errors: string[] = [];
@@ -33,19 +36,8 @@ describe('UI Events §8.4: TextEvent', () => {
     });
   });
 
-  it('matches only the singular factory name case-insensitively and retains the Document realm', () => {
-    const owner = new Browlet({ route: () => '' });
-    const other = new Browlet({ route: () => '' });
-    for (const name of ['TextEvent', 'textevent', 'TEXTEVENT']) {
-      const event = other.document.createEvent.call(owner.document, name);
-      expect(event).toBeInstanceOf(owner.window.TextEvent);
-      expect(getRelevantRealm(event)).toBe(getRelevantRealm(owner.document));
-    }
-    expect(() => owner.document.createEvent('TextEvents')).toThrow(expect.objectContaining({ name: 'NotSupportedError' }));
-  });
-
   it('uses the literal undefined default and preserves DOMString text', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = document.createEvent('TextEvent');
       return [[], [undefined], [null], [''], [5], [false], ['e\u0301'], ['\ud800'], ['\udc00'], ['\ud83d\ude42']]
@@ -59,7 +51,7 @@ describe('UI Events §8.4: TextEvent', () => {
   });
 
   it('converts all arguments before mutating the event and propagates conversion failures', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = document.createEvent('TextEvent');
       const reads: string[] = [];
@@ -84,7 +76,7 @@ describe('UI Events §8.4: TextEvent', () => {
   });
 
   it('checks getter and initializer receivers before converting arguments', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const prototype = browser.window.TextEvent.prototype;
     const descriptor = Object.getOwnPropertyDescriptor(prototype, 'data')!;
     expect(descriptor).toMatchObject({ enumerable: true, configurable: true, set: undefined });
@@ -100,20 +92,8 @@ describe('UI Events §8.4: TextEvent', () => {
     }
   });
 
-  it('preserves event ownership and supplied view across borrowed getters and initialization', () => {
-    const owner = new Browlet({ route: () => '' });
-    const other = new Browlet({ route: () => '' });
-    const event = owner.document.createEvent('TextEvent') as TextEventPlatform;
-    other.window.TextEvent.prototype.initTextEvent.call(event, 'textInput', true, true, other.window, 'text');
-    const data = Object.getOwnPropertyDescriptor(other.window.TextEvent.prototype, 'data')!;
-    const view = Object.getOwnPropertyDescriptor(other.window.UIEvent.prototype, 'view')!;
-    expect(data.get!.call(event)).toBe('text');
-    expect(view.get!.call(event)).toBe(other.window);
-    expect(getRelevantRealm(event)).toBe(getRelevantRealm(owner.window));
-  });
-
   it('resets event state and detail without replacing the timestamp', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = document.createEvent('TextEvent');
       event.initTextEvent('textInput', true, true, window, 'old');
@@ -133,7 +113,7 @@ describe('UI Events §8.4: TextEvent', () => {
   });
 
   it('converts initializer arguments before the dispatch guard without changing the active event', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = document.createEvent('TextEvent');
       event.initTextEvent('textInput', true, true, window, 'old');
@@ -152,7 +132,7 @@ describe('UI Events §8.4: TextEvent', () => {
   });
 
   it('retains text through inherited initializers', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = document.createEvent('TextEvent');
       event.initTextEvent('textInput', false, false, null, 'retained');
@@ -163,7 +143,7 @@ describe('UI Events §8.4: TextEvent', () => {
   });
 
   it('dispatches synthetic events synchronously without editing or producing other input events', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const element = document.createElement('div');
       element.setAttribute('contenteditable', 'true');
@@ -189,7 +169,7 @@ describe('UI Events §8.4: TextEvent', () => {
   });
 
   it('projects internally created events and retains composed while reinitialization clears trust', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     await browser.evaluate(() => {
       document.body.addEventListener('textInput', (event) => {
         const text = event as TextEvent;
@@ -212,5 +192,32 @@ describe('UI Events §8.4: TextEvent', () => {
       return [Reflect.get(window, 'received') as unknown,
         event.data, event.composed, event.isTrusted, event.target, event.defaultPrevented];
     })).toEqual([[true, 'text', true, true, true, true, true, true], 'undefined', true, false, null, false]);
+  });
+});
+
+describe('UI Events §8.4: TextEvent across environments', () => {
+  const prepared = useFixture(() => [new Browlet({ route: () => '' }), new Browlet({ route: () => '' })] as const);
+
+  it('matches only the singular factory name case-insensitively and retains the Document realm', () => {
+    const owner = prepared()[0];
+    const other = prepared()[1];
+    for (const name of ['TextEvent', 'textevent', 'TEXTEVENT']) {
+      const event = other.document.createEvent.call(owner.document, name);
+      expect(event).toBeInstanceOf(owner.window.TextEvent);
+      expect(getRelevantRealm(event)).toBe(getRelevantRealm(owner.document));
+    }
+    expect(() => owner.document.createEvent('TextEvents')).toThrow(expect.objectContaining({ name: 'NotSupportedError' }));
+  });
+
+  it('preserves event ownership and supplied view across borrowed getters and initialization', () => {
+    const owner = prepared()[0];
+    const other = prepared()[1];
+    const event = owner.document.createEvent('TextEvent') as TextEventPlatform;
+    other.window.TextEvent.prototype.initTextEvent.call(event, 'textInput', true, true, other.window, 'text');
+    const data = Object.getOwnPropertyDescriptor(other.window.TextEvent.prototype, 'data')!;
+    const view = Object.getOwnPropertyDescriptor(other.window.UIEvent.prototype, 'view')!;
+    expect(data.get!.call(event)).toBe('text');
+    expect(view.get!.call(event)).toBe(other.window);
+    expect(getRelevantRealm(event)).toBe(getRelevantRealm(owner.window));
   });
 });

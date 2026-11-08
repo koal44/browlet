@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { setImmediate as nextTurn } from 'node:timers/promises';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { internalType } from '../../../src/infra/promises';
 import { Browlet } from '../../../src/browlet/browlet';
@@ -73,7 +74,7 @@ describe('Navigable HTML response loading', () => {
       document.env.queueTask('navigation-and-traversal', () => {
         document.updateForHistoryStepApplication(target, false, 2, 1, 'push', [previous, target], previous);
       });
-      await expect.poll(() => document.readyState).toBe('complete');
+      await waitForLoad(document);
       expect(script).toHaveBeenCalledOnce();
       expect(document.querySelector('p')!.textContent).toBe('after');
     }
@@ -122,7 +123,7 @@ describe('Navigable HTML response loading', () => {
       },
     }, env.userAgent.sandbox);
     const document = await loading.promise;
-    await expect.poll(() => document.readyState).toBe('complete');
+    await waitForLoad(document);
     await expect.poll(() => document.styleSheets.length).toBe(2);
     expect([...document.styleSheets].map((sheet) => [sheet.href, sheet.ownerNode])).toEqual([
       [`${origin}/first.css`, null], [`${origin}/second.css`, null],
@@ -193,7 +194,7 @@ describe('Navigable HTML response loading', () => {
       },
     }, env.userAgent.sandbox);
     const document = await loading.promise;
-    await expect.poll(() => document.readyState).toBe('complete');
+    await waitForLoad(document);
     const text = document.body?.firstChild?.firstChild;
     expect(text?.isText() ? text.data : undefined).toBe('café');
     const inherited = document.querySelector('p')!;
@@ -230,3 +231,16 @@ describe('Navigable HTML response loading', () => {
     expect(window.performance.getEntriesByType('resource')).toEqual([]);
   });
 });
+
+async function waitForLoad(document: DocumentImpl): Promise<void> {
+  if (document.readyState !== 'complete') {
+    const window = document.env.realm.globalObject as Window;
+    await new Promise<void>((resolve) => {
+      window.addEventListener('load', () => resolve(), { once: true });
+    });
+  }
+  // Callback cleanup can run Promise reactions before load dispatch returns.
+  // Read completion timing only after that dispatch has recorded loadEventEnd.
+  await nextTurn();
+  expect(document.readyState).toBe('complete');
+}

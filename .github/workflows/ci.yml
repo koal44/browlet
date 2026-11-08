@@ -43,20 +43,44 @@ jobs:
         run: npm.cmd run lint
       - name: Build packages
         run: npm.cmd run build
+      - name: Prepare test diagnostics
+        id: diagnostics
+        shell: pwsh
+        run: ./scripts/ci-diagnostics.ps1 prepare
+      - name: Report runner resources
+        run: >-
+          node -e "const os = require('node:os'); const v8 = require('node:v8');
+          console.log({ cpus: os.availableParallelism(), memoryMiB: os.totalmem() / 2**20,
+          freeMemoryMiB: os.freemem() / 2**20, heapLimitMiB: v8.getHeapStatistics().heap_size_limit / 2**20 });"
       - name: Check contracts and unit tests (stock)
         env:
           NODE_RUNTIME: stock
-        run: npm.cmd run test:unit
+          NODE_OPTIONS: ${{ steps.diagnostics.outputs.node-options }}
+        run: npm.cmd run test:unit -- --logHeapUsage
       - name: Check packaged artifacts (stock)
         env:
           NODE_RUNTIME: stock
         run: npm.cmd run test:artifact
       - name: Check contracts and unit tests (compat)
-        run: npm.cmd run test:unit
+        env:
+          NODE_OPTIONS: ${{ steps.diagnostics.outputs.node-options }}
+        run: npm.cmd run test:unit -- --logHeapUsage
       - name: Check native integration
         run: npm.cmd run test:node-compat
       - name: Check packaged artifacts (compat)
         run: npm.cmd run test:artifact
+      - name: Collect crash details
+        if: ${{ always() && steps.diagnostics.outcome == 'success' }}
+        shell: pwsh
+        run: ./scripts/ci-diagnostics.ps1 collect
+      - name: Retain test diagnostics
+        if: ${{ always() && steps.diagnostics.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: unit-diagnostics-windows-node-${{ matrix.node }}
+          path: ${{ runner.temp }}/browlet-unit-diagnostics/
+          retention-days: 7
+          if-no-files-found: warn
 
   linux:
     name: Linux / Node ${{ matrix.node }}
@@ -86,26 +110,68 @@ jobs:
         run: npm run build:node-compat
       - name: Build packages
         run: npm run build
+      - name: Prepare test diagnostics
+        id: diagnostics
+        shell: pwsh
+        run: ./scripts/ci-diagnostics.ps1 prepare
+      - name: Report runner resources
+        run: >-
+          node -e "const os = require('node:os'); const v8 = require('node:v8');
+          console.log({ cpus: os.availableParallelism(), memoryMiB: os.totalmem() / 2**20,
+          freeMemoryMiB: os.freemem() / 2**20, heapLimitMiB: v8.getHeapStatistics().heap_size_limit / 2**20 });"
       - name: Check contracts and unit tests (stock)
         env:
           NODE_RUNTIME: stock
-        run: npm run test:unit
+          NODE_OPTIONS: ${{ steps.diagnostics.outputs.node-options }}
+        run: npm run test:unit -- --logHeapUsage
       - name: Check packaged artifacts (stock)
         env:
           NODE_RUNTIME: stock
         run: npm run test:artifact
       - name: Check contracts and unit tests (compat)
-        run: npm run test:unit
+        env:
+          NODE_OPTIONS: ${{ steps.diagnostics.outputs.node-options }}
+        run: npm run test:unit -- --logHeapUsage
       - name: Check native integration
         run: npm run test:node-compat
       - name: Check packaged artifacts (compat)
         run: npm run test:artifact
+      - name: Retain test diagnostics
+        if: ${{ always() && steps.diagnostics.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: unit-diagnostics-linux-node-${{ matrix.node }}
+          path: ${{ runner.temp }}/browlet-unit-diagnostics/
+          retention-days: 7
+          if-no-files-found: warn
+
+  browsers:
+    name: Browser scenarios / Node 26.8.1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      NODE_BASE: 26.8.1
+      NODE_RUNTIME: compat
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26.8.1
+          cache: npm
+      - name: Prepare patched dependency
+        run: npm run install:vendor -- undici
+      - name: Install dependencies
+        run: npm ci
+      - name: Install selected Node runtime
+        run: npm run install:node
+      - name: Build compatibility addon
+        run: npm run build:node-compat
+      - name: Build packages
+        run: npm run build
       - name: Install browser engines and system dependencies
-        if: matrix.node == '26.8.1'
         run: npm run install:browsers -- --with-deps
       - name: Check Selectlet browser scenarios
-        if: matrix.node == '26.8.1'
         run: npm run test:selectlet:oracle -- --workers=2
       - name: Check Stylelet browser scenarios
-        if: matrix.node == '26.8.1'
         run: npm run test:stylelet:oracle -- --workers=2

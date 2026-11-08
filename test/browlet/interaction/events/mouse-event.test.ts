@@ -3,10 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { MouseEventImpl } from '../../../../src/browlet/interaction/events/index';
 import { getRelevantRealm, unwrap } from '../../../support/browlet-binding';
+import { useFixture } from '../../../support/fixture';
 
 describe('Pointer Events: MouseEvent prerequisite', () => {
+  const prepared = useFixture(() => new Browlet({ route: () => '' }));
+
   it('inherits UIEvent and defaults data without inferring trusted event-type flags', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = new MouseEvent('click');
       return {
@@ -29,7 +32,7 @@ describe('Pointer Events: MouseEvent prerequisite', () => {
   });
 
   it('converts coordinates, button widths, and inherited fields through the binding', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = Reflect.construct(MouseEvent, ['probe', {
         screenX: '5.9', screenY: -7.8, clientX: 3.25, clientY: -4.75,
@@ -53,7 +56,7 @@ describe('Pointer Events: MouseEvent prerequisite', () => {
   });
 
   it('rejects nonfinite coordinates and movement in the constructor realm', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       return ['screenX', 'screenY', 'clientX', 'clientY', 'movementX', 'movementY'].flatMap((key) =>
         [NaN, Infinity, -Infinity].map((value) => {
@@ -64,7 +67,7 @@ describe('Pointer Events: MouseEvent prerequisite', () => {
   });
 
   it('captures all fourteen modifiers independently of later changes to the dictionary', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const init = {
         ctrlKey: true, shiftKey: true, altKey: true, metaKey: true,
@@ -84,29 +87,15 @@ describe('Pointer Events: MouseEvent prerequisite', () => {
   });
 
   it('derives which from the changed button without using buttons or the constructor which input', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => [-2, -1, 0, 1, 2, 3, 4, 32767].map((button) => {
       const event = Reflect.construct(MouseEvent, ['probe', { button, buttons: 31, which: 99 }]);
       return event.which;
     }))).toEqual([4294967295, 0, 1, 2, 3, 4, 5, 32768]);
   });
 
-  it('preserves event, view, and related-target ownership across borrowed getters and initialization', () => {
-    const owner = new Browlet({ route: () => '' });
-    const other = new Browlet({ route: () => '' });
-    const event = new owner.window.MouseEvent('probe', { view: other.window, relatedTarget: other.document });
-    const descriptor = Object.getOwnPropertyDescriptor(other.window.MouseEvent.prototype, 'relatedTarget')!;
-    expect(descriptor.get!.call(event)).toBe(other.document);
-    expect(event.view).toBe(other.window);
-    other.window.MouseEvent.prototype.initMouseEvent.call(event, 'changed', true, true, owner.window,
-      5, 10, 20, 30, 40, true, false, false, false, 2, other.window);
-    expect([event.relatedTarget, event.view, event.clientX, event.button, event.ctrlKey])
-      .toEqual([other.window, owner.window, 30, 2, true]);
-    expect(getRelevantRealm(event)).toBe(getRelevantRealm(owner.window));
-  });
-
   it('validates related targets and receivers without unwrapping arbitrary author proxies', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const realm = getRelevantRealm(browser.window);
     for (const relatedTarget of [{}, false, new Proxy(browser.document, {})]) {
       expect(() => { Reflect.construct(browser.window.MouseEvent, ['probe', { relatedTarget }]); }).toThrow(realm.TypeError);
@@ -124,7 +113,7 @@ describe('Pointer Events: MouseEvent prerequisite', () => {
   });
 
   it('supports author subclasses', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       class Derived extends MouseEvent {}
       const event = new Derived('probe', { clientX: 5, relatedTarget: window });
@@ -135,7 +124,7 @@ describe('Pointer Events: MouseEvent prerequisite', () => {
   });
 
   it.each(['MouseEvent', 'MouseEvents', 'mOuSeEvEnTs'])('creates an uninitialized %s in the Document realm', (name) => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const event = browser.document.createEvent(name);
     expect(event).toBeInstanceOf(browser.window.MouseEvent);
     const mouse = unwrap<MouseEventImpl>(event);
@@ -145,7 +134,7 @@ describe('Pointer Events: MouseEvent prerequisite', () => {
   });
 
   it('initializes every legacy argument, preserving buttons, movement, composed, and timestamp', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = new MouseEvent('probe', {
         buttons: 5, movementX: 2.75, movementY: -3.25, cancelable: true, composed: true,
@@ -174,7 +163,7 @@ describe('Pointer Events: MouseEvent prerequisite', () => {
   });
 
   it('uses legacy defaults, converts before the dispatch guard, and otherwise leaves an in-flight event alone', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = new MouseEvent('probe', { clientX: 5, buttons: 3, altKey: true });
       let converted = false;
@@ -199,7 +188,7 @@ describe('Pointer Events: MouseEvent prerequisite', () => {
   });
 
   it('retargets relatedTarget through the normal shadow-tree dispatch path', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const host = document.createElement('div');
       document.body.append(host);
@@ -219,7 +208,7 @@ describe('Pointer Events: MouseEvent prerequisite', () => {
   });
 
   it('does not let author construction, dispatch, or legacy initialization change native movement history', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const window = getRelevantRealm(browser.window).env.window;
     window.setPointerLockAttributesForMousemove(new MouseEventImpl('mousemove', { screenX: 100, screenY: 400 }));
     expect(await browser.evaluate(() => {
@@ -233,5 +222,23 @@ describe('Pointer Events: MouseEvent prerequisite', () => {
     const next = new MouseEventImpl('mousemove', { screenX: 106, screenY: 402 });
     window.setPointerLockAttributesForMousemove(next);
     expect([next.movementX, next.movementY]).toEqual([6, 2]);
+  });
+});
+
+describe('Pointer Events: MouseEvent prerequisite across environments', () => {
+  const prepared = useFixture(() => [new Browlet({ route: () => '' }), new Browlet({ route: () => '' })] as const);
+
+  it('preserves event, view, and related-target ownership across borrowed getters and initialization', () => {
+    const owner = prepared()[0];
+    const other = prepared()[1];
+    const event = new owner.window.MouseEvent('probe', { view: other.window, relatedTarget: other.document });
+    const descriptor = Object.getOwnPropertyDescriptor(other.window.MouseEvent.prototype, 'relatedTarget')!;
+    expect(descriptor.get!.call(event)).toBe(other.document);
+    expect(event.view).toBe(other.window);
+    other.window.MouseEvent.prototype.initMouseEvent.call(event, 'changed', true, true, owner.window,
+      5, 10, 20, 30, 40, true, false, false, false, 2, other.window);
+    expect([event.relatedTarget, event.view, event.clientX, event.button, event.ctrlKey])
+      .toEqual([other.window, owner.window, 30, 2, true]);
+    expect(getRelevantRealm(event)).toBe(getRelevantRealm(owner.window));
   });
 });

@@ -85,8 +85,6 @@ export class UserAgent implements
   pdfViewerSupported = false;
   /** Discover live broadcast channels in creation order without retaining their globals. */
   broadcastChannels = new WeakOrderedSet<BroadcastChannelImpl>();
-  /** Execution created with this user agent for work that can outlive pages. */
-  sandbox: BrowletEnvironment;
   /** Browser binding factory used by browsing algorithms to create Window environments. */
   createWindowEnvironment = createWindowEnvironment;
   /** Browser-owned continuations, including Fetch and protocol commands, outlive individual environments. */
@@ -186,6 +184,8 @@ export class UserAgent implements
   // https://w3c.github.io/webappsec-secure-contexts/#development-environments
   trustworthyOrigins: TupleOrigin[] = [];
 
+  /** Internal execution is allocated on demand and can outlive individual pages. */
+  #sandbox: BrowletEnvironment | null = null;
   /** Allocate the native/automation mouse owner only when input is used. */
   #mouseInput: MouseInputProcessor | null = null;
   /** Allocate shared keyboard modifier state and queued input delivery on first use. */
@@ -195,8 +195,8 @@ export class UserAgent implements
   /** System clipboard notification identity belongs to this UserAgent and is allocated only when used. */
   #systemClipboard: SystemClipboard | null = null;
 
-  constructor() {
-    this.sandbox = createSandboxEnvironment(this);
+  get sandbox(): BrowletEnvironment {
+    return this.#sandbox ??= createSandboxEnvironment(this);
   }
 
   get mouseInput(): MouseInputProcessor {

@@ -146,6 +146,9 @@ supportedTest('lookup rejects proxies and coercible names without running author
   const f = fixture();
   const original = f.compile('export const value = 1;');
   f.link(original);
+  // An absent lookup also throws TypeError. Exercise valid input first so it
+  // cannot satisfy every rejection assertion on unsupported engines.
+  assert.equal(haveSameModuleBinding(original.namespace, 'value', original.namespace, 'value'), true);
   let calls = 0;
   const trap = () => { calls++; throw new Error('author trap'); };
   const proxy = new Proxy(original.namespace, { get: trap, getPrototypeOf: trap, ownKeys: trap });

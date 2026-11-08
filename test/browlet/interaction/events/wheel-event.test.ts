@@ -4,10 +4,13 @@ import { Browlet } from '../../../../src/browlet/browlet';
 import { WheelEventImpl } from '../../../../src/browlet/interaction/events/index';
 import type { WheelEvent as WheelEventPlatform } from '../../../../src/browlet/platform';
 import { getRelevantRealm } from '../../../support/browlet-binding';
+import { useFixture } from '../../../support/fixture';
 
 describe('Pointer Events: WheelEvent', () => {
+  const prepared = useFixture(() => new Browlet({ route: () => '' }));
+
   it('inherits MouseEvent and defaults data without inferring native wheel flags', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = new WheelEvent('wheel');
       return {
@@ -31,7 +34,7 @@ describe('Pointer Events: WheelEvent', () => {
   });
 
   it('exposes the three non-writable unit constants on constructor, prototype, and instances', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const ctor = browser.window.WheelEvent;
     const event = new ctor('wheel');
     for (const [key, value] of [['DOM_DELTA_PIXEL', 0], ['DOM_DELTA_LINE', 1], ['DOM_DELTA_PAGE', 2]] as const) {
@@ -46,7 +49,7 @@ describe('Pointer Events: WheelEvent', () => {
   });
 
   it('converts wheel and inherited mouse data once and retains it independently of the dictionary', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const init = {
         deltaX: '1.25', deltaY: -2.5, deltaZ: '3.75', deltaMode: 2 ** 32 + 1, momentum: 'inertia',
@@ -72,7 +75,7 @@ describe('Pointer Events: WheelEvent', () => {
   });
 
   it('reads inherited dictionary members before the alphabetically ordered wheel members', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const reads: string[] = [];
       const observed = new Set(['view', 'buttons', 'deltaX', 'deltaY', 'deltaZ', 'deltaMode', 'momentum']);
@@ -87,7 +90,7 @@ describe('Pointer Events: WheelEvent', () => {
   });
 
   it('preserves full double precision and signed zero on every delta axis', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const values = [-0, 1.123456789012345, Number.MIN_VALUE, 1e100, -1e100];
       return values.map((value) => {
@@ -98,7 +101,7 @@ describe('Pointer Events: WheelEvent', () => {
   });
 
   it('uses unsigned-long conversion for deltaMode without converting or clamping deltas', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() =>
       [-1, 0, 1, 2, 3, 4.9, NaN, Infinity, 2 ** 32 + 2].map((deltaMode) => {
         const event = new WheelEvent('wheel', { deltaMode, deltaY: 2.5 });
@@ -108,7 +111,7 @@ describe('Pointer Events: WheelEvent', () => {
   });
 
   it('rejects nonfinite and invalid numeric inputs in the constructor realm', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       return ['deltaX', 'deltaY', 'deltaZ'].flatMap((key) =>
         [NaN, Infinity, -Infinity, 1n, Symbol('delta')].map((value) => {
@@ -119,7 +122,7 @@ describe('Pointer Events: WheelEvent', () => {
   });
 
   it('uses ordinary dictionary defaults and boolean conversion for momentum', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     for (const init of [undefined, null, {}]) {
       const event = Reflect.construct(browser.window.WheelEvent, ['wheel', init]) as WheelEventPlatform;
       expect([event.deltaX, event.deltaY, event.deltaZ, event.deltaMode, event.momentum]).toEqual([0, 0, 0, 0, false]);
@@ -130,26 +133,8 @@ describe('Pointer Events: WheelEvent', () => {
     }
   });
 
-  it('checks getter brands and preserves event ownership across borrowed getters', () => {
-    const owner = new Browlet({ route: () => '' });
-    const other = new Browlet({ route: () => '' });
-    const event = new owner.window.WheelEvent('wheel', { deltaY: -2.5, momentum: true, view: other.window });
-    const otherRealm = getRelevantRealm(other.window);
-    for (const [key, expected] of [['deltaX', 0], ['deltaY', -2.5], ['deltaZ', 0], ['deltaMode', 0], ['momentum', true]] as const) {
-      const descriptor = Object.getOwnPropertyDescriptor(other.window.WheelEvent.prototype, key)!;
-      expect(descriptor).toMatchObject({ enumerable: true, configurable: true, set: undefined });
-      expect(descriptor.get!.call(event)).toBe(expected);
-      for (const receiver of [{}, new other.window.MouseEvent('wheel'), new Proxy(event, {})]) {
-        expect(() => { descriptor.get!.call(receiver); }).toThrow(otherRealm.TypeError);
-      }
-    }
-    expect(event.view).toBe(other.window);
-    expect(getRelevantRealm(event)).toBe(getRelevantRealm(owner.window));
-    expect(() => new other.window.WheelEvent('wheel', { deltaX: Infinity })).toThrow(otherRealm.TypeError);
-  });
-
   it('supports subclasses and requires construction and an event type', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       class Derived extends WheelEvent {}
       const event = new Derived('custom', { deltaX: 5 });
@@ -166,7 +151,7 @@ describe('Pointer Events: WheelEvent', () => {
   });
 
   it('preserves wheel fields and timestamps through all inherited legacy initializers', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       return ['initEvent', 'initUIEvent', 'initMouseEvent'].map((method) => {
         const event = Reflect.construct(WheelEvent, ['wheel', {
@@ -181,7 +166,7 @@ describe('Pointer Events: WheelEvent', () => {
   });
 
   it('does not add a legacy document factory name or an initWheelEvent method', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const rejected = ['WheelEvent', 'wheelevent', 'WheelEvents', 'MouseWheelEvent'].map((name) => {
         try { document.createEvent(name); return false; }
@@ -192,7 +177,7 @@ describe('Pointer Events: WheelEvent', () => {
   });
 
   it('dispatches through onwheel without converting deltas or making the event trusted', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const target = document.createElement('div');
       document.body.append(target);
@@ -208,7 +193,7 @@ describe('Pointer Events: WheelEvent', () => {
   });
 
   it('retains DOM passive-listener cancellation rules for synthetic wheel events', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const results: boolean[][] = [];
       const listener = (event: Event) => { event.preventDefault(); };
@@ -225,7 +210,7 @@ describe('Pointer Events: WheelEvent', () => {
   });
 
   it('uses the existing host event factory without claiming native wheel processing', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     await browser.evaluate(() => {
       window.addEventListener('wheel', (event) => {
         Reflect.set(window, 'received', [event instanceof WheelEvent, event instanceof MouseEvent,
@@ -243,5 +228,27 @@ describe('Pointer Events: WheelEvent', () => {
     })).toBe(false);
     expect(await browser.evaluate(() => Reflect.get(window, 'received') as unknown))
       .toEqual([true, true, 2.5, 1, true, true, true]);
+  });
+});
+
+describe('Pointer Events: WheelEvent across environments', () => {
+  const prepared = useFixture(() => [new Browlet({ route: () => '' }), new Browlet({ route: () => '' })] as const);
+
+  it('checks getter brands and preserves event ownership across borrowed getters', () => {
+    const owner = prepared()[0];
+    const other = prepared()[1];
+    const event = new owner.window.WheelEvent('wheel', { deltaY: -2.5, momentum: true, view: other.window });
+    const otherRealm = getRelevantRealm(other.window);
+    for (const [key, expected] of [['deltaX', 0], ['deltaY', -2.5], ['deltaZ', 0], ['deltaMode', 0], ['momentum', true]] as const) {
+      const descriptor = Object.getOwnPropertyDescriptor(other.window.WheelEvent.prototype, key)!;
+      expect(descriptor).toMatchObject({ enumerable: true, configurable: true, set: undefined });
+      expect(descriptor.get!.call(event)).toBe(expected);
+      for (const receiver of [{}, new other.window.MouseEvent('wheel'), new Proxy(event, {})]) {
+        expect(() => { descriptor.get!.call(receiver); }).toThrow(otherRealm.TypeError);
+      }
+    }
+    expect(event.view).toBe(other.window);
+    expect(getRelevantRealm(event)).toBe(getRelevantRealm(owner.window));
+    expect(() => new other.window.WheelEvent('wheel', { deltaX: Infinity })).toThrow(otherRealm.TypeError);
   });
 });

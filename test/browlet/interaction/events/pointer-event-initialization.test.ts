@@ -7,10 +7,13 @@ import {
 import type { ElementImpl } from '../../../../src/browlet/dom/nodes/index';
 import type { PointerEvent as PointerEventPlatform } from '../../../../src/browlet/platform';
 import { getRelevantRealm, project, unwrap } from '../../../support/browlet-binding';
+import { useFixture } from '../../../support/fixture';
 
 describe('Pointer Events: producer initialization and creation', () => {
+  const prepared = useFixture(() => new Browlet({ route: () => '' }));
+
   it('initializes MouseEvent from mapped input and resets UI, button, and movement fields', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const target = unwrap<ElementImpl>(browser.document.createElement('div'));
     const platform = new browser.window.MouseEvent('before', {
       cancelable: true, detail: 8, button: 4, buttons: 16, movementX: 6, movementY: -7,
@@ -39,7 +42,7 @@ describe('Pointer Events: producer initialization and creation', () => {
   });
 
   it('keeps native AltGraph handling separate from construction and legacy initialization', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const target = unwrap<ElementImpl>(browser.document.createElement('div'));
     const platform = new browser.window.PointerEvent('pointermove', { modifierAltGraph: true });
     const event = unwrap<PointerEventImpl>(platform);
@@ -57,7 +60,7 @@ describe('Pointer Events: producer initialization and creation', () => {
   });
 
   it('clears every pointer-specific field and sample list without modifying retained samples', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const target = unwrap<ElementImpl>(browser.document.createElement('div'));
     const sample = new browser.window.PointerEvent('pointermove', { pointerId: 9, clientX: 25 });
     const platform = new browser.window.PointerEvent('before', {
@@ -86,7 +89,7 @@ describe('Pointer Events: producer initialization and creation', () => {
 
   it.each(['pointermove', 'pointerdown', 'custom', 'click', 'auxclick', 'contextmenu'])(
     'initializes %s coordinates with the constructor compatibility rule', (type) => {
-      const browser = new Browlet({ route: () => '' });
+      const browser = prepared();
       const target = unwrap<ElementImpl>(browser.document.createElement('div'));
       const event = PointerEventImpl.create(type, target, true, true, mouseInput());
       const platform = project(event) as PointerEventPlatform;
@@ -100,7 +103,7 @@ describe('Pointer Events: producer initialization and creation', () => {
 
   it.each([[false, false], [false, true], [true, false], [true, true]])(
     'preserves the caller-supplied flags (bubbles: %s, cancelable: %s)', (bubbles, cancelable) => {
-      const browser = new Browlet({ route: () => '' });
+      const browser = prepared();
       const target = unwrap<ElementImpl>(browser.document.createElement('div'));
       const event = PointerEventImpl.create('pointerenter', target, bubbles, cancelable, mouseInput());
       const platform = project(event) as PointerEventPlatform;
@@ -116,7 +119,7 @@ describe('Pointer Events: producer initialization and creation', () => {
   );
 
   it('allocates fresh platform identities and timestamps through the target environment', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const target = unwrap<ElementImpl>(browser.document.createElement('div'));
     const realm = getRelevantRealm(target);
     const clock = vi.spyOn(realm, 'eventTimeStamp').mockReturnValueOnce(125).mockReturnValueOnce(130);
@@ -137,21 +140,8 @@ describe('Pointer Events: producer initialization and creation', () => {
     }
   });
 
-  it('selects an adopted target\'s current view independently of its retained allocation realm', () => {
-    const owner = new Browlet({ route: () => '' });
-    const other = new Browlet({ route: () => '' });
-    const element = owner.document.createElement('div');
-    other.document.adoptNode(element);
-    const target = unwrap<ElementImpl>(element);
-    const event = PointerEventImpl.create('pointermove', target, true, true, mouseInput());
-    const platform = project(event) as PointerEventPlatform;
-    expect(getRelevantRealm(platform)).toBe(getRelevantRealm(target));
-    expect(platform.target).toBe(element);
-    expect(platform.view).toBe(other.window);
-  });
-
   it('supports a Window target through the existing UIEvent initialization contract', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const target = getRelevantRealm(browser.window).env.window;
     const event = PointerEventImpl.create('pointermove', target, true, false, mouseInput());
     const platform = project(event) as PointerEventPlatform;
@@ -160,7 +150,7 @@ describe('Pointer Events: producer initialization and creation', () => {
   });
 
   it('leaves dispatch and trust to the producer and preserves author redispatch rules', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const element = browser.document.createElement('div');
     const target = unwrap<ElementImpl>(element);
     const seen: boolean[] = [];
@@ -174,6 +164,23 @@ describe('Pointer Events: producer initialization and creation', () => {
     expect(target.dispatch(event)).toBe(false);
     element.dispatchEvent(project(event) as PointerEventPlatform);
     expect(seen).toEqual([true, false]);
+  });
+});
+
+describe('Pointer Events: producer initialization and creation across environments', () => {
+  const prepared = useFixture(() => [new Browlet({ route: () => '' }), new Browlet({ route: () => '' })] as const);
+
+  it('selects an adopted target\'s current view independently of its retained allocation realm', () => {
+    const owner = prepared()[0];
+    const other = prepared()[1];
+    const element = owner.document.createElement('div');
+    other.document.adoptNode(element);
+    const target = unwrap<ElementImpl>(element);
+    const event = PointerEventImpl.create('pointermove', target, true, true, mouseInput());
+    const platform = project(event) as PointerEventPlatform;
+    expect(getRelevantRealm(platform)).toBe(getRelevantRealm(target));
+    expect(platform.target).toBe(element);
+    expect(platform.view).toBe(other.window);
   });
 });
 

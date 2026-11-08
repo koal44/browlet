@@ -1,11 +1,25 @@
-'use strict';
-/* global __filename, process */
+/* global process, console */
 
-const { threadId, isMainThread, workerData } = require('node:worker_threads');
-const { pathToFileURL } = require('node:url');
+import { threadId, isMainThread, workerData } from 'node:worker_threads';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+import { WorkerThread, WorkerThreadRuntime } from '../../../../src/browlet/integration/host/index.ts';
+import {
+  AgentCluster, BrowletRealm, ClassicScript, EventLoop, JavaScriptModuleScript, ScriptFetchOptions,
+  SharedWorkerAgent, WindowAgent, createTaskSource, networkingTaskSource,
+} from '../../../../src/browlet/scripting/index.ts';
+import { addon, JSThread } from '../../../../src/js-engine/index.ts';
+import { WorkerImpl } from '../../../../src/browlet/workers/index.ts';
+import { createWindowEnvironment, createWorkerEnvironment } from '../../../../src/browlet/integration/web-idl/index.ts';
+import { UserAgent } from '../../../../src/browlet/user-agent.ts';
+import { parseURL, serializeURL } from '../../../../src/url/index.ts';
+import { FetchResponse } from '../../../../src/fetch/index.ts';
+
+const filename = fileURLToPath(import.meta.url);
 // JS Engine's envelope contains the original browser startup inputs.
 const initialization = workerData.data;
-const { mode, state } = initialization.data;
+const { mode, state, traceTiming } = initialization.data;
+traceWorker('fixture module evaluated');
 if (mode === 'throw-before-ready') throw new Error('bootstrap failed');
 if (mode === 'exit-before-ready') process.exit(0);
 if (mode === 'wait-before-ready') {
@@ -13,24 +27,15 @@ if (mode === 'wait-before-ready') {
   Atomics.wait(state, 1, 0);
 }
 
-// Trusted test bootstrap, loaded in an actual Node worker. tsx only loads source
-// files for this fixture; production startup reloads the existing package bundle.
-// These tests deliberately terminate isolates. tsx's background disk-cache writes
-// can still be pending then, leaving open files that delay Windows process exit.
-// Keep its in-memory transform cache, without starting that unrelated disk I/O.
-process.env.TSX_DISABLE_CACHE = '1';
-const { requireTypeScript: loadTypeScript } = require('../../../support/typescript.cjs');
-const { WorkerThread, WorkerThreadRuntime } = loadTypeScript('../../../../src/browlet/integration/host/index.ts', __filename);
-const {
-  AgentCluster, BrowletRealm, EventLoop, SharedWorkerAgent, WindowAgent, createTaskSource, networkingTaskSource,
-} = loadTypeScript('../../../../src/browlet/scripting/index.ts', __filename);
-const { addon, JSThread } = loadTypeScript('../../../../src/js-engine/index.ts', __filename);
+// Suite setup compiles this entry once. Each real isolate evaluates fresh runtime
+// modules without TypeScript transforms or cache writes that termination could interrupt.
 
 // Descendants reload this fixture too. This replaces only the entry registration,
 // without mocking the transport, runtime, agent allocation, or environment capture.
-JSThread.initialize(pathToFileURL(__filename).href, startFixture);
+JSThread.initialize(pathToFileURL(filename).href, startFixture);
 
 function startFixture() {
+  traceWorker('runtime setup starts');
   const runtime = new WorkerThreadRuntime();
 
   // This deliberately has no WorkerGlobalScope/settings. The fixture exercises
@@ -90,7 +95,6 @@ function startFixture() {
         void runNestedWorkerError(runtime).catch((error) => runtime.send({ error: error.stack }));
         break;
       case 'inspect-policy': {
-        const { parseURL } = loadTypeScript('../../../../src/url/index.ts', __filename);
         const container = runtime.creatorPolicyContainer;
         const list = container.cspList;
         const url = parseURL(message.url).url;
@@ -144,7 +148,6 @@ function startFixture() {
         break;
     }
   }, ({ response, bodyBytes, blobPolicyContainer }) => {
-    const { serializeURL } = loadTypeScript('../../../../src/url/index.ts', __filename);
     runtime.send({
       ownsNetworkingTask: runtime.agent.eventLoop.currentlyRunningTask?.source === networkingTaskSource,
       type: response.type, aborted: response.aborted, status: response.status,
@@ -156,10 +159,10 @@ function startFixture() {
       scriptRan: realm.globalObject.scriptRan === true,
     });
   });
+  traceWorker('runtime ready sent');
 }
 
 function prepareWorkerMessages(runtime, portTransfers = false) {
-  const { ClassicScript, ScriptFetchOptions } = loadTypeScript('../../../../src/browlet/scripting/index.ts', __filename);
   const env = createFixtureWorkerEnvironment(runtime, 'https://creator.test/messages.js');
   runtime.connectMessagePort();
   env.markExecutionReady();
@@ -285,26 +288,38 @@ function roundTripStructuredData(runtime, message) {
 }
 
 async function runNestedWorkerError(runtime) {
-  const { WorkerImpl } = loadTypeScript('../../../../src/browlet/workers/index.ts', __filename);
+  traceWorker('nested-error request received');
   const env = createFixtureWorkerEnvironment(runtime, 'https://creator.test/parent.js');
   env.markExecutionReady();
+  traceWorker('parent environment ready');
   const events = [];
   env.global.addEventListener('error', (event) => { events.push({ message: event.message, error: event.error }); });
   const worker = new WorkerImpl(env);
-  const child = new WorkerThread({ kind: 'dedicated', data: {}, worker }, () => {});
+  const child = new WorkerThread({ kind: 'dedicated', data: { traceTiming }, worker }, () => {});
+  traceWorker('child created');
   env.globalImplementation.reportErrorToOwner = (errorInfo) => {
+    traceWorker('parent forwards child error');
     runtime.reportError(errorInfo);
-    void child.terminate().then(() => runtime.send(events));
+    traceWorker('child termination requested');
+    void child.terminate().then(() => {
+      traceWorker('child terminated; reply sent');
+      runtime.send(events);
+    });
   };
   await child.ready;
+  traceWorker('child ready observed');
   child.send({ type: 'report-worker-error', scriptType: 'classic' });
 }
 
 function runWorkerError(runtime, message, followupTaskSource) {
-  const { ClassicScript, JavaScriptModuleScript, ScriptFetchOptions } = loadTypeScript('../../../../src/browlet/scripting/index.ts', __filename);
+  traceWorker('error request received');
   const env = createFixtureWorkerEnvironment(runtime, 'https://creator.test/error.js', message.scriptType);
   env.markExecutionReady();
-  env.globalImplementation.reportErrorToOwner = (errorInfo) => runtime.reportError(errorInfo);
+  traceWorker('error environment ready');
+  env.globalImplementation.reportErrorToOwner = (errorInfo) => {
+    traceWorker('child reports error');
+    runtime.reportError(errorInfo);
+  };
   const events = [];
   env.global.addEventListener('error', (event) => {
     events.push({ message: event.message, errorType: typeof event.error, trusted: event.isTrusted });
@@ -318,12 +333,12 @@ function runWorkerError(runtime, message, followupTaskSource) {
     : new ClassicScript(source, env, env.apiBaseURL, new ScriptFetchOptions(), message.muted === true);
   if (message.scriptType === 'module') script.record.link();
   script.run();
+  traceWorker('error script returned');
   // Module rejection reporting finishes at the checkpoint before this reply.
   runtime.agent.eventLoop.queueTask(followupTaskSource, null, () => runtime.send(events));
 }
 
 function runBlockingWorkerScript(runtime, state, scriptType) {
-  const { ClassicScript, JavaScriptModuleScript, ScriptFetchOptions } = loadTypeScript('../../../../src/browlet/scripting/index.ts', __filename);
   const env = createFixtureWorkerEnvironment(runtime, 'https://creator.test/blocked.js', scriptType);
   env.markExecutionReady();
   env.global.state = state;
@@ -376,10 +391,7 @@ async function inspectNestedWorker(runtime, url) {
 // The actual received Origin records and runtime cluster feed a real worker
 // environment, which then creates a child through the production host adapter.
 function createFixtureWorkerEnvironment(runtime, url, type = 'classic') {
-  const { createWindowEnvironment, createWorkerEnvironment } = loadTypeScript('../../../../src/browlet/integration/web-idl/index.ts', __filename);
-  const { UserAgent } = loadTypeScript('../../../../src/browlet/user-agent.ts', __filename);
-  const { parseURL } = loadTypeScript('../../../../src/url/index.ts', __filename);
-  const { FetchResponse } = loadTypeScript('../../../../src/fetch/index.ts', __filename);
+  traceWorker('environment construction starts');
   const creator = runtime.creatorEnvSnapshot;
   const userAgent = new UserAgent();
   const agent = new WindowAgent(new EventLoop({ requestTurn() {} }));
@@ -395,6 +407,7 @@ function createFixtureWorkerEnvironment(runtime, url, type = 'classic') {
   document.url = creationURL;
   document.policyContainer = runtime.creatorPolicyContainer.clone();
   outsideEnv.window.setAssociatedDocument(document);
+  traceWorker('fixture Window ready');
   const env = createWorkerEnvironment({
     agent: runtime.agent, outsideEnv, url: parseURL(url).url, unsafeWorkerCreationTime: 1234,
     type, name: 'worker fixture', credentials: 'same-origin', extendedLifetime: false,
@@ -404,5 +417,14 @@ function createFixtureWorkerEnvironment(runtime, url, type = 'classic') {
   const response = new FetchResponse();
   response.urlList.push(env.apiBaseURL);
   env.globalImplementation.initializePolicyContainer(response, env);
+  traceWorker('fixture worker environment ready');
   return env;
+}
+
+function traceWorker(phase) {
+  if (traceTiming) {
+    // hrtime uses the same monotonic clock across these isolates; console delivery
+    // can reorder lines, so compare timestamps rather than printed order.
+    console.error(JSON.stringify({ workerTiming: phase, threadId, ms: Number(process.hrtime.bigint()) / 1e6 }));
+  }
 }

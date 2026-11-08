@@ -5,10 +5,13 @@ import { EventModifierState, MouseEventImpl, type MouseEventInput } from '../../
 import type { ElementImpl } from '../../../../src/browlet/dom/nodes/index';
 import type { MouseEvent as MouseEventPlatform } from '../../../../src/browlet/platform';
 import { getRelevantRealm, project, unwrap } from '../../../support/browlet-binding';
+import { useFixture } from '../../../support/fixture';
 
 describe('Pointer Events §11.2: MouseEvent creation', () => {
+  const prepared = useFixture(() => new Browlet({ route: () => '' }));
+
   it.each([true, false])('creates the %s bubbling/cancelable variant from explicit input', (enabled) => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const element = browser.document.createElement('div');
     const target = unwrap<ElementImpl>(element);
     const input = mouseInput();
@@ -35,7 +38,7 @@ describe('Pointer Events §11.2: MouseEvent creation', () => {
   });
 
   it('allocates fresh identities and timestamps through the target environment', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const target = unwrap<ElementImpl>(browser.document.createElement('div'));
     const realm = getRelevantRealm(target);
     const clock = vi.spyOn(realm, 'eventTimeStamp').mockReturnValueOnce(125).mockReturnValueOnce(130);
@@ -52,20 +55,8 @@ describe('Pointer Events §11.2: MouseEvent creation', () => {
     }
   });
 
-  it('uses an adopted target\'s current view while preserving its allocation realm', () => {
-    const owner = new Browlet({ route: () => '' });
-    const other = new Browlet({ route: () => '' });
-    const element = owner.document.createElement('div');
-    other.document.adoptNode(element);
-    const target = unwrap<ElementImpl>(element);
-    const platform = project(MouseEventImpl.create('mousedown', target, true, true, mouseInput())) as MouseEventPlatform;
-    expect([platform.target, platform.view]).toEqual([element, other.window]);
-    expect(getRelevantRealm(platform)).toBe(getRelevantRealm(target));
-    expect(platform).toBeInstanceOf(owner.window.MouseEvent);
-  });
-
   it('supports a Window target with the existing view and realm rules', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const realm = getRelevantRealm(browser.window);
     const event = MouseEventImpl.create('mouseup', realm.env.window, true, true, mouseInput());
     const platform = project(event) as MouseEventPlatform;
@@ -74,7 +65,7 @@ describe('Pointer Events §11.2: MouseEvent creation', () => {
   });
 
   it('retains the input snapshot when its producer prepares later input', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const target = unwrap<ElementImpl>(browser.document.createElement('div'));
     const input = mouseInput();
     input.modifiers = new EventModifierState({ ctrlKey: true });
@@ -87,7 +78,7 @@ describe('Pointer Events §11.2: MouseEvent creation', () => {
   });
 
   it('leaves dispatch and trust to the producer and preserves author redispatch rules', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const element = browser.document.createElement('div');
     const target = unwrap<ElementImpl>(element);
     const seen: boolean[] = [];
@@ -101,6 +92,22 @@ describe('Pointer Events §11.2: MouseEvent creation', () => {
     expect(target.dispatch(event)).toBe(false);
     element.dispatchEvent(project(event) as MouseEventPlatform);
     expect(seen).toEqual([true, false]);
+  });
+});
+
+describe('Pointer Events §11.2: MouseEvent creation across environments', () => {
+  const prepared = useFixture(() => [new Browlet({ route: () => '' }), new Browlet({ route: () => '' })] as const);
+
+  it('uses an adopted target\'s current view while preserving its allocation realm', () => {
+    const owner = prepared()[0];
+    const other = prepared()[1];
+    const element = owner.document.createElement('div');
+    other.document.adoptNode(element);
+    const target = unwrap<ElementImpl>(element);
+    const platform = project(MouseEventImpl.create('mousedown', target, true, true, mouseInput())) as MouseEventPlatform;
+    expect([platform.target, platform.view]).toEqual([element, other.window]);
+    expect(getRelevantRealm(platform)).toBe(getRelevantRealm(target));
+    expect(platform).toBeInstanceOf(owner.window.MouseEvent);
   });
 });
 

@@ -4,10 +4,13 @@ import { Browlet } from '../../../../src/browlet/browlet';
 import { FocusEventImpl } from '../../../../src/browlet/interaction/events/index';
 import type { FocusEvent as FocusEventPlatform } from '../../../../src/browlet/platform';
 import { getRelevantRealm } from '../../../support/browlet-binding';
+import { useFixture } from '../../../support/fixture';
 
 describe('UI Events: FocusEvent', () => {
+  const prepared = useFixture(() => new Browlet({ route: () => '' }));
+
   it('inherits UIEvent and keeps constructor defaults independent of the event type', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = new FocusEvent('focusin');
       return {
@@ -26,7 +29,7 @@ describe('UI Events: FocusEvent', () => {
   });
 
   it('converts inherited dictionary members before relatedTarget', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const reads: string[] = [];
       const values = { bubbles: 1, cancelable: 'yes', composed: {}, detail: '5.9', view: window, relatedTarget: document };
@@ -47,7 +50,7 @@ describe('UI Events: FocusEvent', () => {
   });
 
   it('accepts every EventTarget kind, including WindowProxy, without restricting author targets to focusable elements', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const element = document.createElement('div');
       const shadow = element.attachShadow({ mode: 'closed' });
@@ -57,7 +60,7 @@ describe('UI Events: FocusEvent', () => {
   });
 
   it('rejects non-EventTargets and author proxies in the constructor realm', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       return [undefined, false, 1, 'target', {}, new Event('probe'),
         new Proxy(document, {}), new Proxy(window, {})].map((relatedTarget) => {
@@ -69,20 +72,8 @@ describe('UI Events: FocusEvent', () => {
     })).toEqual(Array<boolean>(8).fill(true));
   });
 
-  it('preserves related-target identity across constructor and borrowed getter realms', () => {
-    const owner = new Browlet({ route: () => '' });
-    const other = new Browlet({ route: () => '' });
-    const descriptor = Object.getOwnPropertyDescriptor(other.window.FocusEvent.prototype, 'relatedTarget')!;
-    for (const relatedTarget of [other.window, other.document, other.document.createElement('span')]) {
-      const event = new owner.window.FocusEvent('probe', { relatedTarget });
-      expect(event.relatedTarget).toBe(relatedTarget);
-      expect(descriptor.get!.call(event)).toBe(relatedTarget);
-      expect(getRelevantRealm(event)).toBe(getRelevantRealm(owner.window));
-    }
-  });
-
   it('checks getter receivers and exposes a read-only Web IDL attribute', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const descriptor = Object.getOwnPropertyDescriptor(browser.window.FocusEvent.prototype, 'relatedTarget')!;
     expect(descriptor).toMatchObject({ enumerable: true, configurable: true, set: undefined });
     for (const receiver of [{}, new browser.window.Event('probe'), new browser.window.UIEvent('probe')]) {
@@ -91,7 +82,7 @@ describe('UI Events: FocusEvent', () => {
   });
 
   it('supports author subclasses', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       class Derived extends FocusEvent {}
       const event = new Derived('probe', { relatedTarget: document, view: window, detail: 5 });
@@ -101,7 +92,7 @@ describe('UI Events: FocusEvent', () => {
   });
 
   it.each(['FocusEvent', 'focusevent', 'fOcUsEvEnT'])('creates an uninitialized %s in the Document realm', (name) => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const event = browser.document.createEvent(name) as FocusEventPlatform;
     expect(event).toBeInstanceOf(browser.window.FocusEvent);
     expect(getRelevantRealm(event)).toBe(getRelevantRealm(browser.document));
@@ -113,7 +104,7 @@ describe('UI Events: FocusEvent', () => {
   });
 
   it('retargets a related target hidden in a shadow tree for an outside listener', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const host = document.createElement('div');
       document.body.append(host);
@@ -130,7 +121,7 @@ describe('UI Events: FocusEvent', () => {
   });
 
   it('stops propagation when both targets retarget to one host and clears private targets after dispatch', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const host = document.createElement('div');
       document.body.append(host);
@@ -151,7 +142,7 @@ describe('UI Events: FocusEvent', () => {
   });
 
   it('preserves constructor data when related-target retargeting suppresses the entire dispatch', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const host = document.createElement('div');
       document.body.append(host);
@@ -167,7 +158,7 @@ describe('UI Events: FocusEvent', () => {
   });
 
   it('delivers a host-created FocusEvent through the existing event factory', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     await browser.evaluate(() => {
       window.addEventListener('focus', (event) => {
         Reflect.set(window, 'received', [event instanceof FocusEvent, event.view === window,
@@ -181,5 +172,21 @@ describe('UI Events: FocusEvent', () => {
       focus.setFlags({ composed: true });
     })).toBe(true);
     expect(await browser.evaluate(() => Reflect.get(window, 'received') as unknown)).toEqual([true, true, true, true, true]);
+  });
+});
+
+describe('UI Events: FocusEvent across environments', () => {
+  const prepared = useFixture(() => [new Browlet({ route: () => '' }), new Browlet({ route: () => '' })] as const);
+
+  it('preserves related-target identity across constructor and borrowed getter realms', () => {
+    const owner = prepared()[0];
+    const other = prepared()[1];
+    const descriptor = Object.getOwnPropertyDescriptor(other.window.FocusEvent.prototype, 'relatedTarget')!;
+    for (const relatedTarget of [other.window, other.document, other.document.createElement('span')]) {
+      const event = new owner.window.FocusEvent('probe', { relatedTarget });
+      expect(event.relatedTarget).toBe(relatedTarget);
+      expect(descriptor.get!.call(event)).toBe(relatedTarget);
+      expect(getRelevantRealm(event)).toBe(getRelevantRealm(owner.window));
+    }
   });
 });

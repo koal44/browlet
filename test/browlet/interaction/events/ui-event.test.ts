@@ -5,10 +5,13 @@ import { UIEventImpl } from '../../../../src/browlet/interaction/events/index';
 import type { NodeImpl } from '../../../../src/browlet/dom/nodes/index';
 import type { UIEvent as UIEventPlatform } from '../../../../src/browlet/platform';
 import { getBindingContext, getRelevantRealm, unwrap } from '../../../support/browlet-binding';
+import { useFixture } from '../../../support/fixture';
 
 describe('UI Events: UIEvent', () => {
+  const prepared = useFixture(() => new Browlet({ route: () => '' }));
+
   it('exposes the Event inheritance, constructor defaults, and legacy attributes', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = new UIEvent('probe');
       return {
@@ -27,7 +30,7 @@ describe('UI Events: UIEvent', () => {
   });
 
   it('converts inherited dictionary members before detail/view and never reads which', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const reads: string[] = [];
       const values = { bubbles: 1, cancelable: 'yes', composed: {}, detail: '5.9', view: window };
@@ -51,7 +54,7 @@ describe('UI Events: UIEvent', () => {
   });
 
   it('uses Web IDL long conversion for detail', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() =>
       [NaN, Infinity, -Infinity, 2 ** 32 + 5, 2 ** 31, -1.9, '6.2', null, undefined].map((detail) =>
         (Reflect.construct(UIEvent, ['probe', { detail }]) as UIEvent).detail),
@@ -59,7 +62,7 @@ describe('UI Events: UIEvent', () => {
   });
 
   it('rejects invalid constructor inputs in the constructor realm', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       return [[], [Symbol()], ['probe', 1], ['probe', { detail: Symbol() }], ['probe', { detail: 1n }],
         ['probe', { view: {} }], ['probe', { view: document }], ['probe', { view: new Proxy(window, {}) }]]
@@ -70,22 +73,8 @@ describe('UI Events: UIEvent', () => {
     })).toEqual(Array<boolean>(8).fill(true));
   });
 
-  it('preserves supplied Window identity independently of the event and getter realms', () => {
-    const owner = new Browlet({ route: () => '' });
-    const other = new Browlet({ route: () => '' });
-    const event = new owner.window.UIEvent('probe', { view: other.window, detail: 8 });
-    const descriptor = Object.getOwnPropertyDescriptor(other.window.UIEvent.prototype, 'view')!;
-    expect(event.view).toBe(other.window);
-    expect(descriptor.get!.call(event)).toBe(other.window);
-    expect(getRelevantRealm(event)).toBe(getRelevantRealm(owner.window));
-    other.window.UIEvent.prototype.initUIEvent.call(event, 'after', false, true, owner.window, 3);
-    expect(event.view).toBe(owner.window);
-    expect(event.detail).toBe(3);
-    expect(getRelevantRealm(event)).toBe(getRelevantRealm(owner.window));
-  });
-
   it('checks accessor and initializer receivers before converting arguments', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const prototype = browser.window.UIEvent.prototype;
     const realm = getRelevantRealm(browser.window);
     for (const name of ['view', 'detail', 'which']) {
@@ -101,7 +90,7 @@ describe('UI Events: UIEvent', () => {
   });
 
   it('supports author subclasses', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       class Derived extends UIEvent {}
       const event = new Derived('probe', { detail: 3, view: window });
@@ -111,7 +100,7 @@ describe('UI Events: UIEvent', () => {
   });
 
   it.each(['UIEvent', 'UIEvents', 'uievent', 'uIeVeNtS'])('creates an uninitialized %s in the Document realm', (name) => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const event = browser.document.createEvent(name) as UIEventPlatform;
     expect(event).toBeInstanceOf(browser.window.UIEvent);
     expect(getRelevantRealm(event)).toBe(getRelevantRealm(browser.document));
@@ -123,7 +112,7 @@ describe('UI Events: UIEvent', () => {
   });
 
   it('reinitializes payload and DOM state while retaining composed and timestamp', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const event = new browser.window.UIEvent('before', {
       bubbles: true, cancelable: true, composed: true, view: browser.window, detail: 9,
     });
@@ -141,7 +130,7 @@ describe('UI Events: UIEvent', () => {
   });
 
   it('ignores reinitialization during dispatch after performing argument conversion', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = new UIEvent('before', { cancelable: true, view: window, detail: 5 });
       let converted = false;
@@ -158,7 +147,7 @@ describe('UI Events: UIEvent', () => {
   });
 
   it('leaves UIEvent data intact when only initEvent is called', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = new UIEvent('before', { view: window, detail: 7 });
       event.initEvent('after');
@@ -166,9 +155,47 @@ describe('UI Events: UIEvent', () => {
     })).toEqual(['after', true, 7]);
   });
 
+  it('delivers a host-created UIEvent through the projected listener and preserves cancellation', async () => {
+    const browser = prepared();
+    await browser.evaluate(() => {
+      window.addEventListener('host', (event) => {
+        const ui = event as UIEvent;
+        ui.preventDefault();
+        Reflect.set(window, 'received', [ui instanceof UIEvent, ui.view === window,
+          ui.detail, ui.isTrusted, ui.target === window, ui.defaultPrevented]);
+      }, { once: true });
+    });
+    const target = getRelevantRealm(browser.window).env.window;
+    expect(target.fireEvent('host', UIEventImpl, (ui) => {
+      ui.view = target;
+      ui.detail = 5;
+      ui.setFlags({ cancelable: true });
+    })).toBe(false);
+    expect(await browser.evaluate(() => Reflect.get(window, 'received') as unknown))
+      .toEqual([true, true, 5, true, true, true]);
+  });
+});
+
+describe('UI Events: UIEvent across environments', () => {
+  const prepared = useFixture(() => [new Browlet({ route: () => '' }), new Browlet({ route: () => '' })] as const);
+
+  it('preserves supplied Window identity independently of the event and getter realms', () => {
+    const owner = prepared()[0];
+    const other = prepared()[1];
+    const event = new owner.window.UIEvent('probe', { view: other.window, detail: 8 });
+    const descriptor = Object.getOwnPropertyDescriptor(other.window.UIEvent.prototype, 'view')!;
+    expect(event.view).toBe(other.window);
+    expect(descriptor.get!.call(event)).toBe(other.window);
+    expect(getRelevantRealm(event)).toBe(getRelevantRealm(owner.window));
+    other.window.UIEvent.prototype.initUIEvent.call(event, 'after', false, true, owner.window, 3);
+    expect(event.view).toBe(owner.window);
+    expect(event.detail).toBe(3);
+    expect(getRelevantRealm(event)).toBe(getRelevantRealm(owner.window));
+  });
+
   it.each(['node', 'window'] as const)('initializes a host event from its %s target instead of its allocation realm', (kind) => {
-    const owner = new Browlet({ route: () => '' });
-    const other = new Browlet({ route: () => '' });
+    const owner = prepared()[0];
+    const other = prepared()[1];
     const node = owner.document.createElement('div');
     other.document.adoptNode(node);
     const target = kind === 'node' ? unwrap<NodeImpl>(node) : getRelevantRealm(other.window).env.window;
@@ -194,29 +221,13 @@ describe('UI Events: UIEvent', () => {
     target.dispatchEvent(event);
     expect(platform.isTrusted).toBe(false);
   });
+});
 
-  it('delivers a host-created UIEvent through the projected listener and preserves cancellation', async () => {
-    const browser = new Browlet({ route: () => '' });
-    await browser.evaluate(() => {
-      window.addEventListener('host', (event) => {
-        const ui = event as UIEvent;
-        ui.preventDefault();
-        Reflect.set(window, 'received', [ui instanceof UIEvent, ui.view === window,
-          ui.detail, ui.isTrusted, ui.target === window, ui.defaultPrevented]);
-      }, { once: true });
-    });
-    const target = getRelevantRealm(browser.window).env.window;
-    expect(target.fireEvent('host', UIEventImpl, (ui) => {
-      ui.view = target;
-      ui.detail = 5;
-      ui.setFlags({ cancelable: true });
-    })).toBe(false);
-    expect(await browser.evaluate(() => Reflect.get(window, 'received') as unknown))
-      .toEqual([true, true, 5, true, true, true]);
-  });
+describe('UI Events: UIEvent with reporting disabled', () => {
+  const prepared = useFixture(() => new Browlet({ route: () => '', reporting: false }));
 
   it.each([false, true])('returns null for a retired view (read before replacement: %s)', async (readBefore) => {
-    const browser = new Browlet({ route: () => '', reporting: false });
+    const browser = prepared();
     await browser.navigate('https://example.test/before');
     const event = new browser.window.UIEvent('retained', { view: browser.window });
     const savedView = readBefore ? event.view : null;

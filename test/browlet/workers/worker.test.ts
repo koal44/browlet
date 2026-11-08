@@ -10,12 +10,15 @@ import { obtainURLOrigin, parseURL } from '../../../src/url/index';
 
 import { createManualEventLoop, createManualUserAgent } from '../../support/browlet-agent';
 import { runInHostTask } from '../../support/tasks';
+import { useFixture } from '../../support/fixture';
 
 afterEach(() => vi.restoreAllMocks());
 
 describe('Worker outside interface (HTML §10.2.6.3)', () => {
+  const prepared = useFixture(() => createOutsideWorker());
+
   it('projects an EventTarget with the two mixins and keeps its outside port private', () => {
-    const { worker, window, env } = createOutsideWorker();
+    const { worker, window, env } = prepared();
     expect(worker).toBeInstanceOf(window.Worker);
     expect(worker).toBeInstanceOf(window.EventTarget);
     expect(Object.prototype.toString.call(worker)).toBe('[object Worker]');
@@ -35,7 +38,7 @@ describe('Worker outside interface (HTML §10.2.6.3)', () => {
   });
 
   it.each([false, true])('exposes nested Worker construction in a worker global (shared: %s)', (shared) => {
-    const { env } = createOutsideWorker();
+    const { env } = prepared();
     const agent = shared ? new SharedWorkerAgent(createManualEventLoop()) : new DedicatedWorkerAgent(createManualEventLoop());
     env.realm.agent.agentCluster!.add(agent);
     const insideEnv = createWorkerEnvironment({
@@ -48,7 +51,7 @@ describe('Worker outside interface (HTML §10.2.6.3)', () => {
   });
 
   it('uses ordinary constructor arity and WorkerOptions enum conversion', () => {
-    const { window, env } = createOutsideWorker();
+    const { window, env } = prepared();
     expect(() => { Reflect.construct(window.Worker, []); }).toThrow(env.realm.TypeError);
     expect(() => { Reflect.apply(window.Worker, undefined, ['http://[']); }).toThrow(env.realm.TypeError);
     for (const options of [{ type: 'invalid' }, { credentials: 'invalid' }, 1]) {
@@ -57,7 +60,7 @@ describe('Worker outside interface (HTML §10.2.6.3)', () => {
   });
 
   it('finishes URL-string and dictionary conversion before rejecting a malformed URL', () => {
-    const { window, env } = createOutsideWorker();
+    const { window, env } = prepared();
     const order: string[] = [];
     const scriptURL = { toString() { order.push('scriptURL'); return 'http://['; } };
     const options = {
@@ -72,7 +75,7 @@ describe('Worker outside interface (HTML §10.2.6.3)', () => {
   });
 
   it('enforces TrustedScriptURL before parsing and reports the Worker constructor sink', () => {
-    const { window, env } = createOutsideWorker();
+    const { window, env } = prepared();
     env.policyContainer.cspList!.policies.push(ContentSecurityPolicy.parse("require-trusted-types-for 'script'", 'header', 'enforce'));
     expect(() => { new window.Worker('http://['); }).toThrow(env.realm.TypeError);
     const calls: unknown[][] = [];
@@ -84,7 +87,7 @@ describe('Worker outside interface (HTML §10.2.6.3)', () => {
   });
 
   it('unwraps a matching trusted URL without calling the default policy', () => {
-    const { window, env } = createOutsideWorker();
+    const { window, env } = prepared();
     env.policyContainer.cspList!.policies.push(ContentSecurityPolicy.parse("require-trusted-types-for 'script'", 'header', 'enforce'));
     const marker = new Error('default policy must not run');
     window.trustedTypes.createPolicy('default', { createScriptURL() { throw marker; } });
@@ -93,8 +96,22 @@ describe('Worker outside interface (HTML §10.2.6.3)', () => {
       .toThrow(expect.objectContaining({ name: 'SyntaxError' }));
   });
 
+  it.each([false, true])('uses ordinary outside error cancellation for %s', (result) => {
+    const { worker, window } = prepared();
+    const calls: unknown[][] = [];
+    worker.onerror = function(this: unknown, ...args: unknown[]) { calls.push([this, ...args]); return result; };
+    const event = new window.ErrorEvent('error', { cancelable: true, error: null });
+    expect(worker.dispatchEvent(event)).toBe(result !== false);
+    expect(calls).toEqual([[worker, event]]);
+    expect(event.defaultPrevented).toBe(result === false);
+  });
+});
+
+describe('Worker outside interface (HTML §10.2.6.3) connected messages', () => {
+  const prepared = useFixture(() => createConnectedWorker());
+
   it('clones outgoing messages synchronously and delivers them in order to the inside global', () => {
-    const { worker, scope, inside, insideLoop } = createConnectedWorker();
+    const { worker, scope, inside, insideLoop } = prepared();
     const messages: MessageEvent[] = [];
     scope.onmessage = (event) => { messages.push(event as MessageEvent); };
     inside.insidePort.start();
@@ -115,7 +132,7 @@ describe('Worker outside interface (HTML §10.2.6.3)', () => {
   });
 
   it.each(['sequence', 'options'] as const)('transfers a port through the %s overload', (overload) => {
-    const { worker, window, scope, inside, insideLoop, loop } = createConnectedWorker();
+    const { worker, window, scope, inside, insideLoop, loop } = prepared();
     const channel = new window.MessageChannel();
     let received: MessagePort | undefined;
     const replies: unknown[] = [];
@@ -136,7 +153,7 @@ describe('Worker outside interface (HTML §10.2.6.3)', () => {
   });
 
   it('keeps incoming messages disabled despite onmessage until startup enables the outside port', () => {
-    const { worker, implementation, scope, loop } = createConnectedWorker();
+    const { worker, implementation, scope, loop } = prepared();
     const messages: unknown[] = [];
     worker.onmessage = function(this: unknown, event) {
       const message = event as MessageEvent;
@@ -151,7 +168,7 @@ describe('Worker outside interface (HTML §10.2.6.3)', () => {
   });
 
   it('delivers messageerror to the Worker when deserialization fails', () => {
-    const { worker, implementation, scope, env, loop } = createConnectedWorker();
+    const { worker, implementation, scope, env, loop } = prepared();
     const messages: unknown[] = [];
     worker.onmessageerror = function(this: unknown, event) {
       const message = event as MessageEvent;
@@ -164,19 +181,26 @@ describe('Worker outside interface (HTML §10.2.6.3)', () => {
     expect(messages).toEqual([[worker, worker, 'messageerror', null, true]]);
   });
 
-  it.each([false, true])('uses ordinary outside error cancellation for %s', (result) => {
-    const { worker, window } = createOutsideWorker();
-    const calls: unknown[][] = [];
-    worker.onerror = function(this: unknown, ...args: unknown[]) { calls.push([this, ...args]); return result; };
-    const event = new window.ErrorEvent('error', { cancelable: true, error: null });
-    expect(worker.dispatchEvent(event)).toBe(result !== false);
-    expect(calls).toEqual([[worker, event]]);
-    expect(event.defaultPrevented).toBe(result === false);
-  });
+  it('delivers initial-script messages to the Worker through existing completion steps', () => runInHostTask(() => {
+    const { worker, implementation, insideEnv, loop, insideLoop } = prepared();
+    const messages: unknown[] = [];
+    worker.onmessage = (event) => { messages.push((event as MessageEvent).data); };
+    const script = new ClassicScript("postMessage('initial script');", insideEnv, insideEnv.apiBaseURL, new ScriptFetchOptions());
+    insideEnv.queueTask('network', () => { insideEnv.completeScriptFetch(script, implementation, implementation.outsidePort); });
+    expect(insideLoop.runTaskTurn()).toBe(true);
+    expect(insideEnv.executionReady).toBe(true);
+    expect(messages).toEqual([]);
+    drain(loop);
+    expect(messages).toEqual(['initial script']);
+  }));
+});
+
+describe('Worker outside interface (HTML §10.2.6.3) across environments', () => {
+  const prepared = useFixture(() => [createOutsideWorker(), createConnectedWorker()] as const);
 
   it('uses the receiver port across realms and preserves synchronous conversion and clone errors', () => {
-    const first = createOutsideWorker();
-    const second = createConnectedWorker();
+    const first = prepared()[0];
+    const second = prepared()[1];
     const messages: unknown[] = [];
     second.scope.onmessage = (event) => { messages.push((event as MessageEvent).data); };
     second.inside.insidePort.start();
@@ -192,19 +216,6 @@ describe('Worker outside interface (HTML §10.2.6.3)', () => {
     expect(() => { first.worker.postMessage(buffer, [buffer, buffer]); }).toThrow(expect.objectContaining({ name: 'DataCloneError' }));
     expect(buffer.byteLength).toBe(1);
   });
-
-  it('delivers initial-script messages to the Worker through existing completion steps', () => runInHostTask(() => {
-    const { worker, implementation, insideEnv, loop, insideLoop } = createConnectedWorker();
-    const messages: unknown[] = [];
-    worker.onmessage = (event) => { messages.push((event as MessageEvent).data); };
-    const script = new ClassicScript("postMessage('initial script');", insideEnv, insideEnv.apiBaseURL, new ScriptFetchOptions());
-    insideEnv.queueTask('network', () => { insideEnv.completeScriptFetch(script, implementation, implementation.outsidePort); });
-    expect(insideLoop.runTaskTurn()).toBe(true);
-    expect(insideEnv.executionReady).toBe(true);
-    expect(messages).toEqual([]);
-    drain(loop);
-    expect(messages).toEqual(['initial script']);
-  }));
 });
 
 /** Construct only the outside implementation; production startup remains an explicit dependency. */

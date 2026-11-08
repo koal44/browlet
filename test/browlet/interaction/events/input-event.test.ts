@@ -3,10 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { InputEventImpl } from '../../../../src/browlet/interaction/events/index';
 import { getRelevantRealm } from '../../../support/browlet-binding';
+import { useFixture } from '../../../support/fixture';
 
 describe('UI Events: InputEvent', () => {
+  const prepared = useFixture(() => new Browlet({ route: () => '' }));
+
   it.each(['beforeinput', 'input'])('constructs %s with dictionary defaults rather than trusted-producer flags', async (type) => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate((type) => {
       const event = new InputEvent(type);
       return {
@@ -25,7 +28,7 @@ describe('UI Events: InputEvent', () => {
   });
 
   it('converts inherited members first and own dictionary members in lexical order', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const reads: string[] = [];
       const values = {
@@ -52,7 +55,7 @@ describe('UI Events: InputEvent', () => {
   });
 
   it('preserves nullable DOMString data, including decomposed text and lone surrogates', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       return [undefined, null, '', 5, false, 'e\u0301', '\ud800', '\udc00', '\ud83d\ude42'].map((data) =>
         (Reflect.construct(InputEvent, ['input', { data }]) as InputEvent).data);
@@ -60,7 +63,7 @@ describe('UI Events: InputEvent', () => {
   });
 
   it('preserves DOMString inputType after conversion without a known-operation filter', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       return [undefined, null, false, 5, '', 'insertText', 'insertFromPasteAsQuotation',
         'formatFontColor', 'vendorFuture', 'INSERTTEXT', '\ud800'].map((inputType) =>
@@ -70,7 +73,7 @@ describe('UI Events: InputEvent', () => {
   });
 
   it('propagates a data coercion failure before reading later members', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const sentinel = new Error('coercion');
       const reads: string[] = [];
@@ -85,7 +88,7 @@ describe('UI Events: InputEvent', () => {
   });
 
   it('checks required arguments, call shape, and invalid inputs in the constructor realm', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const invalid = [[], [Symbol()], ['input', 1], ['input', { data: Symbol() }],
         ['input', { inputType: Symbol() }], ['input', { view: {} }]].map((args) => {
@@ -100,7 +103,7 @@ describe('UI Events: InputEvent', () => {
   });
 
   it('exposes read-only attributes with InputEvent receiver checks', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     for (const name of ['data', 'isComposing', 'inputType']) {
       const descriptor = Object.getOwnPropertyDescriptor(browser.window.InputEvent.prototype, name)!;
       expect(descriptor).toMatchObject({ enumerable: true, configurable: true, set: undefined });
@@ -110,21 +113,8 @@ describe('UI Events: InputEvent', () => {
     }
   });
 
-  it('keeps event ownership and the supplied view across borrowed getters', () => {
-    const owner = new Browlet({ route: () => '' });
-    const other = new Browlet({ route: () => '' });
-    const event = new owner.window.InputEvent('input', {
-      view: other.window, data: 'text', isComposing: true, inputType: 'insertText',
-    });
-    const data = Object.getOwnPropertyDescriptor(other.window.InputEvent.prototype, 'data')!;
-    const view = Object.getOwnPropertyDescriptor(other.window.UIEvent.prototype, 'view')!;
-    expect(data.get!.call(event)).toBe('text');
-    expect(view.get!.call(event)).toBe(other.window);
-    expect(getRelevantRealm(event)).toBe(getRelevantRealm(owner.window));
-  });
-
   it('supports author subclasses', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       class Derived extends InputEvent {}
       const event = new Derived('input', { data: 'text', isComposing: true, inputType: 'insertText' });
@@ -134,14 +124,14 @@ describe('UI Events: InputEvent', () => {
   });
 
   it('does not add InputEvent to DOM\'s legacy createEvent table', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(() => browser.document.createEvent('InputEvent')).toThrow(
       expect.objectContaining({ name: 'NotSupportedError' }),
     );
   });
 
   it('retains input-specific data through inherited legacy initialization', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = new InputEvent('beforeinput', { data: 'e\u0301', isComposing: true, inputType: 'vendorFuture' });
       const timeStamp = event.timeStamp;
@@ -153,7 +143,7 @@ describe('UI Events: InputEvent', () => {
   });
 
   it('dispatches cancellable synthetic beforeinput without editing or producing another event', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const editable = document.createElement('div');
       editable.setAttribute('contenteditable', 'true');
@@ -174,7 +164,7 @@ describe('UI Events: InputEvent', () => {
   });
 
   it('delivers a host-created InputEvent through the existing event factory', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     await browser.evaluate(() => {
       document.addEventListener('input', (input) => {
         Reflect.set(window, 'received', [input instanceof InputEvent, input.view === window,
@@ -191,5 +181,22 @@ describe('UI Events: InputEvent', () => {
     })).toBe(true);
     expect(await browser.evaluate(() => Reflect.get(window, 'received') as unknown))
       .toEqual([true, true, 'text', 'insertText', false, true, true]);
+  });
+});
+
+describe('UI Events: InputEvent across environments', () => {
+  const prepared = useFixture(() => [new Browlet({ route: () => '' }), new Browlet({ route: () => '' })] as const);
+
+  it('keeps event ownership and the supplied view across borrowed getters', () => {
+    const owner = prepared()[0];
+    const other = prepared()[1];
+    const event = new owner.window.InputEvent('input', {
+      view: other.window, data: 'text', isComposing: true, inputType: 'insertText',
+    });
+    const data = Object.getOwnPropertyDescriptor(other.window.InputEvent.prototype, 'data')!;
+    const view = Object.getOwnPropertyDescriptor(other.window.UIEvent.prototype, 'view')!;
+    expect(data.get!.call(event)).toBe('text');
+    expect(view.get!.call(event)).toBe(other.window);
+    expect(getRelevantRealm(event)).toBe(getRelevantRealm(owner.window));
   });
 });

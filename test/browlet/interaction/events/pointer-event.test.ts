@@ -3,10 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { PointerEventImpl } from '../../../../src/browlet/interaction/events/index';
 import { getRelevantRealm, unwrap } from '../../../support/browlet-binding';
+import { useFixture } from '../../../support/fixture';
 
 describe('Pointer Events: event objects', () => {
+  const prepared = useFixture(() => new Browlet({ route: () => '' }));
+
   it('inherits MouseEvent and supplies constructor defaults without native pointer state', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = new PointerEvent('pointermove');
       return {
@@ -29,7 +32,7 @@ describe('Pointer Events: event objects', () => {
   });
 
   it('converts numeric widths and inherited data without enforcing hardware ranges on author input', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = Reflect.construct(PointerEvent, ['pointerdown', {
         pointerId: 2 ** 32 + 5, persistentDeviceId: 2 ** 31, width: -2, height: '3.5',
@@ -45,7 +48,7 @@ describe('Pointer Events: event objects', () => {
   });
 
   it('reads own dictionary members once in lexical order after inherited members', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const result = await browser.evaluate(() => {
       const reads: string[] = [];
       const init = new Proxy({}, { get(_target, key) { reads.push(String(key)); return key === 'tiltX' ? 45 : undefined; } });
@@ -61,7 +64,7 @@ describe('Pointer Events: event objects', () => {
   });
 
   it('rejects nonfinite floating-point input and finite values that overflow float', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const inputs = ['width', 'height', 'pressure', 'tangentialPressure', 'altitudeAngle', 'azimuthAngle']
         .flatMap((key) => [NaN, Infinity, -Infinity].map((value) => ({ [key]: value })));
@@ -74,7 +77,7 @@ describe('Pointer Events: event objects', () => {
   });
 
   it('preserves fractional coordinates except for the three compatibility event types', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => ['pointermove', 'pointerdown', 'probe', 'click', 'auxclick', 'contextmenu'].map((type) => {
       const event = new PointerEvent(type, { screenX: 3.75, screenY: -4.25, clientX: 1.75, clientY: -2.25 });
       const before = [event.screenX, event.screenY, event.clientX, event.clientY];
@@ -87,7 +90,7 @@ describe('Pointer Events: event objects', () => {
   });
 
   it('derives spherical angles from plane tilts, including axes and horizontal transducers', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const cases = [
       [0, 0, Math.PI / 2, 0], [0, 45, Math.PI / 4, Math.PI / 2], [0, -45, Math.PI / 4, 3 * Math.PI / 2],
       [45, 0, Math.PI / 4, 0], [-45, 0, Math.PI / 4, Math.PI],
@@ -108,7 +111,7 @@ describe('Pointer Events: event objects', () => {
   });
 
   it('derives integer tilts from spherical angles with exact horizontal-axis handling', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const cases = [
       [0, 0, 90, 0], [0, Math.PI / 2, 0, 90], [0, Math.PI, -90, 0], [0, 3 * Math.PI / 2, 0, -90],
       [0, 2 * Math.PI, 90, 0], [0, Math.PI / 4, 90, 90], [0, 3 * Math.PI / 4, -90, 90],
@@ -124,7 +127,7 @@ describe('Pointer Events: event objects', () => {
   });
 
   it('distinguishes absent orientation members from explicit zero and mixed representations', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => [{}, { tiltX: undefined }, { tiltX: 45 }, { tiltY: -45 },
       { altitudeAngle: 0 }, { azimuthAngle: Math.PI / 2 }, { tiltX: 45, altitudeAngle: Math.PI / 3 },
       { tiltY: 30, azimuthAngle: Math.PI }, { tiltX: 0, tiltY: 0, altitudeAngle: 0, azimuthAngle: 1 },
@@ -139,7 +142,7 @@ describe('Pointer Events: event objects', () => {
   });
 
   it('wraps only calculation inputs for out-of-range orientation without loops proportional to the input', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const result = await browser.evaluate(() => {
       const tilt = new PointerEvent('probe', { tiltX: 100, tiltY: -181 });
       const angles = new PointerEvent('probe', { altitudeAngle: -2, azimuthAngle: 8 });
@@ -160,7 +163,7 @@ describe('Pointer Events: event objects', () => {
   });
 
   it('exposes coalesced access only in secure contexts while predicted access remains available', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const results: unknown[] = [];
     for (const url of ['http://pointer.test/', 'https://pointer.test/']) {
       await browser.navigate(url);
@@ -171,7 +174,7 @@ describe('Pointer Events: event objects', () => {
   });
 
   it('copies the lists, retains repeated event identities, and returns fresh sequence arrays', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     await browser.navigate('https://pointer.test/');
     expect(await browser.evaluate(() => {
       const first = new PointerEvent('first', { pointerId: 9 });
@@ -195,7 +198,7 @@ describe('Pointer Events: event objects', () => {
   });
 
   it('converts sequences from iterables and rejects non-PointerEvent entries, including author proxies', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     await browser.navigate('https://pointer.test/');
     expect(await browser.evaluate(() => {
       const child = new PointerEvent('child');
@@ -209,37 +212,8 @@ describe('Pointer Events: event objects', () => {
     })).toEqual([true, Array<boolean>(12).fill(true)]);
   });
 
-  it('allocates borrowed-method arrays in the receiver realm without moving contained events', async () => {
-    const owner = new Browlet({ route: () => '' });
-    const other = new Browlet({ route: () => '' });
-    await owner.navigate('https://pointer.test/');
-    await other.navigate('https://pointer.test/');
-    const child = new other.window.PointerEvent('child');
-    const event = new owner.window.PointerEvent('probe', { coalescedEvents: [child], predictedEvents: [child] });
-    const coalesced = other.window.PointerEvent.prototype.getCoalescedEvents.call(event);
-    const predicted = other.window.PointerEvent.prototype.getPredictedEvents.call(event);
-    expect(Object.getPrototypeOf(coalesced)).toBe(getRelevantRealm(owner.window).Array.prototype);
-    expect(Object.getPrototypeOf(predicted)).toBe(getRelevantRealm(owner.window).Array.prototype);
-    expect(coalesced[0]).toBe(child);
-    expect(predicted[0]).toBe(child);
-    expect(getRelevantRealm(child)).toBe(getRelevantRealm(other.window));
-    const getter = Object.getOwnPropertyDescriptor(other.window.PointerEvent.prototype, 'pointerId')!;
-    expect(getter.get!.call(event)).toBe(0);
-    expect(getRelevantRealm(event)).toBe(getRelevantRealm(owner.window));
-  });
-
-  it('keeps the copied implementation lists independent of caller-owned arrays', () => {
-    const child = new PointerEventImpl('child');
-    const input = [child];
-    const event = new PointerEventImpl('probe', { coalescedEvents: input, predictedEvents: input });
-    input.length = 0;
-    expect(event.getCoalescedEvents()).toEqual([child]);
-    expect(event.getPredictedEvents()).toEqual([child]);
-    expect(event.getCoalescedEvents()).not.toBe(event.getPredictedEvents());
-  });
-
   it('does not rewrite sample trust when an author redispatches the containing event', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     await browser.navigate('https://pointer.test/');
     const child = new browser.window.PointerEvent('sample');
     const event = new browser.window.PointerEvent('pointermove', { coalescedEvents: [child], predictedEvents: [child] });
@@ -253,7 +227,7 @@ describe('Pointer Events: event objects', () => {
   });
 
   it('checks receiver brands, supports subclasses, and rejects legacy factory names', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       class Derived extends PointerEvent {}
       const event = new Derived('probe', { pointerId: 5 });
@@ -272,7 +246,7 @@ describe('Pointer Events: event objects', () => {
   });
 
   it('preserves pointer data and lists when using inherited legacy mouse initialization', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const child = new PointerEvent('child');
       const event = new PointerEvent('pointermove', {
@@ -283,5 +257,40 @@ describe('Pointer Events: event objects', () => {
       return [event.type, event.pointerId, event.pointerType, event.tiltX, event.altitudeAngle,
         event.clientX, event.getPredictedEvents()[0] === child];
     })).toEqual(['changed', 5, 'pen', 45, Math.PI / 4, 0, true]);
+  });
+});
+
+describe('Pointer Events: event objects across environments', () => {
+  const prepared = useFixture(() => [new Browlet({ route: () => '' }), new Browlet({ route: () => '' })] as const);
+
+  it('allocates borrowed-method arrays in the receiver realm without moving contained events', async () => {
+    const owner = prepared()[0];
+    const other = prepared()[1];
+    await owner.navigate('https://pointer.test/');
+    await other.navigate('https://pointer.test/');
+    const child = new other.window.PointerEvent('child');
+    const event = new owner.window.PointerEvent('probe', { coalescedEvents: [child], predictedEvents: [child] });
+    const coalesced = other.window.PointerEvent.prototype.getCoalescedEvents.call(event);
+    const predicted = other.window.PointerEvent.prototype.getPredictedEvents.call(event);
+    expect(Object.getPrototypeOf(coalesced)).toBe(getRelevantRealm(owner.window).Array.prototype);
+    expect(Object.getPrototypeOf(predicted)).toBe(getRelevantRealm(owner.window).Array.prototype);
+    expect(coalesced[0]).toBe(child);
+    expect(predicted[0]).toBe(child);
+    expect(getRelevantRealm(child)).toBe(getRelevantRealm(other.window));
+    const getter = Object.getOwnPropertyDescriptor(other.window.PointerEvent.prototype, 'pointerId')!;
+    expect(getter.get!.call(event)).toBe(0);
+    expect(getRelevantRealm(event)).toBe(getRelevantRealm(owner.window));
+  });
+});
+
+describe('Pointer Events: event objects implementation', () => {
+  it('keeps the copied implementation lists independent of caller-owned arrays', () => {
+    const child = new PointerEventImpl('child');
+    const input = [child];
+    const event = new PointerEventImpl('probe', { coalescedEvents: input, predictedEvents: input });
+    input.length = 0;
+    expect(event.getCoalescedEvents()).toEqual([child]);
+    expect(event.getPredictedEvents()).toEqual([child]);
+    expect(event.getCoalescedEvents()).not.toBe(event.getPredictedEvents());
   });
 });

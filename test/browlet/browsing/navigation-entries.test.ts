@@ -8,10 +8,13 @@ import { Navigable } from '../../../src/browlet/browsing/navigation/navigable';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { createOpaqueOrigin, obtainURLOrigin, parseURL } from '../../../src/url/index';
 import { getRelevantRealm, unwrap } from '../../support/browlet-binding';
+import { useFixture } from '../../support/fixture';
 
 describe('Navigation entry lists', () => {
+  const prepared = useFixture(() => new Browlet({ route: () => '' }));
+
   it('disables entries for initial about:blank, even with an inherited tuple origin', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const document = unwrap<DocumentImpl>(browser.document);
     document.origin = obtainURLOrigin(parseURL('https://example.test/').url!);
     expect(document.isFullyActive()).toBe(true);
@@ -22,8 +25,81 @@ describe('Navigation entry lists', () => {
     expect(browser.window.navigation.canGoForward).toBe(false);
   });
 
+  it('includes entry zero and recreates its platform identity in the new Window', async () => {
+    const browser = prepared();
+    await browser.navigate('https://example.test/first');
+    const old = browser.window.navigation.currentEntry!;
+    const { key, id } = old;
+    expect(key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(id).not.toBe(key);
+    await browser.navigate('https://example.test/second');
+    const entries = browser.window.navigation.entries();
+    expect(entries.map((entry) => entry.url)).toEqual(['https://example.test/first', 'https://example.test/second']);
+    expect(entries[0]).not.toBe(old);
+    expect(entries[0]).toMatchObject({ key, id, index: 0, sameDocument: false });
+    expect(getRelevantRealm(entries[0]!)).toBe(getRelevantRealm(browser.window));
+    expect(entries[1]).toBe(browser.window.navigation.currentEntry);
+    expect(entries[1]!.sameDocument).toBe(true);
+    expect(browser.window.navigation.canGoBack).toBe(true);
+    expect(browser.window.navigation.canGoForward).toBe(false);
+  });
+
+  it('retains the position key on replacement, while giving the new entry a new ID', async () => {
+    const browser = prepared();
+    await browser.navigate('https://example.test/current');
+    const { key, id } = browser.window.navigation.currentEntry!;
+    await browser.navigate('https://example.test/current');
+    const entry = browser.window.navigation.currentEntry!;
+    expect(entry.key).toBe(key);
+    expect(entry.id).not.toBe(id);
+    expect(browser.window.navigation.entries()).toHaveLength(1);
+  });
+
+  it('stops at a cross-origin boundary even when older entries have the same origin', async () => {
+    const browser = prepared();
+    for (const url of ['https://example.test/first', 'https://other.test/boundary', 'https://example.test/last']) {
+      await browser.navigate(url);
+    }
+    expect(browser.window.navigation.entries().map((entry) => entry.url)).toEqual(['https://example.test/last']);
+    expect(browser.window.navigation.currentEntry!.index).toBe(0);
+    expect(browser.window.navigation.canGoBack).toBe(false);
+    expect(browser.window.history.length).toBe(3);
+  });
+
+  it('keeps entries disabled for a loaded opaque-origin Document', async () => {
+    const browser = prepared();
+    await browser.navigate('data:text/html,opaque');
+    expect(unwrap<DocumentImpl>(browser.document).isInitialAboutBlank).toBe(false);
+    expect(browser.window.navigation.entries()).toEqual([]);
+    expect(browser.window.navigation.currentEntry).toBeNull();
+    expect(browser.window.navigation.canGoBack).toBe(false);
+    expect(browser.window.navigation.canGoForward).toBe(false);
+  });
+
+  it.each(['replace', 'detach'] as const)('hides retained Navigation and entry values after %s', async (change) => {
+    const browser = prepared();
+    await browser.navigate('https://example.test/first');
+    const navigation = browser.window.navigation;
+    const entry = navigation.currentEntry!;
+    const document = unwrap<DocumentImpl>(browser.document);
+    const deserialize = vi.spyOn(document.env, 'deserialize');
+    if (change === 'replace') await browser.navigate('https://example.test/second');
+    else document.browsingContext = null;
+    expect(navigation.entries()).toEqual([]);
+    expect(navigation.currentEntry).toBeNull();
+    expect(navigation.canGoBack).toBe(false);
+    expect(navigation.canGoForward).toBe(false);
+    expect(entry).toMatchObject({ key: '', id: '', url: '', index: -1, sameDocument: false });
+    expect(entry.getState()).toBeUndefined();
+    expect(deserialize).not.toHaveBeenCalled();
+  });
+});
+
+describe('Navigation entry lists during parsing', () => {
+  const prepared = useFixture(() => new Browlet({ route: () => '<script>globalThis.entryAtParse = navigation.currentEntry;</script>' }));
+
   it('initializes before parser scripts run and returns fresh arrays of stable entries', async () => {
-    const browser = new Browlet({ route: () => '<script>globalThis.entryAtParse = navigation.currentEntry;</script>' });
+    const browser = prepared();
     await browser.navigate('https://example.test/first');
     expect(await browser.evaluate(() => {
       const first = navigation.entries();
@@ -47,78 +123,13 @@ describe('Navigation entry lists', () => {
       state: undefined, canGoBack: false, canGoForward: false, constructible: false, writable: false,
     });
   });
+});
 
-  it('includes entry zero and recreates its platform identity in the new Window', async () => {
-    const browser = new Browlet({ route: () => '' });
-    await browser.navigate('https://example.test/first');
-    const old = browser.window.navigation.currentEntry!;
-    const { key, id } = old;
-    expect(key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-    expect(id).not.toBe(key);
-    await browser.navigate('https://example.test/second');
-    const entries = browser.window.navigation.entries();
-    expect(entries.map((entry) => entry.url)).toEqual(['https://example.test/first', 'https://example.test/second']);
-    expect(entries[0]).not.toBe(old);
-    expect(entries[0]).toMatchObject({ key, id, index: 0, sameDocument: false });
-    expect(getRelevantRealm(entries[0]!)).toBe(getRelevantRealm(browser.window));
-    expect(entries[1]).toBe(browser.window.navigation.currentEntry);
-    expect(entries[1]!.sameDocument).toBe(true);
-    expect(browser.window.navigation.canGoBack).toBe(true);
-    expect(browser.window.navigation.canGoForward).toBe(false);
-  });
+describe('Navigation entry lists with retained history', () => {
+  const prepared = useFixture(fixture);
 
-  it('retains the position key on replacement, while giving the new entry a new ID', async () => {
-    const browser = new Browlet({ route: () => '' });
-    await browser.navigate('https://example.test/current');
-    const { key, id } = browser.window.navigation.currentEntry!;
-    await browser.navigate('https://example.test/current');
-    const entry = browser.window.navigation.currentEntry!;
-    expect(entry.key).toBe(key);
-    expect(entry.id).not.toBe(id);
-    expect(browser.window.navigation.entries()).toHaveLength(1);
-  });
-
-  it('stops at a cross-origin boundary even when older entries have the same origin', async () => {
-    const browser = new Browlet({ route: () => '' });
-    for (const url of ['https://example.test/first', 'https://other.test/boundary', 'https://example.test/last']) {
-      await browser.navigate(url);
-    }
-    expect(browser.window.navigation.entries().map((entry) => entry.url)).toEqual(['https://example.test/last']);
-    expect(browser.window.navigation.currentEntry!.index).toBe(0);
-    expect(browser.window.navigation.canGoBack).toBe(false);
-    expect(browser.window.history.length).toBe(3);
-  });
-
-  it('keeps entries disabled for a loaded opaque-origin Document', async () => {
-    const browser = new Browlet({ route: () => '' });
-    await browser.navigate('data:text/html,opaque');
-    expect(unwrap<DocumentImpl>(browser.document).isInitialAboutBlank).toBe(false);
-    expect(browser.window.navigation.entries()).toEqual([]);
-    expect(browser.window.navigation.currentEntry).toBeNull();
-    expect(browser.window.navigation.canGoBack).toBe(false);
-    expect(browser.window.navigation.canGoForward).toBe(false);
-  });
-
-  it.each(['replace', 'detach'] as const)('hides retained Navigation and entry values after %s', async (change) => {
-    const browser = new Browlet({ route: () => '' });
-    await browser.navigate('https://example.test/first');
-    const navigation = browser.window.navigation;
-    const entry = navigation.currentEntry!;
-    const document = unwrap<DocumentImpl>(browser.document);
-    const deserialize = vi.spyOn(document.env, 'deserialize');
-    if (change === 'replace') await browser.navigate('https://example.test/second');
-    else document.browsingContext = null;
-    expect(navigation.entries()).toEqual([]);
-    expect(navigation.currentEntry).toBeNull();
-    expect(navigation.canGoBack).toBe(false);
-    expect(navigation.canGoForward).toBe(false);
-    expect(entry).toMatchObject({ key: '', id: '', url: '', index: -1, sameDocument: false });
-    expect(entry.getState()).toBeUndefined();
-    expect(deserialize).not.toHaveBeenCalled();
-  });
-
-  it('selects around a target-step gap and retains both back and forward entries', async () => {
-    const { browser, document, navigable } = await fixture();
+  it('selects around a target-step gap and retains both back and forward entries', () => {
+    const { browser, document, navigable } = prepared();
     const entries = [0, 3, 7].map((step) => {
       const state = DocumentState.create(document);
       state.origin = document.origin;
@@ -140,10 +151,14 @@ describe('Navigation entry lists', () => {
     entries[2]!.documentState.origin = createOpaqueOrigin();
     expect(navigable.getSessionHistoryEntriesForNavigationAPI(5)).toEqual(entries.slice(0, 2));
   });
+});
 
-  it('selects the child history rather than the parent list, including deeper retained lists', async () => {
-    const { navigable: parent } = await fixture();
-    const childBrowser = new Browlet({ route: () => '' });
+describe('Navigation entry lists across environments', () => {
+  const prepared = useFixture(async () => [await fixture(), new Browlet({ route: () => '' })] as const);
+
+  it('selects the child history rather than the parent list, including deeper retained lists', () => {
+    const { navigable: parent } = prepared()[0];
+    const childBrowser = prepared()[1];
     const childDocument = unwrap<DocumentImpl>(childBrowser.document);
     childDocument.browsingContext = new BrowsingContext();
     const child = new Navigable(DocumentState.create(childDocument), parent);
@@ -165,8 +180,10 @@ describe('Navigation entry lists', () => {
 });
 
 describe('NavigationHistoryEntry state and metadata', () => {
+  const prepared = useFixture(fixture);
+
   it('deserializes a fresh state graph on each read, independently of History.state', async () => {
-    const { browser, document, navigable } = await fixture();
+    const { browser, document, navigable } = prepared();
     const state = await browser.evaluate(() => {
       const value: { items: number[]; self?: unknown; } = { items: [1] };
       value.self = value;
@@ -186,23 +203,8 @@ describe('NavigationHistoryEntry state and metadata', () => {
     })).toEqual({ realm: true, fresh: true, cycle: true, items: [1], historyState: null });
   });
 
-  it('uses a borrowed getState method realm while checking the receiver Document', async () => {
-    const first = await fixture();
-    const second = await fixture();
-    first.navigable.activeSessionHistoryEntry.navigationAPIState = first.document.env.serializeForStorage({ items: [1] });
-    const entry = first.browser.window.navigation.currentEntry!;
-    // eslint-disable-next-line @typescript-eslint/unbound-method -- Exercise the method realm with an explicit foreign receiver.
-    const getState = second.browser.window.NavigationHistoryEntry.prototype.getState;
-    const state: unknown = Reflect.apply(getState, entry, []);
-    expect(state).toBeInstanceOf(getRelevantRealm(second.browser.window).Object);
-    expect(state).not.toBeInstanceOf(getRelevantRealm(first.browser.window).Object);
-    first.document.browsingContext = null;
-    expect(Reflect.apply(getState, entry, [])).toBeUndefined();
-    expect(() => { Reflect.apply(getState, {}, []); }).toThrow(getRelevantRealm(second.browser.window).TypeError);
-  });
-
-  it('propagates deserialization failures', async () => {
-    const { browser, document } = await fixture();
+  it('propagates deserialization failures', () => {
+    const { browser, document } = prepared();
     const failure = new RangeError('allocation failed');
     vi.spyOn(document.env, 'deserialize').mockImplementation(() => { throw failure; });
     expect(() => { browser.window.navigation.currentEntry!.getState(); }).toThrow('allocation failed');
@@ -210,7 +212,7 @@ describe('NavigationHistoryEntry state and metadata', () => {
 
   it.each(['no-referrer', 'origin', 'same-origin', 'strict-origin-when-cross-origin'] as const)(
     'applies request referrer policy %s only to another Document', async (policy) => {
-      const { browser, document, navigable } = await fixture();
+      const { browser, document, navigable } = prepared();
       const oldState = navigable.activeSessionHistoryEntry.documentState;
       oldState.requestReferrerPolicy = policy;
       expect(browser.window.navigation.currentEntry!.url).toBe('https://example.test/current');
@@ -225,8 +227,8 @@ describe('NavigationHistoryEntry state and metadata', () => {
     },
   );
 
-  it('uses the Window-owned Navigation after its replaceable property is overwritten', async () => {
-    const { browser, document } = await fixture();
+  it('uses the Window-owned Navigation after its replaceable property is overwritten', () => {
+    const { browser, document } = prepared();
     const entry = browser.window.navigation.currentEntry!;
     Reflect.set(browser.window, 'navigation', 'author replacement');
     expect(entry.index).toBe(0);
@@ -237,7 +239,7 @@ describe('NavigationHistoryEntry state and metadata', () => {
 
   it.each(['navigate', 'navigatesuccess', 'navigateerror', 'currententrychange', 'dispose'] as const)(
     'supports the on%s attribute through EventTarget dispatch', async (type) => {
-      const { browser } = await fixture();
+      const { browser } = prepared();
       expect(await browser.evaluate((eventType) => {
         const target = eventType === 'dispose' ? navigation.currentEntry! : navigation;
         const name = `on${eventType}`;
@@ -257,6 +259,25 @@ describe('NavigationHistoryEntry state and metadata', () => {
       }, type)).toEqual({ initiallyNull: true, stable: true, calls: 1, correctThis: true });
     },
   );
+});
+
+describe('NavigationHistoryEntry state and metadata across environments', () => {
+  const prepared = useFixture(async () => [await fixture(), await fixture()] as const);
+
+  it('uses a borrowed getState method realm while checking the receiver Document', () => {
+    const first = prepared()[0];
+    const second = prepared()[1];
+    first.navigable.activeSessionHistoryEntry.navigationAPIState = first.document.env.serializeForStorage({ items: [1] });
+    const entry = first.browser.window.navigation.currentEntry!;
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Exercise the method realm with an explicit foreign receiver.
+    const getState = second.browser.window.NavigationHistoryEntry.prototype.getState;
+    const state: unknown = Reflect.apply(getState, entry, []);
+    expect(state).toBeInstanceOf(getRelevantRealm(second.browser.window).Object);
+    expect(state).not.toBeInstanceOf(getRelevantRealm(first.browser.window).Object);
+    first.document.browsingContext = null;
+    expect(Reflect.apply(getState, entry, [])).toBeUndefined();
+    expect(() => { Reflect.apply(getState, {}, []); }).toThrow(getRelevantRealm(second.browser.window).TypeError);
+  });
 });
 
 async function fixture() {

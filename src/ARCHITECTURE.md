@@ -861,7 +861,7 @@ Browlet's adapter supplies concrete implementation types instead.
 
 ### Construction and lifetime
 
-[`Browlet`](browlet/browlet.ts) constructs UserAgent, which creates its sandbox
+[`Browlet`](browlet/browlet.ts) constructs UserAgent, which creates its sandbox on first use
 through [Web IDL composition](browlet/integration/web-idl/composition.ts) and exposes that module's
 Window-environment factory. Composition assembles environments for existing owners;
 it does not construct UserAgent or serve as an implementation service entry.
@@ -913,8 +913,8 @@ their standalone tests compose a real `SandboxEnvironment` with its execution
 facilities instead of supplying a separate realm-only environment view.
 
 `BrowletRealm.hostDefined` permits the absence of HTML settings; `BrowletRealm.env` requires
-them and throws if they are unattached. UserAgent composition creates its sandbox
-eagerly, with a real BrowletRealm, Agent, event loop, and SandboxEnvironment, but no
+them and throws if they are unattached. UserAgent creates and retains one sandbox
+on first access, with a real BrowletRealm, Agent, event loop, and SandboxEnvironment, but no
 Window, Document, or attached HTML settings object. It supplies execution for
 retained browser work such as Reporting uploads and retains that UserAgent explicitly.
 SandboxEnvironment extends BrowletEnvironment so binding declarations retain

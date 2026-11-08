@@ -10,6 +10,12 @@ export default defineConfig({
         test: {
           name: 'unit',
           environment: 'node',
+          globalSetup: ['./test/browlet/workers/fixtures/setup.ts'],
+          setupFiles: [
+            // Start diagnostics before collection so its pause is visible in CI.
+            ...(process.env.BROWLET_TEST_DIAGNOSTICS ? ['./test/support/unit-diagnostics.ts'] : []),
+            './test/support/unit-collection.ts',
+          ],
           // Exercise stock Node's module backend as well as the addon implementation.
           execArgv: ['--experimental-vm-modules'],
           isolate: false,

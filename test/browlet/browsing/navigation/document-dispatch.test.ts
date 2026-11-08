@@ -197,14 +197,20 @@ describe('population MIME preparation', () => {
     const load = vi.spyOn(navigable, 'loadDocument');
     const complete = vi.fn();
     const failed = vi.fn();
-    const queue = vi.spyOn(env, 'queueTask');
     navigable.populateHistoryEntryDocument(entry, 'navigate', source, navigable.snapshotTargetParams(), 'none', {
       navigationId: 'dispatch', navigationParams: params, completionSteps: complete, failureSteps: failed,
     });
     expect(env.responsibleEventLoop.runTaskTurn()).toBe(true);
+    const queued = Promise.withResolvers<void>();
+    const queueTask = env.queueTask.bind(env);
+    vi.spyOn(env, 'queueTask').mockImplementationOnce((...args) => {
+      const task = queueTask(...args);
+      queued.resolve();
+      return task;
+    });
     const failure = new Error('response body failed');
     stream.error(failure);
-    await expect.poll(() => queue.mock.calls.length).toBe(2);
+    await queued.promise;
     expect(env.responsibleEventLoop.runTaskTurn()).toBe(true);
     expect(failed).toHaveBeenCalledExactlyOnceWith(failure);
     expect(complete).not.toHaveBeenCalled();

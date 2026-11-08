@@ -16,6 +16,7 @@ import { FetchResponse } from '../../../src/fetch/response';
 import type { HTTPTransportListener } from '../../../src/fetch/transport';
 import { mockHTTPTransport } from '../../fetch/transport-fixture';
 import { getRelevantRealm } from '../../support/browlet-binding';
+import { type Fixture, useFixture } from '../../support/fixture';
 import { createScriptState } from '../../support/script-state';
 import { runInHostTask } from '../../support/tasks';
 
@@ -24,9 +25,11 @@ afterEach(() => vi.restoreAllMocks());
 // Real environments, Fetch, and owner Promises; only script creation and the unfinished
 // module-record operations are replaced. These do not claim worker/worklet global startup.
 describe('worker module graphs', () => {
+  const fixture = useFixture((scope) => createGraphFixture(scope, 1));
+
   it('fetches with the outside client and creates and links in the target environment', async () => {
-    const fetchClient = await createEnvironment();
-    const target = await createModule();
+    const { scope, fetchClient, targets } = fixture();
+    const target = targets[0]!;
     const url = fetchClient.parseURL('https://modules.test/worker.js')!;
     const construct = mockCreation(target);
     const transport = mockHTTPTransport(fetchClient.userAgent, (request, listener) => {
@@ -36,7 +39,7 @@ describe('worker module graphs', () => {
     const complete = vi.fn();
 
     target.env.fetchModuleWorkerScriptGraph(url, fetchClient, 'worker', 'include', complete);
-    const state = await target.started;
+    const state = await scope.waitFor(target.started);
 
     expect(transport).toHaveBeenCalledOnce();
     expect(construct).toHaveBeenCalledExactlyOnceWith('export default 1;', target.env, url,
@@ -45,20 +48,20 @@ describe('worker module graphs', () => {
     expect(fetchClient.moduleMap.get(url, 'javascript-or-wasm')).toBeUndefined();
     expect(target.env.moduleMap.get(url, 'javascript-or-wasm')).toBe(target.script);
     expect(complete).not.toHaveBeenCalled();
-    await finish(target);
+    await scope.waitFor(finish(target));
     expect(complete).toHaveBeenCalledExactlyOnceWith(target.script);
   });
 
   it('reports a failed worker root without creating or linking a module', async () => {
-    const fetchClient = await createEnvironment();
-    const target = await createModule();
+    const { scope, fetchClient, targets } = fixture();
+    const target = targets[0]!;
     const construct = mockCreation(target);
     mockHTTPTransport(fetchClient.userAgent, (_request, listener) => respond(listener, 404));
     const url = fetchClient.parseURL('https://modules.test/missing.js')!;
 
-    const result = await new Promise<ModuleScript | null>((complete) => {
+    const result = await scope.waitFor(new Promise<ModuleScript | null>((complete) => {
       target.env.fetchModuleWorkerScriptGraph(url, fetchClient, 'sharedworker', 'same-origin', complete);
-    });
+    }));
 
     expect(result).toBeNull();
     expect(construct).not.toHaveBeenCalled();
@@ -68,8 +71,8 @@ describe('worker module graphs', () => {
 
   it.each(['omit', 'same-origin', 'include'] as const)(
     'sets the shared graph defaults with %s credentials and retains the custom hook for descendants', async (credentialsMode) => {
-      const fetchClient = await createEnvironment();
-      const target = await createModule();
+      const { scope, fetchClient, targets } = fixture();
+      const target = targets[0]!;
       const url = fetchClient.parseURL('https://modules.test/root.js')!;
       const construct = mockCreation(target);
       const complete = vi.fn();
@@ -89,22 +92,74 @@ describe('worker module graphs', () => {
       });
 
       fetchWorkletModuleWorkerScriptGraph(url, fetchClient, 'paintworklet', credentialsMode, target.env, complete, performFetch);
-      const state = await target.started;
+      const state = await scope.waitFor(target.started);
 
       expect(construct).toHaveBeenCalledOnce();
       expect(state).toEqual({ errorToRethrow: null, fetchClient, destination: 'paintworklet', performFetch });
-      await finish(target);
+      await scope.waitFor(finish(target));
       expect(complete).toHaveBeenCalledExactlyOnceWith(target.script);
     },
   );
 });
 
+describe('worklet module graphs', () => {
+  const fixture = useFixture((scope) => createGraphFixture(scope, 1));
+
+  it('does not deliver a retired fixture response through the next constructor mock', async () => {
+    const { scope, fetchClient, targets } = fixture();
+    const target = targets[0]!;
+    const url = fetchClient.parseURL('https://modules.test/retired.js')!;
+    const dispatched = Promise.withResolvers<HTTPTransportListener>();
+    const completed = Promise.withResolvers<ModuleScript | null>();
+    mockCreation(target);
+    mockHTTPTransport(fetchClient.userAgent, (_request, listener) => dispatched.resolve(listener));
+    target.env.fetchWorkletScriptGraph(url, fetchClient, 'paintworklet', 'omit', new ModuleResponsesMap(), completed.resolve);
+    const listener = await scope.waitFor(dispatched.promise);
+
+    // Reproduce a test ending while its response is still outstanding.
+    await scope.dispose();
+    const followingConstructor = mockCreation();
+    respond(listener);
+    expect(await completed.promise).toBeNull();
+    await runInHostTask(() => {});
+
+    expect(followingConstructor).not.toHaveBeenCalled();
+  });
+
+  it('passes the response-sharing hook to descendant loading too', async () => {
+    const { scope, fetchClient, targets } = fixture();
+    const target = targets[0]!;
+    mockCreation(target);
+    const url = fetchClient.parseURL('https://modules.test/root.js')!;
+    const dependencyURL = fetchClient.parseURL('https://modules.test/dep.js')!;
+    const responses = new ModuleResponsesMap();
+    const transport = mockHTTPTransport(fetchClient.userAgent, (_request, listener) => respond(listener));
+    target.env.fetchWorkletScriptGraph(url, fetchClient, 'audioworklet', 'same-origin', responses, vi.fn());
+    const state = await scope.waitFor(target.started);
+    expect(state.performFetch).not.toBeNull();
+    const request = new FetchRequest(dependencyURL, fetchClient);
+    request.client = fetchClient;
+    request.destination = 'audioworklet';
+
+    const response = await scope.waitFor(new Promise<FetchResponse>((complete) => {
+      state.performFetch!(request, false, (result) => complete(result));
+    }));
+    const replay = vi.fn();
+    state.performFetch!(request, false, replay);
+
+    expect(transport).toHaveBeenCalledTimes(2);
+    expect(replay).toHaveBeenCalledExactlyOnceWith(response, utf8Encode('export default 1;'));
+    expect(responses.get(dependencyURL)).toEqual([response, utf8Encode('export default 1;')]);
+    await scope.waitFor(finish(target));
+  });
+});
+
 describe('worklet module response sharing', () => {
+  const fixture = useFixture((scope) => createGraphFixture(scope, 3));
+
   it('shares one download across pending and later globals, but creates and links separate modules', async () => {
-    const fetchClient = await createEnvironment();
-    const first = await createModule();
-    const second = await createModule();
-    const later = await createModule();
+    const { scope, fetchClient, targets } = fixture();
+    const first = targets[0]!, second = targets[1]!, later = targets[2]!;
     const construct = mockCreation(first, second, later);
     const url = fetchClient.parseURL('https://modules.test/worklet.js')!;
     const sameURL = fetchClient.parseURL('https://modules.test/worklet.js')!;
@@ -117,6 +172,11 @@ describe('worklet module response sharing', () => {
       queued.push(steps);
       return { remove() {} };
     });
+    scope.onCleanup(() => {
+      delivery.mockRestore();
+      // Release callbacks parked by this test before draining the real task queues.
+      for (const steps of queued.splice(0)) steps();
+    });
     const completeFirst = vi.fn();
     const completeSecond = vi.fn();
     const completeLater = vi.fn();
@@ -124,8 +184,8 @@ describe('worklet module response sharing', () => {
     first.env.fetchWorkletScriptGraph(url, fetchClient, 'paintworklet', 'omit', responses, completeFirst);
     second.env.fetchWorkletScriptGraph(sameURL, fetchClient, 'paintworklet', 'omit', responses, completeSecond);
     expect(responses.get(sameURL)).toBe('fetching');
-    respond(await dispatched.promise);
-    await first.started;
+    respond(await scope.waitFor(dispatched.promise));
+    await scope.waitFor(first.started);
 
     expect(transport).toHaveBeenCalledOnce();
     expect(construct).toHaveBeenCalledOnce();
@@ -134,7 +194,7 @@ describe('worklet module response sharing', () => {
     expect(completeSecond).not.toHaveBeenCalled();
     expect(responses.get(url)).not.toBe('fetching');
     queued.shift()!();
-    await second.started;
+    await scope.waitFor(second.started);
 
     // A new global replays the cached response without another download or pending-response task.
     const laterDelivery = vi.spyOn(later.env, 'queueTask');
@@ -146,46 +206,17 @@ describe('worklet module response sharing', () => {
     expect(fetchClient.moduleMap.entries).toHaveLength(0);
     for (const target of [first, second, later]) {
       expect(target.env.moduleMap.get(url, 'javascript-or-wasm')).toBe(target.script);
-      await finish(target);
+      await scope.waitFor(finish(target));
     }
     expect(completeFirst).toHaveBeenCalledExactlyOnceWith(first.script);
     expect(completeSecond).toHaveBeenCalledExactlyOnceWith(second.script);
     expect(completeLater).toHaveBeenCalledExactlyOnceWith(later.script);
   });
 
-  it('passes the response-sharing hook to descendant loading too', async () => {
-    const fetchClient = await createEnvironment();
-    const target = await createModule();
-    mockCreation(target);
-    const url = fetchClient.parseURL('https://modules.test/root.js')!;
-    const dependencyURL = fetchClient.parseURL('https://modules.test/dep.js')!;
-    const responses = new ModuleResponsesMap();
-    const transport = mockHTTPTransport(fetchClient.userAgent, (_request, listener) => respond(listener));
-    target.env.fetchWorkletScriptGraph(url, fetchClient, 'audioworklet', 'same-origin', responses, vi.fn());
-    const state = await target.started;
-    expect(state.performFetch).not.toBeNull();
-    const request = new FetchRequest(dependencyURL, fetchClient);
-    request.client = fetchClient;
-    request.destination = 'audioworklet';
-
-    const response = await new Promise<FetchResponse>((complete) => {
-      state.performFetch!(request, false, (result) => complete(result));
-    });
-    const replay = vi.fn();
-    state.performFetch!(request, false, replay);
-
-    expect(transport).toHaveBeenCalledTimes(2);
-    expect(replay).toHaveBeenCalledExactlyOnceWith(response, utf8Encode('export default 1;'));
-    expect(responses.get(dependencyURL)).toEqual([response, utf8Encode('export default 1;')]);
-    await finish(target);
-  });
-
   it.each(['HTTP error', 'null body', 'network error', 'body error', 'wrong MIME'] as const)(
     'retains a %s response for waiting and later globals without retrying', async (failure) => {
-      const fetchClient = await createEnvironment();
-      const first = await createModule();
-      const second = await createModule();
-      const later = await createModule();
+      const { scope, fetchClient, targets } = fixture();
+      const first = targets[0]!, second = targets[1]!, later = targets[2]!;
       const construct = mockCreation(first, second, later);
       const url = fetchClient.parseURL('https://modules.test/failure.js')!;
       const responses = new ModuleResponsesMap();
@@ -196,7 +227,7 @@ describe('worklet module response sharing', () => {
       const initial = [first, second].map((target) => new Promise<ModuleScript | null>((complete) => {
         target.env.fetchWorkletScriptGraph(url, fetchClient, 'paintworklet', 'omit', responses, complete);
       }));
-      const listener = await dispatched.promise;
+      const listener = await scope.waitFor(dispatched.promise);
       if (failure === 'network error') {
         listener.onError(new Error('Connection failed'));
       } else {
@@ -205,14 +236,14 @@ describe('worklet module response sharing', () => {
         ]), true);
         if (failure === 'body error') {
           // Let Fetch publish the headers before failing the body; otherwise this is a network error.
-          await responseReceived.promise;
+          await scope.waitFor(responseReceived.promise);
           listener.onError(new Error('Body failed'));
         } else {
           listener.onEnd();
         }
       }
 
-      expect(await Promise.all(initial)).toEqual([null, null]);
+      expect(await scope.waitFor(Promise.all(initial))).toEqual([null, null]);
       const completeLater = vi.fn();
       later.env.fetchWorkletScriptGraph(url, fetchClient, 'paintworklet', 'omit', responses, completeLater);
 
@@ -232,18 +263,38 @@ describe('worklet module response sharing', () => {
   );
 });
 
-async function createEnvironment(): Promise<BrowletEnvironment> {
-  const browser = new Browlet({ route: () => '', reporting: false });
-  await browser.navigate('https://modules.test/page');
-  return getRelevantRealm(browser.window).env;
+async function createGraphFixture(scope: Fixture, targetCount: number) {
+  const environments = new Set<BrowletEnvironment>();
+  // Keep the constructor replacement installed until every old delivery has finished.
+  scope.onCleanup(() => { vi.restoreAllMocks(); });
+  scope.onCleanup(() => drainEnvironments(environments));
+  const fetchClient = await createEnvironment(scope, environments);
+  const targets: ReturnType<typeof createModule>[] = [];
+  for (let index = 0; index < targetCount; index++) {
+    targets.push(createModule(await createEnvironment(scope, environments), scope));
+  }
+  return { scope, fetchClient, targets };
 }
 
-async function createModule() {
-  const env = await createEnvironment();
+async function createEnvironment(scope: Fixture, environments: Set<BrowletEnvironment>): Promise<BrowletEnvironment> {
+  const browser = new Browlet({ route: () => '', reporting: false });
+  environments.add(getRelevantRealm(browser.window).env);
+  const navigation = browser.navigate('https://modules.test/page').then(() => {
+    const env = getRelevantRealm(browser.window).env;
+    environments.add(env);
+    return env;
+  });
+  // A setup timeout still waits for this finite, fixture-supplied navigation before draining.
+  scope.onCleanup(async () => { await navigation; });
+  return scope.waitFor(navigation);
+}
+
+function createModule(env: BrowletEnvironment, scope: Fixture) {
   const script: JavaScriptModuleScript = createScriptState(env);
   const record = new JSSourceTextModuleRecord(script, env.realm.compileModule('', 'fixture.js'));
   script.record = record;
   const loading = env.InternalPromise.withResolvers(internalType<void>());
+  scope.onCleanup(() => { loading.resolve(undefined); });
   const started = Promise.withResolvers<ModuleGraphLoadingState>();
   const load = vi.spyOn(record, 'loadRequestedModules').mockImplementation((state) => {
     expect(state).toBeDefined();
@@ -254,7 +305,7 @@ async function createModule() {
   return { env, script, loading, started: started.promise, load, link };
 }
 
-function mockCreation(...targets: Awaited<ReturnType<typeof createModule>>[]) {
+function mockCreation(...targets: ReturnType<typeof createModule>[]) {
   return vi.spyOn(scriptClasses, 'JavaScriptModuleScript').mockImplementation(function(_source, env, baseURL, options) {
     const target = targets.find((candidate) => candidate.env === env)!;
     target.script.baseURL = baseURL;
@@ -263,12 +314,24 @@ function mockCreation(...targets: Awaited<ReturnType<typeof createModule>>[]) {
   });
 }
 
-function finish(target: Awaited<ReturnType<typeof createModule>>) {
+function finish(target: ReturnType<typeof createModule>) {
   return runInHostTask(() => {
     target.loading.resolve(undefined);
     target.env.realm.agent.eventLoop.performMicrotaskCheckpoint();
     expect(target.link).toHaveBeenCalledOnce();
   });
+}
+
+async function drainEnvironments(environments: Set<BrowletEnvironment>): Promise<void> {
+  const owned = [...environments];
+  for (const env of owned) env.fetchGroup.terminate();
+  // Cancellation queues completion work. Drain it with the original mocks still installed.
+  // This is fixture cleanup, not the unfinished HTML Document destruction algorithm.
+  do {
+    await runInHostTask(() => {
+      for (const env of owned) env.responsibleEventLoop.performMicrotaskCheckpoint();
+    });
+  } while (owned.some((env) => env.fetchGroup.hasPendingFetches() || env.responsibleEventLoop.hasRunnableTasks()));
 }
 
 function respond(listener: HTTPTransportListener, status = 200) {

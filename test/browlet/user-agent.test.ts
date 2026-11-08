@@ -4,6 +4,28 @@ import { Browlet } from '../../src/browlet/browlet';
 import { getRelevantRealm } from '../support/browlet-binding';
 import { getEnvironmentDefaultUserAgent } from '../../src/fetch/headers';
 import { createFetchWindow } from './fetch-fixture';
+import * as composition from '../../src/browlet/integration/web-idl/composition';
+
+describe('UserAgent internal execution', () => {
+  it('allocates one sandbox per owner only when internal execution is requested', () => {
+    const create = vi.spyOn(composition, 'createSandboxEnvironment');
+    try {
+      const first = new UserAgent();
+      const second = new UserAgent();
+      expect(create).not.toHaveBeenCalled();
+
+      const sandbox = first.sandbox;
+      expect(create).toHaveBeenCalledOnce();
+      expect(sandbox.userAgent).toBe(first);
+      expect(first.sandbox).toBe(sandbox);
+      expect(create).toHaveBeenCalledOnce();
+      expect(second.sandbox).not.toBe(sandbox);
+      expect(second.sandbox.realm).not.toBe(sandbox.realm);
+      expect(second.sandbox.userAgent).toBe(second);
+      expect(create).toHaveBeenCalledTimes(2);
+    } finally { create.mockRestore(); }
+  });
+});
 
 describe('User-Agent identification', () => {
   it('supplies a browser-shaped default identifying Browlet', () => {

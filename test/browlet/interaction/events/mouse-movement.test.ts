@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { MouseEventImpl, PointerEventImpl } from '../../../../src/browlet/interaction/events/index';
 import { getRelevantRealm } from '../../../support/browlet-binding';
+import { useFixture } from '../../../support/fixture';
 
 // Internal algorithms use converted coordinates, independently of native input delivery.
 class MouseMovementEvent extends MouseEventImpl {
@@ -22,9 +23,13 @@ describe('UI Events §5: mouse movement', () => {
     expect([event.movementX, event.movementY, event.screenX, event.screenY, event.type, event.isTrusted])
       .toEqual([0, 0, 30, 400, 'mousemove', true]);
   });
+});
+
+describe('UI Events §5: Window mouse movement state', () => {
+  const prepared = useFixture(() => new Browlet({ route: () => '' }));
 
   it('starts with unknown position and reports zero for the first move', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const window = getRelevantRealm(browser.window).env.window;
     expect(window.lastMouseMove).toBeUndefined();
     const event = new MouseMovementEvent('mousemove', -40, 300);
@@ -36,7 +41,7 @@ describe('UI Events §5: mouse movement', () => {
   });
 
   it('uses independent X/Y deltas and copies each position rather than retaining the event', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const window = getRelevantRealm(browser.window).env.window;
     const first = new MouseMovementEvent('mousemove', 100, 400);
     window.setPointerLockAttributesForMousemove(first);
@@ -51,7 +56,7 @@ describe('UI Events §5: mouse movement', () => {
   });
 
   it('accepts a native pointer snapshot while using MouseEvent-rounded screen positions', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const window = getRelevantRealm(browser.window).env.window;
     const first = new PointerEventImpl('pointermove', { screenX: 10.9, screenY: -10.9 });
     const next = new PointerEventImpl('pointermove', { screenX: 14.1, screenY: -7.1 });
@@ -64,7 +69,7 @@ describe('UI Events §5: mouse movement', () => {
 
   it.each(['mousedown', 'mouseup', 'click', 'pointerrawupdate', 'MouseMove'])(
     'leaves %s and the previous mousemove position unchanged', (type) => {
-      const browser = new Browlet({ route: () => '' });
+      const browser = prepared();
       const window = getRelevantRealm(browser.window).env.window;
       const ignored = new MouseMovementEvent(type, 900, 800);
       ignored.movementX = 7;
@@ -82,7 +87,7 @@ describe('UI Events §5: mouse movement', () => {
   );
 
   it('starts a new sequence after the input source clears an interrupted position', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const window = getRelevantRealm(browser.window).env.window;
     window.setPointerLockAttributesForMousemove(new MouseMovementEvent('mousemove', 100, 400));
     // Simulate the missing native producer's gap notification, not an implemented OS hookup.
@@ -95,22 +100,8 @@ describe('UI Events §5: mouse movement', () => {
     expect([next.movementX, next.movementY]).toEqual([6, 2]);
   });
 
-  it('keeps independent histories for different Windows', () => {
-    const first = new Browlet({ route: () => '' });
-    const second = new Browlet({ route: () => '' });
-    const firstWindow = getRelevantRealm(first.window).env.window;
-    const secondWindow = getRelevantRealm(second.window).env.window;
-    firstWindow.setPointerLockAttributesForMousemove(new MouseMovementEvent('mousemove', 100, 400));
-    secondWindow.setPointerLockAttributesForMousemove(new MouseMovementEvent('mousemove', 500, 200));
-    const a = new MouseMovementEvent('mousemove', 110, 407);
-    const b = new MouseMovementEvent('mousemove', 497, 202);
-    firstWindow.setPointerLockAttributesForMousemove(a);
-    secondWindow.setPointerLockAttributesForMousemove(b);
-    expect([a.movementX, a.movementY, b.movementX, b.movementY]).toEqual([10, 7, -3, 2]);
-  });
-
   it('leaves the previous position and supplied deltas alone during author dispatch', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const window = getRelevantRealm(browser.window).env.window;
     window.setPointerLockAttributesForMousemove(new MouseMovementEvent('mousemove', 100, 400));
     const synthetic = new MouseMovementEvent('mousemove', 900, 800);
@@ -125,7 +116,7 @@ describe('UI Events §5: mouse movement', () => {
   });
 
   it('starts fresh after navigation replaces the Window while preserving the public proxy', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     await browser.navigate('https://example.test/before');
     const proxy = browser.window;
     const previous = getRelevantRealm(proxy).env.window;
@@ -139,5 +130,23 @@ describe('UI Events §5: mouse movement', () => {
     current.setPointerLockAttributesForMousemove(event);
     expect([event.movementX, event.movementY]).toEqual([0, 0]);
     expect(previous.lastMouseMove).toEqual({ x: 100, y: 400 });
+  });
+});
+
+describe('UI Events §5: mouse movement across environments', () => {
+  const prepared = useFixture(() => [new Browlet({ route: () => '' }), new Browlet({ route: () => '' })] as const);
+
+  it('keeps independent histories for different Windows', () => {
+    const first = prepared()[0];
+    const second = prepared()[1];
+    const firstWindow = getRelevantRealm(first.window).env.window;
+    const secondWindow = getRelevantRealm(second.window).env.window;
+    firstWindow.setPointerLockAttributesForMousemove(new MouseMovementEvent('mousemove', 100, 400));
+    secondWindow.setPointerLockAttributesForMousemove(new MouseMovementEvent('mousemove', 500, 200));
+    const a = new MouseMovementEvent('mousemove', 110, 407);
+    const b = new MouseMovementEvent('mousemove', 497, 202);
+    firstWindow.setPointerLockAttributesForMousemove(a);
+    secondWindow.setPointerLockAttributesForMousemove(b);
+    expect([a.movementX, a.movementY, b.movementX, b.movementY]).toEqual([10, 7, -3, 2]);
   });
 });

@@ -9,10 +9,13 @@ import type { EventTargetImpl } from '../../../../src/browlet/dom/events/index';
 import type { ElementImpl } from '../../../../src/browlet/dom/nodes/index';
 import type { PointerEvent as PointerEventPlatform } from '../../../../src/browlet/platform';
 import { getRelevantRealm, project, unwrap } from '../../../support/browlet-binding';
+import { useFixture } from '../../../support/fixture';
 
 describe('Pointer Events: creation from MouseEvent', () => {
+  const prepared = useFixture(() => new Browlet({ route: () => '' }));
+
   it('copies mouse and UI input data while retaining fresh event identity and creation time', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const target = unwrap<ElementImpl>(browser.document.createElement('div'));
     const otherView = new Browlet({ route: () => '' });
     const sourcePlatform = new browser.window.MouseEvent('mousemove', {
@@ -53,7 +56,7 @@ describe('Pointer Events: creation from MouseEvent', () => {
 
   it.each([[false, false], [false, true], [true, false], [true, true]])(
     'uses explicit flags instead of the source flags (bubbles: %s, cancelable: %s)', (bubbles, cancelable) => {
-      const browser = new Browlet({ route: () => '' });
+      const browser = prepared();
       const target = unwrap<ElementImpl>(browser.document.createElement('div'));
       const source = unwrap<MouseEventImpl>(new browser.window.MouseEvent('mousedown', {
         bubbles: !bubbles, cancelable: !cancelable, composed: true,
@@ -75,7 +78,7 @@ describe('Pointer Events: creation from MouseEvent', () => {
   );
 
   it('retains pointer defaults and empty samples when the MouseEvent source is a PointerEvent', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const target = unwrap<ElementImpl>(browser.document.createElement('div'));
     const sample = new browser.window.PointerEvent('pointermove');
     const sourcePlatform = new browser.window.PointerEvent('pointermove', {
@@ -100,7 +103,7 @@ describe('Pointer Events: creation from MouseEvent', () => {
   });
 
   it.each(['click', 'auxclick', 'contextmenu'])('applies %s coordinate rounding to a fractional source', (type) => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const source = unwrap<PointerEventImpl>(new browser.window.PointerEvent('pointermove', {
       screenX: 1.75, screenY: -2.25, clientX: 3.75, clientY: -4.25,
     }));
@@ -112,7 +115,7 @@ describe('Pointer Events: creation from MouseEvent', () => {
   });
 
   it('preserves native AltGraph handling and the copied modifier snapshot after source reinitialization', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const target = unwrap<ElementImpl>(browser.document.createElement('div'));
     const sourcePlatform = new browser.window.MouseEvent('mousemove');
     const source = unwrap<MouseEventImpl>(sourcePlatform);
@@ -130,30 +133,8 @@ describe('Pointer Events: creation from MouseEvent', () => {
     expect(sourcePlatform.getModifierState('AltGraph')).toBe(false);
   });
 
-  it('uses the selected target realm without copying a foreign source timestamp', () => {
-    const owner = new Browlet({ route: () => '' });
-    const targetBrowser = new Browlet({ route: () => '' });
-    const source = unwrap<MouseEventImpl>(new owner.window.MouseEvent('mousemove', { view: owner.window }));
-    source.target = unwrap<ElementImpl>(targetBrowser.document.createElement('div'));
-    source.timeStamp = 9000;
-    const targetRealm = getRelevantRealm(targetBrowser.window);
-    const clock = vi.spyOn(targetRealm, 'eventTimeStamp').mockReturnValue(15);
-    try {
-      const event = PointerEventImpl.fromMouseEvent('pointermove', source, true, true);
-      const platform = project(event) as PointerEventPlatform;
-      expect(getRelevantRealm(platform)).toBe(targetRealm);
-      expect(platform).toBeInstanceOf(targetBrowser.window.PointerEvent);
-      expect(platform.target).toBe(project(source.target));
-      expect(platform.view).toBe(owner.window);
-      expect(platform.timeStamp).toBe(15);
-      expect(source.timeStamp).toBe(9000);
-    } finally {
-      clock.mockRestore();
-    }
-  });
-
   it('accepts a Window target and preserves a null source view', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const source = unwrap<MouseEventImpl>(new browser.window.MouseEvent('mousemove'));
     source.target = getRelevantRealm(browser.window).env.window;
     const platform = project(PointerEventImpl.fromMouseEvent('pointermove', source, true, true)) as PointerEventPlatform;
@@ -162,7 +143,7 @@ describe('Pointer Events: creation from MouseEvent', () => {
   });
 
   it.each(['none', 'generic'] as const)('rejects an unprepared %s target before allocating an event', (kind) => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const source = unwrap<MouseEventImpl>(new browser.window.MouseEvent('mousemove'));
     if (kind === 'generic') source.target = unwrap<EventTargetImpl>(new browser.window.EventTarget());
     const createEvent = vi.spyOn(getRelevantRealm(browser.window).env, 'createEvent');
@@ -175,7 +156,7 @@ describe('Pointer Events: creation from MouseEvent', () => {
   });
 
   it('does not copy an in-flight dispatch path or dispatch the new event automatically', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const element = browser.document.createElement('div');
     browser.document.body!.append(element);
     let converted: PointerEventImpl | undefined;
@@ -204,5 +185,31 @@ describe('Pointer Events: creation from MouseEvent', () => {
     expect(unwrap<ElementImpl>(element).dispatch(converted!)).toBe(false);
     element.dispatchEvent(project(converted!) as PointerEventPlatform);
     expect(seen).toEqual([true, false]);
+  });
+});
+
+describe('Pointer Events: creation from MouseEvent across environments', () => {
+  const prepared = useFixture(() => [new Browlet({ route: () => '' }), new Browlet({ route: () => '' })] as const);
+
+  it('uses the selected target realm without copying a foreign source timestamp', () => {
+    const owner = prepared()[0];
+    const targetBrowser = prepared()[1];
+    const source = unwrap<MouseEventImpl>(new owner.window.MouseEvent('mousemove', { view: owner.window }));
+    source.target = unwrap<ElementImpl>(targetBrowser.document.createElement('div'));
+    source.timeStamp = 9000;
+    const targetRealm = getRelevantRealm(targetBrowser.window);
+    const clock = vi.spyOn(targetRealm, 'eventTimeStamp').mockReturnValue(15);
+    try {
+      const event = PointerEventImpl.fromMouseEvent('pointermove', source, true, true);
+      const platform = project(event) as PointerEventPlatform;
+      expect(getRelevantRealm(platform)).toBe(targetRealm);
+      expect(platform).toBeInstanceOf(targetBrowser.window.PointerEvent);
+      expect(platform.target).toBe(project(source.target));
+      expect(platform.view).toBe(owner.window);
+      expect(platform.timeStamp).toBe(15);
+      expect(source.timeStamp).toBe(9000);
+    } finally {
+      clock.mockRestore();
+    }
   });
 });

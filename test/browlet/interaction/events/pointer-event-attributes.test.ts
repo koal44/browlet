@@ -5,8 +5,11 @@ import type { DocumentImpl, ElementImpl } from '../../../../src/browlet/dom/node
 import { PointerEventImpl, type PointerEventType } from '../../../../src/browlet/interaction/events/index';
 import type { PointerEvent as PointerEventPlatform } from '../../../../src/browlet/platform';
 import { getRelevantRealm, project, unwrap } from '../../../support/browlet-binding';
+import { useFixture } from '../../../support/fixture';
 
 describe('Pointer Events §3.1.3.1: internal event attributes', () => {
+  const prepared = useFixture(() => new Browlet({ route: () => '' }));
+
   it.each([
     ['pointerover', true, true, true], ['pointerenter', false, false, false],
     ['pointerdown', true, true, true], ['pointermove', true, true, true],
@@ -16,7 +19,7 @@ describe('Pointer Events §3.1.3.1: internal event attributes', () => {
     ['lostpointercapture', true, false, true],
   ] satisfies [PointerEventType, boolean, boolean, boolean][])(
     'delivers %s with its specified flags and cancellation behavior', (type, bubbles, cancelable, composed) => {
-      const browser = new Browlet({ route: () => '' });
+      const browser = prepared();
       const realm = getRelevantRealm(browser.window);
       let observed: unknown;
       browser.window.addEventListener(type, (value) => {
@@ -40,7 +43,7 @@ describe('Pointer Events §3.1.3.1: internal event attributes', () => {
 
   it.each(['pointerover', 'pointerout', 'pointerenter', 'pointerleave', 'gotpointercapture', 'lostpointercapture'] as const)(
     'retains the supplied related target for %s', (type) => {
-      const browser = new Browlet({ route: () => '' });
+      const browser = prepared();
       const other = browser.document.createElement('div');
       const event = new PointerEventImpl('before', { relatedTarget: unwrap<ElementImpl>(other) });
       event.setPointerEventAttributes(type);
@@ -51,7 +54,7 @@ describe('Pointer Events §3.1.3.1: internal event attributes', () => {
 
   it.each(['pointerdown', 'pointermove', 'pointerrawupdate', 'pointerup', 'pointercancel'] as const)(
     'clears unrelated boundary data from %s', (type) => {
-      const browser = new Browlet({ route: () => '' });
+      const browser = prepared();
       const event = new PointerEventImpl('before', { relatedTarget: unwrap<DocumentImpl>(browser.document) });
       event.setPointerEventAttributes(type);
       expect(event.relatedTarget).toBeNull();
@@ -59,7 +62,7 @@ describe('Pointer Events §3.1.3.1: internal event attributes', () => {
   );
 
   it('preserves supplied samples, modifiers, coordinates, view, and timing without registering a pointer', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const sample = new browser.window.PointerEvent('sample');
     const platform = new browser.window.PointerEvent('before', {
       pointerId: 12, pointerType: 'pen', isPrimary: true, buttons: 5, button: 1,
@@ -78,7 +81,7 @@ describe('Pointer Events §3.1.3.1: internal event attributes', () => {
   });
 
   it('uses the prepared bubbling/composed flags through shadow dispatch', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     await browser.evaluate(() => {
       const host = document.createElement('div');
       host.id = 'host';
@@ -105,7 +108,7 @@ describe('Pointer Events §3.1.3.1: internal event attributes', () => {
   });
 
   it('does not apply native defaults to author construction or redispatch', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const ordinary = new PointerEvent('pointerdown');
       const custom = new PointerEvent('pointerrawupdate', {

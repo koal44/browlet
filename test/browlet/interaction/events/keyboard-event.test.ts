@@ -4,10 +4,13 @@ import { Browlet } from '../../../../src/browlet/browlet';
 import { KeyboardEventImpl } from '../../../../src/browlet/interaction/events/index';
 import type { ElementImpl } from '../../../../src/browlet/dom/nodes/index';
 import { getRelevantRealm, unwrap } from '../../../support/browlet-binding';
+import { useFixture } from '../../../support/fixture';
 
 describe('UI Events: KeyboardEvent', () => {
+  const prepared = useFixture(() => new Browlet({ route: () => '' }));
+
   it.each(['keydown', 'keyup', 'keypress'])('constructs %s with dictionary defaults rather than producer flags', async (type) => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate((type) => {
       const event = new KeyboardEvent(type);
       return {
@@ -28,7 +31,7 @@ describe('UI Events: KeyboardEvent', () => {
   });
 
   it('exposes the four location constants on the constructor and prototype', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       return ['DOM_KEY_LOCATION_STANDARD', 'DOM_KEY_LOCATION_LEFT', 'DOM_KEY_LOCATION_RIGHT',
         'DOM_KEY_LOCATION_NUMPAD'].map((name) => [
@@ -42,7 +45,7 @@ describe('UI Events: KeyboardEvent', () => {
   });
 
   it('converts all dictionary levels in order and ignores which rather than reading it', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const reads: string[] = [];
       const init = new Proxy({ view: window, detail: 5, key: 'a', code: 'KeyA', location: 2 }, {
@@ -60,7 +63,7 @@ describe('UI Events: KeyboardEvent', () => {
   });
 
   it('snapshots every specified modifier independently with exact key names', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const entries = [
         ['ctrlKey', 'Control'], ['shiftKey', 'Shift'], ['altKey', 'Alt'], ['metaKey', 'Meta'],
@@ -86,7 +89,7 @@ describe('UI Events: KeyboardEvent', () => {
   });
 
   it('converts supplied strings and numbers without inferring physical keys, locations, or codes', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = Reflect.construct(KeyboardEvent, ['keydown', {
         key: { toString: () => '\ud800' }, code: 'vendorFuture', location: -1,
@@ -102,7 +105,7 @@ describe('UI Events: KeyboardEvent', () => {
   });
 
   it('keeps constructor strings outside native key selection and vocabulary checks', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     const values = ['e\u0301', '\u0001', 'vendorFuture', 'F0', 'Soft8', 'KeyQ', ''];
     expect(await browser.evaluate((values) => values.map((value) => {
       const event = new KeyboardEvent('keydown', { key: value, code: value });
@@ -111,7 +114,7 @@ describe('UI Events: KeyboardEvent', () => {
   });
 
   it('checks constructor and method inputs in the invoked function realm', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const invalid = [[], [Symbol()], ['keydown', 1], ['keydown', { key: Symbol() }],
         ['keydown', { code: Symbol() }], ['keydown', { location: 1n }], ['keydown', { view: {} }]].map((args) => {
@@ -135,7 +138,7 @@ describe('UI Events: KeyboardEvent', () => {
   });
 
   it('propagates coercion failures before reading later keyboard members', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const error = new Error('key conversion');
       const reads: string[] = [];
@@ -149,7 +152,7 @@ describe('UI Events: KeyboardEvent', () => {
   });
 
   it('enforces KeyboardEvent receiver brands on read-only attributes', () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     for (const name of ['key', 'code', 'location', 'ctrlKey', 'shiftKey', 'altKey', 'metaKey',
       'repeat', 'isComposing', 'charCode', 'keyCode']) {
       const descriptor = Object.getOwnPropertyDescriptor(browser.window.KeyboardEvent.prototype, name)!;
@@ -160,20 +163,8 @@ describe('UI Events: KeyboardEvent', () => {
     }
   });
 
-  it('preserves receiver ownership and Window view with borrowed getters and methods', () => {
-    const owner = new Browlet({ route: () => '' });
-    const other = new Browlet({ route: () => '' });
-    const event = new owner.window.KeyboardEvent('keydown', { key: 'a', ctrlKey: true, view: other.window });
-    const key = Object.getOwnPropertyDescriptor(other.window.KeyboardEvent.prototype, 'key')!;
-    const view = Object.getOwnPropertyDescriptor(other.window.UIEvent.prototype, 'view')!;
-    expect(key.get!.call(event)).toBe('a');
-    expect(view.get!.call(event)).toBe(other.window);
-    expect(other.window.KeyboardEvent.prototype.getModifierState.call(event, 'Control')).toBe(true);
-    expect(getRelevantRealm(event)).toBe(getRelevantRealm(owner.window));
-  });
-
   it('supports author subclasses', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       class Derived extends KeyboardEvent {}
       const event = new Derived('keydown', { key: 'a', code: 'KeyA', shiftKey: true });
@@ -183,7 +174,7 @@ describe('UI Events: KeyboardEvent', () => {
   });
 
   it('creates uninitialized KeyboardEvents through DOM\'s singular legacy entry', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = document.createEvent('kEyBoArDeVeNt') as KeyboardEvent;
       let uninitialized = false;
@@ -199,7 +190,7 @@ describe('UI Events: KeyboardEvent', () => {
   });
 
   it('initializes only legacy fields, replacing modifiers and preserving unrelated keyboard data', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = new KeyboardEvent('keydown', {
         key: 'a', code: 'KeyA', detail: 5, location: 3,
@@ -225,7 +216,7 @@ describe('UI Events: KeyboardEvent', () => {
   });
 
   it('converts initializer arguments but leaves a dispatching event unchanged', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const event = new KeyboardEvent('keydown', { key: 'a', ctrlKey: true });
       const reads: string[] = [];
@@ -243,7 +234,7 @@ describe('UI Events: KeyboardEvent', () => {
   });
 
   it('keeps synthetic dispatch synchronous and independent of device ordering or editing', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     expect(await browser.evaluate(() => {
       const element = document.createElement('div');
       element.setAttribute('contenteditable', 'true');
@@ -266,7 +257,7 @@ describe('UI Events: KeyboardEvent', () => {
   });
 
   it('delivers a host-created keyboard notification using the existing factory', async () => {
-    const browser = new Browlet({ route: () => '' });
+    const browser = prepared();
     await browser.evaluate(() => {
       document.body.onkeydown = (event) => {
         Reflect.set(window, 'received', [event instanceof KeyboardEvent, event.key, event.view === window,
@@ -281,5 +272,21 @@ describe('UI Events: KeyboardEvent', () => {
     })).toBe(true);
     expect(await browser.evaluate(() => Reflect.get(window, 'received') as unknown))
       .toEqual([true, 'a', true, true, true, true, true, true]);
+  });
+});
+
+describe('UI Events: KeyboardEvent across environments', () => {
+  const prepared = useFixture(() => [new Browlet({ route: () => '' }), new Browlet({ route: () => '' })] as const);
+
+  it('preserves receiver ownership and Window view with borrowed getters and methods', () => {
+    const owner = prepared()[0];
+    const other = prepared()[1];
+    const event = new owner.window.KeyboardEvent('keydown', { key: 'a', ctrlKey: true, view: other.window });
+    const key = Object.getOwnPropertyDescriptor(other.window.KeyboardEvent.prototype, 'key')!;
+    const view = Object.getOwnPropertyDescriptor(other.window.UIEvent.prototype, 'view')!;
+    expect(key.get!.call(event)).toBe('a');
+    expect(view.get!.call(event)).toBe(other.window);
+    expect(other.window.KeyboardEvent.prototype.getModifierState.call(event, 'Control')).toBe(true);
+    expect(getRelevantRealm(event)).toBe(getRelevantRealm(owner.window));
   });
 });

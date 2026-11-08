@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { threadId, type WorkerOptions } from 'node:worker_threads';
 import type * as WorkerThreads from 'node:worker_threads';
-import { afterEach, assert, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, assert, beforeEach, describe, expect, inject, it, vi } from 'vitest';
 
 import { addon, type JSThreadExit } from '../../../src/js-engine/index';
 import { utf8Encode } from '../../../src/encoding/index';
@@ -36,39 +36,49 @@ import { mockHTTPTransport } from '../../fetch/transport-fixture';
 // Production owns a fixed entry. Redirect only the native loader in these
 // lifecycle tests so the fixture can block or fail without production commands.
 // The real JSThread still performs execution, cloning, and teardown.
-const entry = vi.hoisted((): { path: string; worker: WorkerThreads.Worker | null; } => ({ path: '', worker: null }));
+const entry = vi.hoisted((): { path: string | null; worker: WorkerThreads.Worker | null; } => ({ path: null, worker: null }));
 vi.mock('node:worker_threads', async (importOriginal) => {
   const original = await importOriginal<typeof WorkerThreads>();
   return {
     ...original,
     Worker: class extends original.Worker {
-      constructor(_entryPath: string, options: WorkerOptions) {
-        // Retarget the marker too: importing the source adapter in the fixture
-        // must not also start its production runtime.
-        super(entry.path, {
+      constructor(entryPath: string | URL, options: WorkerOptions = {}) {
+        const fixturePath = entry.path;
+        // The unit pool reuses modules between files. Cached JSThread imports
+        // must use the requested entry after this suite releases its override.
+        super(fixturePath ?? entryPath, fixturePath === null ? options : {
           ...options,
-          workerData: { ...options.workerData as object, jsThreadEntry: pathToFileURL(entry.path).href },
+          // Retarget the marker too, so importing the source adapter does not
+          // also start its production runtime.
+          workerData: { ...options.workerData as object, jsThreadEntry: pathToFileURL(fixturePath).href },
         });
-        entry.worker = this;
+        if (fixturePath !== null) entry.worker = this;
       }
     },
   };
 });
 const threads = new Set<WorkerThread>();
+const fixturePath = inject('workerFixturePath');
+assert(fixturePath !== undefined, 'The worker fixture must be compiled before test collection');
 
 beforeEach(() => {
-  entry.path = resolve(__dirname, 'fixtures/thread.cjs');
+  entry.path = fixturePath;
   entry.worker = null;
 });
 
 afterEach(async () => {
-  await Promise.all([...threads].map((thread) => thread.terminate()));
-  threads.clear();
-  vi.restoreAllMocks();
+  try {
+    await Promise.all([...threads].map((thread) => thread.terminate()));
+  } finally {
+    threads.clear();
+    entry.path = null;
+    entry.worker = null;
+    vi.restoreAllMocks();
+  }
 });
 
-// Each entry loads the production TypeScript graph in a fresh isolate. Allow for
-// that source-fixture overhead; native startup and all waits remain bounded.
+// Each entry loads the compiled production graph in a fresh isolate. Source
+// compilation precedes test workers; native startup and all waits remain bounded.
 describe('Worker isolate startup host', { timeout: 30_000 }, () => {
   it.each(['dedicated', 'shared'] as const)('starts a %s agent and its real task loop in another isolate', async (kind) => {
     const { thread, request } = createThread({ kind, data: {} });
@@ -731,15 +741,27 @@ describe('Worker error transport', { timeout: 30_000 }, () => {
   });
 
   it('propagates through a live parent worker across two isolate boundaries', async () => {
+    const traceTiming = process.env.CI === 'true' || process.env.BROWLET_TRACE_WORKER === '1';
+    const trace = (phase: string) => {
+      if (traceTiming) {
+        console.error(JSON.stringify({ workerTiming: phase, threadId, ms: Number(process.hrtime.bigint()) / 1e6 }));
+      }
+    };
+    trace('test starts');
     const { implementation, worker, creatorEnv, drain } = createTerminationWorker();
+    trace('outside environment ready');
     const errors: ErrorEvent[] = [];
     worker.addEventListener('error', (event) => { event.preventDefault(); errors.push(event as ErrorEvent); });
-    const { thread, request } = createThread({ kind: 'dedicated', data: {}, worker: implementation });
+    const { thread, request } = createThread({ kind: 'dedicated', data: { traceTiming }, worker: implementation });
+    trace('parent created');
     await thread.ready;
+    trace('parent ready observed');
 
     expect(await request({ type: 'nested-error' })).toEqual([{ message: 'worker failed', error: null }]);
+    trace('nested reply received');
     expect(errors).toEqual([]);
     drain();
+    trace('outside error delivery drained');
 
     expect(errors).toHaveLength(1);
     expect(errors[0]).toMatchObject({ message: 'worker failed', error: null });
