@@ -12,6 +12,7 @@
 #include "promise.h"
 #include "realm.h"
 #include "temporal.h"
+#include "threads.h"
 #include "vm.h"
 #include "vm-imports.h"
 #include "vm-modules.h"
@@ -32,6 +33,7 @@ void Initialize(v8::Local<v8::Object> exports, v8::Local<v8::Value>,
   InitializeCodeGeneration(exports);
   InitializeExceptionReporting(exports, context, vm_data);
   InitializeTemporal(exports);
+  InitializeThreads(exports);
   InitializeArrayBuffer(exports, context, vm_data);
   InitializeRealm(exports, context);
   InitializeGlobalAccess(exports, context);

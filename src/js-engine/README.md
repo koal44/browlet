@@ -44,6 +44,34 @@ chains local cleanup onto it, preserving that queue and propagating cleanup
 failures. The backend inherits the current Node executable, startup options, and
 environment, including the selected addon.
 
+With the addon, `suspend()` requests a native V8 interrupt and waits there without
+unwinding the JavaScript stack. `suspended` reports when the wait has actually
+started; it is not an acknowledgement merely of the request. `resume()` wakes
+the isolate directly, or cancels a pending request. Requests before entry are
+retained by an outside-owned control and applied when the child attaches. Stock
+Node rejects suspension and resumption explicitly; ordinary startup and
+termination retain their existing behavior. Package initialization allocates no
+thread or suspension control.
+
+The wait also blocks Node's host messages. `terminate()` therefore requests V8
+termination and wakes the native wait before calling Node's termination method.
+It stops controlled descendants as well. An owner exit hook handles uncaught
+errors and explicit process exit before Node joins children; the hook exists
+only while that isolate owns controlled threads. Native cleanup hooks retire
+registrations without retaining disposed isolates. A separate Node owner that
+forcibly terminates an isolate containing suspended JSThreads bypasses this
+coordination and is unsupported. This primitive cannot interrupt arbitrary
+blocking native I/O and does not provide a nested native control loop.
+
+`JSThreadEndpoint.preventSuspension()` permanently disables pending and future
+suspension from inside the worker. HTML calls it before publishing closing, so
+a concurrent outside suspension cannot strand cleanup. Dedicated Document
+eligibility is connected. The endpoint's private `elapsedTime` clock excludes
+accepted suspension periods, including a pending interrupt while idle. Resume,
+cancellation, and closing update that accounting under the native control lock.
+Stock Node uses its monotonic clock because it cannot suspend. HTML worker timers
+consume this elapsed time; author-visible performance time stays separate.
+
 Both endpoints take the same `JSThreadProtocol` type, which declares startup data
 and each message direction. TypeScript checks host sends and receives against
 that contract; the native receive boundary still trusts the cloned value's

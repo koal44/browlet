@@ -33,6 +33,9 @@ export class WorkerEnvironment extends BrowletEnvironment {
     super(realm, baseEnv, init);
     this.#settings = settings;
     this.#globalScopeMixin = new WindowOrWorkerGlobalScopeMixin(this);
+    // Local workers have no native suspension. Separate-isolate startup replaces
+    // this clock before author code or timeout algorithms can create waits.
+    this.#globalScopeMixin.timers.setWorkerClock(() => this.currentHighResolutionTime().milliseconds);
   }
 
   get globalImplementation(): WorkerGlobalImpl {
@@ -136,7 +139,7 @@ export class WorkerEnvironment extends BrowletEnvironment {
     const insidePort = global.connectPort(outsidePort);
     // WorkerLocation already reads this global's final response URL. Owner
     // monitoring and the outside object association remain caller dependencies.
-    this.runScript(script, outsidePort, insidePort);
+    this.runScript(script, insidePort, () => { outsidePort.start(); });
   }
 
   /** Run a successfully loaded initial script from its completion task, then activate its entangled startup ports. */
@@ -144,14 +147,14 @@ export class WorkerEnvironment extends BrowletEnvironment {
   // Extracted onComplete steps 9–14. completeScriptFetch first rejects failed
   // scripts and entangles the ports; outside Worker association remains with
   // the startup caller.
-  // TODO(HTML §10.2.4): The startup caller must also connect owner-derived closing
-  // and suspension monitoring before entering this phase.
-  runScript(script: ClassicScript | ModuleScript, outsidePort: MessagePortImpl, insidePort: MessagePortImpl): void {
+  // The caller connects lifetime monitoring first. The outside queue may live in
+  // another isolate, so its execution owner supplies the activation steps.
+  runScript(script: ClassicScript | ModuleScript, insidePort: MessagePortImpl, startOutsidePort: () => void): void {
     this.markExecutionReady();
     // ModuleScript.run() owns rejection reporting. HTML does not wait for its
     // evaluation Promise (including top-level await) before enabling the ports.
     void script.run();
-    outsidePort.start();
+    startOutsidePort();
     if (!(this.realm.agent instanceof SharedWorkerAgent)) {
       insidePort.start();
     } else {

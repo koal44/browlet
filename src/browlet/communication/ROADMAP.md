@@ -20,8 +20,9 @@ The §9 APIs were implemented for local realms. The §10 integration sweep on
   ports also move between isolates, carrying pending HTML deliveries and nested
   ports/buffers. Configured dedicated startup now establishes this transport
   automatically before returning to its creator, retaining immediate messages.
-  Production queue enablement and public Worker startup still require owner
-  monitoring and initial script execution.
+  Dedicated Document-owned startup now connects owner monitoring, initial script
+  execution, and queue enablement, including public `new Worker()` on add-on
+  runtimes. Shared-service APIs retain their own transport dependencies.
 - **BroadcastChannel:** worker eligibility uses the existing closing/suspendable
   checks. The UserAgent-owned registry is still local; discovery, delivery, and
   cleanup across isolates require the shared-service transport.
@@ -222,7 +223,7 @@ Other ports on the unshipped shared task source and incoming messages remain
 queued. The separate-isolate `WorkerThread` host owns the outside port directly
 and uses `clearMessageQueue()` at termination, followed by disentanglement on
 native exit. Both operations share endpoint cancellation. The public Worker
-constructor must supply that port when connecting startup; ordinary port close
+constructor supplies that port when connecting startup; ordinary port close
 and cooperative worker shutdown must preserve pending deliveries.
 
 The 2026-11-04 source comparison supports keeping channel state separate from

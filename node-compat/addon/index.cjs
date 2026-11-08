@@ -23,6 +23,15 @@ if (native.installHostHooks) {
   exports.setHostHooks = require('./host-hooks.cjs')(native, vm.getCompiledCode);
 }
 exports.getRealm = native.getRealm;
+exports.createThreadControl = native.createThreadControl;
+exports.attachThreadControl = native.attachThreadControl;
+exports.preventThreadSuspension = native.preventThreadSuspension;
+exports.getThreadElapsedTime = native.getThreadElapsedTime;
+exports.suspendThread = native.suspendThread;
+exports.resumeThread = native.resumeThread;
+exports.stopThread = native.stopThread;
+exports.isThreadSuspended = native.isThreadSuspended;
+exports.releaseThreadControl = native.releaseThreadControl;
 exports.getFunctionRealm = native.getFunctionRealm;
 exports.createExoticObject = native.createExoticObject;
 exports.createFunctionWithIncumbent = native.createFunctionWithIncumbent;

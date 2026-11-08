@@ -1,5 +1,5 @@
 import { assertNever, InternalError } from '../../../infra/index';
-import { JSMessagePort, JSThreadEndpoint } from '../../../js-engine/index';
+import { JSMessagePort, JSThread, JSThreadEndpoint } from '../../../js-engine/index';
 import { unsafeSharedCurrentTime } from '../../../timing/index';
 import { copyURL, type BlobURLEntry, type URLRecord } from '../../../url/index';
 import { FetchResponse, type Destination } from '../../../fetch/index';
@@ -15,6 +15,7 @@ import type { MessagePortTransportMessage } from '../../communication/index';
 import type {
   WorkerEnvironment, WorkerScriptResponse, WorkerEnvironmentSnapshotInit, CreatorEnvironmentSnapshot,
 } from '../../environment/index';
+import { RemoteWorkerOwner } from '../../workers/index';
 import { queueNodeTask } from '../host/index';
 
 import type { WorkerThreadProtocol, WorkerScriptStartup, WorkerModuleScriptRequest, ScriptResponseSnapshot } from './protocol';
@@ -42,6 +43,8 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
   #started = false;
   /** Response processing supplied by inside startup, before it requests the root script. */
   #onScriptResponse: ((result: WorkerScriptResponse) => void) | undefined;
+  /** Initial-script continuation held until the outside lifetime monitor is connected. */
+  #onLifetimeReady: (() => void) | null = null;
   /** Each execution owner fetches its initial script only once. */
   #scriptRequested = false;
   /** Root already fetched by the creator; consumed when the module loader requests its source. */
@@ -76,7 +79,10 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
       ...this.script, agent: this.agent, creatorEnvSnapshot: this.creatorEnvSnapshot, unsafeWorkerCreationTime,
       userAgent: this.#userAgent,
     });
-    this.environment.globalImplementation.remoteOwnerState = init.ownerState;
+    this.environment.getWindowOrWorkerGlobalScopeMixin().timers.setWorkerClock(() => this.#endpoint.elapsedTime);
+    const global = this.environment.globalImplementation;
+    global.remoteOwner = init.ownerState === null ? null : new RemoteWorkerOwner(init.ownerState);
+    global.onClosing = () => { this.#endpoint.preventSuspension(); };
     if (this.agent instanceof DedicatedWorkerAgent) {
       this.agent.globalScope!.reportErrorToOwner = (errorInfo) => this.reportError(errorInfo);
     }
@@ -98,17 +104,22 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
   // https://html.spec.whatwg.org/multipage/workers.html#run-a-worker
   run(): void {
     this.start(() => {
-      throw new InternalError('Worker shared services and script execution are not implemented');
+      throw new InternalError('Production worker does not accept private commands');
     }, (result) => this.loadScript(result, (script) => {
       if (script === null || script.errorToRethrow !== null) {
         this.environment.discard();
         this.#endpoint.send({ type: 'script-fetch-failed' });
         return;
       }
-      // TODO(HTML §§7.5, 10.2.4): Connect execution suspension and shared/nested
-      // ownership, alongside the remaining shared services,
-      // before setting execution readiness and running the prepared script.
-      throw new InternalError('Worker script execution requires owner monitoring and shared services');
+      const agent = this.agent;
+      if (!(agent instanceof DedicatedWorkerAgent)) {
+        throw new InternalError('Shared worker execution requires ownership and connection management');
+      }
+      this.monitorLifetime(() => {
+        this.environment.runScript(script, agent.globalScope!.insidePort, () => {
+          this.#endpoint.send({ type: 'enable-outside-port' });
+        });
+      });
     }));
     this.fetchScript();
   }
@@ -120,15 +131,16 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
     this.#onScriptResponse = onScriptResponse;
     this.#endpoint.listen((message) => {
       switch (message.type) {
-        case 'owner-activity':
-          // This updates lifetime eligibility, not execution suspension. The
-          // backend must still stop running script as well as queued callbacks.
-          this.environment.globalImplementation.remoteOwnerState = message.fullyActive ? 'active' : 'inactive';
+        case 'lifetime-ready': {
+          const continuation = this.#onLifetimeReady;
+          this.#onLifetimeReady = null;
+          if (continuation === null) throw new InternalError('Worker lifetime monitoring was not requested');
+          this.agent.eventLoop.queueTask(workerHostTaskSource, null, continuation);
           break;
+        }
         case 'owner-removed':
           // Orphan closing sets the flag without discarding already queued work.
           // The existing loop tail performs cleanup after its final checkpoint.
-          this.environment.globalImplementation.remoteOwnerState = null;
           this.environment.globalImplementation.closing = true;
           this.agent.eventLoop.notifyTaskRunnabilityChanged();
           break;
@@ -169,6 +181,20 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
       }
     });
     this.#endpoint.send({ type: 'ready' });
+  }
+
+  /** Connect dedicated-Document closing and suspension before admitting the initial script. */
+  // HTML §10.2.4 installs these monitors after loading and before execution
+  // readiness. The continuation waits for the outside monitor, including an
+  // initially inactive owner; suspension must not prevent initial Fetch itself.
+  monitorLifetime(onReady: () => void): void {
+    if (!JSThread.supportsSuspension) throw new InternalError('Worker script suspension requires the Node compatibility addon');
+    if (!(this.agent instanceof DedicatedWorkerAgent) || this.environment.globalImplementation.remoteOwner === null) {
+      throw new InternalError('Worker lifetime monitoring requires dedicated Document ownership');
+    }
+    if (this.#onLifetimeReady !== null) throw new InternalError('Worker lifetime monitoring is already pending');
+    this.#onLifetimeReady = onReady;
+    this.#endpoint.send({ type: 'monitor-lifetime' });
   }
 
   /** Request the root through the creator's UserAgent, delivering its response on this worker's networking queue. */
@@ -265,6 +291,7 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
 
   /** Release the native control channel; remaining tasks/resources determine natural thread exit. */
   disconnect(): void {
+    this.#onLifetimeReady = null;
     this.#userAgent.close();
     this.#moduleRootResponse = null;
     this.#moduleResponses.clear();

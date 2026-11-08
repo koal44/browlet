@@ -7,17 +7,27 @@ import type { EventLoop, Task } from './event-loop';
 
 /** Timer state owned by a WindowOrWorkerGlobalScope mixin. */
 export class GlobalTimers {
+  /** Waiting timeout algorithms, in registration order. */
   #activeTimers = new Map<TimerKey, ActiveTimer>();
+  /** Owning task loop, used to inherit timer nesting levels. */
   #eventLoop: EventLoop;
+  /** Native wake-up requests; these never invoke author code directly. */
   #host: TimerHost;
+  /** Public IDs remain allocated through queued callback delivery. */
   #idMap = new Map<number, TimerKey>();
+  /** Delivery onto this global's HTML timer task source. */
   #queueTask: TimerTaskQueuingSteps;
+  /** This global's ordinary high-resolution clock, also used for deadline estimates. */
   #time: HighResolutionTimeSource;
-  // TODO(HTML worker timers): Connect non-suspended worker time during worker
-  // startup. Only Window Document activity currently drives these waits.
-  #fullyActive = false;
+  /** Worker-only clock excluding suspension, installed before the first timeout. */
+  #workerClock: (() => number) | null = null;
+  /** Window activity permits counting; a worker's clock itself excludes suspension. */
+  #countingTime = false;
+  /** Next candidate public timer ID. */
   #nextId = 1;
+  /** Registration ordering independent of reusable public IDs. */
   #nextSequence = 0;
+  /** Remove the associated Window Document's activity observer during cleanup. */
   #stopObservingDocument: (() => void) | null = null;
 
   constructor(options: GlobalTimersOptions) {
@@ -31,6 +41,11 @@ export class GlobalTimers {
   getNextTimeoutDeadline(): Duration | null {
     let deadline = Infinity;
     for (const timer of this.#activeTimers.values()) deadline = Math.min(deadline, timer.expiryTime);
+    if (deadline !== Infinity && this.#workerClock !== null) {
+      // Worker deadlines use a private counted-time origin. Preserve this
+      // method's ordinary time-origin-relative estimate for callers.
+      deadline = this.#time.currentHighResolutionTime().milliseconds + (deadline - this.#currentTime());
+    }
     return deadline === Infinity ? null : new Duration(deadline);
   }
 
@@ -45,14 +60,21 @@ export class GlobalTimers {
     return false;
   }
 
+  /** Observe the Window's current Document, counting only its fully-active periods. */
   setAssociatedDocument(document: DocumentImpl): void {
     this.#stopObservingDocument?.();
     this.#stopObservingDocument = null;
-    this.#setFullyActive(false);
+    this.#setCountingTime(false);
     this.#stopObservingDocument = document.observeFullyActiveState(
-      (fullyActive) => { this.#setFullyActive(fullyActive); },
+      (fullyActive) => { this.#setCountingTime(fullyActive); },
     );
-    this.#setFullyActive(document.isFullyActive());
+    this.#setCountingTime(document.isFullyActive());
+  }
+
+  /** Supply a monotonic worker clock excluding suspension, before creating any timeout waits. */
+  setWorkerClock(readTime: () => number): void {
+    this.#workerClock = readTime;
+    this.#countingTime = true;
   }
 
   /** HTML §8.7, run steps after a timeout, using this global's timer state. */
@@ -71,13 +93,14 @@ export class GlobalTimers {
       milliseconds,
       orderingIdentifier,
       sequence: this.#nextSequence++,
-      suspensionStartTime: this.#fullyActive ? null : startTime,
+      suspensionStartTime: this.#countingTime ? null : startTime,
     };
     this.#activeTimers.set(timerKey, timer);
-    if (this.#fullyActive) this.#schedule(timer);
+    if (this.#countingTime) this.#schedule(timer);
     return timerKey;
   }
 
+  /** Initialize a one-shot timer using the shared ID and nesting rules. */
   setTimeout(
     action: TimerAction,
     timeout: number,
@@ -91,6 +114,7 @@ export class GlobalTimers {
     );
   }
 
+  /** Initialize a repeating timer; each delivery starts its next wait. */
   setInterval(
     action: TimerAction,
     timeout: number,
@@ -104,6 +128,7 @@ export class GlobalTimers {
     );
   }
 
+  /** Cancel a public ID, including a callback already queued for that ID. */
   clearTimer(id: number): void {
     this.#idMap.delete(id);
   }
@@ -116,9 +141,10 @@ export class GlobalTimers {
     this.#idMap.clear();
     this.#stopObservingDocument?.();
     this.#stopObservingDocument = null;
-    this.#fullyActive = false;
+    this.#countingTime = false;
   }
 
+  /** Retain the ID through callback delivery and reinitialize intervals after the callback. */
   #initializeTimer(
     action: TimerAction,
     timeout: number,
@@ -170,6 +196,7 @@ export class GlobalTimers {
     return id;
   }
 
+  /** Select an unused positive ID, wrapping without colliding with outstanding timers. */
   #allocateId(): number {
     while (this.#idMap.has(this.#nextId)) this.#advanceNextId();
     const id = this.#nextId;
@@ -177,18 +204,20 @@ export class GlobalTimers {
     return id;
   }
 
+  /** Advance within the public signed-long ID range. */
   #advanceNextId(): void {
     this.#nextId = this.#nextId === 2_147_483_647
       ? 1
       : this.#nextId + 1;
   }
 
-  #setFullyActive(fullyActive: boolean): void {
-    if (this.#fullyActive === fullyActive) return;
+  /** Pause Window waits and shift their deadlines by the inactive duration on resumption. */
+  #setCountingTime(counting: boolean): void {
+    if (this.#countingTime === counting) return;
 
     const now = this.#currentTime();
-    this.#fullyActive = fullyActive;
-    if (!fullyActive) {
+    this.#countingTime = counting;
+    if (!counting) {
       for (const timer of this.#activeTimers.values()) {
         timer.wakeUp?.remove();
         timer.wakeUp = null;
@@ -206,6 +235,7 @@ export class GlobalTimers {
     }
   }
 
+  /** Request the remaining delay; host wake-ups recheck the counted clock before completing. */
   #schedule(timer: ActiveTimer): void {
     timer.wakeUp?.remove();
     timer.wakeUp = this.#host.scheduleTimeout(
@@ -214,11 +244,12 @@ export class GlobalTimers {
     );
   }
 
+  /** Recheck elapsed time after host delay limits or worker suspension, then enforce ordering. */
   #timeoutReached(key: TimerKey): void {
     const timer = this.#activeTimers.get(key);
     if (timer === undefined) return;
     timer.wakeUp = null;
-    if (!this.#fullyActive) return;
+    if (!this.#countingTime) return;
     if (this.#currentTime() < timer.expiryTime) {
       this.#schedule(timer);
       return;
@@ -233,6 +264,7 @@ export class GlobalTimers {
     }
   }
 
+  /** Find an earlier invocation with the same ordering identifier and no greater delay. */
   #hasOrderingBlocker(timer: ActiveTimer): boolean {
     for (const candidate of this.#activeTimers.values()) {
       if (candidate.sequence >= timer.sequence) break;
@@ -244,6 +276,7 @@ export class GlobalTimers {
     return false;
   }
 
+  /** Revisit elapsed waits whose earlier ordered invocation has just completed. */
   #scheduleNewlyUnblockedTimers(): void {
     const now = this.#currentTime();
     for (const timer of this.#activeTimers.values()) {
@@ -255,8 +288,9 @@ export class GlobalTimers {
     }
   }
 
+  /** Read counted worker time or the Window clock whose inactive periods shift deadlines. */
   #currentTime(): number {
-    return this.#time.currentHighResolutionTime().milliseconds;
+    return this.#workerClock?.() ?? this.#time.currentHighResolutionTime().milliseconds;
   }
 }
 
@@ -278,6 +312,7 @@ type HighResolutionTimeSource = {
   currentHighResolutionTime(): Duration;
 };
 
+/** One timeout wait; expiry uses the counted clock, not necessarily performance.now()'s origin. */
 type ActiveTimer = {
   wakeUp: TaskHandle | null;
   completionSteps: () => void;

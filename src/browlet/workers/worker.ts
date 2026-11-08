@@ -1,4 +1,3 @@
-import { InternalError } from '../../infra/index';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface, dictMember,
   DOMExceptionImpl, emptyDictionary, idlType, impl, op, reference, sequence, union,
@@ -55,19 +54,13 @@ export class WorkerImpl extends EventTargetImpl {
 
   /** Apply constructor checks after Web IDL conversion, before attempting worker startup. */
   // https://html.spec.whatwg.org/multipage/workers.html#dom-worker
-  initialize(scriptURL: TrustedScriptURLImpl | string, _options: WorkerOptions): void {
+  initialize(scriptURL: TrustedScriptURLImpl | string, options: WorkerOptions): void {
     const compliantScriptURL = this.env.getWindowOrWorkerGlobalScopeMixin().trustedTypes.getCompliantString(
       'TrustedScriptURL', scriptURL, 'Worker constructor', 'script',
     );
     const workerURL = this.env.encodingParseURL(compliantScriptURL);
     if (workerURL === null) throw new DOMExceptionImpl('Invalid Worker URL', 'SyntaxError');
-    // TODO(HTML §§10.2.4, 10.2.6.3): Run a worker in parallel with workerURL, this.env,
-    // this.outsidePort, and options. The host now composes the inside environment,
-    // loads the script graph, and connects the hidden channel. Owner monitoring,
-    // script execution, and later queue enablement remain required. Supply this
-    // Worker and the script inputs to WorkerThread before returning so immediate
-    // postMessage() and terminate() reach the same execution owner.
-    throw new InternalError('Dedicated worker startup is not implemented');
+    this.env.userAgent.runWorker(this, workerURL, options);
   }
 
   /** Abort the associated worker through its outside execution owner. */

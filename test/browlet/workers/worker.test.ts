@@ -48,6 +48,8 @@ describe('Worker outside interface (HTML §10.2.6.3)', () => {
     const scope = insideEnv.global as unknown as DedicatedWorkerGlobalScope | SharedWorkerGlobalScope;
     expect(typeof scope.Worker).toBe('function');
     expect(() => { new scope.Worker('http://['); }).toThrow(insideEnv.DOMException);
+    expect(() => { new scope.Worker('./nested.js'); })
+      .toThrow('Nested worker startup requires ownership and direct browser-service forwarding');
   });
 
   it('uses ordinary constructor arity and WorkerOptions enum conversion', () => {

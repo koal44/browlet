@@ -34,6 +34,7 @@ the observable constraints of each runtime.
 | Native value inspection and iteration | [iterators.cc](addon/iterators.cc), [array-buffer.cc](addon/array-buffer.cc); [iterator predicates](test/iterator-predicates.test.cjs), [buffer views](test/array-buffer.test.cjs), [collection iterators](test/collection-iterator.test.cjs) |
 | Object-brand predicates | [object-types.cc](addon/object-types.cc); [brand tests](test/object-types.test.cjs), [Wasm Global tests](test/wasm-global-type.test.cjs) |
 | Callable, undetectable objects | [html-all-collection.cc](addon/html-all-collection.cc); [native object tests](test/html-dda.test.cjs) |
+| Thread suspension | [threads.cc](addon/threads.cc); [real-isolate execution and shutdown tests](../test/js-engine/thread-suspension.test.ts) |
 
 [addon.cc](addon/addon.cc) registers the native modules;
 [index.cjs](addon/index.cjs) loads the binary and assembles the JavaScript API.
@@ -46,6 +47,32 @@ that opaque VM data for context lookup.
 The [native addon suite](test/) also covers lifetime, garbage collection, and runtime selection.
 
 ## Contexts, globals, and optional facilities
+
+`createThreadControl()` allocates an outside-owned token before Node starts a
+worker. The matching child calls `attachThreadControl()` once. `suspendThread()`
+requests a public V8 interrupt whose native wait retains the executing stack;
+`resumeThread()` wakes it without requiring a worker message callback.
+`isThreadSuspended()` reports entry into the wait, and `releaseThreadControl()`
+retires the outside ownership after exit or failed construction.
+The attached isolate can call `preventThreadSuspension()` before closing to
+disable pending and future suspension permanently. It shares the registry lock
+with outside requests, so this transition cannot race a late suspension.
+`getThreadElapsedTime()` reads a private monotonic clock from inside the attached
+isolate. It excludes accepted suspension periods from request through resume,
+including an idle isolate's pending interrupt. Repeated requests do not reset
+the start, and ignored requests after closing do not stop time. It samples the
+clock and accumulated suspension under one lock; author performance time is
+unrelated. HTML supplies this clock to its existing timer scheduler.
+
+`stopThread()` sets V8 termination before waking the wait, including controlled
+descendants. JS Engine calls it before Node's `Worker.terminate()` and during an
+owner's JavaScript exit event, since Node joins children before native cleanup
+hooks. Registry access and isolate teardown share a lock; tokens are not reused.
+The wait runs no JavaScript and also blocks private host messages. Raw Node
+termination cannot release it; a foreign native owner must coordinate shutdown
+through these controls. HTML owns task admission, eligibility, and timer
+accounting separately. This uses public APIs on all three supported
+addon bases, with no Node/V8 patch or private-layout access.
 
 `compileFunction(body, parameters, options)` follows Node's function-compilation
 shape, with `parsingContext` required to be an attached addon context handle.

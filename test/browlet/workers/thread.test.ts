@@ -2,6 +2,7 @@ import { EventEmitter, once } from 'node:events';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { setTimeout as delay } from 'node:timers/promises';
 import { threadId, type WorkerOptions } from 'node:worker_threads';
 import type * as WorkerThreads from 'node:worker_threads';
 import { afterEach, assert, beforeEach, describe, expect, inject, it, vi } from 'vitest';
@@ -130,6 +131,74 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
       expect(document.ownedWorkers).toEqual([]);
     });
 
+    it.each([
+      ['classic', 'root'], ['module', 'root'], ['module', 'descendant'],
+    ] as const)('cancels a loading %s worker when its Document is destroyed during the %s fetch', async (type, pending) => {
+      const { implementation, worker, creatorEnv, messages, drain } = createTerminationWorker(false);
+      const document = creatorEnv.window.document;
+      const dispatched = Promise.withResolvers<() => void>();
+      const abort = vi.fn();
+      const errors = vi.fn();
+      worker.addEventListener('error', errors);
+      vi.spyOn(creatorEnv.userAgent.httpTransport, 'dispatch').mockImplementation((request, listener) => {
+        if (pending === 'descendant' && serializeURL(request.url).endsWith('/worker.js')) {
+          listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+          listener.onData(utf8Encode('import "./pending.js"; postMessage("initial script ran");'));
+          listener.onEnd();
+          return { pause() {}, resume() {}, abort() {} };
+        }
+        dispatched.resolve(() => {
+          listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+          listener.onData(utf8Encode('postMessage("late script ran");'));
+          listener.onEnd();
+        });
+        return { pause() {}, resume() {}, abort };
+      });
+      const { thread } = createThread({
+        kind: 'dedicated', worker: implementation, data: { mode: 'run-startup' },
+        script: { url: creatorEnv.parseURL('https://creator.test/worker.js')!, type, credentials: 'same-origin', name: '' },
+      });
+      const finishResponse = await dispatched.promise;
+      expect(document.ownedWorkers).toHaveLength(1);
+      creatorEnv.queueTask('dom-manipulation', () => { document.destroy(); });
+      drain();
+      expect(await thread.closed).toEqual({ code: 0, error: undefined, terminated: false });
+      expect(abort).toHaveBeenCalledOnce();
+      expect(document.ownedWorkers).toEqual([]);
+      expect(thread.reservedEnv.discarded).toBe(true);
+      expect(implementation.thread).toBeNull();
+      expect(implementation.outsidePort.isEntangledOutsideGlobal()).toBe(false);
+      // Even a transport completion already in transit when canceled cannot
+      // restart the worker or enqueue a load error for its destroyed owner.
+      finishResponse();
+      drain();
+      expect(messages).toEqual([]);
+      expect(errors).not.toHaveBeenCalled();
+    });
+
+    if (JSThread.supportsSuspension) {
+      it.each(['classic', 'module'] as const)('closes a running %s worker when its Document is destroyed', async (type) => {
+        const source = type === 'classic'
+          ? 'setInterval(() => postMessage("timer ran"), 60_000);'
+          : 'await new Promise(() => {}); postMessage("evaluation continued");';
+        const { thread, worker, creatorEnv, messages, drain } = createRunningWorker(`postMessage("running"); ${source}`, type);
+        const document = creatorEnv.window.document;
+        const errors = vi.fn();
+        worker.addEventListener('error', errors);
+        await vi.waitFor(() => { drain(); expect(messages).toEqual(['running']); }, { timeout: 5000 });
+
+        creatorEnv.queueTask('dom-manipulation', () => { document.destroy(); });
+        drain();
+        // Closing must release timers and host channels without waiting for a
+        // module's pending evaluation Promise to settle.
+        expect(await thread.closed).toEqual({ code: 0, error: undefined, terminated: false });
+        expect(document.ownedWorkers).toEqual([]);
+        drain();
+        expect(messages).toEqual(['running']);
+        expect(errors).not.toHaveBeenCalled();
+      });
+    }
+
     it('keeps the original Document registration when its Window is reused', async () => {
       const creatorEnv = createCreatorEnvironment();
       const document = creatorEnv.window.document;
@@ -203,6 +272,22 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
   });
 
   describe('Document owner activity', () => {
+    it('observes owner activity before a blocked script returns to the host message queue', async () => {
+      const document = TopLevelTraversable.create(createManualUserAgent(), null, '').activeDocument!;
+      const { thread, request } = createThread({ kind: 'dedicated', creatorEnv: document.env, data: {} });
+      const state = new Int32Array(new SharedArrayBuffer(8));
+      await thread.ready;
+      const result = request({ type: 'read-owner-while-blocked', state });
+      try {
+        await vi.waitFor(() => { expect(Atomics.load(state, 0)).toBe(1); });
+        document.browsingContext = null;
+        document.notifyFullyActiveStateChanged();
+      } finally {
+        Atomics.store(state, 1, 1);
+      }
+      expect(await result).toEqual({ activelyNeeded: false });
+    });
+
     it.each([true, false])('tracks initial activity and subsequent changes across isolates, active: %s', async (active) => {
       const document = TopLevelTraversable.create(createManualUserAgent(), null, '').activeDocument!;
       const creatorEnv = document.env;
@@ -268,7 +353,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
     it.each(['natural exit', 'termination', 'bootstrap failure'])('releases activity monitoring after %s', async (exit) => {
       const document = TopLevelTraversable.create(createManualUserAgent(), null, '').activeDocument!;
       const creatorEnv = document.env;
-      const { thread } = createThread({
+      const { thread, request } = createThread({
         kind: 'dedicated', creatorEnv, data: exit === 'bootstrap failure' ? { mode: 'throw-before-ready' } : {},
         script: { url: parseURL('https://creator.test/worker.js').url!, type: 'classic', credentials: 'same-origin', name: '' },
       });
@@ -276,16 +361,177 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
         await expect(thread.ready).rejects.toThrow('bootstrap failed');
       } else {
         await thread.ready;
+        if (JSThread.supportsSuspension) await request({ type: 'monitor-lifetime' });
         if (exit === 'termination') await thread.terminate();
         else thread.send({ type: 'close' });
       }
       await thread.closed;
-      const send = vi.spyOn(JSThread.prototype, 'send');
+      const suspend = vi.spyOn(JSThread.prototype, 'suspend');
+      const resume = vi.spyOn(JSThread.prototype, 'resume');
       document.browsingContext = null;
       document.notifyFullyActiveStateChanged();
-      expect(send).not.toHaveBeenCalled();
+      expect(suspend).not.toHaveBeenCalled();
+      expect(resume).not.toHaveBeenCalled();
       expect(document.ownedWorkers).toEqual([]);
     });
+  });
+
+  describe('Document-driven suspension', () => {
+    if (JSThread.supportsSuspension) {
+      it.each(['script', 'reaction'])('resumes the same %s after repeated owner inactivity', async (entry) => {
+        const { thread, request, setActive } = createSuspensionWorker();
+        const state = new Int32Array(new SharedArrayBuffer(24));
+        await thread.ready;
+        expect(await request({ type: 'monitor-lifetime' })).toBe('monitoring');
+        const result = request({ type: 'run-suspendable-script', state, entry });
+        await vi.waitFor(() => { expect(Atomics.load(state, 0)).toBe(1); });
+        for (let cycle = 0; cycle < 2; cycle++) {
+          setActive(false);
+          await vi.waitFor(() => { expect(thread.suspended).toBe(true); });
+          const progress = Atomics.load(state, 2);
+          await delay(50);
+          expect(Atomics.load(state, 2)).toBe(progress);
+          expect(Array.from(state).slice(3)).toEqual([0, 0, 0]);
+          setActive(true);
+          await vi.waitFor(() => { expect(Atomics.load(state, 2)).not.toBe(progress); });
+        }
+        Atomics.store(state, 1, 1);
+        expect(await result).toEqual({
+          order: entry === 'reaction' ? ['finally', 'return', 'sibling', 'dependent'] : ['finally', 'return'],
+          activelyNeeded: true,
+        });
+        expect(await request({ type: 'echo', data: 'resumed' })).toBe('resumed');
+      });
+
+      it('holds the initial-script continuation until an inactive owner becomes active', async () => {
+        const { thread, request, setActive } = createSuspensionWorker(false);
+        const state = new Int32Array(new SharedArrayBuffer(24));
+        await thread.ready;
+        const result = request({ type: 'monitor-lifetime', state });
+        await vi.waitFor(() => { expect(thread.suspended).toBe(true); });
+        await delay(50);
+        expect(Array.from(state)).toEqual([0, 0, 0, 0, 0, 0]);
+        Atomics.store(state, 1, 1);
+        setActive(true);
+        expect(await result).toEqual({ order: ['finally', 'return'], activelyNeeded: true });
+      });
+
+      it('wakes an orphaned suspended worker so its current turn and cleanup can finish', async () => {
+        const { document, thread, request, setActive } = createSuspensionWorker();
+        const state = new Int32Array(new SharedArrayBuffer(24));
+        await thread.ready;
+        await request({ type: 'monitor-lifetime' });
+        thread.send({ type: 'run-suspendable-script', state, entry: 'reaction' });
+        await vi.waitFor(() => { expect(Atomics.load(state, 0)).toBe(1); });
+        setActive(false);
+        await vi.waitFor(() => { expect(thread.suspended).toBe(true); });
+        Atomics.store(state, 1, 1);
+        // Exercise destruction's owner removal directly. Inactive history
+        // Document destruction still needs its separate §7.5 ownership work.
+        document.ownedWorkers[0]!.ownerSet.delete(document);
+        expect(await thread.closed).toEqual({ code: 0, error: undefined, terminated: false });
+        expect(Array.from(state).slice(3)).toEqual([1, 1, 1]);
+        expect(document.ownedWorkers).toEqual([]);
+      });
+
+      it('does not suspend a worker whose script has already called close()', async () => {
+        const { thread, request, setActive } = createSuspensionWorker();
+        const state = new Int32Array(new SharedArrayBuffer(24));
+        await thread.ready;
+        await request({ type: 'monitor-lifetime' });
+        const result = request({ type: 'run-suspendable-script', state, closeFirst: true });
+        await vi.waitFor(() => { expect(Atomics.load(state, 0)).toBe(1); });
+        setActive(false);
+        const progress = Atomics.load(state, 2);
+        await vi.waitFor(() => { expect(Atomics.load(state, 2)).not.toBe(progress); });
+        expect(thread.suspended).toBe(false);
+        Atomics.store(state, 1, 1);
+        expect(await result).toEqual({ order: ['finally', 'return'], activelyNeeded: false });
+        expect(await thread.closed).toEqual({ code: 0, error: undefined, terminated: false });
+      });
+
+      it('terminates a suspended worker without running its finally or remaining reactions', async () => {
+        const { thread, request, setActive } = createSuspensionWorker();
+        const state = new Int32Array(new SharedArrayBuffer(24));
+        await thread.ready;
+        await request({ type: 'monitor-lifetime' });
+        thread.send({ type: 'run-suspendable-script', state, entry: 'reaction' });
+        await vi.waitFor(() => { expect(Atomics.load(state, 0)).toBe(1); });
+        setActive(false);
+        await vi.waitFor(() => { expect(thread.suspended).toBe(true); });
+        expect(await thread.terminate()).toEqual({ code: 1, error: undefined, terminated: true });
+        expect(Array.from(state).slice(3)).toEqual([0, 0, 0]);
+      });
+
+      it('keeps shared-owner discovery an explicit prerequisite', async () => {
+        const { thread, request } = createThread({ kind: 'shared' });
+        await thread.ready;
+        expect(await request({ type: 'monitor-lifetime' })).toEqual({
+          errorMessage: 'Worker lifetime monitoring requires dedicated Document ownership',
+        });
+      });
+    } else {
+      it('keeps native suspension an explicit prerequisite on stock Node', async () => {
+        const { thread, request } = createSuspensionWorker();
+        await thread.ready;
+        expect(await request({ type: 'monitor-lifetime' })).toEqual({
+          errorMessage: 'Worker script suspension requires the Node compatibility addon',
+        });
+      });
+    }
+  });
+
+  describe('worker timer clock', () => {
+    it('delivers a worker timeout through its HTML task queue', async () => {
+      const { thread, request } = createSuspensionWorker();
+      await thread.ready;
+      const state = new Int32Array(new SharedArrayBuffer(16));
+      expect(await request({ type: 'start-timers', state, timeout: 20 })).toBe('scheduled');
+      await vi.waitFor(() => { expect(Atomics.load(state, 1)).toBe(1); });
+      expect(await request({ type: 'inspect-timers' })).toMatchObject({ calls: 1, outstanding: false, ownsTimerTask: true });
+    });
+
+    if (JSThread.supportsSuspension) {
+      it('excludes repeated native suspension from timer delays without pausing performance.now()', async () => {
+        const { thread, request, setActive } = createSuspensionWorker();
+        const state = new Int32Array(new SharedArrayBuffer(16));
+        await thread.ready;
+        await request({ type: 'monitor-lifetime' });
+        await request({ type: 'start-timers', state, timeout: 400 });
+        for (let cycle = 0; cycle < 2; cycle++) {
+          setActive(false);
+          await vi.waitFor(() => { expect(thread.suspended).toBe(true); });
+          await delay(450);
+          expect(Atomics.load(state, 1)).toBe(0);
+          setActive(true);
+          // An ordinary request round trip lets any overdue native wake-up run.
+          expect(await request({ type: 'inspect-timers' })).toMatchObject({ calls: 0, outstanding: true });
+        }
+        await vi.waitFor(() => { expect(Atomics.load(state, 1)).toBe(1); }, { timeout: 2000 });
+        const result = await request({ type: 'inspect-timers' }) as { elapsed: number; };
+        expect(result).toMatchObject({
+          calls: 1, outstanding: false, ownsTimerTask: true,
+        });
+        expect(result.elapsed).toBeGreaterThanOrEqual(900);
+      });
+
+      it('can cancel a timer after a suspension longer than its requested delay', async () => {
+        const { thread, request, setActive } = createSuspensionWorker();
+        const state = new Int32Array(new SharedArrayBuffer(16));
+        await thread.ready;
+        await request({ type: 'monitor-lifetime' });
+        await request({ type: 'start-timers', state, timeout: 400 });
+        setActive(false);
+        await vi.waitFor(() => { expect(thread.suspended).toBe(true); });
+        await delay(450);
+        const canceled = request({ type: 'cancel-timer' });
+        setActive(true);
+        expect(await canceled).toBe('canceled');
+        await delay(450);
+        expect(Atomics.load(state, 1)).toBe(0);
+        expect(await request({ type: 'inspect-timers' })).toMatchObject({ calls: 0, outstanding: false });
+      });
+    }
   });
 
   it('clones startup data without sharing ordinary creator objects', async () => {
@@ -761,7 +1007,134 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
     });
   });
 
-  describe('production startup failures', () => {
+  describe('public Worker startup', () => {
+    if (JSThread.supportsSuspension) {
+      it.each(['classic', 'module'] as const)('constructs a %s Worker and accepts messages immediately', async (type) => {
+        const { creatorEnv, drain } = createWorkerCreator();
+        mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
+          listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+          listener.onData(utf8Encode('onmessage = event => { postMessage([name, event.data]); close(); };'));
+          listener.onEnd();
+        });
+        const worker = new (creatorEnv.global as Window).Worker('./worker.js', { type, name: 'public worker' });
+        const implementation = unwrap<WorkerImpl>(worker);
+        const thread = implementation.thread;
+        assert(thread !== null);
+        threads.add(thread);
+        const messages: unknown[] = [];
+        worker.onmessage = (event) => { messages.push((event as MessageEvent).data); };
+        const data = { value: 42 };
+        worker.postMessage(data);
+        data.value = 0;
+        expect(messages).toEqual([]);
+        expect(creatorEnv.window.document.ownedWorkers).toHaveLength(1);
+        expect(await thread.closed).toMatchObject({ error: undefined, terminated: false });
+        await vi.waitFor(() => { drain(); expect(messages).toEqual([['public worker', { value: 42 }]]); });
+        expect(implementation.thread).toBeNull();
+        expect(creatorEnv.window.document.ownedWorkers).toEqual([]);
+      });
+
+      it('loads a public module worker graph with the converted credentials option', async () => {
+        const { creatorEnv, drain } = createWorkerCreator();
+        creatorEnv.userAgent.cookieStore.parseAndStoreCookie(
+          'session=creator; Secure; SameSite=None', true, { kind: 'domain', value: 'creator.test' }, [''], true, false, true,
+        );
+        const requests: unknown[] = [];
+        mockHTTPTransport(creatorEnv.userAgent, (request, listener) => {
+          const url = serializeURL(request.url);
+          requests.push({ url, cookie: request.headers.get('Cookie') });
+          listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+          listener.onData(utf8Encode(url.endsWith('/worker.js')
+            ? 'import value from "./dependency.js"; postMessage(value); close();'
+            : 'export default 42;'));
+          listener.onEnd();
+        });
+        const worker = new (creatorEnv.global as Window).Worker('./worker.js', { type: 'module', credentials: 'omit' });
+        const thread = unwrap<WorkerImpl>(worker).thread!;
+        threads.add(thread);
+        const messages: unknown[] = [];
+        worker.onmessage = (event) => { messages.push((event as MessageEvent).data); };
+        expect(await thread.closed).toMatchObject({ error: undefined, terminated: false });
+        await vi.waitFor(() => { drain(); expect(messages).toEqual([42]); });
+        expect(requests).toEqual([
+          { url: 'https://creator.test/worker.js', cookie: null },
+          { url: 'https://creator.test/dependency.js', cookie: null },
+        ]);
+      });
+
+      it('can terminate a public Worker immediately without beginning Fetch', async () => {
+        const { creatorEnv } = createWorkerCreator();
+        const transport = vi.spyOn(creatorEnv.userAgent.httpTransport, 'dispatch');
+        const worker = new (creatorEnv.global as Window).Worker('./worker.js');
+        const implementation = unwrap<WorkerImpl>(worker);
+        const thread = implementation.thread!;
+        threads.add(thread);
+        expect(worker.terminate()).toBeUndefined();
+        expect(await thread.closed).toMatchObject({ error: undefined, terminated: true });
+        expect(transport).not.toHaveBeenCalled();
+        expect(implementation.thread).toBeNull();
+        expect(creatorEnv.window.document.ownedWorkers).toEqual([]);
+      });
+
+      it.each(['network', 'syntax', 'CSP'] as const)('reports public worker %s failure asynchronously', async (failure) => {
+        const { creatorEnv, drain } = createWorkerCreator();
+        if (failure === 'CSP') {
+          creatorEnv.policyContainer.cspList = new CSPList(creatorEnv.origin);
+          creatorEnv.policyContainer.cspList.policies.push(ContentSecurityPolicy.parse("worker-src 'none'", 'header', 'enforce'));
+        }
+        mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
+          if (failure === 'network') { listener.onError(new Error('network failed')); return; }
+          listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+          listener.onData(utf8Encode('const = ;'));
+          listener.onEnd();
+        });
+        const worker = new (creatorEnv.global as Window).Worker('./worker.js');
+        const thread = unwrap<WorkerImpl>(worker).thread!;
+        threads.add(thread);
+        const errors: Event[] = [];
+        worker.onerror = (event) => { errors.push(event); };
+        expect(errors).toEqual([]);
+        expect(await thread.closed).toMatchObject({ error: undefined, terminated: true });
+        expect(errors).toEqual([]);
+        drain();
+        expect(errors).toHaveLength(1);
+        expect(errors[0]).toMatchObject({ type: 'error', target: worker, isTrusted: true });
+        expect('message' in errors[0]!).toBe(false);
+        expect(creatorEnv.window.document.ownedWorkers).toEqual([]);
+      });
+
+      it('connects public construction to Document-owned shutdown', async () => {
+        const { creatorEnv, drain } = createWorkerCreator();
+        mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
+          listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+          listener.onData(utf8Encode('postMessage("running");'));
+          listener.onEnd();
+        });
+        const worker = new (creatorEnv.global as Window).Worker('./worker.js');
+        const thread = unwrap<WorkerImpl>(worker).thread!;
+        threads.add(thread);
+        const messages: unknown[] = [];
+        worker.onmessage = (event) => { messages.push((event as MessageEvent).data); };
+        await vi.waitFor(() => { drain(); expect(messages).toEqual(['running']); }, { timeout: 5000 });
+        const document = creatorEnv.window.document;
+        creatorEnv.queueTask('dom-manipulation', () => { document.destroy(); });
+        drain();
+        expect(await thread.closed).toEqual({ code: 0, error: undefined, terminated: false });
+        expect(document.ownedWorkers).toEqual([]);
+      });
+    } else {
+      it('rejects unsupported public execution before allocating a thread', () => {
+        const { creatorEnv } = createWorkerCreator();
+        const threadBefore = entry.worker;
+        expect(() => { new (creatorEnv.global as Window).Worker('./worker.js'); })
+          .toThrow('Worker script suspension requires the Node compatibility addon');
+        expect(entry.worker).toBe(threadBefore);
+        expect(creatorEnv.window.document.ownedWorkers).toEqual([]);
+      });
+    }
+  });
+
+  describe('production startup', () => {
     it.each([
       ['network', 'classic'], ['network', 'module'],
       ['creator CSP', 'classic'], ['creator CSP', 'module'],
@@ -837,32 +1210,104 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
       expect(thread.reservedEnv.discarded).toBe(true);
     });
 
-    it.each([
-      ['classic', 'empty'], ['module', 'empty'], ['classic', 'throwing'], ['module', 'throwing'],
-    ] as const)('parses an accepted %s root with an %s body without executing it or reporting a load failure', async (type, body) => {
-      const { implementation, worker, creatorEnv, drain } = createTerminationWorker(false);
-      const errors = vi.fn();
-      worker.addEventListener('error', errors);
-      mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
-        listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
-        if (body !== 'empty') listener.onData(utf8Encode('throw new Error("unconnected script ran");'));
-        listener.onEnd();
+    if (JSThread.supportsSuspension) {
+      it.each(['classic', 'module'] as const)('runs the prepared %s script before delivering queued messages', async (type) => {
+        const { thread, worker, messages, drain } = createRunningWorker(`
+          onmessage = event => { postMessage(event.data); close(); };
+          postMessage('script');
+          queueMicrotask(() => postMessage('microtask'));
+        `, type);
+        worker.postMessage('queued before readiness');
+        expect(messages).toEqual([]);
+        await thread.ready;
+        await vi.waitFor(() => {
+          drain();
+          expect(messages).toEqual(['script', 'microtask', 'queued before readiness']);
+        }, { timeout: 5000 });
+        expect(await thread.closed).toMatchObject({ error: undefined, terminated: false });
       });
-      const { thread } = createThread({
-        kind: 'dedicated', worker: implementation, data: { mode: 'run-startup' },
-        script: { url: creatorEnv.parseURL('https://creator.test/worker.js')!, type, credentials: 'same-origin', name: '' },
+
+      it('enables messages while module evaluation is waiting on top-level await', async () => {
+        const { thread, worker, messages, drain } = createRunningWorker(`
+          postMessage('before await');
+          await new Promise(resolve => { onmessage = resolve; });
+          queueMicrotask(() => postMessage('after await'));
+          close();
+        `, 'module');
+        await thread.ready;
+        await vi.waitFor(() => { drain(); expect(messages).toEqual(['before await']); }, { timeout: 5000 });
+        worker.postMessage('resume');
+        expect(await thread.closed).toMatchObject({ error: undefined, terminated: false });
+        await vi.waitFor(() => { drain(); expect(messages).toEqual(['before await', 'after await']); });
       });
-      await thread.ready;
-      expect(await thread.closed).toMatchObject({
-        error: {
-          message: 'Worker script execution requires owner monitoring and shared services',
-        },
-        terminated: false,
+
+      it.each(['classic', 'module'] as const)('delivers final messages when the initial %s script closes', async (type) => {
+        const { thread, messages, drain } = createRunningWorker(`
+          postMessage('script');
+          queueMicrotask(() => postMessage('microtask'));
+          close();
+        `, type);
+        await thread.ready;
+        expect(await thread.closed).toMatchObject({ error: undefined, terminated: false });
+        await vi.waitFor(() => { drain(); expect(messages).toEqual(['script', 'microtask']); });
       });
-      expect(thread.reservedEnv.discarded).toBe(true);
-      drain();
-      expect(errors).not.toHaveBeenCalled();
-    });
+
+      it.each(['classic', 'module'] as const)('reports a %s runtime error and continues accepting messages', async (type) => {
+        const { thread, worker, messages, drain } = createRunningWorker(`
+          onmessage = event => { postMessage(event.data); close(); };
+          throw new Error('initial script failed');
+        `, type);
+        const errors: ErrorEvent[] = [];
+        worker.addEventListener('error', (event) => { errors.push(event as ErrorEvent); event.preventDefault(); });
+        await thread.ready;
+        await vi.waitFor(() => { drain(); expect(errors).toHaveLength(1); }, { timeout: 5000 });
+        expect(errors[0]).toMatchObject({ type: 'error', error: null, cancelable: true, isTrusted: true });
+        expect(errors[0]!.message).toContain('initial script failed');
+        worker.postMessage('after error');
+        expect(await thread.closed).toMatchObject({ error: undefined, terminated: false });
+        await vi.waitFor(() => { drain(); expect(messages).toEqual(['after error']); });
+      });
+
+      it('holds the prepared initial script until its original Document becomes active', async () => {
+        const { thread, messages, drain, setActive } = createRunningWorker("postMessage('ran'); close();", 'classic', false);
+        await thread.ready;
+        await vi.waitFor(() => { expect(thread.suspended).toBe(true); }, { timeout: 5000 });
+        drain();
+        expect(messages).toEqual([]);
+        setActive(true);
+        expect(await thread.closed).toMatchObject({ error: undefined, terminated: false });
+        await vi.waitFor(() => { drain(); expect(messages).toEqual(['ran']); });
+      });
+    }
+
+    if (!JSThread.supportsSuspension) {
+      it.each([
+        ['classic', 'empty'], ['module', 'empty'], ['classic', 'throwing'], ['module', 'throwing'],
+      ] as const)('parses an accepted %s root with an %s body without executing it or reporting a load failure', async (type, body) => {
+        const { implementation, worker, creatorEnv, drain } = createTerminationWorker(false);
+        const errors = vi.fn();
+        worker.addEventListener('error', errors);
+        mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
+          listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+          if (body !== 'empty') listener.onData(utf8Encode('throw new Error("unconnected script ran");'));
+          listener.onEnd();
+        });
+        const { thread } = createThread({
+          kind: 'dedicated', worker: implementation, data: { mode: 'run-startup' },
+          script: { url: creatorEnv.parseURL('https://creator.test/worker.js')!, type, credentials: 'same-origin', name: '' },
+        });
+        await thread.ready;
+        expect(await thread.closed).toMatchObject({
+          error: {
+            message: 'Worker script suspension requires the Node compatibility addon',
+          },
+          terminated: false,
+        });
+        expect(thread.reservedEnv.discarded).toBe(true);
+        drain();
+        expect(errors).not.toHaveBeenCalled();
+      });
+    }
 
     it('does not report a fetch failure when termination wins while the root is pending', async () => {
       const { implementation, worker, creatorEnv, drain } = createTerminationWorker(false);
@@ -2718,13 +3163,38 @@ async function loadWorkerResponse(
   return request({ type: 'fetch-script' });
 }
 
-/** Real outside Worker and controlled HTML deliveries; native execution still uses the isolate fixture. */
-function createTerminationWorker(enablePort = true) {
+/** Observe a real Document while the worker executes through its composed environment. */
+function createSuspensionWorker(active = true) {
+  const document = TopLevelTraversable.create(createManualUserAgent(), null, '').activeDocument!;
+  const browsingContext = document.browsingContext;
+  if (!active) document.browsingContext = null;
+  const worker = createThread({ kind: 'dedicated', creatorEnv: document.env, data: {} });
+  return {
+    ...worker, document,
+    setActive(this: void, fullyActive: boolean): void {
+      document.browsingContext = fullyActive ? browsingContext : null;
+      document.notifyFullyActiveStateChanged();
+    },
+  };
+}
+
+/** Active Document and manually driven HTML deliveries, shared by public and implementation startup tests. */
+function createWorkerCreator() {
   const creatorEnv = createCreatorEnvironment();
   const document = creatorEnv.window.document;
   document.browsingContext = new BrowsingContext(creatorEnv.realm.windowProxy);
   document.makeActive();
   const traversable = new TopLevelTraversable(DocumentState.create(document));
+  return {
+    traversable, creatorEnv,
+    drain: () => { while (creatorEnv.responsibleEventLoop.runTaskTurn()) { /* Drain runnable outside work. */ } },
+  };
+}
+
+/** Real outside Worker and controlled HTML deliveries; native execution still uses the isolate fixture. */
+function createTerminationWorker(enablePort = true) {
+  const creator = createWorkerCreator();
+  const { creatorEnv } = creator;
   const implementation = new WorkerImpl(creatorEnv);
   const worker = creatorEnv.project(implementation) as Worker;
   const producer = new MessagePortImpl(creatorEnv);
@@ -2733,8 +3203,31 @@ function createTerminationWorker(enablePort = true) {
   const messages: unknown[] = [];
   worker.onmessage = (event) => { messages.push((event as MessageEvent).data); };
   return {
-    traversable, creatorEnv, producer, implementation, worker, messages,
-    drain: () => { while (creatorEnv.responsibleEventLoop.runTaskTurn()) { /* Drain runnable outside work. */ } },
+    ...creator, producer, implementation, worker, messages,
+  };
+}
+
+/** Run the production driver with real ports and owners, replacing only the fetched source. */
+function createRunningWorker(source: string, type: 'classic' | 'module' = 'classic', active = true) {
+  const outside = createTerminationWorker(false);
+  const document = outside.creatorEnv.window.document;
+  const browsingContext = document.browsingContext;
+  if (!active) document.browsingContext = null;
+  mockHTTPTransport(outside.creatorEnv.userAgent, (_request, listener) => {
+    listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+    listener.onData(utf8Encode(source));
+    listener.onEnd();
+  });
+  const { thread } = createThread({
+    kind: 'dedicated', worker: outside.implementation, data: { mode: 'run-startup' },
+    script: { url: outside.creatorEnv.parseURL('https://creator.test/worker.js')!, type, credentials: 'same-origin', name: '' },
+  });
+  return {
+    ...outside, thread,
+    setActive(this: void, fullyActive: boolean): void {
+      document.browsingContext = fullyActive ? browsingContext : null;
+      document.notifyFullyActiveStateChanged();
+    },
   };
 }
 

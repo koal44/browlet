@@ -19,6 +19,7 @@ import type { StructuredSerializeOptions } from '../scripting/structured-data/in
 
 import { WorkerLocationImpl } from './worker-location';
 import { WorkerOwnerSet } from './owner-set';
+import type { RemoteWorkerOwner, WorkerOwnerState } from './remote-owner';
 
 /** Common worker scripting and policy state. */
 // https://html.spec.whatwg.org/multipage/workers.html#workerglobalscope
@@ -41,15 +42,15 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
   /** Presence/activity of an owner retained in another isolate; never a cloned Document or worker global. */
   // Dedicated startup supplies its original Document. Shared/nested ownership
   // still requires the managers that collect and forward those owners' state.
-  remoteOwnerState: WorkerOwnerState = null;
+  remoteOwner: RemoteWorkerOwner | null = null;
   /** Policies owned by this global, replaced by the startup response or inherited owner policies. */
   policyContainer = new PolicyContainer();
   /** Script-fetch results shared with this global's worker settings. */
   moduleMap = new ModuleMap();
   /** Startup derives this capability from the agent and response policies. */
   crossOriginIsolatedCapability = false;
-  /** Once set, the worker event loop discards newly queued tasks (HTML §10.2.2). */
-  closing = false;
+  /** Execution owner notified before closing is set, so pending native suspension cannot strand cleanup. */
+  onClosing: (() => void) | null = null;
   /** Stable URL view, observed only after startup assigns this global's URL. */
   location: WorkerLocationImpl;
   /** Stable worker navigator identity; its capability mixins remain a later dependency. */
@@ -69,6 +70,8 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
   /** Startup installs the response's embedder policy before its inheritance check. */
   // https://html.spec.whatwg.org/multipage/workers.html#concept-workerglobalscope-embedder-policy
   embedderPolicy = new EmbedderPolicy();
+  /** Once set, the worker event loop discards newly queued tasks (HTML §10.2.2). */
+  #closing = false;
 
   constructor(type: WorkerType, name: string, env: BrowletEnvironment) {
     super(env);
@@ -86,6 +89,18 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
     const global = env.globalImplementation;
     if (global instanceof WorkerGlobalImpl) return global;
     throw new InternalError('A worker owner requires Window or WorkerGlobalScope settings');
+  }
+
+  /** Current remote ownership, visible without waiting for the worker's host message queue. */
+  get remoteOwnerState(): WorkerOwnerState { return this.remoteOwner?.state ?? null; }
+
+  /** Closing workers finish their current turn and cannot subsequently be suspended. */
+  get closing(): boolean { return this.#closing; }
+  set closing(closing: boolean) {
+    // Disable native suspension before publishing the flag. Otherwise a V8
+    // interrupt between these steps could strand a worker that is already closing.
+    if (closing && !this.#closing) this.onClosing?.();
+    this.#closing = closing;
   }
 
   /** Snapshot of ports connected beyond this global, including peers in transit and the dedicated inside port. */
@@ -277,7 +292,7 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
     // close path here to abort requests, cancel retries, and release retention.
     for (const source of resources.eventSources) source.close();
     this.ownerSet.clear();
-    this.remoteOwnerState = null;
+    this.remoteOwner = null;
   }
 
   /** Local non-Blob workers inherit their owner's policies; other workers use the response. */
@@ -317,9 +332,6 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
 
 /** A Document or worker global responsible for a worker's lifetime. */
 export type WorkerOwner = DocumentImpl | WorkerGlobalImpl;
-
-/** An owner's active need, or null once no owner remains on the remote side. */
-export type WorkerOwnerState = 'active' | 'inactive' | null;
 
 /** Script kinds shared with HTML's WorkerOptions dictionary (§10.2.6.3). */
 export type WorkerType = 'classic' | 'module';

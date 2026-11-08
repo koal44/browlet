@@ -117,8 +117,8 @@ describe('Worker realm and settings setup (HTML §10.2.4 and §10.2.6.2)', () =>
     expect(timeout).not.toBe(interval);
     expect(resources.timers.hasOutstandingTimers()).toBe(true);
     expect(outsideEnv.getWindowOrWorkerGlobalScopeMixin().timers.hasOutstandingTimers()).toBe(false);
-    // The two clearing methods share an ID map. Timer advancement still requires
-    // worker suspension/resumption integration, so this test covers ownership only.
+    // The two clearing methods share an ID map. This case checks ownership;
+    // separate-isolate timer tests cover native suspension accounting.
     scope.clearInterval(timeout);
     expect(resources.timers.hasOutstandingTimers()).toBe(true);
     scope.clearTimeout(interval);

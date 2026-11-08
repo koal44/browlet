@@ -1,10 +1,12 @@
 import { Worker, parentPort, workerData, type MessagePort } from 'node:worker_threads';
 import { fileURLToPath } from 'node:url';
+import { performance } from 'node:perf_hooks';
 
 import { InternalError } from '../infra/internal-error';
 import { internalType, type InternalPromise } from '../infra/promises';
 
 import { NodePromise } from './node-promise';
+import { addon } from './node-addons';
 import type { JSTransferable } from './message-channel';
 
 /** Independent execution using a trusted host entry, with native cloning and teardown. */
@@ -13,9 +15,13 @@ import type { JSTransferable } from './message-channel';
 export class JSThread<Protocol extends JSThreadProtocol> {
   /** Trusted host entry selected once during package initialization. */
   static #entryURL: string | null = null;
+  /** Native children owned by this isolate, including those not yet attached. */
+  static #controls = new Set<number>();
 
   /** Native execution owner; never exposed to higher layers. */
   #worker: Worker;
+  /** Outside-owned native control; absent on stock Node and after native exit. */
+  #control: number | null;
   /** Host-owned internal completion; uncaught entry failures are retained in the private exit record. */
   #closed = NodePromise.withResolvers(internalType<JSThreadExit>());
   /** Whether the host requested forced termination. */
@@ -36,10 +42,18 @@ export class JSThread<Protocol extends JSThreadProtocol> {
   ) {
     const entryURL = JSThread.#entryURL;
     if (entryURL === null) throw new InternalError('Thread entry has not been initialized');
-    const startup: JSThreadStartup<Protocol['startup']> = { jsThreadEntry: entryURL, data };
-    this.#worker = new Worker(fileURLToPath(entryURL), {
-      workerData: startup, transferList,
-    });
+    this.#control = addon.createThreadControl?.() ?? null;
+    if (this.#control !== null) {
+      if (JSThread.#controls.size === 0) process.on('exit', JSThread.#stopOwnedThreads);
+      JSThread.#controls.add(this.#control);
+    }
+    const startup: JSThreadStartup<Protocol['startup']> = { jsThreadEntry: entryURL, control: this.#control, data };
+    try {
+      this.#worker = new Worker(fileURLToPath(entryURL), { workerData: startup, transferList });
+    } catch (error) {
+      this.#releaseControl();
+      throw error;
+    }
     // Node's listener is untyped. This annotation trusts the shared host
     // protocol; native cloning does not validate it.
     this.#worker.on('message', (message: Protocol['fromThread']) => {
@@ -48,6 +62,7 @@ export class JSThread<Protocol extends JSThreadProtocol> {
     this.#worker.on('error', (error: unknown) => { this.#error = error; });
     this.#worker.on('exit', (code) => {
       this.#exited = true;
+      this.#releaseControl();
       this.#closed.resolve({ code, error: this.#error, terminated: this.#stopping });
     });
   }
@@ -61,11 +76,41 @@ export class JSThread<Protocol extends JSThreadProtocol> {
     // entry rather than accidentally reloading only this engine module.
     JSThread.#entryURL = moduleURL;
     const startup = workerData as JSThreadStartup | null;
-    if (parentPort !== null && startup?.jsThreadEntry === moduleURL) setImmediate(steps);
+    if (parentPort !== null && startup?.jsThreadEntry === moduleURL) {
+      if (startup.control !== null && !addon.attachThreadControl?.(startup.control)) {
+        throw new InternalError('Thread suspension control could not be attached');
+      }
+      setImmediate(steps);
+    }
   }
+
+  /** Node joins children before native cleanup hooks; wake them during its earlier JavaScript exit event. */
+  static #stopOwnedThreads(this: void): void {
+    for (const token of JSThread.#controls) addon.stopThread!(token);
+  }
+
+  /** Whether this backend can interrupt a running script without unwinding its stack. */
+  static get supportsSuspension(): boolean { return addon.createThreadControl !== undefined; }
 
   /** Resolves on native exit, or rejects if termination fails; an uncaught entry failure is part of the result. */
   get closed(): InternalPromise<JSThreadExit> { return this.#closed.promise; }
+
+  /** Whether execution has reached the native wait, rather than merely received a suspension request. */
+  get suspended(): boolean { return this.#control !== null && addon.isThreadSuspended!(this.#control); }
+
+  /** Suspend at a V8 interrupt, retaining the stack and reactions. Requires the addon; blocks the host queue too. */
+  suspend(): void {
+    if (this.#stopping || this.#exited) return;
+    if (this.#control === null) throw new InternalError('Thread suspension requires the Node compatibility addon');
+    addon.suspendThread!(this.#control);
+  }
+
+  /** Resume from outside the paused isolate, or cancel a request that has not reached its interrupt yet. */
+  resume(): void {
+    if (this.#stopping || this.#exited) return;
+    if (this.#control === null) throw new InternalError('Thread suspension requires the Node compatibility addon');
+    addon.resumeThread!(this.#control);
+  }
 
   /** Clone internal data and move listed resources; the consumer owns readiness and task admission. */
   send(message: Protocol['toThread'], transferList: JSTransferable[] = []): void {
@@ -77,11 +122,21 @@ export class JSThread<Protocol extends JSThreadProtocol> {
   terminate(): InternalPromise<JSThreadExit> {
     if (!this.#stopping && !this.#exited) {
       this.#stopping = true;
+      if (this.#control !== null) addon.stopThread!(this.#control);
       // Node's native Promise stays at the backend boundary. Exit settles the
       // shared completion; a failed termination request rejects it instead.
       void this.#worker.terminate().catch(this.#closed.reject);
     }
     return this.closed;
+  }
+
+  /** Retire the native registration after failed construction or final exit. */
+  #releaseControl(): void {
+    if (this.#control === null) return;
+    addon.releaseThreadControl!(this.#control);
+    JSThread.#controls.delete(this.#control);
+    if (JSThread.#controls.size === 0) process.off('exit', JSThread.#stopOwnedThreads);
+    this.#control = null;
   }
 }
 
@@ -91,11 +146,27 @@ export class JSThreadEndpoint<Protocol extends JSThreadProtocol> {
   data: Protocol['startup'];
   /** Native channel hidden behind host-message operations. */
   #port: MessagePort;
+  /** Native control associated during this entry's initialization, absent on stock Node. */
+  #control: number | null;
 
   constructor() {
     if (parentPort === null) throw new InternalError('Thread endpoint requires a native worker thread');
     this.#port = parentPort;
-    this.data = (workerData as JSThreadStartup<Protocol['startup']>).data;
+    const startup = workerData as JSThreadStartup<Protocol['startup']>;
+    this.data = startup.data;
+    this.#control = startup.control;
+  }
+
+  /** Internal elapsed milliseconds excluding accepted suspension, including time before interrupt entry. */
+  // This has a private time origin, independent of author-visible performance.now().
+  // Stock Node cannot suspend, so its monotonic clock already counts the required time.
+  get elapsedTime(): number {
+    return this.#control === null ? performance.now() : addon.getThreadElapsedTime!(this.#control);
+  }
+
+  /** Rule out future suspension before inside cleanup; also cancels an interrupt not yet entered. */
+  preventSuspension(): void {
+    if (this.#control !== null) addon.preventThreadSuspension!(this.#control);
   }
 
   /** Add an internal receiver; the consumer must route browser work into its own task loop. */
@@ -134,5 +205,7 @@ export interface JSThreadExit {
 /** Native startup envelope; the host sees only its own data through the endpoint. */
 interface JSThreadStartup<Data = unknown> {
   jsThreadEntry: string;
+  /** Only the child receives this token; the native control remains owned by the creating isolate. */
+  control: number | null;
   data: Data;
 }

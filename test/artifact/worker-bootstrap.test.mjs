@@ -34,9 +34,35 @@ for (const extension of ['mjs', 'cjs']) {
     assert.throws(() => require.resolve('browlet/worker-bootstrap'), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
   });
 
+  if (process.env.BROWLET_NODE_ADDON) {
+    for (const type of ['classic', 'module']) {
+      test(`${extension} public ${type} Worker reloads the relocated package`, { timeout: 30_000 }, async (t) => {
+        // Each independently bundled package installs its own host hooks. Run
+        // each format in a separate host isolate, as for the bootstrap probes.
+        const { thread, exited, errors } = start(t,
+          fileURLToPath(new URL('./fixtures/public-worker.mjs', import.meta.url)),
+          { entryURL, extension, type },
+        );
+        assert.deepEqual(await once(thread, 'message'), [{ result: ['packaged worker', { value: 42 }] }]);
+        assert.equal(await exited, 0);
+        assert.deepEqual(errors, []);
+      });
+    }
+  } else {
+    test(`${extension} public Worker retains the stock suspension dependency`, { timeout: 30_000 }, async (t) => {
+      const { thread, exited, errors } = start(t,
+        fileURLToPath(new URL('./fixtures/public-worker.mjs', import.meta.url)),
+        { entryURL, extension, type: 'classic' },
+      );
+      assert.deepEqual(await once(thread, 'message'), [{ error: 'Worker script suspension requires the Node compatibility addon' }]);
+      assert.equal(await exited, 0);
+      assert.deepEqual(errors, []);
+    });
+  }
+
   for (const kind of ['dedicated', 'shared']) {
     test(`relocated ${extension} package is its own ${kind} worker entry and composes its environment`, { timeout: 30_000 }, async (t) => {
-      const { thread, errors } = start(t, entryPath, { jsThreadEntry: entryURL, data: configuredStartup(t, kind) });
+      const { thread, errors } = start(t, entryPath, { jsThreadEntry: entryURL, control: null, data: configuredStartup(t, kind) });
       // Readiness is emitted only after production realm/environment composition.
       // There is no source fixture or replacement Window/UserAgent in this isolate.
       assert.deepEqual(await once(thread, 'message'), [{ type: 'ready' }]);
@@ -46,7 +72,7 @@ for (const extension of ['mjs', 'cjs']) {
   }
 
   test(`${extension} production startup requests its root and reports a rejected response`, { timeout: 30_000 }, async (t) => {
-    const { thread, errors } = start(t, entryPath, { jsThreadEntry: entryURL, data: configuredStartup(t, 'dedicated') });
+    const { thread, errors } = start(t, entryPath, { jsThreadEntry: entryURL, control: null, data: configuredStartup(t, 'dedicated') });
     const messages = on(thread, 'message');
     t.after(async () => { await messages.return(); });
     assert.deepEqual((await messages.next()).value, [{ type: 'ready' }]);
@@ -64,30 +90,39 @@ for (const extension of ['mjs', 'cjs']) {
     assert.deepEqual(errors, []);
   });
 
-  test(`${extension} production startup retains the accepted-response service dependency`, { timeout: 30_000 }, async (t) => {
+  test(`${extension} production startup runs its accepted script when suspension is supported`, { timeout: 30_000 }, async (t) => {
     const startup = configuredStartup(t, 'dedicated');
-    const { thread, exited } = start(t, entryPath, { jsThreadEntry: entryURL, data: startup });
+    const { thread, exited } = start(t, entryPath, { jsThreadEntry: entryURL, control: null, data: startup });
     const messages = on(thread, 'message');
     t.after(async () => { await messages.return(); });
     assert.deepEqual((await messages.next()).value, [{ type: 'ready' }]);
     assert.deepEqual((await messages.next()).value, [{ type: 'fetch-script' }]);
-    await messages.return();
-    const failure = once(thread, 'error');
+    const failure = process.env.BROWLET_NODE_ADDON ? null : once(thread, 'error');
     thread.postMessage({
       type: 'script-response', snapshot: {
         type: 'default', aborted: false, urlList: [startup.script.url], status: 200, statusMessage: 'OK',
-        headers: [['Content-Type', 'text/javascript']], bodyBytes: new TextEncoder().encode('throw new Error("script ran");'),
+        headers: [['Content-Type', 'text/javascript']], bodyBytes: new TextEncoder().encode('close();'),
         policyContainer: startup.creatorEnvSnapshot.policyContainer,
         embedderPolicyAllowed: true, outsideCrossOriginIsolatedCapability: false,
       },
     });
-    const [error] = await failure;
-    assert.equal(error.message, 'Worker script execution requires owner monitoring and shared services');
-    assert.equal(await exited, 1);
+    if (process.env.BROWLET_NODE_ADDON) {
+      assert.deepEqual((await messages.next()).value, [{ type: 'monitor-lifetime' }]);
+      // The real WorkerThread installs its Document monitor and native control.
+      // This raw bundle test only supplies the private continuation acknowledgement.
+      thread.postMessage({ type: 'lifetime-ready' });
+      assert.deepEqual((await messages.next()).value, [{ type: 'enable-outside-port' }]);
+      assert.equal(await exited, 0);
+    } else {
+      await messages.return();
+      const [error] = await failure;
+      assert.equal(error.message, 'Worker script suspension requires the Node compatibility addon');
+      assert.equal(await exited, 1);
+    }
   });
 
   test(`${extension} startup can be cancelled before host readiness`, { timeout: 30_000 }, async (t) => {
-    const { thread, errors } = start(t, entryPath, { jsThreadEntry: entryURL, data: configuredStartup(t, 'dedicated') });
+    const { thread, errors } = start(t, entryPath, { jsThreadEntry: entryURL, control: null, data: configuredStartup(t, 'dedicated') });
     const messages = [];
     thread.on('message', (message) => { messages.push(message); });
     // Native cancellation before any execution may report normal exit rather
@@ -97,19 +132,19 @@ for (const extension of ['mjs', 'cjs']) {
     assert.deepEqual(errors, []);
   });
 
-  test(`${extension} worker reports the unfinished service/execution boundary`, { timeout: 30_000 }, async (t) => {
-    const { thread, exited } = start(t, entryPath, { jsThreadEntry: entryURL, data: configuredStartup(t, 'dedicated') });
+  test(`${extension} production worker rejects fixture-only private commands`, { timeout: 30_000 }, async (t) => {
+    const { thread, exited } = start(t, entryPath, { jsThreadEntry: entryURL, control: null, data: configuredStartup(t, 'dedicated') });
     await once(thread, 'message');
     const failure = once(thread, 'error');
     thread.postMessage({ type: 'message', data: { type: 'start', url: 'https://example.test/worker.js' } });
     const [error] = await failure;
-    assert.equal(error.message, 'Worker shared services and script execution are not implemented');
+    assert.equal(error.message, 'Production worker does not accept private commands');
     assert.equal(await exited, 1);
   });
 
   for (const message of [{ type: 'unexpected' }, {}]) {
     test(`${extension} worker diagnoses unknown input kind: ${JSON.stringify(message)}`, { timeout: 30_000 }, async (t) => {
-      const { thread, exited } = start(t, entryPath, { jsThreadEntry: entryURL, data: configuredStartup(t, 'dedicated') });
+      const { thread, exited } = start(t, entryPath, { jsThreadEntry: entryURL, control: null, data: configuredStartup(t, 'dedicated') });
       await once(thread, 'message');
       const failure = once(thread, 'error');
       // Deliberately bypass the typed host sender to test the receive boundary.
@@ -153,7 +188,7 @@ function configuredStartup(t, kind) {
     path: ['worker.js'], query: null, fragment: null, blobURLEntry: null,
   };
   return {
-    kind, data: undefined, ownerState: 'active',
+    kind, data: undefined, ownerState: kind === 'dedicated' ? new Int32Array(new SharedArrayBuffer(4)).fill(1) : null,
     userAgent: {
       port: channel.port2, state,
       scriptingPolicy: new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)).fill(1),

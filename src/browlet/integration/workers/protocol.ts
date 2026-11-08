@@ -6,7 +6,7 @@ import type { Destination, ReferrerPolicy, RequestCredentials, ResponseType } fr
 import type { ErrorInformation } from '../../dom/events/index';
 import type { PolicyContainerSnapshot } from '../../browsing/policy/index';
 import type { CreatorEnvironmentSnapshot } from '../../environment/index';
-import type { WorkerOptions, WorkerOwnerState } from '../../workers/index';
+import type { WorkerOptions } from '../../workers/index';
 
 import type { WorkerUserAgentInit } from './user-agent';
 
@@ -47,8 +47,8 @@ export interface WorkerThreadStartup {
   creatorEnvSnapshot: CreatorEnvironmentSnapshot;
   /** Initial script selection; its URL has no live Blob registration. */
   script: WorkerScriptStartup;
-  /** Original Document activity for dedicated startup; its live identity stays with the creator. */
-  ownerState: WorkerOwnerState;
+  /** Shared original-Document activity for dedicated startup; its live identity stays with the creator. */
+  ownerState: Int32Array<SharedArrayBuffer> | null;
 }
 
 /** Private acknowledgement and outbound data; never HTML MessageEvents. */
@@ -58,6 +58,8 @@ type WorkerThreadMessage =
   { type: 'error'; errorInfo: ErrorInformation; } |
   { type: 'fetch-script'; } |
   { type: 'fetch-module'; id: number; request: WorkerModuleScriptFetch; } |
+  { type: 'monitor-lifetime'; } |
+  { type: 'enable-outside-port'; } |
   { type: 'script-fetch-failed'; };
 
 /** Cloneable subset consumed by worker script processing; timing and network resources stay with Fetch. */
@@ -109,7 +111,7 @@ export interface WorkerModuleScriptFetch extends WorkerModuleScriptRequest {
 /** Private creator-to-worker messages, distinguished before choosing the receiving task source. */
 type WorkerThreadInput = { type: 'message'; data: unknown; } |
   { type: 'owner-removed'; } |
-  { type: 'owner-activity'; fullyActive: boolean; } |
+  { type: 'lifetime-ready'; } |
   { type: 'connect-port'; handle: JSMessagePortHandle; } |
   { type: 'script-response'; snapshot: WorkerScriptResponseSnapshot; } |
   { type: 'module-response'; id: number; snapshot: ScriptResponseSnapshot; };

@@ -8,7 +8,7 @@ import type { PolicyContainer } from '../../browsing/policy/index';
 import { DocumentImpl } from '../../dom/nodes/index';
 import type { MessagePortTransportMessage } from '../../communication/index';
 import { WorkerEnvironmentBase, type BrowletEnvironment, type CreatorEnvironmentSnapshot } from '../../environment/index';
-import { WorkerGlobalImpl, WorkerOwnerSet, type WorkerImpl, type WorkerOwner } from '../../workers/index';
+import { RemoteWorkerOwner, WorkerGlobalImpl, WorkerOwnerSet, type WorkerImpl, type WorkerOptions, type WorkerOwner } from '../../workers/index';
 
 import type {
   WorkerThreadProtocol, WorkerThreadStartup, WorkerScriptInit, WorkerScriptStartup,
@@ -51,12 +51,20 @@ export class WorkerThread {
   #worker: WorkerImpl | null;
   /** Remove the original Document's membership record and lifetime subscriptions on native exit. */
   #releaseDocumentOwner: (() => void) | null = null;
+  /** Dedicated Document state read by the inside global without a host-message round trip. */
+  #remoteOwner: RemoteWorkerOwner | null = null;
+  /** Suspension begins only after inside setup reaches HTML's monitoring step. */
+  #monitoringLifetime = false;
 
   /** Reload this Browlet bundle in a new isolate; the caller supplies no executable entry. */
   constructor(init: WorkerThreadInit, onMessage: (message: unknown) => void) {
     this.#worker = init.worker ?? null;
     this.creatorEnv = init.creatorEnv;
     this.owner = WorkerGlobalImpl.getRelevantOwner(this.creatorEnv);
+    if (init.kind === 'dedicated' && this.owner instanceof DocumentImpl) {
+      this.#remoteOwner = new RemoteWorkerOwner();
+      this.#remoteOwner.state = this.owner.isFullyActive() ? 'active' : 'inactive';
+    }
     this.creatorEnvSnapshot = WorkerThread.captureCreatorEnvironment(this.creatorEnv);
     const env = this.creatorEnv;
     const input = init.script;
@@ -85,8 +93,7 @@ export class WorkerThread {
     const startup: WorkerThreadStartup = {
       kind: init.kind, data: init.data, creatorEnvSnapshot: this.creatorEnvSnapshot, script,
       userAgent: this.#userAgentConnection.init,
-      ownerState: init.kind === 'dedicated' && this.owner instanceof DocumentImpl
-        ? this.owner.isFullyActive() ? 'active' : 'inactive' : null,
+      ownerState: this.#remoteOwner?.sharedState ?? null,
     };
     try {
       this.#thread = new JSThread<WorkerThreadProtocol>(startup, (message) => {
@@ -98,6 +105,18 @@ export class WorkerThread {
             break;
           case 'message':
             onMessage(message.data);
+            break;
+          case 'monitor-lifetime':
+            this.#monitoringLifetime = true;
+            this.#updateSuspension();
+            // Request suspension before admitting the initial-script continuation.
+            this.#thread.send({ type: 'lifetime-ready' });
+            break;
+          case 'enable-outside-port':
+            // Initial execution has returned; retained packets can now become
+            // outside HTML message tasks, including after inside close().
+            if (this.#worker === null) throw new InternalError('Worker port activation requires its outside Worker');
+            this.#worker.outsidePort.start();
             break;
           case 'error':
             if (this.#worker === null) throw new InternalError('Worker error requires its outside Worker');
@@ -169,6 +188,28 @@ export class WorkerThread {
     if (init.kind === 'dedicated') this.#registerDocumentOwner();
   }
 
+  /** Start public dedicated execution with its outside object associated before the constructor returns. */
+  // https://html.spec.whatwg.org/multipage/workers.html#run-a-worker
+  // The outside Worker retains its creator environment and hidden port. Native
+  // execution runs independently; only private transport is prepared synchronously.
+  static run(this: void, worker: WorkerImpl, url: URLRecord, options: WorkerOptions): void {
+    if (!worker.env.realm.isWindow()) {
+      throw new InternalError('Nested worker startup requires ownership and direct browser-service forwarding');
+    }
+    if (!JSThread.supportsSuspension) {
+      throw new InternalError('Worker script suspension requires the Node compatibility addon');
+    }
+    const thread = new WorkerThread({
+      kind: 'dedicated', creatorEnv: worker.env, worker, script: { url, ...options }, data: undefined,
+    }, () => { throw new InternalError('Production worker emitted a private command'); });
+    // Author script/load errors already use HTML error delivery. An uncaught
+    // bootstrap or host-cleanup failure must not disappear in the private result.
+    thread.closed.observe((exit) => {
+      // eslint-disable-next-line @typescript-eslint/only-throw-error -- Preserve the native host failure, including non-Error thrown values.
+      if (exit.error !== undefined) throw exit.error;
+    }, (error) => { throw error; });
+  }
+
   /** Copy the creator's environment data before startup, preserving origin and cluster identities. */
   static captureCreatorEnvironment(env: BrowletEnvironment): CreatorEnvironmentSnapshot {
     const cluster = env.realm.agent.agentCluster;
@@ -215,6 +256,9 @@ export class WorkerThread {
 
   /** Host completion after native exit and local cleanup; uncaught thread failures remain in the result. */
   get closed(): InternalPromise<JSThreadExit> { return this.#closed; }
+
+  /** Whether execution has reached its native suspension wait. */
+  get suspended(): boolean { return this.#thread.suspended; }
 
   /** Send internal cloneable data after startup; this is not Worker.postMessage(). */
   send(message: unknown): void {
@@ -317,18 +361,20 @@ export class WorkerThread {
   #registerDocumentOwner(): void {
     const document = this.owner;
     const env = this.creatorEnv;
+    const remoteOwner = this.#remoteOwner;
     // Shared/nested ownership still belongs to their manager and surviving browser connection.
-    if (!(document instanceof DocumentImpl)) return;
+    if (!(document instanceof DocumentImpl) || remoteOwner === null) return;
     const ownerSet = new WorkerOwnerSet(env);
     ownerSet.add(document);
     const registration = { ownerSet };
     document.ownedWorkers.push(registration);
     const stopObserving = ownerSet.observe(() => {
-      if (ownerSet.size === 0) this.#closeOrphan();
+      if (ownerSet.size === 0) this.#closeOrphan(remoteOwner);
     });
     const stopObservingActivity = document.observeFullyActiveState((fullyActive) => {
       if (this.#state !== 'starting' && this.#state !== 'running') return;
-      this.#thread.send({ type: 'owner-activity', fullyActive });
+      remoteOwner.state = fullyActive ? 'active' : 'inactive';
+      this.#updateSuspension();
     });
     this.#releaseDocumentOwner = () => {
       stopObserving();
@@ -336,20 +382,35 @@ export class WorkerThread {
       const index = document.ownedWorkers.indexOf(registration);
       if (index !== -1) document.ownedWorkers.splice(index, 1);
       ownerSet.clear();
+      remoteOwner.state = null;
     };
+  }
+
+  /** Apply dedicated single-Document eligibility without entering the paused worker's message queue. */
+  // In this supported ownership case, permissible + not actively needed means
+  // the original Document remains present but inactive. Shared/nested ownership
+  // requires its manager; the inside runtime does not enable monitoring for it.
+  #updateSuspension(): void {
+    if (!this.#monitoringLifetime) return;
+    if (this.#remoteOwner?.state === 'inactive') this.#thread.suspend();
+    else this.#thread.resume();
   }
 
   /** Close at the loss of permissibility; inactive Documents remain owners and do not take this path. */
   // https://html.spec.whatwg.org/multipage/workers.html#step-closing-orphan-workers
-  #closeOrphan(): void {
+  #closeOrphan(remoteOwner: RemoteWorkerOwner): void {
     if (this.#state !== 'starting' && this.#state !== 'running') return;
     this.#state = 'closing';
+    remoteOwner.state = null;
     this.#ready.reject(new InternalError('Worker owner was destroyed during startup'));
     // Existing turns finish before native exit. Explicit terminate() can still
     // interrupt this closing isolate through the separate native execution owner.
     // TODO(HTML terminate-rampant-workers): Supply the host's forced-stop policy
     // when a running script cannot return to receive this orphan notification.
     this.#thread.send({ type: 'owner-removed' });
+    // A paused worker cannot receive that notification until native execution
+    // resumes. Closing overrides suspension, while terminate remains separate.
+    this.#updateSuspension();
   }
 
   /** Fetch an initial module-graph dependency using the live creator client, without replacing root policies. */

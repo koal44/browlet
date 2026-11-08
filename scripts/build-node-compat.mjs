@@ -26,7 +26,7 @@ try {
   const sources = [
     'addon.cc', 'array-buffer.cc', 'code-generation.cc', 'exception-reporting.cc', 'exotic-object.cc', 'function-entry.cc',
     'global-access.cc', 'global-object.cc', 'host-hooks.cc', 'html-all-collection.cc', 'iterators.cc', 'object-types.cc', 'promise.cc', 'property-delegate.cc', 'realm.cc',
-    'temporal.cc', 'vm.cc', 'vm-modules.cc', 'vm-module-bindings.cc', 'vm-imports.cc', 'wasm-completion.cc', 'wasm-functions.cc',
+    'temporal.cc', 'threads.cc', 'vm.cc', 'vm-modules.cc', 'vm-module-bindings.cc', 'vm-imports.cc', 'wasm-completion.cc', 'wasm-functions.cc',
   ].map(name => resolve(addon, name));
   const isolateHeader = target.includes.map(path => resolve(path, 'v8-isolate.h')).find(existsSync);
   const api = readFileSync(isolateHeader, 'utf8');

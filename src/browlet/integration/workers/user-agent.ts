@@ -193,6 +193,10 @@ export class WorkerUserAgent implements UserAgent {
   createWindowAgent(): never { return unconnected('createWindowAgent'); }
   /** Allocate a dedicated worker in its creator's cluster, or a shared worker in a new cluster. Not connected in workers. */
   obtainDedicatedOrSharedWorkerAgent(): never { return unconnected('obtainDedicatedOrSharedWorkerAgent'); }
+  /** Nested creation needs ownership propagation and a surviving direct browser-service connection. */
+  runWorker(): never {
+    throw new InternalError('Nested worker startup requires ownership and direct browser-service forwarding');
+  }
   /** Allocate one worklet agent in its creator's cluster. Not connected in workers. */
   obtainWorkletAgent(): never { return unconnected('obtainWorkletAgent'); }
   /** Allocate a service worker in a new cluster without an outside environment. Not connected in workers. */

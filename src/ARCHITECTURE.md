@@ -619,6 +619,11 @@ provider. Hosts may limit requested delays, so consumers enforcing a deadline
 must recheck their clock. UserAgent supplies Browlet's Node provider through
 `timerHost`; each global's `GlobalTimers` retains HTML activity, deadline, and
 ordering rules.
+Workers supply an internal elapsed-time clock that excludes accepted native
+suspension periods, including pending interrupts while idle. Overdue host
+wake-ups recheck that clock and schedule any remaining delay. This reuses
+`GlobalTimers` without changing author-visible performance time or Window
+Document activity tracking.
 Infra's [`tasks.ts`](infra/tasks.ts) supplies task types and `nativeTimerHost`,
 which captures scheduling and cancellation together, retaining their original receiver;
 it requires native timers only when scheduling work, not during module import.
@@ -1069,8 +1074,10 @@ to the receiving worker's networking task queue. Blob creator policies are copie
 before stripping live registrations from response URLs. WorkerThread retains and
 cancels Fetch controllers on teardown. Startup now composes the real inside
 environment with its reserved client identity, initializes response policies,
-and loads and links module descendants. Execution readiness, owner monitoring,
-and nested workers remain processing-model work. The response handoff is not
+and loads and links module descendants. Dedicated Document ownership, suspension,
+and timer accounting are connected. Dedicated Document-owned startup also runs
+the prepared script and activates its ports, including public construction on
+add-on runtimes. Nested workers remain processing-model work. The response handoff is not
 general response or MessagePort serialization.
 
 `WorkerEnvironment.completeScriptFetch()` handles failed-load error delivery and
@@ -1078,9 +1085,12 @@ environment discard, or entangles the startup ports and calls `runScript()`.
 The outside target uses the EventTarget base for both Worker and future SharedWorker;
 its original outside port retains the environment responsible for error delivery.
 `runScript()` reuses the script runners, without awaiting module evaluation, and
-activates ports or queues shared-worker connection delivery. The separate-isolate
-startup caller, natural thread teardown, and
-lifetime monitors remain explicit dependencies.
+activates ports or queues shared-worker connection delivery. Outside-port
+activation is supplied by its execution owner: the separate-isolate runtime
+sends a private instruction to the creator. Dedicated Document-owned execution
+is connected on add-on runtimes, including public construction. Shared-service
+APIs retain explicit transport dependencies, and shared/nested startup needs its
+ownership managers.
 
 After a dedicated/shared global starts closing, its event loop finishes all
 queued tasks and the final microtask checkpoint before becoming destroyed. The
@@ -1097,15 +1107,24 @@ Document and the host forwards this transition to the inside global. This sets
 the closing flag without clearing queued work. Native exit releases the local
 registration and subscription. The Document itself never crosses the isolate
 boundary, and Window reuse does not change its identity. Its activity observer
-also sends updates through the private control channel; startup carries the
-initial state. The inside global's `remoteOwnerState` supplies the remote owner's
+publishes updates in a shared `RemoteWorkerOwner` atomic cell. The inside global's
+`remoteOwnerState` supplies the remote owner's
 contribution to lifetime predicates without placing a substitute Document in the
-local owner set. Native exit releases both subscriptions. Actual execution
-suspension, shared/nested ownership, and forced stopping of an orphan blocked in
-JavaScript remain separate startup dependencies.
+local owner set, including while author code prevents message delivery. Native
+exit releases both subscriptions. After script loading, a startup acknowledgement
+connects the Document's activity to native suspension before admitting the
+initial script. Resume reaches the native wait directly. Closing first disables
+native suspension; owner removal resumes a paused isolate for its closing message.
+Shared/nested ownership and forced stopping of an orphan
+blocked in JavaScript remain separate dependencies.
 
 The dedicated outside `WorkerImpl` retains its `WorkerThread` in the creating
-isolate. Host startup accepts that Worker, derives its creator environment/port,
+isolate. After constructor conversion and validation, `UserAgent.runWorker`
+selects the integration-owned `WorkerThread.run` factory. This keeps runtime
+composition out of the worker implementation, as with Window environment
+creation. The worker-local UserAgent explicitly rejects nested creation until
+ownership and direct browser-service forwarding are connected. Host startup
+accepts the outside Worker, derives its creator environment/port,
 and installs the association after native creation succeeds, before readiness.
 When script inputs are configured, it also establishes native channel transport
 before returning to the creator, retaining immediate messages while both HTML
@@ -1114,9 +1133,11 @@ Public `terminate()` forwards to the host and returns undefined; host completion
 stays on its internal promise. The host interrupts blocked native execution
 without scheduling inside work and clears pending outside deliveries. Native
 exit disconnects the port and releases the association, including when Fetch
-cleanup throws. Natural exit preserves messages sent before closing. Production
-startup must still supply the Worker before its constructor returns and connect
-execution suspension and initial script execution; a local Agent is not a cross-isolate handle.
+cleanup throws. Natural exit preserves messages sent before closing. Public
+construction supplies the Worker before returning; a local Agent is not a
+cross-isolate handle. The private completion observer sends genuine bootstrap or
+cleanup failures through the host's existing failure policy. Author load/runtime
+errors keep their HTML error-delivery paths.
 
 Dedicated error reporting uses a narrow `reportErrorToOwner` callback on the
 inside global. The runtime sends only diagnostic attributes, with a null error

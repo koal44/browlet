@@ -14,7 +14,7 @@ import {
 import { AgentCluster, BrowletRealm, EventLoop, SandboxAgent, WindowAgent } from '../../../src/browlet/scripting/index';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { monotonicClock, type Moment } from '../../../src/timing/index';
-import { DedicatedWorkerGlobalImpl, SharedWorkerGlobalImpl, WorkerGlobalImpl } from '../../../src/browlet/workers/index';
+import { DedicatedWorkerGlobalImpl, RemoteWorkerOwner, SharedWorkerGlobalImpl, WorkerGlobalImpl } from '../../../src/browlet/workers/index';
 import type { MessageEvent, MessagePort } from '../../../src/browlet/platform';
 import { createFetchRequest } from '../../fetch/fetch-fixture';
 
@@ -411,11 +411,12 @@ describe('Worker protection, permission, and suspension (HTML §10.2.3)', () => 
     const parent = createWorker();
     const child = createWorker();
     child.global.ownerSet.add(parent.global);
-    parent.global.remoteOwnerState = 'active';
+    parent.global.remoteOwner = new RemoteWorkerOwner();
+    parent.global.remoteOwner.state = 'active';
     parent.global.setTimeout(() => {}, 100);
     expect(parent.global.isProtected()).toBe(true);
     expect(child.global.isActivelyNeeded()).toBe(true);
-    parent.global.remoteOwnerState = 'inactive';
+    parent.global.remoteOwner.state = 'inactive';
     expect(parent.global.isProtected()).toBe(false);
     expect(parent.global.isSuspendable()).toBe(true);
     expect(child.global.isActivelyNeeded()).toBe(false);

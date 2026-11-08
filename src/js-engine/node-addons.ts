@@ -25,6 +25,25 @@ export class NodeAPI {
   /** Whether addon contexts and compiled code can install Node-shaped import callbacks. */
   supportsDynamicImport: boolean;
 
+  /** Allocate an outside-owned suspension control before native thread creation. */
+  createThreadControl?: () => number;
+  /** Associate the starting child isolate; false if its owner already stopped it. */
+  attachThreadControl?: (token: number) => boolean;
+  /** Permanently disable suspension from inside the controlled isolate before its cleanup phase. */
+  preventThreadSuspension?: (token: number) => void;
+  /** Inside-only monotonic milliseconds since control creation, excluding accepted suspension periods. */
+  getThreadElapsedTime?: (token: number) => number;
+  /** Request interruption without unwinding the target's JavaScript stack. */
+  suspendThread?: (token: number) => void;
+  /** Wake a suspended isolate without using its blocked host message queue. */
+  resumeThread?: (token: number) => void;
+  /** Terminate and wake this isolate and its controlled descendants before Node teardown. */
+  stopThread?: (token: number) => void;
+  /** Whether the native interrupt has reached its suspension wait. */
+  isThreadSuspended?: (token: number) => boolean;
+  /** Release outside ownership after native exit or failed thread construction. */
+  releaseThreadControl?: (token: number) => void;
+
   // Requires the V8 iterator-factory patch.
   createCollectionIterator?: <Value>(
     context: VMContext, kind: CollectionIteratorKind, next: () => JSIteratorResult<Value>,
@@ -129,6 +148,15 @@ export class NodeAPI {
   setPropertyHandlers?: (object: object, handlers: AddonPropertyHandlers) => void;
 
   constructor(backend: object) {
+    this.createThreadControl = this.#loadMethod(backend, 'createThreadControl');
+    this.attachThreadControl = this.#loadMethod(backend, 'attachThreadControl');
+    this.preventThreadSuspension = this.#loadMethod(backend, 'preventThreadSuspension');
+    this.getThreadElapsedTime = this.#loadMethod(backend, 'getThreadElapsedTime');
+    this.suspendThread = this.#loadMethod(backend, 'suspendThread');
+    this.resumeThread = this.#loadMethod(backend, 'resumeThread');
+    this.stopThread = this.#loadMethod(backend, 'stopThread');
+    this.isThreadSuspended = this.#loadMethod(backend, 'isThreadSuspended');
+    this.releaseThreadControl = this.#loadMethod(backend, 'releaseThreadControl');
     this.createCollectionIterator = this.#loadMethod(backend, 'createCollectionIterator');
     this.createContextHandle = this.#loadMethod(backend, 'createContextHandle');
     this.createExoticObject = this.#loadMethod(backend, 'createExoticObject');

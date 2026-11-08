@@ -2138,7 +2138,8 @@ suppress valid assignments. This does not implement WindowProxy/Location's
 cross-origin access enforcement. The OAC header and `originAgentCluster` expose
 modeled cluster selection, without native execution isolation. Structured data
 enforces cluster IDs, including Wasm Module and shared-memory transport across
-real test isolates. MessagePort transport is connected; public worker startup remains unfinished.
+real isolates. MessagePort transport and public Document-owned dedicated startup
+are connected on add-on runtimes; shared/nested startup remains unfinished.
 `Origin.from()` supports strings, URL, Origin, and Window
 objects, including WindowProxy and entry-origin access checks. Direct host calls
 without an HTML entry use the operation environment. Worker globals remain
@@ -2173,17 +2174,18 @@ including focus/blur, also leave the annotation-derived property list incomplete
 
 COEP navigation and dedicated-worker inheritance checks and observer reports are
 implemented, but automatic child creation/destruction, navigation network-error handling,
-and worker startup still prevent complete enforcement through those lifecycles.
+and shared/nested worker startup still prevent complete enforcement through those lifecycles.
 WorkerGlobalScope, DedicatedWorkerGlobalScope, and SharedWorkerGlobalScope have declared members and
-can be projected for internally supplied implementations. The outside Worker and
-SharedWorker interfaces are declared, but valid public construction still stops
-at explicit startup/discovery boundaries. SharedWorker exposes its connection
+can be projected for internally supplied implementations. Public `new Worker()`
+starts Document-owned classic/module execution on add-on runtimes. Stock Node
+rejects missing suspension before allocating a thread; nested construction and
+SharedWorker retain explicit startup/discovery boundaries. SharedWorker exposes its connection
 port and ordinary outside error handler; it does not expose global messaging or
 termination methods. Shared globals retain creation fields and expose `onconnect`;
 discovery, automatic connection delivery,
 and lifetime monitoring remain pending. Dedicated globals forward messaging
-through a hidden port and can close their agent's task queues; native channel
-transport and thread teardown exist separately from public startup.
+through a hidden port and can close their agent's task queues; public dedicated
+startup connects native channel transport and thread teardown.
 WorkerLocation's read-only URL surface is implemented; WorkerNavigator also supplies
 [NavigatorID](browlet/navigator/ROADMAP.md#client-identification). Identification
 uses the approved Chrome compatibility profile and configurable common `Win32`
@@ -2252,8 +2254,9 @@ a replacement creator Window or UserAgent. The retained inside UserAgent
 connection supplies local timers and the shared lifetime clock without creating
 another browser. It implements the full UserAgent surface, with explicit throws
 for facilities that have no worker connection yet.
-Report delivery and remote lifetime updates remain dependencies, and the original
-owner is retained outside rather than replaced by an inside owner placeholder.
+Report delivery and shared/nested lifetime updates remain dependencies; dedicated
+Document activity and owner removal are connected. The original owner is retained
+outside rather than replaced by an inside owner placeholder.
 Copied URL records omit cached Blob registrations; resolving Blob URLs still
 requires access to the original UserAgent's store.
 An internally configured initial script can now be requested from the worker
@@ -2275,8 +2278,8 @@ BiDi scripting overrides remain provisional: worker scope and transport are pend
 and disabling the preference does not interrupt an already-running script.
 Response processing uses the existing script processors and module loader for
 HTTP status, body, MIME, parse, and link failures. Valid roots and their module
-graphs are loaded and linked without execution. Owner monitoring, running the
-script, and acknowledging execution readiness remain unfinished.
+graphs are loaded and linked before execution. Dedicated Document-owned startup
+connects owner monitoring, script execution, and execution readiness.
 Environment URL parsing delegates to its UserAgent connection. Synchronous Blob
 lookup/revocation, live scalar preferences, configured trust and loading queries
 reach the original browser owner. Inside module-resolution cases pass through
@@ -2293,17 +2296,18 @@ partition, or reading the creator's URL, UserAgent or policies throws an explici
 dependency error; the owner-side entry still provides these operations normally.
 Direct worker API probes reach the explicit missing transport errors for
 `URL.createObjectURL()` and `BroadcastChannel`, and the isolate remains usable
-afterward. The worker global does not expose `fetch` yet: WindowOrWorkerGlobalScope
-API forwarding remains a §10.3 dependency. Its exposure regression is an ordinary
-failure, not an expected failure or a test of the current missing behavior.
+afterward. The worker global exposes `fetch` through WindowOrWorkerGlobalScope;
+its general worker network/service transport remains unfinished.
 Private initial-graph fetch transport now supports concurrent requests through
 the creator's actual Fetch client, delivery on the worker networking queue, and
 cancellation on exit. The graph loader now uses it, retaining its inside module
 map and the actual outside creator as the initial graph's client. Dynamic
 imports require the worker's own Fetch client; general worker Fetch and
 nested-worker service forwarding also remain unconnected.
-The bootstrap rejects unsupported control commands at that unfinished boundary
-and does not execute downloaded author code.
+The configured bootstrap now executes downloaded classic/module code for
+dedicated Document owners on add-on runtimes. Unsupported private host commands
+are rejected. Public Document-owned construction uses this same bootstrap;
+shared/nested startup remains unfinished.
 Its internal Node-cloned messages are not HTML MessagePort transport. HTML
 serialization records now carry cluster IDs and survive that channel for ordinary
 graphs, transferred ArrayBuffers, shared memory, and native Wasm Module tokens.
@@ -2313,34 +2317,36 @@ The dedicated worker's hidden channel now connects native endpoints to HTML
 MessagePort delivery, including disabled startup queues, receiving-realm
 reconstruction, messageerror, and cleanup. Author-created MessagePorts now carry
 native endpoints and pending HTML deliveries across isolates, including nested
-transfers and repeated handoff. Real-isolate tests supply
-environment composition, so they do not establish successful public `new Worker()`
-startup. Shared UserAgent services remain a separate dependency.
+transfers and repeated handoff. Public-constructor tests also exercise immediate
+messaging, termination, load errors, and Document cleanup; relocated CJS/ESM
+package tests use `new Worker()` without a test bootstrap. Shared UserAgent
+services remain a separate dependency.
 The host adapter can now fetch a prepared initial-script request in the creator
 isolate and hand its consumed response to an explicit worker networking-task
 consumer. Fetch retains the original stores and client; host-owned body streams
 and parallel callback delivery avoid depending on creator Document activity.
 Blob creator policies travel as values, and thread teardown cancels pending
-fetching. The production script driver now prepares complete initial graphs;
-execution and nested-worker service routing remain unwired. The reserved
+fetching. The production script driver prepares complete initial graphs and
+runs them after lifetime monitoring is connected. Nested-worker service routing
+remains unwired. The reserved
 inside-client identity is retained.
 WorkerEnvironment can fetch and parse/link its root script and initialize response
 URL, CSP, COEP, and isolation state using the existing Fetch machinery. This is
-tested on composed worker settings; the separate-isolate bootstrap still needs
-the creator environment snapshot and reconstructed policies connected to
-shared-service transport before it can call this path.
+connected to the separate-isolate bootstrap through the creator snapshot,
+reconstructed policies, and initial-script response transport.
 `WorkerEnvironment.completeScriptFetch()` can reject failed scripts, queue the
 outside `error`, and discard the unready environment. On success it entangles the
 startup ports and calls `runScript()` to mark readiness, evaluate the script,
 enable dedicated messaging, and queue shared `connect` delivery. These steps use
-the outside target's EventTarget base; the separate-isolate caller remains
-unwired. Environment discard does not
-terminate a native thread. Owner monitoring and the ServiceWorkerContainer client
-message queue also remain processing-model dependencies.
+the outside target's EventTarget base. Separate-isolate startup activates the
+creator's port through a private host instruction after initial execution returns;
+top-level await does not delay activation. The startup host terminates rejected
+isolates. Shared/nested ownership and the ServiceWorkerContainer client message
+queue remain processing-model dependencies.
 The dedicated `Worker` outside interface now has its hidden port, messaging
 overloads, and error/message handlers, with ordinary Web IDL conversion and
-constructor Trusted Types/URL checks. Valid public construction still throws at
-the missing production startup connection. `terminate()` now forwards through
+constructor Trusted Types/URL checks. Public construction delegates to the
+integration factory on its UserAgent. `terminate()` forwards through
 the outside Worker's retained WorkerThread. Local-agent interface tests
 exercise existing ports and script completion, not cross-isolate transport.
 The dedicated/shared worker event-loop tail now performs cooperative shutdown:
@@ -2349,29 +2355,32 @@ timers, external ports, local EventSources, and owners are released. Already-sen
 outgoing messages remain deliverable. Later tasks, microtasks, and spinning continuations cannot
 restart that HTML loop. The final cleanup now disconnects the runtime's private
 endpoints so its native isolate can exit. This does not abort a blocking script;
-worker suspension, rendering, and Service Worker teardown remain dependencies.
+rendering and Service Worker teardown remain dependencies.
 `WorkerThread.terminate()` now connects native interruption to dedicated outside
 port cleanup: it clears pending deliveries immediately and disconnects on native
 exit, even if Fetch cleanup fails. Actual HTML classic/module runner tests verify
 interruption without catch/finally or pending reactions through the public
 Worker method. Native exit releases its host association. The public constructor
-must supply the outside Worker before returning, and production inside settings,
-shared-service transport, and shared-worker connection cleanup remain
-unimplemented. Natural native exit preserves already-queued outside deliveries.
+supplies the outside Worker before returning, so immediate termination reaches
+the same execution owner. Remaining shared-service transport and shared-worker
+connection cleanup are unimplemented. Natural native exit preserves
+already-queued outside deliveries.
 Dedicated runtime errors now cross the native channel as diagnostics, without
 the original exception. Outside Worker delivery and uncanceled reporting through
 live owners use HTML tasks and the normal ErrorEvent binding. Production startup
-must attach the inside global's reporter. Propagation through terminated parents
+attaches the inside global's reporter. Propagation through terminated parents
 still needs a route that survives their isolates; source filename/line/column
 extraction remains the existing diagnostic metadata dependency.
 Worker common-global API forwarding is connected through Web IDL, including
 microtasks, structured cloning, Base64, security getters, Performance, and
-Trusted Types. Timer IDs can be allocated and canceled, but elapsed worker time
-still requires suspension/resumption; string timer handlers require Trusted
+Trusted Types. Worker timers count non-suspended elapsed time; string timer handlers require Trusted
 Types/CSP/script preparation. General Fetch needs the remaining worker browser
 services. Cross-thread messaging and separate-isolate execution have focused
-coverage; production startup still needs suspension support before advancing
-execution readiness. Worker event producers remain separate dependencies. Inheritance
+coverage. Configured dedicated Document-owned startup now advances readiness,
+executes the initial script, and activates messaging on add-on runtimes, including
+public construction. Shared/nested construction and remaining shared-service APIs
+are still unfinished. Worker event
+producers remain separate dependencies. Inheritance
 reports omit CORP's destination member and preserve local observation even with
 an empty endpoint or outbound delivery disabled. Private Network Access and
 Opaque Response Blocking remain absent; the
@@ -2384,8 +2393,8 @@ Document-inactive periods, shared-worker timeout policies, and extended-lifetime
 actively-needed decisions are implemented. Protected/permissible/suspendable
 checks now use owners, external ports, uncanceled timers, pending Fetch completion,
 EventSources, and loading navigables. IndexedDB transactions and WebSocket/WebTransport
-activity remain explicit inputs to add when those subsystems exist. Worker timer
-advancement, automatic startup/additional shared-owner registration, suspension,
+activity remain explicit inputs to add when those subsystems exist. Automatic
+startup/additional shared-owner registration
 and Service Worker enforcement of the shared no-client lifetime ceiling remain
 pending; see the
 [worker lifetime review](browlet/workers/ROADMAP.md#document-order-review).
@@ -2394,10 +2403,18 @@ Configured dedicated isolates now retain an ownership registration in their
 original Document. `Document.destroy()` removes that owner and requests orphan
 closing through the existing loop cleanup; native exit releases the registration
 even on startup failure. Aborting a Document or making it inactive does not remove
-membership. Document activity now reaches the inside lifetime predicates through
-the private control channel, including initial activity and updates before native
-readiness. Execution suspension/resumption and non-suspended timer advancement
-remain backend dependencies; updating eligibility does not freeze author code.
+membership. Document activity reaches the inside lifetime predicates through
+a shared atomic cell, including during a busy script. On addon bases, dedicated
+startup connects this activity to stack-preserving suspension/resumption after
+script loading and before the initial-script continuation. Closing disables
+pending and future suspension, and owner removal resumes a paused worker for
+cooperative cleanup. Stock Node rejects unsupported suspension. Worker timers
+exclude accepted suspension periods, including the wait for an idle isolate's
+next JavaScript entry; ordinary idle time still counts. The native wait blocks
+Node messages too. JSThread coordinates resume, termination, and owner exit from
+outside the wait; raw termination by an unrelated Node owner bypasses this
+coordination. There is no nested native control loop or interruption of blocking
+native I/O.
 Recursive destruction still stops at the explicit HTML §7.5.10 stub;
 its worker-exit regression is an expected failure with unexpected-pass detection.
 Shared/nested owner monitoring and the forced-stop policy for an orphan blocked

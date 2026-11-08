@@ -21,7 +21,7 @@ Only terms requiring a new embedding boundary belong in this plan.
 | Realm facts | Native object and ordinary/bound/proxy function lookup; bounded evidence on plain Node |
 | Promise and job hooks | Custom engine/addon captures registrations and supplies make/call plus Promise, generic, and timeout enqueue; HTML consumes all five |
 | Portable execution | Implementations retain `env`; internal Promise continuations keep their owner and Node work keeps its native queue |
-| Separate execution threads | `JSThread` and `JSThreadEndpoint` hide Node threads, initialization data, native messaging, and teardown; Browlet owns worker startup and task admission |
+| Separate execution threads | `JSThread` and `JSThreadEndpoint` hide Node threads, initialization data, native messaging, and teardown; the addon preserves executing stacks through suspension/resumption; Browlet owns eligibility, startup, and task admission |
 | Transferable channels | `JSMessageChannel`/`JSMessagePort` retain native queues and peer connections across isolates; thread startup and sends accept explicit endpoint/ArrayBuffer transfer lists |
 | Buffers and collection iterators | Native length-mode query and callback iterators are available with the corresponding V8 patches |
 | Shared-buffer allocation | Destination-realm objects share the existing backing store through the addon or stock Node's temporary MessagePort path |
@@ -32,6 +32,25 @@ prerequisite for returning to HTML. Script records, browser security, and full
 Agent semantics are not implied by native queue/context support.
 
 ## Next consumers
+
+### Worker suspension integration
+
+`JSThread.suspend()`/`resume()` now use public V8 interrupts on every supported
+addon base. The native control is created outside the child, supports requests
+before startup, and coordinates termination of suspended descendants. Focused
+tests retain task stacks, finally processing, and sibling/dependent Promise
+reactions after resumption. They also cover owner exit and uncaught errors;
+Node joins children before native environment cleanup, so JS Engine stops them
+in its earlier exit hook. Stock Node reports the missing suspension facility.
+
+HTML now connects dedicated Document eligibility and closing. The inside endpoint
+can permanently disable suspension before cleanup. Its private elapsed-time
+clock now drives HTML worker timers; shared/nested owners remain to connect.
+The native wait cannot deliver
+JS control messages or pump Node's loop.
+Keep resume/termination outside that wait and review any additional control that
+must run while suspended. Foreign native owners bypassing JSThread termination
+must supply their own wakeup coordination. No Node/V8 patch was added.
 
 ### Optimized Promise-job snapshots
 

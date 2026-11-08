@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createManualUserAgent } from '../../support/browlet-agent';
+import { createManualEventLoop, createManualUserAgent } from '../../support/browlet-agent';
 import { createTestDocument } from '../../support/dom';
 import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import { Duration } from
   '../../../src/timing/clock';
 import type { EventLoop } from '../../../src/browlet/scripting/event-loop';
+import { GlobalTimers } from '../../../src/browlet/scripting/timers';
+import { timerTaskSource } from '../../../src/browlet/scripting/tasks';
 import type { TaskHandle, TimerHost } from '../../../src/infra/tasks';
 
 describe('HTML timers', () => {
@@ -165,6 +167,89 @@ describe('HTML timers', () => {
   });
 });
 
+describe('worker timeout accounting', () => {
+  it('counts disjoint running periods and rechecks overdue native wake-ups', () => {
+    const { timers, host, pause } = createWorkerTimerFixture();
+    const completion = vi.fn();
+    timers.runStepsAfterTimeout('example', 10, completion);
+    host.advanceBy(4);
+    pause(100);
+    host.advanceBy(0);
+    expect(completion).not.toHaveBeenCalled();
+    expect(timers.getNextTimeoutDeadline()?.milliseconds).toBe(110);
+    host.advanceBy(3);
+    pause(50);
+    host.advanceBy(2);
+    expect(completion).not.toHaveBeenCalled();
+    expect(timers.getNextTimeoutDeadline()?.milliseconds).toBe(160);
+    host.advanceBy(1);
+    expect(completion).toHaveBeenCalledOnce();
+  });
+
+  it('preserves ordering when several native wake-ups expire during suspension', () => {
+    const { timers, host, pause } = createWorkerTimerFixture();
+    const calls: string[] = [];
+    timers.runStepsAfterTimeout('ordered', 10, () => { calls.push('first'); });
+    timers.runStepsAfterTimeout('ordered', 10, () => { calls.push('second'); });
+    host.advanceBy(4);
+    pause(100);
+    host.advanceBy(0, true);
+    expect(calls).toEqual([]);
+    host.advanceBy(6, true);
+    expect(calls).toEqual(['first', 'second']);
+  });
+
+  it('retains already queued callbacks and starts the next interval wait after delivery', () => {
+    const { timers, eventLoop, host, pause } = createWorkerTimerFixture();
+    const callback = vi.fn();
+    const id = timers.setInterval(callback, 10, []);
+    host.advanceBy(10);
+    pause(100);
+    runNextTask(eventLoop);
+    expect(callback).toHaveBeenCalledOnce();
+    host.advanceBy(9);
+    expect(eventLoop.hasRunnableTasks()).toBe(false);
+    host.advanceBy(1);
+    runNextTask(eventLoop);
+    expect(callback).toHaveBeenCalledTimes(2);
+    timers.clearTimer(id);
+    timers.clear();
+  });
+
+  it('does not revive queued or waiting callbacks after permanent cleanup', () => {
+    const { timers, eventLoop, host, pause } = createWorkerTimerFixture();
+    const callback = vi.fn();
+    timers.setTimeout(callback, 0, []);
+    timers.runStepsAfterTimeout('completion', 10, callback);
+    host.advanceBy(0);
+    pause(100);
+    timers.clear();
+    while (eventLoop.hasRunnableTasks()) runNextTask(eventLoop);
+    host.advanceBy(100);
+    expect(callback).not.toHaveBeenCalled();
+    expect(timers.hasOutstandingTimers()).toBe(false);
+  });
+});
+
+/** Independent host and counted clocks model a blocked native wait without real-time tolerances. */
+function createWorkerTimerFixture() {
+  const host = new ManualTimerHost();
+  const eventLoop = createManualEventLoop();
+  let suspended = 0;
+  const timers = new GlobalTimers({
+    eventLoop, host,
+    time: { currentHighResolutionTime: () => new Duration(host.now) },
+    queueTask: (steps, options) => { eventLoop.queueTask(timerTaskSource, null, steps, options); },
+  });
+  // A distinct origin also verifies that public deadline estimates stay relative
+  // to the global's ordinary clock, not this private counted-time origin.
+  timers.setWorkerClock(() => 1000 + host.now - suspended);
+  return {
+    timers, host, eventLoop,
+    pause(this: void, milliseconds: number) { suspended += milliseconds; host.now += milliseconds; },
+  };
+}
+
 function createTimerFixture() {
   const host = new ManualTimerHost();
   const userAgent = createManualUserAgent();
@@ -218,7 +303,7 @@ class ManualTimerHost implements TimerHost {
       if (wakeUp === undefined) break;
 
       this.#wakeUps.delete(wakeUp);
-      this.now = wakeUp.at;
+      this.now = Math.max(this.now, wakeUp.at);
       wakeUp.steps();
     }
     this.now = target;

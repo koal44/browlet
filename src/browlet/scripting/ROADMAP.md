@@ -1413,10 +1413,9 @@ ordering, active-time accounting, and destruction independently of the addon.
 Generic/timeout hooks can now decline unrelated Node/VM jobs; see the ownership
 follow-up below. Unsupported backends retain their approved missing-host-hook
 expectations. Worker globals/settings/startup are
-still incomplete; `GlobalTimers` now marks the missing non-suspended-worker-time
-connection explicitly. The [worker roadmap](../workers/ROADMAP.md#execution-and-lifetime-constraints)
-owns that lifecycle work. This Window audit does not supply worker execution or
-suspension machinery.
+still incomplete, but `GlobalTimers` now receives a worker clock excluding
+accepted suspension periods. The [worker roadmap](../workers/ROADMAP.md#execution-and-lifetime-constraints)
+owns that lifecycle integration and its remaining public-startup dependencies.
 
 Validation: all 10 engine-job/timer cases pass normally on custom/compat. Each
 other configuration passes the five timer cases and retains five approved

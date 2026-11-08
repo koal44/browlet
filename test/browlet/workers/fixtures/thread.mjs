@@ -18,7 +18,7 @@ import { FetchResponse } from '../../../../src/fetch/index.ts';
 const filename = fileURLToPath(import.meta.url);
 // JS Engine's envelope contains the original browser startup inputs.
 const initialization = workerData.data;
-const { mode, state, traceTiming } = initialization.data;
+const { mode, state, traceTiming } = initialization.data ?? { mode: 'run-startup' };
 traceWorker('fixture module evaluated');
 if (mode === 'throw-before-ready') throw new Error('bootstrap failed');
 if (mode === 'exit-before-ready') process.exit(0);
@@ -120,6 +120,33 @@ function startFixture() {
         });
         break;
       }
+      case 'monitor-lifetime':
+        try {
+          runtime.monitorLifetime(() => {
+            if (message.state) runSuspendableScript(runtime, message);
+            else runtime.send('monitoring');
+          });
+        } catch (error) { runtime.send({ errorMessage: error.message }); }
+        break;
+      case 'run-suspendable-script':
+        runSuspendableScript(runtime, message);
+        break;
+      case 'start-timers':
+        startTimers(runtime, message);
+        runtime.send('scheduled');
+        break;
+      case 'inspect-timers':
+        runtime.send({
+          calls: realm.globalObject.timerCalls,
+          outstanding: runtime.environment.getWindowOrWorkerGlobalScopeMixin().timers.hasOutstandingTimers(),
+          ownsTimerTask: realm.globalObject.ownsTimerTask,
+          elapsed: realm.globalObject.timerElapsed,
+        });
+        break;
+      case 'cancel-timer':
+        runtime.environment.global.clearTimeout(realm.globalObject.workerTimerId);
+        runtime.send('canceled');
+        break;
       case 'inspect-environment': {
         const env = runtime.environment;
         const { serializeURL } = loadTypeScript('../../../../src/url/index.ts', __filename);
@@ -273,6 +300,11 @@ function startFixture() {
         runtime.send('entering loop');
         // Source evaluation and uninterruptible execution are the behavior under test.
         realm.evaluate('try { Atomics.store(state, 0, 1); for (;;) {} } finally { Atomics.store(state, 1, 1); }', 'worker-block.js');
+        break;
+      case 'read-owner-while-blocked':
+        realm.globalObject.state = message.state;
+        realm.evaluate('Atomics.store(state, 0, 1); while (Atomics.load(state, 1) === 0) {}', 'worker-owner-read.js');
+        runtime.send({ activelyNeeded: runtime.environment.globalImplementation.isActivelyNeeded() });
         break;
       case 'block-worker-script':
         runBlockingWorkerScript(runtime, message.state, message.scriptType, message.entry);
@@ -536,6 +568,52 @@ function runWorkerError(runtime, message, followupTaskSource) {
   traceWorker('error script returned');
   // Module rejection reporting finishes at the checkpoint before this reply.
   runtime.agent.eventLoop.queueTask(followupTaskSource, null, () => runtime.send(events));
+}
+
+/** Schedule through the projected worker API and observe delivery on the HTML timer queue. */
+function startTimers(runtime, { state, timeout }) {
+  const env = runtime.environment;
+  env.markExecutionReady();
+  env.global.timerState = state;
+  env.global.timerDelay = timeout;
+  env.global.isTimerTask = () => runtime.agent.eventLoop.currentlyRunningTask?.timerNestingLevel === 1;
+  env.realm.evaluate(`(${function () {
+    globalThis.timerCalls = 0;
+    const start = globalThis.performance.now();
+    globalThis.workerTimerId = globalThis.setTimeout(() => {
+      globalThis.timerCalls++;
+      globalThis.timerElapsed = globalThis.performance.now() - start;
+      globalThis.ownsTimerTask = globalThis.isTimerTask();
+      Atomics.store(globalThis.timerState, 1, globalThis.timerCalls);
+    }, globalThis.timerDelay);
+  }.toString()})()`, 'worker-timers.js');
+}
+
+/** Execute through HTML's script runner in the actual production-composed environment. */
+function runSuspendableScript(runtime, { state, entry = 'script', closeFirst = false }) {
+  const { ClassicScript, ScriptFetchOptions } = loadTypeScript('../../../../src/browlet/scripting/index.ts', __filename);
+  const env = runtime.environment;
+  env.markExecutionReady();
+  env.global.state = state;
+  env.global.reportSuspension = (order) => runtime.send({
+    order, activelyNeeded: env.globalImplementation.isActivelyNeeded(),
+  });
+  // started, finish request, progress, finally, sibling, dependent.
+  // These scripts deliberately block: native suspension is the behavior under test.
+  const loop = `
+    ${closeFirst ? 'close();' : ''}
+    Atomics.store(state, 0, 1);
+    try { while (Atomics.load(state, 1) === 0) Atomics.add(state, 2, 1); }
+    finally { Atomics.store(state, 3, 1); order.push('finally'); }
+    order.push('return');
+  `;
+  const source = entry === 'reaction' ? `
+    const order = [];
+    const first = Promise.resolve().then(() => { ${loop} });
+    Promise.resolve().then(() => { Atomics.store(state, 4, 1); order.push('sibling'); });
+    first.then(() => { Atomics.store(state, 5, 1); order.push('dependent'); reportSuspension(order); });
+  ` : `const order = []; ${loop} reportSuspension(order);`;
+  new ClassicScript(source, env, env.apiBaseURL, new ScriptFetchOptions(), false).run();
 }
 
 function runBlockingWorkerScript(runtime, state, scriptType, entry = 'script') {

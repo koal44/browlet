@@ -53,6 +53,7 @@ import { NodeHTTPTransport, createContentDecoder, supportedContentCodings } from
 import { queueNodeTask, nodeTimerHost } from './integration/host/index';
 import type { PermissionStatusImpl } from './integration/permissions/index';
 import { BlobURLEntry, BlobURLStore } from './integration/file/index';
+import { WorkerThread } from './integration/workers/index';
 import { browletDOM } from './integration/index';
 import { createSandboxEnvironment, createWindowEnvironment } from './integration/web-idl/index';
 
@@ -88,6 +89,8 @@ class BrowletUserAgent implements
   broadcastChannels = new WeakOrderedSet<BroadcastChannelImpl>();
   /** Browser binding factory used by browsing algorithms to create Window environments. */
   createWindowEnvironment = createWindowEnvironment;
+  /** Start dedicated execution through the browser's configured isolate backend. */
+  runWorker = WorkerThread.run;
   /** Browser-owned continuations, including Fetch and protocol commands, outlive individual environments. */
   HostPromise = NodePromise;
   /** Background steps remain distinct from task delivery to a global. */

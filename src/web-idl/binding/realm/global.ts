@@ -34,9 +34,15 @@ export class GlobalPlatformObjectBinding {
     // ordinary author objects inheriting from this global keep their receiver.
     const resolveReceiver = (receiver: unknown): unknown =>
       receiver === realm.globalProxy && realm.globalThis === object ? object : receiver;
+    const set = (target_: object, property: PropertyKey, value: unknown, receiver: unknown): boolean =>
+      Reflect.set(target_, property, value, resolveReceiver(receiver));
     const object = new Proxy(target, {
       get: (target_, property, receiver) => Reflect.get(target_, property, resolveReceiver(receiver)) as unknown,
-      set: (target_, property, value, receiver) => Reflect.set(target_, property, value, resolveReceiver(receiver)),
+      // This host trap precedes the IDL setter. Retain the author incumbent
+      // before Reflect.set enters Node, including module code with no modeled
+      // ScriptOrModule frame to recover it from afterward.
+      set: realm.createFunction((_receiver, args) => Reflect.apply(set, undefined, args) as boolean,
+        { name: 'set', length: 4, captureIncumbent: true }),
       setPrototypeOf: (target_, value) => this.#setPrototypeOf(target_, value),
     });
     return object;
