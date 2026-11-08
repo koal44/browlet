@@ -75,10 +75,10 @@ it, and Binding supplies its platform identity. Querying, status updates, and
 remaining dependencies are covered in the
 [Permissions roadmap](../../permissions/ROADMAP.md#61-navigator-permissions).
 WorkerNavigator must expose its environment's object and assemble the exported
-Worker partial when worker settings are implemented. Its current
-implementation supports WorkerGlobalScope's stable `navigator` attribute and
-NavigatorID, NavigatorLanguage, NavigatorOnLine, and NavigatorConcurrentHardware; the other HTML mixins and Permissions/Storage members are still
-explicit dependencies.
+Worker partial when worker service transport is implemented. Its implementation
+supports WorkerGlobalScope's stable `navigator` attribute, NavigatorID,
+NavigatorLanguage, NavigatorOnLine, and concurrent hardware; Permissions/Storage
+members remain explicit dependencies.
 Storage's `persist()` uses the same permission owner.
 
 For `NavigatorID.userAgent`, call Fetch's `getEnvironmentDefaultUserAgent()`
@@ -139,11 +139,12 @@ Window is created. Omission retains `Win32`; any explicit string is preserved,
 including the empty string. This adds no OS adapter.
 
 The existing `webDriverBiDiEmulatedUserAgent()` selector still returns null until
-session/emulation routing exists. Worker settings composed in this isolate use
-the same UserAgent and their own environment. Cross-isolate service transport is
-still blocked by `WorkerThreadRuntime` startup's named throwing dependency; the
-worker owner must carry identification policy and scoped emulation when connecting
-that transport. This slice does not manufacture a worker-local substitute owner.
+session/emulation routing exists. Isolated workers now read platform, user-agent,
+language preferences, and connectivity through WorkerUserAgent's existing browser
+connection. Scoped selectors receive the browser-side worker environment identity,
+not its creator. Navigator keeps its published language array in the worker's realm.
+Live cross-isolate language/online change notifications remain explicit producer
+work; preference reads do not install a second browser owner or registry.
 Language preferences and online transitions are covered below. Protocol handlers,
 cookies, plugins, and hardware concurrency remain separate Navigator families.
 
@@ -215,7 +216,7 @@ replaces the array when the effective tags happen to remain equal. Scoped
 overrides continue to win over ordinary preference updates. The existing BiDi
 selector remains the explicit no-session stub, with its update obligation in
 source. OS preference watching, complete recipient discovery, and worker
-cross-isolate service transport are still producer dependencies; this slice does
+cross-isolate change notifications are still producer dependencies; this slice does
 not claim automatic native or remote delivery.
 
 `SPEC_CLASH(navigator-languages-identity)`: Eric approved HTML's stable identity
@@ -276,7 +277,7 @@ Eric approved HTML's worker notification requirement. These are Playwright
 network-emulation observations, not physical-network or WebDriver BiDi evidence.
 
 Host connectivity monitoring, complete recipient discovery, BiDi change routing,
-and cross-isolate transport remain explicit producer dependencies. The existing
+and cross-isolate change notifications remain explicit producer dependencies. The existing
 default assumes connectivity; it does not detect the OS network. Future BiDi
 updates must capture each affected Navigator's old getter value, apply the scoped
 change, and call `queueOnlineStateChange()` with that old value. The producer must

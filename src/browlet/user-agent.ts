@@ -53,7 +53,7 @@ import { NodeHTTPTransport, createContentDecoder, supportedContentCodings } from
 import { queueNodeTask, nodeTimerHost } from './integration/host/index';
 import type { PermissionStatusImpl } from './integration/permissions/index';
 import { BlobURLEntry, BlobURLStore } from './integration/file/index';
-import { WorkerThread } from './workers/index';
+import { SharedWorkerManager, WorkerThread } from './workers/index';
 import { browletDOM } from './integration/index';
 import { createSandboxEnvironment, createWindowEnvironment } from './integration/web-idl/index';
 
@@ -166,13 +166,6 @@ class BrowletUserAgent implements
   /** Render-blocking cutoff in milliseconds from the relevant global's time origin. */
   // https://html.spec.whatwg.org/multipage/dom.html#render-blocked
   renderBlockingTimeout = 5000;
-  /** Milliseconds an ownerless shared worker may survive between page loads. */
-  // https://html.spec.whatwg.org/multipage/workers.html#between-loads-shared-worker-timeout
-  betweenLoadsSharedWorkerTimeout = 5000;
-  /** Policy ceiling in milliseconds for a Service Worker running without clients. */
-  // TODO(Service Workers): Enforce this policy in the service-worker lifetime controller.
-  // Shared workers use the same value so their extension never exceeds that ceiling.
-  serviceWorkerWithoutClientsTimeout = 5 * 60 * 1000;
   /** Maximum age of queued reports in milliseconds; Reporting suggests about two days. */
   maxReportAge = 2 * 24 * 60 * 60 * 1000;
   /** Reporting endpoints are retired after exceeding this consecutive-failure count. */
@@ -196,6 +189,12 @@ class BrowletUserAgent implements
   #keyboardInput: KeyboardInputProcessor | null = null;
   /** Pointer Lock state is shared across Documents and allocated on first use. */
   #pointerLock: PointerLock | null = null;
+  /** Shared-worker discovery belongs to this browser and is allocated only when needed. */
+  #sharedWorkerManager: SharedWorkerManager | null = null;
+  /** Ownerless grace policy; its setter reschedules existing shared-worker deadlines. */
+  #betweenLoadsSharedWorkerTimeout = 5000;
+  /** Shared extension ceiling, also reserved for the future Service Worker controller. */
+  #serviceWorkerWithoutClientsTimeout = 5 * 60 * 1000;
   /** System clipboard notification identity belongs to this UserAgent and is allocated only when used. */
   #systemClipboard: SystemClipboard | null = null;
   /** Protocol-handler decisions are allocated only when registration is used. */
@@ -233,6 +232,28 @@ class BrowletUserAgent implements
 
   get pointerLock(): PointerLock {
     return this.#pointerLock ??= new PointerLock(this);
+  }
+
+  /** Serialize shared-worker discovery across this browser's creating Window agents. */
+  get sharedWorkerManager(): SharedWorkerManager {
+    return this.#sharedWorkerManager ??= new SharedWorkerManager(this);
+  }
+
+  /** Milliseconds an ownerless shared worker may survive between page loads. */
+  // https://html.spec.whatwg.org/multipage/workers.html#between-loads-shared-worker-timeout
+  get betweenLoadsSharedWorkerTimeout(): number { return this.#betweenLoadsSharedWorkerTimeout; }
+  set betweenLoadsSharedWorkerTimeout(value: number) {
+    this.#betweenLoadsSharedWorkerTimeout = value;
+    this.#sharedWorkerManager?.updateOwnerlessLifetimes();
+  }
+
+  /** Policy ceiling in milliseconds for a Service Worker running without clients. */
+  // TODO(Service Workers): Enforce this policy in the service-worker lifetime controller.
+  // Shared workers use the same value so their extension never exceeds that ceiling.
+  get serviceWorkerWithoutClientsTimeout(): number { return this.#serviceWorkerWithoutClientsTimeout; }
+  set serviceWorkerWithoutClientsTimeout(value: number) {
+    this.#serviceWorkerWithoutClientsTimeout = value;
+    this.#sharedWorkerManager?.updateLifetimes();
   }
 
   get systemClipboard(): SystemClipboard {
@@ -450,6 +471,11 @@ class BrowletUserAgent implements
 
   appendTopLevelTraversable(traversable: TopLevelTraversable): void {
     this.topLevelTraversableSet.add(traversable);
+  }
+
+  /** Notify existing shared-worker monitors without allocating a manager in a worker-free browser. */
+  notifyLoadingNavigableStateChanged(): void {
+    this.#sharedWorkerManager?.updateOwnerlessLifetimes();
   }
 
   /** Whether any navigable has an active Document that has not completely loaded. */

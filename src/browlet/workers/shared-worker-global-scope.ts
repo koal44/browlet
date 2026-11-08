@@ -4,14 +4,13 @@ import type { StorageKey } from '../../storage/index';
 import type { RequestCredentials } from '../../fetch/index';
 
 import { EventHandlerMap, eventHandlerMapAttr } from '../scripting/index';
+import { MessageEventImpl, type MessagePortImpl } from '../communication/index';
 import type { BrowletEnvironment } from '../environment/index';
 
 import { WorkerGlobalImpl, type WorkerType } from './worker-global-scope';
 
 /** Inside global of a shared worker, receiving a separate message port for each connection. */
 // https://html.spec.whatwg.org/multipage/workers.html#sharedworkerglobalscope
-// TODO(HTML §§10.2.4, 10.2.6.4): Startup must invoke environment composition; the
-// shared-worker manager owns matching, additional owners, and queued connect events.
 export class SharedWorkerGlobalImpl extends WorkerGlobalImpl {
   /** Common worker handlers plus the shared worker's connection handler. */
   static #handlerDefinitions = new Map([...WorkerGlobalImpl.handlerDefinitions, ['onconnect', 'connect']]);
@@ -38,6 +37,26 @@ export class SharedWorkerGlobalImpl extends WorkerGlobalImpl {
     this.extendedLifetime = extendedLifetime;
   }
 
+  /** Queue a connection on this global without enabling either MessagePort's message queue. */
+  // https://html.spec.whatwg.org/multipage/workers.html#dom-sharedworker
+  // The isolate can receive ports while its initial script is still loading.
+  // HTML enters the worker event loop after initial execution, so hold these
+  // events until then. A failed/closing startup must still release their ports.
+  queueConnectEvent(insidePort: MessagePortImpl): void {
+    if (this.closing || this.env.discarded) { insidePort.close(); return; }
+    this.env.queueTask('dom-manipulation', () => {
+      if (!this.env.executionReady) { insidePort.close(); return; }
+      this.fireEvent('connect', MessageEventImpl, (event) => {
+        event.data = '';
+        event.ports = [insidePort];
+        event.source = insidePort;
+      });
+    }, {
+      isRunnable: () => this.env.executionReady || this.env.discarded || this.closing,
+      discardSteps: () => insidePort.close(),
+    });
+  }
+
   /** Keep opted-in shared workers extended during a recent ownerless or inactive-Document period. */
   // https://html.spec.whatwg.org/multipage/workers.html#in-extended-lifetime-worker
   // SPEC_CLASH(shared-worker-extension-restart): HTML measures the current uninterrupted
@@ -52,6 +71,12 @@ export class SharedWorkerGlobalImpl extends WorkerGlobalImpl {
       if (visited.has(global)) continue;
       visited.add(global);
       if (!global.extendedLifetime) continue;
+      // Separate-isolate shared startup keeps all Window owners at the browser.
+      // Its local ownerSet is empty; that is not an ownerless worker.
+      if (global.remoteOwner !== null) {
+        if (global.remoteOwner.inExtendedLifetime) return true;
+        continue;
+      }
       const now = global.env.userAgent.unsafeSharedCurrentTime();
       const timeout = global.env.userAgent.extendedLifetimeSharedWorkerTimeout;
       const emptySince = global.ownerSet.emptySince;
@@ -88,12 +113,18 @@ export class SharedWorkerGlobalImpl extends WorkerGlobalImpl {
   /** Allow a short ownerless interval while any navigable in this browser is still loading. */
   // https://html.spec.whatwg.org/multipage/workers.html#permissible-worker
   override isPermissible(): boolean {
+    if (this.remoteOwner !== null) return this.remoteOwner.permissible;
     if (super.isPermissible()) return true;
     const { userAgent } = this.env;
     const emptySince = this.ownerSet.emptySince!;
     // Unlike the extended-lifetime test, HTML includes the exact timeout boundary.
     return userAgent.unsafeSharedCurrentTime() - emptySince <= userAgent.betweenLoadsSharedWorkerTimeout &&
       userAgent.hasLoadingNavigable();
+  }
+
+  /** Keep the remote activity/permissibility decision coherent during concurrent owner changes. */
+  override isSuspendable(): boolean {
+    return this.remoteOwner?.suspendable ?? super.isSuspendable();
   }
 }
 

@@ -2175,19 +2175,28 @@ including focus/blur, also leave the annotation-derived property list incomplete
 
 COEP navigation and dedicated-worker inheritance checks and observer reports are
 implemented, but automatic child creation/destruction, navigation network-error handling,
-and shared/nested worker startup still prevent complete enforcement through those lifecycles.
+and nested worker startup still prevent complete enforcement through those lifecycles.
 WorkerGlobalScope, DedicatedWorkerGlobalScope, and SharedWorkerGlobalScope have declared members and
 can be projected for internally supplied implementations. Public `new Worker()`
-starts Document-owned classic/module execution on add-on runtimes. Stock Node
-rejects missing suspension before allocating a thread; nested construction and
-SharedWorker retain explicit startup/discovery boundaries. SharedWorker exposes its connection
+starts Document-owned classic/module execution on add-on runtimes, and public
+SharedWorker starts or reuses execution for Window clients of the same UserAgent.
+Stock Node rejects missing suspension before allocating a channel or thread;
+nested dedicated construction retains its startup boundary. SharedWorker exposes its connection
 port and ordinary outside error handler; it does not expose global messaging or
-termination methods. Shared globals retain creation fields and expose `onconnect`;
-discovery, automatic connection delivery,
-and lifetime monitoring remain pending. Dedicated globals forward messaging
+termination methods. Shared globals retain creation fields and expose `onconnect`.
+The UserAgent's manager supplies discovery matching, native port connections,
+and a shared owner set integrated with Document destruction. Port closure does
+not remove its Document, and native exit releases registrations. Combined owner
+activity and extension/between-loads deadlines now drive suspension and closing
+across isolates, using browser-clock timers and Document activity/loading notifications.
+Public SharedWorker ports require start()/onmessage, failed loads notify every
+waiting client with noncancelable ordinary error events, and runtime errors stay
+at the shared global/console. The worker roadmap records the browser/spec conflicts.
+Dedicated globals forward messaging
 through a hidden port and can close their agent's task queues; public dedicated
 startup connects native channel transport and thread teardown.
-WorkerLocation's read-only URL surface is implemented; WorkerNavigator also supplies
+WorkerLocation's read-only URL surface
+is implemented; WorkerNavigator also supplies
 [NavigatorID](browlet/navigator/ROADMAP.md#client-identification). Identification
 uses the approved Chrome compatibility profile and configurable common `Win32`
 platform, while User-Agent text retains its existing Fetch configuration/emulation
@@ -2196,8 +2205,9 @@ provides stable frozen lists, scoped initial BiDi selection, and queued per-glob
 change notifications. The default list and HTTP Accept-Language are `en-US`;
 configured preference updates share the same ordered list. The producer must
 supply all recipients and valid BCP 47 tags. OS preference watching, complete
-recipient discovery, BiDi change routing, and cross-isolate identification/language
-transport remain explicit dependencies. [NavigatorOnLine](browlet/navigator/ROADMAP.md#browser-state)
+recipient discovery, BiDi change routing, and cross-isolate change notifications
+remain explicit dependencies. Initial preferences and live identification/connectivity
+reads use the existing worker-to-browser service connection. [NavigatorOnLine](browlet/navigator/ROADMAP.md#browser-state)
 reads Fetch's existing offline state immediately and queues trusted online/offline
 events on each affected global's networking task source. Its producer supplies
 complete recipients and previous effective state for scoped emulation updates.
@@ -2235,8 +2245,8 @@ The [closing audit](browlet/navigator/ROADMAP.md#closing-custom-handler-audit)
 also assigns cross-site registration-spam policy, safe consent UI, and optional
 administrator restrictions to those unfinished hosts. Remembering a pair and
 preparing its URL do not complete these policies or automatically select a default.
-Workers do not expose these methods. Navigator and WorkerNavigator also expose
-the UserAgent-selected hardwareConcurrency.
+Workers do not expose these methods. Navigator and WorkerNavigator report the browser-owned
+hardware concurrency. Worker Permissions and Storage still need service integration.
 `importScripts()` now performs Trusted Types and URL validation, rejects module
 workers, and executes imported scripts in order. Isolated workers use browser-side
 Fetch through their private UserAgent channel; only the requesting worker blocks.
@@ -2280,7 +2290,7 @@ the initial script automatically, and applies response policies on its networkin
 task. Network and policy rejection discard the inside environment, queue an
 ordinary error event on a dedicated outside Worker, and terminate the isolate.
 Explicit termination suppresses late fetch failure delivery. Shared-root cleanup
-also works, but outside SharedWorker association/error delivery remains pending.
+also notifies every loading SharedWorker client and releases outside associations.
 The browser's scripting preference is shared live with the inside environment;
 script creation and later entry checks no longer require a local UserAgent.
 The creator Document's sandbox stays separate from that preference and response CSP.
@@ -2357,10 +2367,11 @@ URL/CSP/isolation initialization to WorkerGlobalImpl, and discards the inside
 environment on a failed load. WorkerThread queues the outside error and releases
 the rejected isolate. Successful startup connects lifetime monitoring before
 WorkerGlobalImpl.runScript() marks readiness, evaluates the script, and activates
-messaging. The outside port is activated through a private host instruction;
-top-level await does not delay activation. Shared connect-event behavior is covered
-through local agents, but SharedWorker discovery/outside association, nested
-ownership, and ServiceWorkerContainer's client message queue remain dependencies.
+messaging. The dedicated outside port is activated through a private host instruction;
+top-level await does not delay activation. Public SharedWorker startup connects
+discovery, outside associations, and connect events across isolates while preserving
+explicit outside-port activation. Nested ownership and ServiceWorkerContainer's
+client message queue remain dependencies.
 The older in-process WorkerEnvironment fetch/completion path has been removed.
 The dedicated `Worker` outside interface now has its hidden port, messaging
 overloads, and error/message handlers, with ordinary Web IDL conversion and
@@ -2412,9 +2423,9 @@ Document-inactive periods, shared-worker timeout policies, and extended-lifetime
 actively-needed decisions are implemented. Protected/permissible/suspendable
 checks now use owners, external ports, uncanceled timers, pending Fetch completion,
 EventSources, and loading navigables. IndexedDB transactions and WebSocket/WebTransport
-activity remain explicit inputs to add when those subsystems exist. Automatic
-startup/additional shared-owner registration
-and Service Worker enforcement of the shared no-client lifetime ceiling remain
+activity remain explicit inputs to add when those subsystems exist. Shared-owner
+activity/deadline monitoring and public SharedWorker startup are connected; nested
+ownership and Service Worker enforcement of the shared no-client lifetime ceiling remain
 pending; see the
 [worker lifetime review](browlet/workers/ROADMAP.md#document-order-review).
 

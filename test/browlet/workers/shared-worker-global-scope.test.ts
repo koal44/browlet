@@ -73,7 +73,7 @@ describe('SharedWorkerGlobalScope (HTML §10.2.1.3)', () => {
     first.port2.onmessage = (event) => { replies.push(['first', (event as MessageEvent).data]); };
     second.port2.onmessage = (event) => { replies.push(['second', (event as MessageEvent).data]); };
 
-    // Supply the events manually: run-a-worker/SharedWorker startup does not queue them yet.
+    // Exercise the handler and port behavior independently of script startup and discovery.
     scope.dispatchEvent(new scope.MessageEvent('connect', { ports: [first.port1] }));
     scope.dispatchEvent(new scope.MessageEvent('connect', { ports: [second.port1] }));
     expect(connections).toEqual([[scope, scope, first.port1], [scope, scope, second.port1]]);

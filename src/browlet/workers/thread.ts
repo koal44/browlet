@@ -1,16 +1,16 @@
 import { assertNever, InternalError, internalType, type InternalPromise } from '../../infra/index';
-import { JSMessageChannel, JSThread, NodePromise, type JSThreadExit } from '../../js-engine/index';
+import { JSMessageChannel, JSThread, NodePromise, type JSMessagePort, type JSThreadExit } from '../../js-engine/index';
 import { copyOrigin, copyURL, createOpaqueOrigin, type URLRecord } from '../../url/index';
 import { fetch, isFilteredResponse, isLocalURL, type FetchController, type FetchRequest, type FetchResponse } from '../../fetch/index';
 
 import { createWorkerScriptRequest, createModuleScriptRequest, ScriptFetchOptions } from '../scripting/index';
 import type { PolicyContainer } from '../browsing/policy/index';
 import { DocumentImpl } from '../dom/nodes/index';
-import type { MessagePortTransportMessage } from '../communication/index';
+import type { MessagePortImpl, MessagePortTransportMessage } from '../communication/index';
 import type { BrowletEnvironment } from '../environment/index';
 
 import { WorkerEnvironmentBase, type CreatorEnvironmentSnapshot } from './environment';
-import { RemoteWorkerOwner } from './remote-owner';
+import { RemoteWorkerOwner, type WorkerOwnerState } from './remote-owner';
 import { WorkerGlobalImpl, type WorkerOwner } from './worker-global-scope';
 import { WorkerOwnerSet } from './owner-set';
 import type { WorkerImpl, WorkerOptions } from './worker';
@@ -53,9 +53,11 @@ export class WorkerThread {
   #initialScriptRequest: FetchRequest | null = null;
   /** Dedicated outside object and its hidden port, retained locally until native exit. */
   #worker: WorkerImpl | null;
+  /** Shared executions publish inside closing immediately; dedicated workers need no discovery flag. */
+  #sharedClosing: Int32Array<SharedArrayBuffer> | null;
   /** Remove the original Document's membership record and lifetime subscriptions on native exit. */
   #releaseDocumentOwner: (() => void) | null = null;
-  /** Dedicated Document state read by the inside global without a host-message round trip. */
+  /** Browser-owned lifetime state read by the inside global without a host-message round trip. */
   #remoteOwner: RemoteWorkerOwner | null = null;
   /** Suspension begins only after inside setup reaches HTML's monitoring step. */
   #monitoringLifetime = false;
@@ -63,9 +65,10 @@ export class WorkerThread {
   /** Reload this Browlet bundle in a new isolate; the caller supplies no executable entry. */
   constructor(init: WorkerThreadInit, onMessage: (message: unknown) => void) {
     this.#worker = init.worker ?? null;
+    this.#sharedClosing = init.kind === 'shared' ? new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)) : null;
     this.creatorEnv = init.creatorEnv;
     this.owner = WorkerGlobalImpl.getRelevantOwner(this.creatorEnv);
-    if (init.kind === 'dedicated' && this.owner instanceof DocumentImpl) {
+    if (this.owner instanceof DocumentImpl) {
       this.#remoteOwner = new RemoteWorkerOwner();
       this.#remoteOwner.state = this.owner.isFullyActive() ? 'active' : 'inactive';
     }
@@ -92,7 +95,7 @@ export class WorkerThread {
     };
     const remoteOwner = this.#remoteOwner;
     this.#userAgentConnection = new WorkerUserAgentConnection(env.userAgent,
-      remoteOwner === null ? undefined : () => remoteOwner.state !== 'inactive',
+      remoteOwner === null ? undefined : () => !remoteOwner.suspendable,
       this.reservedEnv,
     );
     // The caller can terminate during startup and inspect closed without awaiting
@@ -102,6 +105,7 @@ export class WorkerThread {
       kind: init.kind, data: init.data, creatorEnvSnapshot: this.creatorEnvSnapshot, script,
       userAgent: this.#userAgentConnection.init,
       ownerState: this.#remoteOwner?.sharedState ?? null,
+      sharedClosing: this.#sharedClosing,
     };
     try {
       this.#thread = new JSThread<WorkerThreadProtocol>(startup, (message) => {
@@ -116,15 +120,21 @@ export class WorkerThread {
             break;
           case 'monitor-lifetime':
             this.#monitoringLifetime = true;
-            this.#updateSuspension();
+            if (this.#sharedClosing !== null) env.userAgent.sharedWorkerManager.updateLifetime(this);
+            else this.#updateSuspension();
             // Request suspension before admitting the initial-script continuation.
-            this.#thread.send({ type: 'lifetime-ready' });
+            if (!this.closing) this.#thread.send({ type: 'lifetime-ready' });
             break;
-          case 'enable-outside-port':
-            // Initial execution has returned; retained packets can now become
-            // outside HTML message tasks, including after inside close().
-            if (this.#worker === null) throw new InternalError('Worker port activation requires its outside Worker');
-            this.#worker.outsidePort.start();
+          case 'script-started':
+            // Initial execution has returned, including after inside close().
+            // Dedicated ports can deliver; shared clients release load retention
+            // and keep their explicit start()/onmessage activation policy.
+            if (this.#sharedClosing !== null) {
+              env.userAgent.sharedWorkerManager.didStartScript(this);
+            } else {
+              if (this.#worker === null) throw new InternalError('Worker port activation requires its outside Worker');
+              this.#worker.outsidePort.start();
+            }
             break;
           case 'error':
             if (this.#worker === null) throw new InternalError('Worker error requires its outside Worker');
@@ -135,6 +145,7 @@ export class WorkerThread {
           // an uncanceled exception report. Keep delivery on the outside loop.
             const worker = this.#worker;
             if (worker !== null) worker.env.queueTask('dom-manipulation', () => { worker.fireEvent('error'); });
+            else if (this.#sharedClosing !== null) env.userAgent.sharedWorkerManager.reportScriptFetchFailure(this);
             // The inside settings have been discarded. Release their execution
             // owner and native endpoints even when no author script ever ran.
             void this.terminate();
@@ -165,6 +176,7 @@ export class WorkerThread {
         this.#ready.reject(exit.error ?? new InternalError('Worker thread exited before completing startup'));
       }
       this.#state = 'closed';
+      if (this.#sharedClosing !== null) this.creatorEnv.userAgent.sharedWorkerManager.unregister(this);
       this.#releaseDocumentOwner?.();
       this.#releaseDocumentOwner = null;
       this.#userAgentConnection.close();
@@ -194,6 +206,7 @@ export class WorkerThread {
       catch (error) { void this.terminate(); throw error; }
     }
     if (init.kind === 'dedicated') this.#registerDocumentOwner();
+    else env.userAgent.sharedWorkerManager.register(this, input);
   }
 
   /** Start public dedicated execution with its outside object associated before the constructor returns. */
@@ -265,6 +278,12 @@ export class WorkerThread {
   /** Host completion after native exit and local cleanup; uncaught thread failures remain in the result. */
   get closed(): InternalPromise<JSThreadExit> { return this.#closed; }
 
+  /** Whether host teardown or the shared global's closing flag forbids new connections. */
+  get closing(): boolean {
+    return (this.#state !== 'starting' && this.#state !== 'running') ||
+      (this.#sharedClosing !== null && Atomics.load(this.#sharedClosing, 0) !== 0);
+  }
+
   /** Whether execution has reached its native suspension wait. */
   get suspended(): boolean { return this.#thread.suspended; }
 
@@ -292,6 +311,30 @@ export class WorkerThread {
       channel.port2.close();
       throw error;
     }
+  }
+
+  /** Entangle one shared-worker client across isolates; discovery and owner association belong to the manager. */
+  // https://html.spec.whatwg.org/multipage/workers.html#dom-sharedworker
+  // Connection delivery does not enable the outside queue. Each client controls
+  // its own port through onmessage or start(), including a port queued at startup.
+  connectSharedPort(outsidePort: MessagePortImpl): void {
+    const channel = new JSMessageChannel<MessagePortTransportMessage>();
+    try {
+      if (!this.attachSharedPort(channel.port2)) throw new InternalError('Worker thread is not running');
+      outsidePort.entangleRemote(channel.port1);
+    } catch (error) {
+      channel.port1.close();
+      channel.port2.close();
+      throw error;
+    }
+  }
+
+  /** Hand off a prepared connection, or leave it untouched if closing requires discovery to retry. */
+  attachSharedPort(channel: JSMessagePort<MessagePortTransportMessage>, initial = false): boolean {
+    if (this.#sharedClosing === null) throw new InternalError('Shared connections require a shared worker thread');
+    if (this.closing) return false;
+    this.#thread.send({ type: 'connect-shared-port', handle: channel.handle, initial }, [channel.handle]);
+    return true;
   }
 
   /** Fetch a prepared initial-script request beside its creator, then deliver the consumed response to the isolate. */
@@ -366,6 +409,17 @@ export class WorkerThread {
     return this.closed;
   }
 
+  /** Publish the shared manager's decision and apply it once startup enables lifetime monitoring. */
+  updateSharedLifetime(state: WorkerOwnerState, extended: boolean, permissible: boolean): void {
+    const remoteOwner = this.#remoteOwner;
+    if (this.#sharedClosing === null || remoteOwner === null) throw new InternalError('Shared lifetime requires browser-owned Documents');
+    if (this.closing) return;
+    remoteOwner.update(state, extended, permissible);
+    if (!this.#monitoringLifetime) return;
+    if (!permissible) this.#closeOrphan(remoteOwner);
+    else this.#updateSuspension();
+  }
+
   /** Register the original Document with its existing destruction algorithm, without cloning that owner. */
   #registerDocumentOwner(): void {
     const document = this.owner;
@@ -395,13 +449,10 @@ export class WorkerThread {
     };
   }
 
-  /** Apply dedicated single-Document eligibility without entering the paused worker's message queue. */
-  // In this supported ownership case, permissible + not actively needed means
-  // the original Document remains present but inactive. Shared/nested ownership
-  // requires its manager; the inside runtime does not enable monitoring for it.
+  /** Apply the browser's lifetime decision without entering the paused worker's message queue. */
   #updateSuspension(): void {
     if (!this.#monitoringLifetime) return;
-    if (this.#remoteOwner?.state === 'inactive') this.#thread.suspend();
+    if (!this.closing && this.#remoteOwner?.suspendable) this.#thread.suspend();
     else this.#thread.resume();
   }
 
@@ -411,6 +462,7 @@ export class WorkerThread {
     if (this.#state !== 'starting' && this.#state !== 'running') return;
     this.#state = 'closing';
     remoteOwner.state = null;
+    if (this.#sharedClosing !== null) Atomics.store(this.#sharedClosing, 0, 1);
     this.#ready.reject(new InternalError('Worker owner was destroyed during startup'));
     // Existing turns finish before native exit. Explicit terminate() can still
     // interrupt this closing isolate through the separate native execution owner.

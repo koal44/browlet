@@ -68,6 +68,8 @@ export class DedicatedWorkerGlobalImpl extends WorkerGlobalImpl {
       const worker = pending.pop()!;
       if (visited.has(worker)) continue;
       visited.add(worker);
+      // Isolated dedicated startup publishes the original Document owner through this shared state.
+      if (worker.remoteOwnerState !== null) return true;
       for (const owner of worker.ownerSet) {
         if (!(owner instanceof WorkerGlobalImpl)) return true;
         if (owner instanceof DedicatedWorkerGlobalImpl) pending.push(owner);

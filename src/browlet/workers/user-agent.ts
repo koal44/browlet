@@ -91,6 +91,8 @@ export class WorkerUserAgent implements UserAgent {
   // through their owning browser services before exposing their worker APIs.
   /** Worker globals do not own a Document tree or expose the Window DOM interfaces. */
   get dom(): never { return unconnected('Document DOM'); }
+  /** SharedWorker is Window-only; discovery remains with the browser's original UserAgent. */
+  get sharedWorkerManager(): never { return unconnected('SharedWorker discovery'); }
   /** Network operations need the browser's Fetch transport. */
   get httpTransport(): never { return unconnected('Fetch'); }
   get supportedContentCodings(): never { return unconnected('Fetch'); }
@@ -306,6 +308,9 @@ export class WorkerUserAgent implements UserAgent {
 
   /** Query the owning browser's current navigable activity for worker lifetime decisions. */
   hasLoadingNavigable(): boolean { return this.#settings().hasLoadingNavigable; }
+
+  /** Document loading belongs to the browser isolate, never to a worker-local UserAgent. */
+  notifyLoadingNavigableStateChanged(): never { return unconnected('Document loading'); }
 
   /** Use the original browser's live configured trust policy. */
   isOriginPotentiallyTrustworthy(origin: Origin): boolean {

@@ -14,21 +14,257 @@ operations; Web IDL composition supplies the inside environment factory.
 
 ## Current stopping point
 
-The document-order review has reached the **outside interface and constructor
-checks in §10.2.6.4, SharedWorker**. §§10.1–10.2.6.3 have been reviewed with
-dependencies recorded below;
+The document-order review has reached **public classic/module startup, discovery,
+connection delivery, and Document lifetime monitoring in §10.2.6.4, SharedWorker**.
+§§10.1–10.2.6.3 have been reviewed with dependencies recorded below;
 this does not mean the processing model is fully connected. The dedicated global,
 environment composition, real isolate, initial-script handoff, execution,
 termination, and error reporting have focused coverage. Public `new Worker()`
-now connects Document-owned classic/module execution on add-on runtimes.
-Stock Node still lacks native suspension; nested workers and SharedWorker
-discovery retain explicit startup boundaries. Unconnected shared-service APIs
+now connects Document-owned classic/module execution on add-on runtimes, as does
+public `new SharedWorker()` for Window clients of the same browser UserAgent.
+Stock Node still lacks native suspension; nested dedicated workers retain their
+explicit startup boundary. Unconnected shared-service APIs
 remain explicit dependencies at their own operations.
+
+### SharedWorker ownership cleanup before consolidation
+
+[SharedWorkerManager](shared-worker-manager.ts) now owns its ParallelQueue instead
+of inheriting its generic enqueue operation. It serializes discovery/creation,
+tracks registrations, and routes thread notifications and browser policy changes.
+[SharedWorkerRegistration](shared-worker-registration.ts) is a browser-local class
+that composes captured SharedWorkerOptions and owns one execution's matching,
+client associations, owner subscriptions, deadline, and cleanup. Document
+destruction still uses the same ownerSet contract; no transport shape or public
+worker behavior changes.
+
+The two tests that accessed manager.enqueue now use public SharedWorker
+construction and the existing UserAgent scheduler. Serializing actual public
+construction requires add-on suspension support; stock keeps its explicit
+startup-dependency regression. Existing discovery, connection, loading-client,
+Document-destruction, deadline, suspension, and teardown cases verify the move.
+
+Validation: 63 focused checks pass per add-on runtime and 48 per stock runtime on
+Node 24.19.0, 26.8.1, and custom Node 27. Four relocated ESM/CommonJS artifact
+checks pass classic/module SharedWorker startup. Typecheck, type contracts,
+changed-file lint, import boundaries, and build pass; the same seven existing
+cycle warnings remain. No Node, V8, or add-on changes are involved.
+
+This is the stopping point for consolidation. Nested-worker startup and the
+other dependencies below remain follow-up work.
+
+### Public SharedWorker startup (HTML §10.2.6.4)
+
+The public constructor now connects the reviewed discovery, connection, and
+lifetime machinery. Binding supplies converted arguments; SharedWorkerImpl applies
+Trusted Types, parses the URL, and normalizes the string-name form. The manager
+captures storage/security lookup inputs before queuing selection and native
+creation together. Classic and module scripts use the existing browser Fetch,
+policy handoff, inside environment, and script runners. A reused execution does
+not fetch or run its root script again.
+
+The outside port gets its native pipe before queued discovery, preserving an
+immediate `worker.port.postMessage()`. A regression first demonstrated that
+waiting until discovery lost that message. A second regression closed a selected
+execution between lookup and port handoff: discovery now retries with the same
+pipe, preserving queued messages while selecting a replacement. Each successful
+handoff adds the client's Document owner. Loading clients are retained until
+initial execution or failure; associations are weak afterward and clear on native
+exit. Option conflicts and failed network, parse, CSP, or module-graph loads queue
+ordinary outside error events. The public API has no termination method.
+
+`start(worker, url, options)` extracts the queued remainder of the SharedWorker
+constructor; conversion stays with Binding and synchronous validation with the
+public implementation.
+RemoteWorkerOwner now names its existing bit positions with a private OwnerFlags
+enum, keeping the shared cell's representation unchanged.
+
+Browser comparison on 2026-11-07 used two clients of one delayed script load and
+separate initial/reused-port and runtime-error probes: Chromium 156.0.8078.4,
+Firefox 157.0, and WebKit 27.2. Eric approved these choices:
+
+| Continuing conflict | HTML and browser evidence | Browlet behavior |
+| --- | --- | --- |
+| `shared-worker-port-activation` | HTML enables the initiating outside port after initial execution; all three browsers require `start()` or `onmessage`. | Explicit activation for every public connection. |
+| `shared-worker-load-error-clients` | HTML's failed-start path names its initial outside object; all three browsers notify both clients waiting on that load. | Notify every waiting client. |
+| `shared-worker-load-error-cancelability` | HTML/Firefox use noncancelable ordinary events. Chromium makes network/parse failures cancelable; WebKit makes network failures cancelable. | Noncancelable ordinary events. |
+| `shared-worker-runtime-errors` | HTML/WebKit stop at the shared global and developer console. Chromium/Firefox also notify outside objects with ErrorEvents. | Report at the shared global/console; keep the execution and its connections usable. |
+
+The source markers retain these disagreements. The script-started control message
+releases shared loading retention; it still enables a dedicated worker's hidden
+outside port. Top-level await does not delay that notification. No Node, V8, or
+add-on changes are required.
+
+**Next dependencies:** nested dedicated-worker creation/owner routing; general
+worker Fetch and Reporting/ResourceTiming transport; remaining WorkerNavigator
+contributions; and the document-order §§9–10 integration audit. Service Worker
+client queues and its separate specification stay after core workers. IndexedDB
+transactions and WebSocket/WebTransport lifetime inputs wait on their subsystems.
+A forced-stop policy for an orphan blocked in JavaScript remains separate from
+cooperative closing. Public execution still requires add-on suspension support.
+
+Validation: 62 focused public startup, connection, ownership, lifetime, and
+dedicated-worker regression checks pass per add-on runtime; 41 pass per stock
+runtime on Node 24.19.0, 26.8.1, and custom Node 27. Twelve new add-on cases cover
+public SharedWorker startup; stock coverage keeps its explicit suspension guard.
+Relocated ESM/CommonJS artifacts pass classic/module public SharedWorker startup.
+The artifact run also exposed two old hand-built startup records missing the
+shared closing field: the fixture now supplies the current wire contract, and
+both affected accepted-script cases pass on focused rerun. Typecheck, type
+contracts, changed-file lint, import boundaries, and build pass with the same
+seven existing cycle warnings.
+
+### SharedWorker lifetime monitoring (HTML §§10.2.3–10.2.4)
+
+Each SharedWorkerRegistration observes its real owners' fully-active state and owner-set
+membership in the browser isolate. It publishes one atomic lifetime snapshot:
+owner presence/activity, extended lifetime, and permissibility. The inside global
+uses that snapshot instead of treating its empty local owner set as ownerlessness.
+The existing RemoteWorkerOwner cell now packs these independent flags together;
+activity and suspension queries read a coherent decision in one atomic load.
+
+Any fully active Document keeps the worker running. An opted-in extension uses
+the most recent inactive owner's deadline, or the start of the current ownerless
+period. Reconnection/reactivation resets the uninterrupted period, preserving
+the previously approved HTML behavior and `shared-worker-extension-restart`
+spec-clash note. Once the extension expires, an inactive owned worker suspends.
+An ownerless worker can also suspend during the between-loads grace period while
+any navigable is still loading. Losing that final permission sets closing and
+resumes a suspended isolate for its existing cleanup path. Explicit termination
+still reaches the paused native execution directly.
+
+The manager schedules only the next browser-clock deadline, without polling.
+Document activity/load completion and host timeout-policy setters notify existing
+monitors; they do not allocate a manager when no shared worker exists. Exit,
+termination, and failed startup cancel deadlines and remove subscriptions. A
+regression first demonstrated that changing the extension ceiling left the old
+deadline effective; the policy setters now recompute existing lifetimes immediately.
+
+`updateLifetime(thread)` extracts the closing/suspension monitors from HTML's
+`run a worker(worker, url, outside settings, outside port, options)`. It retains
+the real Documents beside the browser's manager and delegates native control to
+WorkerThread. Monitoring starts after loading, before the initial-script
+continuation; an initially inactive worker waits at that boundary.
+
+Public constructor dispatch and production execution are connected in the slice
+above. These lower-level tests also retain the explicit isolate fixture. Nested
+worker ownership and a forced-stop policy for an orphan blocked in JavaScript
+remain separate dependencies. No Node, V8, or add-on changes are needed.
+
+Validation: the focused real-isolate discovery, connection, ownership, lifetime,
+dedicated suspension, and timer selection passes on Node 24.19.0, 26.8.1, and
+custom Node 27: 50 cases per add-on runtime and 40 per stock runtime. The new
+shared-monitor family contributes 11 add-on cases or eight stock cases, including
+the explicit stock suspension dependency. Node 26 add-on also passes all 37 local
+lifetime predicate cases, for 87 cases in that combined run. Typecheck, type
+contracts, changed-file lint, import boundaries, diff checks, and build pass;
+the same seven existing cycle warnings remain.
+
+### SharedWorker Document ownership (HTML §§10.2.3, 10.2.6.4)
+
+The manager now keeps one WorkerOwnerSet for each registered shared execution.
+Native creation records its original Document before readiness. `connect()`
+attaches an additional client's port and then adds its relevant owner; multiple
+connections from the same Document share one membership and one `ownedWorkers`
+entry. A failed native handoff adds no owner. The method expects constructor
+matching to have selected the thread already; it does not replace those checks.
+
+Document destruction removes that Document through the existing owner-set hook.
+Other owners and their ports remain usable. Closing a port does not remove its
+Document: port connectivity and HTML's owner set are separate lifetime inputs.
+Native exit clears memberships and Document backlinks after normal close,
+startup failure, or termination. A weak cleanup list also reaches backlinks on
+destroyed Documents without retaining those Documents until worker exit. Cleanup
+does not mutate `ownedWorkers` during Document.destroy()'s synchronous iteration.
+
+The next slice above connects activity/deadline publication, suspension/resumption,
+and extended/between-load lifetime monitoring. Losing the last shared owner does
+not invoke the dedicated worker's immediate orphan-closing policy. Public constructor
+dispatch and outside-object association/error handling are connected above.
+
+Validation: six new real-isolate ownership cases and 16 discovery/connection
+regressions pass on Node 24.19.0, 26.8.1, and custom Node 27, stock and add-on.
+The broader Node 26 add-on selection verifies 50 cases, with the existing expected
+recursive Document-destruction failure unchanged. Typecheck, type contracts,
+changed-file lint, import boundaries, and build pass; the same seven existing
+cycle warnings remain. No Node, V8, or add-on changes are needed.
+
+### SharedWorker discovery matching (HTML §10.2.6.4)
+
+The UserAgent lazily owns one [SharedWorkerManager](shared-worker-manager.ts),
+composing Infra's ParallelQueue and the browser's existing background scheduler.
+Creating it does not launch a native thread. Shared WorkerThreads register their
+constructor URL, creator storage key, name, type, credentials, lifetime option,
+and secure-context status after native construction succeeds, before readiness.
+Native exit unregisters them even when startup fails. The manager retains the
+existing outside execution handle, not a second representation of the remote global.
+
+Matching uses StorageKey equality and URL equality, including fragments. A
+redirected response does not replace the constructor URL. Data workers retain
+the creator's partition despite their own opaque origin; disabled storage does
+not disable this non-storage lookup. Option or secure-context conflicts produce
+an incompatible result rather than selecting a new identity. Different UserAgents
+own different managers. Browlet has no additional development-mode communication
+isolation preference to apply at the optional policy step.
+
+Shared executions publish the global's closing flag through one shared atomic
+cell. Lookup and new port attachment reject a closing worker immediately, even
+while its current script is still running. This is JavaScript shared-memory
+plumbing; no Node, V8, or add-on changes are needed.
+
+The reviewed `find()` contract extracts selection and compatibility from the HTML
+constructor, which also supplies error delivery, association, and startup.
+This method returns a WorkerThread, `incompatible`, or null. Lookup and any new
+creation must happen in the same queued manager steps. The constructor integration
+above captures its storage key/security status before enqueueing and does not
+await between lookup and creation.
+
+Constructor dispatch, default-name normalization, option-mismatch error tasks,
+outside-object associations, and public execution are now connected above. These
+discovery tests retain the existing explicit isolate fixture to isolate matching
+and native lifetime from script execution.
+
+Validation: 44 focused discovery, connection, interface/global, and startup
+checks pass on Node 24.19.0, 26.8.1, and custom Node 27, stock and add-on.
+The nine new real-isolate cases cover queued creation/lookup, partition and
+UserAgent isolation, option/security incompatibility, data and opaque origins,
+redirects, closing during blocked author execution, failed startup, and exclusion
+of dedicated workers. Typecheck, type contracts, changed-file lint, import
+boundaries, and the bundle build pass; the same seven existing cycle warnings remain.
+
+### SharedWorker connection delivery (HTML §10.2.6.4)
+
+`WorkerThread.connectSharedPort()` now entangles an additional client's outside
+port with a new inside port across real isolates. SharedWorkerGlobalImpl owns
+the queued DOM-manipulation `connect` event used by this path and initial-script
+completion. The event carries empty-string data, the inside port as source, and
+the frozen one-port array required by HTML. Each port keeps its normal queue
+activation rules; connecting a client does not call `start()` on either end.
+
+Connections received while the initial script is loading wait for execution
+readiness. Pending events release their ports if discarded during closing;
+native startup failure and forced teardown disconnect transported endpoints.
+One client's port can close without disconnecting the other clients.
+
+This implements the connection steps within the SharedWorker constructor:
+https://html.spec.whatwg.org/multipage/workers.html#dom-sharedworker
+The native channel and private control message are implementation plumbing;
+event contents, task source, entanglement, and queue behavior follow HTML.
+
+The public constructor now associates outside objects and dispatches these
+connections through the manager's owner/lifetime integration. These lower-level
+tests retain an explicitly installed initial script to test delivery independently;
+public startup has separate coverage above.
+
+Validation: all 32 focused SharedWorker interface, global, and connection checks
+pass on Node 24.19.0, 26.8.1, and custom Node 27, stock and add-on. Seven of those
+checks exercise real-isolate connections and failure cleanup. Typecheck, type
+contracts, changed-file lint, import boundaries, and the bundle build pass;
+the same seven pre-existing circular-dependency warnings remain. No native
+Node, V8, or add-on changes are required.
 
 ### Concurrent hardware (HTML §10.2.7)
 
-The small concurrent-hardware section is reviewed in full while SharedWorker
-discovery remains the earlier unfinished section. Navigator and WorkerNavigator
+The small concurrent-hardware section is reviewed in full. Navigator and WorkerNavigator
 now expose `hardwareConcurrency` through ordinary Web IDL mixin inclusion.
 Their implementations use the relevant UserAgent; JS Engine owns Node's native
 parallelism query, including its minimum-one fallback. Workers read the original
@@ -40,11 +276,11 @@ both worker kinds across real isolates. Typecheck, type contracts, changed-file
 lint, and import boundaries pass.
 The bundle build passes with the same seven existing circular-dependency warnings.
 
-The next substantial startup work is SharedWorker discovery, repeated connections,
-and shared-owner lifetime monitoring. Nested workers, general worker Fetch and
-Reporting/ResourceTiming transport, and the remaining WorkerNavigator contributions
-still require their recorded connections. The document-order §§9–10 integration
-audit remains pending; this section does not close those dependencies.
+Shared-owner monitoring and public constructor dispatch are now connected above. Nested workers,
+general worker Fetch and Reporting/ResourceTiming transport, and the remaining
+WorkerNavigator contributions still require their recorded connections. The
+document-order §§9–10 integration audit remains pending; this section does not
+close those dependencies.
 
 ### Worker environment and Fetch client ownership
 
@@ -866,8 +1102,9 @@ Dependencies encountered in this first interface:
   stringifier as a small dependency. It reads the associated worker's script
   URL, never a creator Window's Location. Startup must assign the final response
   URL before author code can observe it.
-- **§10.3.2 WorkerNavigator:** identity, NavigatorID, NavigatorLanguage,
-  NavigatorOnLine, and concurrent hardware are connected. Worker Permissions/Storage
+- **§10.3.2 WorkerNavigator:** stable identity, NavigatorID, NavigatorLanguage,
+  NavigatorOnLine, and NavigatorConcurrentHardware are implemented.
+  Worker Permissions/Storage
   contributions still need navigator integration; settings composition is now available below.
 - **§10.3.1 importScripts():** Trusted Types, URL validation, response processing,
   and ordered evaluation are connected as described above. Synchronous Fetch

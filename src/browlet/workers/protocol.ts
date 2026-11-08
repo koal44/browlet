@@ -47,8 +47,10 @@ export interface WorkerThreadStartup {
   creatorEnvSnapshot: CreatorEnvironmentSnapshot;
   /** Initial script selection; its URL has no live Blob registration. */
   script: WorkerScriptStartup;
-  /** Shared original-Document activity for dedicated startup; its live identity stays with the creator. */
+  /** Atomic lifetime contribution of browser-owned Documents; their live identities stay in the browser. */
   ownerState: Int32Array<SharedArrayBuffer> | null;
+  /** Shared-global closing flag, readable by discovery without waiting for a message from that isolate. */
+  sharedClosing: Int32Array<SharedArrayBuffer> | null;
 }
 
 /** Private acknowledgement and outbound data; never HTML MessageEvents. */
@@ -59,7 +61,7 @@ type WorkerThreadMessage =
   { type: 'fetch-script'; } |
   { type: 'fetch-module'; id: number; request: WorkerModuleScriptFetch; } |
   { type: 'monitor-lifetime'; } |
-  { type: 'enable-outside-port'; } |
+  { type: 'script-started'; } |
   { type: 'script-fetch-failed'; };
 
 /** Cloneable subset consumed by worker script processing; timing and network resources stay with Fetch. */
@@ -129,5 +131,6 @@ type WorkerThreadInput = { type: 'message'; data: unknown; } |
   { type: 'owner-removed'; } |
   { type: 'lifetime-ready'; } |
   { type: 'connect-port'; handle: JSMessagePortHandle; } |
+  { type: 'connect-shared-port'; handle: JSMessagePortHandle; initial: boolean; } |
   { type: 'script-response'; snapshot: WorkerScriptResponseSnapshot; } |
   { type: 'module-response'; id: number; snapshot: ScriptResponseSnapshot; };

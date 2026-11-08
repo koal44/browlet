@@ -1578,6 +1578,7 @@ export class DocumentImpl extends NodeImpl {
       throw new InternalError('A completely loaded Document needs a browsing context');
     }
     this.completelyLoadedTime = currentCoarsenedWallTime().milliseconds;
+    this.env.userAgent.notifyLoadingNavigableStateChanged();
     // TODO(HTML child loading): Queue the container's iframe load event steps on the DOM
     // manipulation task source, including the Permissions Policy §10.1 check after dispatch.
     // Those steps still need iframe timing/mute flags; the Window load event above is separate.
@@ -2388,6 +2389,7 @@ export class DocumentImpl extends NodeImpl {
     for (const observer of this.#fullyActiveObservers) {
       observer(fullyActive);
     }
+    this.env.userAgent.notifyLoadingNavigableStateChanged();
     if (fullyActive) {
       // HTML task runnability changes for every source, independently of timers.
       this.env.responsibleEventLoop.notifyTaskRunnabilityChanged();

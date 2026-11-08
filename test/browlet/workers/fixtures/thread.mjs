@@ -3,17 +3,17 @@
 import { threadId, isMainThread, workerData } from 'node:worker_threads';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { WorkerThread, WorkerThreadRuntime } from '../../../../src/browlet/workers/index.ts';
 import {
   AgentCluster, ClassicScript, EventLoop, JavaScriptModuleScript, ScriptFetchOptions,
   SharedWorkerAgent, WindowAgent, createTaskSource, networkingTaskSource,
 } from '../../../../src/browlet/scripting/index.ts';
 import { addon, JSThread } from '../../../../src/js-engine/index.ts';
-import { WorkerImpl } from '../../../../src/browlet/workers/index.ts';
+import { WorkerImpl, WorkerThread, WorkerThreadRuntime } from '../../../../src/browlet/workers/index.ts';
 import { createWindowEnvironment, createWorkerEnvironment, createWorkerEnvironmentFromSnapshot } from '../../../../src/browlet/integration/web-idl/index.ts';
 import { UserAgent } from '../../../../src/browlet/user-agent.ts';
 import { parseURL, serializeURL } from '../../../../src/url/index.ts';
 import { FetchResponse } from '../../../../src/fetch/index.ts';
+import { BlobData, BlobImpl } from '../../../../src/file/index.ts';
 
 const filename = fileURLToPath(import.meta.url);
 // JS Engine's envelope contains the original browser startup inputs.
@@ -42,7 +42,6 @@ function startFixture() {
     return;
   }
   if (mode === 'load-startup') {
-    const { serializeURL } = loadTypeScript('../../../../src/url/index.ts', __filename);
     // Observe the production loading stage without advancing readiness or
     // replacing its module-map, Fetch, or engine linking algorithms.
     runtime.start(() => runtime.fetchScript(), (result) => runtime.loadScript(result, (script) => {
@@ -83,6 +82,31 @@ function startFixture() {
       case 'inspect-worker-messages':
         runtime.send(messagingEnv.global.messageCount);
         break;
+      case 'prepare-shared-connections':
+        prepareSharedConnections(runtime);
+        runtime.send('prepared');
+        break;
+      case 'inspect-shared-connections': {
+        const env = runtime.environment;
+        runtime.send({
+          connections: env.global.connectionCount ?? 0,
+          messages: env.global.messageCount ?? 0,
+          ports: env.globalImplementation.ports.length,
+          executionReady: env.executionReady,
+        });
+        break;
+      }
+      case 'start-shared-port':
+        runtime.environment.global.connectionPorts[message.index].start();
+        runtime.send('started');
+        break;
+      case 'close-shared-worker':
+        runtime.environment.globalImplementation.close();
+        runtime.send('closing');
+        break;
+      case 'close-shared-and-block':
+        closeSharedAndBlock(runtime, message.state);
+        break;
       case 'send-worker-messages':
         for (const value of message.values) messagingEnv.global.postMessage(value);
         runtime.send('sent');
@@ -93,6 +117,29 @@ function startFixture() {
       case 'close-configured-worker':
         closeConfiguredWorker(runtime, message.blobURL);
         break;
+      case 'animation-frame-registration': {
+        const global = runtime.environment.global;
+        try {
+          const handle = global.requestAnimationFrame(() => {});
+          const pending = runtime.environment.globalImplementation.animationFrameController.hasPending;
+          global.cancelAnimationFrame(handle);
+          runtime.send({ handle, pending, canceled: !runtime.environment.globalImplementation.animationFrameController.hasPending });
+        } catch (error) { runtime.send({ error: error.name }); }
+        break;
+      }
+      case 'navigator-preferences': {
+        const navigator = runtime.environment.global.navigator;
+        try {
+          const languages = navigator.languages;
+          runtime.send({
+            platform: navigator.platform, userAgent: navigator.userAgent,
+            language: navigator.language, languages: [...languages],
+            stableLanguages: languages === navigator.languages, frozenLanguages: Object.isFrozen(languages),
+            online: navigator.onLine,
+          });
+        } catch (error) { runtime.send({ error: error.message }); }
+        break;
+      }
       case 'hardware-concurrency': {
         const global = runtime.environment.global;
         const navigator = global.navigator;
@@ -139,6 +186,16 @@ function startFixture() {
         });
         break;
       }
+      case 'inspect-shared-lifetime': {
+        const global = runtime.environment.globalImplementation;
+        runtime.send({
+          extended: global.isInExtendedLifetime(),
+          activelyNeeded: global.isActivelyNeeded(),
+          permissible: global.isPermissible(),
+          suspendable: global.isSuspendable(),
+        });
+        break;
+      }
       case 'monitor-lifetime':
         try {
           runtime.monitorLifetime(() => {
@@ -168,7 +225,6 @@ function startFixture() {
         break;
       case 'inspect-environment': {
         const env = runtime.environment;
-        const { serializeURL } = loadTypeScript('../../../../src/url/index.ts', __filename);
         let sharedServicesError;
         try { void env.userAgent; } catch (error) { sharedServicesError = error.message; }
         const global = env.globalImplementation;
@@ -189,9 +245,6 @@ function startFixture() {
         break;
       }
       case 'resolve-module-specifiers': {
-        const { parseURL, serializeURL } = loadTypeScript('../../../../src/url/index.ts', __filename);
-        const { JavaScriptModuleScript, ScriptFetchOptions } =
-          loadTypeScript('../../../../src/browlet/scripting/index.ts', __filename);
         const env = runtime.environment;
         const script = message.referrerURL === undefined ? null
           : new JavaScriptModuleScript('', env, parseURL(message.referrerURL).url, new ScriptFetchOptions());
@@ -217,8 +270,6 @@ function startFixture() {
         runtime.send(typeof runtime.environment.global.fetch);
         break;
       case 'inspect-scripting-policy': {
-        const { ClassicScript, JavaScriptModuleScript, ScriptFetchOptions } =
-          loadTypeScript('../../../../src/browlet/scripting/index.ts', __filename);
         const env = runtime.environment;
         const options = new ScriptFetchOptions();
         // Invalid source distinguishes disabled scripting's empty script from
@@ -283,7 +334,6 @@ function startFixture() {
         try {
           let blob;
           if (message.hostSource) {
-            const { BlobData, BlobImpl } = loadTypeScript('../../../../src/file/index.ts', __filename);
             const source = {
               size: 1, snapshotState: { version: 1 },
               read: () => Promise.resolve(Uint8Array.of(65)),
@@ -297,7 +347,6 @@ function startFixture() {
         break;
       }
       case 'fetch-modules': {
-        const { serializeURL } = loadTypeScript('../../../../src/url/index.ts', __filename);
         const replies = [];
         message.requests.forEach((request, index) => {
           if (message.captured) request.url = capturedModuleURL;
@@ -395,6 +444,48 @@ function startFixture() {
   traceWorker('runtime ready sent');
 }
 
+/** Hold a closing shared worker inside author code while the parent performs discovery. */
+function closeSharedAndBlock(runtime, state) {
+  const env = runtime.environment;
+  env.markExecutionReady();
+  env.global.waitState = state;
+  // Source execution after close() is the behavior under test: discovery must
+  // observe closing without waiting for this task or the native isolate to exit.
+  new ClassicScript(`
+    close();
+    Atomics.store(waitState, 0, 1);
+    while (Atomics.load(waitState, 1) === 0) {}
+  `, env, env.apiBaseURL, new ScriptFetchOptions()).run(true);
+}
+
+/** Install an initial shared script without pretending discovery or owner monitoring is connected. */
+function prepareSharedConnections(runtime) {
+  const env = runtime.environment;
+  // The fixture advances readiness in one task, like initial script execution.
+  // Connection events must wait until this script has installed its handler.
+  env.markExecutionReady();
+  const script = new ClassicScript(`
+    globalThis.connectionPorts = [];
+    globalThis.connectionCount = 0;
+    globalThis.messageCount = 0;
+    onconnect = event => {
+      const id = ++connectionCount;
+      const port = event.ports[0];
+      connectionPorts.push(port);
+      port.postMessage({
+        id, connected: true, data: event.data, source: event.source === port,
+        frozen: Object.isFrozen(event.ports), trusted: event.isTrusted,
+        target: event.target === self, realm: port instanceof MessagePort,
+      });
+      port.addEventListener('message', message => {
+        ++messageCount;
+        port.postMessage({ id, value: message.data, realm: Object.getPrototypeOf(message.data) === Object.prototype });
+      });
+    };
+  `, env, env.apiBaseURL, new ScriptFetchOptions());
+  script.run();
+}
+
 function prepareWorkerMessages(runtime, portTransfers = false) {
   const env = runtime.environment;
   // This fixture enables script entry explicitly; production still requires
@@ -423,7 +514,6 @@ function prepareWorkerMessages(runtime, portTransfers = false) {
 
 /** Exercise author close and its final checkpoint without manually disconnecting the native host. */
 function closeWorkerMessages(env) {
-  const { ClassicScript, ScriptFetchOptions } = loadTypeScript('../../../../src/browlet/scripting/index.ts', __filename);
   const script = new ClassicScript(`
     postMessage('before close');
     close();
@@ -436,7 +526,6 @@ function closeWorkerMessages(env) {
 
 /** Keep the real browser service connection usable through the final author microtask. */
 function closeConfiguredWorker(runtime, blobURL) {
-  const { ClassicScript, ScriptFetchOptions } = loadTypeScript('../../../../src/browlet/scripting/index.ts', __filename);
   const env = runtime.environment;
   // Only the fixture advances readiness; production still awaits owner monitoring.
   env.markExecutionReady();
@@ -629,7 +718,6 @@ function startTimers(runtime, { state, timeout }) {
 
 /** Execute through HTML's script runner in the actual production-composed environment. */
 function runSuspendableScript(runtime, { state, entry = 'script', closeFirst = false }) {
-  const { ClassicScript, ScriptFetchOptions } = loadTypeScript('../../../../src/browlet/scripting/index.ts', __filename);
   const env = runtime.environment;
   env.markExecutionReady();
   env.global.state = state;

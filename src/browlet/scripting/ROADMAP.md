@@ -2958,7 +2958,9 @@ Remaining dependencies are explicit:
 - The worker event-loop rendering branch still needs a rendering-opportunity
   producer, current worker timestamp, and OffscreenCanvas/rendering integration.
   Its call-site TODO names the support check and controller delivery. Worker
-  registration is available, but automatic worker frame delivery is not connected.
+  registration is available, including dedicated isolates whose Document owner
+  is represented by shared remote-owner state. Automatic worker frame delivery
+  is not connected.
 - Layout, painting, display presentation, and the other rendering phase owners
   retain their existing separate hooks. No graphics backend is selected here.
 

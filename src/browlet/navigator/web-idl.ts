@@ -14,7 +14,7 @@ import { navigatorPluginsIDL, pluginArrayIDL, mimeTypeArrayIDL, pluginIDL, mimeT
 import { workerNavigatorIDL } from './worker-navigator';
 import { navigatorConcurrentHardwareIDL } from './hardware';
 
-// TODO(HTML §10): Worker NavigatorStorage and workerNavigatorPermissionsIDL need worker settings/startup.
+// TODO(HTML §10): Worker NavigatorStorage and workerNavigatorPermissionsIDL need worker service integration.
 export const navigatorIDLDefinitions: Definition<BrowletEnvironment>[] = [
   navigatorIDL,
   workerNavigatorIDL,

@@ -128,10 +128,24 @@ export class JSThread<Protocol extends JSThreadProtocol> {
       this.#stopping = true;
       // Node's native Promise stays at the backend boundary. Exit settles the
       // shared completion; a failed termination request rejects it instead.
-      void this.#worker.terminate().catch(this.#closed.reject);
-      // Node must mark its environment as stopping before the addon unwinds or
-      // wakes a suspended stack, so Node's async-hook cleanup observes shutdown.
-      if (this.#control !== null) addon.stopThread!(this.#control);
+      let refused = false;
+      try {
+        void this.#worker.terminate().catch((error: unknown) => {
+          refused = true;
+          this.#closed.reject(error);
+        });
+      } catch (error) {
+        this.#closed.reject(error);
+        return this.closed;
+      }
+      // Node accepts a stop synchronously, but a rejected backend request must
+      // not be followed by raw V8 interruption without Node's shutdown state.
+      // Observe an immediate refusal before waking a suspended native stack.
+      if (this.#control !== null) {
+        NodePromise.resolve(undefined, internalType<void>()).observe(() => {
+          if (!refused && this.#control !== null) addon.stopThread!(this.#control);
+        }, this.#closed.reject);
+      }
     }
     return this.closed;
   }

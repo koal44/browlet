@@ -1001,7 +1001,11 @@ the concrete browser owner; `UserAgent = Public<BrowletUserAgent>` declares its
 complete public contract in one place. `new UserAgent()` keeps the constructor
 export, and `WorkerUserAgent implements UserAgent` supplies the worker connection.
 Infra's `Public<T>` excludes private class identity without narrowing public members.
-Unavailable worker facilities throw explicit dependency errors.
+Unavailable worker facilities throw explicit dependency errors. Navigator reads
+share that connection: preferences come from the original browser, while emulation
+selectors use its reserved worker identity. Those selectors require only the
+base environment view, not a realm or the worker's full Fetch client. Change-event
+transport remains separate from these reads.
 Environments and existing consumers keep the same non-generic `userAgent` access.
 The store uses `Public<BlobURLStore>`, and `resolve()` returns
 `Public<BlobURLEntry>`. The browser keeps its actual entry; the worker reconstructs
@@ -1118,8 +1122,42 @@ activates ports or queues shared-worker connection delivery. Outside-port
 activation is supplied by its execution owner: the separate-isolate runtime
 sends a private instruction to the creator. Dedicated Document-owned execution
 is connected on add-on runtimes, including public construction. Shared-service
-APIs retain explicit transport dependencies, and shared/nested startup needs its
-ownership managers.
+APIs retain explicit transport dependencies. Shared startup uses the manager
+below; nested dedicated startup still needs owner routing.
+
+The browser UserAgent lazily owns SharedWorkerManager, which composes a private
+Infra ParallelQueue and registrations for actual WorkerThreads. The creating
+environment's StorageKey and secure-context status remain separate from the
+inside worker's origin and redirected response URL. Lookup returns the existing
+host execution, an incompatible match, or no match. Native creation registers
+before readiness; native exit removes the registration. A shared closing flag
+excludes a remote global before its current script or native thread has exited.
+SharedWorkerRegistration owns captured SharedWorkerOptions, discovery identity,
+its execution handle, and its browser-side WorkerOwnerSet. Connecting a client
+adds its original Document after native port handoff succeeds, deduplicating
+multiple connections from that Document. Document destruction uses its existing
+ownedWorkers hook; port closure does not remove an owner. Native exit removes
+all memberships and backlinks, with weak references for already-removed owners.
+Each registration observes Document activity and publishes the combined owner,
+extension, and permissibility flags in one RemoteWorkerOwner atomic cell. It
+schedules its next extension/between-loads deadline on the browser clock. The
+manager asks ownerless registrations to recheck when Document loading changes;
+timeout-policy setters ask all registrations to recheck. The inside global reads
+the same decision; WorkerThread applies native suspension after the startup
+monitoring handshake.
+Loss of permissibility resumes the isolate for closing. Native exit removes the
+registration from discovery and disposes its deadlines, subscriptions, client
+associations, and Document backlinks. Public SharedWorker construction captures
+lookup inputs, prepares its native message pipe, and queues selection/creation together.
+Preparing the pipe first preserves messages posted immediately after construction;
+if an execution closes after selection, handoff retries without losing that pipe.
+The initial connection reaches the existing script runner, while later clients
+queue connect events on the same execution. Outside associations are weak after
+loading; loading clients are retained for startup-failure notification. All ports
+require explicit start()/onmessage activation. Failed loads notify every waiting
+outside object; runtime errors stay at the shared global/console. The worker
+roadmap records the approved browser/spec conflicts. A manager instance alone
+does not start a native thread.
 
 After a dedicated/shared global starts closing, its event loop finishes all
 queued tasks and the final microtask checkpoint before becoming destroyed. The
@@ -1144,7 +1182,7 @@ exit releases both subscriptions. After script loading, a startup acknowledgemen
 connects the Document's activity to native suspension before admitting the
 initial script. Resume reaches the native wait directly. Closing first disables
 native suspension; owner removal resumes a paused isolate for its closing message.
-Shared/nested ownership and forced stopping of an orphan
+Nested ownership and forced stopping of an orphan
 blocked in JavaScript remain separate dependencies.
 
 The dedicated outside `WorkerImpl` retains its `WorkerThread` in the creating

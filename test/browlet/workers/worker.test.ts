@@ -222,6 +222,7 @@ describe('Worker outside interface (HTML §10.2.6.3) across environments', () =>
     expect(() => { first.worker.postMessage(buffer, [buffer, buffer]); }).toThrow(expect.objectContaining({ name: 'DataCloneError' }));
     expect(buffer.byteLength).toBe(1);
   });
+
 });
 
 /** Construct only the outside implementation; production startup remains an explicit dependency. */

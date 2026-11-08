@@ -11,7 +11,7 @@ import {
   type ScriptEnvironment, type ScriptSourceCallback, type PerformScriptFetch,
 } from '../scripting/index';
 import { PolicyContainer } from '../browsing/policy/index';
-import type { MessagePortTransportMessage } from '../communication/index';
+import { MessagePortImpl, type MessagePortTransportMessage } from '../communication/index';
 import { queueNodeTask } from '../integration/host/index';
 
 import type { WorkerEnvironment, WorkerScriptResponse, WorkerEnvironmentSnapshotInit, CreatorEnvironmentSnapshot } from './environment';
@@ -53,6 +53,8 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
   #moduleResponses = new Map<number, ModuleScriptResponseConsumer>();
   /** Received native endpoint retained until the dedicated global takes ownership. */
   #messagePort: JSMessagePort<MessagePortTransportMessage> | null = null;
+  /** The initiating shared connection receives its connect event only after the initial script returns. */
+  #initialSharedPort: MessagePortImpl | null = null;
   /** Private access to the browser owner; close it before disconnecting the control endpoint. */
   #userAgent: WorkerUserAgent;
 
@@ -84,6 +86,7 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
     const global = this.environment.globalImplementation;
     global.remoteOwner = init.ownerState === null ? null : new RemoteWorkerOwner(init.ownerState);
     global.onClosing = () => {
+      if (init.sharedClosing !== null) Atomics.store(init.sharedClosing, 0, 1);
       this.#userAgent.broadcastChannels.beginClosing();
       this.#endpoint.preventSuspension();
     };
@@ -116,12 +119,11 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
         return;
       }
       const agent = this.agent;
-      if (!(agent instanceof DedicatedWorkerAgent)) {
-        throw new InternalError('Shared worker execution requires ownership and connection management');
-      }
+      const insidePort = agent instanceof DedicatedWorkerAgent ? agent.globalScope!.insidePort : this.#initialSharedPort;
+      if (insidePort === null) throw new InternalError('Shared worker execution requires its initial connection');
       this.monitorLifetime(() => {
-        this.environment.globalImplementation.runScript(script, agent.globalScope!.insidePort, () => {
-          this.#endpoint.send({ type: 'enable-outside-port' });
+        this.environment.globalImplementation.runScript(script, insidePort, () => {
+          this.#endpoint.send({ type: 'script-started' });
         });
       });
     }));
@@ -155,6 +157,25 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
             this.connectMessagePort();
           });
           break;
+        case 'connect-shared-port': {
+          const channel = new JSMessagePort<MessagePortTransportMessage>(message.handle);
+          const global = this.agent instanceof SharedWorkerAgent ? this.agent.globalScope : undefined;
+          if (global === undefined) {
+            channel.close();
+            throw new InternalError('Shared connection requires a shared worker global');
+          }
+          const insidePort = new MessagePortImpl(this.environment);
+          try {
+            insidePort.entangleRemote(channel);
+            if (message.initial) this.#initialSharedPort = insidePort;
+            else global.queueConnectEvent(insidePort);
+          } catch (error) {
+            insidePort.close();
+            channel.close();
+            throw error;
+          }
+          break;
+        }
         case 'message':
           this.agent.eventLoop.queueTask(workerHostTaskSource, null, () => { onMessage(message.data); });
           break;
@@ -187,14 +208,14 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
     this.#endpoint.send({ type: 'ready' });
   }
 
-  /** Connect dedicated-Document closing and suspension before admitting the initial script. */
+  /** Connect browser-owned Document closing and suspension before admitting the initial script. */
   // HTML §10.2.4 installs these monitors after loading and before execution
   // readiness. The continuation waits for the outside monitor, including an
   // initially inactive owner; suspension must not prevent initial Fetch itself.
   monitorLifetime(onReady: () => void): void {
     if (!JSThread.supportsSuspension) throw new InternalError('Worker script suspension requires the Node compatibility addon');
-    if (!(this.agent instanceof DedicatedWorkerAgent) || this.environment.globalImplementation.remoteOwner === null) {
-      throw new InternalError('Worker lifetime monitoring requires dedicated Document ownership');
+    if (this.environment.globalImplementation.remoteOwner === null) {
+      throw new InternalError('Worker lifetime monitoring requires browser-owned Documents');
     }
     if (this.#onLifetimeReady !== null) throw new InternalError('Worker lifetime monitoring is already pending');
     this.#onLifetimeReady = onReady;
@@ -301,6 +322,7 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
     this.#moduleResponses.clear();
     this.#messagePort?.close();
     this.#messagePort = null;
+    this.#initialSharedPort = null;
     this.#endpoint.disconnect();
   }
 }

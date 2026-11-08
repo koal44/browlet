@@ -35,13 +35,16 @@ for (const extension of ['mjs', 'cjs']) {
   });
 
   if (process.env.BROWLET_NODE_ADDON) {
-    for (const [type, broadcast, imports] of [['classic', false, false], ['module', false, false], ['classic', true, false], ['classic', false, true]]) {
-      test(`${extension} public ${type} Worker reloads the relocated package${broadcast ? ' with BroadcastChannel' : imports ? ' with importScripts' : ''}`, { timeout: 30_000 }, async (t) => {
+    for (const [type, broadcast, imports, shared = false] of [
+      ['classic', false, false], ['module', false, false], ['classic', true, false], ['classic', false, true],
+      ['classic', false, false, true], ['module', false, false, true],
+    ]) {
+      test(`${extension} public ${type} ${shared ? 'SharedWorker' : 'Worker'} reloads the relocated package${broadcast ? ' with BroadcastChannel' : imports ? ' with importScripts' : ''}`, { timeout: 30_000 }, async (t) => {
         // Each independently bundled package installs its own host hooks. Run
         // each format in a separate host isolate, as for the bootstrap probes.
         const { thread, exited, errors } = start(t,
           fileURLToPath(new URL('./fixtures/public-worker.mjs', import.meta.url)),
-          { entryURL, extension, type, broadcast, imports },
+          { entryURL, extension, type, broadcast, imports, shared },
         );
         assert.deepEqual(await once(thread, 'message'), [{ result: ['packaged worker', { value: 42 }] }]);
         assert.equal(await exited, 0);
@@ -111,7 +114,7 @@ for (const extension of ['mjs', 'cjs']) {
       // The real WorkerThread installs its Document monitor and native control.
       // This raw bundle test only supplies the private continuation acknowledgement.
       thread.postMessage({ type: 'lifetime-ready' });
-      assert.deepEqual((await messages.next()).value, [{ type: 'enable-outside-port' }]);
+      assert.deepEqual((await messages.next()).value, [{ type: 'script-started' }]);
       assert.equal(await exited, 0);
     } else {
       await messages.return();
@@ -188,7 +191,10 @@ function configuredStartup(t, kind) {
     path: ['worker.js'], query: null, fragment: null, blobURLEntry: null,
   };
   return {
-    kind, data: undefined, ownerState: kind === 'dedicated' ? new Int32Array(new SharedArrayBuffer(4)).fill(1) : null,
+    kind, data: undefined,
+    // RemoteWorkerOwner's wire bits: present, active, and permissible.
+    ownerState: new Int32Array(new SharedArrayBuffer(4)).fill(1 | 2 | 8),
+    sharedClosing: kind === 'shared' ? new Int32Array(new SharedArrayBuffer(4)) : null,
     userAgent: {
       port: channel.port2, state,
       scriptingPolicy: new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)).fill(1),

@@ -17,7 +17,7 @@ import type { TrustedScriptURLImpl, TrustedTypePolicyFactoryImpl } from '../brow
 import type { DocumentImpl } from '../dom/nodes/index';
 import type { PerformanceImpl } from '../performance/index';
 import { WorkerNavigatorImpl } from '../navigator/index';
-import { MessageEventImpl, MessagePortImpl } from '../communication/index';
+import { MessagePortImpl } from '../communication/index';
 import { WindowOrWorkerGlobalScopeMixin, type BrowletEnvironment, type BrowletEnvironmentBase, type TimerHandler } from '../environment/index';
 import type { StructuredSerializeOptions } from '../scripting/structured-data/index';
 
@@ -47,8 +47,8 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
   /** Documents and worker globals retaining this worker, including ownerless-period timing. */
   ownerSet: WorkerOwnerSet;
   /** Presence/activity of an owner retained in another isolate; never a cloned Document or worker global. */
-  // Dedicated startup supplies its original Document. Shared/nested ownership
-  // still requires the managers that collect and forward those owners' state.
+  // Dedicated startup supplies its original Document; the shared manager
+  // publishes the combined state of its browser-owned Documents.
   remoteOwner: RemoteWorkerOwner | null = null;
   /** Policies owned by this global, replaced by the startup response or inherited owner policies. */
   policyContainer = new PolicyContainer();
@@ -231,13 +231,7 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
     if (!(env.realm.agent instanceof SharedWorkerAgent)) {
       insidePort.start();
     } else {
-      env.queueTask('dom-manipulation', () => {
-        this.fireEvent('connect', MessageEventImpl, (event) => {
-          event.data = '';
-          event.ports = [insidePort];
-          event.source = insidePort;
-        });
-      });
+      env.realm.agent.globalScope!.queueConnectEvent(insidePort);
     }
     // TODO(Service Workers): Enable this client's ServiceWorkerContainer message
     // queue. No container/client-message-queue implementation exists yet.
@@ -306,7 +300,7 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
       const global = pending.pop()!;
       if (visited.has(global)) continue;
       visited.add(global);
-      if (global.remoteOwnerState === 'active' || global.isInExtendedLifetime()) return true;
+      if (global.remoteOwner?.activelyNeeded || global.isInExtendedLifetime()) return true;
       for (const owner of global.ownerSet) {
         if (owner instanceof WorkerGlobalImpl) pending.push(owner);
         else if (owner.isFullyActive()) return true;

@@ -56,9 +56,12 @@ Node rejects suspension and resumption explicitly; ordinary startup and
 termination retain their existing behavior. Package initialization allocates no
 thread or suspension control.
 
-The wait also blocks Node's host messages. `terminate()` therefore requests V8
-termination and wakes the native wait before calling Node's termination method.
-It stops controlled descendants as well. An owner exit hook handles uncaught
+The wait also blocks Node's host messages. `terminate()` first asks Node to mark
+its environment as stopping, then uses the host queue to interrupt V8 and wake
+the native wait. A thrown or immediately rejected Node termination request
+rejects the shared completion without that addon interruption. This preserves
+Node's shutdown bookkeeping when the request fails. Successful termination
+stops controlled descendants as well. An owner exit hook handles uncaught
 errors and explicit process exit before Node joins children; the hook exists
 only while that isolate owns controlled threads. Native cleanup hooks retire
 registrations without retaining disposed isolates. A separate Node owner that

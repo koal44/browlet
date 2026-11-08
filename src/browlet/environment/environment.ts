@@ -553,6 +553,8 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
       return;
     }
     // HTML permits reporting an unhandled exception to a developer console.
+    // SPEC_CLASH(shared-worker-runtime-errors): HTML/WebKit stop at the shared global;
+    // Chromium/Firefox also send ErrorEvents to its outside SharedWorker objects.
     console.error(exception);
   }
 

@@ -10,6 +10,7 @@ import { afterEach, assert, beforeEach, describe, expect, inject, it, vi } from 
 import { addon, JSThread, type JSThreadExit } from '../../../src/js-engine/index';
 import { utf8Encode } from '../../../src/encoding/index';
 import { BlobData, BlobImpl } from '../../../src/file/index';
+import { StorageKey } from '../../../src/storage/index';
 import { FetchHeaders, type FetchRequest } from '../../../src/fetch/index';
 import { queueNodeTask } from '../../../src/browlet/integration/host/index';
 import { createWindowEnvironment, createWorkerEnvironment } from '../../../src/browlet/integration/web-idl/index';
@@ -22,7 +23,9 @@ import {
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { BrowsingContext, DocumentState, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
 import { MessageChannelImpl, MessagePortImpl } from '../../../src/browlet/communication/index';
-import { WorkerImpl, WorkerThread, type WorkerThreadInit, type WorkerModuleScriptRequest } from '../../../src/browlet/workers/index';
+import {
+  SharedWorkerImpl, WorkerImpl, WorkerThread, type SharedWorkerOptions, type WorkerThreadInit, type WorkerModuleScriptRequest,
+} from '../../../src/browlet/workers/index';
 import type { Event, ErrorEvent, MessageChannel, MessageEvent, MessagePort, Window, Worker } from '../../../src/browlet/platform';
 import { PolicyContainer } from '../../../src/browlet/browsing/policy/index';
 import { ContentSecurityPolicy, CSPList } from '../../../src/browlet/browsing/policy/csp/index';
@@ -81,6 +84,59 @@ afterEach(async () => {
 // Each entry loads the compiled production graph in a fresh isolate. Source
 // compilation precedes test workers; native startup and all waits remain bounded.
 describe('Worker isolate startup host', { timeout: 30_000 }, () => {
+  it('registers and cancels animation frames for a Document-owned isolate', async () => {
+    const { thread, request } = createThread({ kind: 'dedicated', data: {} });
+    await thread.ready;
+    expect(await request({ type: 'animation-frame-registration' })).toEqual({
+      handle: 1, pending: true, canceled: true,
+    });
+  });
+
+  it.each(['dedicated', 'shared'] as const)('reads browser preferences through a %s worker navigator', async (kind) => {
+    const creatorEnv = createCreatorEnvironment();
+    const userAgent = creatorEnv.userAgent;
+    userAgent.navigatorPlatform = 'Test platform';
+    userAgent.defaultUserAgentValue = 'Mozilla/5.0 (worker preferences)';
+    userAgent.setPreferredLanguages(['fr-CA', 'en-US'], []);
+    userAgent.setOffline(true, []);
+    const { thread, request } = createThread({ kind, creatorEnv, data: {} });
+    await thread.ready;
+
+    expect(await request({ type: 'navigator-preferences' })).toEqual({
+      platform: 'Test platform', userAgent: 'Mozilla/5.0 (worker preferences)',
+      language: 'fr-CA', languages: ['fr-CA', 'en-US'], stableLanguages: true, frozenLanguages: true,
+      online: false,
+    });
+    userAgent.navigatorPlatform = 'Changed platform';
+    userAgent.defaultUserAgentValue = 'Mozilla/5.0 (changed preferences)';
+    userAgent.setOffline(false, []);
+    expect(await request({ type: 'navigator-preferences' })).toMatchObject({
+      platform: 'Changed platform', userAgent: 'Mozilla/5.0 (changed preferences)', online: true,
+      languages: ['fr-CA', 'en-US'], stableLanguages: true,
+    });
+  });
+
+  it.each(['dedicated', 'shared'] as const)('selects emulation for the %s worker instead of its creator', async (kind) => {
+    const creatorEnv = createCreatorEnvironment();
+    const userAgent = creatorEnv.userAgent;
+    const ua = vi.spyOn(userAgent, 'webDriverBiDiEmulatedUserAgent')
+      .mockImplementation((env) => env === creatorEnv ? 'creator UA' : 'worker UA');
+    const language = vi.spyOn(userAgent, 'webDriverBiDiEmulatedLanguage')
+      .mockImplementation((env) => env === creatorEnv ? 'en-US' : 'de');
+    const offline = vi.spyOn(userAgent, 'webDriverBiDiNetworkIsOffline')
+      .mockImplementation((env) => env !== creatorEnv);
+    const { thread, request } = createThread({ kind, creatorEnv, data: {} });
+    await thread.ready;
+
+    expect(await request({ type: 'navigator-preferences' })).toMatchObject({
+      userAgent: 'worker UA', language: 'de', languages: ['de'], online: false,
+      stableLanguages: true, frozenLanguages: true,
+    });
+    const workerEnvs = [ua, language, offline].map((spy) => spy.mock.calls.at(-1)![0]);
+    expect(workerEnvs[0]).not.toBe(creatorEnv);
+    expect(new Set(workerEnvs).size).toBe(1);
+  });
+
   it.each(['dedicated', 'shared'] as const)('reads the browser hardware count from a %s worker navigator', async (kind) => {
     const creatorEnv = createCreatorEnvironment();
     const count = vi.spyOn(creatorEnv.userAgent, 'hardwareConcurrency', 'get').mockReturnValue(2);
@@ -477,13 +533,6 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
         expect(Array.from(state).slice(3)).toEqual([0, 0, 0]);
       });
 
-      it('keeps shared-owner discovery an explicit prerequisite', async () => {
-        const { thread, request } = createThread({ kind: 'shared' });
-        await thread.ready;
-        expect(await request({ type: 'monitor-lifetime' })).toEqual({
-          errorMessage: 'Worker lifetime monitoring requires dedicated Document ownership',
-        });
-      });
     } else {
       it('keeps native suspension an explicit prerequisite on stock Node', async () => {
         const { thread, request } = createSuspensionWorker();
@@ -577,20 +626,28 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
     expect(thread.terminate()).toBe(completion);
   });
 
-  it('propagates a native termination failure through the shared internal completion', async () => {
+  it.each(['throw', 'reject'] as const)('propagates a native termination failure without interrupting the isolate: %s', async (mode) => {
     const { implementation, worker } = createTerminationWorker();
     const { thread } = createThread({ kind: 'dedicated', data: {}, worker: implementation });
     await thread.ready;
+    const state = new Int32Array(new SharedArrayBuffer(8));
+    thread.send({ type: 'block', state });
+    await vi.waitFor(() => { expect(Atomics.load(state, 0)).toBe(1); });
     assert(entry.worker !== null);
     const nativeThread = entry.worker;
     const failure = new Error('Native termination failed');
-    const terminate = vi.spyOn(nativeThread, 'terminate').mockRejectedValueOnce(failure);
+    const terminate = vi.spyOn(nativeThread, 'terminate').mockImplementationOnce(() => {
+      if (mode === 'throw') throw failure;
+      return Promise.reject(failure);
+    });
     try {
       const completion = thread.closed;
       expect(worker.terminate()).toBeUndefined();
       await expect(completion).rejects.toBe(failure);
       expect(thread.terminate()).toBe(completion);
       expect(terminate).toHaveBeenCalledOnce();
+      await delay(30);
+      expect(nativeThread.threadId).toBeGreaterThan(0);
     } finally {
       // The injected failure leaves the real isolate running. Stop it through
       // Node after observing the rejected host completion.
@@ -3367,6 +3424,833 @@ describe('Dedicated worker message channel across isolates', { timeout: 30_000 }
   });
 });
 
+describe('Public SharedWorker startup', { timeout: 30_000 }, () => {
+  if (JSThread.supportsSuspension) {
+    it.each(['classic', 'module'] as const)('starts a %s shared worker and preserves messages sent before discovery runs', async (type) => {
+      const { creatorEnv, drain } = createWorkerCreator();
+      mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
+        listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+        listener.onData(utf8Encode(`onconnect = event => {
+          const port = event.ports[0];
+          port.onmessage = message => { port.postMessage([name, message.data]); close(); };
+          port.postMessage('connected');
+        };`));
+        listener.onEnd();
+      });
+      const worker = new (creatorEnv.global as Window).SharedWorker('./shared.js', { type, name: 'public shared' });
+      const implementation = unwrap<SharedWorkerImpl>(worker);
+      expect(implementation.thread).toBeNull();
+      const messages: unknown[] = [];
+      worker.port.onmessage = (event) => { messages.push((event as MessageEvent).data); };
+      const data = { value: 42 };
+      worker.port.postMessage(data);
+      data.value = 0;
+      await vi.waitFor(() => { expect(implementation.thread).not.toBeNull(); });
+      const thread = implementation.thread!;
+      threads.add(thread);
+      await vi.waitFor(() => { drain(); expect(messages).toContain('connected'); }, { timeout: 15_000 });
+      await vi.waitFor(() => { drain(); expect(messages).toEqual(['connected', ['public shared', { value: 42 }]]); });
+      expect(await thread.closed).toMatchObject({ error: undefined, terminated: false });
+      expect(implementation.thread).toBeNull();
+      expect(creatorEnv.window.document.ownedWorkers).toEqual([]);
+    });
+    it('shares one pending execution between Windows and preserves each connection queue', async () => {
+      const first = createWorkerCreator();
+      const second = createWorkerCreator(createCreatorEnvironment('https://creator.test/other', first.creatorEnv.userAgent));
+      const transport = mockHTTPTransport(first.creatorEnv.userAgent, (_request, listener) => {
+        listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+        listener.onData(utf8Encode(`let connections = 0; onconnect = event => {
+          const port = event.ports[0], id = ++connections;
+          port.onmessage = message => port.postMessage([name, id, message.data]);
+        };`));
+        listener.onEnd();
+      });
+      const firstWorker = new (first.creatorEnv.global as Window).SharedWorker('./shared.js', 'room');
+      const secondWorker = new (second.creatorEnv.global as Window).SharedWorker('./shared.js', { name: 'room' });
+      const firstImpl = unwrap<SharedWorkerImpl>(firstWorker);
+      const secondImpl = unwrap<SharedWorkerImpl>(secondWorker);
+      const firstMessages: unknown[] = [];
+      const secondMessages: unknown[] = [];
+      firstWorker.port.onmessage = (event) => { firstMessages.push((event as MessageEvent).data); };
+      secondWorker.port.addEventListener('message', (event) => { secondMessages.push((event as MessageEvent).data); });
+      firstWorker.port.postMessage('first');
+      secondWorker.port.postMessage('second');
+      await vi.waitFor(() => { expect(firstImpl.thread).not.toBeNull(); });
+      const thread = firstImpl.thread!;
+      threads.add(thread);
+      expect(secondImpl.thread).toBe(thread);
+      await vi.waitFor(() => { first.drain(); second.drain(); expect(firstMessages).toHaveLength(1); }, { timeout: 15_000 });
+      expect(secondMessages).toEqual([]);
+      secondWorker.port.start();
+      await vi.waitFor(() => { second.drain(); expect(secondMessages).toHaveLength(1); });
+      expect(firstMessages[0]).toEqual(['room', expect.any(Number), 'first']);
+      expect(secondMessages[0]).toEqual(['room', expect.any(Number), 'second']);
+      expect(firstMessages[0]).not.toEqual(secondMessages[0]);
+      expect(transport).toHaveBeenCalledTimes(1);
+      expect(first.creatorEnv.window.document.ownedWorkers).toHaveLength(1);
+      expect(second.creatorEnv.window.document.ownedWorkers).toHaveLength(1);
+      firstWorker.port.close();
+      secondWorker.port.postMessage('still connected');
+      await vi.waitFor(() => { second.drain(); expect(secondMessages).toHaveLength(2); });
+      await thread.terminate();
+      expect(firstImpl.thread).toBeNull();
+      expect(secondImpl.thread).toBeNull();
+    });
+
+    it('queues ordinary mismatch errors without starting another execution or connecting the rejected ports', async () => {
+      const { creatorEnv, drain } = createWorkerCreator();
+      const transport = mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
+        listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+        listener.onData(utf8Encode('onconnect = event => event.ports[0].postMessage("connected");'));
+        listener.onEnd();
+      });
+      const window = creatorEnv.global as Window;
+      const first = new window.SharedWorker('./shared.js');
+      const firstImpl = unwrap<SharedWorkerImpl>(first);
+      const rejected = [
+        new window.SharedWorker('./shared.js', { type: 'module' }),
+        new window.SharedWorker('./shared.js', { credentials: 'include' }),
+        new window.SharedWorker('./shared.js', { extendedLifetime: true }),
+      ];
+      const errors: Event[] = [];
+      for (const worker of rejected) worker.onerror = (event) => { errors.push(event); };
+      expect(errors).toEqual([]);
+      await vi.waitFor(() => { expect(firstImpl.thread).not.toBeNull(); });
+      threads.add(firstImpl.thread!);
+      expect(errors).toEqual([]);
+      drain();
+      expect(errors.map((event) => event.target)).toEqual(rejected);
+      for (const event of errors) {
+        expect(event).toMatchObject({ type: 'error', isTrusted: true, cancelable: false, bubbles: false });
+        expect('message' in event).toBe(false);
+      }
+      for (const worker of rejected) {
+        const implementation = unwrap<SharedWorkerImpl>(worker);
+        expect(implementation.thread).toBeNull();
+        expect(implementation.port.isEntangledOutsideGlobal()).toBe(false);
+      }
+      const messages: unknown[] = [];
+      first.port.onmessage = (event) => { messages.push((event as MessageEvent).data); };
+      await vi.waitFor(() => { drain(); expect(messages).toEqual(['connected']); }, { timeout: 15_000 });
+      expect(transport).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['network', 'syntax', 'CSP', 'module graph'] as const)('reports a public shared worker %s failure and releases its association', async (failure) => {
+      const { creatorEnv, drain } = createWorkerCreator();
+      if (failure === 'CSP') {
+        creatorEnv.policyContainer.cspList = new CSPList(creatorEnv.origin);
+        creatorEnv.policyContainer.cspList.policies.push(ContentSecurityPolicy.parse("worker-src 'none'", 'header', 'enforce'));
+      }
+      mockHTTPTransport(creatorEnv.userAgent, (request, listener) => {
+        if (failure === 'network' || (failure === 'module graph' && serializeURL(request.url).endsWith('/missing.js'))) {
+          listener.onError(new Error('network failed')); return;
+        }
+        listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+        listener.onData(utf8Encode(failure === 'module graph' ? 'import "./missing.js";' : 'const = ;'));
+        listener.onEnd();
+      });
+      const worker = new (creatorEnv.global as Window).SharedWorker('./shared.js', { type: failure === 'module graph' ? 'module' : 'classic' });
+      const second = new (creatorEnv.global as Window).SharedWorker('./shared.js', { type: failure === 'module graph' ? 'module' : 'classic' });
+      const implementation = unwrap<SharedWorkerImpl>(worker);
+      const secondImpl = unwrap<SharedWorkerImpl>(second);
+      const errors: Event[] = [];
+      worker.onerror = (event) => { errors.push(event); };
+      second.onerror = (event) => { errors.push(event); };
+      await vi.waitFor(() => { expect(implementation.thread).not.toBeNull(); });
+      const thread = implementation.thread!;
+      threads.add(thread);
+      expect(secondImpl.thread).toBe(thread);
+      expect(await thread.closed).toMatchObject({ error: undefined, terminated: true });
+      expect(errors).toEqual([]);
+      expect(implementation.thread).toBeNull();
+      expect(secondImpl.thread).toBeNull();
+      expect(thread.reservedEnv.discarded).toBe(true);
+      expect(creatorEnv.window.document.ownedWorkers).toEqual([]);
+      drain();
+      expect(errors).toHaveLength(2);
+      expect(errors[0]).toMatchObject({ target: worker, type: 'error', isTrusted: true, cancelable: false });
+      expect(errors[1]).toMatchObject({ target: second, type: 'error', isTrusted: true, cancelable: false });
+      expect('message' in errors[0]!).toBe(false);
+    });
+
+    it('keeps the initial outside queue disabled until the author starts it', async () => {
+      const { creatorEnv, drain } = createWorkerCreator();
+      mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
+        listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+        listener.onData(utf8Encode('onconnect = event => { event.ports[0].postMessage("queued"); close(); };'));
+        listener.onEnd();
+      });
+      const worker = new (creatorEnv.global as Window).SharedWorker('./shared.js');
+      const implementation = unwrap<SharedWorkerImpl>(worker);
+      const messages: unknown[] = [];
+      worker.port.addEventListener('message', (event) => { messages.push((event as MessageEvent).data); });
+      await vi.waitFor(() => { expect(implementation.thread).not.toBeNull(); });
+      const thread = implementation.thread!;
+      threads.add(thread);
+      expect(await thread.closed).toMatchObject({ error: undefined, terminated: false });
+      drain();
+      expect(messages).toEqual([]);
+      worker.port.start();
+      await vi.waitFor(() => { drain(); expect(messages).toEqual(['queued']); });
+    });
+
+    it('starts a replacement if the selected execution closes before the port handoff', async () => {
+      const { creatorEnv, drain } = createWorkerCreator();
+      mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
+        listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+        listener.onData(utf8Encode('onconnect = event => { const port = event.ports[0]; port.onmessage = message => port.postMessage(message.data); };'));
+        listener.onEnd();
+      });
+      const window = creatorEnv.global as Window;
+      const first = new window.SharedWorker('./shared.js');
+      const firstImpl = unwrap<SharedWorkerImpl>(first);
+      await vi.waitFor(() => { expect(firstImpl.thread).not.toBeNull(); });
+      const previous = firstImpl.thread!;
+      threads.add(previous);
+      const manager = creatorEnv.userAgent.sharedWorkerManager;
+      const find = manager.find.bind(manager);
+      vi.spyOn(manager, 'find').mockImplementationOnce((...args) => {
+        const found = find(...args);
+        expect(found).toBe(previous);
+        void previous.terminate();
+        return found;
+      });
+      const queued: (() => void)[] = [];
+      vi.spyOn(creatorEnv.userAgent, 'runInParallel').mockImplementationOnce((steps) => { queued.push(steps); });
+      const worker = new window.SharedWorker('./shared.js');
+      const messages: unknown[] = [];
+      worker.port.onmessage = (event) => { messages.push((event as MessageEvent).data); };
+      worker.port.postMessage('kept through reselection');
+      expect(() => queued[0]!()).not.toThrow();
+      const thread = unwrap<SharedWorkerImpl>(worker).thread!;
+      threads.add(thread);
+      expect(thread).not.toBe(previous);
+      await vi.waitFor(() => { drain(); expect(messages).toEqual(['kept through reselection']); }, { timeout: 15_000 });
+    });
+
+    it.each([true, false])('reports runtime errors on the shared global and keeps its connections usable, canceled: %s', async (cancelInside) => {
+      const { creatorEnv, drain } = createWorkerCreator();
+      mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
+        listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+        listener.onData(utf8Encode(`let reported;
+          onerror = (message, filename, line, column, error) => { reported = [message, error instanceof Error]; return ${cancelInside}; };
+          onconnect = event => { event.ports[0].postMessage(reported); close(); };
+          throw new Error('shared runtime');`));
+        listener.onEnd();
+      });
+      const worker = new (creatorEnv.global as Window).SharedWorker('./shared.js');
+      const implementation = unwrap<SharedWorkerImpl>(worker);
+      const messages: unknown[] = [];
+      const errors: Event[] = [];
+      worker.onerror = (event) => { errors.push(event); };
+      worker.port.onmessage = (event) => { messages.push((event as MessageEvent).data); };
+      await vi.waitFor(() => { expect(implementation.thread).not.toBeNull(); });
+      const thread = implementation.thread!;
+      threads.add(thread);
+      expect(await thread.closed).toMatchObject({ error: undefined, terminated: false });
+      await vi.waitFor(() => { drain(); expect(messages).toEqual([['Error: shared runtime', true]]); });
+      expect(errors).toEqual([]);
+    });
+  } else {
+    it('rejects missing native suspension before allocating a public shared worker channel or execution', () => {
+      const { creatorEnv } = createWorkerCreator();
+      const worker = new SharedWorkerImpl(creatorEnv);
+      expect(() => worker.initialize('./shared.js', 'named')).toThrow('Worker script suspension requires the Node compatibility addon');
+      expect(worker.thread).toBeNull();
+      expect(worker.port.isEntangledOutsideGlobal()).toBe(false);
+      expect(entry.worker).toBeNull();
+    });
+  }
+});
+
+describe('Shared worker discovery across isolates', { timeout: 30_000 }, () => {
+  const options: SharedWorkerOptions = { name: 'shared', type: 'classic', credentials: 'same-origin', extendedLifetime: false };
+
+  it.runIf(JSThread.supportsSuspension)('serializes lookup and native creation before the next queued constructor, without waiting for readiness', async () => {
+    const creatorEnv = createCreatorEnvironment();
+    mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
+      listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+      listener.onData(utf8Encode('close();'));
+      listener.onEnd();
+    });
+    const turns: (() => void)[] = [];
+    vi.spyOn(creatorEnv.userAgent, 'runInParallel').mockImplementationOnce((steps) => { turns.push(steps); });
+    const manager = creatorEnv.userAgent.sharedWorkerManager;
+    expect(manager).toBe(creatorEnv.userAgent.sharedWorkerManager);
+    expect(turns).toHaveLength(0);
+    expect(entry.worker).toBeNull();
+    const window = creatorEnv.global as Window;
+    const first = unwrap<SharedWorkerImpl>(new window.SharedWorker('./shared.js', options));
+    const second = unwrap<SharedWorkerImpl>(new window.SharedWorker('./shared.js', options));
+    expect(first.thread).toBeNull();
+    expect(second.thread).toBeNull();
+    expect(entry.worker).toBeNull();
+    expect(turns).toHaveLength(1);
+    turns.shift()!();
+    const thread = first.thread!;
+    threads.add(thread);
+    expect(second.thread).toBe(thread);
+    expect(thread.reservedEnv.executionReady).toBe(false);
+    await thread.ready;
+  });
+
+  it('matches the constructor URL, name, and storage key only within the owning UserAgent', async () => {
+    const creatorEnv = createCreatorEnvironment();
+    const url = creatorEnv.encodingParseURL('./shared.js#first')!;
+    const { thread } = createThread({ kind: 'shared', creatorEnv, script: { url, ...options }, data: {} });
+    const manager = creatorEnv.userAgent.sharedWorkerManager;
+    const secondEnv = createCreatorEnvironment('https://creator.test/another', creatorEnv.userAgent);
+    const key = StorageKey.obtainForNonStoragePurposes(secondEnv);
+    expect(manager.find(parseURL('https://creator.test:443/shared.js#first').url!, options, key, true)).toBe(thread);
+    expect(manager.find(url, { ...options, name: 'other' }, key, true)).toBeNull();
+    expect(manager.find(creatorEnv.encodingParseURL('./other.js#first')!, options, key, true)).toBeNull();
+    expect(manager.find(creatorEnv.encodingParseURL('./shared.js#second')!, options, key, true)).toBeNull();
+    expect(manager.find(url, options, new StorageKey(obtainURLOrigin(parseURL('https://other.test/').url!)), true)).toBeNull();
+    expect(new UserAgent().sharedWorkerManager.find(url, options, key, true)).toBeNull();
+    await thread.ready;
+  });
+
+  it('rejects incompatible options or secure-context status instead of choosing a new identity', async () => {
+    const creatorEnv = createCreatorEnvironment();
+    const url = creatorEnv.encodingParseURL('./shared.js')!;
+    const { thread } = createThread({ kind: 'shared', creatorEnv, script: { url, ...options }, data: {} });
+    const manager = creatorEnv.userAgent.sharedWorkerManager;
+    const key = StorageKey.obtainForNonStoragePurposes(creatorEnv);
+    for (const change of [{ type: 'module' }, { credentials: 'include' }, { extendedLifetime: true }] satisfies Partial<SharedWorkerOptions>[]) {
+      expect(manager.find(url, { ...options, ...change }, key, true)).toBe('incompatible');
+    }
+    expect(manager.find(url, options, key, false)).toBe('incompatible');
+    expect(manager.find(url, options, key, true)).toBe(thread);
+    await thread.ready;
+  });
+
+  it.each(['https://creator.test/', 'data:text/html,creator'])('keeps a data worker in its creator partition (%s)', async (creatorURL) => {
+    const creatorEnv = createCreatorEnvironment(creatorURL);
+    creatorEnv.userAgent.storageEnabled = false;
+    const url = parseURL('data:text/javascript,').url!;
+    const { thread } = createThread({ kind: 'shared', creatorEnv, script: { url, ...options }, data: {} });
+    const manager = creatorEnv.userAgent.sharedWorkerManager;
+    const key = StorageKey.obtainForNonStoragePurposes(creatorEnv);
+    expect(manager.find(url, options, key, creatorEnv.isSecureContext)).toBe(thread);
+    expect(manager.find(url, options, new StorageKey(thread.reservedEnv.origin), creatorEnv.isSecureContext)).toBeNull();
+    if (key.origin.kind === 'opaque') {
+      expect(manager.find(url, options, new StorageKey(copyOrigin(key.origin)), creatorEnv.isSecureContext)).toBe(thread);
+      expect(manager.find(url, options, new StorageKey(createOpaqueOrigin()), creatorEnv.isSecureContext)).toBeNull();
+    }
+    await thread.ready;
+  });
+
+  it('keeps the original constructor URL after a redirected script response', async () => {
+    const creatorEnv = createCreatorEnvironment();
+    mockHTTPTransport(creatorEnv.userAgent, (request, listener) => {
+      if (serializeURL(request.url).endsWith('/shared.js')) {
+        listener.onHeaders(302, '', new FetchHeaders([['Location', '/final.js']]), false);
+      } else {
+        listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+        listener.onData(utf8Encode(''));
+      }
+      listener.onEnd();
+    });
+    const url = creatorEnv.encodingParseURL('./shared.js')!;
+    const { thread, request } = createThread({
+      kind: 'shared', creatorEnv, script: { url, ...options }, data: { initializeScriptResponse: true },
+    });
+    await thread.ready;
+    expect(await request({ type: 'fetch-script' })).toMatchObject({ initialized: { url: 'https://creator.test/final.js' } });
+    const key = StorageKey.obtainForNonStoragePurposes(creatorEnv);
+    expect(creatorEnv.userAgent.sharedWorkerManager.find(url, options, key, true)).toBe(thread);
+    expect(creatorEnv.userAgent.sharedWorkerManager.find(creatorEnv.encodingParseURL('./final.js')!, options, key, true)).toBeNull();
+  });
+
+  it('excludes a closing global while its current script still runs', async () => {
+    const creatorEnv = createCreatorEnvironment();
+    const url = creatorEnv.encodingParseURL('./shared.js')!;
+    const { thread } = createThread({ kind: 'shared', creatorEnv, script: { url, ...options }, data: {} });
+    await thread.ready;
+    const state = new Int32Array(new SharedArrayBuffer(8));
+    const key = StorageKey.obtainForNonStoragePurposes(creatorEnv);
+    thread.send({ type: 'close-shared-and-block', state });
+    try {
+      await vi.waitFor(() => { expect(Atomics.load(state, 0)).toBe(1); });
+      expect(creatorEnv.userAgent.sharedWorkerManager.find(url, options, key, true)).toBeNull();
+      expect(() => { thread.connectSharedPort(new MessagePortImpl(creatorEnv)); }).toThrow('Worker thread is not running');
+    } finally {
+      Atomics.store(state, 1, 1);
+    }
+    expect(await thread.closed).toEqual({ code: 0, error: undefined, terminated: false });
+  });
+
+  it('drops a failed startup so a later execution can occupy the same identity', async () => {
+    const creatorEnv = createCreatorEnvironment();
+    const url = creatorEnv.encodingParseURL('./shared.js')!;
+    const key = StorageKey.obtainForNonStoragePurposes(creatorEnv);
+    const { thread } = createThread({ kind: 'shared', creatorEnv, script: { url, ...options }, data: { mode: 'throw-before-ready' } });
+    await expect(thread.ready).rejects.toThrow('bootstrap failed');
+    await thread.closed;
+    expect(creatorEnv.userAgent.sharedWorkerManager.find(url, options, key, true)).toBeNull();
+    const replacement = createThread({ kind: 'shared', creatorEnv, script: { url, ...options }, data: {} });
+    expect(creatorEnv.userAgent.sharedWorkerManager.find(url, options, key, true)).toBe(replacement.thread);
+    await replacement.thread.ready;
+    const closed = replacement.thread.terminate();
+    expect(creatorEnv.userAgent.sharedWorkerManager.find(url, options, key, true)).toBeNull();
+    await closed;
+  });
+
+  it('does not discover a dedicated execution with matching script inputs', async () => {
+    const creatorEnv = createCreatorEnvironment();
+    const url = creatorEnv.encodingParseURL('./shared.js')!;
+    const { thread } = createThread({ kind: 'dedicated', creatorEnv, script: { url, ...options }, data: {} });
+    expect(creatorEnv.userAgent.sharedWorkerManager.find(url, options, StorageKey.obtainForNonStoragePurposes(creatorEnv), true)).toBeNull();
+    await thread.ready;
+  });
+});
+
+describe('Shared worker connections across isolates', { timeout: 30_000 }, () => {
+  it('queues separate connect events until initial execution and leaves each port queue disabled', async () => {
+    const first = createSharedWorkerClient();
+    const second = createSharedWorkerClient(createCreatorEnvironment('https://creator.test/second', first.creatorEnv.userAgent));
+    const { thread, request } = createThread({ kind: 'shared', creatorEnv: first.creatorEnv, data: {} });
+    thread.connectSharedPort(first.implementation.port);
+    thread.connectSharedPort(second.implementation.port);
+    first.port.postMessage({ client: 1 });
+    second.port.postMessage({ client: 2 });
+    await thread.ready;
+    expect(await request({ type: 'inspect-shared-connections' })).toEqual({
+      connections: 0, messages: 0, ports: 2, executionReady: false,
+    });
+
+    await request({ type: 'prepare-shared-connections' });
+    await vi.waitFor(async () => {
+      expect(await request({ type: 'inspect-shared-connections' })).toEqual({
+        connections: 2, messages: 0, ports: 2, executionReady: true,
+      });
+    });
+    first.drain();
+    second.drain();
+    expect(first.messages).toEqual([]);
+    expect(second.messages).toEqual([]);
+
+    first.port.start();
+    second.port.start();
+    await vi.waitFor(() => {
+      first.drain();
+      second.drain();
+      expect(first.messages).toEqual([{
+        id: 1, connected: true, data: '', source: true, frozen: true, trusted: true, target: true, realm: true,
+      }]);
+      expect(second.messages).toEqual([{
+        id: 2, connected: true, data: '', source: true, frozen: true, trusted: true, target: true, realm: true,
+      }]);
+    });
+    expect(Object.getPrototypeOf(first.messages[0])).toBe(first.creatorEnv.realm.objectPrototype);
+    expect(Object.getPrototypeOf(second.messages[0])).toBe(second.creatorEnv.realm.objectPrototype);
+
+    await request({ type: 'start-shared-port', index: 0 });
+    await vi.waitFor(() => { first.drain(); expect(first.messages).toHaveLength(2); });
+    second.drain();
+    expect(first.messages[1]).toEqual({ id: 1, value: { client: 1 }, realm: true });
+    expect(second.messages).toHaveLength(1);
+    expect(await request({ type: 'inspect-shared-connections' })).toMatchObject({ messages: 1 });
+    await request({ type: 'start-shared-port', index: 1 });
+    await vi.waitFor(() => { second.drain(); expect(second.messages).toHaveLength(2); });
+    expect(second.messages[1]).toEqual({ id: 2, value: { client: 2 }, realm: true });
+  });
+
+  it('accepts a later client and keeps it connected when another client closes its port', async () => {
+    const first = createSharedWorkerClient();
+    const second = createSharedWorkerClient(createCreatorEnvironment('https://creator.test/second', first.creatorEnv.userAgent));
+    const { thread, request } = createThread({ kind: 'shared', creatorEnv: first.creatorEnv, data: {} });
+    await thread.ready;
+    await request({ type: 'prepare-shared-connections' });
+    thread.connectSharedPort(first.implementation.port);
+    first.port.start();
+    await vi.waitFor(() => { first.drain(); expect(first.messages).toHaveLength(1); });
+    thread.connectSharedPort(second.implementation.port);
+    second.port.start();
+    await vi.waitFor(() => { second.drain(); expect(second.messages).toHaveLength(1); });
+    expect(second.messages[0]).toMatchObject({ id: 2, connected: true });
+    await request({ type: 'start-shared-port', index: 1 });
+
+    first.port.close();
+    await vi.waitFor(async () => {
+      expect(await request({ type: 'inspect-shared-connections' })).toMatchObject({ ports: 1 });
+    });
+    second.port.postMessage({ stillConnected: true });
+    await vi.waitFor(() => { second.drain(); expect(second.messages).toHaveLength(2); });
+    expect(second.messages[1]).toEqual({ id: 2, value: { stillConnected: true }, realm: true });
+  });
+
+  it('releases pending connections when the global closes before initial execution', async () => {
+    const client = createSharedWorkerClient();
+    const { thread, request } = createThread({ kind: 'shared', creatorEnv: client.creatorEnv, data: {} });
+    thread.connectSharedPort(client.implementation.port);
+    await thread.ready;
+    expect(await request({ type: 'inspect-shared-connections' })).toMatchObject({ ports: 1, connections: 0 });
+    expect(await request({ type: 'close-shared-worker' })).toBe('closing');
+    expect(await thread.closed).toEqual({ code: 0, error: undefined, terminated: false });
+    await vi.waitFor(() => { expect(client.implementation.port.isEntangledOutsideGlobal()).toBe(false); });
+    expect(client.messages).toEqual([]);
+  });
+
+  it.each([false, true])('disconnects all native client ports on forced teardown, initial execution: %s', async (ready) => {
+    const client = createSharedWorkerClient();
+    const second = createSharedWorkerClient(client.creatorEnv);
+    const { thread, request } = createThread({ kind: 'shared', creatorEnv: client.creatorEnv, data: {} });
+    thread.connectSharedPort(client.implementation.port);
+    thread.connectSharedPort(second.implementation.port);
+    await thread.ready;
+    if (ready) {
+      await request({ type: 'prepare-shared-connections' });
+      await vi.waitFor(async () => {
+        expect(await request({ type: 'inspect-shared-connections' })).toMatchObject({ connections: 2 });
+      });
+    }
+    expect(await thread.terminate()).toMatchObject({ terminated: true, error: undefined });
+    await vi.waitFor(() => {
+      expect(client.implementation.port.isEntangledOutsideGlobal()).toBe(false);
+      expect(second.implementation.port.isEntangledOutsideGlobal()).toBe(false);
+    });
+    expect(() => { thread.connectSharedPort(client.implementation.port); }).toThrow('Worker thread is not running');
+  });
+
+  it('disconnects an early connection when native startup fails', async () => {
+    const client = createSharedWorkerClient();
+    const { thread } = createThread({ kind: 'shared', creatorEnv: client.creatorEnv, data: { mode: 'throw-before-ready' } });
+    thread.connectSharedPort(client.implementation.port);
+    await expect(thread.ready).rejects.toThrow('bootstrap failed');
+    expect(await thread.closed).toMatchObject({ error: { message: 'bootstrap failed' }, terminated: false });
+    await vi.waitFor(() => { expect(client.implementation.port.isEntangledOutsideGlobal()).toBe(false); });
+  });
+
+  it('closes a failed native handoff without poisoning the shared execution', async () => {
+    const client = createSharedWorkerClient();
+    const { thread, request } = createThread({ kind: 'shared', creatorEnv: client.creatorEnv, data: {} });
+    await thread.ready;
+    await request({ type: 'prepare-shared-connections' });
+    const failure = new Error('Shared connection handoff failed');
+    const send = vi.spyOn(JSThread.prototype, 'send').mockImplementationOnce(() => { throw failure; });
+    expect(() => { thread.connectSharedPort(client.implementation.port); }).toThrow(failure);
+    send.mockRestore();
+    expect(client.implementation.port.isEntangledOutsideGlobal()).toBe(false);
+    thread.connectSharedPort(client.implementation.port);
+    client.port.start();
+    await vi.waitFor(() => { client.drain(); expect(client.messages).toHaveLength(1); });
+    expect(client.messages[0]).toMatchObject({ id: 1, connected: true });
+  });
+});
+
+describe('Shared worker Document ownership across isolates', { timeout: 30_000 }, () => {
+  it('deduplicates owners, keeps ownership after port close, and survives another Document being destroyed', async () => {
+    const first = createSharedWorkerClient();
+    const second = createSharedWorkerClient(createCreatorEnvironment('https://creator.test/second', first.creatorEnv.userAgent));
+    const firstDocument = first.creatorEnv.window.document;
+    const secondDocument = second.creatorEnv.window.document;
+    const manager = first.creatorEnv.userAgent.sharedWorkerManager;
+    const { thread, request } = createThread({ kind: 'shared', creatorEnv: first.creatorEnv });
+    const registration = firstDocument.ownedWorkers[0]!;
+    expect([...registration.ownerSet]).toEqual([firstDocument]);
+    manager.connect(thread, first.implementation.port);
+    manager.connect(thread, second.implementation.port);
+    const extraPort = new MessagePortImpl(first.creatorEnv);
+    manager.connect(thread, extraPort);
+    expect(firstDocument.ownedWorkers).toEqual([registration]);
+    expect(secondDocument.ownedWorkers).toEqual([registration]);
+    expect([...registration.ownerSet]).toEqual([firstDocument, secondDocument]);
+    first.port.close();
+    extraPort.close();
+    expect(registration.ownerSet.has(firstDocument)).toBe(true);
+
+    await thread.ready;
+    await request({ type: 'prepare-shared-connections' });
+    await vi.waitFor(async () => {
+      expect(await request({ type: 'inspect-shared-connections' })).toMatchObject({ connections: 3 });
+    });
+    first.creatorEnv.queueTask('dom-manipulation', () => { firstDocument.destroy(); });
+    first.drain();
+    expect([...registration.ownerSet]).toEqual([secondDocument]);
+    expect(thread.closing).toBe(false);
+    second.port.start();
+    await request({ type: 'start-shared-port', index: 1 });
+    second.port.postMessage({ client: 'surviving' });
+    await vi.waitFor(() => {
+      second.drain();
+      expect(second.messages).toContainEqual({ id: 2, value: { client: 'surviving' }, realm: true });
+    });
+
+    await thread.terminate();
+    expect(registration.ownerSet.size).toBe(0);
+    expect(firstDocument.ownedWorkers).toEqual([]);
+    expect(secondDocument.ownedWorkers).toEqual([]);
+  });
+
+  it('lets Document destruction remove every shared registration without skipping a neighboring worker', async () => {
+    const client = createSharedWorkerClient();
+    const document = client.creatorEnv.window.document;
+    const workers = (['shared', 'dedicated', 'shared'] as const).map((kind) => createThread({
+      kind, creatorEnv: client.creatorEnv,
+    }).thread);
+    const registrations = [...document.ownedWorkers];
+    expect(registrations).toHaveLength(3);
+    await Promise.all(workers.map((thread) => thread.ready));
+    client.creatorEnv.queueTask('dom-manipulation', () => { document.destroy(); });
+    client.drain();
+    expect(registrations.every((registration) => registration.ownerSet.size === 0)).toBe(true);
+    await Promise.all(workers.map((thread) => thread.terminate()));
+    expect(document.ownedWorkers).toEqual([]);
+  });
+
+  it.each(['startup failure', 'inside close', 'termination'] as const)('releases every owner after %s', async (ending) => {
+    const first = createSharedWorkerClient();
+    const second = createSharedWorkerClient(createCreatorEnvironment('https://creator.test/second', first.creatorEnv.userAgent));
+    const { thread, request } = createThread({
+      kind: 'shared', creatorEnv: first.creatorEnv,
+      data: ending === 'startup failure' ? { mode: 'throw-before-ready' } : {},
+    });
+    first.creatorEnv.userAgent.sharedWorkerManager.connect(thread, second.implementation.port);
+    const registration = first.creatorEnv.window.document.ownedWorkers[0]!;
+    expect(registration.ownerSet.size).toBe(2);
+    if (ending === 'startup failure') {
+      await expect(thread.ready).rejects.toThrow('bootstrap failed');
+    } else {
+      await thread.ready;
+      if (ending === 'inside close') await request({ type: 'close-shared-worker' });
+      else await thread.terminate();
+    }
+    await thread.closed;
+    expect(first.creatorEnv.window.document.ownedWorkers).toEqual([]);
+    expect(second.creatorEnv.window.document.ownedWorkers).toEqual([]);
+    expect(registration.ownerSet.size).toBe(0);
+    expect(() => { first.creatorEnv.userAgent.sharedWorkerManager.connect(thread, second.implementation.port); })
+      .toThrow('Shared worker connection requires the owning browser manager');
+  });
+
+  it('does not retain a new owner when a handoff fails or the client belongs to another browser', async () => {
+    const first = createSharedWorkerClient();
+    const second = createSharedWorkerClient(createCreatorEnvironment('https://creator.test/second', first.creatorEnv.userAgent));
+    const foreign = createSharedWorkerClient();
+    const manager = first.creatorEnv.userAgent.sharedWorkerManager;
+    const { thread } = createThread({ kind: 'shared', creatorEnv: first.creatorEnv });
+    await thread.ready;
+    const failure = new Error('Shared handoff failed');
+    const send = vi.spyOn(JSThread.prototype, 'send').mockImplementationOnce(() => { throw failure; });
+    expect(() => { manager.connect(thread, second.implementation.port); }).toThrow(failure);
+    send.mockRestore();
+    expect(second.creatorEnv.window.document.ownedWorkers).toEqual([]);
+    expect(second.implementation.port.isEntangledOutsideGlobal()).toBe(false);
+    expect(() => { manager.connect(thread, foreign.implementation.port); })
+      .toThrow('Shared worker connection requires the owning browser manager');
+    expect(() => { foreign.creatorEnv.userAgent.sharedWorkerManager.connect(thread, first.implementation.port); })
+      .toThrow('Shared worker connection requires the owning browser manager');
+    expect(foreign.creatorEnv.window.document.ownedWorkers).toEqual([]);
+    manager.connect(thread, second.implementation.port);
+    expect(second.creatorEnv.window.document.ownedWorkers).toHaveLength(1);
+  });
+});
+
+describe('Shared worker lifetime monitoring across isolates', { timeout: 30_000 }, () => {
+  it('publishes combined activity and releases removed Documents without treating a closed port as owner removal', async () => {
+    const worker = createSharedLifetimeWorker();
+    await worker.thread.ready;
+    worker.setActive(0, false);
+    expect(await worker.inspect()).toEqual({ extended: false, activelyNeeded: true, permissible: true, suspendable: false });
+    worker.secondPort.close();
+    expect(worker.ownerSet.size).toBe(2);
+    worker.setActive(1, false);
+    expect(await worker.inspect()).toEqual({ extended: false, activelyNeeded: false, permissible: true, suspendable: true });
+    worker.ownerSet.delete(worker.documents[0]);
+    worker.setActive(0, true);
+    expect(await worker.inspect()).toMatchObject({ activelyNeeded: false });
+    worker.setActive(1, true);
+    expect(await worker.inspect()).toMatchObject({ activelyNeeded: true });
+    await worker.thread.terminate();
+    const update = vi.spyOn(worker.thread, 'updateSharedLifetime');
+    worker.setActive(1, false);
+    expect(update).not.toHaveBeenCalled();
+    expect(worker.pendingTimers()).toBe(0);
+  });
+
+  it('uses the latest inactive owner deadline and restarts the extension after reconnecting', async () => {
+    const worker = createSharedLifetimeWorker(true);
+    await worker.thread.ready;
+    expect(await worker.inspect()).toMatchObject({ extended: false, activelyNeeded: true });
+    worker.advanceTo(100);
+    worker.setActive(0, false);
+    worker.advanceTo(120);
+    worker.setActive(1, false);
+    worker.advanceTo(219);
+    expect(await worker.inspect()).toMatchObject({ extended: true, activelyNeeded: true });
+    worker.advanceTo(220);
+    expect(await worker.inspect()).toMatchObject({ extended: false, suspendable: true });
+    worker.advanceTo(230);
+    worker.setActive(0, true);
+    expect(await worker.inspect()).toMatchObject({ extended: false, activelyNeeded: true });
+    worker.advanceTo(250);
+    worker.setActive(0, false);
+    expect(await worker.inspect()).toMatchObject({ extended: true });
+    worker.advanceTo(300);
+    worker.ownerSet.clear();
+    worker.advanceTo(350);
+    worker.setActive(0, true);
+    worker.userAgent.sharedWorkerManager.connect(worker.thread, new MessagePortImpl(worker.documents[0].env));
+    expect(await worker.inspect()).toMatchObject({ extended: false, activelyNeeded: true });
+    worker.advanceTo(360);
+    worker.ownerSet.clear();
+    worker.advanceTo(459);
+    expect(await worker.inspect()).toMatchObject({ extended: true, permissible: true });
+    worker.advanceTo(460);
+    expect(await worker.inspect()).toEqual({ extended: false, activelyNeeded: false, permissible: false, suspendable: false });
+    expect(worker.pendingTimers()).toBe(0);
+  });
+
+  it.each(['deadline', 'load completion'] as const)('ends between-loads permission at %s', async (ending) => {
+    const worker = createSharedLifetimeWorker();
+    const loading = TopLevelTraversable.create(worker.userAgent, null, '').activeDocument!;
+    // Initial about:blank is already completely loaded; model a subsequent loading Document.
+    loading.completelyLoadedTime = null;
+    await worker.thread.ready;
+    worker.advanceTo(100);
+    worker.ownerSet.clear();
+    expect(await worker.inspect()).toEqual({ extended: false, activelyNeeded: false, permissible: true, suspendable: true });
+    if (ending === 'deadline') {
+      worker.advanceTo(300);
+      expect(await worker.inspect()).toMatchObject({ permissible: true });
+      worker.advanceTo(301);
+    } else {
+      loading.completelyFinishLoading();
+    }
+    expect(await worker.inspect()).toMatchObject({ permissible: false, suspendable: false });
+    expect(worker.pendingTimers()).toBe(0);
+  });
+
+  it('rechecks an existing extension immediately when the browser shortens its timeout policy', async () => {
+    const worker = createSharedLifetimeWorker(true);
+    await worker.thread.ready;
+    worker.setActive(0, false);
+    worker.setActive(1, false);
+    worker.advanceTo(50);
+    expect(await worker.inspect()).toMatchObject({ extended: true });
+    worker.userAgent.serviceWorkerWithoutClientsTimeout = 40;
+    expect(await worker.inspect()).toMatchObject({ extended: false, suspendable: true });
+    expect(worker.pendingTimers()).toBe(0);
+  });
+
+  it.each(['termination', 'startup failure'] as const)('cancels an outstanding lifetime deadline after %s', async (ending) => {
+    const worker = createSharedLifetimeWorker(true, ending === 'startup failure' ? { mode: 'throw-before-ready' } : {});
+    worker.setActive(0, false);
+    worker.setActive(1, false);
+    expect(worker.pendingTimers()).toBe(1);
+    if (ending === 'startup failure') await expect(worker.thread.ready).rejects.toThrow('bootstrap failed');
+    else await worker.thread.terminate();
+    await worker.thread.closed;
+    expect(worker.pendingTimers()).toBe(0);
+    const update = vi.spyOn(worker.thread, 'updateSharedLifetime');
+    worker.advanceTo(1000);
+    worker.setActive(1, true);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  if (JSThread.supportsSuspension) {
+    it('pauses running script only after all owners become inactive and resumes for a new active client', async () => {
+      const worker = createSharedLifetimeWorker();
+      const third = TopLevelTraversable.create(worker.userAgent, worker.documents[0].browsingContext, '').activeDocument!;
+      third.completelyFinishLoading();
+      const state = new Int32Array(new SharedArrayBuffer(24));
+      await worker.thread.ready;
+      expect(await worker.request({ type: 'monitor-lifetime' })).toBe('monitoring');
+      const result = worker.request({ type: 'run-suspendable-script', state, entry: 'reaction' });
+      await vi.waitFor(() => { expect(Atomics.load(state, 0)).toBe(1); });
+      worker.setActive(0, false);
+      let progress = Atomics.load(state, 2);
+      await vi.waitFor(() => { expect(Atomics.load(state, 2)).not.toBe(progress); });
+      expect(worker.thread.suspended).toBe(false);
+      worker.setActive(1, false);
+      await vi.waitFor(() => { expect(worker.thread.suspended).toBe(true); });
+      progress = Atomics.load(state, 2);
+      await delay(30);
+      expect(Atomics.load(state, 2)).toBe(progress);
+      expect(Array.from(state).slice(3)).toEqual([0, 0, 0]);
+      worker.userAgent.sharedWorkerManager.connect(worker.thread, new MessagePortImpl(third.env));
+      await vi.waitFor(() => { expect(Atomics.load(state, 2)).not.toBe(progress); });
+      Atomics.store(state, 1, 1);
+      expect(await result).toEqual({ order: ['finally', 'return', 'sibling', 'dependent'], activelyNeeded: true });
+    });
+
+    it('holds startup while all owners are inactive, then admits its original continuation', async () => {
+      const worker = createSharedLifetimeWorker();
+      const state = new Int32Array(new SharedArrayBuffer(24));
+      worker.setActive(0, false);
+      worker.setActive(1, false);
+      await worker.thread.ready;
+      const result = worker.request({ type: 'monitor-lifetime', state });
+      await vi.waitFor(() => { expect(worker.thread.suspended).toBe(true); });
+      expect(Atomics.load(state, 0)).toBe(0);
+      Atomics.store(state, 1, 1);
+      worker.setActive(1, true);
+      expect(await result).toEqual({ order: ['finally', 'return'], activelyNeeded: true });
+    });
+
+    it('expires an ownerless extension into suspension and wakes for closing when loading ends', async () => {
+      const worker = createSharedLifetimeWorker(true);
+      const loading = TopLevelTraversable.create(worker.userAgent, null, '').activeDocument!;
+      loading.completelyLoadedTime = null;
+      const state = new Int32Array(new SharedArrayBuffer(24));
+      await worker.thread.ready;
+      await worker.request({ type: 'monitor-lifetime' });
+      void worker.request({ type: 'run-suspendable-script', state, entry: 'reaction' });
+      await vi.waitFor(() => { expect(Atomics.load(state, 0)).toBe(1); });
+      worker.ownerSet.clear();
+      worker.advanceTo(99);
+      const progress = Atomics.load(state, 2);
+      await vi.waitFor(() => { expect(Atomics.load(state, 2)).not.toBe(progress); });
+      expect(worker.thread.suspended).toBe(false);
+      worker.advanceTo(100);
+      await vi.waitFor(() => { expect(worker.thread.suspended).toBe(true); });
+      expect(worker.thread.closing).toBe(false);
+      Atomics.store(state, 1, 1);
+      loading.completelyFinishLoading();
+      expect(worker.thread.closing).toBe(true);
+      expect(await worker.thread.closed).toEqual({ code: 0, error: undefined, terminated: false });
+      expect(Array.from(state).slice(3)).toEqual([1, 1, 1]);
+      expect(worker.pendingTimers()).toBe(0);
+    });
+
+    it('closes at the between-loads deadline and terminates a suspended execution directly', async () => {
+      const worker = createSharedLifetimeWorker();
+      const loading = TopLevelTraversable.create(worker.userAgent, null, '').activeDocument!;
+      loading.completelyLoadedTime = null;
+      await worker.thread.ready;
+      await worker.request({ type: 'monitor-lifetime' });
+      worker.ownerSet.clear();
+      // The native interrupt is entered at the next V8 entry; an idle isolate
+      // need not wake merely to pause code that is not executing.
+      worker.thread.send({ type: 'echo', data: 'queued while inactive' });
+      await vi.waitFor(() => { expect(worker.thread.suspended).toBe(true); });
+      worker.advanceTo(200);
+      expect(worker.thread.closing).toBe(false);
+      worker.advanceTo(201);
+      expect(await worker.thread.closed).toEqual({ code: 0, error: undefined, terminated: false });
+
+      const second = createSharedLifetimeWorker();
+      await second.thread.ready;
+      await second.request({ type: 'monitor-lifetime' });
+      second.setActive(0, false);
+      second.setActive(1, false);
+      second.thread.send({ type: 'echo', data: 'queued before termination' });
+      await vi.waitFor(() => { expect(second.thread.suspended).toBe(true); });
+      expect(await second.thread.terminate()).toMatchObject({ terminated: true, error: undefined });
+      expect(second.documents.every((document) => document.ownedWorkers.length === 0)).toBe(true);
+    });
+  } else {
+    it('keeps native suspension explicit for shared startup on stock Node', async () => {
+      const worker = createSharedLifetimeWorker();
+      await worker.thread.ready;
+      expect(await worker.request({ type: 'monitor-lifetime' })).toEqual({
+        errorMessage: 'Worker script suspension requires the Node compatibility addon',
+      });
+    });
+  }
+});
+
 describe('MessagePort transfer across isolates', { timeout: 30_000 }, () => {
   it('moves queued and in-flight messages, retaining start gating and receiving-realm identity', async () => {
     const { worker, creatorEnv, messages, receive, drain } = await createMessagingWorker(undefined, true);
@@ -3744,6 +4628,52 @@ async function loadWorkerResponse(
   return request({ type: 'fetch-script' });
 }
 
+/** Real Window owners with a controllable browser clock; the isolate still uses its native execution loop. */
+function createSharedLifetimeWorker(extendedLifetime = false, data: object = {}) {
+  const userAgent = createManualUserAgent();
+  let now = 0;
+  const timers = new Map<() => void, number>();
+  vi.spyOn(userAgent, 'unsafeSharedCurrentTime').mockImplementation(() => now);
+  userAgent.serviceWorkerWithoutClientsTimeout = 100;
+  userAgent.betweenLoadsSharedWorkerTimeout = 200;
+  userAgent.timerHost = {
+    scheduleTimeout(milliseconds, steps) {
+      timers.set(steps, now + milliseconds);
+      return { remove: () => { timers.delete(steps); } };
+    },
+  };
+  const first = TopLevelTraversable.create(userAgent, null, '').activeDocument!;
+  const second = TopLevelTraversable.create(userAgent, first.browsingContext, '').activeDocument!;
+  const documents = [first, second] as const;
+  const contexts = documents.map((document) => document.browsingContext);
+  for (const document of documents) document.completelyFinishLoading();
+  const worker = createThread({
+    kind: 'shared', creatorEnv: first.env, data,
+    script: { url: parseURL('https://creator.test/worker.js').url!, type: 'classic', credentials: 'same-origin', name: '', extendedLifetime },
+  });
+  const secondPort = new MessagePortImpl(second.env);
+  userAgent.sharedWorkerManager.connect(worker.thread, secondPort);
+  return {
+    ...worker, documents, userAgent, secondPort, ownerSet: first.ownedWorkers[0]!.ownerSet,
+    inspect: () => worker.request({ type: 'inspect-shared-lifetime' }),
+    pendingTimers: () => timers.size,
+    setActive(index: 0 | 1, active: boolean): void {
+      documents[index].browsingContext = active ? contexts[index]! : null;
+      documents[index].notifyFullyActiveStateChanged();
+    },
+    advanceTo(time: number): void {
+      for (;;) {
+        const next = [...timers].sort((a, b) => a[1] - b[1])[0];
+        if (next === undefined || next[1] > time) break;
+        now = next[1];
+        timers.delete(next[0]);
+        next[0]();
+      }
+      now = time;
+    },
+  };
+}
+
 /** Observe a real Document while the worker executes through its composed environment. */
 function createSuspensionWorker(active = true) {
   const document = TopLevelTraversable.create(createManualUserAgent(), null, '').activeDocument!;
@@ -3769,6 +4699,16 @@ function createWorkerCreator(creatorEnv = createCreatorEnvironment()) {
     traversable, creatorEnv,
     drain: () => { while (creatorEnv.responsibleEventLoop.runTaskTurn()) { /* Drain runnable outside work. */ } },
   };
+}
+
+/** Public SharedWorker port without invoking the still-unimplemented discovery manager. */
+function createSharedWorkerClient(env = createCreatorEnvironment()) {
+  const creator = createWorkerCreator(env);
+  const implementation = new SharedWorkerImpl(env);
+  const port = env.project(implementation.port) as MessagePort;
+  const messages: unknown[] = [];
+  port.addEventListener('message', (event) => { messages.push((event as MessageEvent).data); });
+  return { ...creator, implementation, port, messages };
 }
 
 /** Public construction and real script execution; only HTTP response bytes are controlled. */

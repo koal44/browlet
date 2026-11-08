@@ -1,4 +1,3 @@
-import { InternalError } from '../../infra/index';
 import {
   arg, atArg, ctor, defineDictionary, defineIncludes, defineInterface, dictMember, DOMExceptionImpl,
   emptyDictionary, idlType, impl, reference, roAttr, union,
@@ -12,6 +11,7 @@ import type { BrowletEnvironment } from '../environment/index';
 
 import { AbstractWorkerMixin } from './abstract-worker';
 import type { WorkerOptions } from './worker';
+import type { WorkerThread } from './thread';
 
 /** Outside shared-worker connection; author messages belong to its exposed port. */
 // https://html.spec.whatwg.org/multipage/workers.html#shared-workers-and-the-sharedworker-interface
@@ -19,6 +19,8 @@ export class SharedWorkerImpl extends EventTargetImpl {
   declare env: BrowletEnvironment;
   /** Stable connection endpoint, initially disconnected with its message queue disabled. */
   port: MessagePortImpl;
+  /** Associated execution in the browser isolate, installed by discovery and cleared on exit. */
+  thread: WorkerThread | null = null;
   /** Only error events target the outside object; message events target its port. */
   override eventHandlers: EventHandlerMap = new EventHandlerMap(this, AbstractWorkerMixin.handlerDefinitions);
   /** Shared outside-object handler behavior, distinct from the global's five-argument onerror. */
@@ -37,20 +39,21 @@ export class SharedWorkerImpl extends EventTargetImpl {
 
   /** Apply the synchronous constructor checks after Web IDL has converted both arguments. */
   // https://html.spec.whatwg.org/multipage/workers.html#dom-sharedworker
-  initialize(scriptURL: TrustedScriptURLImpl | string, _options: string | SharedWorkerOptions): void {
+  initialize(scriptURL: TrustedScriptURLImpl | string, options: string | SharedWorkerOptions): void {
     const compliantScriptURL = this.env.getWindowOrWorkerGlobalScopeMixin().trustedTypes.getCompliantString(
       'TrustedScriptURL', scriptURL, 'SharedWorker constructor', 'script',
     );
+    if (typeof options === 'string') options = { name: options, type: 'classic', credentials: 'same-origin', extendedLifetime: false };
     const workerURL = this.env.encodingParseURL(compliantScriptURL);
     if (workerURL === null) throw new DOMExceptionImpl('Invalid SharedWorker URL', 'SyntaxError');
-    // TODO(HTML §§10.2.4, 10.2.6.4): The UserAgent's shared-worker manager must
-    // normalize a string name to option defaults, capture the creator's non-storage
-    // storage key and secure-context state, then serialize discovery/connection.
-    // Match constructor URL/name/key, reject incompatible options asynchronously,
-    // and reuse this port for an existing global or a new independent execution.
-    // Startup and shared-service transport remain explicit dependencies; do not
-    // return an apparently connected SharedWorker or invent a local-only registry.
-    throw new InternalError('Shared worker discovery and startup are not implemented');
+    this.env.userAgent.sharedWorkerManager.start(this, workerURL, options);
+  }
+
+  /** Constructor mismatch and script-load failures dispatch an ordinary event on the outside global's loop. */
+  // SPEC_CLASH(shared-worker-load-error-cancelability): Follow HTML/Firefox's
+  // noncancelable event; Chromium makes load/parse errors cancelable, WebKit only load errors.
+  queueError(): void {
+    this.env.queueTask('dom-manipulation', () => { this.fireEvent('error'); });
   }
 }
 

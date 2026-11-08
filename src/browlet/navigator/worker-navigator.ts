@@ -38,6 +38,9 @@ export class WorkerNavigatorImpl {
 
   get onLine(): boolean { return this.#navigatorOnLineMixin.onLine; }
 
+  /** Use the owning browser's processor count, including when it lives in another isolate. */
+  get hardwareConcurrency(): number { return this.env.userAgent.hardwareConcurrency; }
+
   /** Queue selected language tags on this worker before their source changes. */
   queueLanguageChange(tags: readonly [string, ...string[]], emulationUpdated = false): void {
     this.#navigatorLanguageMixin.queueLanguageChange(tags, emulationUpdated);
@@ -48,8 +51,6 @@ export class WorkerNavigatorImpl {
     this.#navigatorOnLineMixin.queueOnlineStateChange(wasOnline);
   }
 
-  /** Use the owning browser's processor count, including when it lives in another isolate. */
-  get hardwareConcurrency(): number { return this.env.userAgent.hardwareConcurrency; }
 }
 
 /*
