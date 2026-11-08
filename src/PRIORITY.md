@@ -257,7 +257,14 @@ now reads the existing shared cookie policy. §8.10.1.6's
 [PDF compatibility objects](browlet/navigator/ROADMAP.md#pdf-compatibility) now
 reuse navigation's support flag, defaulting to no viewer. Actual PDF rendering,
 external handoff, live viewer-preference updates, and the deferred CSSOM View work
-remain separate. The next document-order section is §8.11 Images.
+remain separate. §8.11.1's [ImageData](graphics/ROADMAP.md#imagedata) now supplies
+both pixel formats, all current color-space labels, constructor validation, and
+cloning with preserved buffer aliases. Window and worker exposure use existing
+bindings. §8.11.2's [ImageBitmap lifetime](graphics/ROADMAP.md#imagebitmap-lifetime)
+now supplies owned pixels, dimensions, close, origin-clean checks, cloning, and
+transfer. Next is in-memory source preparation/formatting for createImageBitmap;
+the author factory, decoding, color conversion, and canvas consumers remain
+explicit dependencies.
 Source/deferred imports and the HTML Wasm parser remain explicit boundaries.
 Later host-hook algorithms must be connected before judging
 the complete model; the uncertain cross-realm observer test is skipped.
@@ -327,8 +334,9 @@ property or referenced specification first.
 When Stylelet work resumes, continue from step 1. The
 [CSSOM review order](stylelet/cssom/ROADMAP.md#next-review-order) bounds this detour;
 [subsystem roadmaps](stylelet/ROADMAP.md#source-organization) keep later dependencies
-visible. Geometry, fonts, graphics, animation, and layout have roadmap-only
-homes; concrete APIs and backend choices remain open. Stylelet stays host-neutral,
+visible. Geometry, fonts, animation, and layout have roadmap-only
+homes. Graphics now supplies ImageData; its decoding/rendering backend remains
+open. Stylelet stays host-neutral,
 and Browlet composes document lifecycle, policy, scheduling, and Platform bindings.
 
 ## Dependency order

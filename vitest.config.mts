@@ -33,6 +33,7 @@ export default defineConfig({
             'test/encoding/**/*.test.ts',
             'test/http/**/*.test.ts',
             'test/file/**/*.test.ts',
+            'test/graphics/**/*.test.ts',
             'test/fetch/**/*.test.ts',
             'test/url/**/*.test.ts',
             'test/permissions/**/*.test.ts',

@@ -5,6 +5,10 @@
 /** Inherit static properties; each interface supplies its own construction, prototype, and brand. */
 type Ctor<T> = Omit<T, 'prototype' | typeof Symbol.hasInstance>;
 
+export type PredefinedColorSpace = "srgb" | "srgb-linear" | "display-p3" | "display-p3-linear";
+
+export type ImageDataPixelFormat = "rgba-unorm8" | "rgba-float16";
+
 export type DocumentReadyState = "loading" | "interactive" | "complete";
 
 export type DocumentVisibilityState = "visible" | "hidden";
@@ -75,6 +79,8 @@ export type BufferSource = Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | In
 
 export type AllowSharedBufferSource = ArrayBuffer | SharedArrayBuffer | Int8Array<ArrayBufferLike> | Int16Array<ArrayBufferLike> | Int32Array<ArrayBufferLike> | Uint8Array<ArrayBufferLike> | Uint16Array<ArrayBufferLike> | Uint32Array<ArrayBufferLike> | Uint8ClampedArray<ArrayBufferLike> | BigInt64Array<ArrayBufferLike> | BigUint64Array<ArrayBufferLike> | Float16Array<ArrayBufferLike> | Float32Array<ArrayBufferLike> | Float64Array<ArrayBufferLike> | DataView<ArrayBufferLike>;
 
+export type ImageDataArray = Uint8ClampedArray<ArrayBuffer> | Float16Array<ArrayBuffer>;
+
 export type HTMLOrSVGScriptElement = HTMLScriptElement | SVGScriptElement;
 
 export type ClipboardItemData = string | Blob | PromiseLike<string | Blob>;
@@ -128,6 +134,11 @@ export interface WindowProxy extends Window {
 export interface QuotaExceededErrorOptions {
   quota?: number;
   requested?: number;
+}
+
+export interface ImageDataSettings {
+  colorSpace?: PredefinedColorSpace;
+  pixelFormat?: ImageDataPixelFormat;
 }
 
 export interface ShowPopoverOptions {
@@ -979,6 +990,32 @@ export interface QuotaExceededErrorConstructor extends Ctor<DOMExceptionConstruc
   readonly prototype: QuotaExceededError;
   [Symbol.hasInstance](value: unknown): value is QuotaExceededError;
   new (message?: string, options?: QuotaExceededErrorOptions): QuotaExceededError;
+}
+
+export interface ImageData {
+  readonly width: number;
+  readonly height: number;
+  readonly data: Uint8ClampedArray<ArrayBuffer> | Float16Array<ArrayBuffer>;
+  readonly pixelFormat: ImageDataPixelFormat;
+  readonly colorSpace: PredefinedColorSpace;
+}
+
+export interface ImageDataConstructor {
+  readonly prototype: ImageData;
+  [Symbol.hasInstance](value: unknown): value is ImageData;
+  new (sw: number, sh: number, settings?: ImageDataSettings): ImageData;
+  new (data: Uint8ClampedArray<ArrayBuffer> | Float16Array<ArrayBuffer>, sw: number, sh?: number, settings?: ImageDataSettings): ImageData;
+}
+
+export interface ImageBitmap {
+  readonly width: number;
+  readonly height: number;
+  close(): void;
+}
+
+export interface ImageBitmapConstructor {
+  readonly prototype: ImageBitmap;
+  [Symbol.hasInstance](value: unknown): value is ImageBitmap;
 }
 
 export interface HTMLAllCollection {
@@ -3226,6 +3263,8 @@ export interface DedicatedWorkerGlobalScope extends WorkerGlobalScope {
   onmessageerror: EventHandlerNonNull | null;
   DOMException: DOMExceptionConstructor;
   QuotaExceededError: QuotaExceededErrorConstructor;
+  ImageData: ImageDataConstructor;
+  ImageBitmap: ImageBitmapConstructor;
   CustomElementRegistry: CustomElementRegistryConstructor;
   Origin: OriginConstructor;
   ReportBody: ReportBodyConstructor;
@@ -3308,6 +3347,8 @@ export interface SharedWorkerGlobalScope extends WorkerGlobalScope {
   onconnect: EventHandlerNonNull | null;
   DOMException: DOMExceptionConstructor;
   QuotaExceededError: QuotaExceededErrorConstructor;
+  ImageData: ImageDataConstructor;
+  ImageBitmap: ImageBitmapConstructor;
   CustomElementRegistry: CustomElementRegistryConstructor;
   Origin: OriginConstructor;
   ReportBody: ReportBodyConstructor;
@@ -3618,6 +3659,8 @@ export interface Window extends EventTarget {
   readonly localStorage: Storage;
   DOMException: DOMExceptionConstructor;
   QuotaExceededError: QuotaExceededErrorConstructor;
+  ImageData: ImageDataConstructor;
+  ImageBitmap: ImageBitmapConstructor;
   HTMLAllCollection: HTMLAllCollectionConstructor;
   CustomElementRegistry: CustomElementRegistryConstructor;
   ElementInternals: ElementInternalsConstructor;

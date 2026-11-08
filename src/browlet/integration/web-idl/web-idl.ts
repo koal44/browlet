@@ -5,6 +5,7 @@ import { urlIDLDefinitions } from '../../../url/index';
 import { permissionsIDLDefinitions } from '../../../permissions/index';
 import { storageIDLDefinitions } from '../../../storage/index';
 import { fileIDLDefinitions } from '../../../file/index';
+import { graphicsIDLDefinitions } from '../../../graphics/index';
 import { xhrIDLDefinitions } from '../../../xhr/index';
 import { fetchIDLDefinitions } from '../../../fetch/index';
 import { styleletIDLDefinitions } from '../../../stylelet/index';
@@ -76,6 +77,7 @@ import { fileReaderIDL, objectURLIDL } from '../file/index';
 
 /** Declarations combined by Browlet's binding world, also available for development validation. */
 export const browletDefinitions = [
+  ...graphicsIDLDefinitions,
   documentReadyStateIDL,
   documentVisibilityStateIDL,
   htmlOrSVGScriptElementIDL,

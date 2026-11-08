@@ -23,6 +23,7 @@ export const layers = [
   ['http/', 'storage/'],
   ['mime/'],
   ['file/'],
+  ['graphics/'],
   ['xhr/'],
   ['fetch/'],
   ['stylelet/syntax/'],

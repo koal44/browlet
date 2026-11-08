@@ -21,6 +21,7 @@
     { "path": "../permissions" },
     { "path": "../storage" },
     { "path": "../file" },
+    { "path": "../graphics" },
     { "path": "../xhr" },
     { "path": "../fetch" },
     { "path": "../http" },

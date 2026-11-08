@@ -1260,6 +1260,30 @@ destroyed Document.
 See the [data API boundary](browlet/interaction/drag-drop/ROADMAP.md)
 and [Clipboard event slice](browlet/interaction/clipboard/ROADMAP.md).
 
+## Image data and graphics
+
+[ImageData](graphics/ROADMAP.md#imagedata) stores RGBA pixel arrays and metadata;
+it does not decode images, convert color values, render pixels, or implement a
+canvas consumer. Both pixel formats and all four current HTML color-space
+labels are exposed in Windows and workers. Half-float allocation requires the
+existing realm Float16Array intrinsic; a host without it reaches an explicit
+InternalError instead of receiving another representation.
+
+Supplied arrays retain their identity and realm. Structured cloning preserves
+view offsets and aliases through the existing graph memory, following the
+approved HTML/Firefox rule rather than Chromium/WebKit's separate pixel copy.
+Only the backing ArrayBuffer is transferable. Detached pixels cannot be cloned
+or passed to the data constructor. Worker-realm cloning is available internally;
+worker forwarding of the public structuredClone API remains HTML §10.3 work.
+
+[ImageBitmap's lifetime surface](graphics/ROADMAP.md#imagebitmap-lifetime) supplies
+dimensions, close, cloning, and transfer for prepared owned pixels. Closed and
+tainted bitmaps reject cloning/transfer; successful transfer clears the sender.
+There is no author constructor, and createImageBitmap remains unexposed until
+its source and formatting flow is implemented. Source extraction, decoding,
+canvas readback, and rendering remain explicit in the
+[dependency map](browlet/graphics/ROADMAP.md#imagebitmap-creation-dependencies).
+
 ## HTML integration gates
 
 - **Element content handlers retain explicit dependencies.** HTML, SVG, and MathML

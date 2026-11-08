@@ -1121,13 +1121,26 @@ decide when navigation may jump ahead.
 | Native I/O, clocks, scheduling, or unavailable engine primitive | Narrow Host Port, composed by the embedder |
 
 Planned shared engines have roadmap-only owners: [geometry](geometry/ROADMAP.md),
-[fonts](fonts/ROADMAP.md), [graphics](graphics/ROADMAP.md),
+[fonts](fonts/ROADMAP.md),
 [animation](animation/ROADMAP.md), and [layout](layout/ROADMAP.md). They own their
 data and algorithms; Browlet connects document state, policy, scheduling, and
 presentation. Stylelet owns CSS processing and [Typed OM](stylelet/cssom/typed/ROADMAP.md).
 These folders establish responsibility, not new Environment/Context APIs.
 Style/layout feedback needs explicit update ordering and invalidation, not
 reciprocal engine imports or ambient service discovery.
+
+[Graphics](graphics/ROADMAP.md) now owns ImageData's pixel storage and neutral
+Web IDL declarations. Its existing `JSEnvironment` supplies realm intrinsics for
+fresh arrays; supplied arrays retain their identity. Serialization steps share
+HTML's graph memory, including pixel-view offsets and buffer aliases. Browlet
+composes Window/worker exposure through its ordinary definitions. This does not
+introduce a graphics Environment or select a decoding/rendering backend.
+
+ImageBitmap owns a prepared RGBA byte record with dimensions, format/color/alpha
+metadata, and origin-clean state. Its interface steps copy that record for
+serialization or move it for transfer; close releases it. The record is portable
+data with no source environment or decoder handle. Source extraction, formatting,
+and async factory orchestration remain with the future graphics/HTML producers.
 
 [Browlet's bindings](browlet/integration/web-idl/composition.ts) and
 [integration modules](browlet/integration/README.md) are explicit composition
