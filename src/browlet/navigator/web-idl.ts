@@ -8,6 +8,7 @@ import { navigatorIDL } from './navigator';
 import { navigatorIDIDL } from './identification';
 import { navigatorLanguageIDL } from './language';
 import { navigatorOnLineIDL } from './online';
+import { navigatorContentUtilsIDL } from './protocol-handler';
 import { workerNavigatorIDL } from './worker-navigator';
 
 // TODO(HTML §10): Worker NavigatorStorage and workerNavigatorPermissionsIDL need worker settings/startup.
@@ -17,6 +18,7 @@ export const navigatorIDLDefinitions: Definition<BrowletEnvironment>[] = [
   navigatorIDIDL,
   navigatorLanguageIDL,
   navigatorOnLineIDL,
+  navigatorContentUtilsIDL,
   navigatorPermissionsIDL,
   navigatorClipboardIDL,
   defineIncludes({ interface: 'Navigator', mixin: 'NavigatorID' }),
@@ -25,5 +27,6 @@ export const navigatorIDLDefinitions: Definition<BrowletEnvironment>[] = [
   defineIncludes({ interface: 'WorkerNavigator', mixin: 'NavigatorLanguage' }),
   defineIncludes({ interface: 'Navigator', mixin: 'NavigatorOnLine' }),
   defineIncludes({ interface: 'WorkerNavigator', mixin: 'NavigatorOnLine' }),
+  defineIncludes({ interface: 'Navigator', mixin: 'NavigatorContentUtils' }),
   defineIncludes({ interface: 'Navigator', mixin: 'NavigatorStorage' }),
 ];

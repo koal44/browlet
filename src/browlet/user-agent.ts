@@ -36,7 +36,7 @@ import { PolicyContainer, HSTSStore, EmbedderPolicy, type SandboxingFlagSet } fr
 import type { IntersectionObserverMargin } from './dom/intersection-observer/index';
 import type { DocumentImpl, ElementImpl } from './dom/nodes/index';
 import type { PerformanceNavigationTimingImpl, PerformanceTimingConfidenceValue } from './performance/index';
-import type { NavigatorImpl, WorkerNavigatorImpl } from './navigator/index';
+import { ProtocolHandlerRegistry, type NavigatorImpl, type WorkerNavigatorImpl } from './navigator/index';
 import type { BroadcastChannelImpl } from './communication/index';
 import type { StorageImpl } from './storage/index';
 import type { SourceSnapshotParams } from './browsing/navigation/state/index';
@@ -199,6 +199,8 @@ export class UserAgent implements
   #pointerLock: PointerLock | null = null;
   /** System clipboard notification identity belongs to this UserAgent and is allocated only when used. */
   #systemClipboard: SystemClipboard | null = null;
+  /** Protocol-handler decisions are allocated only when registration is used. */
+  #protocolHandlers: ProtocolHandlerRegistry | null = null;
   /** Suppress another print operation while print events or the print host are running. */
   #printing = false;
   /** Ordered valid BCP 47 tags; the default is a deliberate plausible-language policy. */
@@ -222,6 +224,10 @@ export class UserAgent implements
 
   get systemClipboard(): SystemClipboard {
     return this.#systemClipboard ??= new SystemClipboard();
+  }
+
+  get protocolHandlers(): ProtocolHandlerRegistry {
+    return this.#protocolHandlers ??= new ProtocolHandlerRegistry(this);
   }
 
   /** Preferences for new globals; existing navigators publish changes through their queued tasks. */
@@ -292,6 +298,35 @@ export class UserAgent implements
     for (const navigator of navigators) previousStates.set(navigator, navigator.onLine);
     this.assumeNoInternetConnectivity = offline;
     for (const [navigator, wasOnline] of previousStates) navigator.queueOnlineStateChange(wasOnline);
+  }
+
+  /** Receive an already-normalized registration request from the Navigator's parallel steps. */
+  // https://html.spec.whatwg.org/multipage/system-state.html#protocol-handler-registration
+  registerProtocolHandler(scheme: string, url: URLRecord, document: DocumentImpl): void {
+    this.protocolHandlers.register(scheme, url, document).observe(() => undefined, (error) => { throw error; });
+  }
+
+  /** Remove an already-normalized handler through the browser's registration owner. */
+  // https://html.spec.whatwg.org/multipage/system-state.html#dom-navigator-unregisterprotocolhandler
+  unregisterProtocolHandler(scheme: string, url: URLRecord, _document: DocumentImpl): void {
+    this.#protocolHandlers?.unregister(scheme, url);
+  }
+
+  /** Obtain a consent decision without storing it or selecting a default handler. */
+  // https://html.spec.whatwg.org/multipage/system-state.html#security-and-privacy
+  requestProtocolHandlerConsent(_scheme: string, _url: URLRecord, _document: DocumentImpl): InternalPromise<boolean> {
+    // TODO(Protocol handler host): Apply admission/admin policy and cross-site/many-handler
+    // spam controls; present untrusted metadata safely, including nulls, escape characters,
+    // and long strings without obscuring rejection controls. Resolve consent without
+    // automatically choosing a default; exact-pair deduplication alone is not this UI policy.
+    throw new InternalError('Protocol handler consent is not implemented');
+  }
+
+  /** Require a verified automation context before honoring a Document's automatic decision. */
+  verifyProtocolHandlerAutomation(_document: DocumentImpl): void {
+    // TODO(WebDriver): Verify the controlling active session and its automation context.
+    // A Document mode alone, or a locally constructed WebDriverSession, is not that proof.
+    throw new InternalError('Protocol handler automation verification is not implemented');
   }
 
   /** Recheck live results after a decision or feature-specific constraint changes. */
@@ -494,6 +529,9 @@ export class UserAgent implements
   shouldHandleURLExternally(_url: URLRecord): boolean {
     // TODO(HTML §7.4.2.3.4/§8.10.1.4): Compose handler selection with the host's protocol support and
     // registered web handlers. Unsupported schemes may need an inline error or handler-selection page.
+    // Registration must not choose defaults automatically. Apply administrator restrictions on
+    // handler destinations before disclosing input URLs; selected web handlers need invocation's
+    // destination/navigation integration rather than an OS handoff merely because they are registered.
     throw new InternalError('External URL handler selection is not implemented');
   }
 

@@ -2148,7 +2148,26 @@ events on each affected global's networking task source. Its producer supplies
 complete recipients and previous effective state for scoped emulation updates.
 OS network monitoring, BiDi connectivity change routing, and cross-isolate
 notifications remain explicit dependencies; the default assumes connectivity.
-Hardware concurrency remains unfinished. `importScripts()` throws
+Secure Window Navigators expose
+[NavigatorContentUtils](browlet/navigator/ROADMAP.md#custom-scheme-handlers): both
+protocol-handler methods synchronously validate and normalize their arguments,
+then queue browser-owned registration/removal. Those UserAgent operations
+now retain exact-pair candidates and declined decisions in a lazy registry for
+one UserAgent's lifetime. Duplicate pending requests share consent; removal
+invalidates a late decision and forgets that pair. Each Document has the specified
+automation mode, defaulting to `none`. Consent UI and automation verification
+remain named throwing dependencies; setting the mode alone cannot bypass them.
+Accepted pairs can prepare an invocation URL by stripping input credentials from
+a copy, component-encoding its serialization, and replacing the first `%s`.
+The WebDriver mode command validates decoded JSON and updates the selected active
+Document, but its session-admission and current-context dependencies still throw.
+HTTP routing and session lifecycle are not implemented. Durable storage, default
+selection, OS integration, and actual handler navigation remain unfinished.
+The [closing audit](browlet/navigator/ROADMAP.md#closing-custom-handler-audit)
+also assigns cross-site registration-spam policy, safe consent UI, and optional
+administrator restrictions to those unfinished hosts. Remembering a pair and
+preparing its URL do not complete these policies or automatically select a default.
+Workers do not expose these methods. Hardware concurrency remains unfinished. `importScripts()` throws
 at its explicit synchronous-loading boundary. Dedicated/shared realm and settings
 composition is available internally, including initial ownership and separate resource
 state. It leaves execution readiness false and still runs on the caller's thread.

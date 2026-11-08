@@ -3021,6 +3021,8 @@ export interface Navigator {
   readonly language: string;
   readonly languages: ReadonlyArray<string>;
   readonly onLine: boolean;
+  registerProtocolHandler(scheme: string, url: string): void;
+  unregisterProtocolHandler(scheme: string, url: string): void;
   readonly storage: StorageManager;
 }
 

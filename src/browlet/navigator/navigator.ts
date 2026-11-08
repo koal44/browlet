@@ -8,10 +8,11 @@ import type { BrowletEnvironment } from '../environment/index';
 import { NavigatorIDMixin } from './identification';
 import { NavigatorLanguageMixin } from './language';
 import { NavigatorOnLineMixin } from './online';
+import { NavigatorContentUtilsMixin } from './protocol-handler';
 
 /** Stable Window navigator identity; independent specifications contribute its capabilities. */
 // https://html.spec.whatwg.org/multipage/system-state.html#the-navigator-object
-// TODO(HTML §8.10): Protocol handlers, cookies, and plugins.
+// TODO(HTML §8.10): Cookies and plugins; protocol handler registration has explicit owner dependencies.
 export class NavigatorImpl {
   /** Relevant settings, shared with this Navigator's owning Window. */
   env: BrowletEnvironment;
@@ -21,6 +22,8 @@ export class NavigatorImpl {
   #navigatorLanguageMixin: NavigatorLanguageMixin;
   /** Live connectivity getter and queued transition notifications. */
   #navigatorOnLineMixin: NavigatorOnLineMixin;
+  /** Custom scheme validation and browser-owned registration requests. */
+  #navigatorContentUtilsMixin: NavigatorContentUtilsMixin;
   #clipboard: ClipboardImpl | null = null;
 
   constructor(env: BrowletEnvironment) {
@@ -28,6 +31,7 @@ export class NavigatorImpl {
     this.#navigatorIDMixin = new NavigatorIDMixin(env);
     this.#navigatorLanguageMixin = new NavigatorLanguageMixin(env);
     this.#navigatorOnLineMixin = new NavigatorOnLineMixin(env);
+    this.#navigatorContentUtilsMixin = new NavigatorContentUtilsMixin(env);
   }
 
   get appCodeName(): string { return this.#navigatorIDMixin.appCodeName; }
@@ -78,6 +82,14 @@ export class NavigatorImpl {
   /** Queue a transition after the producer changes the connectivity/emulation source. */
   queueOnlineStateChange(wasOnline: boolean): void {
     this.#navigatorOnLineMixin.queueOnlineStateChange(wasOnline);
+  }
+
+  registerProtocolHandler(scheme: string, url: string): void {
+    this.#navigatorContentUtilsMixin.registerProtocolHandler(scheme, url);
+  }
+
+  unregisterProtocolHandler(scheme: string, url: string): void {
+    this.#navigatorContentUtilsMixin.unregisterProtocolHandler(scheme, url);
   }
 }
 

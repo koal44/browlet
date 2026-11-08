@@ -383,11 +383,16 @@ review of its observer and translation of HTML's examples; see the
 [audit record](browlet/scripting/ROADMAP.md#html-8133-explicit-context-experiment).
 There is no native interception of arbitrary author frames.
 
-`UserAgent.webDriver` owns the BiDi remote-end command algorithms, whose completion
-uses `InternalPromise` through `UserAgent.HostPromise`. `PageEvaluation`
-owns Browlet's Node convenience API above that boundary. Its existing local source
-evaluator remains in use until the driver's Await operation, protocol values,
-and target/session lifecycles are connected. Retained classic execution now runs
+`UserAgent.webDriver` owns the remote-end command algorithms. BiDi script completion
+uses `InternalPromise` through `UserAgent.HostPromise`. HTML's classic Set RPH
+Registration Mode command instead takes decoded JSON and an explicit session,
+then returns synchronous success/error records. Its session-admission check
+precedes HTML's parameter validation; current-context lookup follows validation.
+Both remain throwing dependencies, with HTTP routing and session lifecycle still
+unimplemented. `PageEvaluation` owns Browlet's Node convenience API above the
+driver boundary. Its existing local source evaluator remains in use until the
+driver's Await operation, protocol values, and target/session lifecycles are
+connected. Retained classic execution now runs
 through JSRealm on both stock and addon contexts. Navigation currently notifies
 the local evaluation clients through a UserAgent-owned weak map; cancellation and
 Node callback reinstallation are convenience behavior, not BiDi events. The
@@ -1340,6 +1345,22 @@ selection and confirmation/handoff methods are explicit unfinished host boundari
 they do not invoke operating-system handlers. Inline browser-page creation remains
 a separate Document-creation dependency. Population must connect these operations
 on the destination's navigation-and-traversal task after checking its navigation ID.
+
+`UserAgent.protocolHandlers` lazily owns Navigator's `ProtocolHandlerRegistry`.
+It remembers exact normalized scheme/template pairs for that UserAgent's lifetime,
+including declined requests. Pending consent uses the browser's `HostPromise`;
+settled entries retain only their decision and string keys, without a Document or
+realm. Removal invalidates an outstanding decision by entry identity, so a late
+result cannot restore the removed handler or change a replacement request.
+Each Document owns its protocol-handler automation mode. The registry requires
+the explicit automation-verification hook before honoring a non-default mode.
+Consent UI, a verified WebDriver session, durable storage, default selection,
+OS integration, and navigation are separate unfinished dependencies. Accepting a
+candidate does not select it as a default or hand anything to the OS. After a
+caller selects an accepted pair, the registry's `getInvocationURL()` prepares
+the destination using URL's existing copy, credential setters, component encoder,
+serializer, and parser. It preserves the input/template records and performs no
+navigation. The external-handler chooser remains an explicit throwing boundary.
 
 [`import-hierarchy.mjs`](../scripts/eslint/import-hierarchy.mjs) records the reviewed
 folder order for import layout and dependency review. Every entry ends in `/`

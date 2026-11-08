@@ -1,9 +1,10 @@
-import { InternalError, internalType, type InternalPromise } from '../../infra/index';
+import { InternalError, internalType, type InternalPromise, type JSONValue } from '../../infra/index';
 import { isCallable, isPromiseObject, randomUUID } from '../../js-engine/index';
 import type { URLRecord } from '../../url/index';
 
 import { ClassicScript, ScriptFetchOptions, type BrowletRealm, type ScriptCompletion } from '../scripting/index';
 import type { BrowletEnvironment } from '../environment/index';
+import type { BrowsingContext } from '../browsing/navigation/index';
 import type { UserAgent } from '../user-agent';
 
 import type {
@@ -11,7 +12,7 @@ import type {
   LocalValue, RemoteValue, ResultOwnership, ScriptTarget, SerializationOptions, StepResult,
 } from './protocol';
 
-/** WebDriver BiDi remote-end algorithms, independent of Browlet's Node convenience API. */
+/** WebDriver remote-end algorithms, independent of Browlet's Node convenience API. */
 export class WebDriver {
   userAgent: UserAgent;
   #realmIds = new WeakMap<BrowletRealm, string>();
@@ -112,6 +113,49 @@ export class WebDriver {
         };
       }, undefined, internalType<EvaluateResult>());
     }, internalType<EvaluateResult | CommandError>());
+  }
+
+  /**
+   * Execute HTML's classic WebDriver extension with decoded JSON parameters.
+   * Request admission precedes the command body; HTTP parsing/routing remains separate.
+   */
+  // https://html.spec.whatwg.org/multipage/system-state.html#set-rph-registration-mode
+  setRPHRegistrationMode(parameters: JSONValue, session: WebDriverSession): StepResult<null> {
+    // WebDriver request admission, not part of HTML's six command steps.
+    // https://w3c.github.io/webdriver/#processing-model
+    const admission = this.checkActiveSession(session);
+    if (admission.type === 'error') return admission;
+
+    if (parameters === null || typeof parameters !== 'object' || Array.isArray(parameters)) {
+      return { type: 'error', error: 'invalid argument', message: 'Parameters must be a JSON object' };
+    }
+    const mode = parameters['mode'];
+    if (mode !== 'autoAccept' && mode !== 'autoReject' && mode !== 'none') {
+      return { type: 'error', error: 'invalid argument', message: 'mode must be autoAccept, autoReject, or none' };
+    }
+    const context = this.getCurrentBrowsingContext(session);
+    if (context.type === 'error') return context;
+    const document = context.data.activeDocument;
+    if (document === null) throw new InternalError('WebDriver current browsing context has no active Document');
+    document.protocolHandlerAutomationMode = mode;
+    return { type: 'success', data: null };
+  }
+
+  /** Admit an active session controlled by this remote end, or return its protocol error. */
+  // https://w3c.github.io/webdriver/#processing-model
+  checkActiveSession(_session: WebDriverSession): StepResult<null> {
+    // TODO(WebDriver sessions/request dispatch): Resolve the route's session ID, verify
+    // ownership and active HTTP membership, and recheck admission on the request queue.
+    // A locally constructed session identity is not evidence of a live session.
+    throw new InternalError('WebDriver active session admission is not implemented');
+  }
+
+  /** Resolve this session's selected live context, including its current frame selection. */
+  // https://w3c.github.io/webdriver/#dfn-current-browsing-context
+  getCurrentBrowsingContext(_session: WebDriverSession): StepResult<BrowsingContext> {
+    // TODO(WebDriver context lifecycle): Track context handles, frame/window switching,
+    // and closure; resolve the admitted session's current context or its protocol error.
+    throw new InternalError('WebDriver current browsing context lookup is not implemented');
   }
 
   /** Resolve protocol context/realm IDs; never accept a Navigable as a protocol target. */

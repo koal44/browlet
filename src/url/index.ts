@@ -13,4 +13,4 @@ export {
 } from './origin';
 export { hostsEqual, obtainPublicSuffix, parseHost } from './host';
 export { parseFormUrlEncoded } from './form-url-encoded';
-export { percentDecodeString, percentEncodeByte } from './percent-encoding';
+export { percentDecodeString, percentEncodeByte, utf8PercentEncode } from './percent-encoding';

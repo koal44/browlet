@@ -21,10 +21,14 @@ export type EvaluateResult =
   | { type: 'success'; result: RemoteValue; realm: string; }
   | { type: 'exception'; exceptionDetails: ExceptionDetails; realm: string; };
 
-/** Protocol errors currently needed by the script algorithms; command envelopes are separate. */
-export type CommandError = { type: 'error'; error: 'invalid argument' | 'no such frame'; message: string; };
+/** Protocol errors currently needed by the remote-end algorithms; command envelopes are separate. */
+export type CommandError = {
+  type: 'error';
+  error: 'invalid argument' | 'invalid session id' | 'no such frame' | 'no such window';
+  message: string;
+};
 
-/** A subordinate algorithm's success-with-data or protocol error. */
+/** An algorithm's success-with-data or protocol error. */
 export type StepResult<T> = { type: 'success'; data: T; } | CommandError;
 
 // https://w3c.github.io/webdriver-bidi/#type-script-Target

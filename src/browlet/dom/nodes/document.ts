@@ -57,6 +57,7 @@ import { SelectionImpl, scheduleSelectionChange, selectionGlobalEventHandlers } 
 import { HistoryImpl } from '../../browsing/history/index';
 import type { NotRestoredReasonDetails, NotRestoredReasons } from '../../browsing/navigation/diagnostics/index';
 import type { PerformanceNavigationTimingImpl } from '../../performance/index';
+import type { ProtocolHandlerAutomationMode } from '../../navigator/index';
 // eslint-disable-next-line browlet/dependency-direction -- DOM's legacy event factory includes HTML-defined event interfaces.
 import { MessageEventImpl } from '../../communication/index';
 import type { StorageImpl } from '../../storage/index';
@@ -132,6 +133,9 @@ export class DocumentImpl extends NodeImpl {
   type: DocumentType = 'xml';
   /** Compatibility mode selected by the parser. */
   mode = DocumentMode.NoQuirks;
+  /** Automation choice for protocol-handler consent; the browser must still verify its context. */
+  // https://html.spec.whatwg.org/multipage/system-state.html#rph-user-agent-automation
+  protocolHandlerAutomationMode: ProtocolHandlerAutomationMode = 'none';
   /** Invalidates live collections after any tree or attribute mutation in this document. */
   collectionVersion = 0;
   /** Cached session Storage object for this Document, acquired on first successful access. */

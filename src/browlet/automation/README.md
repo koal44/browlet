@@ -1,8 +1,9 @@
 # Browlet automation
 
-WebDriver BiDi owns the protocol algorithms. Browlet's Node convenience API is
-a client above that boundary, with its own function-source conversion, value
-copying, callback API, and navigation policy.
+WebDriver owns the remote-end algorithms for BiDi script commands and HTML's
+classic protocol-handler extension. Browlet's Node convenience API is a client
+above that boundary, with its own function-source conversion, value copying,
+callback API, and navigation policy.
 
 ## Current separation
 
@@ -13,16 +14,41 @@ exception, or error results. They create HTML classic scripts, prepare the
 selected environment, request evaluation of the retained record, and clean up.
 They neither call `PageEvaluation` nor fall back to source evaluation.
 
-Command completion uses `InternalPromise` with `userAgent.HostPromise`, so
+Script-command completion uses `InternalPromise` with `userAgent.HostPromise`, so
 remote-end continuations belong to the host rather than the selected page's
 microtask queue. WebDriver commands are protocol operations, not Web IDL
 members; there is no binding layer to project their promises. Native Promise
 conversion belongs at the Node API or transport boundary.
 
 [protocol.ts](protocol.ts) describes the command bodies and script values.
-Protocol input validation, command IDs/envelopes, session establishment, and
-WebSocket transport are not implemented. `WebDriverSession` currently supplies
+BiDi input validation, command IDs/envelopes, session establishment, HTTP routing,
+and WebSocket transport are not implemented. `WebDriverSession` currently supplies
 identity only; constructing it does not establish a live session.
+
+`WebDriver.setRPHRegistrationMode(parameters, session)` implements HTML's
+[Set RPH Registration Mode](https://html.spec.whatwg.org/multipage/system-state.html#set-rph-registration-mode)
+command body for `POST /session/{session id}/custom-handlers/set-mode`. It accepts
+decoded Infra `JSONValue`, validates the object and exact mode string, obtains
+the session's current browsing context, updates its active Document, and returns
+the existing synchronous success/error record, with null on success. Extra JSON
+properties are ignored. The mode belongs to that Document; a replacement starts
+with `none`.
+
+Eric approved a separate `checkActiveSession(session)` call before HTML's steps,
+following WebDriver's [processing model](https://w3c.github.io/webdriver/#processing-model).
+It remains a throwing dependency for active-session ownership and request-queue
+admission. `getCurrentBrowsingContext(session)` runs after parameter validation
+and separately throws until selected frame/window lookup and closure handling
+exist. Either hook can return a protocol error without changing a mode. A
+successful context lookup must supply a live context with an active Document.
+The future dispatcher still owns HTTP decoding, route/session resolution, queueing,
+and response envelopes; no endpoint is installed by this command body.
+
+Registration separately requires `UserAgent.verifyProtocolHandlerAutomation(document)`
+before honoring `autoAccept` or `autoReject`. That dependency still throws until
+the Document's controlling session can be verified. Setting a mode does not
+substitute for that check. Tests replace only these unfinished owner operations
+and exercise real Documents, navigation, and the registration registry.
 
 HTML's top-level creation now calls `UserAgent.webDriverBiDiNavigableCreated()`
 after registering the initialized traversable. This provisional hook still needs
@@ -47,6 +73,8 @@ explicitly:
 
 | Dependency | Remaining work |
 | --- | --- |
+| Classic session admission | Active HTTP session ownership, request queue, and session closure |
+| Current browsing context | Session-selected frame/window lookup and context closure |
 | Target lookup | Context/realm registration, lifecycle, ID lookup, and sandbox selection |
 | ECMAScript Await | Observe the native author Promise in its realm; suspend/resume the modeled execution context when invoking its internal continuation |
 | LocalValue/RemoteValue | Specified deserialization, serialization limits, handles, shared node IDs, and channels |
