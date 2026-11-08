@@ -1743,7 +1743,7 @@ separate executable algorithm.
 | Linearize child histories into one traversable history | Nested histories and distinct-step counting exist. The traversal queue, creation/destruction history update, and full history application remain explicit dependencies. |
 | Synchronize multiple navigables, event loops, and clusters | The serial queue can wait for an algorithm's completion; the intercepted-traversal resume boundary still throws. Document-population waits, synchronization, and queue jumping remain §7.4.6 work. |
 | 204/205 and attachment responses preserve the active Document | Navigation response selection must handle these outcomes before creating or committing a Document. The `navigate()` stub now names them explicitly. Download navigate-event dispatch alone does not implement download response handling. |
-| Location/Refresh/X-Frame-Options/CSP/COOP headers | Fetch redirect processing and policy components are available, but HTML navigation must coordinate redirects, snapshots, response selection, and X-Frame-Options enforcement. Document creation already applies CSP/COOP and context-group changes; Refresh processing has its own explicit throwing boundary. |
+| Location/Refresh/X-Frame-Options/CSP/COOP headers | Fetch redirect processing and policy components are available, but HTML navigation must coordinate redirects, snapshots, response selection, and X-Frame-Options enforcement. Document creation already applies CSP/COOP and context-group changes. HTTP Refresh parsing and load-relative scheduling exist; meta insertion and ordinary navigation's transient-activation dependency remain explicit. |
 | Synchronous fragment and single-page navigation | §7.4.4 connects `Document.updateURLAndHistory()` for History/interception. Fragment navigation uses §7.4.6.2's existing-Document update, reaching the explicit persisted-state restoration boundary. Scrolling and queued joint-history application remain unfinished. |
 | javascript: URLs, srcdoc, and beforeunload | URL/origin and inherited-state foundations exist, but special navigation paths remain unfinished. `checkIfUnloadingIsCanceled()` now coordinates queued beforeunload/navigate checks; prompt policy/UI, history application, and teardown still need their owners. |
 
@@ -5402,7 +5402,7 @@ origin check in both directions.
 | 8–10: Document fields and Window association | Audited below: incoming state is fresh even when the initial Window is reused, and association precedes loader callbacks without activating the Document. Cookie-URL producer/history inputs and the public registry API remain separate dependencies. |
 | 11–14: ancestry, CSP, referrer | Audited below: captured iframe policy and known container initialize ancestry before activation; CSP applies to the incoming Document; referrer consumes Fetch's resolved value. Existing masking/null-request choices remain. CSP's unspecified style-src initialization and Console output remain explicit dependencies. |
 | 15–16: Navigation Timing | Controller-backed creation selects redirect counts using HTML's taint/client/referrer/TAO rule. All shared-factory Documents expose destination metadata and buffer the entry before callbacks, using zero unavailable fetch phases/transfer size without a controller. Target-history diagnostics arrive before activation; child entries retain null. Load completion notifies observers without reinsertion. Initial about:blank intentionally has no entry. Missing producer timing, unload/Critical-CH producers, and diagnostic lifecycle callers remain explicit. |
-| 17–20: response headers | Refresh and Speculation-Rules throw when present. Early Hints producer processing throws; its retained commit callback is invoked. HTML pre-media Link processing remains a marked no-op, distinct from the implemented CSSOM stylesheet-Link consumer. Each needs its own header/ordering audit. |
+| 17–20: response headers | Step 17 performs Refresh decoding, shared parsing, admission, and HTTP load-relative scheduling. Ordinary dispatch retains navigation's transient-activation dependency; meta insertion timing remains unfinished. Invalid inputs do not block Document creation. Speculation-Rules throws when present. Early Hints producer processing throws; its retained commit callback is invoked. HTML pre-media Link processing remains a marked no-op, distinct from the implemented CSSOM stylesheet-Link consumer. Their remaining algorithms and ordering need separate slices. |
 | 21: deferred Fetch quota | The existing `potentiallyFreeDeferredFetchQuota()` consumer is connected; full deferred-fetch request/lifetime integration retains its Fetch owner. |
 | §§7.5.2–7.5.11 | HTML production parser/script setup, other Document loaders, finish/unload/destruction/abort coordination remain separate bounded slices. Window allocation does not complete those operations. |
 
@@ -5572,8 +5572,223 @@ History state updates, and intercepted commits preserve it. A newly created
 Document receives its navigate/reload/back-forward classification during §7.5.1.
 The bounded timing detour is ready to return to HTML; its unfinished producers
 remain with their named lifecycle, loader, worker, and host owners.
-Resume HTML at §7.5.1 steps 17–20, the remaining response-header
-and callback ordering audit, beginning with Refresh.
+The following slice resumes HTML at §7.5.1 step 17. Steps 18–20 retain their
+remaining response-header and callback-ordering audit.
+
+## HTML §7.5.1: Refresh input preparation
+
+Step 17 now calls `Document.processRefreshHeaders()` instead of rejecting every
+response containing Refresh. Fetch's byte-string representation already supplies
+the isomorphic decoding. The Document-owned shared operation implements
+[§4.2.5.3's input parsing and admission](https://html.spec.whatwg.org/multipage/semantics.html#shared-declarative-refresh-steps),
+steps 1–12: integer delays, discarded fractions, separators, optional URL prefixes,
+quoted/unclosed targets, encoding-relative URL parsing, javascript rejection, and
+the `willDeclarativelyRefresh` flag. Delay values stay exact nonnegative bigints
+for the later scheduling owner; no native timeout conversion occurs in the parser.
+
+The focused regression first failed because a malformed Refresh field threw from
+`createAndInitializeDocument()`. Malformed and javascript inputs now leave the
+admission flag false and allow the remaining initialization callbacks to run.
+Accepted input sets the flag before calling
+`Document.scheduleDeclarativeRefresh(seconds, url, meta?)`. This is the extracted
+step-13 continuation, not another standard algorithm; its HTTP scheduling is
+implemented in the following slice. The optional meta source
+is retained for its future timing/sandbox checks; processing does not reread its
+node Document after admission.
+
+The HTML checkout was refreshed to `5955a33` on 2026-11-06. The same-day HTTP/meta
+probe used Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2. Eric approved:
+
+- `SPEC_GAP(refresh-repeated-fields)` / `SPEC_CLASH(refresh-repeated-fields)`:
+  [HTML issue #2900](https://github.com/whatwg/html/issues/2900) still gives no
+  resolution for repeated fields. Use Fetch's comma combination, like Chromium
+  and Firefox for nonempty fields. WebKit takes the last field; Firefox also
+  ignores an empty first field. Thus two valid URL directives can produce one
+  target containing the second directive; do not silently select a field.
+- `SPEC_CLASH(refresh-closing-quote)`: keep HTML/Firefox/WebKit's first matching
+  closing quote. Chromium uses the last matching quote.
+- `SPEC_CLASH(refresh-empty-url)`: distinguish absent targets from explicit empty
+  targets. An absent target keeps the Document URL; an empty target resolves
+  against its base, matching HTML/Firefox. Chromium/WebKit use the Document URL
+  for empty targets too. The base difference is observable with meta inputs;
+  response-header parsing precedes body-created base elements.
+- `SPEC_CLASH(refresh-url-encoding)`: use the Document encoding at processing
+  time. Headers are processed before body decoding while the Document starts as
+  UTF-8; Firefox/WebKit produce that result, whereas Chromium uses the response's
+  legacy charset. For meta refresh in an established Windows-1252 Document,
+  Chromium/WebKit use that encoding and Firefox uses UTF-8. Keep HTML's existing
+  `encodingParseURL()` operation at both call sites.
+- `SPEC_CLASH(refresh-first-valid)`: follow HTML's first-valid admission flag.
+  All three browsers permit a later zero-delay meta refresh to replace an earlier
+  header or meta refresh in the probe. Full replacement/priority policies have
+  additional scheduling rules; this slice does not adopt them.
+
+Experimental's `document-refresh.mjs` and `DOCUMENT-REFRESH.md` preserve the probe.
+The [Blink parser](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/platform/network/http_parsers.cc),
+[Gecko parser](https://github.com/mozilla/gecko-dev/blob/master/docshell/base/nsDocShell.cpp),
+and [WebKit parser](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/html/parser/HTMLParserIdioms.cpp)
+support the observed quote/encoding differences. The Extractlet capture of #2900
+was complete and supplied no capture warnings.
+
+The input-preparation slice stopped at scheduling. The following slices connect
+HTTP Refresh and meta insertion, including its timing and sandbox check. Window
+timeout waits count fully active time and are not substituted for this algorithm.
+Speculation-Rules, Early Hints production, and HTML's pre-media Link phases remain
+separate unfinished owners.
+
+Validation: the new 37-case suite covers malformed-header recovery, ordinary and
+fractional input, huge exact delays, incomplete prefixes, quoted and empty URLs,
+base/encoding selection, admission, duplicate fields, and initialization ordering.
+Nine affected Document-creation, navigation-params, loader, load-status, timing,
+and base-URL suites contain 174 cases; all pass on Node 24.19.0, 26.8.1, and custom
+27.0.0-pre, with and without the matching addon. TypeScript/generated declarations,
+declaration contracts, changed-file ESLint, import hierarchy, and whitespace checks
+pass. No new expected failures, skips, or native changes were introduced.
+
+## HTTP Refresh scheduling
+
+The Document retains the accepted target and exact delay. Complete loading starts
+the wait; processing after loading uses the already recorded timestamp. The
+existing UserAgent TimerHost supplies wake-ups, and every wake-up rechecks the
+deadline. Node's host already bounds individual native timeouts. A due refresh
+queues a navigation-and-traversal task associated explicitly with the captured
+Document, even if its Window has since been reassociated. Zero-delay refreshes
+also queue instead of navigating inside a load handler or initialization callback.
+
+`cancelDeclarativeRefresh()` removes the pending timer or task without resetting
+first-valid admission. Document abortion, destruction through abortion, and
+unsalvageable unloading cleanup call it. Canceled wake-ups cannot revive work,
+and event-loop task disposal releases the pending state. Existing Document task
+runnability prevents delivery against a replacement Document; it permits a held
+task when the same Document becomes active again. That verifies task ownership,
+not a completed bfcache pause/restart policy.
+
+The 2026-11-06 probe used Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2:
+
+| Case | Chromium | Firefox | WebKit | Browlet choice approved by Eric |
+| --- | --- | --- | --- | --- |
+| Slow load, then one-second Refresh | About one second after load | Same | Same | Document load-relative deadline |
+| Same current URL | Reload | Reload | Reload | Existing reload operation |
+| Distinct target, zero/one seconds | Replace | Replace | Reports push | HTML replacement |
+| Distinct target, two seconds | Push | Replace | Reports push | HTML replacement |
+| Changed fragment | Push, same Document | Replace, same Document | Push, same Document | HTML replacement |
+| stop() after load, before deadline | Cancels | Cancels | Still refreshes | Cancel on Document abortion |
+| Loaded child with a still-loading parent | Refreshes before parent load | Same | Waits for parent | Child Document's deadline |
+| Child removed before deadline | No navigation | No navigation | No navigation | Document teardown cancels |
+
+These are Navigation API event observations; WebKit's event type does not prove
+that its eventual back/forward-list behavior is also push. Its scheduler separately
+locks that list for short delays. The probe cancels the navigation event so it can
+inspect dispatch without entering a replacement Document.
+
+- `SPEC_CLASH(refresh-same-url-reload)`: HTML's shared algorithm calls ordinary
+  replacement navigation even for the current URL. Follow all browsers' reload
+  classification through the existing reload owner, including cancellation.
+- `SPEC_CLASH(refresh-history-replacement)`: retain HTML's replacement rule for
+  every other target and delay. Blink switches after one second, Gecko's source
+  uses a 15-second threshold, and WebKit has separate list-lock/event decisions.
+- `SPEC_CLASH(refresh-abort)`: follow Chromium/Firefox on cancellation after stop.
+  The public stop/recursive-abortion owner still throws; it must eventually reach
+  the implemented Document abortion hook, not another independent Refresh flag.
+- `SPEC_CLASH(refresh-ancestor-loading)`: follow HTML/Chromium/Firefox's local
+  deadline. WebKit's `ScheduledRedirect::shouldStartTimer()` waits for ancestors.
+- `SPEC_CLASH(refresh-large-delay)`: retain HTML's full integer delay. Blink and
+  WebKit source reject delays above `INT_MAX / 1000` seconds; Gecko checks its
+  unsigned millisecond conversion. Those long-delay limits are source evidence,
+  not multi-day live measurements. Browlet keeps an exact deadline and passes a
+  finite, bounded numeric request to the host, without rounding the accepted delay.
+- `SPEC_GAP(refresh-task-source)`: HTML does not identify delayed dispatch's task
+  source. Use the existing navigation-and-traversal source and its Document gate.
+  Blink uses its internal-loading runner; Gecko and WebKit dispatch through their
+  document-loader timer/navigation machinery.
+
+Sources: [shared refresh steps](https://html.spec.whatwg.org/multipage/semantics.html#shared-declarative-refresh-steps),
+[Blink scheduler](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/loader/http_refresh_scheduler.cc),
+[Gecko DocShell](https://github.com/mozilla/gecko-dev/blob/master/docshell/base/nsDocShell.cpp),
+[WebKit scheduler](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/loader/NavigationScheduler.cpp).
+Experimental's `refresh-scheduling.mjs` and `REFRESH-SCHEDULING.md` retain the probe.
+
+The meta follow-up below supplies the captured insertion timestamp and
+automatic-features check. **Explicit dependencies:** host preferences/manual
+redirect UI, complete parser load-event accounting, recursive abortion/destruction,
+and full bfcache Refresh policy retain their existing owners. Most importantly, ordinary navigation
+still calls the throwing `Window.hasTransientActivation()` through
+`SourceSnapshotParams`. The new strict delivery regression observed that failure;
+Eric approved retaining it as an expected failure. Enabled tests supply that one
+activation result to verify real cancelable replacement/fragment events. Same-URL
+reload reaches its cancelable event without that fixture. Downstream history,
+unloading, and loading TODOs remain in the existing navigation/reload operations.
+
+Validation: all eleven affected creation, loading, destruction, abortion, reload,
+fragment, reactivation, timer, and Refresh suites pass across Node 24.19.0, 26.8.1,
+and custom 27.0.0-pre, each with and without the matching addon. The final focused
+scheduling suite has 21 passing cases and the one approved activation expected
+failure in every configuration. TypeScript/generated declarations, declaration
+contracts, changed-file ESLint, import hierarchy, and whitespace checks pass.
+No native code or artifacts changed in this slice.
+
+## Meta Refresh insertion and scheduling
+
+HTML §4.2.5.3's Refresh state now enters the shared Document algorithm from the
+ordinary insertion hook. `HTMLMetaElement` exposes its four current reflected
+attributes through the existing binding machinery. A case-insensitive `refresh`
+keyword is recognized without trimming, and absent/empty content is ignored.
+Parser insertion, script insertion, and insertion of populated subtrees or
+fragments use the same node hook. Detached and shadow trees are excluded.
+
+The element records its Document-tree insertion time; admission copies that
+timestamp, the parsed URL, and the exact delay into the Document's existing
+pending Refresh state. The deadline uses the later of insertion and complete
+loading. Removing, editing, reinserting, or adopting the meta does not change an
+already accepted refresh. The eventual task checks the original Document's
+`sandboxed-automatic-features` flag only for meta-originated work; HTTP Refresh
+does not acquire that restriction. No new timer or scheduling owner was added.
+
+The 2026-11-06 browser-only probe used Chromium 156.0.8078.4, Firefox 157.0, and
+WebKit 27.2:
+
+| Case | Chromium | Firefox | WebKit | Browlet |
+| --- | --- | --- | --- | --- |
+| Valid inserted meta, including a fragment | Refreshes | Refreshes | Refreshes | Refreshes |
+| Change content/http-equiv after insertion; repair invalid content | Refreshes | No refresh | Refreshes | Insertion only |
+| Whitespace-padded keyword or shadow-tree meta | Ignored | Ignored | Ignored | Ignored |
+| Remove or adopt accepted meta into an inert Document | Original refresh remains | Same | Same | Original Document retains it |
+| One-second refresh inserted after load | About 1009 ms after insertion | About 1002 ms | About 1006 ms | Later-of-insertion/load deadline |
+| Sandboxed child, meta Refresh | Blocked | Blocked | Blocked | Blocked |
+| Same child, HTTP Refresh | Allowed | Allowed | Allowed | Allowed |
+
+`SPEC_CLASH(meta-refresh-attribute-changes)`: Eric approved HTML/Firefox's
+insertion-only rule. Blink and WebKit reprocess when content/http-equiv changes;
+Gecko calls `ProcessMETATag()` from `BindToTree()` and not from those attribute
+changes. Reinsertion processes the new attributes if no prior valid directive was
+accepted. The previously approved first-valid, history handling, and cancellation
+choices still apply.
+
+Sources: [HTML pragma directives](https://html.spec.whatwg.org/multipage/semantics.html#pragma-directives),
+[shared Refresh algorithm](https://html.spec.whatwg.org/multipage/semantics.html#shared-declarative-refresh-steps),
+[Blink HTMLMetaElement](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/html/html_meta_element.cc),
+[Gecko HTMLMetaElement](https://github.com/mozilla/gecko-dev/blob/master/dom/html/HTMLMetaElement.cpp),
+[WebKit HTMLMetaElement](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/html/HTMLMetaElement.cpp).
+Experimental retains `meta-refresh-insertion.mjs` and `META-REFRESH-INSERTION.md`.
+
+**Stopping point:** Refresh insertion and scheduling are connected. Other pragma
+states (including meta CSP, default-style, and legacy content-language), metadata
+name processing, and parser encoding declarations remain separate §4.2.5/§13
+work; the element's hook explicitly covers only Refresh. The existing activation
+expected failure is retained, with controlled-activation tests for projected
+Navigation events. Complete recursive abortion/destruction, bfcache timer policy,
+load-event accounting, and optional host UI remain at the owners listed above.
+For §7.5.1, Early Hints production, pre-media Link processing, and Speculation-Rules
+remain the next explicit response-initialization dependencies.
+
+Validation: 17 affected suites pass with 311 passing cases and the one previously
+approved activation expected failure on Node 24.19.0, 26.8.1, and custom 27.0.0-pre,
+each with and without the matching addon. The scheduling suite includes 24 new
+meta cases, including real parser insertion, projected Navigation events, and
+delivery through Browlet's ordinary loader/host scheduler. TypeScript/generated
+declarations, declaration contracts, changed-file ESLint, import hierarchy, and
+whitespace checks pass. The Browlet package rebuild and CJS/ESM/platform-type
+artifact checks pass on Node 26.8.1 stock and compat. No native changes were needed.
 
 ## Removal condition
 

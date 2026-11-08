@@ -1,11 +1,12 @@
-import { HTML_NAMESPACE, InternalError } from '../../../../../infra/index';
-import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/core/index';
+import { HTML_NAMESPACE, InternalError, asciiLower } from '../../../../../infra/index';
+import { attr, ctor, defineInterface, idlType, impl, reflect, xattr } from '../../../../../web-idl/core/index';
+import { currentCoarsenedWallTime } from '../../../../../timing/index';
 
 import { ElementTag, ContentCategory } from '../../element-definitions/index';
 
 import { HTMLElementImpl } from '../html-element';
 
-/** Metadata identity used by named collections. */
+/** Metadata identity and insertion-triggered declarative Refresh. */
 // https://html.spec.whatwg.org/multipage/semantics.html#the-meta-element
 export class HTMLMetaElementImpl extends HTMLElementImpl {
   static {
@@ -16,11 +17,30 @@ export class HTMLMetaElementImpl extends HTMLElementImpl {
     ];
   }
 
+  /** Most recent insertion into a Document tree, in wall-clock milliseconds. */
+  documentInsertionTime: number | null = null;
+
   override hasCategory(category: ContentCategory): boolean {
     if (category === ContentCategory.Flow || category === ContentCategory.Phrasing) {
       return this.hasAttributeNS(null, 'itemprop');
     }
     return super.hasCategory(category);
+  }
+
+  protected override insertionSteps(): void {
+    super.insertionSteps();
+    // HTML's "inserted into a document" excludes connected shadow trees.
+    if (!this.getRoot().isDocument()) return;
+    this.documentInsertionTime = currentCoarsenedWallTime().milliseconds;
+    // TODO(HTML §4.2.5): Other pragma states and metadata-name processing still need
+    // their own algorithms; this hook connects only the Refresh state.
+    // SPEC_CLASH(meta-refresh-attribute-changes): Follow HTML/Firefox's insertion-only
+    // processing; Chromium/WebKit also activate Refresh on content/http-equiv changes.
+    // https://html.spec.whatwg.org/multipage/semantics.html#attr-meta-http-equiv-refresh
+    if (asciiLower(this.getAttributeNS(null, 'http-equiv') ?? '') !== 'refresh') return;
+    const input = this.getAttributeNS(null, 'content');
+    if (input === null || input === '') return;
+    this.nodeDocument.processDeclarativeRefresh(input, this);
   }
 
   protected override isDirectionalityCapableAttributeName(name: string): boolean {
@@ -62,5 +82,9 @@ export const htmlMetaElementIDL = defineInterface({
   localNames: ['meta'],
   members: [
     ctor([], xattr('HTMLConstructor')),
+    attr('name', idlType.DOMString, xattr('CEReactions', reflect())),
+    attr('httpEquiv', idlType.DOMString, xattr('CEReactions', reflect({ name: 'http-equiv' }))),
+    attr('content', idlType.DOMString, xattr('CEReactions', reflect())),
+    attr('media', idlType.DOMString, xattr('CEReactions', reflect())),
   ],
 });

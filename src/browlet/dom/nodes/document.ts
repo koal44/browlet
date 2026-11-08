@@ -1,6 +1,6 @@
 import {
-  type InternalPromise, type InternalPromiseWithResolvers, asciiLower, HTML_NAMESPACE, SVG_NAMESPACE,
-  stripAndCollapseASCIIWhitespace, toScalarValueString, InternalError,
+  type InternalPromise, type InternalPromiseWithResolvers, type TaskHandle, asciiLower, HTML_NAMESPACE, SVG_NAMESPACE,
+  stripAndCollapseASCIIWhitespace, toScalarValueString, isAsciiWhitespace, TextCursor, InternalError,
 } from '../../../infra/index';
 import { addon, isomorphicDecode, isomorphicEncode } from '../../../js-engine/index';
 import {
@@ -34,7 +34,7 @@ import { ElementTag } from './element-definitions/index';
 import type { DOMStringListImpl } from '../lists/index';
 import { EventImpl, CustomEventImpl, type EventTargetImpl } from '../events/index';
 import {
-  AnimationFrameController, EventHandlerMap, eventHandlerMapAttr, globalEventHandlers, ModuleMap, SpeculationRulesParseResult,
+  AnimationFrameController, EventHandlerMap, eventHandlerMapAttr, globalEventHandlers, ModuleMap, SpeculationRulesParseResult, taskSources,
   type EventHandlerCallback, type SpeculationRuleSet,
 } from '../../scripting/index';
 import { StorageEventImpl } from '../../storage/events/index';
@@ -97,7 +97,9 @@ import {
   findElementsByTagNameNS,
 } from './lookups';
 import { getElementConstructor } from './element-interfaces';
-import { HTMLBaseElementImpl, HTMLHeadElementImpl, HTMLTitleElementImpl } from './html/metadata/index';
+import {
+  HTMLBaseElementImpl, HTMLHeadElementImpl, HTMLTitleElementImpl, type HTMLMetaElementImpl,
+} from './html/metadata/index';
 import { HTMLElementImpl, HTMLScriptElementImpl } from './html/index';
 import { HTMLHtmlElementImpl } from './html/document/index';
 import { HTMLBodyElementImpl } from './html/sections/index';
@@ -257,6 +259,8 @@ export class DocumentImpl extends NodeImpl {
   legacyNavigationType: NavigationTimingType = 'navigate';
   /** Completion timestamp, or null until the document is completely loaded. */
   completelyLoadedTime: number | null = null;
+  /** Whether a valid declarative refresh has already been accepted for this Document. */
+  willDeclarativelyRefresh = false;
   /** Whether tasks that depend on loading completion may proceed. */
   readyForPostLoadTasks = false;
   /** Whether a script requested printing before post-load tasks were available. */
@@ -296,6 +300,8 @@ export class DocumentImpl extends NodeImpl {
 
   /** Associated browsing context, or null for a detached document. */
   #browsingContext: BrowsingContext | null = null;
+  /** Accepted Refresh and its current wake-up or queued task; absent after cancellation or dispatch. */
+  #pendingDeclarativeRefresh: { seconds: bigint; url: URLRecord; metaInsertionTime?: number; handle?: TaskHandle; } | null = null;
   /** Page visibility, initially hidden until navigable initialization or history activation. */
   // https://html.spec.whatwg.org/multipage/interaction.html#visibility-state
   #visibilityState: DocumentVisibilityState = 'hidden';
@@ -1590,6 +1596,7 @@ export class DocumentImpl extends NodeImpl {
     }
     this.completelyLoadedTime = currentCoarsenedWallTime().milliseconds;
     this.env.userAgent.notifyLoadingNavigableStateChanged();
+    this.#startDeclarativeRefresh();
     // TODO(HTML child loading): Queue the container's iframe load event steps on the DOM
     // manipulation task source, including the Permissions Policy §10.1 check after dispatch.
     // Those steps still need iframe timing/mute flags; the Window load event above is separate.
@@ -1811,6 +1818,8 @@ export class DocumentImpl extends NodeImpl {
     if (env.responsibleEventLoop.currentlyRunningTask === null) {
       throw new InternalError('Document abortion requires a task on its owning event loop');
     }
+    // SPEC_CLASH(refresh-abort): Cancel pending Refresh like Chromium/Firefox; WebKit keeps it after stop().
+    this.cancelDeclarativeRefresh();
     if (env.fetchGroup.cancel()) this.makeUnsalvageable('fetch');
 
     const navigationID = this.duringLoadingNavigationID;
@@ -1840,6 +1849,7 @@ export class DocumentImpl extends NodeImpl {
     }
     for (const transport of global.webTransports) transport.cleanup();
     if (!this.salvageable) {
+      this.cancelDeclarativeRefresh();
       for (const source of global.eventSources) source.close();
       global.timers.clear();
       this.getRelevantGlobalObject()?.idleCallbacks.clear();
@@ -1973,6 +1983,94 @@ export class DocumentImpl extends NodeImpl {
     const ready = this.#scriptsMayRunReady;
     this.#scriptsMayRunReady = null;
     ready?.resolve(undefined);
+  }
+
+  /** Decode the response's Refresh field and process it before Early Hints commit callbacks. */
+  // HTML §7.5.1, create and initialize a Document object, step 17.
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#create-and-initialize-a-document-object
+  processRefreshHeaders(response: FetchResponse): void {
+    // SPEC_GAP(refresh-repeated-fields): HTML issue #2900 leaves repeated fields undefined.
+    // SPEC_CLASH(refresh-repeated-fields): Use Fetch's comma combination, like Chromium and Firefox
+    // for nonempty fields. WebKit uses the last field; Firefox also ignores an empty first field.
+    // Fetch stores byte strings, so its returned string already represents the isomorphic decoding.
+    const input = response.headerList.get('Refresh');
+    if (input !== null) this.processDeclarativeRefresh(input);
+  }
+
+  /** Accept the first valid refresh, resolving its target immediately against this Document. */
+  // https://html.spec.whatwg.org/multipage/semantics.html#shared-declarative-refresh-steps
+  processDeclarativeRefresh(input: string, meta?: HTMLMetaElementImpl): void {
+    // SPEC_CLASH(refresh-first-valid): Follow HTML's admission flag; all three tested browsers
+    // let a later zero-delay meta refresh replace an earlier header or meta refresh.
+    if (this.willDeclarativelyRefresh) return;
+    const cursor = new TextCursor(input);
+    const whitespace = (char: string) => isAsciiWhitespace(char.charCodeAt(0));
+    cursor.consumeWhile(whitespace);
+    const start = cursor.pos();
+    cursor.consumeWhile((char) => char >= '0' && char <= '9');
+    const timeString = cursor.slice(start);
+    if (timeString === '' && cursor.peek() !== '.') return;
+    // The collected digits are already a valid nonnegative integer; retain their exact value.
+    const seconds = timeString === '' ? 0n : BigInt(timeString);
+    cursor.consumeWhile((char) => (char >= '0' && char <= '9') || char === '.');
+
+    let url = this.url;
+    if (!cursor.eof()) {
+      const separator = cursor.peek();
+      if (separator !== ';' && separator !== ',' && !whitespace(separator)) return;
+      cursor.consumeWhile(whitespace);
+      if (cursor.peek() === ';' || cursor.peek() === ',') cursor.advance();
+      cursor.consumeWhile(whitespace);
+    }
+    if (!cursor.eof()) {
+      let urlString = input.slice(cursor.pos());
+      // An incomplete URL= prefix remains part of the URL, as the algorithm's parse label requires.
+      const prefix = /^url[\t\n\f\r ]*=[\t\n\f\r ]*/i.exec(urlString);
+      if (prefix !== null) urlString = urlString.slice(prefix[0].length);
+      const quote = urlString[0];
+      if (quote === '"' || quote === "'") {
+        urlString = urlString.slice(1);
+        // SPEC_CLASH(refresh-closing-quote): HTML/Firefox/WebKit use the first matching quote;
+        // Chromium truncates at the last one. Keep the written parser.
+        const end = urlString.indexOf(quote);
+        if (end !== -1) urlString = urlString.slice(0, end);
+      }
+      // SPEC_CLASH(refresh-empty-url): Resolve explicit empty URLs against the base, like HTML/Firefox;
+      // Chromium/WebKit use the current Document URL. An omitted URL still uses this.url above.
+      // SPEC_CLASH(refresh-url-encoding): Use the Document's current encoding. Header processing runs
+      // before body decoding, matching Firefox/WebKit's UTF-8 result; Chromium uses the later charset.
+      // For meta inputs with an established legacy encoding, Firefox instead uses UTF-8.
+      const parsed = this.encodingParseURL(urlString);
+      if (parsed === null || parsed.scheme === 'javascript') return;
+      url = parsed;
+    }
+
+    this.willDeclarativelyRefresh = true;
+    this.scheduleDeclarativeRefresh(seconds, url, meta);
+  }
+
+  /** Continue an accepted refresh using this Document, even if its source meta element later moves. */
+  // Continuation of shared declarative refresh steps, step 13.
+  // https://html.spec.whatwg.org/multipage/semantics.html#shared-declarative-refresh-steps
+  scheduleDeclarativeRefresh(seconds: bigint, url: URLRecord, meta?: HTMLMetaElementImpl): void {
+    const metaInsertionTime = meta?.documentInsertionTime;
+    if (metaInsertionTime === null) {
+      throw new InternalError('Meta refresh requires a Document insertion time');
+    }
+    // Use HTML's automatic option with the requested delay. Host preferences that adjust/suppress
+    // it and the optional manual redirect UI remain TODOs for the UserAgent's UI integration.
+    // Capture the insertion time now: removing, adopting, or reinserting the meta must
+    // not change this Document's accepted deadline or the Document selected below.
+    this.#pendingDeclarativeRefresh = { seconds, url, metaInsertionTime };
+    this.#startDeclarativeRefresh();
+  }
+
+  /** Cancel an accepted refresh without allowing a later directive to replace it. */
+  // TODO(HTML §7.5.11): The unfinished stop-loading/recursive-abortion path must reach abort().
+  cancelDeclarativeRefresh(): void {
+    const refresh = this.#pendingDeclarativeRefresh;
+    this.#pendingDeclarativeRefresh = null;
+    refresh?.handle?.remove();
   }
 
   /** Process response Link fields for the selected document-loading phase. */
@@ -2768,6 +2866,53 @@ export class DocumentImpl extends NodeImpl {
   /** Root moves can change prolog membership without DOM children-changed steps. */
   protected override childrenMoved(): void {
     this.#updateStyleSheetProlog();
+  }
+
+  /** Wait from complete loading or a later meta insertion; host wake-ups only queue work. */
+  #startDeclarativeRefresh(): void {
+    const refresh = this.#pendingDeclarativeRefresh;
+    // SPEC_CLASH(refresh-ancestor-loading): Use this Document's load time like HTML/Chromium/Firefox;
+    // WebKit additionally waits for its ancestor Documents to finish loading.
+    const loadedTime = this.completelyLoadedTime;
+    if (refresh === null || refresh.handle !== undefined || loadedTime === null) return;
+    // SPEC_CLASH(refresh-large-delay): Preserve HTML's full delay; browsers impose different integer limits.
+    // Round fractional milliseconds away from early delivery.
+    const startTime = Math.max(loadedTime, refresh.metaInsertionTime ?? loadedTime);
+    const deadline = BigInt(Math.ceil(startTime)) + refresh.seconds * 1_000n;
+    const { env } = this;
+    const eventLoop = env.responsibleEventLoop;
+    const wait = () => {
+      if (this.#pendingDeclarativeRefresh !== refresh) return;
+      const remaining = deadline - BigInt(Math.floor(currentCoarsenedWallTime().milliseconds));
+      if (remaining > 0n) {
+        // TimerHost may shorten a wake-up; recheck the deadline rather than shortening the refresh.
+        const delay = Number(remaining > BigInt(Number.MAX_SAFE_INTEGER) ? BigInt(Number.MAX_SAFE_INTEGER) : remaining);
+        refresh.handle = env.userAgent.timerHost.scheduleTimeout(delay, wait);
+        return;
+      }
+      // SPEC_GAP(refresh-task-source): HTML leaves delayed dispatch's task source unspecified.
+      // Use navigation-and-traversal, retaining this Document even if its Window is reassociated.
+      const task = eventLoop.queueTask(taskSources['navigation-and-traversal'], this, () => {
+        if (this.#pendingDeclarativeRefresh !== refresh) return;
+        this.#pendingDeclarativeRefresh = null;
+        if (refresh.metaInsertionTime !== undefined && this.activeSandboxingFlagSet.has('sandboxed-automatic-features')) return;
+        const navigable = this.getNodeNavigable();
+        if (navigable === null) return;
+        if (urlsEqual(refresh.url, this.url)) {
+          // SPEC_CLASH(refresh-same-url-reload): All three browsers reload; HTML says navigate with replacement.
+          navigable.reload();
+        } else {
+          // SPEC_CLASH(refresh-history-replacement): Keep HTML's replacement at every delay, including fragments.
+          // Chromium/Firefox use different delay thresholds; Chromium/WebKit report push for fragments.
+          // TODO(HTML §6.4): SourceSnapshotParams still needs Window's transient-activation implementation.
+          navigable.navigate(refresh.url, this, { historyHandling: 'replace' }, env);
+        }
+      }, {
+        discardSteps: () => { if (this.#pendingDeclarativeRefresh === refresh) this.#pendingDeclarativeRefresh = null; },
+      });
+      refresh.handle = { remove: () => { eventLoop.removeTask(task); } };
+    };
+    wait();
   }
 
   /** Prefer the first ID match, then the first legacy HTML anchor name, excluding shadow trees. */

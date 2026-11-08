@@ -1576,10 +1576,7 @@ export class Navigable {
     document.processDefaultStyleHeaders(response);
     window.env.getWindowOrWorkerGlobalScopeMixin().initializeReportingEndpoints(response);
 
-    // https://html.spec.whatwg.org/multipage/semantics.html#shared-declarative-refresh-steps
-    if (response.headerList.get('Refresh') !== null) {
-      throw new InternalError('Refresh response processing is not implemented');
-    }
+    document.processRefreshHeaders(response);
     params.commitEarlyHints?.(document);
     // CSSOM stylesheet relations are processed once, independently of HTML's two Link phases.
     document.processStyleSheetLinkHeaders(response);

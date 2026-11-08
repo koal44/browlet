@@ -1736,8 +1736,24 @@ calculation; existing reservations retain their fixed decision. Browlet keeps
 HTML/WebKit's secure-context gate where Chromium/Firefox honor an HTTPS child's
 header beneath an insecure parent. The null-reservation input remains a documented
 specification gap, not an unfinished implementation. The local-route response-policy
-adapter remains until that producer supplies complete params. Navigation Timing
-now creates and buffers entries before loader callbacks, with
+adapter remains until that producer supplies complete params.
+Refresh headers now use the shared Document parser: malformed and javascript
+targets are ignored, and valid input sets first-valid admission state. Accepted
+HTTP refreshes wait for complete loading and their requested delay, then queue a
+Document-owned navigation task. Same-URL refreshes use reload; other targets use
+replacement. Abortion, destruction, and unsalvageable cleanup cancel pending work.
+Meta Refresh uses the same scheduler, counting from the later of insertion and
+complete loading and checking the captured Document's automatic-features sandbox
+flag when due. Only Document-tree insertion processes it, as HTML/Firefox specify;
+attribute changes alone and shadow-tree insertion do not. Removal or adoption does
+not cancel a Refresh already accepted by the original Document.
+Ordinary navigation still reaches the throwing transient-activation dependency;
+the strict integration expectation remains an approved expected failure. The
+existing downstream loading/unloading dependencies are unchanged. Other meta
+pragma/name processing, Window.stop()/recursive abortion, full bfcache timer policy,
+and optional host preferences/manual redirect UI remain explicit.
+See the [Refresh audit](browlet/browsing/navigation/ROADMAP.md#html-751-refresh-input-preparation).
+Navigation Timing now creates and buffers entries before loader callbacks, with
 live completion/body/milestone data, destination-visible response metadata, and
 HTML's separate taint/client/referrer/TAO redirect gate. Load completion notifies
 observers without inserting the entry again; early and later buffered replays

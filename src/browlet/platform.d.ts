@@ -1283,7 +1283,10 @@ export interface HTMLBaseElementConstructor extends Ctor<HTMLElementConstructor>
 }
 
 export interface HTMLMetaElement extends HTMLElement {
-
+  name: string;
+  httpEquiv: string;
+  content: string;
+  media: string;
 }
 
 export interface HTMLMetaElementConstructor extends Ctor<HTMLElementConstructor> {
