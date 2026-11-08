@@ -139,7 +139,11 @@ describe('Fetch over HTTP/2', () => {
     f.operation.options.processEarlyHintsResponse = hint.resolve;
     const response = await f.receive();
     expect(response.status).toBe(200);
-    expect((await hint.promise).headerList.get('Link')).toBe('</asset>; rel=preload');
+    const interim = await hint.promise;
+    expect(interim.url).toEqual(f.request.currentURL);
+    expect(interim.urlList).toEqual(f.request.urlList);
+    expect(interim.urlList).not.toBe(f.request.urlList);
+    expect(interim.headerList.get('Link')).toBe('</asset>; rel=preload');
     expect(f.operation.controller.extractFullTimingInfo().firstInterimNetworkResponseStartTime).toBeGreaterThan(0);
     expect(f.operation.controller.extractFullTimingInfo().finalNetworkResponseStartTime)
       .toBeGreaterThanOrEqual(f.operation.controller.extractFullTimingInfo().firstInterimNetworkResponseStartTime);

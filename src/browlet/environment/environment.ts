@@ -52,6 +52,7 @@ import {
   COEPInheritanceViolationReportBodyImpl, type COEPInheritanceViolationReportBody,
   PermissionsPolicyViolationReportBodyImpl, type PermissionsPolicyViolationReportBody,
 } from '../browsing/policy/index';
+import { processEarlyHintHeaders } from '../loader/links/index';
 import type { AbortControllerImpl, AbortSignalImpl } from '../dom/abort/index';
 import { NodeImpl, type DocumentImpl, type ElementImpl } from '../dom/nodes/index';
 import { HTMLAnchorElementImpl } from '../dom/nodes/html/text/index';
@@ -191,11 +192,8 @@ export class BrowletEnvironmentBase implements FetchEnvironmentBase {
 
   /** Start early hinted resources and return the steps that attach them to the incoming Document. */
   // https://html.spec.whatwg.org/multipage/semantics.html#process-early-hint-headers
-  processEarlyHintHeaders(_response: FetchResponse): (document: DocumentImpl) => void {
-    // TODO(HTML §4.2.4): Extract Link headers, apply the early policy container, process preload/preconnect
-    // options using this reserved environment, and commit their results to the Document's preload map.
-    // Fetch's interim response must first retain its URL for the link base and origin.
-    throw new InternalError('Early Hint Link-header processing is not implemented');
+  processEarlyHintHeaders(response: FetchResponse): (document: DocumentImpl) => void {
+    return processEarlyHintHeaders(response, this);
   }
 
   /** Raw lifetime clock; independent workers read the same monotonic source in their isolate. */

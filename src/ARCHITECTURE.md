@@ -1439,6 +1439,18 @@ becomes active. Document loading and parsing use that document's owner.
 BrowsingContext creates the initial about:blank document before the navigable
 is initialized.
 
+`FetchHeaders` owns both Link extraction views over HTTP's syntax parser.
+`extractRawLinks()` retains unresolved targets and complete parameters for CSSOM;
+`extractLinks()` filters anchors and expands relations for HTML consumers.
+`loader/links/` owns resource options, Early Hints, and final-response phase
+processing below Document/environment implementations. It reuses shared
+attribute definitions and retains only type references to its browser owners.
+The reserved environment forwards to Early Hints, retaining the Document commit
+callback; Document forwards final-response phases with its own base, origin, policy,
+and environment. Media matching and image source-set creation retain explicit
+unfinished boundaries. Resource operations own fetching/connection effects and
+preload or module-map commitment; they remain explicit dependencies until connected.
+
 History population admits a response before asking ResourceReader to determine
 its MIME type. It resumes synchronous `loadDocument()` dispatch and retained-state
 updates on the captured destination's navigation-and-traversal task, rechecking

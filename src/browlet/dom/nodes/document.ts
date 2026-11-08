@@ -17,7 +17,7 @@ import {
   serializeHost, serializeOrigin, serializeURL, urlsEqual,
   type Origin, type URLRecord,
 } from '../../../url/index';
-import { HTTPCookie, parseHTTPDate, parseLinkHeader, type CookieHost, type HTTPStatus } from '../../../http/index';
+import { HTTPCookie, parseHTTPDate, type CookieHost, type HTTPStatus } from '../../../http/index';
 import { getMIMETypeEssence, minimizeSupportedMIMEType } from '../../../mime/index';
 import {
   fetch, FetchRequest, FetchTimingInfo, isFilteredResponse, isOkStatus, parseReferrerPolicyFromHeader,
@@ -49,6 +49,7 @@ import {
   InsecureRequestsPolicy, PolicyContainer, OpenerPolicy, PermissionsPolicy, PermissionsPolicyImpl, SandboxingFlagSet,
   type SandboxingFlag, type PolicyControlledFeature, type PolicyFeatureValue,
 } from '../../browsing/policy/index';
+import { processLinkHeaders, type LinkHeaderPhase } from '../../loader/links/index';
 import { RangeImpl } from '../ranges/index';
 import { NodeIteratorImpl, TreeWalkerImpl, SHOW_ALL, type NodeFilterCallback } from '../traversal/index';
 // The observer retains registrations; rendering input and scheduled notification remain provisional.
@@ -2074,10 +2075,9 @@ export class DocumentImpl extends NodeImpl {
   }
 
   /** Process response Link fields for the selected document-loading phase. */
-  // https://html.spec.whatwg.org/multipage/links.html#process-link-headers
-  processLinkHeaders(_response: FetchResponse, _phase: 'pre-media' | 'media'): void {
-    // PROVISIONAL(HTML Link): preload/link processing and media selection are
-    // not implemented. Both loader phases reach this owner without side effects.
+  // https://html.spec.whatwg.org/multipage/semantics.html#process-link-headers
+  processLinkHeaders(response: FetchResponse, phase: LinkHeaderPhase): void {
+    processLinkHeaders(this, response, phase);
   }
 
   /** Select the preferred stylesheet set from Default-Style fields in response order. */
@@ -2096,37 +2096,34 @@ export class DocumentImpl extends NodeImpl {
   processStyleSheetLinkHeaders(response: FetchResponse): void {
     // Retain header order even when requests complete in the opposite order.
     const sheets: (CSSStyleSheetImpl | null)[] = [];
-    for (const [name, value] of response.headerList) {
-      if (asciiLower(name) !== 'link') continue;
-      for (const { href, parameters } of parseLinkHeader(value)) {
-        const relations = asciiLower(parameters.get('rel') ?? '').split(/ +/);
-        if (!relations.includes('stylesheet')) continue;
-        // RFC 8288 §3.2 permits ignoring anchored links; they need not describe this document.
-        if (parameters.has('anchor')) continue;
-        const title = parameters.get('title') ?? '';
-        const alternate = relations.includes('alternate');
-        if (alternate && title === '') continue;
-        const url = this.env.parseURL(href, this.getBaseURL());
-        if (url === null) continue;
-        const index = sheets.length;
-        sheets.push(null);
-        // SPEC_GAP(http-link-quirks-mode): CSSOM leaves early-header timing open; MIME checks use the document mode at response completion.
-        this.fetchCSSStyleSheet(url, this.url, { initiatorType: 'link' }, (response, bytes) => {
-          if (bytes === null) return;
-          const sheet = this.createFetchedStyleSheet(url, response, bytes, {
-            ownerNode: null, title, alternate, media: parameters.get('media') ?? '',
-          });
-          sheets[index] = sheet;
-          let insertionIndex = 0;
-          for (let i = 0; i < index; i++) if (sheets[i] !== null) insertionIndex++;
-          this.getStyleScope().addHeaderStyleSheet(sheet, insertionIndex);
-          // TODO(HTML stylesheet resources): Register the pending load before
-          // fetching and release it after critical resources complete. Document's
-          // addScriptBlockingStyleSheet()/removeScriptBlockingStyleSheet() hold
-          // elements; header loads need ownership in that resource-lifecycle review.
-          // Start loadStyleSheetImports() here when this owner tracks load completion.
+    for (const { href, parameters } of response.headerList.extractRawLinks()) {
+      const relations = asciiLower(parameters.get('rel') ?? '').split(/ +/);
+      if (!relations.includes('stylesheet')) continue;
+      // RFC 8288 §3.2 permits ignoring anchored links; they need not describe this document.
+      if (parameters.has('anchor')) continue;
+      const title = parameters.get('title') ?? '';
+      const alternate = relations.includes('alternate');
+      if (alternate && title === '') continue;
+      const url = this.env.parseURL(href, this.getBaseURL());
+      if (url === null) continue;
+      const index = sheets.length;
+      sheets.push(null);
+      // SPEC_GAP(http-link-quirks-mode): CSSOM leaves early-header timing open; MIME checks use the document mode at response completion.
+      this.fetchCSSStyleSheet(url, this.url, { initiatorType: 'link' }, (response, bytes) => {
+        if (bytes === null) return;
+        const sheet = this.createFetchedStyleSheet(url, response, bytes, {
+          ownerNode: null, title, alternate, media: parameters.get('media') ?? '',
         });
-      }
+        sheets[index] = sheet;
+        let insertionIndex = 0;
+        for (let i = 0; i < index; i++) if (sheets[i] !== null) insertionIndex++;
+        this.getStyleScope().addHeaderStyleSheet(sheet, insertionIndex);
+        // TODO(HTML stylesheet resources): Register the pending load before
+        // fetching and release it after critical resources complete. Document's
+        // addScriptBlockingStyleSheet()/removeScriptBlockingStyleSheet() hold
+        // elements; header loads need ownership in that resource-lifecycle review.
+        // Start loadStyleSheetImports() here when this owner tracks load completion.
+      });
     }
   }
 

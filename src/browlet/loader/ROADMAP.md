@@ -39,14 +39,16 @@ loading, including its later supplied-response parts, remains unfinished.
 The provisional local route still needs late response preparation. Do not replace
 inherited synthetic params with ordinary response-derived policy.
 
-Navigation Fetch now receives 103 responses through
-`BrowletEnvironmentBase.processEarlyHintHeaders(response)`, an explicit throwing
-dependency for HTML §4.2.4. It must create the early policy container, extract Link
-headers, process preload/preconnect using the reserved environment, and return
-steps committing completed or pending hints to the incoming Document's preload map.
-Fetch's interim response also needs its URL retained for link base/origin selection.
-Only the first Early Hints response is processed; redirect handling must retain its
-commit steps across same-origin redirects and clear them across cross-origin redirects.
+Navigation Fetch receives 103 responses through
+`BrowletEnvironmentBase.processEarlyHintHeaders(response)`. The environment forwards
+to `links/early-hints.ts`, which creates the early policy container, extracts Link
+relations, prepares options using the reserved environment, dispatches each relation,
+and returns the specified Document callback.
+Fetch snapshots the producing request's URL history for the correct base and origin.
+Only the first response is processed, including an empty/irrelevant response;
+same-origin redirects retain its callback and cross-origin redirects discard it.
+Actual preload, preconnect, and modulepreload header operations still throw at
+their named owners in `links/`. See [Link preparation](#link-header-preparation).
 
 History population now calls `Navigable.loadDocument(params, sourceSnapshotParams,
 initiatorOrigin)` for an admitted ordinary response and saves its nullable result,
@@ -106,7 +108,7 @@ script callback does not maintain this state yet.
 | `preload.ts` | preload/modulepreload resource hints, parser-discovered preloads, and Link-header integrity metadata | HTML §4.2.4; Fetch; SRI §3.6 |
 | `response-policy.ts` | Convert response headers into CSP, COOP, COEP, OAC, referrer, permissions, Integrity Policy, policy-container, and `X-Frame-Options` state | HTML §§7.1 and 7.7; Fetch; SRI §3.8.1 |
 | `refresh.ts` | Parse `Refresh` response/`meta` input and schedule the corresponding navigation | HTML §7.8 and §4.2.5 |
-| `speculation.ts` (planned), [`../scripting/speculation-rules.ts`](../scripting/speculation-rules.ts) | Loader processing, navigational prefetch, and `Speculation-Rules`/`Sec-Speculation-Tags` headers; rule-set records and the parser boundary live in Scripting | HTML §7.6 |
+| [`speculation.ts`](speculation.ts), [`../scripting/speculation-rules.ts`](../scripting/speculation-rules.ts) | Header-selected rule-set fetching, validation, and registration are implemented; rule-set parsing, candidate selection, navigational prefetch, and `Sec-Speculation-Tags` remain explicit dependencies | HTML §7.6 |
 
 The shared [CORS attribute definition](../dom/nodes/html/attributes/cors.ts) and link/script
 `crossOrigin` reflection are implemented. Element loaders must read the current
@@ -210,8 +212,10 @@ permission. Fragment-scroll scheduling now returns without waiting; its later
 navigation task reaches explicit user-interest, target-selection, and scrolling
 dependencies. See the
 [new-Document audit](../browsing/navigation/ROADMAP.md#html-7462-new-document-history-initialization).
-`processLinkHeaders()` is a marked no-op in the pre-media and media phases; preload/link processing and
-media selection remain here. CSSOM stylesheet Link relations have a separate
+`processLinkHeaders()` forwards both loading phases to the Link processor, which
+selects the phase and prepares Document-owned options. Nonempty media matching,
+responsive-image source sets, and resource effects remain explicit dependencies.
+CSSOM stylesheet Link relations have a separate
 [Document method](../dom/nodes/document.ts), `processStyleSheetLinkHeaders()`: they fetch once, retain
 header order, and feed the parsed document's cascade. Script/load blockers remain
 with the [resource-lifecycle review](../style/ROADMAP.md#external-stylesheet-loading),
@@ -228,7 +232,8 @@ overrides it. Stylesheet cases cover repeated and combined Link fields through
 Fetch, document creation, sheet association, and computed style on parsed elements.
 They supply navigation inputs, select Fetch's parallel callback queue and sandbox
 body owner, and commit before parser input tasks run. They do not implement
-HTML §7.4's whole state machine, Refresh, or Speculation-Rules processing.
+HTML §7.4's whole state machine or Speculation-Rules processing. Refresh has since
+been connected through the shared Document scheduler and meta insertion hooks.
 General MIME dispatch is now connected separately by navigation's §7.4.5 coordinator.
 
 The first element consumers should be `<link>`, `<script>`, `<img>`, and
@@ -366,6 +371,238 @@ does not implement HTML encoding restart or retain the entire response for repla
 The [MIME integration notes](../../mime/ROADMAP.md) remain until the support
 policy and handler selection are settled. Fetch's MIME/nosniff blocking checks
 continue to serve their separate requirements.
+
+## Link header preparation
+
+HTML §§4.2.4.4–4.2.4.5 now use `FetchHeaders.extractLinks()` and `LinkProcessingOptions`.
+This is a dependency slice for §7.5.1 steps 18–19, not a general Section 4
+implementation pass. Resource loading and image selection retain their named
+unfinished owners.
+
+`FetchHeaders.extractRawLinks()` collects complete Link fields through HTTP's
+parser. It returns the existing unresolved `HTTPLink` values without interpreting
+relations or anchors. The CSSOM stylesheet-header path uses this view to retain
+the relationship between `alternate` and `stylesheet`. `FetchHeaders.extractLinks()`
+uses that raw view, filters anchors, and expands relations for HTML preparation
+without resolving a target against the wrong Document. These distinct methods
+keep their result types explicit without a mode flag or another loader helper.
+Options retain the response base/origin, reserved environment, early policy container,
+destination, CORS, integrity,
+nonce, type, referrer policy, priority, and Document-completion callback.
+`links/early-hints.ts` owns the loop and returns the specified commit steps;
+`BrowletEnvironmentBase.processEarlyHintHeaders()` only forwards with its owner.
+Empty, irrelevant, and invalid-only hints still occupy the first-response slot.
+The callback either sets the receiving Document or
+invokes the resource's then-current `onDocumentReady` operation.
+
+The layer sits below nodes/environments because both are consumers of Link
+preparation; their references in options and the Early Hints function are type-only.
+Syntax remains in HTTP, both extraction views belong to FetchHeaders, and attribute
+keyword interpretation reuses `dom/nodes/html/attributes/`. CSSOM's stylesheet
+interpretation remains with its existing consumer.
+
+The representation review is accepted: extracted HTML links retain unresolved
+`{ href, rel, attributes }` fields until the consuming loader has the correct base.
+Options retain the specified `sourceSet` slot with its null default. Its type is
+currently null-only, with an explicit TODO for the future image-source owner;
+source-set construction and selection remain unfinished. Early Hints does not
+populate that slot. The standalone Early Hints function preserves the spec's
+response/environment inputs and returned callback. No Binding or Platform object
+is involved, and neither representation retains a pending `SPEC_MISMATCH` flag.
+
+Sources: [HTML Link processing](https://html.spec.whatwg.org/multipage/semantics.html#processing-link-headers),
+[Early Hints](https://html.spec.whatwg.org/multipage/semantics.html#early-hints),
+[RFC 8288 parsing](https://www.rfc-editor.org/rfc/rfc8288.html#appendix-B).
+The current HTML source was checked on 2026-11-06. The browser-only
+`node-compat/experimental/link-header-processing.mjs` uses local HTTPS/HTTP2 and
+records actual resource requests. Chromium 156.0.8078.4, Firefox 157.0, and
+WebKit 27.2 were tested. WebKit emitted no Early Hints requests in this fixture;
+its final-response results are not evidence of Early Hints behavior.
+
+| Retained decision | Evidence and chosen behavior |
+| --- | --- |
+| `SPEC_CLASH(link-header-comma-splitting)` | HTML uses Fetch's generic comma splitter, which breaks `<a,b.js>`. All three browsers preserve the target. Use the existing RFC-aware parser on complete fields. |
+| `SPEC_CLASH(link-header-relations)` | RFC parsing and all three final-response paths expand space-separated relations. Chromium/Firefox Early Hints ignore a multi-relation value. Expand it consistently. |
+| `SPEC_CLASH(link-header-duplicate-parameters)` | Retain the existing parser's first parameter value, as Chromium/Firefox do for duplicate `as`; WebKit uses the last. RFC permits application rules for extension parameters; this is not a claim that it mandates first-wins for every extension. |
+| `SPEC_CLASH(link-header-as-case)` | HTML's string translation rejects mixed-case destinations; all three final-response paths and Chromium/Firefox Early Hints accept them. Fold ASCII case before translation, without trimming. |
+| `SPEC_CLASH(link-header-crossorigin)` | HTML's header algorithm recognizes only explicit keywords. All three final-response paths and Firefox Early Hints use anonymous for empty/unknown values. Chromium accepts empty but rejects unknown Early Hints values. Reuse the shared attribute defaults. |
+| `SPEC_CLASH(link-header-invalid-preload)` | HTML exits the whole loop and can omit its callback; browsers skip an invalid preload and process the later valid link. Continue, preserving all retained commit work. |
+| `SPEC_CLASH(link-header-modulepreload)` | HTML says no effect; all three browsers fetch modules from final headers and Chromium/Firefox do so from Early Hints. Recognize it and retain an explicit throwing integration boundary. |
+
+All choices above were approved. Anchored links are ignored under RFC 8288's
+permitted policy. Prefetch requests appeared in Chromium/Firefox final headers,
+but not Early Hints; final-response behavior remains part of its separate phase
+audit. Firefox's stylesheet requests agree with the existing CSSOM decision.
+
+Remaining owners are explicit:
+
+- `LinkProcessingOptions.preload()` must perform MIME admission, Link request
+  construction, Fetch/SRI, and preload-map insertion/consumption. Construction
+  must resolve HTML's reserved environment versus Fetch's full-settings client
+  contract; borrowing the departing Document or sandbox as the client is not a
+  completed implementation. The existing `UserAgent.supportsMIMEType()` support
+  policy remains unfinished.
+- `preconnect()` must select a URL, partition and credentials, then ask the
+  transport connection owner for a reusable idle connection.
+- `modulepreload()` must connect the existing module-graph fetch algorithm to
+  the incoming settings/module map, including early results and cancellation.
+- `Document.processLinkHeaders()` now forwards both final-response phases to
+  `links/response.ts`. Nonempty media matching and image source-set creation
+  throw at the point where their inputs are needed. Element Link lifecycle
+  processing remains separate; the options class does not replace the stylesheet owner.
+- Preload/connection/module methods throw today. Callback bookkeeping can be
+  exercised with controlled resource operations, but it does not populate a
+  real preload or module map. Speculation-Rules now has its separate header loader
+  below; Service Worker integration remains its existing explicit dependency.
+
+Initial validation on 2026-11-06: the four Early Hints preparation regressions first
+failed at the old blanket throwing hook. The preparation slice passed 168 tests
+in eight suites on Node 24.19.0, Node 26.8.1, and custom Node 27.0.0-pre, each
+with stock and matching-addon runtimes. The suites cover Link parsing/options,
+Early Hints callbacks, navigation Fetch/redirect ownership, Document creation,
+network/cache delivery, and HTTP/2. Typecheck, declaration contracts,
+changed-file ESLint, and the import-hierarchy checks also pass. Resource effects
+remain controlled only where their named implementations are unfinished.
+
+After the ownership cleanup, nine focused suites pass in all six configurations:
+431 passes with the addon, and 428 passes plus three existing expected failures
+without it. Those failures cover native Window global identity/prototype behavior
+in `document-lifecycle.test.ts`, not Link processing. The expanded selection adds
+Fetch header contracts, CSSOM stylesheet loading, and Document loader/lifecycle
+integration. Typecheck, changed-file ESLint, import boundaries, and diff whitespace
+checks pass. The two new extraction cases verify that Fetch preserves anchors,
+unexpanded relations, raw targets, and later fields after a malformed suffix.
+
+Consolidating both extraction views into FetchHeaders preserves those results on
+Node 26.8.1 stock and matching-addon runtimes: 428 passes plus the same three expected
+failures on stock, and 431 passes with the addon. The expanded extraction tests now
+live beside the raw tests in `test/fetch/headers.test.ts`. Typecheck, changed-file
+ESLint, import boundaries, and diff whitespace checks pass again.
+
+## Final-response Link phases
+
+HTML §7.5.1 step 19 now reaches the shared §4.2.4.4 processor. The Document method
+forwards its receiver, response, and phase; loader owns the loop. Attribute
+presence selects the phase: `media`, `srcset`, or `imagesrcset`, including empty
+values, require the media phase. `imagesizes` alone does not. Options use the
+receiving Document's current base URL, origin, policy container, and environment,
+with its Document already attached. Invalid preloads continue to later links
+under the previously approved `link-header-invalid-preload` decision.
+
+HTML's empty/ASCII-whitespace media rule is implemented without device inputs.
+Other media strings reach an explicit throwing dependency: Stylelet still needs
+active matching and the Document's actual device/viewport facts. A matching link
+with both `imagesrcset` and `imagesizes` reaches a separate source-set construction
+dependency after option validation. Neither dependency supplies a fabricated
+match, source set, or successful load.
+
+The existing §7.5.2 byte-loader callback now performs actual preparation after its
+first input has been parsed. A regression confirms that this phase sees the
+`base` element from that input, while the earlier pre-media phase uses the
+Document's original base. No parser or scheduler ordering changed. Another
+integration regression now controls only the unfinished preload operation and
+confirms Early Hints commitment precedes final-header preparation on the new
+Document. CSSOM stylesheet Link loading remains its separate once-only consumer.
+
+This slice leaves preload, preconnect, modulepreload, responsive images, and
+element Link lifecycle at their recorded Section 4 owners. Final-response
+prefetch's browser-behavior audit remains deferred as described above; the
+existing HTML relation dispatch is unchanged. §7.5.1 step 20's Speculation-Rules
+header is covered by the subsequent complete header-processing slice below.
+
+Sources: [processing Link headers](https://html.spec.whatwg.org/multipage/semantics.html#process-link-headers),
+[HTML media matching](https://html.spec.whatwg.org/multipage/common-microsyntaxes.html#mq),
+[HTML document loading](https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-html).
+The clean local HTML reference was refreshed on 2026-11-06 at `5955a33`.
+This adds no new browser-policy choice; the earlier Link decisions still apply.
+
+Validation: all 13 new preparation cases first failed at the old no-op hook and
+now pass. A new byte-loader regression covers the parsed base URL; the existing
+Early Hints ordering regression now runs real final-header preparation. Nine
+focused suites pass across Node 24.19.0, 26.8.1, and custom 27.0.0-pre, each with
+stock and matching-addon runtimes: 445 passes with the addon, 442 passes plus
+the same three existing Window identity/prototype expected failures without it.
+Typecheck/generated declarations, declaration contracts, changed-file ESLint,
+import boundaries, and diff whitespace checks pass. No native code changed.
+
+## Speculation-Rules header loading
+
+HTML §7.5.1 now calls the complete §7.6.3 header-processing algorithm for top-level
+Documents. `speculation.ts` selects strings from the structured list, resolves
+URLs before parallel work, queues each request on the speculation-rules task
+source, and uses real Fetch with the incoming Document as client. It ignores
+failed/null bodies, non-ok status, and incorrect MIME essence. Successful bodies
+are decoded as UTF-8, handed to the existing parser with the final response URL,
+and appended to the Document's list before reconsidering speculative loads.
+Author parse exceptions are ignored; an InternalError from an unfinished owner
+escapes instead of masquerading as invalid author input.
+
+Approved decisions (2026-11-06):
+
+- `SPEC_GAP(speculation-header-client)`: HTML omits Fetch's client assignment.
+  Use the incoming Document's environment for its origin, referrer, fetch group,
+  policy container, and networking tasks. Both implementing browser sources use
+  the Document's loader/context; live requests carry that Document's Origin.
+- `SPEC_GAP(speculation-fetch-destination)`: HTML references `speculationrules`
+  although Fetch has not defined it. Add the internal destination as a subresource,
+  without making it script-like (which would reject its JSON MIME under nosniff).
+  [Fetch PR #1952](https://github.com/whatwg/fetch/pull/1952) remains open. Its
+  public enum and proposed CSP directive are not adopted wholesale here.
+- `SPEC_CLASH(speculation-header-csp)`: follow HTML's explicit header exemption
+  and Chromium. WebKit blocks under script CSP, while CSP's current destination
+  fallback would select connect-src. [The original discussion](https://github.com/WICG/nav-speculation/issues/327)
+  and [Chromium's correction](https://issues.chromium.org/issues/371595744)
+  distinguish trusted response headers from injected script elements.
+  [CSP PR #808](https://github.com/w3c/webappsec-csp/pull/808) proposes a new
+  speculation-rules-src directive; revisit this rule if that integration lands.
+- `SPEC_CLASH(speculation-header-credentials)`: follow HTML/Chromium's same-origin
+  credentials. WebKit's live foreign request sends the foreign site's cookie.
+  CORS still governs whether any foreign response can supply rules.
+- `SPEC_CLASH(speculation-header-empty-url)`: follow HTML's normal URL parsing,
+  including resolving an empty string against the Document base. Chromium/WebKit
+  skip empty strings. Non-string items and inner lists are ignored in all three
+  implementations that supply an algorithm (HTML, Blink, and WebKit).
+- `SPEC_CLASH(speculation-header-redirect-base)`: follow HTML and Blink's final
+  response URL for rule parsing. WebKit's source retains the requested URL;
+  this distinction is source evidence, not a live rule-target observation.
+
+Browser-only probe: `node-compat/experimental/speculation-rules-header.mjs`,
+Chromium 156.0.8078.4, Firefox 157.0, WebKit 27.2. Firefox made no rule requests,
+including the positive control, so it supplies no behavior oracle here. Blink
+sources: `core/speculation_rules/speculation_rules_header.cc`,
+`core/loader/speculation_rule_loader.cc`, and
+`core/frame/csp/content_security_policy.cc`; WebKit sources:
+`dom/Document.cpp` and `dom/LoadableSpeculationRules.cpp`.
+Specification: [header algorithm](https://html.spec.whatwg.org/multipage/speculative-loading.html#process-the-speculation-rules-header)
+and [security considerations](https://html.spec.whatwg.org/multipage/speculative-loading.html#speculative-loading-injected-content).
+
+The rule parser still throws at `SpeculationRuleSet.parse()`. The data model,
+candidate matching, coalesced reconsideration, and actual prefetch/prerender
+lifecycles remain §7.6 work; `considerSpeculativeLoads()` is still a marked no-op.
+This slice fetches rule-set resources, not their proposed navigation targets.
+Shared cancellation also remains explicit: `Document.abort()` reaches the
+no-op `FetchGroup.cancel()`. The new real-Fetch regression failed waiting for
+body-failure delivery, and Eric approved retaining that strict assertion as an
+expected failure until §7.5.11/Fetch cancellation is implemented. Destruction
+already removes queued rule-request tasks; inactive Documents' tasks wait for
+activation through the existing event loop.
+
+The §7.5.1 pass is now through its return: step 21 already invokes the deferred
+Fetch quota owner, and its existing dedicated tests remain part of validation.
+This completes the algorithm audit, not all of its referenced subsystems.
+Next document-order work is the full §7.5.2 HTML-loading algorithm and its
+parser/encoding handoffs; take connected behavior as one reviewable slice.
+
+Validation: 23 header-loader cases cover selection, URL snapshots, MIME/status,
+body failure, UTF-8, redirects, parse errors, real CORS/cookies/CSP, incoming
+Document activation, child exclusion, and teardown. The cancellation case is the
+one approved expected failure. Seven focused suites (including request
+classification, CSP, inline-rule lifecycle, Document loading/creation, and quota)
+pass on Node 24.19.0, 26.8.1, and custom 27.0.0-pre with stock/matching addons:
+212 passes plus one expected failure with addons; 209 passes plus that failure
+and the same three existing Window identity/prototype expected failures on stock.
+Typecheck/generated declarations, declaration contracts, changed-file ESLint,
+import boundaries, and diff whitespace checks pass. No native code changed.
 
 ## Removal condition
 

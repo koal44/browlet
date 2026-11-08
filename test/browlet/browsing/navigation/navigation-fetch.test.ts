@@ -1,10 +1,12 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, assert, describe, expect, it, vi } from 'vitest';
 
 import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
 import { NavigationParams } from '../../../../src/browlet/browsing/navigation/params';
 import { DocumentState, SourceSnapshotParams } from '../../../../src/browlet/browsing/navigation/state/index';
+import type { PolicyContainer } from '../../../../src/browlet/browsing/policy/index';
 import { CSPList, ContentSecurityPolicy, type CSPDisposition } from '../../../../src/browlet/browsing/policy/csp/index';
 import { BrowletEnvironmentBase } from '../../../../src/browlet/environment/index';
+import { LinkProcessingOptions } from '../../../../src/browlet/loader/links/index';
 import { FetchController, FetchHeaders, type HTTPTransportListener } from '../../../../src/fetch/index';
 import { obtainURLOrigin, parseURL } from '../../../../src/url/index';
 import { mockHTTPTransport } from '../../../fetch/transport-fixture';
@@ -281,29 +283,69 @@ describe('parallel navigation Fetch delivery and cancellation', () => {
       return { pause() {}, resume() {}, abort };
     });
     await expect(NavigationParams.fromFetch(entry, navigable, source, target, 'other', 'none', null, 'navigate', env))
-      .rejects.toThrow('Early Hint Link-header processing is not implemented');
+      .rejects.toThrow('Link preload fetching and Document commitment are not implemented');
     expect(abort).toHaveBeenCalledOnce();
   });
 
   it('processes only the first Early Hints response with the incoming reserved environment', async () => {
     const { entry, navigable, source, target, env, transport } = fixture('');
     const commit = vi.fn();
-    const early = vi.spyOn(BrowletEnvironmentBase.prototype, 'processEarlyHintHeaders').mockReturnValue(commit);
+    const policies = vi.spyOn(env.userAgent, 'createPolicyContainerFromResponse');
+    let earlyPolicy: PolicyContainer | undefined;
+    const early = vi.spyOn(BrowletEnvironmentBase.prototype, 'processEarlyHintHeaders');
+    // Run real header preparation; control only the explicitly unfinished resource operation.
+    vi.spyOn(LinkProcessingOptions.prototype, 'preload').mockImplementation(function(this: LinkProcessingOptions) {
+      earlyPolicy = this.policyContainer;
+      this.onDocumentReady = commit;
+    });
     const construct = vi.spyOn(entry, 'createNavigationRequest');
     transport.mockImplementation((_request, listener) => {
-      listener.onHeaders(103, 'Early Hints', new FetchHeaders([['Link', '</first.css>; rel=preload; as=style']]), true);
+      listener.onHeaders(103, 'Early Hints', new FetchHeaders([
+        ['Link', '<first.css>; rel=preload; as=style'],
+        ['Content-Security-Policy', "style-src 'self'"], ['Referrer-Policy', 'origin'],
+      ]), true);
       listener.onHeaders(103, 'Early Hints', new FetchHeaders([['Link', '</second.css>; rel=preload; as=style']]), true);
       listener.onHeaders(200, 'OK', new FetchHeaders(), true);
       listener.onEnd();
       return { pause() {}, resume() {}, abort() {} };
     });
-    await expect(NavigationParams.fromFetch(entry, navigable, source, target, 'other', 'none', null, 'navigate', env))
-      .resolves.toMatchObject({ commitEarlyHints: commit });
+    const params = await NavigationParams.fromFetch(entry, navigable, source, target, 'other', 'none', null, 'navigate', env);
+    assert(params instanceof NavigationParams);
+    expect(params.commitEarlyHints).toBe(early.mock.results[0]!.value);
     expect(early).toHaveBeenCalledOnce();
     expect(early.mock.calls[0]![0].headerList.get('Link')).toContain('first.css');
+    expect(early.mock.calls[0]![0].url).toEqual(entry.url);
     expect(early.mock.contexts[0]).toBeInstanceOf(BrowletEnvironmentBase);
     expect(construct).toHaveReturnedWith(expect.objectContaining({ reservedClient: early.mock.contexts[0] }));
+    expect(policies.mock.calls[0]).toEqual([early.mock.calls[0]![0], early.mock.contexts[0]]);
+    assert(earlyPolicy);
+    expect(earlyPolicy.cspList?.selfOrigin).toEqual(obtainURLOrigin(entry.url));
+    expect(earlyPolicy.cspList?.policies[0]?.directives.has('style-src')).toBe(true);
+    expect(earlyPolicy.referrerPolicy).toBe('origin');
+    const finalPolicy = params.policyContainer;
+    expect(finalPolicy).not.toBe(earlyPolicy);
+    expect(finalPolicy.cspList?.policies).toEqual([]);
+    // No final Referrer-Policy field: retain the parser's empty policy, whose fallback is selected by Fetch.
+    expect(finalPolicy.referrerPolicy).toBe('');
     expect(commit).not.toHaveBeenCalled();
+  });
+
+  it.each([null, '<ignored>; rel=unknown', '<invalid>; rel=preload'])('retains the first hint callback without starting a resource: %s', async (link) => {
+    const { entry, navigable, source, target, env, transport } = fixture('');
+    const early = vi.spyOn(BrowletEnvironmentBase.prototype, 'processEarlyHintHeaders');
+    transport.mockImplementation((_request, listener) => {
+      listener.onHeaders(103, 'Early Hints', new FetchHeaders(link === null ? [] : [['Link', link]]), true);
+      // This later valid preload must be ignored, rather than reaching the resource dependency.
+      listener.onHeaders(103, 'Early Hints', new FetchHeaders([['Link', '</ignored.css>; rel=preload; as=style']]), true);
+      listener.onHeaders(200, 'OK', new FetchHeaders(), true);
+      listener.onEnd();
+      return { pause() {}, resume() {}, abort() {} };
+    });
+    const params = await NavigationParams.fromFetch(entry, navigable, source, target, 'other', 'none', null, 'navigate', env);
+    assert(params instanceof NavigationParams);
+    expect(early).toHaveBeenCalledOnce();
+    expect(params.commitEarlyHints).toBe(early.mock.results[0]!.value);
+    expect(params.commitEarlyHints).toBeTypeOf('function');
   });
 });
 

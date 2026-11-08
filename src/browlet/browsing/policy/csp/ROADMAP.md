@@ -660,6 +660,22 @@ Mixed Content and Upgrade Insecure Requests remain parent-policy algorithms;
 CSP contributes directives rather than another upgrade implementation.
 Navigation Timing remains [performance work](../../../performance/ROADMAP.md#fetch-and-navigation-integration).
 
+## Speculation-Rules response-header consumer
+
+`SPEC_CLASH(speculation-header-csp)`: HTML's current security section explicitly
+exempts rule sets fetched from trusted response headers. Chromium follows that
+rule; WebKit's source and live probe apply script CSP. CSP's current generic
+destination fallback would instead choose connect-src. The approved choice is
+HTML/Chromium: `speculationrules` selects no fetch directive. This does not exempt
+inline rule scripts or speculative target navigations. Keep Document ownership
+and the ordinary Fetch machinery for CORS, credentials, referrers, and lifecycle.
+
+The [loader audit](../../../loader/ROADMAP.md#speculation-rules-header-loading)
+records sources and a real Fetch test under default-src/script-src/connect-src
+`'none'`. Revisit this exemption if the proposed
+[speculation-rules-src directive](https://github.com/w3c/webappsec-csp/pull/808)
+lands; that open proposal is not silently adopted here.
+
 ## Validation and sources
 
 Tests cover parsing, matching/fallback, multiple policies, redirects,

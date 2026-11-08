@@ -46,6 +46,9 @@ export const reportingTaskSource = createTaskSource('reporting');
 // when the event loop's queue-selection policy supports task-source priorities.
 export const performanceTimelineTaskSource = createTaskSource('performance timeline');
 
+// https://html.spec.whatwg.org/multipage/speculative-loading.html#speculation-rules-task-source
+export const speculationRulesTaskSource = createTaskSource('speculation rules');
+
 // Automation entry is embedder work; HTML still owns task execution and checkpoints.
 export const automationTaskSource = createTaskSource('automation');
 
@@ -65,6 +68,7 @@ export const taskSources: Record<TaskSourceKey, TaskSource> = {
   bitmap: bitmapTaskSource,
   report: reportingTaskSource,
   'performance-timeline': performanceTimelineTaskSource,
+  'speculation-rules': speculationRulesTaskSource,
   automation: automationTaskSource,
   engine: jsEngineTaskSource,
 };

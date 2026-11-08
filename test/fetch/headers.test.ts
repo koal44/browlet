@@ -104,6 +104,58 @@ describe('header lists (Fetch §2.2.2)', () => {
     expect(new FetchHeaders([['A', 'text/html;"'], ['B', 'ignored'], ['A', 'x/x']]).getDecodeAndSplit('A'))
       .toEqual(['text/html;", x/x']);
   });
+
+  it('extracts Link syntax without resolving targets, expanding relations, or filtering anchors', () => {
+    const headers = new FetchHeaders([
+      ['Other', '<ignored>; rel=preload'],
+      ['LiNk', '<./a,b.css>; rel="alternate STYLESHEET"; title="a,;b"; title=ignored; anchor="/elsewhere"'],
+      ['Link', '<../second>; crossorigin'],
+    ]);
+    expect(headers.extractRawLinks().map(({ href, parameters }) => ({ href, parameters: [...parameters] }))).toEqual([
+      { href: './a,b.css', parameters: [['rel', 'alternate STYLESHEET'], ['title', 'a,;b'], ['anchor', '/elsewhere']] },
+      { href: '../second', parameters: [['crossorigin', '']] },
+    ]);
+  });
+
+  it('extracts later Link fields independently after an earlier malformed suffix', () => {
+    const headers = new FetchHeaders([
+      ['Link', '<first>; rel=preconnect, broken'],
+      ['link', '<second>; rel=preconnect'],
+    ]);
+    expect(headers.extractRawLinks().map((link) => link.href)).toEqual(['first', 'second']);
+    expect(new FetchHeaders().extractRawLinks()).toEqual([]);
+  });
+});
+
+describe('expanded Link extraction (HTML §4.2.4.4)', () => {
+  it('preserves complete fields, URL commas, quoted delimiters, relation order, and first parameters', () => {
+    const links = new FetchHeaders([
+      ['Other', '<ignored>; rel=preload'],
+      ['LiNk', '<a,b.js>; rel="unknown PRELOAD"; as=script; as=invalid; title="a,;b"'],
+      ['Link', '<second>; rel=preconnect'],
+    ]).extractLinks();
+    expect(links.map(({ href, rel, attributes }) => ({ href, rel, attributes: [...attributes] }))).toEqual([
+      { href: 'a,b.js', rel: 'unknown', attributes: [['as', 'script'], ['title', 'a,;b']] },
+      { href: 'a,b.js', rel: 'preload', attributes: [['as', 'script'], ['title', 'a,;b']] },
+      { href: 'second', rel: 'preconnect', attributes: [] },
+    ]);
+  });
+
+  it('ignores anchors, absent relations, and empty relation lists; preserves extension relation case', () => {
+    const links = new FetchHeaders([['Link',
+      '<anchored>; rel=preload; anchor="/other", <missing>, <blank>; rel="  ", <extension>; rel="https://example.test/REL"',
+    ]]).extractLinks();
+    expect(links.map(({ href, rel }) => [href, rel])).toEqual([['extension', 'https://example.test/REL']]);
+    expect(new FetchHeaders().extractLinks()).toEqual([]);
+  });
+
+  it('keeps completed links before a malformed suffix and parses later fields independently', () => {
+    const headers = new FetchHeaders([
+      ['Link', '<first>; rel=preconnect, broken'],
+      ['Link', '<second>; rel=preconnect'],
+    ]);
+    expect(headers.extractLinks().map((link) => link.href)).toEqual(['first', 'second']);
+  });
 });
 
 describe('header syntax and normalization', () => {

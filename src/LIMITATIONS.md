@@ -1470,6 +1470,14 @@ maintain the associated Document's rule-set list and report parse errors
 synchronously or through DOM manipulation tasks. The rule-set record is
 empty-only pending §7.6's full rule model. Tests supply parser results; no source
 string can produce a usable rule set or speculative request through this path yet.
+Top-level Document creation does fetch resources selected by `Speculation-Rules`
+headers, using Document-owned CORS requests with same-origin credentials and
+HTML's CSP exemption. Status, MIME, decoding, and rule registration are connected;
+successful response bodies still reach the explicit parser dependency. Inactive
+Documents defer their tasks and destruction removes queued requests, but
+`FetchGroup.cancel()` does not yet stop an in-flight rule body on Document abortion.
+The strict cancellation regression remains an approved expected failure. See the
+[header-loading audit](browlet/loader/ROADMAP.md#speculation-rules-header-loading).
 `HTMLScriptElement` has a dedicated implementation/platform identity and result
 state, plus `crossOrigin` and `referrerPolicy` reflection, without its preparation
 algorithm. Link and script reflection uses the shared HTML attribute definitions,
@@ -1847,7 +1855,7 @@ override (`SPEC_CLASH(navigation-container-origin)`, HTML #4703).
 Initial reservation now creates a client identity, target context, top-level
 metadata, and security decision without allocating a realm. Cross-origin redirects
 discard and replace the reservation and clear its Early Hints callback; same-origin
-redirects retain both. Service Worker association and Early Hints processing remain
+redirects retain both. Service Worker association and Early Hints resource loading remain
 unfinished. Navigation-request CSP checks
 captured source policies and reports to the source Document. Enforcing failure
 returns null through the browser-owned promise; its error-Document loader remains
@@ -1871,9 +1879,18 @@ Fetch retains full timing for all navigation destinations, including children,
 following the approved correction to Fetch's document-only condition
 (`SPEC_CLASH(navigation-fetch-full-timing)`). Timing exposure checks remain unchanged.
 Allowed iframe timing clears the pending fallback start, but its iframe-navigation
-producer and fallback reporting still need §4.8.5 integration. Early Hints call an
-explicit reserved-environment dependency for Link processing/preloading, including
-the interim response's URL metadata.
+producer and fallback reporting still need §4.8.5 integration. Early Hints retain
+the producing request's URL history before queued delivery or later redirects.
+HTML's reserved-environment hook forwards to the loader, which extracts Link
+relations, applies header attributes and early policy, and returns the Document
+callback. Empty/ignored or invalid-only hints no longer abort navigation, and later 103 responses remain
+ignored. Preload, preconnect, and modulepreload still throw at their named resource
+operations; preload/module-map commitment is unfinished. Final-response Link
+processing now selects each phase and prepares options from the incoming Document.
+Empty/ASCII-whitespace media matches directly; nonempty queries and responsive-image
+source-set construction throw at their named dependencies. Reserved-client Fetch
+construction also remains unfinished. See the
+[Link audit](browlet/loader/ROADMAP.md#link-header-preparation) for approved browser differences.
 Top-level Document requests bypass generic connect-src/default-src checks, following
 Fetch and all three browsers instead of CSP's fallback; form-action remains separate
 (`SPEC_CLASH(csp-document-fetch-directive)`). The loader preserves null initiators from openerless

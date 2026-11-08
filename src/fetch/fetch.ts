@@ -617,6 +617,10 @@ function httpNetworkFetch(
               timingInfo.firstInterimNetworkResponseStartTime = timingInfo.finalNetworkResponseStartTime;
             }
             const interim = new FetchResponse();
+            // SPEC_GAP(early-hints-response-url): Fetch delivers 103 before assigning the final
+            // response URL list, but HTML needs that URL for the early policy container and Link base.
+            // Capture the producing request now, before queued delivery or a later redirect.
+            interim.urlList = request.urlList.map(copyURL);
             interim.status = status;
             interim.headerList = headers;
             request.env.userAgent.webDriverBiDiResponseStarted(request, interim);

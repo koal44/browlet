@@ -1,5 +1,7 @@
 /** Fetch's internal destination type includes values outside the public Web IDL enum. */
-export type Destination = RequestDestination | 'serviceworker' | 'webidentity';
+// SPEC_GAP(speculation-fetch-destination): HTML uses speculationrules before Fetch defines it.
+// Retain the internal destination and subresource classification pending Fetch PR #1952.
+export type Destination = RequestDestination | 'serviceworker' | 'webidentity' | 'speculationrules';
 
 export type RequestDestination = EmptyDestination | 'audio' | 'audioworklet' | 'document' | 'embed' |
   'font' | 'frame' | 'iframe' | 'image' | 'json' | 'manifest' | 'object' | 'paintworklet' |
@@ -38,7 +40,6 @@ export function isNavigationDestination(destination: Destination): boolean {
 
 /** Translate the potential destination "fetch" to the empty request destination. */
 // https://fetch.spec.whatwg.org/#concept-potential-destination-translate
-// UNUSED: consumer integration has not needed this destination translation yet.
 export function translatePotentialDestination(destination: PotentialDestination): Destination {
   return destination === 'fetch' ? '' : destination;
 }
@@ -48,7 +49,7 @@ const scriptLikeDestinations = new Set<Destination>([
 ]);
 const subresourceDestinations = new Set<Destination>([
   '', 'audio', 'audioworklet', 'font', 'image', 'json', 'manifest', 'paintworklet',
-  'script', 'style', 'text', 'track', 'video', 'xslt',
+  'script', 'speculationrules', 'style', 'text', 'track', 'video', 'xslt',
 ]);
 const nonSubresourceDestinations = new Set<Destination>([
   'document', 'embed', 'frame', 'iframe', 'object', 'report', 'serviceworker', 'sharedworker', 'worker',

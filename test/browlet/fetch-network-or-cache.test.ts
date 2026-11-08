@@ -178,6 +178,9 @@ describe('HTTP response metadata', () => {
     expect(await f.text(response)).toBe('ready');
     const interim = await hint.promise;
     expect(interim.status).toBe(103);
+    expect(interim.url).toEqual(f.request.currentURL);
+    expect(interim.urlList).toEqual(f.request.urlList);
+    expect(interim.urlList).not.toBe(f.request.urlList);
     expect(interim.headerList.get('Link')).toBe('</asset.css>; rel=preload; as=style');
     const timing = f.operation.controller.extractFullTimingInfo();
     expect(timing.firstInterimNetworkResponseStartTime).toBeGreaterThan(0);

@@ -39,7 +39,7 @@ import type { WindowImpl, WindowProxyHandle } from '../window/index';
 import { BrowletEnvironmentBase, type BrowletEnvironment } from '../../environment/index';
 import { HTMLDocumentParser, type ScriptHandler } from '../../html/parser/index';
 import type { SerializedRecord } from '../../scripting/structured-data/index';
-import { ResourceReader } from '../../loader/index';
+import { processSpeculationRulesHeader, ResourceReader } from '../../loader/index';
 import type { PointerEventStream } from '../../interaction/index';
 import type { UserAgent } from '../../user-agent';
 
@@ -1582,9 +1582,7 @@ export class Navigable {
     document.processStyleSheetLinkHeaders(response);
     document.processLinkHeaders(response, 'pre-media');
     // https://html.spec.whatwg.org/multipage/speculative-loading.html#process-the-speculation-rules-header
-    if (this.isTopLevelTraversable && response.headerList.get('Speculation-Rules') !== null) {
-      throw new InternalError('Speculation-Rules response processing is not implemented');
-    }
+    if (this.isTopLevelTraversable) processSpeculationRulesHeader(document, response);
     document.potentiallyFreeDeferredFetchQuota();
     return document;
   }

@@ -160,6 +160,7 @@ describe('Fetch request classifications', () => {
     track: [false, true, false, false],
     video: [false, true, false, false],
     webidentity: [false, false, false, false],
+    speculationrules: [false, true, false, false],
     worker: [true, false, true, false],
     xslt: [false, true, false, false],
   };

@@ -281,9 +281,11 @@ when reviewing names or coordination state.
 
 ## Media matching
 
-Defer [HTML §2.3.10](https://html.spec.whatwg.org/multipage/common-microsyntaxes.html#mq)
-integration until a concrete caller needs matching. Current
-sheet associations retain their media lists, but Stylelet's
+[HTML §2.3.10](https://html.spec.whatwg.org/multipage/common-microsyntaxes.html#mq)
+now has a concrete loading consumer: [final-response Link processing](../loader/ROADMAP.md#final-response-link-phases)
+accepts empty/ASCII-whitespace strings, then explicitly throws for nonempty media
+until this owner supplies active matching. It introduces no substitute device
+facts or general matching service. Current sheet associations retain their media lists, but Stylelet's
 [`getActiveStyleSheets()`](../../stylelet/engine/cascade-engine.ts) checks only
 the disabled flag. Stylesheet applicability is a natural first integration;
 HTML's [`<source media>` selection](https://html.spec.whatwg.org/multipage/embedded-content.html#attr-source-media)

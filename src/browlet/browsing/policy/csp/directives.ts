@@ -28,6 +28,10 @@ export class CSPDirectives extends Map<string, CSPDirectiveValue> {
       // Follow Fetch's destination table and browsers: navigation has no fetch directive;
       // form-action remains a separate navigation check. Prefetch/prerender are handled above.
       case 'document': return null;
+      // SPEC_CLASH(speculation-header-csp): Follow HTML's explicit exemption and Chromium.
+      // CSP's unextended destination switch falls back to connect-src; WebKit checks script policy.
+      // Revisit for the proposed speculation-rules-src directive (CSP PR #808).
+      case 'speculationrules': return null;
       case 'report': return null;
       default: return 'connect-src';
     }

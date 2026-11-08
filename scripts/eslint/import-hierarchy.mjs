@@ -61,6 +61,8 @@ export const layers = [
   ['browlet/browsing/policy/csp/'],
   ['browlet/browsing/policy/'],
   ['browlet/browsing/policy/trusted-types/'],
+  // Shared Link preparation retains Document/environment types without loading their implementations.
+  ['browlet/loader/links/'],
   // Mutation participants retain typed nodes without loading their implementation classes.
   ['browlet/dom/ranges/', 'browlet/dom/traversal/', 'browlet/dom/intersection-observer/'],
   // Selection owns a live Range and retains only typed Document/node references.

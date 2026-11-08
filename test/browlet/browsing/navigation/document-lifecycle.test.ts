@@ -17,7 +17,8 @@ import { DocumentState } from '../../../../src/browlet/browsing/navigation/state
 import { monotonicClock } from '../../../../src/timing/clock';
 import { WindowProxyHandle } from '../../../../src/browlet/browsing/window/window-proxy';
 import { WindowImpl } from '../../../../src/browlet/browsing/window/window';
-import { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
+import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
+import { LinkProcessingOptions } from '../../../../src/browlet/loader/links/options';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
 import { InternalError } from '../../../../src/infra/internal-error';
 import { FetchBody } from '../../../../src/fetch/body';
@@ -532,23 +533,30 @@ describe('navigation response inputs', () => {
   it('commits early hints before processing the new document\'s pre-media Link headers', () => {
     const traversable = TopLevelTraversable.create(new UserAgent(), null, '');
     const params = traversable.createNavigationParamsFromSource(requireURL('https://example.test/page'));
+    params.response.headerList.append('Link', '<asset>; rel=preload; as=fetch');
     const steps: string[] = [];
     let hintsDocument: DocumentImpl | undefined;
     params.commitEarlyHints = (document) => {
       hintsDocument = document;
       steps.push('early-hints');
     };
-    const processLinkHeaders = vi.spyOn(DocumentImpl.prototype, 'processLinkHeaders')
-      .mockImplementation((_response, phase) => { steps.push(phase); });
+    const prepared: LinkProcessingOptions[] = [];
+    const preload = vi.spyOn(LinkProcessingOptions.prototype, 'preload')
+      .mockImplementation(function(this: LinkProcessingOptions) {
+        prepared.push(this);
+        steps.push('pre-media');
+      });
     try {
       const document = traversable.createAndInitializeDocument('html', 'text/html', params);
 
       expect(steps).toEqual(['early-hints', 'pre-media']);
       expect(hintsDocument).toBe(document);
-      expect(processLinkHeaders).toHaveBeenCalledExactlyOnceWith(params.response, 'pre-media');
-      expect(processLinkHeaders.mock.contexts).toEqual([document]);
+      expect(preload).toHaveBeenCalledOnce();
+      expect(prepared[0]!.document).toBe(document);
+      expect(prepared[0]!.env).toBe(document.env);
+      expect(prepared[0]!.policyContainer).toBe(document.policyContainer);
     } finally {
-      processLinkHeaders.mockRestore();
+      preload.mockRestore();
     }
   });
 

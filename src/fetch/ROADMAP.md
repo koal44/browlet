@@ -12,6 +12,46 @@ at `586cd2a`, with focused implementation, binding, transport, and WPT coverage.
 The remaining implementation work is deferred below. Reviewed specification
 and upstream-test disagreements remain documented under retained decisions.
 
+## Early Hints response URL handoff
+
+The next HTML §7.5.1 dependency audit reproduced missing provenance on 103 responses:
+HTTP/1.1 and HTTP/2 callbacks received `url === null`, and hints delivered around
+manual redirects had empty URL lists. Fetch now snapshots the producing request's
+URL list, including the URL records, when creating each informational response.
+Queued delivery and later redirects cannot advance an earlier hint's base URL.
+The HTTP transport contract and final-response processing are unchanged.
+
+`SPEC_GAP(early-hints-response-url)`: Fetch's HTTP network algorithm queues the 103
+callback before HTTP-network-or-cache fetch assigns the final response URL list.
+HTML nevertheless requires the hint response's URL to create its early policy
+container and to choose Link's base URL and origin. Retain the producing request
+history here, without substituting the departing Document or a later final URL.
+The standards' acknowledged HTTP/Fetch layering gap leaves that interim assignment
+implicit. This supplies existing inputs; it does not create a new policy decision.
+
+Sources: [HTTP network fetch](https://fetch.spec.whatwg.org/#http-network-fetch),
+[HTTP-network-or-cache fetch](https://fetch.spec.whatwg.org/#http-network-or-cache-fetch),
+[HTML early hint processing](https://html.spec.whatwg.org/multipage/semantics.html#process-early-hint-headers).
+Both local specification checkouts were refreshed from upstream on 2026-11-06.
+Browser source corroborates keeping navigation provenance available: Chromium's
+[Early Hints manager](https://github.com/chromium/chromium/blob/main/content/browser/loader/navigation_early_hints_manager.cc)
+receives the navigation request and retained origin, while Gecko's
+[EarlyHintsService](https://github.com/mozilla/gecko-dev/blob/master/netwerk/protocol/http/EarlyHintsService.cpp)
+receives the response's base URI and channel. These are source observations,
+not a live browser comparison or a claim that their complete hint policies agree.
+Extractlet's complete Chromium capture supplied no capture warnings.
+
+Regressions retain real HTTP/1.1 and HTTP/2 coverage plus same/cross-origin manual
+redirects. Navigation's first-hint test runs real policy-container construction
+with the incoming reserved environment, checks the destination CSP self origin,
+and keeps early policies separate from the final response's policies. HTML now
+performs real Link option preparation through `FetchHeaders.extractLinks()`, which
+filters anchors and expands relations over `extractRawLinks()`'s parsed fields.
+CSSOM uses the raw view to retain complete relation lists; both leave target URL
+resolution to their consumers. Tests control only unfinished resource operations.
+Preload/preconnect/modulepreload and actual
+preload/module-map commitment remain explicit throwing dependencies.
+
 ## Remaining Fetch work
 
 Background cache revalidation retains the execution environment passed to the
@@ -22,11 +62,10 @@ the client Document is inactive; previously even HTTP dispatch stalled. This
 follows Fetch §4.6's parallel revalidation step. Separating the client type from
 the complete execution-environment contract remains an architecture follow-up.
 
-- **Early Hints URL metadata:** HTML's new reserved-environment callback explicitly
-  stops at Link-header/preload processing. Before implementing that owner, interim
-  responses need their URL retained for the hint's base URL and origin; the current
-  transport callback supplies status and headers only. See the
-  [navigation boundary](../browlet/browsing/navigation/ROADMAP.md#initial-fetch-parallel-response-delivery-and-cancellation).
+- **Early Hints consumption:** The response URL handoff above is implemented.
+  HTML's reserved-environment callback prepares headers and retains its Document
+  callback, but resource operations and actual preload/module-map commitment
+  still throw. See the [Link boundary](../browlet/loader/ROADMAP.md#link-header-preparation).
 - **Content-Disposition rejection:** Navigation now uses Fetch's header-list
   extraction and RFC 6266 attachment classification; HTTP owns single-value parsing.
   Identical repeated values are accepted; conflicting values explicitly throw during classification. Producing
@@ -43,6 +82,15 @@ the complete execution-environment contract remains an architecture follow-up.
 - **Group cancellation:** `FetchGroup.cancel()` is a provisional no-op. Complete
   HTML's task/data disposal and keepalive/deferred rules; controller cancellation
   and non-keepalive group termination already work.
+  The real Speculation-Rules body test reproduces missing failure delivery after
+  `Document.abort()`; Eric approved its expected-failure classification on 2026-11-06.
+  See the [header loader audit](../browlet/loader/ROADMAP.md#speculation-rules-header-loading).
+- **Speculation-rules destination:** HTML's header loader now uses the internal
+  `speculationrules` destination and subresource classification. Fetch still lacks
+  that destination (`SPEC_GAP(speculation-fetch-destination)`,
+  [PR #1952](https://github.com/whatwg/fetch/pull/1952)); its proposed public enum
+  and new CSP directive await the owning Fetch/CSP audit. It is not script-like:
+  header rule sets require JSON, not JavaScript MIME, including with nosniff.
 - **Deferred fetching:** [§4.12](https://fetch.spec.whatwg.org/#deferred-fetch)
   now has quota reservation/accounting and request-length calculation, connected
   to HTML navigation and Document creation. `fetchLater()`, FetchLaterResult,

@@ -6,6 +6,7 @@ import { DocumentState, SourceSnapshotParams } from '../../../../src/browlet/bro
 import { CSPList, ContentSecurityPolicy, CSPViolation } from '../../../../src/browlet/browsing/policy/csp/index';
 import { PolicyContainer } from '../../../../src/browlet/browsing/policy/index';
 import { BrowletEnvironmentBase } from '../../../../src/browlet/environment/index';
+import { LinkProcessingOptions } from '../../../../src/browlet/loader/links/index';
 import { FetchController, FetchHeaders, type HTTPTransportListener } from '../../../../src/fetch/index';
 import { obtainURLOrigin, parseURL, serializeURL } from '../../../../src/url/index';
 import { mockHTTPTransport } from '../../../fetch/transport-fixture';
@@ -123,11 +124,15 @@ describe('navigation manual redirects', () => {
   });
 
   it.each([false, true])('retains Early Hints only across same-origin redirects (cross-origin: %s)', async (crossOrigin) => {
-    const { begin, transport } = fixture(crossOrigin ? 'https://elsewhere.test/next' : '/next');
-    const early = vi.spyOn(BrowletEnvironmentBase.prototype, 'processEarlyHintHeaders').mockImplementation(() => vi.fn());
+    const { begin, navigable, transport } = fixture(crossOrigin ? 'https://elsewhere.test/next' : '/next');
+    const early = vi.spyOn(BrowletEnvironmentBase.prototype, 'processEarlyHintHeaders');
+    const committed: string[] = [];
+    vi.spyOn(LinkProcessingOptions.prototype, 'preload').mockImplementation(function(this: LinkProcessingOptions) {
+      this.onDocumentReady = () => { committed.push(this.href); };
+    });
     transport.mockImplementation((request, listener) => {
       const initial = serializeURL(request.url, true).endsWith('/start');
-      listener.onHeaders(103, 'Early Hints', new FetchHeaders([['Link', initial ? '</first>' : '</second>']]), true);
+      listener.onHeaders(103, 'Early Hints', new FetchHeaders([['Link', `${initial ? '</first>' : '</second>'}; rel=preload; as=script`]]), true);
       listener.onHeaders(initial ? 302 : 200, initial ? 'Found' : 'OK', new FetchHeaders(initial
         ? [['Location', crossOrigin ? 'https://elsewhere.test/next' : '/next']] : []), true);
       listener.onEnd();
@@ -139,9 +144,14 @@ describe('navigation manual redirects', () => {
     expect(params.commitEarlyHints).toBe(early.mock.results.at(-1)!.value);
     expect(params.reservedEnv).toBe(early.mock.contexts.at(-1));
     if (crossOrigin) expect(early.mock.contexts[1]).not.toBe(early.mock.contexts[0]);
-    for (const result of early.mock.results) {
-      if (result.type === 'return') expect(result.value).not.toHaveBeenCalled();
-    }
+    expect(early.mock.calls.map(([response]) => response.urlList.map((url) => serializeURL(url))))
+      .toEqual(crossOrigin ? [
+        ['https://source.test/start#original'],
+        ['https://source.test/start#original', 'https://elsewhere.test/next#original'],
+      ] : [['https://source.test/start#original']]);
+    expect(committed).toEqual([]);
+    params.commitEarlyHints!(navigable.activeDocument!);
+    expect(committed).toEqual([crossOrigin ? '/second' : '/first']);
   });
 
   it('keeps both COOP switch results across a chain instead of restarting from the departing Document', async () => {

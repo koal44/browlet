@@ -1,5 +1,6 @@
 import { TypeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
+import { asciiLower } from '../infra/ascii';
 import { TextCursor } from '../infra/text-cursor';
 import { nonASCIIDigitPattern, surroundingTabOrSpacePattern } from '../infra/patterns';
 import { isomorphicEncode } from '../js-engine/index';
@@ -9,8 +10,8 @@ import {
 } from '../web-idl/core/index';
 import { getEncoding, type Encoding } from '../encoding/index';
 import {
-  collectHTTPQuotedString, isHTTPTabOrSpace, isHTTPToken, parseContentDispositionType,
-  parseStructuredField, serializeStructuredField, type StructuredField,
+  collectHTTPQuotedString, isHTTPTabOrSpace, isHTTPToken, parseContentDispositionType, parseLinkHeader,
+  parseStructuredField, serializeStructuredField, type HTTPLink, type StructuredField,
 } from '../http/index';
 import { getMIMETypeEssence, parseMIMEType, type MIMEType, type MIMETypeEssence } from '../mime/index';
 
@@ -147,6 +148,45 @@ export class FetchHeaders {
     return value === null ? null : getDecodeAndSplitHeaderValue(value);
   }
 
+  /** Extract unresolved Link targets and one relation per result, ignoring anchored links. */
+  // https://html.spec.whatwg.org/multipage/semantics.html#extract-links-from-headers
+  // https://www.rfc-editor.org/rfc/rfc8288.html#appendix-B
+  // Retain unresolved href and attributes; URL resolution belongs to each consumer.
+  extractLinks(): LinkHeader[] {
+    const links: LinkHeader[] = [];
+    for (const { href, parameters } of this.extractRawLinks()) {
+      // RFC 8288 permits ignoring anchored links rather than applying them to the wrong context.
+      if (parameters.has('anchor')) continue;
+      const relations = parameters.get('rel');
+      if (relations === undefined) continue;
+      const attributes = new Map(parameters);
+      attributes.delete('rel');
+      // SPEC_CLASH(link-header-relations): RFC 8288 and final-response implementations expand rel lists;
+      // Chromium/Firefox's Early Hints paths instead ignore a multi-relation value. Keep the shared RFC rule.
+      for (const relation of relations.split(/ +/)) {
+        if (relation === '') continue;
+        const rel = relation.includes(':') ? relation : asciiLower(relation);
+        links.push({ href, rel, attributes });
+      }
+    }
+    return links;
+  }
+
+  /** Parse Link fields in order, retaining unresolved targets, complete relation lists, and anchors. */
+  // https://www.rfc-editor.org/rfc/rfc8288.html#appendix-B
+  extractRawLinks(): HTTPLink[] {
+    const links: HTTPLink[] = [];
+    for (const [name, value] of this.list) {
+      if (asciiLower(name) !== 'link') continue;
+      // SPEC_CLASH(link-header-comma-splitting): HTML's generic splitter breaks commas in <URLs>.
+      // Follow RFC 8288 and browsers by letting the Link parser consume each complete field.
+      // SPEC_CLASH(link-header-duplicate-parameters): Keep the existing parser's first value,
+      // matching Chromium/Firefox for duplicate as parameters; WebKit uses the last.
+      for (const link of parseLinkHeader(value)) links.push(link);
+    }
+    return links;
+  }
+
   /** Extract the disposition type without interpreting filename or extension parameters. */
   // https://www.rfc-editor.org/rfc/rfc6266.html#section-4.1
   extractContentDispositionType(): string | null {
@@ -244,6 +284,13 @@ export class FetchHeaders {
 
 /** Each string code unit represents one byte. */
 export type Header = [name: string, value: string];
+
+/** One expanded relation, its unresolved target, and the remaining header attributes. */
+export type LinkHeader = {
+  href: string;
+  rel: string;
+  attributes: Map<string, string>;
+};
 
 /*
  * typedef (sequence<sequence<ByteString>> or record<ByteString, ByteString>) HeadersInit;

@@ -3797,9 +3797,13 @@ success removes the temporary navigation-change listener and transfers control t
 the params consumer.
 
 The first 103 response calls the reserved environment's
-`processEarlyHintHeaders(response)`. That method explicitly throws until HTML
-§4.2.4 Link-header/preload/preconnect processing and preload-map commitment exist.
-Fetch's interim response must also retain its URL for Link base/origin selection.
+`processEarlyHintHeaders(response)`. That method forwards to the loader's Early
+Hints algorithm to prepare Link options and early policy, then dispatch each
+resource operation. Preload, preconnect, and modulepreload still throw at their
+named dependencies; empty/ignored hints
+return their commit callback normally.
+Fetch now retains each interim response's producing URL history for Link base/origin
+selection; see the [response handoff audit](../../../fetch/ROADMAP.md#early-hints-response-url-handoff).
 Later hints are ignored once commit steps exist; redirect handling retains them
 for same-origin redirects and discards them, together with the reservation, for
 cross-origin redirects. Service Worker association and the remaining reserved-client
@@ -3876,7 +3880,7 @@ so cancellation works on later hops as well as on the first response.
 | Location selection | Use Fetch's Location parsing and fragment inheritance. Invalid Location returns null without replacing history state. An absent Location selects final parameter assembly. |
 | History state | Clear classic History state to serialized null. Replace only this entry's DocumentState, preserving the specified referrer, origin, resource, population, and target-name metadata and cloning its history policy container. Adjacent entries keep the old state; document, nested histories, reload-pending, and not-restored diagnostics start at their defaults. Navigation API state is unchanged. |
 | HTTP(S) redirects | Update the entry URL, repeat request CSP, and resume the same Fetch controller. A request body cleared by Fetch also clears the retained resource. Fetch's existing 20-redirect limit remains authoritative. |
-| Reservation and Early Hints | Same-origin hops retain the reserved environment and first commit callback. Cross-origin hops discard the old reservation, clear its callback, and reserve a new client with the new URL/security inputs before continuing Fetch. Actual Link/preload/preconnect processing still throws. |
+| Reservation and Early Hints | Same-origin hops retain the reserved environment and first commit callback. Cross-origin hops discard the old reservation, clear its callback, and reserve a new client with the new URL/security inputs before continuing Fetch. Link preparation and callback selection are implemented; preload/preconnect/modulepreload resource operations still throw. |
 | Repeated response checks | Rebuild each response's policy container, sandbox flags, and origin; accumulate top-level COOP results and rerun HTTP(S) child CORP. Configured URL-scoped COOP reports retain their explicit unfinished owner. |
 | Non-HTTP redirects | Clear retained POST data. Non-HTTP Fetch schemes return null; non-fetch schemes return params with the last response's origin and the captured activation/sandbox inputs. External handler selection and launch remain explicit dependencies. |
 
@@ -3929,10 +3933,10 @@ navigation producer and fallback load-event reporting remain explicit TODOs.
 The provisional response-policy loader also remains: Browlet's local route still
 needs late preparation; §7.5.1 now preserves intentionally null reservations in
 completed params rather than sending them through that adapter.
-Service Worker association, actual Early Hints processing (including interim URL
-metadata), URL-scoped COOP reporting, local cookie-URL inheritance, synthetic
-null-request referrer persistence, error pages, and actual Document loaders remain
-at their recorded owner boundaries. No dependency is replaced with a default success.
+Service Worker association, actual Early Hints processing, URL-scoped COOP reporting,
+local cookie-URL inheritance, synthetic null-request referrer persistence, error
+pages, and actual Document loaders remain at their recorded owner boundaries.
+No dependency is replaced with a default success.
 
 The new parameter tests cover retained fields, body/controller lifetime, policy
 precedence and cloning, both iframe timing-permission branches, and target-task
@@ -5402,7 +5406,7 @@ origin check in both directions.
 | 8–10: Document fields and Window association | Audited below: incoming state is fresh even when the initial Window is reused, and association precedes loader callbacks without activating the Document. Cookie-URL producer/history inputs and the public registry API remain separate dependencies. |
 | 11–14: ancestry, CSP, referrer | Audited below: captured iframe policy and known container initialize ancestry before activation; CSP applies to the incoming Document; referrer consumes Fetch's resolved value. Existing masking/null-request choices remain. CSP's unspecified style-src initialization and Console output remain explicit dependencies. |
 | 15–16: Navigation Timing | Controller-backed creation selects redirect counts using HTML's taint/client/referrer/TAO rule. All shared-factory Documents expose destination metadata and buffer the entry before callbacks, using zero unavailable fetch phases/transfer size without a controller. Target-history diagnostics arrive before activation; child entries retain null. Load completion notifies observers without reinsertion. Initial about:blank intentionally has no entry. Missing producer timing, unload/Critical-CH producers, and diagnostic lifecycle callers remain explicit. |
-| 17–20: response headers | Step 17 performs Refresh decoding, shared parsing, admission, and HTTP load-relative scheduling. Ordinary dispatch retains navigation's transient-activation dependency; meta insertion timing remains unfinished. Invalid inputs do not block Document creation. Speculation-Rules throws when present. Early Hints producer processing throws; its retained commit callback is invoked. HTML pre-media Link processing remains a marked no-op, distinct from the implemented CSSOM stylesheet-Link consumer. Their remaining algorithms and ordering need separate slices. |
+| 17–20: response headers | Step 17 performs Refresh decoding, shared parsing, admission, and HTTP/meta scheduling. Ordinary dispatch retains navigation's transient-activation dependency. Invalid inputs do not block Document creation. Early Hints prepares Link options and invokes the retained Document callback. Step 19 selects final-response phases and prepares options from the incoming Document, independently of CSSOM's stylesheet-Link consumer. Nonempty media matching, image source-set construction, and preload/preconnect/modulepreload effects remain explicit throwing dependencies. Step 20 now fetches, validates, decodes, and registers header rule sets through the incoming Document; rule parsing, candidate selection, and shared in-flight cancellation remain explicit dependencies. |
 | 21: deferred Fetch quota | The existing `potentiallyFreeDeferredFetchQuota()` consumer is connected; full deferred-fetch request/lifetime integration retains its Fetch owner. |
 | §§7.5.2–7.5.11 | HTML production parser/script setup, other Document loaders, finish/unload/destruction/abort coordination remain separate bounded slices. Window allocation does not complete those operations. |
 
@@ -5789,6 +5793,72 @@ delivery through Browlet's ordinary loader/host scheduler. TypeScript/generated
 declarations, declaration contracts, changed-file ESLint, import hierarchy, and
 whitespace checks pass. The Browlet package rebuild and CJS/ESM/platform-type
 artifact checks pass on Node 26.8.1 stock and compat. No native changes were needed.
+
+## Early Hints response preparation prerequisite
+
+The next bounded slice repairs the existing missing 103-response URL before
+implementing HTML's hint consumer. Real HTTP/1.1 and HTTP/2 regressions failed on
+the null URL; both manual-redirect variants failed on empty URL histories. Fetch
+now snapshots the producing request URL list before queuing the hint callback.
+The [Fetch audit](../../../fetch/ROADMAP.md#early-hints-response-url-handoff)
+records the specification gap and source evidence.
+
+The existing first-hint/redirect policy remains unchanged. Coverage runs real
+early policy-container construction with the reserved environment, verifying
+the destination origin and separate early/final policies. The follow-up now
+implements Link extraction/options, relation dispatch, and the Document callback;
+its resource operations still throw. The [Link audit](../../loader/ROADMAP.md#link-header-preparation)
+records the bounded implementation, browser decisions, and remaining request,
+preload, connection, module, media, and lifecycle dependencies.
+
+Validation: all 77 cases in the HTTP/1.1 network/cache, HTTP/2, navigation Fetch,
+and manual-redirect suites pass on Node 24.19.0, 26.8.1, and custom 27.0.0-pre,
+each with and without the matching addon. The four URL expectations failed before
+the repair and pass afterward. TypeScript/generated declarations, declaration
+contracts, changed-file ESLint, import hierarchy, and whitespace checks pass.
+No native changes were needed.
+
+## HTML §7.5.1: Final-response Link preparation
+
+Step 19 now forwards from Document to `loader/links/response.ts`. The shared
+processor selects pre-media/media links by attribute presence, applies the
+approved header rules, and dispatches with the incoming Document's base URL,
+origin, policy, and environment. Early Hints commitment still precedes this
+work. CSSOM stylesheet header loading retains its independent consumer.
+
+The existing §7.5.2 first-input callback reaches the media phase after parsing
+that input. Coverage verifies that it sees a newly parsed `base` element and
+does not replay the pre-media links. Empty/ASCII-whitespace media strings match;
+nonempty media queries and responsive-image source-set construction still throw
+at explicit dependency branches. Resource fetching/connection/module commitment
+remains at its existing Section 4 owners. The [Link audit](../../loader/ROADMAP.md#final-response-link-phases)
+records those boundaries and the focused validation.
+
+Step 20 is now covered by the subsequent Speculation-Rules header slice below;
+the Link work itself does not expand the speculation parser or speculative-load
+subsystem.
+
+## HTML §7.5.1: Speculation-Rules and shared-creation completion
+
+The top-level guard now calls `loader/speculation.ts` instead of rejecting every
+present header. The complete header algorithm includes structured-list and URL
+selection, parallel/global-task scheduling, Document-owned CORS Fetch,
+response/body/MIME checks, UTF-8 decoding, and parser/registration handoff.
+The [loader audit](../../loader/ROADMAP.md#speculation-rules-header-loading)
+records the approved client, CSP, credential, and URL decisions with sources.
+
+This reaches the end of §7.5.1: deferred Fetch quota release already has its
+implementation and tests. Remaining dependencies above are still real work,
+including Link resource effects, the §7.6 rule parser/speculative engine, and
+§7.5.11/Fetch in-flight cancellation. The new cancellation regression remains
+an approved expected failure; it is not replaced by a speculation-only abort
+mechanism. Scheduling, activation, queued-task destruction, actual Fetch/CORS,
+and response handoff are covered independently of that limitation.
+
+The next document-order boundary is §7.5.2, loading HTML documents. Audit its
+complete loader/parser flow as a coherent slice, rather than one numbered step
+per check-in. Existing source-route and parser/encoding dependencies remain
+visible until their actual owners are implemented.
 
 ## Removal condition
 

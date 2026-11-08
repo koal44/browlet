@@ -5,6 +5,7 @@ import { internalType } from '../../../src/infra/promises';
 import { Browlet } from '../../../src/browlet/browlet';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { ResourceReader } from '../../../src/browlet/loader/resource-reader';
+import { LinkProcessingOptions } from '../../../src/browlet/loader/links/options';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import type { PerformanceEntry, PerformanceNavigationTiming, Window } from '../../../src/browlet/platform';
 import { fetch } from '../../../src/fetch/fetch';
@@ -78,6 +79,35 @@ describe('Navigable HTML response loading', () => {
       expect(script).toHaveBeenCalledOnce();
       expect(document.querySelector('p')!.textContent).toBe('after');
     }
+  });
+
+  it('processes each header phase once, with media links using the base from the first parsed bytes', async () => {
+    const browser = new Browlet({ route: () => '' });
+    const env = getRelevantRealm(browser.window).env;
+    const navigable = env.realm.getAssociatedDocument().getNodeNavigable()!;
+    const response = new FetchResponse();
+    response.urlList = [env.parseURL('https://example.test/new')!];
+    response.headerList.append('Content-Type', 'text/html');
+    response.headerList.append('Link', '<early>; rel=preload; as=fetch, <media>; rel=preload; as=image; media=""');
+    response.body = FetchBody.fromBytes(utf8Encode('<!doctype html><base href="/later/"><p>loaded</p>'), env.userAgent.sandbox);
+    const resource = new ResourceReader(response, env.userAgent);
+    await new Promise<void>((resolve, reject) => resource.determineMIMEType().observe(() => { resolve(); }, reject));
+    const params = navigable.createNavigationParams(response);
+    const prepared: LinkProcessingOptions[] = [];
+    vi.spyOn(LinkProcessingOptions.prototype, 'preload').mockImplementation(function(this: LinkProcessingOptions) {
+      prepared.push(this);
+    });
+
+    const document = navigable.loadHTMLDocument(params, () => {}, resource);
+    expect(prepared.map((options) => options.href)).toEqual(['early']);
+    navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
+    await expect.poll(() => document.readyState).toBe('complete');
+
+    expect(prepared.map((options) => options.href)).toEqual(['early', 'media']);
+    expect(prepared.map((options) => options.document)).toEqual([document, document]);
+    expect(prepared.map((options) => options.baseURL.path)).toEqual([['new'], ['later', '']]);
+    expect(document.getBaseURL().path).toEqual(['later', '']);
+    expect(document.querySelector('p')!.textContent).toBe('loaded');
   });
 
   it.each(['combined', 'repeated'])('loads stylesheet Link fields through navigation (%s)', async (format) => {
