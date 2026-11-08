@@ -175,9 +175,10 @@ routing; nested forwarding and general shared stores remain separate dependencie
 Execution, owner monitoring, and readiness remain later startup steps. Internal
 dependency errors remain host errors rather than being converted into ordinary
 worker load failures. The production driver handles ordinary graph completion
-directly. Only the explicit unfinished-startup error is reported on the native
-host queue, so it tears down the thread instead of being swallowed by a Promise
-reaction. That reporting step is not an extra HTML startup task.
+directly and throws an unfinished-startup error normally. Shared internal Promise
+observation now reports escaping completion exceptions to the host, preserving
+native worker teardown without a special reporting task in the worker driver.
+These implementation failures must not become author `unhandledrejection` events.
 Real-isolate tests cover preference changes, classic/module parsing,
 event-handler policy access, and creator sandbox separation.
 

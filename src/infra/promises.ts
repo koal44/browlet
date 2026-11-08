@@ -123,7 +123,11 @@ export class InternalPromise<T> {
     return this.then(undefined, reject);
   }
 
-  /** Run completion steps without creating another internal Promise. */
+  /**
+   * Run synchronous completion steps without returning another internal Promise.
+   * reject handles the source rejection; an escaping callback exception belongs
+   * to the observation backend's host failure handling, not the other callback.
+   */
   observe(fulfill: (value: T) => void, reject: (reason: unknown) => void, conversionFailed = reject): void {
     this.observeNative((value) => {
       let item: T;

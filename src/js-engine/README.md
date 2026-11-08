@@ -389,6 +389,27 @@ discarded derived Promise are documented under
 [Promise observation](../LIMITATIONS.md#promise-observation). Web IDL retains
 typed fulfillment conversion.
 
+Internal `observe()` callbacks are synchronous completion steps. The rejection
+callback handles failure of the source operation; an exception escaping either
+callback is an unexpected implementation failure. Realm-owned internal Promises
+catch it before native Then can reject a discarded result and expose that result
+through HTML's `unhandledrejection` event. They use the same host reporter as
+`NodePromise`: report the original thrown value on a later Node turn, after
+reaction cleanup, and let Node's uncaught-exception policy apply. Without a host
+exception handler, the worker thread or main Node process exits. Reporting does
+not repair partial work or settle an abandoned completion. Worker isolates use
+the existing native error/exit path. No successful
+completion moves to another queue, and ordinary internal/author Promise chains
+retain their rejection semantics. The lower-level `JSRealm.observePromise()`
+primitive is unchanged; this policy belongs to internal Promise completion.
+
+The isolated [observer regression](../../test/browlet/scripting/promise-observers.test.ts)
+checks private and declared results, fulfillment/rejection/conversion-failure
+callbacks, thrown values, independent observers, absence of author rejection
+events, and normal rejection recovery. It also checks host reporting without
+another realm checkpoint and process termination without an exception handler.
+Worker startup tests also exercise native thread teardown from an observer throw.
+
 `bindAsyncContext(steps)` preserves Node scheduling-time AsyncLocalStorage state
 across explicit task handoff. It does not choose a Promise queue or establish
 HTML execution ownership. Node diagnostics must remain able to complete without

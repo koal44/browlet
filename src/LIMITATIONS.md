@@ -516,6 +516,12 @@ Promise handled by attaching a reaction; the addon does not expose V8's existing
 preserve typed settlement, exception identity, handled state, and queue ownership.
 Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promises](web-idl/values/promise.ts).
 
+Realm-owned internal Promise completion catches escaping observer exceptions and
+reports them through Node's host failure path before the discarded result can
+become an author-visible rejection. This fixes internal error ownership without
+removing the extra native Promise or changing the raw observation primitive.
+See the [internal observer regression](../test/browlet/scripting/promise-observers.test.ts).
+
 ## Buffers and engine internal slots
 
 - **WebAssembly Memory buffer conversion on Node 24:** Its engine lacks

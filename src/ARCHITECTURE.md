@@ -1019,9 +1019,9 @@ existing WorkerThreadRuntime forwards inputs through its creator connection
 before request construction. The already-fetched root response uses the same
 loader; graph failures join ordinary worker load-failure cleanup directly.
 Dynamic imports and general worker Fetch require the worker's own client, not
-this initial-graph path. Only the unfinished successful-startup dependency error
-is reported on the native host queue so it triggers thread teardown; ordinary
-graph completion does not acquire another task.
+this initial-graph path. Internal Promise observation reports an escaping startup
+exception through the host's ordinary failure policy, including thread teardown.
+The worker driver needs no separate error-reporting task.
 
 `UserAgent.scriptingPolicy` owns the browser's live scripting preference.
 `scriptingEnabled` remains its boolean getter/setter; the private startup channel
@@ -1157,6 +1157,13 @@ conversion; subsequent results use the destination. Declared adoption preserves
 compatible native results and converts other representations in the destination.
 Private fulfillment values stay on their internal Promise, shared by imported
 views; its native backing signals completion without adopting the value.
+`observe()` runs synchronous terminal completion steps: source rejections go to
+the supplied rejection callback, while escaping observer exceptions belong to
+the host. Realm-owned internal observers catch those exceptions before native
+Then can create an unhandled rejection visible to author code. They share
+NodePromise's host reporter, which preserves the thrown value and reports after
+reaction cleanup. Ordinary `then()` chains still reject their returned result;
+author Promise handling and the raw realm observation primitive are unchanged.
 Native async/await belongs at host boundaries; returning a Promise cannot repair work
 already scheduled on the wrong queue.
 

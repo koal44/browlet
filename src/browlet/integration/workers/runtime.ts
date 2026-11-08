@@ -115,11 +115,7 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
       }
       // TODO(HTML §10.2.4): Connect owner monitoring and remaining shared services
       // before setting execution readiness and running the prepared script.
-      // Report only this unfinished host dependency outside the Promise reaction,
-      // so Node tears down the thread. Normal completion requires no extra task.
-      queueNodeTask(() => {
-        throw new InternalError('Worker script execution requires owner monitoring and shared services');
-      });
+      throw new InternalError('Worker script execution requires owner monitoring and shared services');
     }));
     if (this.script !== null) this.fetchScript();
   }

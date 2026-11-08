@@ -12,6 +12,7 @@ import {
 import { isObject } from './abstract-operations';
 import type { JSWasmInstance, JSWasmModule, JSWasmTag } from './built-in-primitives';
 import { addon, isAddonContextHandle } from './node-addons';
+import { reportPromiseObserverError } from './node-promise';
 import {
   compileModule, compileWebAssemblyModule, createDefaultExportModule, moduleRequests, linkModule, evaluateModule, moduleNamespace,
   type CompiledModule, type ImportModuleDynamically, type ModuleCompilationOptions, type ModuleRequest,
@@ -403,7 +404,16 @@ export class JSRealm {
     const realm = this;
     this.InternalPromise = class RealmPromise<T> extends InternalPromise<T> {
       protected override observeNative(fulfilled: (value: unknown) => void, rejected: (reason: unknown) => void): void {
-        realm.observePromise(this.backing, fulfilled, rejected);
+        // These are internal completion steps, not author Promise handlers.
+        // Catch before native Then can reject its discarded result and expose
+        // an implementation failure through HTML's unhandledrejection event.
+        realm.observePromise(this.backing, (value) => {
+          try { return fulfilled(value); }
+          catch (error) { reportPromiseObserverError(error); }
+        }, (reason) => {
+          try { return rejected(reason); }
+          catch (error) { reportPromiseObserverError(error); }
+        });
       }
     };
     this.#callableFunctionFactory = runInContext(
