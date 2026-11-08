@@ -21,10 +21,15 @@ import { PerformanceImpl } from '../performance/index';
 import type { BroadcastChannelImpl, EventSourceImpl, MessagePortImpl } from '../communication/index';
 import type { StructuredSerializeOptions } from '../scripting/structured-data/index';
 import type { PermissionStatusImpl } from '../integration/permissions/index';
+import type { FileReaderImpl } from '../integration/file/index';
 
 import type { BrowletEnvironment } from './environment';
 
-/** Owns timers, performance, reporting, and resource lifetimes for one global. */
+/**
+ * Owns timers, performance, reporting, and resource lifetimes for one global.
+ * Cleanup collections are Browlet bookkeeping alongside the Web IDL mixin;
+ * they are not exposed members or collections prescribed by that declaration.
+ */
 // https://html.spec.whatwg.org/multipage/webappapis.html#windoworworkerglobalscope
 export class WindowOrWorkerGlobalScopeMixin {
   /** Timer handles and scheduling state retained by this global. */
@@ -43,6 +48,9 @@ export class WindowOrWorkerGlobalScopeMixin {
   webTransports: { cleanup(): void; }[] = [];
   /** Active EventSources, retained until close or permanent Document/worker cleanup. */
   eventSources = new Set<EventSourceImpl>();
+  /** Active FileReader reads, released on completion, abort, or global teardown. */
+  // TODO: Should the environment own this collection directly?
+  fileReaders = new Set<FileReaderImpl>();
   /** Named Reporting destinations configured by this global's resource response. */
   reportingEndpoints: ReportingEndpoint[] = [];
   /** Reports awaiting delivery for this global, independent of other globals. */

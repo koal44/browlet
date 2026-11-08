@@ -6,6 +6,9 @@ import { parseMIMEType } from '../mime/index';
 
 /** Package Blob bytes in the requested FileReader result format. */
 // https://w3c.github.io/FileAPI/#package-data
+export function packageData(bytes: Uint8Array, type: 'ArrayBuffer', mimeType: string, encodingLabel: string | undefined, env: JSEnvironment): ArrayBuffer;
+export function packageData(bytes: Uint8Array, type: 'Text' | 'DataURL' | 'BinaryString', mimeType: string, encodingLabel: string | undefined, env: JSEnvironment): string;
+export function packageData(bytes: Uint8Array, type: FileReadType, mimeType: string, encodingLabel: string | undefined, env: JSEnvironment): string | ArrayBuffer;
 export function packageData(
   bytes: Uint8Array,
   type: FileReadType,

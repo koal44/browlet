@@ -2,9 +2,12 @@
 
 The [File API](https://w3c.github.io/FileAPI/) data model, Blob/File reads,
 FileList, structured cloning, asynchronous FileReader, and Blob object URLs are
-implemented for the current Window host. Fetch consumes the same backing data
-and registered Blob URLs. Remaining work concerns global teardown, host-selected
-files, workers, MediaSource, and the final conformance audit.
+implemented for the current Window host. Memory-backed Blob/File messaging and
+worker-created Blob URLs also cross isolates through the browser owner.
+FileReaderSync reads memory-backed data in dedicated and shared workers. Fetch
+consumes the same backing data and registered Blob URLs. Remaining work concerns
+global teardown, host-selected files, general worker Fetch, MediaSource, and the
+final conformance audit.
 
 ## Current ownership
 
@@ -15,6 +18,7 @@ files, workers, MediaSource, and the final conformance audit.
 | [file.ts](file.ts), [file-list.ts](file-list.ts) | File metadata/host-source factory, owner-mutable FileList, and serialization steps |
 | [environment.ts](environment.ts) | Streams execution and native line endings required by Blob/File |
 | [package-data.ts](package-data.ts) | FileReader text, Data URL, ArrayBuffer, and binary-string results |
+| [file-reader-sync.ts](file-reader-sync.ts) | Synchronous Blob/File reads and dedicated/shared-worker declaration |
 | [Browlet File integration](../browlet/integration/file/) | Concrete FileReader EventTarget and Blob URL store/URL methods |
 | [Storage](../storage/ROADMAP.md) | Storage-key acquisition and equality |
 | [Fetch](../fetch/README.md) | Blob scheme responses/ranges and multipart body consumption |
@@ -50,6 +54,14 @@ belongs to its owner, not authors. HTML serialization preserves snapshot, bytes,
 MIME type, and metadata; FileList sub-serialization retains repeated File identity.
 Storage serialization requires a storage-safe source rather than silently
 retaining an unusable host handle.
+
+Memory-backed byte sequences serialize as plain segment records containing typed
+arrays. Native transport copies the bytes; deserialization rebuilds `BlobData`
+in the recipient. Blob/File messages therefore retain their contents after the
+sending worker exits, and FileList keeps its shared File identities. Local cloning
+of host-backed sources still defers reads and preserves snapshot failures. Those
+source records explicitly reject native cloning until portable host-file backing
+descriptors exist; native cloning must not discard their private state silently.
 
 FileReader uses Browlet's EventTarget and XHR's ProgressEvent. Its read operation
 owns its removable tasks, reader, progress clock, and final result. Abort and
@@ -110,23 +122,37 @@ A fake MediaSource or generic `object` would hide the missing dependency.
 
 ## Remaining work
 
-1. **Shared global teardown.** Connect outstanding FileReader operations to the
-   Window/worker destruction lifecycle, cancelling the active reader and its
-   queued work. Inactive-Document task gating already prevents delivery but
-   does not release an outstanding read. Use the shared
-   [browsing lifecycle](../browlet/browsing/ROADMAP.md) and
-   [worker lifecycle](../browlet/workers/ROADMAP.md), not a second File registry.
+1. **Window teardown and host I/O cancellation.** Active FileReaders use the
+   existing global resource owner. Cooperative worker shutdown cancels their
+   streams and queued notifications after the final checkpoint, without author
+   events; completion and abort release normal reads. Connect the same stop
+   operation to permanent Window destruction through the
+   [browsing lifecycle](../browlet/browsing/ROADMAP.md). Inactive-Document task
+   gating alone does not release a read, and retention for history is not
+   destruction. BlobByteSource still needs cancellation of an already-issued
+   host read; stream cancellation currently stops subsequent reads and delivery.
+   See the [worker cleanup evidence](../browlet/workers/ROADMAP.md#filereader-shutdown).
 
-2. **Worker exposure and FileReaderSync.** Install the declared interfaces and
-   Blob URL cleanup with real worker globals. File API
-   [§6.5](https://w3c.github.io/FileAPI/#FileReaderSync) needs an actual synchronous
-   worker byte-source contract. Reuse result packaging; do not manufacture
-   synchrony over Streams with a nested loop or Atomics.wait.
+2. **Worker Fetch and host-file reads.** Blob/File/FileList are exposed in worker
+   globals, and memory-backed Blob/File messaging is connected across isolates.
+   Worker-created Blob URLs now use the original browser store and are cleaned up
+   at native exit. Worker-side Fetch of those URLs still needs the general Fetch
+   connection; host-file backing transport is separate. FileReaderSync now reads
+   memory sources through `BlobByteSource.readSync()` and shares result packaging
+   with FileReader. Host-selected files must implement that optional synchronous
+   source operation; async-only sources fail explicitly without starting I/O.
+   The [§6.5](https://w3c.github.io/FileAPI/#FileReaderSync) stream-and-wait steps
+   read the same internal bytes directly, without a nested loop or Promise
+   pumping. Author overrides of `Blob.prototype.stream` are never consulted.
+   The interface is exposed only to dedicated/shared workers, not Window or
+   service workers, and needs no asynchronous shutdown registry.
 
 3. **Host-selected files.** HTML file inputs/drag-and-drop and the selecting host
    must supply safe names, type policy, permissions, and captured snapshots.
    Implement missing/changed/unsafe/locked/unreadable source failures at that
    boundary. Preserve the no-path author API and shared immutable backing.
+   Cross-isolate cloning also needs a portable source descriptor and lifetime,
+   rather than a live source object from the sending isolate.
 
 4. **MediaSource URLs.** The [media roadmap](../browlet/media/ROADMAP.md) owns MSE
    and its HTML media dependencies. Extend registration/acquisition and the
@@ -154,6 +180,14 @@ metadata, source failures, and packaging. Browser tests cover
 [the Blob URL store](../../test/browlet/blob-url.test.ts), and
 [public object URLs](../../test/browlet/object-url.test.ts).
 Structured-data tests check destination realms, storage cloning, and graph identity.
+Native transport variants exercise Blob and FileList records independently of the
+add-on. [Worker messaging tests](../../test/browlet/workers/thread.test.ts) cover
+Blob/File round trips through both dedicated `postMessage()` and BroadcastChannel,
+including recipient brands, slices, repeated identities, and reads after sender exit.
+The synchronous reader adds encoding/BOM, empty/composed/sliced data, source
+failure, unsupported synchronous I/O, and copy-isolation coverage. Worker realm
+tests cover Web IDL conversion, receiver/result realms, and exposure; a real
+isolate reads cloned Blob/File data without running queued author jobs.
 
 Selected FileAPI WPT groups live in [file.json](../../wpt/suites/file.json).
 The complete File-constructor Window case still requires HTMLBodyElement;

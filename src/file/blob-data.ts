@@ -1,4 +1,5 @@
 import { InternalError } from '../infra/internal-error';
+import { markAsUncloneable } from '../js-engine/index';
 import { DOMExceptionImpl, DOMExceptionNames } from '../web-idl/core/index';
 import { ReadableStreamImpl, type StreamsEnvironment } from '../streams/index';
 
@@ -48,6 +49,13 @@ export class BlobData {
     return size === 0
       ? BlobData.empty()
       : new BlobData([{ source, start: 0, length: size }]);
+  }
+
+  /** Rebuild byte-source behavior in the receiving isolate from File API's internal record. */
+  static deserialize(record: SerializedBlobData): BlobData {
+    return new BlobData(record.map((segment): BlobSegment => segment.kind === 'bytes'
+      ? { source: new MemoryBlobByteSource(segment.bytes), start: 0, length: segment.bytes.length }
+      : { source: segment.source, start: segment.start, length: segment.length }));
   }
 
   static concatenate(parts: Iterable<BlobData>): BlobData {
@@ -125,7 +133,7 @@ export class BlobData {
         env.queueTask('file', () => {
           if (canceled) return;
           canceled = true;
-          stream.error(error instanceof BlobReadFailure ? createReadException(error) : error);
+          stream.error(error instanceof BlobReadFailure ? error.toDOMException() : error);
         });
       }
     };
@@ -166,6 +174,26 @@ export class BlobData {
     return bytes;
   }
 
+  /** Copy all retained segments without scheduling tasks or Promise reactions. */
+  readSync(): Uint8Array {
+    const bytes = new Uint8Array(this.#size);
+    let offset = 0;
+    for (const { source, start, length } of this.#segments) {
+      // TODO(File API): Host-selected files must supply synchronous backing I/O.
+      // Waiting on read() here would block the very queue needed to complete it.
+      if (source.readSync === undefined) {
+        throw new InternalError('The Blob byte source does not support synchronous reads');
+      }
+      const chunk = source.readSync(start, length);
+      if (chunk.length !== length) {
+        throw new InternalError('A Blob byte source must return the complete requested range');
+      }
+      bytes.set(chunk, offset);
+      offset += length;
+    }
+    return bytes;
+  }
+
   captureSnapshotState(): BlobSnapshotState {
     const states = new Set<unknown>();
     for (const segment of this.#segments) {
@@ -176,6 +204,21 @@ export class BlobData {
     if (states.size === 0) return;
     if (states.size === 1) return states.values().next().value;
     return Object.freeze([...states]);
+  }
+
+  /** Serialize memory segments as bytes, keeping host-backed sources explicitly local. */
+  serialize(): SerializedBlobData {
+    return this.#segments.map(({ source, start, length }): SerializedBlobSegment => {
+      if (source instanceof MemoryBlobByteSource) {
+        return { kind: 'bytes', bytes: source.serialize(start, length) };
+      }
+      const segment: SerializedBlobSegment = { kind: 'source', source, start, length };
+      // TODO(File API): Host-selected files need portable backing descriptors before
+      // crossing isolates. Preserve local lazy reads, but reject native transport
+      // instead of silently replacing a source's private state with an empty object.
+      markAsUncloneable(segment);
+      return segment;
+    });
   }
 
   /** Retain only byte sources which can safely outlive the current agent. */
@@ -203,9 +246,30 @@ export type BlobByteSource = {
   get snapshotState(): BlobSnapshotState;
   cloneForStorage?(start: number, length: number): BlobByteSource;
   read(start: number, length: number): Promise<Uint8Array>;
+  /** Read the same immutable range synchronously, when the backing host supports it. */
+  readSync?(start: number, length: number): Uint8Array;
 };
 
+/**
+ * Source-defined snapshot of underlying storage, preserved without interpretation.
+ * Memory sources use undefined. The unknown type does not guarantee cloneability:
+ * cross-isolate sources must supply a cloneable snapshot as well as portable backing.
+ */
 export type BlobSnapshotState = unknown;
+
+/** Memory bytes travel through native cloning; same-isolate host sources retain their lazy reads. */
+export type SerializedBlobData = SerializedBlobSegment[];
+
+/** One immutable byte range, either portable bytes or a local host source. */
+type SerializedBlobSegment =
+  { kind: 'bytes'; bytes: Uint8Array; } |
+  {
+    kind: 'source';
+    /** Same-isolate source identity, preserving deferred I/O and snapshot failures. */
+    source: BlobByteSource;
+    start: number;
+    length: number;
+  };
 
 export type BlobReadFailureReason =
   | 'NotFound'
@@ -214,7 +278,7 @@ export type BlobReadFailureReason =
   | 'SnapshotState'
   | 'FileLock';
 
-/** A backing-source failure which Blob streaming maps to a File API DOMException. */
+/** A backing-source failure which File API readers map to a DOMException. */
 // eslint-disable-next-line no-restricted-globals -- A backing read failure is translated to a File API DOMException, not an implementation failure.
 export class BlobReadFailure extends Error {
   constructor(
@@ -223,6 +287,16 @@ export class BlobReadFailure extends Error {
   ) {
     super(message);
     this.name = 'BlobReadFailure';
+  }
+
+  /** Map the source's failure category to File API's public exception. */
+  toDOMException(): DOMExceptionImpl {
+    const name = this.reason === 'NotFound'
+      ? DOMExceptionNames.notFound
+      : this.reason === 'UnsafeFile' || this.reason === 'TooManyReads'
+        ? DOMExceptionNames.security
+        : DOMExceptionNames.notReadable;
+    return new DOMExceptionImpl(this.message, name);
   }
 }
 
@@ -247,16 +321,25 @@ class MemoryBlobByteSource implements BlobByteSource {
     return;
   }
 
+  /** Retain an internal immutable view; native transport copies its bytes for another isolate. */
+  serialize(start: number, length: number): Uint8Array {
+    return this.#bytes.subarray(start, start + length);
+  }
+
   cloneForStorage(start: number, length: number): BlobByteSource {
     requireRange(this.size, start, length);
     return new MemoryBlobByteSource(this.#bytes.slice(start, start + length));
   }
 
   read(start: number, length: number): Promise<Uint8Array> {
-    requireRange(this.size, start, length);
-    // BlobData.read copies this immutable backing range into its result.
     // eslint-disable-next-line no-restricted-globals -- Memory reads share the native Promise contract of asynchronous backing sources.
-    return Promise.resolve(this.#bytes.subarray(start, start + length));
+    return Promise.resolve(this.readSync(start, length));
+  }
+
+  /** Return an immutable view which BlobData copies before exposing the result. */
+  readSync(start: number, length: number): Uint8Array {
+    requireRange(this.size, start, length);
+    return this.#bytes.subarray(start, start + length);
   }
 }
 
@@ -269,15 +352,6 @@ function requireRange(size: number, start: number, length: number): void {
   ) {
     throw new InternalError('Blob byte range is outside the source');
   }
-}
-
-function createReadException(failure: BlobReadFailure): DOMExceptionImpl {
-  const name = failure.reason === 'NotFound'
-    ? DOMExceptionNames.notFound
-    : failure.reason === 'UnsafeFile' || failure.reason === 'TooManyReads'
-      ? DOMExceptionNames.security
-      : DOMExceptionNames.notReadable;
-  return new DOMExceptionImpl(failure.message, name);
 }
 
 const blobReadChunkSize = 64 * 1024;

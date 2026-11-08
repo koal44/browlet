@@ -291,6 +291,10 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
     // Blink closes EventSources on context destruction. Reuse the same local
     // close path here to abort requests, cancel retries, and release retention.
     for (const source of resources.eventSources) source.close();
+    // SPEC_GAP(worker-file-reader-shutdown): HTML's worker tail omits FileReader disposal.
+    // Blink, Gecko, and WebKit cancel pending reads on context destruction,
+    // without the author events fired by FileReader.abort().
+    for (const reader of resources.fileReaders) reader.stop();
     this.ownerSet.clear();
     this.remoteOwner = null;
   }

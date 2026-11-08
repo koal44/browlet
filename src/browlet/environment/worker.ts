@@ -8,7 +8,7 @@ import {
   SharedWorkerAgent, type BrowletRealm, type DedicatedWorkerAgent, type ModuleMap,
   type ClassicScript, type ModuleScript, type PerformScriptFetch, type CrossOriginIsolationMode,
 } from '../scripting/index';
-import { EmbedderPolicy, type PolicyContainer, type PolicyContainerSnapshot } from '../browsing/policy/index';
+import { EmbedderPolicy, PolicyContainer, type PolicyContainerSnapshot } from '../browsing/policy/index';
 import { MessageEventImpl, type MessagePortImpl } from '../communication/index';
 import type { WorkerGlobalImpl, WorkerType } from '../workers/index';
 import type { UserAgent } from '../user-agent';
@@ -253,10 +253,12 @@ export interface WorkerEnvironmentSnapshotInit extends Omit<WorkerEnvironmentIni
   userAgent: UserAgent;
 }
 
-/** Outside Fetch reservation with the worker's established security origin for partition checks. */
+/** Outside worker identity for Fetch and browser-owned Blob registrations. */
 export class WorkerEnvironmentBase extends BrowletEnvironmentBase {
   /** Transported unchanged to the inside settings object. */
   origin: Origin;
+  /** Root response policies, retained before author execution for Blob URL inheritance. */
+  policyContainer = new PolicyContainer();
 
   constructor(init: BrowletEnvironmentBaseInit, origin: Origin) {
     super(init);

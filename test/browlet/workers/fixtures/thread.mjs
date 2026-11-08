@@ -258,6 +258,25 @@ function startFixture() {
         runtime.environment.global.URL.revokeObjectURL(message.url);
         runtime.send('revoked');
         break;
+      case 'create-blob-url': {
+        const env = runtime.environment;
+        const global = runtime.environment.global;
+        try {
+          let blob;
+          if (message.hostSource) {
+            const { BlobData, BlobImpl } = loadTypeScript('../../../../src/file/index.ts', __filename);
+            const source = {
+              size: 1, snapshotState: { version: 1 },
+              read: () => Promise.resolve(Uint8Array.of(65)),
+            };
+            blob = env.project(BlobImpl.create(BlobData.fromSource(source), 'text/plain', source.snapshotState, env));
+          } else {
+            blob = new global.Blob(['prefix:worker bytes:suffix'], { type: 'text/plain' }).slice(7, 19, 'text/plain');
+          }
+          runtime.send(global.URL.createObjectURL(blob));
+        } catch (error) { runtime.send({ error: error.message, name: error.name }); }
+        break;
+      }
       case 'fetch-modules': {
         const { serializeURL } = loadTypeScript('../../../../src/url/index.ts', __filename);
         const replies = [];

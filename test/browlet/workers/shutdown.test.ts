@@ -3,9 +3,11 @@ import { assert, describe, expect, it, vi } from 'vitest';
 import { parseURL, serializeURL } from '../../../src/url/index';
 import { utf8Encode } from '../../../src/encoding/index';
 import { FetchHeaders, type HTTPTransportListener } from '../../../src/fetch/index';
+import { BlobData, BlobImpl, BlobReadFailure } from '../../../src/file/index';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
 import { EventSourceImpl, MessagePortImpl } from '../../../src/browlet/communication/index';
 import { createWorkerEnvironment } from '../../../src/browlet/integration/web-idl/index';
+import { FileReaderImpl } from '../../../src/browlet/integration/file/index';
 import {
   AgentCluster, ClassicScript, DedicatedWorkerAgent, ScriptFetchOptions, SharedWorkerAgent,
 } from '../../../src/browlet/scripting/index';
@@ -171,6 +173,91 @@ describe('Worker event-loop shutdown (HTML §§8.1.7.3, 10.2.4)', () => {
     expect(env.getWindowOrWorkerGlobalScopeMixin().messagePorts).toEqual(new Set([localFirst, localSecond]));
     expect(() => { received.postMessage('no recipient'); }).not.toThrow();
   }));
+
+  it.each([false, true])('stops pending FileReader reads after the final checkpoint (shared: %s)', async (shared) => {
+    const { env, loop, scope } = createWorker(shared);
+    const other = createWorker();
+    let release: (() => void) | undefined;
+    const read = vi.fn((_start: number, length: number) => new Promise<Uint8Array>((resolve) => {
+      release = () => { resolve(new Uint8Array(length)); };
+    }));
+    const blob = BlobImpl.create(BlobData.fromSource({
+      size: 2 * 65536,
+      snapshotState: undefined,
+      read,
+    }), '', undefined, env);
+    const reader = new FileReaderImpl(env);
+    const events: string[] = [];
+    for (const type of ['loadstart', 'progress', 'load', 'error', 'abort', 'loadend']) {
+      reader.addEventListener(type, () => { events.push(type); });
+    }
+    const otherReader = new other.scope.FileReader();
+    const otherLoaded = vi.fn();
+    otherReader.onload = otherLoaded;
+    otherReader.readAsText(new other.scope.Blob(['independent']));
+    reader.readAsText(blob);
+    await vi.waitFor(() => { expect(read).toHaveBeenCalledOnce(); });
+
+    const states: number[] = [];
+    await runInHostTask(() => {
+      env.queueTask('dom-manipulation', () => {
+        scope.close();
+        states.push(reader.readyState);
+        loop.queueMicrotask(() => { states.push(reader.readyState); });
+      });
+      loop.runTaskTurn();
+      expect(states).toEqual([1, 1]);
+    });
+    expect(reader.readyState).toBe(2);
+    expect(reader.result).toBeNull();
+    expect(reader.error).toBeNull();
+    expect(events).toEqual([]);
+    assert(release !== undefined);
+    release();
+    await vi.waitFor(() => {
+      while (other.loop.runTaskTurn()) { /* Complete the independent worker's read. */ }
+      expect(otherReader.result).toBe('independent');
+    });
+    expect(otherLoaded).toHaveBeenCalledOnce();
+    expect(read).toHaveBeenCalledOnce();
+    expect(loop.runTaskTurn()).toBe(false);
+    expect(events).toEqual([]);
+    other.scope.close();
+    other.runHostTurns();
+  });
+
+  it.each(['load', 'error', 'abort'] as const)('cleans up a FileReader restarted from %s before closing', async (type) => {
+    const { env, loop, scope } = createWorker();
+    const reader = new FileReaderImpl(env);
+    const waiting = BlobImpl.create(BlobData.fromSource({
+      size: 1,
+      snapshotState: undefined,
+      read: () => new Promise<Uint8Array>(() => {}),
+    }), '', undefined, env);
+    const initial = type === 'error' ? BlobImpl.create(BlobData.fromSource({
+      size: 1,
+      snapshotState: undefined,
+      read: () => Promise.reject(new BlobReadFailure('NotFound')),
+    }), '', undefined, env) : new BlobImpl(['first'], {}, env);
+    const events: string[] = [];
+    if (type === 'abort') reader.onloadstart = () => { reader.abort(); };
+    reader.addEventListener(type, () => {
+      events.push(type);
+      reader.readAsText(waiting);
+      scope.close();
+    });
+    reader.onloadend = () => { events.push('loadend'); };
+    reader.readAsText(initial);
+
+    await vi.waitFor(() => {
+      while (loop.runTaskTurn()) { /* Deliver the first read and close from its callback. */ }
+      expect(events).toEqual([type]);
+    });
+    expect(reader.readyState).toBe(2);
+    expect(reader.result).toBeNull();
+    expect(reader.error).toBeNull();
+    expect(env.getWindowOrWorkerGlobalScopeMixin().fileReaders.size).toBe(0);
+  });
 
   it.each([false, true])('closes worker-owned EventSources after the final checkpoint (shared: %s)', async (shared) => {
     const { env, loop, scope, outsideEnv } = createWorker(shared);

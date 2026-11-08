@@ -31,6 +31,7 @@ export class FileReaderImpl extends EventTargetImpl {
   error: DOMExceptionImpl | null = null;
   /** Read lifecycle handlers backed by this reader's listener registrations. */
   override eventHandlers: EventHandlerMap = new EventHandlerMap(this, FileReaderImpl.#handlerDefinitions);
+  /** Internal counterpart of the public EMPTY, LOADING, and DONE constants. */
   #state: FileReaderState = 'empty';
   /** Identity and pending tasks of the read that may still deliver events. */
   #operation: FileReadOperation | null = null;
@@ -96,14 +97,17 @@ export class FileReaderImpl extends EventTargetImpl {
     this.eventHandlers.set('onloadend', callback);
   }
 
+  /** Read the Blob into an ArrayBuffer allocated in this reader's realm. */
   readAsArrayBuffer(blob: BlobImpl): void {
     this.#read(blob, 'ArrayBuffer');
   }
 
+  /** Read the Blob as a string with one character for each byte. */
   readAsBinaryString(blob: BlobImpl): void {
     this.#read(blob, 'BinaryString');
   }
 
+  /** Decode the Blob using the optional encoding label and its MIME type. */
   readAsText(
     blob: BlobImpl,
     encoding?: string,
@@ -111,6 +115,7 @@ export class FileReaderImpl extends EventTargetImpl {
     this.#read(blob, 'Text', encoding);
   }
 
+  /** Read the Blob into a data URL retaining its MIME type. */
   readAsDataURL(blob: BlobImpl): void {
     this.#read(blob, 'DataURL');
   }
@@ -126,11 +131,7 @@ export class FileReaderImpl extends EventTargetImpl {
       throw new InternalError('A loading FileReader has no active read operation');
     }
 
-    this.#state = 'done';
-    this.#operation = null;
-    for (const task of operation.tasks) task.remove();
-    operation.tasks.clear();
-    operation.cancel();
+    this.stop();
 
     // The current draft does not set error to AbortError. Blink, Gecko, and
     // WebKit do; keep the normative state until that divergence is resolved.
@@ -140,6 +141,19 @@ export class FileReaderImpl extends EventTargetImpl {
     }
   }
 
+  /** Cancel an active read and queued notifications without firing events during global teardown. */
+  stop(): void {
+    const operation = this.#operation;
+    if (operation === null) return;
+    this.#state = 'done';
+    this.#operation = null;
+    this.env.getWindowOrWorkerGlobalScopeMixin().fileReaders.delete(this);
+    for (const task of operation.tasks) task.remove();
+    operation.tasks.clear();
+    operation.cancel();
+  }
+
+  /** Start one read, retaining its identity across asynchronous bytes and author callbacks. */
   // https://w3c.github.io/FileAPI/#readOperation
   #read(
     blob: BlobImpl,
@@ -158,6 +172,8 @@ export class FileReaderImpl extends EventTargetImpl {
     const reader = blob.stream().getDefaultReader();
     const operation: FileReadOperation = {
       cancel() {
+        // This stops subsequent reads and delivery. BlobByteSource has no
+        // cancellation contract for a host read that is already in progress.
         const promise = reader.cancelInternal(undefined);
         promise.observe(() => {}, () => {});
       },
@@ -166,6 +182,7 @@ export class FileReaderImpl extends EventTargetImpl {
       total: blob.size,
     };
     this.#operation = operation;
+    this.env.getWindowOrWorkerGlobalScopeMixin().fileReaders.add(this);
     const chunks: Uint8Array[] = [];
     let isFirstChunk = true;
     let lastProgressTime: number | undefined;
@@ -226,6 +243,7 @@ export class FileReaderImpl extends EventTargetImpl {
 
             this.#state = 'done';
             this.#operation = null;
+            this.env.getWindowOrWorkerGlobalScopeMixin().fileReaders.delete(this);
             const bytes = new Uint8Array(operation.loaded);
             let offset = 0;
             for (const chunk of chunks) {
@@ -254,6 +272,7 @@ export class FileReaderImpl extends EventTargetImpl {
           queueTask(() => {
             this.#state = 'done';
             this.#operation = null;
+            this.env.getWindowOrWorkerGlobalScopeMixin().fileReaders.delete(this);
             if (!DOMExceptionImpl.is(error)) throw error;
             this.error = error;
             fire('error');
@@ -266,6 +285,7 @@ export class FileReaderImpl extends EventTargetImpl {
     runInParallel(readNextChunk);
   }
 
+  /** Recheck state after author callbacks, which may have started another read. */
   #isLoading(): boolean {
     return this.#state === 'loading';
   }
@@ -338,10 +358,15 @@ export const fileReaderIDL = defineInterface<BrowletEnvironment>({
 
 type FileReaderState = 'empty' | 'loading' | 'done';
 
+/** Cancellation and progress state for one read, distinct from later reads on the same object. */
 type FileReadOperation = {
+  /** Cancel the stream reader without invoking author code. */
   cancel(): void;
+  /** Bytes collected so far for progress and abort notifications. */
   loaded: number;
+  /** Queued FileReader events that cancellation must remove. */
   tasks: Set<TaskHandle>;
+  /** Blob size captured when the read begins. */
   total: number;
 };
 

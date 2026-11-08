@@ -64,7 +64,7 @@ describe('File reading implementation', () => {
   it('packages bytes without a binding context and preserves the source', () => {
     const env = createEnvironment();
     const bytes = Uint8Array.of(65, 66, 67);
-    const result = packageData(bytes, 'ArrayBuffer', '', undefined, env) as ArrayBuffer;
+    const result = packageData(bytes, 'ArrayBuffer', '', undefined, env);
     expect(new Uint8Array(result)).toEqual(bytes);
     new Uint8Array(result)[0] = 90;
     expect(bytes[0]).toBe(65);

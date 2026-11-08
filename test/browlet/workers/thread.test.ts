@@ -1135,6 +1135,124 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
   });
 
   if (JSThread.supportsSuspension) {
+    it.each(['close', 'terminate'] as const)('serves worker-created Blob URLs and removes registrations on %s', async (shutdown) => {
+      const owner = createWorkerCreator();
+      const { creatorEnv } = owner;
+      creatorEnv.policyContainer.referrerPolicy = 'unsafe-url';
+      const window = creatorEnv.global as Window;
+      const ownURL = window.URL.createObjectURL(new window.Blob(['window data']));
+      const { worker, thread, messages } = startBroadcastWorker(`
+        const blob = new Blob(['prefix:worker bytes:suffix']).slice(7, 19, 'text/plain');
+        const first = URL.createObjectURL(blob), second = URL.createObjectURL(blob);
+        postMessage([first, second]);
+        onmessage = event => {
+          if (event.data === 'revoke') { URL.revokeObjectURL(first); postMessage('revoked'); }
+          else close();
+        };
+      `, owner, [['Referrer-Policy', 'no-referrer']]);
+      await vi.waitFor(() => { owner.drain(); expect(messages).toHaveLength(1); }, { timeout: 5000 });
+      const [first, second] = messages[0] as [string, string];
+      expect(first).not.toBe(second);
+      const captured = creatorEnv.parseURL(second)!.blobURLEntry!;
+      const storeEntry = creatorEnv.userAgent.blobURLStore.resolve(parseURL(second).url!)!;
+      expect(storeEntry.env).toBe(thread.reservedEnv);
+      expect(storeEntry.env.policyContainer.referrerPolicy).toBe('no-referrer');
+      const received: unknown[] = [];
+      void window.fetch(first).then(async (response) => {
+        received.push(response.status, response.headers.get('Content-Type'), await response.text());
+      }).catch((error) => { received.push(error); });
+      await vi.waitFor(() => { owner.drain(); expect(received).toEqual([200, 'text/plain', 'worker bytes']); });
+      worker.postMessage('revoke');
+      await vi.waitFor(() => { owner.drain(); expect(messages[1]).toBe('revoked'); });
+      expect(creatorEnv.parseURL(first)!.blobURLEntry).toBeNull();
+      expect(creatorEnv.parseURL(second)!.blobURLEntry).not.toBeNull();
+      if (shutdown === 'close') worker.postMessage('close');
+      else worker.terminate();
+      expect(await thread.closed).toMatchObject({ error: undefined, terminated: shutdown === 'terminate' });
+      expect(creatorEnv.parseURL(second)!.blobURLEntry).toBeNull();
+      expect(creatorEnv.parseURL(ownURL)!.blobURLEntry).not.toBeNull();
+      // Capturing a URL retains its data even when its registration is later removed.
+      const retained = creatorEnv.userAgent.obtainBlobObject(captured, creatorEnv)!;
+      expect(new TextDecoder().decode(await retained.data.read())).toBe('worker bytes');
+      window.URL.revokeObjectURL(ownURL);
+    });
+
+    it.each(['postMessage', 'BroadcastChannel'] as const)('preserves Blob and File bytes across %s and sender shutdown', async (transport) => {
+      const owner = createWorkerCreator();
+      const window = owner.creatorEnv.global as Window;
+      const channel = transport === 'BroadcastChannel' ? new window.BroadcastChannel('blob-files') : null;
+      const received: { data: unknown; }[] = [];
+      if (channel !== null) channel.onmessage = (event) => { received.push(event as MessageEvent); };
+      const { worker, thread, messages } = startBroadcastWorker(`
+        const channel = ${transport === 'BroadcastChannel'} ? new BroadcastChannel('blob-files') : null;
+        const target = channel ?? globalThis;
+        target.onmessage = async event => {
+          try {
+            const { blob, file, repeated } = event.data;
+            const summary = [blob instanceof Blob, file instanceof File, blob === repeated,
+              blob.size, blob.type, await blob.text(), file.name, file.lastModified, file.type, await file.text()];
+            target.postMessage({ summary, blob: new Blob(['reply:', blob]), file, repeated: file });
+          } catch (error) { target.postMessage({ error: error.message }); }
+          channel?.close(); close();
+        };
+        postMessage('ready');
+      `, owner);
+      await vi.waitFor(() => { owner.drain(); expect(messages).toEqual(['ready']); }, { timeout: 5000 });
+      const bytes = new owner.creatorEnv.realm.Uint8Array([65, 66, 67]);
+      const whole = new window.Blob(['prefix:', bytes, ':suffix']);
+      const blob = whole.slice(7, 10, 'TEXT/PLAIN');
+      const file = new window.File(['file:', blob], 'payload.txt', { type: 'text/custom', lastModified: 123 });
+      bytes.fill(0);
+      (channel ?? worker).postMessage({ blob, file, repeated: blob });
+      await vi.waitFor(() => {
+        owner.drain();
+        expect(channel === null ? messages.length : received.length).toBe(channel === null ? 2 : 1);
+      }, { timeout: 5000 });
+      const result = (channel === null ? messages[1] : received[0]!.data) as {
+        summary: unknown[]; blob: Blob; file: File; repeated: File;
+      };
+      expect(result).toMatchObject({ summary: [true, true, true, 3, 'text/plain', 'ABC', 'payload.txt', 123, 'text/custom', 'file:ABC'] });
+      expect(await thread.closed).toMatchObject({ error: undefined, terminated: false });
+      expect(result.blob).toBeInstanceOf(window.Blob);
+      expect(result.file).toBeInstanceOf(window.File);
+      expect(result.file).toBe(result.repeated);
+      const texts: string[] = [];
+      void result.blob.text().then((text) => { texts[0] = text; });
+      void result.file.text().then((text) => { texts[1] = text; });
+      await vi.waitFor(() => { owner.drain(); expect(texts).toEqual(['reply:ABC', 'file:ABC']); });
+      channel?.close();
+    });
+
+    it('uses FileReaderSync on cloned Blob/File data without running pending worker jobs', async () => {
+      const owner = createWorkerCreator();
+      const window = owner.creatorEnv.global as Window;
+      const { worker, thread, messages } = startBroadcastWorker(`
+        onmessage = event => {
+          const trace = [];
+          queueMicrotask(() => trace.push('microtask'));
+          Promise.resolve().then(() => trace.push('reaction'));
+          setTimeout(() => trace.push('timer'), 0);
+          const { blob, file } = event.data;
+          const reader = new FileReaderSync();
+          Blob.prototype.stream = () => { throw new Error('author stream called'); };
+          const buffer = reader.readAsArrayBuffer(blob);
+          postMessage([reader.readAsText(file), reader.readAsBinaryString(blob),
+            reader.readAsDataURL(blob), buffer instanceof ArrayBuffer,
+            Array.from(new Uint8Array(buffer)), trace]);
+          close();
+        };
+        postMessage('ready');
+      `, owner);
+      await vi.waitFor(() => { owner.drain(); expect(messages).toEqual(['ready']); }, { timeout: 5000 });
+      const blob = new window.Blob(['prefix', new owner.creatorEnv.realm.Uint8Array([0, 65, 255]), 'suffix'])
+        .slice(6, 9, 'application/custom');
+      const file = new window.File(['worker text'], 'payload.txt');
+      worker.postMessage({ blob, file });
+      await vi.waitFor(() => { owner.drain(); expect(messages).toHaveLength(2); }, { timeout: 5000 });
+      expect(messages[1]).toEqual(['worker text', '\0A\xff', 'data:application/custom;base64,AEH/', true, [0, 65, 255], []]);
+      expect(await thread.closed).toMatchObject({ error: undefined, terminated: false });
+    });
+
     describe('BroadcastChannel across isolates', () => {
       it('routes worker-to-worker graphs through browser discovery without crossing names or storage keys', async () => {
         const owner = createWorkerCreator();
@@ -1728,6 +1846,37 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
   });
 
   describe('inside environment composition', () => {
+    it('keeps worker Blob registration usable after rejecting an unsupported host-backed source', async () => {
+      const { thread, request } = createThread();
+      await thread.ready;
+      expect(await request({ type: 'create-blob-url', hostSource: true })).toMatchObject({ name: 'DataCloneError' });
+      expect(await request({ type: 'create-blob-url' })).toBeTypeOf('string');
+    });
+
+    it.each(['https://creator.test/worker.js', 'data:text/javascript,'])('registers Blob URLs in the worker partition for %s', async (url) => {
+      const creatorEnv = createCreatorEnvironment();
+      const { thread, request } = createThread({
+        creatorEnv,
+        script: { url: creatorEnv.parseURL(url)!, type: 'classic', credentials: 'same-origin', name: '' },
+      });
+      await thread.ready;
+      const result = await request({ type: 'create-blob-url' });
+      expect(result).toBeTypeOf('string');
+      if (typeof result !== 'string') throw new Error('Expected a registered Blob URL');
+      expect(result.startsWith(`blob:${serializeOrigin(thread.reservedEnv.origin)}/`)).toBe(true);
+      const entry = creatorEnv.userAgent.blobURLStore.resolve(parseURL(result).url!)!;
+      expect(entry.env).toBe(thread.reservedEnv);
+      const blob = entry.obtainObject(thread.reservedEnv)!;
+      expect(new TextDecoder().decode(await blob.data.read())).toBe('worker bytes');
+      if (url.startsWith('data:')) {
+        expect(entry.obtainObject(creatorEnv)).toBeNull();
+        creatorEnv.userAgent.blobURLStore.revoke(result, creatorEnv);
+        expect(creatorEnv.parseURL(result)!.blobURLEntry).not.toBeNull();
+      }
+      expect(await request({ type: 'revoke-blob', url: result })).toBe('revoked');
+      expect(creatorEnv.parseURL(result)!.blobURLEntry).toBeNull();
+    });
+
     it.each([
       ['dedicated', 'classic'], ['shared', 'classic'], ['dedicated', 'module'], ['shared', 'module'],
     ] as const)('composes a %s %s environment before host readiness', async (kind, type) => {
@@ -1897,7 +2046,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
     });
   });
 
-  it('reports unconnected worker services explicitly and keeps the worker usable', async () => {
+  it('connects Blob registration and BroadcastChannel without disrupting later worker operations', async () => {
     const creatorEnv = createCreatorEnvironment();
     const { thread, request } = createThread({
       kind: 'dedicated', creatorEnv, data: {},
@@ -1905,7 +2054,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
     });
     await thread.ready;
     expect(await request({ type: 'inspect-worker-service-failures' })).toEqual([
-      { name: 'createObjectURL', error: 'Worker Blob registration requires cross-isolate Blob backing transport' },
+      { name: 'createObjectURL', error: null },
       { name: 'BroadcastChannel', error: null },
     ]);
     expect(await request({ type: 'resolve-module-specifiers', specifiers: ['./still-usable.js'] }))
@@ -3387,10 +3536,10 @@ function createWorkerCreator(creatorEnv = createCreatorEnvironment()) {
 }
 
 /** Public construction and real script execution; only HTTP response bytes are controlled. */
-function startBroadcastWorker(source: string, owner = createWorkerCreator()) {
+function startBroadcastWorker(source: string, owner = createWorkerCreator(), headers: [string, string][] = []) {
   const { creatorEnv } = owner;
   mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
-    listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+    listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript'], ...headers]), true);
     listener.onData(utf8Encode(source));
     listener.onEnd();
   });

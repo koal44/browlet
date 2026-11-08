@@ -2,12 +2,12 @@ import { InternalError, assertNever, type Public } from '../../../infra/index';
 import { hasErrorData, JSMessageChannel, JSMessagePort, NodePromise, randomUUID, type JSMessagePortHandle, type JSTransferable } from '../../../js-engine/index';
 import { unsafeSharedCurrentTime } from '../../../timing/index';
 import { copyOrigin, copyURL, parseURL, serializeURL, type BlobURLEntry as URLBlobURLEntry, type Origin, type URLRecord } from '../../../url/index';
-import type { StorageEnvironmentBase } from '../../../storage/index';
+import { BlobData, BlobImpl, type BlobSnapshotState, type SerializedBlobData } from '../../../file/index';
 
 import { ScriptingPolicy } from '../../scripting/index';
 import { PolicyContainer } from '../../browsing/policy/index';
 import { nodeTimerHost, queueNodeTask } from '../host/index';
-import type { BlobURLEntry, BlobURLStore } from '../file/index';
+import type { BlobURLEntry, BlobURLEnvironment, BlobURLStore } from '../file/index';
 import type { UserAgent } from '../../user-agent';
 
 import { WorkerBroadcastChannels, WorkerBroadcastChannelConnection, type WorkerBroadcastRequest } from './broadcast-channel';
@@ -34,12 +34,12 @@ export class WorkerUserAgent implements UserAgent {
   blobURLStore: Public<BlobURLStore> = {
     resolve: (url: URLRecord) => this.#resolve(url),
     revoke: (url: string) => { this.revokeObjectURL(url); },
-    add: (): never => { throw new InternalError('Worker Blob registration requires cross-isolate Blob backing transport'); },
-    /** URL creation requires the original browser's Blob registration service. */
+    add: (object: BlobImpl) => this.#registerBlob(object),
+    /** Standalone generation is not needed by the acknowledged registration operation. */
     generateURL: (): never => unconnected('Blob URL generation'),
     /** Internal removals require their owning browser's registration service. */
     remove: (): never => unconnected('Blob URL removal'),
-    /** Environment teardown must remove registrations at the browser owner. */
+    /** The browser-side connection owns environment cleanup when this isolate exits. */
     removeForEnvironment: (): never => unconnected('Blob URL environment cleanup'),
   };
   /** Dedicated private endpoint; no author events or asynchronous listener consume replies. */
@@ -78,7 +78,7 @@ export class WorkerUserAgent implements UserAgent {
   get extendedLifetimeSharedWorkerTimeout(): number { return this.#settings().extendedLifetimeSharedWorkerTimeout; }
 
   // These owners cannot be replaced with independent worker-local stores.
-  // TODO(HTML workers): Route Fetch, permissions, storage, broadcasts and reports
+  // TODO(HTML workers): Route Fetch, permissions, storage and reports
   // through their owning browser services before exposing their worker APIs.
   /** Worker globals do not own a Document tree or expose the Window DOM interfaces. */
   get dom(): never { return unconnected('Document DOM'); }
@@ -347,7 +347,13 @@ export class WorkerUserAgent implements UserAgent {
       throw new InternalError('Worker UserAgent connection is closed or already in use');
     }
     try {
-      this.#port.send(request, transferList);
+      try { this.#port.send(request, transferList); }
+      catch (error) {
+        // Native serialization can reject an unsupported backing before posting.
+        // No reply will arrive; leave the connection usable for the next call.
+        Atomics.compareExchange(this.#state, 0, pending, idle);
+        throw error;
+      }
       while (Atomics.load(this.#state, 0) === pending) Atomics.wait(this.#state, 0, pending);
       const response = this.#port.receive()?.message;
       if (response?.type !== 'response') throw new InternalError('Worker UserAgent connection closed before replying');
@@ -357,6 +363,19 @@ export class WorkerUserAgent implements UserAgent {
       // Never overwrite a concurrent close with a reusable state.
       Atomics.compareExchange(this.#state, 0, replied, idle);
     }
+  }
+
+  /** Register portable File API backing synchronously with this worker's browser-side owner. */
+  #registerBlob(object: BlobImpl): string {
+    const state = object.getSerializationState();
+    const response = this.#request({
+      type: 'register-blob',
+      data: state.data.serialize(),
+      contentType: state.type,
+      snapshotState: state.snapshotState,
+    });
+    if (response.type !== 'url') throw new InternalError('Unexpected Blob registration reply');
+    return response.url;
   }
 
   /** Each capture is independently collectible, even when lookups share one owner-side handle. */
@@ -403,8 +422,8 @@ export class WorkerUserAgentConnection {
   #broadcastChannels: WorkerBroadcastChannelConnection;
   /** The real browser owner; its stores are never copied into the worker. */
   #userAgent: UserAgent;
-  /** Actual caller identity used by File API's storage-partition check. */
-  #env: StorageEnvironmentBase;
+  /** Actual worker identity, origin and response policies retained by the browser. */
+  #env: BlobURLEnvironment;
   /** Browser endpoint, serviced independently of HTML task and microtask queues. */
   #port: JSMessagePort<WorkerUserAgentMessage>;
   /** Untransferred endpoints also need cleanup if thread creation fails. */
@@ -419,7 +438,7 @@ export class WorkerUserAgentConnection {
   #stop: () => void;
 
   /** Bind a fresh endpoint to the browser and the caller's already-established environment. */
-  constructor(userAgent: UserAgent, isEligibleForMessaging: (() => boolean) | undefined, env: StorageEnvironmentBase) {
+  constructor(userAgent: UserAgent, isEligibleForMessaging: (() => boolean) | undefined, env: BlobURLEnvironment) {
     this.#userAgent = userAgent;
     this.#env = env;
     this.#broadcastChannels = new WorkerBroadcastChannelConnection(userAgent, isEligibleForMessaging, env);
@@ -451,6 +470,12 @@ export class WorkerUserAgentConnection {
     this.#workerPort.close();
     this.#entries.clear();
     this.#broadcastChannels.close();
+    // SPEC_GAP(file-worker-blob-url-lifetime): File API names Document unloading.
+    // Chromium, Firefox and WebKit also remove worker registrations when their
+    // execution context is destroyed, for both
+    // close() and terminate(); this native-exit path covers both.
+    // https://w3c.github.io/FileAPI/#lifeTime
+    this.#userAgent.blobURLStore.removeForEnvironment(this.#env);
   }
 
   /** Handle only explicit operations; arbitrary property reads and function calls are not forwarded. */
@@ -469,6 +494,15 @@ export class WorkerUserAgentConnection {
     let error: string | null = null;
     try {
       switch (message.type) {
+        case 'register-blob': {
+          // The browser sandbox owns retained byte reads, independently of either
+          // page activity or worker shutdown. The registration keeps the worker
+          // environment separately for origin, policy inheritance and cleanup.
+          const object = BlobImpl.create(BlobData.deserialize(message.data), message.contentType,
+            message.snapshotState, this.#userAgent.sandbox);
+          result = { type: 'url', url: this.#userAgent.blobURLStore.add(object, this.#env) };
+          break;
+        }
         case 'broadcast-register':
         case 'broadcast-send':
         case 'broadcast-close':
@@ -563,6 +597,7 @@ export interface WorkerBlobURLEntry {
 
 /** Explicit browser-service operations, without transported functions or environments. */
 type WorkerUserAgentRequest = WorkerBroadcastRequest |
+  { type: 'register-blob'; data: SerializedBlobData; contentType: string; snapshotState: BlobSnapshotState; } |
   { type: 'resolve'; url: string; } |
   { type: 'revoke'; url: string; } |
   { type: 'settings'; } |
@@ -582,6 +617,7 @@ interface WorkerBrowserSettings extends Pick<UserAgent,
 
 /** Explicit result kinds prevent treating a settings reply as a Blob capture. */
 type WorkerUserAgentResult =
+  { type: 'url'; url: string; } |
   { type: 'entry'; entry: WorkerBlobURLEntry | null; } |
   { type: 'boolean'; value: boolean; } |
   { type: 'settings'; settings: WorkerBrowserSettings; } |

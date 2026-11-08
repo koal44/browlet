@@ -7,7 +7,7 @@ import { WorkerUserAgentConnection } from '../../../src/browlet/integration/work
 import { createWindowEnvironment } from '../../../src/browlet/integration/web-idl/index';
 import { AgentCluster, WindowAgent } from '../../../src/browlet/scripting/index';
 import { UserAgent } from '../../../src/browlet/user-agent';
-import type { BrowletEnvironment } from '../../../src/browlet/environment/index';
+import { WorkerEnvironmentBase, type BrowletEnvironment } from '../../../src/browlet/environment/index';
 import { BlobImpl } from '../../../src/file/index';
 import { areSameOrigin, createOpaqueOrigin, obtainURLOrigin, parseURL, type Origin } from '../../../src/url/index';
 import { createManualEventLoop } from '../../support/browlet-agent';
@@ -194,7 +194,12 @@ function createEnvironment(url = 'https://worker.test/', userAgent: UserAgent = 
 
 /** Transfer a connection into a real isolate while keeping the browser owner and its stores here. */
 async function connect(env: BrowletEnvironment) {
-  const connection = new WorkerUserAgentConnection(env.userAgent, undefined, env);
+  const workerEnv = new WorkerEnvironmentBase({
+    userAgent: env.userAgent, creationURL: env.creationURL, topLevelCreationURL: null,
+    topLevelOrigin: env.topLevelOrigin, targetBrowsingContext: null, isSecureContext: env.isSecureContext,
+  }, env.origin);
+  workerEnv.policyContainer = env.policyContainer.clone();
+  const connection = new WorkerUserAgentConnection(env.userAgent, undefined, workerEnv);
   connections.add(connection);
   const worker = new Worker(resolve(__dirname, 'fixtures/user-agent.cjs'), {
     workerData: connection.init, transferList: [connection.init.port],

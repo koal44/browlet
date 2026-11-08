@@ -10,7 +10,7 @@ import {
 import type { ReadableStreamImpl } from '../streams/index';
 import { utf8Decode, utf8Encode, TextDecoderStreamImpl } from '../encoding/index';
 
-import { BlobData, type BlobSnapshotState } from './blob-data';
+import { BlobData, type BlobSnapshotState, type SerializedBlobData } from './blob-data';
 import type { FileEnvironment } from './environment';
 
 /*
@@ -210,13 +210,13 @@ export const blobSerialSteps = {
       }
     }
     serialized.fields.SnapshotState = state.snapshotState;
-    serialized.fields.ByteSequence = data;
+    serialized.fields.ByteSequence = data.serialize();
     // Preserve the MIME type, which the draft's listed record fields omit.
     serialized.fields.Type = state.type;
   },
   deserializationSteps(serialized, value) {
     value.setSerializationState({
-      data: serialized.fields.ByteSequence,
+      data: BlobData.deserialize(serialized.fields.ByteSequence),
       snapshotState: serialized.fields.SnapshotState,
       type: serialized.fields.Type,
     });
@@ -226,7 +226,7 @@ export const blobSerialSteps = {
 /** File API record fields shared by Blob and File serialization. */
 export type BlobSerializedFields = {
   SnapshotState: BlobSnapshotState;
-  ByteSequence: BlobData;
+  ByteSequence: SerializedBlobData;
   Type: string;
 };
 

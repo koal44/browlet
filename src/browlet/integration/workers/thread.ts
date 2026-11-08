@@ -328,6 +328,7 @@ export class WorkerThread {
           policyContainer = isLocalURL(url) && url.scheme !== 'blob'
             ? owner.policyContainer.clone()
             : env.userAgent.createPolicyContainerFromResponse(response, this.reservedEnv);
+          this.reservedEnv.policyContainer = policyContainer;
           if (request.destination === 'worker') {
             embedderPolicyAllowed = policyContainer.embedderPolicy.checkWorkerInheritance(response, env);
           }

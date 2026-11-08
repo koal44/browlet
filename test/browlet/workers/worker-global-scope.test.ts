@@ -57,6 +57,17 @@ describe('WorkerGlobalScope common foundation (HTML §10.2.1.1)', () => {
     }
   });
 
+  it('does not expose FileReaderSync to service workers', () => {
+    const agent = new SandboxAgent(new EventLoop({ requestTurn() {} }));
+    const realm = new BrowletRealm({ agent, globalNames: ['Worker', 'ServiceWorker'] });
+    browletBindingWorld.register(realm, (binding) =>
+      new SandboxEnvironment(realm, createBrowletEnvironmentInit(binding), new UserAgent()),
+    );
+    const interfaces = browletBindingWorld.getRealmBinding(realm)!.getExposedGlobalProperties();
+    expect(interfaces.has('FileReader')).toBe(true);
+    expect(interfaces.has('FileReaderSync')).toBe(false);
+  });
+
   it('unwraps a foreign receiver and preserves that receiver\'s public self identity', () => {
     const first = createScope();
     const second = createScope();

@@ -50,7 +50,7 @@ export class BlobURLStore {
     this.remove(record);
   }
 
-  /** Remove every registration created by this environment when its document is unloaded. */
+  /** Remove every registration created by this environment during global teardown. */
   // https://w3c.github.io/FileAPI/#lifeTime
   removeForEnvironment(env: BlobURLEnvironment): void {
     for (const [url, entry] of this.#entries) {

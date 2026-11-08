@@ -1015,8 +1015,23 @@ owner is not implemented.
 Captured Blob entries have per-record leases released by worker-side collection,
 or collectively at connection close. Initial-graph Fetch retains captures through
 the response and uses their IDs, preserving pre-revocation captures. Nested-worker
-forwarding, worker-created Blob backing transport, general Fetch and shared
+forwarding, host-file backing transport, general Fetch and shared
 storage/permission/report services remain explicit dependencies.
+Worker-created Blob URLs use the same acknowledged service connection. File API
+supplies portable byte records; the browser reconstructs retained backing in its
+sandbox. Registrations retain the existing worker reservation, now also holding
+its root response policies, for origin, inheritance and lifetime. Native exit
+removes that environment's registrations without invalidating entries captured
+earlier. No second Blob store or artificial creator environment is introduced.
+Active FileReaders share the global resource owner. Completion/abort releases
+each read before author callbacks; cooperative worker shutdown stops remaining
+reads after its final checkpoint without firing events. Window destruction and
+cancellation of already-issued host byte-source I/O remain separate integrations.
+FileReaderSync lives in the portable File subsystem and is exposed through normal
+Web IDL only in dedicated/shared workers. It reads immutable Blob segments through
+an optional synchronous byte-source operation and reuses result packaging. Memory
+sources implement it; async-only host sources remain an explicit dependency.
+Synchronous reads need neither an event-loop pump nor a cleanup collection.
 BroadcastChannel uses the original UserAgent's weak ordered discovery registry.
 Dedicated Document-owned workers register private remote destinations through
 the existing acknowledged service calls. A single delivery endpoint per worker
@@ -1285,6 +1300,12 @@ before the steps run. Steps can set the flag to request a conditional restrictio
 HTML applies any new restriction afterward, before checking storage or completing
 the transfer. The data retains no source environment or callback. These hooks need
 no separate capability registry.
+
+File API's byte-sequence records contain plain immutable memory segments, which
+native transport copies before the recipient rebuilds its local `BlobData`.
+Same-isolate host-backed clones retain their deferred source reads. Those local
+source records reject native cloning until portable host-file descriptors exist;
+transport must not silently discard a source's class behavior or private state.
 
 For example, Fetch owns request/response policy and transactions; HTTP owns
 reusable protocol syntax and cache rules; the UserAgent supplies transport and

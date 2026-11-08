@@ -3361,6 +3361,7 @@ export interface DedicatedWorkerGlobalScope extends WorkerGlobalScope {
   Blob: BlobConstructor;
   File: FileConstructor;
   FileList: FileListConstructor;
+  FileReaderSync: FileReaderSyncConstructor;
   Permissions: PermissionsConstructor;
   PermissionStatus: PermissionStatusConstructor;
   StorageManager: StorageManagerConstructor;
@@ -3445,6 +3446,7 @@ export interface SharedWorkerGlobalScope extends WorkerGlobalScope {
   Blob: BlobConstructor;
   File: FileConstructor;
   FileList: FileListConstructor;
+  FileReaderSync: FileReaderSyncConstructor;
   Permissions: PermissionsConstructor;
   PermissionStatus: PermissionStatusConstructor;
   StorageManager: StorageManagerConstructor;
@@ -5281,6 +5283,19 @@ export interface FileList {
 export interface FileListConstructor {
   readonly prototype: FileList;
   [Symbol.hasInstance](value: unknown): value is FileList;
+}
+
+export interface FileReaderSync {
+  readAsArrayBuffer(blob: Blob): ArrayBuffer;
+  readAsBinaryString(blob: Blob): string;
+  readAsText(blob: Blob, encoding?: string): string;
+  readAsDataURL(blob: Blob): string;
+}
+
+export interface FileReaderSyncConstructor {
+  readonly prototype: FileReaderSync;
+  [Symbol.hasInstance](value: unknown): value is FileReaderSync;
+  new (): FileReaderSync;
 }
 
 export interface Permissions {

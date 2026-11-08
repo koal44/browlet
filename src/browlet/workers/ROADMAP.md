@@ -19,6 +19,113 @@ Stock Node still lacks native suspension; nested workers and SharedWorker
 discovery retain explicit startup boundaries. Unconnected shared-service APIs
 remain explicit dependencies at their own operations.
 
+### Synchronous FileReader
+
+File API §6.5 is connected through the ordinary File declarations. Dedicated and
+shared workers expose FileReaderSync; Window and service workers do not. All four
+read methods reuse BlobData and result packaging. Memory-backed Blob/File data,
+including slices and objects received across isolates, can be read synchronously.
+Source failures use the existing File API DOMException categories and normal
+Binding projection; result buffers belong to the reader's realm.
+
+The specification's internal stream-and-wait steps are implemented by reading
+the same byte source directly, without running author jobs or calling the public
+`stream()` method. Blink likewise uses a synchronous backing loader in
+`FileReaderSync::Load()` and `SyncedFileReaderAccumulator::Load()`. No new native
+hook or shutdown collection is needed. Host-selected files still need a
+synchronous byte-source implementation and portable backing for transport;
+async-only sources fail at that explicit dependency. General worker Fetch is
+separate from reading already-held Blob data.
+
+Validation: 79 focused File/worker-realm cases pass on Node 24.19.0, 26.8.1, and
+custom Node 27, with and without the add-on. The real-isolate case passes on all
+three add-on builds and verifies that cloned Blob/File reads complete before
+pending microtasks, Promise reactions, and timers. Typecheck, changed-file ESLint,
+import boundaries, and the Browlet bundle build pass; the build retains its seven
+existing circular-dependency warnings.
+
+### FileReader shutdown
+
+Active FileReader reads now register with the existing global resource owner.
+Completion and public abort release them before author callbacks, so a callback
+that starts another read retains the new operation. Cooperative worker shutdown
+stops remaining reads after the final microtask checkpoint, cancels their stream
+readers, and removes queued FileReader notifications without firing abort/loadend.
+Another global's reads remain independent.
+
+`SPEC_GAP(worker-file-reader-shutdown)`: HTML's processing-model tail does not
+name FileReader cleanup. Blink's `FileReader::ContextDestroyed()`, Gecko's
+worker-reference shutdown callback, and WebKit's `FileReader::stop()` cancel
+pending reads during context teardown without author events. The worker tail
+uses the same approach. Direct native termination still destroys the isolate;
+this hook does not run author or host JavaScript after forced termination.
+
+Window destruction remains with the Document lifecycle owner. Ged's 2026-11-07
+`d0f06ac9` connects ordinary Document Fetch cancellation; FileReader's Blob stream
+does not use FetchGroup, and that change supplies no FileReader cleanup hook.
+After consolidation, permanent Document destruction can consume the same reader
+stop operation. In-flight host I/O cancellation needs a BlobByteSource contract;
+current cancellation prevents subsequent reads and late delivery. Portable
+host-file backing and general worker Fetch remain separate dependencies.
+
+Validation: 53 focused FileReader/worker-shutdown cases pass on all six runtime
+configurations (Node 24.19.0, 26.8.1, and custom Node 27; stock/add-on). The new
+dedicated/shared cleanup cases first failed with readers left loading. Coverage
+includes final-checkpoint ordering, late source completion, independent workers,
+normal completion/failure/abort release, and reads restarted by callbacks.
+Typecheck, changed-file ESLint, import boundaries, and the Browlet build pass;
+the build retains its existing circular-dependency warnings.
+
+### Worker-created Blob URLs
+
+`URL.createObjectURL()` now sends File API byte-segment records to the existing
+browser service connection and returns only after registration. The original
+UserAgent owns the store; its sandbox owns retained Blob reads. The registration
+uses the existing outside worker reservation for identity, origin, creation URL,
+and response policies. Root-response processing retains those policies before
+author execution, so the creating Window's policies are not substituted.
+Window Fetch can consume these URLs, and normal partition-checked revocation
+works in both directions. Data workers keep their own opaque origins.
+
+Connection teardown removes only that worker environment's registrations; a
+previously captured entry still retains its data. `SPEC_GAP(file-worker-blob-url-lifetime)`:
+File API §8.3.3 specifies Document cleanup but does not name workers. A local
+Chromium/Firefox/WebKit probe on 2026-11-07 read a worker-created URL while its
+worker lived, then observed fetch rejection after both `close()` and `terminate()`.
+The implementation follows that shared behavior at native-exit cleanup.
+
+Host-backed Blob sources still require portable backing descriptors. Native
+serialization rejection now resets the synchronous request state, preserving
+later service calls. General worker Fetch, worker-side Blob-entry object access,
+and nested/shared-worker startup remain separate dependencies.
+
+Validation: 15 focused cases pass on each add-on runtime and 13 applicable cases
+on each stock runtime (Node 24.19.0, 26.8.1, custom Node 27). They cover synchronous
+registration, unique URLs, slices/type, Window Fetch, opaque-origin authorization,
+revocation, close/termination cleanup, retained captures, and recovery after
+unsupported host-source serialization. The two public-worker execution cases
+remain conditional on native suspension support. Typecheck, changed-file ESLint,
+import boundaries, and the Browlet build pass with the existing circular warnings.
+
+### Blob/File message contents
+
+Memory-backed Blob/File values now round-trip through dedicated `postMessage()`
+and BroadcastChannel. File API serializes plain byte-segment records instead of
+retaining a `BlobData` class instance, whose private fields native cloning dropped.
+The recipient rebuilds its own backing and retains readable contents after sender
+exit. FileList native-transport coverage also preserves shared File identities.
+Host-backed files retain local lazy reads; portable host-file descriptors remain
+explicitly required before their records can cross isolates. General worker
+Fetch/later dynamic imports remain separate service dependencies. No messaging
+protocol or add-on changes were needed for these message contents.
+
+Validation: 65 File API/read cases pass on stock and add-on Node 24.19.0, 26.8.1,
+and custom Node 27. The two real-worker regressions pass on each add-on runtime;
+stock public worker startup still requires suspension support. Both cases first
+failed with `this[#data].stream is not a function` before the serialization fix.
+Typecheck, changed-file ESLint, import boundaries, and the Browlet build pass;
+the build retains its existing circular-dependency warnings.
+
 ### Dedicated-worker BroadcastChannel connection
 
 The original UserAgent now owns discovery for Windows and dedicated Document-owned
@@ -454,15 +561,14 @@ No addon or engine changes are involved.
 The browser host queue must remain able to answer. A long synchronous host script
 can delay it; a host that synchronously waits for its requesting worker can
 deadlock. Do not solve that by pumping author callbacks in the worker. Dedicated
-service execution, direct nested-worker connection forwarding, worker-created
-Blob backing transport, general Fetch, cookies/storage/permissions,
+service execution, direct nested-worker connection forwarding, host-file
+backing transport, general Fetch, cookies/storage/permissions,
 and report delivery remain explicit dependencies. Initial module-graph Fetch
 still uses the creator client as HTML requires; later dynamic imports need the
 worker's own client and a separate service route.
 
-Runtime probes retain the explicit worker-created Blob registration dependency,
-which needs backing transport. It throws through the public worker API without
-killing the worker or breaking subsequent URL resolution. BroadcastChannel now
+Runtime probes now reach worker-created Blob registration and retain connection
+usability after rejecting an unsupported host-backed source. BroadcastChannel now
 connects the browser registry for dedicated Document-owned isolates. The common-global inclusion now
 supplies `fetch`; its formerly failing exposure regression remains an ordinary
 assertion. General Fetch service transport is still an explicit dependency of

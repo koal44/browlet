@@ -1,6 +1,6 @@
 /// <reference types="node" preserve="true" />
 
-import { MessageChannel, receiveMessageOnPort, type MessagePort } from 'node:worker_threads';
+import { markAsUncloneable as nodeMarkAsUncloneable, MessageChannel, receiveMessageOnPort, type MessagePort } from 'node:worker_threads';
 
 /** A native channel for internal data; HTML owns serialization, task queues, and events. */
 export class JSMessageChannel<Message = unknown> {
@@ -65,6 +65,11 @@ export class JSMessagePort<Message = unknown> {
 
   /** Disconnect the native channel. This does not implement HTML MessagePort.close(). */
   close(): void { this.#backing.close(); }
+}
+
+/** Reject native transport of an internal object whose state only exists in this isolate. */
+export function markAsUncloneable(value: object): void {
+  nodeMarkAsUncloneable(value);
 }
 
 /** Trusted internal message contract; native cloning does not validate its TypeScript shape. */

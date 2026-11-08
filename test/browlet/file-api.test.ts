@@ -278,9 +278,11 @@ describe('File API Blob projection', () => {
   });
 
   it.each([
-    ['clones', structuredSerialize],
-    ['storage-clones', structuredSerializeForStorage],
-  ] as const)('%s bytes into a Blob in the target realm', async (_, serialize) => {
+    ['clones', structuredSerialize, false],
+    ['storage-clones', structuredSerializeForStorage, false],
+    ['transports cloned', structuredSerialize, true],
+    ['transports storage-cloned', structuredSerializeForStorage, true],
+  ] as const)('%s bytes into a Blob in the target realm', async (_, serialize, transport) => {
     const sourceWindow = createWindow();
     const targetWindow = createWindow();
     const sourceRealm = getRelevantRealm(sourceWindow);
@@ -289,7 +291,9 @@ describe('File API Blob projection', () => {
       constructBlob(sourceWindow, ['stored'], { type: 'text/plain' }),
       getBindingContext(sourceRealm),
     );
-    const clone = structuredDeserialize(serialized, getBindingContext(targetRealm)) as object;
+    // Node's transport clones internal records without their class prototypes.
+    const transported = transport ? structuredClone(serialized) : serialized;
+    const clone = structuredDeserialize(transported, getBindingContext(targetRealm)) as object;
 
     expect(clone).toBeInstanceOf(requireFunction(targetWindow, 'Blob'));
     expect(clone).not.toBeInstanceOf(requireFunction(sourceWindow, 'Blob'));
@@ -301,6 +305,29 @@ describe('File API Blob projection', () => {
     expect(result.done).toBe(false);
     expect(result.value).toBeInstanceOf(targetWindow.Uint8Array);
     expect(Array.from(result.value!)).toEqual([115, 116, 111, 114, 101, 100]);
+  });
+
+  it('preserves lazy host reads and snapshot failures when cloning within one isolate', async () => {
+    const window = createWindow();
+    const context = getBindingContext(getRelevantRealm(window));
+    let reads = 0;
+    let changed = false;
+    const source: BlobByteSource = {
+      size: 3,
+      snapshotState: { version: 1 },
+      read: (start, length) => {
+        reads++;
+        return changed ? Promise.reject(new BlobReadFailure('SnapshotState'))
+          : Promise.resolve(Uint8Array.of(65, 66, 67).slice(start, start + length));
+      },
+    };
+    const blob = projectBlob(window, BlobImpl.create(BlobData.fromSource(source), 'text/plain', source.snapshotState, context.getEnvironment()));
+    const clone = window.structuredClone(blob);
+    expect(reads).toBe(0);
+    await expect(call(clone, 'text')).resolves.toBe('ABC');
+    changed = true;
+    await expect(call(clone, 'text')).rejects.toMatchObject({ name: 'NotReadableError' });
+    expect(reads).toBe(2);
   });
 });
 
@@ -504,35 +531,36 @@ describe('File API File and FileList projection', () => {
     expect(source.file).not.toBeInstanceOf(requireFunction(targetWindow, 'File'));
   });
 
-  it.each([false, true])('subserializes FileList entries with shared graph identity (list first: %s)', async (listFirst) => {
-    const sourceWindow = createWindow();
-    const targetWindow = createWindow();
-    const file = constructFile(
-      sourceWindow,
-      ['payload'],
-      'payload.txt',
-      { lastModified: 42, type: 'text/plain' },
-    );
-    const list = createFileList(sourceWindow, [file]).platformObject;
-    const sourceRealm = getRelevantRealm(sourceWindow);
-    const targetRealm = getRelevantRealm(targetWindow);
-    const serialized = structuredSerializeForStorage(
-      listFirst ? { list, file } : { file, list },
-      getBindingContext(sourceRealm),
-    );
-    const clone = structuredDeserialize(serialized, getBindingContext(targetRealm)) as Record<string, object>;
-    const clonedFile = clone.file!;
-    const clonedList = clone.list!;
+  it.each([[false, false], [true, false], [false, true], [true, true]])(
+    'subserializes FileList entries with shared graph identity (list first: %s, native transport: %s)', async (listFirst, transport) => {
+      const sourceWindow = createWindow();
+      const targetWindow = createWindow();
+      const file = constructFile(
+        sourceWindow,
+        ['payload'],
+        'payload.txt',
+        { lastModified: 42, type: 'text/plain' },
+      );
+      const list = createFileList(sourceWindow, [file]).platformObject;
+      const sourceRealm = getRelevantRealm(sourceWindow);
+      const targetRealm = getRelevantRealm(targetWindow);
+      const serialized = structuredSerializeForStorage(
+        listFirst ? { list, file } : { file, list },
+        getBindingContext(sourceRealm),
+      );
+      const clone = structuredDeserialize(transport ? structuredClone(serialized) : serialized, getBindingContext(targetRealm)) as Record<string, object>;
+      const clonedFile = clone.file!;
+      const clonedList = clone.list!;
 
-    expect(clonedFile).toBeInstanceOf(requireFunction(targetWindow, 'File'));
-    expect(clonedFile).not.toBeInstanceOf(requireFunction(sourceWindow, 'File'));
-    expect(clonedList).toBeInstanceOf(requireFunction(targetWindow, 'FileList'));
-    expect(Reflect.get(clonedList, '0')).toBe(clonedFile);
-    expect(Reflect.get(clonedFile, 'name')).toBe('payload.txt');
-    expect(Reflect.get(clonedFile, 'lastModified')).toBe(42);
-    expect(Reflect.get(clonedFile, 'type')).toBe('text/plain');
-    await expect(call(clonedFile, 'text')).resolves.toBe('payload');
-  });
+      expect(clonedFile).toBeInstanceOf(requireFunction(targetWindow, 'File'));
+      expect(clonedFile).not.toBeInstanceOf(requireFunction(sourceWindow, 'File'));
+      expect(clonedList).toBeInstanceOf(requireFunction(targetWindow, 'FileList'));
+      expect(Reflect.get(clonedList, '0')).toBe(clonedFile);
+      expect(Reflect.get(clonedFile, 'name')).toBe('payload.txt');
+      expect(Reflect.get(clonedFile, 'lastModified')).toBe(42);
+      expect(Reflect.get(clonedFile, 'type')).toBe('text/plain');
+      await expect(call(clonedFile, 'text')).resolves.toBe('payload');
+    });
 });
 
 function createWindow(): WindowProxy & Pick<typeof globalThis, 'Uint8Array'> {

@@ -456,6 +456,7 @@ describe('File API §6.2: FileReader reads', () => {
     await secondDone;
     expect(second.result).toBe('second');
     expect(firstEvents).toEqual(['abort', 'loadend']);
+    expect(context.getEnvironment().getWindowOrWorkerGlobalScopeMixin().fileReaders.size).toBe(0);
   });
 
   it('clears a completed result without firing events when aborted', async () => {
@@ -752,6 +753,7 @@ describe('File API §6.2: FileReader reads', () => {
 
     expect(events).toEqual(['error', 'loadend']);
     expect(reader.readyState).toBe(2);
+    expect(context.getEnvironment().getWindowOrWorkerGlobalScopeMixin().fileReaders.size).toBe(0);
     expect(reader.result).toBeNull();
     expect(reader.error).toBeInstanceOf(DOMExceptionImpl);
     expect(reader.error).toMatchObject({ name });

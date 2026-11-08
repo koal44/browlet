@@ -2289,15 +2289,27 @@ origin for revocation checks. Captured
 registrations survive revocation and are released when URL records are collected,
 or when the connection closes. Initial-graph fetches retain and consume those
 captures. The owner host queue must be able to answer synchronous calls; nested
-connection forwarding, independent service execution, worker-created Blob backing
-transport, and general worker Fetch/shared-store services remain unimplemented.
+connection forwarding, independent service execution, and general worker
+Fetch/shared-store services remain unimplemented. Worker-created memory-backed
+Blob URLs now register synchronously in the original browser store and are
+removed when their worker exits. Their entries retain the worker's origin and
+response policies, including a data worker's distinct opaque origin.
+Memory-backed Blob/File messages now cross isolates through File API byte-segment
+records. Host-backed files still need portable source descriptors: local cloning
+preserves their lazy reads, but their records explicitly reject native transport.
+Active FileReaders now stop during cooperative worker shutdown without author
+events. Permanent Window destruction still needs the same cleanup connection;
+canceling a Blob stream prevents further reads/delivery but cannot interrupt a
+host byte-source read already in progress.
+FileReaderSync now reads memory-backed Blob/File data in dedicated/shared workers,
+including cloned data. Host-selected sources need synchronous backing I/O; an
+async-only source fails explicitly rather than blocking on its own Promise queue.
 Worker Blob entries retain the full public type, but only origin and capture
 identity are connected locally. Obtaining the Blob, checking another caller's
 partition, or reading the creator's URL, UserAgent or policies throws an explicit
 dependency error; the owner-side entry still provides these operations normally.
-Direct worker API probes reach the explicit missing transport errors for
-`URL.createObjectURL()`, and the isolate remains usable
-afterward. The worker global exposes `fetch` through WindowOrWorkerGlobalScope;
+Rejected native serialization of an unsupported host-backed source leaves the
+service connection usable. The worker global exposes `fetch` through WindowOrWorkerGlobalScope;
 its general worker network/service transport remains unfinished.
 Private initial-graph fetch transport now supports concurrent requests through
 the creator's actual Fetch client, delivery on the worker networking queue, and

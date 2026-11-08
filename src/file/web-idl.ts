@@ -6,6 +6,7 @@ import {
 } from './blob';
 import { fileIDL, filePropertyBagIDL } from './file';
 import { fileListIDL } from './file-list';
+import { fileReaderSyncIDL } from './file-reader-sync';
 
 /** File API declarations supplied to the host binding. */
 export const fileIDLDefinitions: Definition<FileEnvironment>[] = [
@@ -16,4 +17,5 @@ export const fileIDLDefinitions: Definition<FileEnvironment>[] = [
   filePropertyBagIDL,
   fileIDL,
   fileListIDL,
+  fileReaderSyncIDL,
 ];

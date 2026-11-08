@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createOpaqueOrigin, obtainURLOrigin, parseURL, serializeURL } from '../../../src/url/index';
-import { BlobImpl } from '../../../src/file/index';
+import { BlobData, BlobImpl, BlobReadFailure } from '../../../src/file/index';
 import { StorageKey } from '../../../src/storage/index';
 import { FetchTimingInfo, ResponseBodyInfo } from '../../../src/fetch/timing';
 import { BrowsingContext, Navigable, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
@@ -20,6 +20,53 @@ import { createManualEventLoop, createManualUserAgent } from '../../support/brow
 import { runInHostTask } from '../../support/tasks';
 
 describe('Worker realm and settings setup (HTML §10.2.4 and §10.2.6.2)', () => {
+  it.each([false, true])('exposes FileReaderSync with ordinary Web IDL conversion, shared: %s', (shared) => {
+    const outsideEnv = createOutsideEnvironment();
+    const env = createWorker(outsideEnv, shared);
+    const scope = env.global as unknown as DedicatedWorkerGlobalScope | SharedWorkerGlobalScope;
+    const reader = new scope.FileReaderSync();
+    const blob = new scope.Blob([new env.realm.Uint8Array([0xe9])], { type: 'text/plain;charset=windows-1252' });
+    expect(Object.getPrototypeOf(scope.FileReaderSync.prototype)).toBe(env.realm.Object.prototype);
+    expect(Object.prototype.toString.call(reader)).toBe('[object FileReaderSync]');
+    expect(reader).not.toBeInstanceOf(scope.EventTarget);
+    expect(reader.readAsText(blob)).toBe('é');
+    expect(reader.readAsText(blob, undefined)).toBe('é');
+    expect(reader.readAsArrayBuffer(blob)).toBeInstanceOf(env.realm.ArrayBuffer);
+    expect(Reflect.has(outsideEnv.global, 'FileReaderSync')).toBe(false);
+    // Author overrides of Blob.stream() are not the specification's get stream operation.
+    blob.stream = () => { throw new Error('author stream called'); };
+    expect(reader.readAsText(blob)).toBe('é');
+    const encoding = { toString: () => 'windows-1252' };
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Reflect.apply supplies deliberately valid and invalid receivers below.
+    const readAsText = reader.readAsText;
+    expect(Reflect.apply(readAsText, reader, [blob, encoding])).toBe('é');
+    expect(() => { Reflect.apply(readAsText, reader, []); }).toThrow(env.realm.TypeError);
+    expect(() => { Reflect.apply(readAsText, reader, [{}]); }).toThrow(env.realm.TypeError);
+    expect(() => { Reflect.apply(readAsText, {}, [blob]); }).toThrow(env.realm.TypeError);
+    expect(() => { Reflect.apply(readAsText, reader, [blob, Symbol()]); }).toThrow(env.realm.TypeError);
+    const failure = new BlobReadFailure('NotFound');
+    const data = BlobData.fromSource({
+      size: 1, snapshotState: undefined,
+      read: () => Promise.reject(failure),
+      readSync() { throw failure; },
+    });
+    const missingFile = env.project(BlobImpl.create(data, '', undefined, env));
+    expect(() => { Reflect.apply(readAsText, reader, [missingFile]); }).toThrow(scope.DOMException);
+    expect(() => { Reflect.apply(readAsText, reader, [missingFile]); }).toThrow(expect.objectContaining({ name: 'NotFoundError' }));
+  });
+
+  it('uses the FileReaderSync receiver realm when a foreign method reads a foreign Blob', () => {
+    const outsideEnv = createOutsideEnvironment();
+    const first = createWorker(outsideEnv);
+    const second = createWorker(outsideEnv);
+    const firstScope = first.global as unknown as DedicatedWorkerGlobalScope;
+    const secondScope = second.global as unknown as DedicatedWorkerGlobalScope;
+    const reader = new secondScope.FileReaderSync();
+    const result = firstScope.FileReaderSync.prototype.readAsArrayBuffer.call(reader, new firstScope.Blob(['ABC']));
+    expect(result).toBeInstanceOf(second.realm.ArrayBuffer);
+    expect([...new Uint8Array(result)]).toEqual([65, 66, 67]);
+  });
+
   it.each([false, true])('exposes the common global facilities through Web IDL, shared: %s', (shared) => {
     const env = createWorker(createOutsideEnvironment(), shared);
     for (const name of [
