@@ -1,4 +1,4 @@
-import { InternalError, internalType, WeakOrderedSet, type InternalPromise, type TimerHost } from '../infra/index';
+import { InternalError, internalType, WeakOrderedSet, type InternalPromise, type TimerHost, type Public } from '../infra/index';
 import { NodePromise, randomUUID } from '../js-engine/index';
 import { unsafeSharedCurrentTime } from '../timing/index';
 import type { SelectletUserAgent } from '../selectlet/index';
@@ -27,7 +27,7 @@ import { PercentageLiteral, createSystemColorPalette, type StyleletUserAgent } f
 import type { CORSSettingsState } from './dom/nodes/html/attributes/index';
 import {
   type Agent, AgentCluster, DedicatedWorkerAgent, EventLoop, ServiceWorkerAgent,
-  SharedWorkerAgent, WindowAgent, WorkletAgent,
+  SharedWorkerAgent, WindowAgent, WorkletAgent, ScriptingPolicy,
 } from './scripting/index';
 import { type ReportingEndpoint, ReportImpl } from './reporting/index';
 import { SystemClipboard, clipboardWritePermission } from './interaction/clipboard/index';
@@ -57,10 +57,10 @@ import { browletDOM } from './integration/index';
 import { createSandboxEnvironment, createWindowEnvironment } from './integration/web-idl/index';
 
 /** Owns browsing contexts and shared browser services that outlive individual documents. */
-export class UserAgent implements
+class BrowletUserAgent implements
   FetchUserAgent, StorageUserAgent, PermissionUserAgent, URLUserAgent, StyleletUserAgent, SelectletUserAgent {
   /** WebDriver BiDi command implementation; separate from Browlet's convenience API. */
-  webDriver = new WebDriver(this);
+  webDriver: WebDriver = new WebDriver(this);
   /** Local clients notified of document replacement; not WebDriver session state. */
   pageEvaluations = new WeakMap<Navigable, Set<PageEvaluation>>();
   /** Implementation access shared by selector and style engines. */
@@ -110,7 +110,7 @@ export class UserAgent implements
   /** HTTP wire operations using the browser's shared connection pool. */
   httpTransport: HTTPTransport = new NodeHTTPTransport(this);
   /** Credentials and authentication challenges shared by this user agent's HTTP requests. */
-  httpAuthentication = new HTTPAuthenticationStore(this);
+  httpAuthentication: HTTPAuthenticationStore = new HTTPAuthenticationStore(this);
   /** Native HTTP codecs, instantiated separately for each response. */
   supportedContentCodings = new Set(supportedContentCodings);
   /** Construct the decoder chain for one response's content codings. */
@@ -126,7 +126,7 @@ export class UserAgent implements
   /** Remembered HTTPS requirements shared by this user agent's browsing contexts. */
   hstsStore = new HSTSStore();
   /** Blob URL registrations shared by this user agent's environments. */
-  blobURLStore = new BlobURLStore(this);
+  blobURLStore: Public<BlobURLStore> = new BlobURLStore(this);
 
   /** Remembered feature decisions shared by this user agent's environments. */
   // https://w3c.github.io/permissions/#permission-store
@@ -152,12 +152,8 @@ export class UserAgent implements
 
   /** Allows outbound report queues and delivery; local ReportingObservers remain enabled. */
   reportDeliveryEnabled = true;
-  /** User preference for scripting; Browlet itself always has JavaScript support. */
-  // https://html.spec.whatwg.org/multipage/webappapis.html#concept-environment-script
-  // TODO(HTML §8.1.4.5): Disabling must also interrupt already-running scripts
-  // through their Agents. This is deferred with Agent.abortRunningScript(); the
-  // preference gates subsequent entries and cannot preempt the shared Node thread.
-  scriptingEnabled = true;
+  /** Browser preference shared with worker isolates, independently of their document/response policies. */
+  scriptingPolicy = new ScriptingPolicy();
   /** Scroll-container expansion used when a document creates its lazy-loading observer. */
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#lazy-load-root-margin
   // Implementation-defined: use WebKit's image-observer "100%" fallback until measurements justify tuning.
@@ -209,6 +205,16 @@ export class UserAgent implements
   get sandbox(): BrowletEnvironment {
     return this.#sandbox ??= createSandboxEnvironment(this);
   }
+
+  /** User preference for scripting; Browlet itself always has JavaScript support. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#concept-environment-script
+  // TODO(HTML §8.1.4.5): Honor the recommendation to immediately interrupt a
+  // running script when scripting is disabled. This setter only gates later
+  // entries; it does not abort active execution. Script abort and whole-worker
+  // termination are distinct: the spec does not define a reusable-worker or
+  // Promise-recovery contract here. See workers/ROADMAP.md before wiring this.
+  get scriptingEnabled(): boolean { return this.scriptingPolicy.enabled; }
+  set scriptingEnabled(enabled: boolean) { this.scriptingPolicy.enabled = enabled; }
 
   get mouseInput(): MouseInputProcessor {
     return this.#mouseInput ??= new MouseInputProcessor(this);
@@ -1139,6 +1145,12 @@ export class UserAgent implements
     });
   }
 }
+
+/** Construct the browser owner and its stores in this isolate. */
+export const UserAgent = BrowletUserAgent;
+
+/** Complete browser services, independent of the local or worker implementation's private state. */
+export type UserAgent = Public<BrowletUserAgent>;
 
 /** Outcome of one delivery attempt; the caller applies endpoint bookkeeping. */
 export type ReportDeliveryResult = 'success' | 'remove-endpoint' | 'failure';

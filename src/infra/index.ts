@@ -43,5 +43,5 @@ export {
 } from './strings';
 export { TextCursor, TextCursorError } from './text-cursor';
 export {
-  mapTuple, assertNever, clamp, requireDefined, type DistributiveOmit, type PropertyOf, type SameArityTuple, type Permutations,
+  mapTuple, assertNever, clamp, requireDefined, type Public, type DistributiveOmit, type PropertyOf, type SameArityTuple, type Permutations,
 } from './util';

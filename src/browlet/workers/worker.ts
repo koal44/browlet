@@ -11,7 +11,7 @@ import type { TrustedScriptURLImpl } from '../browsing/policy/trusted-types/inde
 import { MessageEventTargetMixin, MessagePortImpl } from '../communication/index';
 import type { BrowletEnvironment } from '../environment/index';
 import type { StructuredSerializeOptions } from '../scripting/structured-data/index';
-import type { WorkerThread } from '../integration/host/index';
+import type { WorkerThread } from '../integration/workers/index';
 
 import { AbstractWorkerMixin } from './abstract-worker';
 import type { WorkerType } from './worker-global-scope';
@@ -62,9 +62,10 @@ export class WorkerImpl extends EventTargetImpl {
     const workerURL = this.env.encodingParseURL(compliantScriptURL);
     if (workerURL === null) throw new DOMExceptionImpl('Invalid Worker URL', 'SyntaxError');
     // TODO(HTML §§10.2.4, 10.2.6.3): Run a worker in parallel with workerURL, this.env,
-    // this.outsidePort, and options. The production isolate still needs its environment
-    // and shared UserAgent services. Connect the hidden message channel after composing
-    // the inside global. Supply this Worker to
+    // this.outsidePort, and options. The production isolate now composes its environment
+    // and handles network/policy rejection, but still needs shared UserAgent services,
+    // script creation/execution, and owner monitoring. Connect the hidden message channel
+    // before execution. Supply this Worker to
     // WorkerThread before returning from construction so immediate termination can reach it.
     throw new InternalError('Dedicated worker startup is not implemented');
   }

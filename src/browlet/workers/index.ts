@@ -3,6 +3,7 @@ export { WorkerLocationImpl } from './worker-location';
 export { workerIDLDefinitions } from './web-idl';
 export { AbstractWorkerMixin } from './abstract-worker';
 export { WorkerImpl, type WorkerOptions } from './worker';
+export { SharedWorkerImpl, type SharedWorkerOptions } from './shared-worker';
 export { DedicatedWorkerGlobalImpl } from './dedicated-worker-global-scope';
 export { SharedWorkerGlobalImpl } from './shared-worker-global-scope';
 export { ServiceWorkerGlobalImpl } from './service-worker-global-scope';

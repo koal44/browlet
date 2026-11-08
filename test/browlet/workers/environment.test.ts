@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createOpaqueOrigin, obtainURLOrigin, parseURL, serializeURL } from '../../../src/url/index';
+import { BlobImpl } from '../../../src/file/index';
 import { StorageKey } from '../../../src/storage/index';
 import { FetchTimingInfo, ResponseBodyInfo } from '../../../src/fetch/timing';
 import { BrowsingContext, Navigable, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
@@ -55,6 +56,23 @@ describe('Worker realm and settings setup (HTML §10.2.4 and §10.2.6.2)', () =>
     expect(env.isSecureContext).toBe(true);
     if (global instanceof DedicatedWorkerGlobalImpl) expect(global.ports).toEqual([]);
     else expect(global).toMatchObject({ type: 'module', credentials: 'include', extendedLifetime: true });
+  });
+
+  it.each([false, true])('retains Blob registrations at parse time when the browser store is local, shared: %s', (shared) => {
+    const outsideEnv = createOutsideEnvironment();
+    const env = createWorker(outsideEnv, shared);
+    const store = outsideEnv.userAgent.blobURLStore;
+    const url = store.add(new BlobImpl(['export {};'], { type: 'text/javascript' }, outsideEnv), outsideEnv);
+    const outside = outsideEnv.parseURL(url)!;
+    const inside = env.parseURL(`${url}#module`)!;
+    expect(outside.blobURLEntry).not.toBeNull();
+    expect(inside.blobURLEntry).toBe(outside.blobURLEntry);
+    expect(serializeURL(inside)).toBe(`${url}#module`);
+
+    store.remove(url);
+    expect(inside.blobURLEntry).toBe(outside.blobURLEntry);
+    expect(env.parseURL(url)!.blobURLEntry).toBeNull();
+    expect(outsideEnv.parseURL(url)!.blobURLEntry).toBeNull();
   });
 
   it('takes shared-worker identity from its creator, separately from its script URL', () => {

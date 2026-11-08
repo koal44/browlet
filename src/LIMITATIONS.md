@@ -2169,13 +2169,16 @@ COEP navigation and dedicated-worker inheritance checks and observer reports are
 implemented, but automatic child creation/destruction, navigation network-error handling,
 and worker startup still prevent complete enforcement through those lifecycles.
 WorkerGlobalScope, DedicatedWorkerGlobalScope, and SharedWorkerGlobalScope have declared members and
-can be projected for internally supplied implementations, but worker startup and
-the author-facing Worker/SharedWorker APIs remain absent. Shared globals retain
-creation fields and expose `onconnect`; discovery, automatic connection delivery,
+can be projected for internally supplied implementations. The outside Worker and
+SharedWorker interfaces are declared, but valid public construction still stops
+at explicit startup/discovery boundaries. SharedWorker exposes its connection
+port and ordinary outside error handler; it does not expose global messaging or
+termination methods. Shared globals retain creation fields and expose `onconnect`;
+discovery, automatic connection delivery,
 and lifetime monitoring remain pending. Dedicated globals forward messaging
-through a hidden port and can close their agent's task queues; automatic channel
-setup and native thread teardown remain pending. WorkerLocation's read-only URL surface
-is implemented; WorkerNavigator also supplies
+through a hidden port and can close their agent's task queues; native channel
+transport and thread teardown exist separately from public startup.
+WorkerLocation's read-only URL surface is implemented; WorkerNavigator also supplies
 [NavigatorID](browlet/navigator/ROADMAP.md#client-identification). Identification
 uses the approved Chrome compatibility profile and configurable common `Win32`
 platform, while User-Agent text retains its existing Fetch configuration/emulation
@@ -2226,7 +2229,8 @@ preparing its URL do not complete these policies or automatically select a defau
 Workers do not expose these methods. Hardware concurrency remains unfinished. `importScripts()` throws
 at its explicit synchronous-loading boundary. Dedicated/shared realm and settings
 composition is available internally, including initial ownership and separate resource
-state. It leaves execution readiness false and still runs on the caller's thread.
+state. It leaves execution readiness false; the separate-isolate startup path
+now also uses this composition with transported creator values and reserved identity.
 JS Engine can start a separate isolate and stop blocked execution. Browlet's host
 adapter reloads the existing package bundle with a private startup marker,
 creates its worker agent/loop, and
@@ -2237,12 +2241,63 @@ fresh one, and subsequent capture preserves those identities. Cluster membership
 sets remain local. Creator policy snapshots also cross the channel and are
 reconstructed as local policy implementations, retaining CSP self origins,
 enforcement/reporting state, COEP, referrer policy, and integrity policies.
-It is not yet connected to environment composition: UserAgent services,
-report delivery, and remote lifetime updates remain dependencies.
+Configured startup now composes its inside environment from those values, without
+a replacement creator Window or UserAgent. The retained inside UserAgent
+connection supplies local timers and the shared lifetime clock without creating
+another browser. It implements the full UserAgent surface, with explicit throws
+for facilities that have no worker connection yet.
+Report delivery and remote lifetime updates remain dependencies, and the original
+owner is retained outside rather than replaced by an inside owner placeholder.
 Copied URL records omit cached Blob registrations; resolving Blob URLs still
 requires access to the original UserAgent's store.
-The bootstrap rejects commands at that unfinished
-boundary; it does not create a worker global or fetch/execute author code yet.
+An internally configured initial script can now be requested from the worker
+through the creator's real Fetch client and shared stores. The creator retains
+captured Blob registrations and reserves the inside Fetch client; its ID crosses
+the startup channel. Complete response/local/Blob policy containers and the
+creator-side COEP outcome now reach the inside environment's policy initializer.
+It applies CSP and isolation decisions without recreating the creator's stores.
+Production now composes that environment, adopts the reserved identity, requests
+the initial script automatically, and applies response policies on its networking
+task. Network and policy rejection discard the inside environment, queue an
+ordinary error event on a dedicated outside Worker, and terminate the isolate.
+Explicit termination suppresses late fetch failure delivery. Shared-root cleanup
+also works, but outside SharedWorker association/error delivery remains pending.
+The browser's scripting preference is shared live with the inside environment;
+script creation and later entry checks no longer require a local UserAgent.
+The creator Document's sandbox stays separate from that preference and response CSP.
+BiDi scripting overrides remain provisional: worker scope and transport are pending,
+and disabling the preference does not interrupt an already-running script.
+Response processing uses the existing script processors and module loader for
+HTTP status, body, MIME, parse, and link failures. Valid roots and their module
+graphs are loaded and linked without execution. Owner monitoring, running the
+script, and acknowledging execution readiness remain unfinished.
+Environment URL parsing delegates to its UserAgent connection. Synchronous Blob
+lookup/revocation, live scalar preferences, configured trust and loading queries
+reach the original browser owner. Inside module-resolution cases pass through
+the normal environment UserAgent delegation. Data workers use their own opaque
+origin for revocation checks. Captured
+registrations survive revocation and are released when URL records are collected,
+or when the connection closes. Initial-graph fetches retain and consume those
+captures. The owner host queue must be able to answer synchronous calls; nested
+connection forwarding, independent service execution, worker-created Blob backing
+transport, and general worker Fetch/shared-store services remain unimplemented.
+Worker Blob entries retain the full public type, but only origin and capture
+identity are connected locally. Obtaining the Blob, checking another caller's
+partition, or reading the creator's URL, UserAgent or policies throws an explicit
+dependency error; the owner-side entry still provides these operations normally.
+Direct worker API probes reach the explicit missing transport errors for
+`URL.createObjectURL()` and `BroadcastChannel`, and the isolate remains usable
+afterward. The worker global does not expose `fetch` yet: WindowOrWorkerGlobalScope
+API forwarding remains a §10.3 dependency. Its exposure regression is an ordinary
+failure, not an expected failure or a test of the current missing behavior.
+Private initial-graph fetch transport now supports concurrent requests through
+the creator's actual Fetch client, delivery on the worker networking queue, and
+cancellation on exit. The graph loader now uses it, retaining its inside module
+map and the actual outside creator as the initial graph's client. Dynamic
+imports require the worker's own Fetch client; general worker Fetch and
+nested-worker service forwarding also remain unconnected.
+The bootstrap rejects unsupported control commands at that unfinished boundary
+and does not execute downloaded author code.
 Its internal Node-cloned messages are not HTML MessagePort transport. HTML
 serialization records now carry cluster IDs and survive that channel for ordinary
 graphs, transferred ArrayBuffers, shared memory, and native Wasm Module tokens.
@@ -2260,8 +2315,9 @@ isolate and hand its consumed response to an explicit worker networking-task
 consumer. Fetch retains the original stores and client; host-owned body streams
 and parallel callback delivery avoid depending on creator Document activity.
 Blob creator policies travel as values, and thread teardown cancels pending
-fetching. The production startup caller/consumer, reserved inside-client
-identity, module-descendant and nested-worker service routing remain unwired.
+fetching. The production script driver now prepares complete initial graphs;
+execution and nested-worker service routing remain unwired. The reserved
+inside-client identity is retained.
 WorkerEnvironment can fetch and parse/link its root script and initialize response
 URL, CSP, COEP, and isolation state using the existing Fetch machinery. This is
 tested on composed worker settings; the separate-isolate bootstrap still needs

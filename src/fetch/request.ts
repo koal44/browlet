@@ -55,7 +55,8 @@ export class FetchRequest {
   env: FetchEnvironment;
   /** Destination environment reserved for a navigation or worker, before it becomes active. */
   // https://fetch.spec.whatwg.org/#concept-request-reserved-client
-  // Navigation uses the base environment; worker requests use a full environment.
+  // Navigation and cross-isolate worker fetching can reserve the base environment
+  // before composition supplies the full environment with the same identity.
   reservedClient: FetchEnvironmentBase | null = null;
   /** Environment ID replaced by a navigation, or an empty string when none is designated. */
   replacesClientId = '';

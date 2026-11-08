@@ -315,7 +315,7 @@ function inNodeTask(steps: () => void): Promise<void> {
   });
 }
 
-function createParserDocument(userAgent = new UserAgent()) {
+function createParserDocument(userAgent: UserAgent = new UserAgent()) {
   const traversable = TopLevelTraversable.create(userAgent, null, '');
   const document = traversable.activeDocument;
   if (document === null) throw new Error('Expected an active document');

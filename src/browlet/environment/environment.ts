@@ -1,6 +1,6 @@
 import {
   InternalError, type InternalPromise, type JSONValue, type InfraValue,
-  type TaskCreationOptions, type TaskHandle, type TaskSourceKey, type AbortSignal,
+  type TaskCreationOptions, type TaskHandle, type TaskSourceKey, type AbortSignal, type TimerHost,
 } from '../../infra/index';
 import {
   getPromiseResult, isPromiseHandled, randomUUID,
@@ -22,7 +22,7 @@ import { PermissionsImpl, type PermissionEnvironment, type PermissionDescriptor 
 import type { HTTPStatus } from '../../http/index';
 import { StorageManagerImpl, type StorageEnvironment, type StorageShed } from '../../storage/index';
 import {
-  FetchGroup, getEnvironmentDefaultUserAgent, type IntegrityViolationReportBody,
+  fetch, FetchGroup, getEnvironmentDefaultUserAgent, type IntegrityViolationReportBody,
   type FetchEnvironment, type FetchEnvironmentBase, type FetchRequest,
   type CacheUsage, type Destination, type FetchMode, type FetchResponse, type FetchTimingInfo,
   type NetworkPartitionKey, type RequestCredentials, type ResponseBodyInfo,
@@ -35,11 +35,11 @@ import {
   fetchClassicScript, fetchClassicWorkerScript, fetchClassicWorkerImportedScript,
   fetchExternalModuleScriptGraph, fetchModulepreloadModuleScriptGraph, fetchInlineModuleScriptGraph,
   fetchModuleWorkerScriptGraph, fetchWorkletScriptGraph,
-  fetchSingleModuleScript, fetchSingleImportedModuleScript, resolveModuleSpecifier,
+  fetchSingleModuleScript, fetchSingleImportedModuleScript, createModuleScriptRequest, resolveModuleSpecifier,
   ClassicScript, DedicatedWorkerAgent, SandboxAgent, BrowletRealm,
   taskSources, domManipulationTaskSource, type Script,
-  type ScriptFetchOptions, type ModuleMap, type ModuleType,
-  type JSModuleRequest, type ModuleFetchCallback, type PerformScriptFetch,
+  type ScriptFetchOptions, type ModuleMap, type ModuleType, type ScriptingPolicy,
+  type JSModuleRequest, type ModuleFetchCallback, type PerformScriptFetch, type ScriptEnvironment, type ScriptSourceCallback,
   type EventLoop, type WindowRealm, type WindowAgent, type JSExecutionContext,
   type BrowletGlobalObject, type EventHandlerCallback,
 } from '../scripting/index';
@@ -92,7 +92,7 @@ export class BrowletEnvironmentBase implements FetchEnvironmentBase {
   activeServiceWorker: object | null;
   /** Whether the environment discarding steps have run for this client. */
   discarded = false;
-  /** Browser owner; null only for an internal sandbox constructed without one. */
+  /** Browser owner; null for standalone sandboxes and worker isolates awaiting shared services. */
   #userAgent: UserAgent | null;
   /** Creation URL; null only for internal sandboxes. */
   #creationURL: URLRecord | null;
@@ -101,16 +101,19 @@ export class BrowletEnvironmentBase implements FetchEnvironmentBase {
   /** Whether setup has completed far enough for this environment to run scripts. */
   #executionReady = false;
 
-  /** Null leaves browser-specific state unavailable for an internal sandbox. */
-  constructor(initialization: BrowletEnvironmentBaseInit | null) {
-    this.id = initialization?.id ?? randomUUID();
-    this.#userAgent = initialization?.userAgent ?? null;
-    this.#creationURL = initialization?.creationURL ?? null;
-    this.topLevelCreationURL = initialization?.topLevelCreationURL ?? null;
-    this.topLevelOrigin = initialization?.topLevelOrigin ?? null;
-    this.targetBrowsingContext = initialization?.targetBrowsingContext ?? null;
-    this.activeServiceWorker = initialization?.activeServiceWorker ?? null;
-    this.#isSecureContext = initialization?.isSecureContext ?? false;
+  /** Initialize base state; full environments pass their reservation, internal sandboxes pass null. */
+  constructor(init: BrowletEnvironmentBaseInit | BrowletEnvironmentBase | null) {
+    this.id = init?.id ?? randomUUID();
+    // BrowletEnvironment calls super(baseEnv). Copy its nullable owner directly:
+    // the userAgent getter throws when an inside worker has no service connection.
+    this.#userAgent = init instanceof BrowletEnvironmentBase
+      ? init.#userAgent : init?.userAgent ?? null;
+    this.#creationURL = init?.creationURL ?? null;
+    this.topLevelCreationURL = init?.topLevelCreationURL ?? null;
+    this.topLevelOrigin = init?.topLevelOrigin ?? null;
+    this.targetBrowsingContext = init?.targetBrowsingContext ?? null;
+    this.activeServiceWorker = init?.activeServiceWorker ?? null;
+    this.#isSecureContext = init?.isSecureContext ?? false;
   }
 
   /** Reserve the incoming client without creating a Window or execution realm. */
@@ -136,7 +139,7 @@ export class BrowletEnvironmentBase implements FetchEnvironmentBase {
     });
   }
 
-  /** Browser owner; unavailable in standalone sandboxes without a supplied owner. */
+  /** Browser owner; unconnected worker services and standalone sandboxes fail explicitly on access. */
   get userAgent(): UserAgent {
     if (this.#userAgent === null) throw new InternalError('Environment has no UserAgent');
     return this.#userAgent;
@@ -145,6 +148,9 @@ export class BrowletEnvironmentBase implements FetchEnvironmentBase {
   set userAgent(value: UserAgent) {
     this.#userAgent = value;
   }
+
+  /** Host wake-ups for this environment's timers; independent workers supply their local host. */
+  get timerHost(): TimerHost { return this.userAgent.timerHost; }
 
   /** Creation URL; internal sandboxes have none. */
   get creationURL(): URLRecord {
@@ -191,6 +197,9 @@ export class BrowletEnvironmentBase implements FetchEnvironmentBase {
     // Fetch's interim response must first retain its URL for the link base and origin.
     throw new InternalError('Early Hint Link-header processing is not implemented');
   }
+
+  /** Raw lifetime clock; independent workers read the same monotonic source in their isolate. */
+  unsafeSharedCurrentTime(): number { return this.userAgent.unsafeSharedCurrentTime(); }
 
   /** Determine this environment's partition before or after a realm exists. */
   // https://fetch.spec.whatwg.org/#determine-the-network-partition-key
@@ -260,7 +269,7 @@ export interface BrowletEnvironmentInit {
 /** Composed browser settings, allocation, and task delivery for one realm and global. */
 // HTML's environment settings object.
 export abstract class BrowletEnvironment extends BrowletEnvironmentBase implements
-  JSEnvironment, TimingEnvironment, DOMEnvironment, FetchEnvironment, PermissionEnvironment,
+  JSEnvironment, TimingEnvironment, DOMEnvironment, FetchEnvironment, ScriptEnvironment, PermissionEnvironment,
   StorageEnvironment, StyleletEnvironment, SelectletEnvironment {
   /** JavaScript realm associated with this browser environment. */
   realm: BrowletRealm;
@@ -324,31 +333,31 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   /** Resolves this realm's DOMException constructor. */
   #getDOMException;
 
-  constructor(realm: BrowletRealm, baseEnv: BrowletEnvironmentBase | null, initialization: BrowletEnvironmentInit) {
+  constructor(realm: BrowletRealm, baseEnv: BrowletEnvironmentBase | null, init: BrowletEnvironmentInit) {
     super(baseEnv);
-    this.InternalPromise = initialization.InternalPromise;
-    this.project = initialization.project;
-    this.unwrap = initialization.unwrap;
-    this.convertPermissionDescriptor = initialization.convertPermissionDescriptor;
-    this.createPermissionStatus = initialization.createPermissionStatus;
-    this.nativeLineEnding = initialization.nativeLineEnding;
-    this.runInParallel = initialization.runInParallel;
-    this.createDocument = initialization.createDocument;
-    this.createDOMStringList = initialization.createDOMStringList;
-    this.constructNode = initialization.constructNode;
-    this.createEvent = initialization.createEvent;
-    this.createAbortController = initialization.createAbortController;
-    this.createDependentAbortSignal = initialization.createDependentAbortSignal;
-    this.createAbortSignal = initialization.createAbortSignal;
-    this.createQuotaExceededError = initialization.createQuotaExceededError;
-    this.clone = initialization.clone;
-    this.serialize = initialization.serialize;
-    this.serializeForStorage = initialization.serializeForStorage;
-    this.deserialize = initialization.deserialize;
-    this.serializeWithTransfer = initialization.serializeWithTransfer;
-    this.deserializeWithTransfer = initialization.deserializeWithTransfer;
-    this.getMessagePorts = initialization.getMessagePorts;
-    this.#getDOMException = initialization.getDOMException;
+    this.InternalPromise = init.InternalPromise;
+    this.project = init.project;
+    this.unwrap = init.unwrap;
+    this.convertPermissionDescriptor = init.convertPermissionDescriptor;
+    this.createPermissionStatus = init.createPermissionStatus;
+    this.nativeLineEnding = init.nativeLineEnding;
+    this.runInParallel = init.runInParallel;
+    this.createDocument = init.createDocument;
+    this.createDOMStringList = init.createDOMStringList;
+    this.constructNode = init.constructNode;
+    this.createEvent = init.createEvent;
+    this.createAbortController = init.createAbortController;
+    this.createDependentAbortSignal = init.createDependentAbortSignal;
+    this.createAbortSignal = init.createAbortSignal;
+    this.createQuotaExceededError = init.createQuotaExceededError;
+    this.clone = init.clone;
+    this.serialize = init.serialize;
+    this.serializeForStorage = init.serializeForStorage;
+    this.deserialize = init.deserialize;
+    this.serializeWithTransfer = init.serializeWithTransfer;
+    this.deserializeWithTransfer = init.deserializeWithTransfer;
+    this.getMessagePorts = init.getMessagePorts;
+    this.#getDOMException = init.getDOMException;
     this.realm = realm;
     // Internal sandboxes participate in Binding without becoming HTML settings objects.
     if (baseEnv !== null) realm.env = this;
@@ -358,6 +367,9 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   get global(): GlobalObject {
     return this.realm.globalObject;
   }
+
+  /** Browser preference shared by this environment and its descendants. */
+  get scriptingPolicy(): ScriptingPolicy { return this.userAgent.scriptingPolicy; }
 
   /** Binding registration finishes after environment construction, so resolve this lazily. */
   get DOMException(): DOMExceptionConstructor {
@@ -786,7 +798,7 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
 
   /** Fetch a worker module graph for these settings using the outside fetch client. */
   fetchModuleWorkerScriptGraph(
-    url: URLRecord, fetchClient: BrowletEnvironment, destination: Destination, credentialsMode: RequestCredentials,
+    url: URLRecord, fetchClient: ScriptEnvironment, destination: Destination, credentialsMode: RequestCredentials,
     onComplete: ModuleFetchCallback, performFetch?: PerformScriptFetch,
   ): void {
     fetchModuleWorkerScriptGraph(url, fetchClient, destination, credentialsMode, this, onComplete, performFetch);
@@ -802,7 +814,7 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
 
   /** Fetch one module for these settings, sharing in-flight work and retained results. */
   fetchSingleModuleScript(
-    url: URLRecord, fetchClient: BrowletEnvironment, destination: Destination, options: ScriptFetchOptions,
+    url: URLRecord, fetchClient: ScriptEnvironment, destination: Destination, options: ScriptFetchOptions,
     referrer: URLRecord | 'client' | 'no-referrer', moduleRequest: JSModuleRequest | undefined,
     isTopLevel: boolean, onComplete: ModuleFetchCallback, performFetch?: PerformScriptFetch,
   ): void {
@@ -813,11 +825,23 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
 
   /** Validate an imported module's attributes and fetch it as a descendant. */
   fetchSingleImportedModuleScript(
-    url: URLRecord, fetchClient: BrowletEnvironment, destination: Destination, options: ScriptFetchOptions,
+    url: URLRecord, fetchClient: ScriptEnvironment, destination: Destination, options: ScriptFetchOptions,
     referrer: URLRecord | 'client' | 'no-referrer', moduleRequest: JSModuleRequest,
     onComplete: ModuleFetchCallback, performFetch?: PerformScriptFetch,
   ): void {
     fetchSingleImportedModuleScript(url, fetchClient, destination, options, this, referrer, moduleRequest, onComplete, performFetch);
+  }
+
+  /** Fetch module source using this environment as the actual client; the caller owns parsing and its module map. */
+  fetchModuleSource(
+    url: URLRecord, destination: Destination, options: ScriptFetchOptions,
+    referrer: URLRecord | 'client' | 'no-referrer', isTopLevel: boolean,
+    processResponse: ScriptSourceCallback, performFetch?: PerformScriptFetch,
+  ): void {
+    const isWorkerRoot = isTopLevel && (destination === 'worker' || destination === 'sharedworker' || destination === 'serviceworker');
+    const request = createModuleScriptRequest(url, destination, options, referrer, isWorkerRoot, this);
+    if (performFetch !== undefined) performFetch(request, isTopLevel, processResponse);
+    else fetch(request, { processResponseConsumeBody: processResponse }, this);
   }
 
   /** Whether this realm permits the requested module type, including CSS interface exposure. */
@@ -830,9 +854,15 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   // https://html.spec.whatwg.org/multipage/webappapis.html#concept-environment-script
   isScriptingEnabled(): boolean {
     // Browlet supports JavaScript; this flag is the user's global disable preference.
-    if (!this.userAgent.scriptingEnabled) return false;
+    if (!this.scriptingPolicy.enabled) return false;
     const document = this.realm.getAssociatedDocument();
     if (document?.activeSandboxingFlagSet.has('sandboxed-scripts')) return false;
+    return this.webDriverBiDiScriptingIsEnabled();
+  }
+
+  /** Automation's environment-specific scripting gate, also used by event handlers. */
+  // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-scripting-is-enabled
+  webDriverBiDiScriptingIsEnabled(): boolean {
     return this.userAgent.webDriverBiDiScriptingIsEnabled(this);
   }
 
@@ -957,8 +987,8 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
 
 /** Internal execution with explicit failures for unsupported browser client settings. */
 export class SandboxEnvironment extends BrowletEnvironment {
-  constructor(realm: BrowletRealm, initialization: BrowletEnvironmentInit, userAgent?: UserAgent) {
-    super(realm, null, initialization);
+  constructor(realm: BrowletRealm, init: BrowletEnvironmentInit, userAgent?: UserAgent) {
+    super(realm, null, init);
     if (userAgent !== undefined) this.userAgent = userAgent;
   }
 
@@ -1015,14 +1045,14 @@ export class WindowEnvironment extends BrowletEnvironment {
   /** Compile and bind a lazy handler in its current Document's Window environment. */
   createEventHandler;
 
-  constructor(realm: WindowRealm, baseEnv: BrowletEnvironmentBase, initialization: BrowletEnvironmentInit & {
+  constructor(realm: WindowRealm, baseEnv: BrowletEnvironmentBase, init: BrowletEnvironmentInit & {
     createEventHandler: (
       this: WindowEnvironment, name: string, body: string, filename: string,
       element: ElementImpl | null, form: HTMLFormElementImpl | null,
     ) => EventHandlerCallback;
   }) {
-    super(realm, baseEnv, initialization);
-    this.createEventHandler = initialization.createEventHandler;
+    super(realm, baseEnv, init);
+    this.createEventHandler = init.createEventHandler;
   }
 
   /** Window implementation whose current Document supplies browser state. */
@@ -1136,7 +1166,8 @@ export class WindowEnvironment extends BrowletEnvironment {
 export interface BrowletEnvironmentBaseInit {
   /** Omitted for a fresh reservation; retained when constructing full settings. */
   id?: string;
-  userAgent: UserAgent;
+  /** Null while an inside worker is composed before its shared-service connection. */
+  userAgent: UserAgent | null;
   creationURL: URLRecord;
   topLevelCreationURL: URLRecord | null;
   topLevelOrigin: Origin | null;

@@ -117,7 +117,7 @@ export class EventHandlerMap {
       const currentTarget = event.currentTarget;
       const env = this.#target.env as BrowletEnvironment;
       // The scripting gate precedes lazy parsing, including syntax-error reporting.
-      if (!env.userAgent.webDriverBiDiScriptingIsEnabled(env)) return;
+      if (!env.webDriverBiDiScriptingIsEnabled()) return;
       const callback = this.get(name);
       if (callback === null || currentTarget === null) {
         return;

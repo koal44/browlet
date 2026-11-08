@@ -8,19 +8,209 @@ structured-clone implementation.
 
 ## Current stopping point
 
-The document-order review has reached **§10.2.6.3, the dedicated Worker
-interface**. §§10.1–10.2.6.2 have been reviewed with dependencies recorded below;
+The document-order review has reached the **outside interface and constructor
+checks in §10.2.6.4, SharedWorker**. §§10.1–10.2.6.3 have been reviewed with
+dependencies recorded below;
 this does not mean the processing model is fully connected. The dedicated global,
 environment composition, real isolate, initial-script handoff, execution,
 termination, and error reporting have focused coverage. Public `new Worker()`
-still rejects successful startup until environment/shared-service composition
-connects those pieces.
+still rejects successful startup until shared services and the production
+script driver connect those pieces.
+
+The startup host now accepts a parsed root URL/options, reserves its Fetch client,
+and sends that client's ID to the isolate. The production bootstrap now requests this
+initial classic/module script through the creator's real UserAgent and receives
+the response on its networking queue. This connects the request side of the
+existing handoff. Configured startup now composes the real inside environment
+before host readiness, but does not execute the downloaded script.
+
+The response handoff now resolves the worker's complete policy container and the
+creator-owned COEP inheritance check before transport. The receiving
+`WorkerEnvironment.initializeScriptResponse()` installs those policies, applies
+CSP initialization to its own global, and derives its isolation capability.
+Real-isolate tests now use the production-composed inside environment for this
+handoff. The production script driver now calls this initializer on the networking
+task before any script creation.
+
+Network errors, creator CSP rejection, worker CSP initialization rejection, and
+dedicated-worker COEP rejection now discard the inside environment and notify
+the creating host. A dedicated outside Worker receives one ordinary `error`
+Event on its DOM-manipulation queue; this is not a runtime ErrorEvent or owner
+exception report. The host terminates the rejected isolate, releases its ports
+and Fetch reservation, and suppresses late responses after explicit termination.
+Shared roots also clean up, but outside SharedWorker association/error delivery
+still belongs to the pending manager/startup integration.
+
+The UserAgent's scripting preference now reaches the inside environment as one
+shared atomic flag, separate from the fixed creator snapshot. Subsequent browser
+changes are visible without a message round trip. Existing classic/module script
+creation and `canRunScript()` read that live preference; the creator Document's
+sandbox flags are not copied into the worker's scripting decision. Response CSP
+still initializes and can reject the worker independently. The shared handle is
+private host state, not an author-visible SharedArrayBuffer capability.
+
+WebDriver BiDi scripting overrides remain provisional, as on the UserAgent.
+`SPEC_GAP(worker-bidi-scripting)`: the [BiDi algorithm](https://w3c.github.io/webdriver-bidi/#webdriver-bidi-scripting-is-enabled)
+obtains a navigable through the relevant global's associated Document, which a
+worker lacks. Browlet currently has no scripting overrides, so that separate
+gate allows scripting. Worker scoping and live override transport must be resolved
+when automation implements them. Disabling the browser preference gates later
+entries; interruption of already-running scripts remains an Agent dependency.
+
+The interruption investigation is archived in Experimental commit `902c76f`
+(`worker-script-abort/`). Its reusable-abort and Promise-retention mechanisms are
+shelved, not a pending add-on migration. HTML §8.1.4.5 defines abrupt script
+abortion without normal finally processing and recommends immediate abortion
+when scripting is disabled; it does not explicitly establish how a worker would
+resume or recover pending reactions after that preference change. Keep that
+integration dependency visible rather than treating later-entry gating as complete.
+This is separate from `Worker.terminate()`: HTML §10.2.4 explicitly closes the
+worker, discards queued tasks, aborts execution, and clears the dedicated outside
+port queue. Chromium, Firefox, and WebKit all abandon future worker execution in
+the focused termination probe. Chromium's live site JavaScript setting did not
+interrupt an existing worker; that observation does not justify removing HTML's
+recommendation or assuming a common browser preference-change policy.
+
+After policy initialization, production startup now reuses the classic-worker
+response processor and module graph loader in `scripting/script-fetching.ts`. HTTP status,
+absent or unreadable body, MIME rejection, and root syntax errors follow the same
+ordinary load-failure cleanup. An empty successful body remains a valid script.
+The existing fetch algorithms own completion callbacks and module-map ordering.
+Module graphs also load and link before startup continues. Parse and link errors
+become `errorToRethrow`; these and failed descendant fetches use the ordinary
+load-failure cleanup. Nothing executes during loading or linking.
+
+The private host channel now transports concurrent initial-module-graph fetches.
+`WorkerThreadRuntime.fetchModuleScript()` sends resolved dependency inputs;
+`WorkerThread` builds each request with the live creator Fetch client and uses
+that UserAgent's existing Fetch, cookies, CSP, CORS, referrer, integrity, and Blob
+stores. A request ID correlates each response with its inside callback; responses
+enter the worker networking queue and do not replace the root's URL or policies.
+Script request preparation is shared with `fetchSingleModuleScript()`. This
+transport does not parse or cache modules and is not general worker Fetch.
+Termination/native exit cancels all pending root and dependency fetches, even if
+one transport's cancellation throws, and drops late responses.
+
+Transport validation: 15 focused transport/cleanup cases pass on all six runtime
+configurations (90 passes), covering out-of-order replies, credentials, CSP,
+CORS, referrers, integrity, Blob reads, root-policy retention, and cancellation.
+The 24 production startup-failure cases and 89 script-fetching/module-graph tests
+also pass on Node 26 compat. Typechecking, focused ESLint, and import checks pass.
+
+WorkerUserAgent implements the complete public UserAgent surface. Unsupported
+members throw explicit dependency errors; supported services retain their real
+connection. The concrete class is `BrowletUserAgent`; `UserAgent` names
+`Public<BrowletUserAgent>` once at its declaration, and its constructor export
+keeps `new UserAgent()` working. Infra's `Public<T> = Pick<T, keyof T>` excludes
+private class identity without changing nested types. The store uses
+`Public<BlobURLStore>` and returns `Public<BlobURLEntry>`, retaining all methods.
+The browser retains its actual entry. Worker captures reconstruct the public
+shape locally; Blob access, partition checks and uncopied creator fields throw
+explicit dependency errors. Only handles and origin data cross the port.
+URL trust requests copy the cached creator origin without entry methods/getters,
+preserving opaque identity without re-resolving registrations. Environments and
+existing production consumers keep `env.userAgent`, without owner generics or
+local-owner accessors. Test helper parameters explicitly name the public contract
+instead of inferring the local constructor's private implementation type.
+
+Ordinary URL parsing remains local. Blob lookup and public revocation use the
+original browser store synchronously, without pumping callbacks or Promise
+reactions. The browser connection retains the worker's actual reservation and
+origin, including a data worker's distinct opaque identity. Live scalar browser
+preferences, configured origin/URL trust, and navigable-loading queries also use
+that connection. Timers, host continuations, UUIDs and the shared monotonic clock
+execute locally; the live scripting preference retains its shared atomic cell.
+This replaces the provisional WorkerEnvironmentHost shortcuts.
+
+Each captured registration has a lease, released when its worker URL record is
+collected. A fetch retains that record until its response, so independent control
+and service ports cannot race collection. Connection close releases all remaining
+leases and wakes a pending synchronous request. Module fetches use captured IDs
+instead of resolving again: revocation invalidates new lookups while earlier
+captures remain usable. Inside module-resolution tests pass through the ordinary
+environment/UserAgent path.
+No addon or engine changes are involved.
+
+The browser host queue must remain able to answer. A long synchronous host script
+can delay it; a host that synchronously waits for its requesting worker can
+deadlock. Do not solve that by pumping author callbacks in the worker. Dedicated
+service execution, direct nested-worker connection forwarding, worker-created
+Blob backing transport, general Fetch, cookies/storage/permissions, broadcasts,
+and report delivery remain explicit dependencies. Initial module-graph Fetch
+still uses the creator client as HTML requires; later dynamic imports need the
+worker's own client and a separate service route.
+
+Runtime probes find two explicit service dependencies: worker-created Blob
+registration needs backing transport, and BroadcastChannel needs the browser's
+shared registry. Both throw through the public worker API without killing the
+worker or breaking subsequent URL resolution. `fetch` fails earlier: the worker
+global has not yet received WindowOrWorkerGlobalScope API forwarding (§10.3).
+Keep its new exposure regression as an ordinary failure. This does not require
+changing the UserAgent contract or treating the missing API as supported.
+
+Validation: 15 focused connection, module-resolution, and explicit-dependency
+cases pass on Node 24.19.0, 26.8.1, and custom Node 27, stock and compat. The added
+Blob-URL trust regression also passes in all six configurations; the final Node
+26 compat run passes all 16 cases together. The separate fetch-exposure regression
+remains a known ordinary failure on Node 26 compat:
+`typeof workerGlobal.fetch` is `"undefined"`, expected `"function"`. Typechecking,
+focused ESLint, and import-boundary checks pass. No Node or V8 changes were made.
+
+Initial module graphs now use the ordinary loader and inside module map. The
+already-fetched root response enters that loader under its original request URL;
+relative imports use the final response URL. Cycles and shared dependencies reuse
+the same cached records, and linking stays in the worker realm.
+
+The fetch client now implements the single `ScriptEnvironment` contract, with
+`fetchModuleSource()` receiving inputs before a FetchRequest is constructed.
+`BrowletEnvironment` supplies ordinary local Fetch, including the existing
+worklet response-cache hook. `WorkerThreadRuntime` supplies the retained creator's
+view through its connection; `WorkerThread` constructs requests against the real
+creator. The inside `WorkerEnvironment` still owns parsing and the module map.
+There is no separate ModuleEnvironment, synthetic creator, or environment/function
+union. The contract belongs to scripting because Window and worklet loaders use
+the same operation.
+Later dynamic imports use the worker's own client and need their own service
+routing; nested forwarding and general shared stores remain separate dependencies.
+Execution, owner monitoring, and readiness remain later startup steps. Internal
+dependency errors remain host errors rather than being converted into ordinary
+worker load failures. The production driver handles ordinary graph completion
+directly. Only the explicit unfinished-startup error is reported on the native
+host queue, so it tears down the thread instead of being swallowed by a Promise
+reaction. That reporting step is not an extra HTML startup task.
+Real-isolate tests cover preference changes, classic/module parsing,
+event-handler policy access, and creator sandbox separation.
+
+Graph-startup validation: 17 focused real-isolate cases pass on Node 24.19.0,
+26.8.1, and custom Node 27, stock and compat (102 passes). Coverage includes
+cycles/diamonds, redirects and original cache keys, credentials/referrer policy,
+JSON/text imports, Blob dependencies, descendant fetch/parse/link/type failures,
+and termination during loading. Node 26 compat also passes all 37 production
+startup/graph cases and 101 existing script-fetching/module-loader/worklet tests.
+Typechecking, focused ESLint, import checks, and diff checks pass.
+
+Response-processing validation: 24 focused startup cases pass on Node 24.19.0,
+26.8.1, and custom Node 27, each stock and with the add-on (144 passes). The 89
+existing script-fetching/module-fetching/module-graph tests pass on Node 26 compat.
+Typechecking, focused ESLint, and the import-boundary check also pass.
+
+Inside composition now consumes the captured creator values without creating a
+replacement Window, Document, or UserAgent. It retains the reserved Fetch-client
+ID, creator origin/ancestry/security decision and the correct agent cluster;
+`data:` workers receive a fresh opaque origin. Dedicated/shared globals use the
+ordinary Binding composition, including shared constructor options/storage key.
+The existing creator snapshot type now lives with the environment it initializes.
+Timer wake-ups and the lifetime clock are isolate-local host inputs. Access to
+unconnected shared UserAgent services still throws, and execution readiness stays
+false. The actual owner remains in `WorkerThread.owner`; remote owner activity,
+reporting, shared stores, and script execution are still required
+before public startup can succeed. No fake owner is added to the inside owner set.
 
 The hidden dedicated-worker channel and author-created MessagePorts now cross
 real isolates, including pending HTML deliveries and further endpoint transfers.
 Current implementation work follows those §9/§10 dependencies; an ordered audit
 of both chapters will follow once their production connections are in place.
-SharedWorker construction/discovery (§10.2.6.4),
+SharedWorker manager discovery and successful construction (§10.2.6.4),
 concurrent hardware (§10.2.7), and the §10.3 API review still follow. In particular,
 `importScripts()` remains an explicit stub; WorkerLocation was brought forward,
 while WorkerNavigator still lacks its contributing APIs.
@@ -286,7 +476,7 @@ the current executable, backend environment, and Node startup options. They repo
 native failure/exit and can terminate blocked execution. They have no HTML Agent
 or readiness policy.
 
-`WorkerThread` in `integration/host/worker-thread.ts` owns the browser setup
+`WorkerThread` in `integration/workers/thread.ts` owns the browser setup
 acknowledgement and reloads the current Browlet bundle (`index.mjs` or
 `index.cjs`) in the new isolate. Callers supply no executable path. Private
 startup data inside JS Engine identifies the exact bundle that should start its worker runtime;
@@ -294,8 +484,8 @@ ordinary imports inside other Node workers or another installed copy remain
 ordinary imports. This trusted host entry is separate from the author's
 worker-script URL. It reports readiness only when the inside runtime finishes
 host setup, not at Node's earlier `online` event.
-`WorkerThreadRuntime` creates the dedicated/shared agent and EventLoop inside the
-isolate and queues incoming commands as tasks. Native termination does not yet
+`WorkerThreadRuntime` in `integration/workers/runtime.ts` creates the dedicated/shared
+agent and EventLoop inside the isolate and queues incoming commands as tasks. Native termination does not yet
 implement HTML's termination algorithm or the public Worker interface. The control channel
 uses Node cloning for host data. It does not implement HTML structured cloning,
 transferable ports, or author `message` events. Lifecycle tests redirect only
@@ -304,7 +494,7 @@ tasks/checkpoints, prove creator progress during a blocked worker script, and
 cover failure/exit/cancellation.
 Their TypeScript-loader startup cost is not a measurement of a packaged worker.
 
-`integration/host/worker-thread.ts` registers its module URL and browser setup
+`integration/web-idl/composition.ts` registers its module URL and browser setup
 steps once with `JSThread.initialize()`. JS Engine owns file-URL conversion,
 the native startup envelope and marker check, and the host turn after module
 evaluation. Thread construction supplies only data and a receiver; the browser
@@ -471,6 +661,33 @@ response metadata and policy implementations and invokes its supplied consumer
 on the worker's networking task source. Termination or unexpected isolate exit
 cancels a pending fetch; a late completion cannot send into a stopped worker.
 
+The request side now uses `WorkerThreadInit.script` and
+`WorkerThreadRuntime.fetchScript()`. HTML's classic and module root fetchers share
+request preparation with this path. The creator retains the parsed URL's live
+Blob registration and actual client; a `BrowletEnvironmentBase` reserves the
+inside client, whose ID travels with the script inputs. Redirects update the
+reservation's creation URL, and exit before execution readiness discards it.
+Real-isolate coverage checks classic/module credentials, worker/sharedworker
+destinations, creator CSP, Blob revocation after capture, termination, and early
+startup failure. The full inside environment must adopt this ID and acknowledge
+execution readiness. Response policies now have the handoff described below;
+production environment composition and parsing/execution remain unconnected.
+Module graph integration, nested-worker forwarding, and remote services
+are still separate dependencies. No Node/V8 or add-on changes.
+
+The next response slice replaces the Blob-only policy field with the complete
+worker policy container. HTTP headers supply response policies; local non-Blob
+URLs inherit from the retained owner (even if its Window has since navigated),
+and Blob URLs inherit from the registration's creator. Creator-side COEP checks
+queue reports through the real outside environment and send their outcome with
+the policies. The receiver applies CSP sandbox restrictions and upgrade state to
+the worker, retains the original URL on policy rejection, and derives dedicated
+or shared isolation state. Network errors carry no policy container. Coverage
+uses real isolate transport plus explicitly composed inside environments;
+it does not create a replacement UserAgent in production. Initial module
+descendants now use this transport; public startup, script execution, and remote
+lifetime monitoring remain separate connections.
+
 Both endpoints now use one private `WorkerThreadProtocol` for startup data and
 the two message directions. JS Engine contains the untyped native transport
 boundary; Browlet has explicit cases for each message kind and rejects unknown
@@ -492,15 +709,13 @@ and cleanup failure propagation, plus all 18 rebuilt CJS/ESM bootstrap artifact
 tests. Typecheck, focused ESLint, import checks, and diff checks pass.
 
 This is a transport building block, **not connected public worker startup**.
-The production bootstrap still has no script-response consumer or composed
-WorkerEnvironment. The startup caller must supply the reserved inside-client
-identity and prepared request, then connect response policy initialization,
-parsing/evaluation, failure cleanup, and execution readiness. Local non-Blob
-policy inheritance must still use the captured owner policies; Blob responses
-must use the transported Blob creator policies. Module descendant requests,
-nested-worker service forwarding, reporting, and remote lifetime management
-remain separate dependencies. No copied UserAgent or replacement stores are
-created, and no Node/V8 or add-on change is needed.
+The production bootstrap now composes WorkerEnvironment with the reserved
+inside-client identity and connects response policy initialization, initial
+script/graph loading, and failure cleanup. Local non-Blob inheritance uses the
+captured owner policies; Blob responses use their transported creator policies.
+Evaluation/readiness, nested-worker service forwarding, reporting, and remote
+lifetime management remain separate dependencies. No copied UserAgent or
+replacement stores are created, and no Node/V8 or add-on change is needed.
 
 Real-isolate regressions cover both worker kinds, cookies sent and stored in the
 creator's store, redirected responses, CSP rejection before network dispatch,
@@ -808,7 +1023,9 @@ Still required before §10.2.6.3 is complete:
 - Connect the inside global's error reporter during production startup. Live-owner
   propagation is implemented below; the terminated-parent route remains pending.
 
-Stay at this startup boundary before moving to §10.2.6.4 SharedWorker discovery.
+That checkpoint stopped at the startup boundary. The subsequent slices below
+connect transport and cleanup; production startup and SharedWorker discovery
+remain explicit dependencies even with both outside interfaces declared.
 
 ### Outside execution association and terminate (HTML §10.2.6.3)
 
@@ -836,6 +1053,15 @@ transport, and the error-delivery connection remain the dependencies above.
 All 62 affected interface and native-thread cases pass on Node 24.19.0, Node
 26.8.1, and the custom build, with and without the add-on (372 passes, no failures
 or skips). Type checking, focused ESLint, import boundaries, and diff checks pass.
+
+The interruption follow-up also covers terminating a real HTML event listener
+and a Promise reaction. Neither author catch/finally, the next listener/reaction,
+nor a queued HTML task runs; the outside port is cleared and the execution owner
+is released. These cases exercise the existing whole-isolate shutdown, not a
+recoverable callback boundary or saved microtask queue. No production termination
+change or additional native hook is required for them. The focused five-case
+termination set passes in all six configurations (30 passes); type checking,
+focused ESLint, and diff checks also pass.
 
 ### Dedicated error delivery across isolates (HTML §§8.1.4.6, 10.2.5)
 
@@ -968,6 +1194,46 @@ retains only its four existing stock-Node incumbent-attribution expected failure
 The early-startup correction was retested separately on configurations whose
 broader run preceded it. Type checking, focused lint, and import checks pass.
 
+### SharedWorker outside object (HTML §10.2.6.4, first slice)
+
+The [outside interface and constructor opening](https://html.spec.whatwg.org/multipage/workers.html#shared-workers-and-the-sharedworker-interface)
+now have their ordinary EventTarget implementation and Web IDL declarations.
+`SharedWorkerImpl` exposes one stable, read-only MessagePort and includes
+AbstractWorker's `onerror`. It is exposed only in Window. It has no direct
+`postMessage`, `terminate`, or message-handler attributes; author messages target
+the port rather than the outside object.
+
+Binding converts the trusted URL/string and string/options unions, inherited
+WorkerOptions members, and the `extendedLifetime` member. Constructor checks
+apply Trusted Types with the SharedWorker sink name before parsing the URL and
+throwing a SyntaxError DOMException for failure. As for Worker, implementation
+allocation creates the disconnected, disabled port before these checks, with no
+observable connection. Reading the port or adding a listener does not enable its
+queue; the existing MessagePort APIs and startup algorithm own that behavior.
+
+Valid public construction still throws at the explicit discovery/startup
+dependency. The next constructor work must normalize the legacy string name,
+capture the creator's non-storage storage key and secure-context result, and
+enqueue discovery on the UserAgent's shared-worker manager. Matching must retain
+constructor URL/name/key and closing state, reject incompatible options or secure
+contexts with queued errors, and connect an existing global or run a new worker.
+No process-local substitute registry or successful public startup is supplied.
+Production environment/shared-service composition remains a prerequisite.
+
+Tests use real Binding, local worker agents, and ports. They cover exposure,
+constructor conversions and Trusted Types, cross-realm port getters, ordinary
+outside error cancellation, disabled port queues and delivery targets, and
+initial-script success/failure through the existing `completeScriptFetch()` path.
+Internally supplied implementations exercise those paths without pretending the
+public constructor discovers or starts a shared worker. No Node/V8 patch or
+add-on source change is required.
+
+The 19 new cases and 16 dedicated Worker regressions pass in all six supported
+runtime configurations (210 passes, no failures or skips). Generated declarations,
+TypeScript, focused ESLint, import boundaries, and diff checks pass. The three
+add-ons were rebuilt from merged main first; the focused settlement-reporting
+and wake-up suites also pass on each (60 native checks).
+
 ## Present
 
 - `service-worker.ts` supplies a non-constructible, secure-context ServiceWorker
@@ -981,8 +1247,9 @@ broader run preceded it. Type checking, focused lint, and import checks pass.
   [script-fetching audit](../scripting/ROADMAP.md#html-8142-fetching-scripts).
 - `fetchModuleWorkerScriptGraph()` now fetches the root and delegates descendant
   loading/linking, retaining the outside fetch client and target worker settings.
-  `WorkerEnvironment.fetchScript()` supplies the response hook and tests real
-  parsing/linking; worker startup still needs to call it. Classic `importScripts()` fetching remains
+  `WorkerEnvironment.fetchScript()` supplies the local response hook. Separate-isolate
+  startup now calls the same graph loader through its remote creator fetch client.
+  Classic `importScripts()` fetching remains
   an explicit stub until synchronous pause can be supplied.
 - `WorkerEnvironment.completeScriptFetch()` handles failed-load notification/discard
   and successful port setup, then calls `runScript()` for execution and activation;
@@ -1046,7 +1313,7 @@ broader run preceded it. Type checking, focused lint, and import checks pass.
   exists on `BrowletEnvironmentBase`; `completeScriptFetch()` invokes it on failure,
   while the separate-isolate startup caller remains unimplemented.
 - Startup must obtain and install the response's embedder policy, then call
-  `workerGlobalScope.checkEmbedderPolicy(outsideEnv, response)` before script
+  `workerGlobalScope.checkEmbedderPolicy(response, outsideEnv)` before script
   execution. False requires a network error and failed-startup cleanup. The
   check reports through the outside environment, including for nested workers;
   it does not require the new worker to have a reporting queue yet. See the
@@ -1109,8 +1376,8 @@ Worker messaging consumes `communication/message-port.ts` and
 worker script has loaded; shared-worker `connect` events and all cross-agent
 messages are queued through the destination event loop.
 
-Node `worker_threads` can eventually supply an execution backend, but it must
-not define public identity, task ordering, lifetime, or error propagation.
+Node `worker_threads` supplies the execution backend, but does not define
+public identity, task ordering, lifetime, or error propagation.
 Blink similarly separates worker globals and messaging proxies from execution
 threads, script loading, and storage-backed shared-worker discovery.
 

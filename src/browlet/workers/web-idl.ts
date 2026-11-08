@@ -7,6 +7,7 @@ import { serviceWorkerIDL, serviceWorkerIncludesAbstractWorkerIDL } from './serv
 import {
   workerIDL, workerOptionsIDL, workerTypeIDL, workerIncludesAbstractWorkerIDL, workerIncludesMessageEventTargetIDL,
 } from './worker';
+import { sharedWorkerIDL, sharedWorkerOptionsIDL, sharedWorkerIncludesAbstractWorkerIDL } from './shared-worker';
 
 /** Worker declarations; concrete global setup remains with the worker processing model. */
 export const workerIDLDefinitions = [
@@ -21,6 +22,9 @@ export const workerIDLDefinitions = [
   workerTypeIDL,
   workerIncludesAbstractWorkerIDL,
   workerIncludesMessageEventTargetIDL,
+  sharedWorkerIDL,
+  sharedWorkerOptionsIDL,
+  sharedWorkerIncludesAbstractWorkerIDL,
   serviceWorkerIDL,
   serviceWorkerIncludesAbstractWorkerIDL,
 ];

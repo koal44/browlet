@@ -11,6 +11,7 @@ environment or UserAgent. See the [composition rules](../../ARCHITECTURE.md#choo
 | [`web-idl/bindings/`](web-idl/bindings/index.ts) | HTML reflection, constructors, cross-origin access, and WindowProxy/Location binding rules |
 | [`host/`](host/index.ts) | Node task turns, timer wake-ups, and browser-owned Promise continuations |
 | [`host/network/`](host/network/index.ts) | Node/Undici HTTP transport and native response decoders |
+| [`workers/`](workers/index.ts) | Creator-side worker lifetime and fetching, inside-isolate startup, and their private message protocol |
 | [`file/`](file/index.ts) | FileReader, the browser's Blob URL store, and URL's object-URL declaration contribution |
 | [`xhr/`](xhr/index.ts) | ProgressEvent's browser implementation, declaration, and trusted event firing |
 | [`permissions/`](permissions/index.ts) | PermissionStatus with browser event delivery and lifetime handling |
@@ -34,6 +35,13 @@ creates Window Agents and composition creates the sandbox Agent; both supply
 `queueNodeTask` for EventLoop wake-ups. JS Engine separately owns the microtask-queue
 backend. Each global's [environment-owned mixin](../environment/global-scope.ts)
 constructs and retains its timer state using the UserAgent's timer host.
+
+Worker integration separates the creator's [thread](workers/thread.ts) from the
+inside [runtime](workers/runtime.ts). Their shared [protocol](workers/protocol.ts)
+contains transport types only. JS Engine owns native thread/channel operations;
+Web IDL composition still registers the existing package entry and supplies the
+inside environment factory. The standard-defined Worker interfaces and lifetime
+algorithms remain in [`browlet/workers/`](../workers/ROADMAP.md).
 
 Fetch owns request processing and stream delivery. The network adapters own
 connections, TLS, native I/O, and compression facilities. Their separate network

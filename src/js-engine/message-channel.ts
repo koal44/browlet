@@ -1,6 +1,6 @@
 /// <reference types="node" preserve="true" />
 
-import { MessageChannel, type MessagePort } from 'node:worker_threads';
+import { MessageChannel, receiveMessageOnPort, type MessagePort } from 'node:worker_threads';
 
 /** A native channel for internal data; HTML owns serialization, task queues, and events. */
 export class JSMessageChannel<Message = unknown> {
@@ -34,6 +34,15 @@ export class JSMessagePort<Message = unknown> {
   /** Clone internal data and move the listed resources, using the native backend. */
   send(message: Message, transferList: JSTransferable[] = []): void {
     this.#backing.postMessage(message, transferList);
+  }
+
+  /**
+   * Remove one queued host message without running listeners or a task checkpoint.
+   * Use on an endpoint without a message listener. The envelope distinguishes an
+   * empty queue from an actual undefined message; its type trusts the host protocol.
+   */
+  receive(): { message: Message; } | undefined {
+    return receiveMessageOnPort(this.#backing);
   }
 
   /**

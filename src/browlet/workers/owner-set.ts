@@ -4,7 +4,7 @@ import type { WorkerOwner } from './worker-global-scope';
 
 /** Worker owners with the start of the current uninterrupted ownerless period. */
 export class WorkerOwnerSet extends Set<WorkerOwner> {
-  /** Environment whose user agent supplies the shared monotonic clock. */
+  /** Environment supplying the local reading of the shared monotonic clock. */
   #env: BrowletEnvironment;
   /** Null while any owner remains; otherwise the time the set became empty. */
   #emptySince: number | null;
@@ -12,7 +12,7 @@ export class WorkerOwnerSet extends Set<WorkerOwner> {
   constructor(env: BrowletEnvironment) {
     super();
     this.#env = env;
-    this.#emptySince = env.userAgent.unsafeSharedCurrentTime();
+    this.#emptySince = env.unsafeSharedCurrentTime();
   }
 
   /** Monotonic milliseconds when this ownerless period began, or null while owned. */
@@ -28,13 +28,13 @@ export class WorkerOwnerSet extends Set<WorkerOwner> {
 
   override delete(owner: WorkerOwner): boolean {
     const removed = super.delete(owner);
-    if (removed && this.size === 0) this.#emptySince = this.#env.userAgent.unsafeSharedCurrentTime();
+    if (removed && this.size === 0) this.#emptySince = this.#env.unsafeSharedCurrentTime();
     return removed;
   }
 
   override clear(): void {
     if (this.size === 0) return;
     super.clear();
-    this.#emptySince = this.#env.userAgent.unsafeSharedCurrentTime();
+    this.#emptySince = this.#env.unsafeSharedCurrentTime();
   }
 }

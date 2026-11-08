@@ -9,6 +9,7 @@ import {
 
 import type { CORSSettingsState } from '../dom/nodes/html/attributes/index';
 import type { BrowletEnvironment } from '../environment/index';
+import type { WorkerType } from '../workers/index';
 import type { ModuleResponsesMap } from '../worklets/index';
 
 import {
@@ -17,6 +18,7 @@ import {
 } from './script';
 import { ScriptFetchOptions } from './script-fetch-options';
 import type { ModuleFetchCallback } from './module-map';
+import type { ScriptEnvironment } from './environment';
 import { getSupportedImportAttributes } from './module-loading';
 
 /** Fetch and decode a classic script, then hand its source to script creation. */
@@ -48,44 +50,55 @@ export function fetchClassicScript(
   }, env);
 }
 
+/** Prepare an initial worker request without creating a script in the creator's realm. */
+// https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-classic-worker-script
+// https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-single-module-script
+export function createWorkerScriptRequest(
+  url: URLRecord, fetchClient: BrowletEnvironment, destination: Destination,
+  type: WorkerType, credentials: RequestCredentials,
+): FetchRequest {
+  const request = new FetchRequest(url, fetchClient);
+  request.client = fetchClient;
+  request.destination = destination;
+  request.initiatorType = type === 'classic' ? 'other' : 'script';
+  request.mode = 'same-origin';
+  request.credentialsMode = type === 'classic' ? 'same-origin' : credentials;
+  request.parserInserted = false;
+  request.useURLCredentials = type === 'classic';
+  return request;
+}
+
 /** Fetch a worker's initial classic script for these settings using its outside client. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-classic-worker-script
 export function fetchClassicWorkerScript(
   url: URLRecord, fetchClient: BrowletEnvironment, destination: Destination, env: BrowletEnvironment,
   onComplete: (script: ClassicScript | null) => void, performFetch?: PerformScriptFetch,
 ): void {
-  const request = new FetchRequest(url, fetchClient);
-  request.client = fetchClient;
-  request.destination = destination;
-  request.initiatorType = 'other';
-  request.mode = 'same-origin';
-  request.credentialsMode = 'same-origin';
-  request.parserInserted = false;
-  request.useURLCredentials = true;
+  const request = createWorkerScriptRequest(url, fetchClient, destination, 'classic', 'same-origin');
 
   const processResponseConsumeBody = (response: FetchResponse, bodyBytes: Uint8Array | null | 'failure') => {
-    if (isFilteredResponse(response)) response = response.internalResponse;
-    if (bodyBytes === null || bodyBytes === 'failure' || !isOkStatus(response.status)) {
-      onComplete(null);
-      return;
-    }
-
-    const responseURL = response.url!;
-    if (responseURL.scheme === 'http' || responseURL.scheme === 'https') {
-      const mimeType = response.headerList.extractMIMEType();
-      if (mimeType === null || !isJavaScriptMIMEType(mimeType)) {
-        onComplete(null);
-        return;
-      }
-    }
-
-    const sourceText = utf8Decode(bodyBytes);
-    const script = new ClassicScript(sourceText, env, responseURL, new ScriptFetchOptions());
-    onComplete(script);
+    onComplete(createClassicWorkerScriptFromResponse(response, bodyBytes, env));
   };
 
   if (performFetch !== undefined) performFetch(request, true, processResponseConsumeBody);
   else fetch(request, { processResponseConsumeBody }, fetchClient);
+}
+
+/** Validate and parse a classic worker response; the fetch owner delivers the returned result. */
+// https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-classic-worker-script
+export function createClassicWorkerScriptFromResponse(
+  response: FetchResponse, bodyBytes: Uint8Array | null | 'failure', env: BrowletEnvironment,
+): ClassicScript | null {
+  if (isFilteredResponse(response)) response = response.internalResponse;
+  if (bodyBytes === null || bodyBytes === 'failure' || !isOkStatus(response.status)) return null;
+
+  const responseURL = response.url!;
+  if (responseURL.scheme === 'http' || responseURL.scheme === 'https') {
+    const mimeType = response.headerList.extractMIMEType();
+    if (mimeType === null || !isJavaScriptMIMEType(mimeType)) return null;
+  }
+
+  return new ClassicScript(utf8Decode(bodyBytes), env, responseURL, new ScriptFetchOptions());
 }
 
 /** Synchronously fetch an importScripts() dependency; its blocking host wait is unfinished. */
@@ -139,7 +152,7 @@ export function fetchInlineModuleScriptGraph(
 /** Fetch a worker's module graph using its creator's client and its own target settings. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-module-worker-script-tree
 export function fetchModuleWorkerScriptGraph(
-  url: URLRecord, fetchClient: BrowletEnvironment, destination: Destination, credentialsMode: RequestCredentials,
+  url: URLRecord, fetchClient: ScriptEnvironment, destination: Destination, credentialsMode: RequestCredentials,
   env: BrowletEnvironment, onComplete: ModuleFetchCallback, performFetch?: PerformScriptFetch,
 ): void {
   fetchWorkletModuleWorkerScriptGraph(url, fetchClient, destination, credentialsMode, env, onComplete, performFetch);
@@ -179,7 +192,7 @@ export function fetchWorkletScriptGraph(
 /** Fetch the root and descendants shared by the worker and worklet graph entry points. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-worklet/module-worker-script-graph
 export function fetchWorkletModuleWorkerScriptGraph(
-  url: URLRecord, fetchClient: BrowletEnvironment, destination: Destination, credentialsMode: RequestCredentials,
+  url: URLRecord, fetchClient: ScriptEnvironment, destination: Destination, credentialsMode: RequestCredentials,
   env: BrowletEnvironment, onComplete: ModuleFetchCallback, performFetch?: PerformScriptFetch,
 ): void {
   const options = new ScriptFetchOptions();
@@ -193,7 +206,7 @@ export function fetchWorkletModuleWorkerScriptGraph(
 /** Load a module's dependencies and link, preserving parse/link errors for later evaluation. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#fetch-the-descendants-of-and-link-a-module-script
 export function fetchDescendantsAndLink(
-  script: ModuleScript, fetchClient: BrowletEnvironment, destination: Destination,
+  script: ModuleScript, fetchClient: ScriptEnvironment, destination: Destination,
   onComplete: ModuleFetchCallback, performFetch?: PerformScriptFetch,
 ): void {
   const record = script.record;
@@ -229,7 +242,7 @@ export function fetchDescendantsAndLink(
 // https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-single-module-script
 // Worker/worklet startup fetches with the creator's client but stores and creates modules in env.
 export function fetchSingleModuleScript(
-  url: URLRecord, fetchClient: BrowletEnvironment, destination: Destination, options: ScriptFetchOptions,
+  url: URLRecord, fetchClient: ScriptEnvironment, destination: Destination, options: ScriptFetchOptions,
   env: BrowletEnvironment, referrer: URLRecord | 'client' | 'no-referrer', moduleRequest: JSModuleRequest | undefined,
   isTopLevel: boolean, onComplete: ModuleFetchCallback, performFetch?: PerformScriptFetch,
 ): void {
@@ -237,7 +250,6 @@ export function fetchSingleModuleScript(
   if (moduleType === null || !env.isModuleTypeAllowed(moduleType)) {
     throw new InternalError('Module type must be allowed before fetching a single module script');
   }
-
   const moduleMap = env.moduleMap;
   const cached = moduleMap.get(url, moduleType);
   if (cached !== undefined) {
@@ -248,17 +260,6 @@ export function fetchSingleModuleScript(
   const callbacks = [onComplete];
   moduleMap.set(url, moduleType, callbacks);
 
-  const request = new FetchRequest(url, fetchClient);
-  request.mode = 'cors';
-  request.referrer = referrer === 'client' ? undefined : referrer === 'no-referrer' ? null : referrer;
-  request.client = fetchClient;
-  request.destination = fetchDestinationFromModuleType(destination, moduleType);
-  if (isTopLevel && (destination === 'worker' || destination === 'sharedworker' || destination === 'serviceworker')) {
-    request.mode = 'same-origin';
-  }
-  request.initiatorType = 'script';
-  options.setUpModuleRequest(request);
-
   // Remove failures or publish success before callbacks can request the same module again.
   const complete = (script: ModuleScript | null) => {
     if (script === null) moduleMap.delete(url, moduleType);
@@ -266,42 +267,62 @@ export function fetchSingleModuleScript(
     for (const callback of callbacks) callback(script);
   };
   const processResponseConsumeBody = (response: FetchResponse, bodyBytes: Uint8Array | null | 'failure') => {
-    if (bodyBytes === null || bodyBytes === 'failure' || !isOkStatus(response.status)) {
-      complete(null);
-      return;
-    }
-
-    const mimeType = response.headerList.extractMIMEType();
-    const essence = mimeType === null ? null : getMIMETypeEssence(mimeType);
-    let script: ModuleScript | null = null;
-    const referrerPolicy = parseReferrerPolicyFromHeader(response);
-    if (referrerPolicy !== '') options.referrerPolicy = referrerPolicy;
-
-    if (essence === 'application/wasm' && moduleType === 'javascript-or-wasm') {
-      script = new WasmModuleScript(bodyBytes, env, response.url!, options);
-    } else {
-      const source = utf8Decode(bodyBytes);
-      if (moduleType === 'text') {
-        script = new TextModuleScript(source, env);
-      } else if (moduleType === 'javascript-or-wasm' && mimeType !== null && isJavaScriptMIMEType(mimeType)) {
-        script = new JavaScriptModuleScript(source, env, response.url!, options);
-      } else if (moduleType === 'css' && essence === 'text/css') {
-        script = new CSSModuleScript(source, response.url!, env);
-      } else if (moduleType === 'json' && mimeType !== null && isJSONMIMEType(mimeType)) {
-        script = new JSONModuleScript(source, env);
-      }
-    }
-    complete(script);
+    complete(createModuleScriptFromResponse(response, bodyBytes, moduleType, options, env));
   };
 
-  if (performFetch !== undefined) performFetch(request, isTopLevel, processResponseConsumeBody);
-  else fetch(request, { processResponseConsumeBody }, fetchClient);
+  const requestDestination = fetchDestinationFromModuleType(destination, moduleType);
+  fetchClient.fetchModuleSource(url, requestDestination, options, referrer, isTopLevel, processResponseConsumeBody, performFetch);
+}
+
+/** Prepare one module request in its Fetch client's isolate, before any network or policy processing. */
+// https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-single-module-script
+export function createModuleScriptRequest(
+  url: URLRecord, destination: Destination, options: ScriptFetchOptions,
+  referrer: URLRecord | 'client' | 'no-referrer', isWorkerRoot: boolean, env: BrowletEnvironment,
+): FetchRequest {
+  const request = isWorkerRoot
+    ? createWorkerScriptRequest(url, env, destination, 'module', options.credentialsMode)
+    : new FetchRequest(url, env);
+  if (!isWorkerRoot) request.mode = 'cors';
+  request.referrer = referrer === 'client' ? undefined : referrer === 'no-referrer' ? null : referrer;
+  request.client = env;
+  request.destination = destination;
+  request.initiatorType = 'script';
+  options.setUpModuleRequest(request);
+  return request;
+}
+
+/** Validate and parse one module response; the fetch owner retains module-map and callback ordering. */
+// https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-single-module-script
+export function createModuleScriptFromResponse(
+  response: FetchResponse, bodyBytes: Uint8Array | null | 'failure', moduleType: ModuleType,
+  options: ScriptFetchOptions, env: BrowletEnvironment,
+): ModuleScript | null {
+  if (bodyBytes === null || bodyBytes === 'failure' || !isOkStatus(response.status)) return null;
+
+  const mimeType = response.headerList.extractMIMEType();
+  const essence = mimeType === null ? null : getMIMETypeEssence(mimeType);
+  const referrerPolicy = parseReferrerPolicyFromHeader(response);
+  if (referrerPolicy !== '') options.referrerPolicy = referrerPolicy;
+
+  if (essence === 'application/wasm' && moduleType === 'javascript-or-wasm') {
+    return new WasmModuleScript(bodyBytes, env, response.url!, options);
+  }
+
+  const source = utf8Decode(bodyBytes);
+  if (moduleType === 'text') return new TextModuleScript(source, env);
+  if (moduleType === 'javascript-or-wasm' && mimeType !== null && isJavaScriptMIMEType(mimeType)) {
+    return new JavaScriptModuleScript(source, env, response.url!, options);
+  }
+  if (moduleType === 'css' && essence === 'text/css') return new CSSModuleScript(source, response.url!, env);
+  if (moduleType === 'json' && mimeType !== null && isJSONMIMEType(mimeType)) return new JSONModuleScript(source, env);
+  return null;
 }
 
 /** Validate an imported module's attributes and fetch it as a descendant. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-single-imported-module-script
 export function fetchSingleImportedModuleScript(
-  url: URLRecord, fetchClient: BrowletEnvironment, destination: Destination, options: ScriptFetchOptions,
+  url: URLRecord, fetchClient: ScriptEnvironment, destination: Destination, options: ScriptFetchOptions,
   env: BrowletEnvironment, referrer: URLRecord | 'client' | 'no-referrer', moduleRequest: JSModuleRequest,
   onComplete: ModuleFetchCallback, performFetch?: PerformScriptFetch,
 ): void {
@@ -341,5 +362,5 @@ export interface ModuleGraphLoadingState {
   errorToRethrow: unknown;
   destination: Destination;
   performFetch: PerformScriptFetch | null;
-  fetchClient: BrowletEnvironment;
+  fetchClient: ScriptEnvironment;
 }

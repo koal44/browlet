@@ -249,7 +249,8 @@ handling can remain at the end of the call.
 | [`FileEnvironment`](file/environment.ts) | Extends the Streams view with native line endings for Blob text processing |
 | [`DOMEnvironment`](browlet/dom/environment.ts) | `realm: DOMRealm` for event behavior and the associated-document query; its Window specialization exposes the Agent's DOM notification state; `createEvent()` supplies event allocation |
 | [`FetchEnvironment`](fetch/environment.ts) | Extends FetchEnvironmentBase and FileEnvironment with Fetch task delivery, exception allocation, and client settings |
-| [`BrowletEnvironment`](browlet/environment/environment.ts) | Full browser environment; extends BrowletEnvironmentBase and satisfies JS Engine, DOM, Fetch, Storage, Stylelet, and Selectlet contracts |
+| [`ScriptEnvironment`](browlet/scripting/environment.ts) | Source fetching through the actual client, locally or through the worker runtime's retained creator connection; parsing and module caching stay with the target environment |
+| [`BrowletEnvironment`](browlet/environment/environment.ts) | Full browser environment; extends BrowletEnvironmentBase and satisfies JS Engine, DOM, Fetch, Scripting, Storage, Stylelet, and Selectlet contracts |
 | `WindowEnvironment` | Specializes BrowletEnvironment with its Window and live queries of the associated Document |
 | `SandboxEnvironment` | Implements the same binding contract for internal execution; unavailable browser client settings throw explicitly |
 
@@ -944,9 +945,10 @@ cloned-data channels, and native teardown. Node Worker/MessagePort objects and
 startup globals remain private there. The host registers its module URL and
 setup steps once through `JSThread.initialize()`; the engine owns native path
 conversion, startup marking, and scheduling, so thread construction takes only
-data and a receiver. Browlet's worker host adapter owns the
-setup acknowledgement; its inside runtime creates the dedicated/shared agent and
-EventLoop, then turns incoming commands into tasks. It does not create another
+data and a receiver. Browlet's [worker integration](browlet/integration/workers/index.ts)
+separates the creator-side thread from the inside runtime and their shared message
+types. The thread owns the setup acknowledgement; its inside runtime creates the
+dedicated/shared agent and EventLoop, then turns incoming commands into tasks. It does not create another
 UserAgent or stand-in owner objects. Browlet reloads its existing
 `index.mjs` or `index.cjs` bundle in the isolate, without eval or another built
 entry. Private startup data identifies that exact bundle; ordinary imports in
@@ -964,8 +966,8 @@ dedicated agent with a local representation of that cluster, or gives a shared
 worker a fresh origin-keyed cluster. Membership sets contain only local agents.
 Nested capture therefore preserves inherited identity without a weak table or
 new UserAgent, agent, or owner tokens. The control channel connects the worker to
-its parent; identity alone grants no access to remote services. Connecting the
-snapshot to environment composition still requires policy and UserAgent service
+its parent; identity alone grants no access to remote services. Inside composition
+reconstructs the transported policies; the remaining UserAgent services still need
 transport. HTML structured-clone records retain the existing cluster ID rather
 than the local cluster object. The private host channel can carry ordinary
 graphs, shared buffers, and native Wasm Module tokens for target-realm
@@ -977,7 +979,59 @@ JS Engine owns `NodePromise` and exposes one internal thread completion with a
 private implementation result. Browlet chains local cleanup onto that completion;
 readiness and cleanup use the creating isolate's host queue, independently of
 page or worker activity. Native termination Promises stay inside JS Engine.
-Only messages cross isolates; these Promises and their resolvers stay local.
+Completion notifications can cross the host channel; Promises and their resolvers stay local.
+
+Initial module-graph fetch transport retains the real creator as the Fetch client.
+Only resolved request inputs and consumed response values cross the private host
+channel; request IDs select callbacks retained in the worker isolate. Fetch runs
+beside the creator's shared stores and delivers on the worker networking queue.
+Root policy initialization remains separate from dependency response delivery.
+`BrowletEnvironment.parseURL()` delegates to its UserAgent. `BrowletUserAgent` is
+the concrete browser owner; `UserAgent = Public<BrowletUserAgent>` declares its
+complete public contract in one place. `new UserAgent()` keeps the constructor
+export, and `WorkerUserAgent implements UserAgent` supplies the worker connection.
+Infra's `Public<T>` excludes private class identity without narrowing public members.
+Unavailable worker facilities throw explicit dependency errors.
+Environments and existing consumers keep the same non-generic `userAgent` access.
+The store uses `Public<BlobURLStore>`, and `resolve()` returns
+`Public<BlobURLEntry>`. The browser keeps its actual entry; the worker reconstructs
+that public shape from the captured handle and origin. Blob access, partition
+checks and uncopied creator-environment fields explicitly throw in the worker.
+Workers do not instantiate another browser or copy its stores. Timers,
+continuations and the shared clock remain local, while scripting policy uses
+the original atomic preference.
+Blob resolution/revocation, live scalar preferences, origin/URL trust and loading
+queries use a private service port. The outside reservation supplies the actual
+worker origin for access checks, including data workers. JS Engine owns native
+synchronous dequeue; waiting does not pump HTML tasks or Promise reactions.
+The browser host queue must be free to answer: it cannot synchronously wait for a
+worker that is itself waiting for this service. A dedicated service execution
+owner is not implemented.
+Captured Blob entries have per-record leases released by worker-side collection,
+or collectively at connection close. Initial-graph Fetch retains captures through
+the response and uses their IDs, preserving pre-revocation captures. Nested-worker
+forwarding, worker-created Blob backing transport, general Fetch and shared
+storage/permission/broadcast/report services remain explicit dependencies.
+The script loader connects to this transport while retaining URL resolution,
+its inside module map, parsing, and graph linking. Its `ScriptEnvironment` client
+supplies `fetchModuleSource()`: BrowletEnvironment fetches locally, while the
+existing WorkerThreadRuntime forwards inputs through its creator connection
+before request construction. The already-fetched root response uses the same
+loader; graph failures join ordinary worker load-failure cleanup directly.
+Dynamic imports and general worker Fetch require the worker's own client, not
+this initial-graph path. Only the unfinished successful-startup dependency error
+is reported on the native host queue so it triggers thread teardown; ordinary
+graph completion does not acquire another task.
+
+`UserAgent.scriptingPolicy` owns the browser's live scripting preference.
+`scriptingEnabled` remains its boolean getter/setter; the private startup channel
+shares one atomic cell with the worker's local `ScriptingPolicy` representation.
+This handle is separate from the creator snapshot and is never exposed through
+author messaging or globals. `env.scriptingPolicy` supplies that same preference
+to script creation and entry checks without a local UserAgent or a blocking RPC.
+Window sandbox checks and worker response CSP retain their own owners. Event
+handlers use the environment's BiDi gate; worker overrides retain the provisional
+no-automation answer until worker scoping and live override transport are defined.
 
 JS Engine also owns transferable native channels. `JSMessagePort` wraps a
 native endpoint locally and exposes its native handle for internal transport;
@@ -1013,10 +1067,11 @@ keeps its creator client and shared UserAgent stores, body execution uses that
 UserAgent's sandbox, and parallel Fetch completion sends consumed bytes/metadata
 to the receiving worker's networking task queue. Blob creator policies are copied
 before stripping live registrations from response URLs. WorkerThread retains and
-cancels the Fetch controller on teardown. This host transport does not compose a
-remote environment or supply the reserved inside client; connecting startup,
-response policy initialization, module descendants, and nested workers remains
-processing-model work. It is not general response or MessagePort serialization.
+cancels Fetch controllers on teardown. Startup now composes the real inside
+environment with its reserved client identity, initializes response policies,
+and loads and links module descendants. Execution readiness, owner monitoring,
+and nested workers remain processing-model work. The response handoff is not
+general response or MessagePort serialization.
 
 `WorkerEnvironment.completeScriptFetch()` handles failed-load error delivery and
 environment discard, or entangles the startup ports and calls `runScript()`.

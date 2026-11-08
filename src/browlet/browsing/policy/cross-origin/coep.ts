@@ -42,6 +42,19 @@ export class EmbedderPolicy implements FetchEmbedderPolicy {
     return value === 'require-corp' || value === 'credentialless';
   }
 
+  /** Check a dedicated worker's policy against its creator and queue violations through that creator. */
+  // https://html.spec.whatwg.org/multipage/browsers.html#check-a-global-object's-embedder-policy
+  checkWorkerInheritance(response: FetchResponse, ownerEnv: BrowletEnvironment): boolean {
+    const ownerPolicy = ownerEnv.policyContainer.embedderPolicy;
+    const compatible = EmbedderPolicy.isCompatibleWithCrossOriginIsolation(this.value);
+    if (EmbedderPolicy.isCompatibleWithCrossOriginIsolation(ownerPolicy.reportOnlyValue) && !compatible) {
+      queueCOEPInheritanceViolation(response, 'worker initialization', ownerPolicy.reportOnlyReportingEndpoint, 'reporting', ownerEnv);
+    }
+    if (!EmbedderPolicy.isCompatibleWithCrossOriginIsolation(ownerPolicy.value) || compatible) return true;
+    queueCOEPInheritanceViolation(response, 'worker initialization', ownerPolicy.reportingEndpoint, 'enforce', ownerEnv);
+    return false;
+  }
+
   /** Copy the enforced and report-only settings independently of their current owner. */
   clone(): EmbedderPolicy {
     const copy = new EmbedderPolicy();

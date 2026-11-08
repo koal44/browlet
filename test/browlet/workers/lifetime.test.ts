@@ -602,7 +602,7 @@ class TestEnvironment extends SandboxEnvironment {
 }
 
 /** Manual globals exercise ownership and real Binding transfers without introducing a worker backend. */
-function createWorker(kind: 'dedicated' | 'shared' = 'dedicated', userAgent = new UserAgent()) {
+function createWorker(kind: 'dedicated' | 'shared' = 'dedicated', userAgent: UserAgent = new UserAgent()) {
   const name = kind === 'dedicated' ? 'DedicatedWorker' : 'SharedWorker';
   const realm = new BrowletRealm({ agent: new SandboxAgent(new EventLoop({ requestTurn() {} })), globalNames: ['Worker', name] });
   let env!: TestEnvironment;
@@ -629,7 +629,7 @@ function createExtendedWorker(userAgent: UserAgent): SharedWorkerGlobalImpl {
 }
 
 /** A real Window environment with an associated, inactive Document; activity is irrelevant to owner selection. */
-function createWindow(userAgent = new UserAgent()) {
+function createWindow(userAgent: UserAgent = new UserAgent()) {
   const agent = new WindowAgent(new EventLoop({ requestTurn() {} }));
   new AgentCluster().add(agent);
   const creationURL = parseURL('https://window.test/').url!;

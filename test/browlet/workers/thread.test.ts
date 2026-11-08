@@ -1,4 +1,5 @@
 import { EventEmitter, once } from 'node:events';
+import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { threadId, type WorkerOptions } from 'node:worker_threads';
@@ -9,11 +10,10 @@ import { addon, type JSThreadExit } from '../../../src/js-engine/index';
 import { utf8Encode } from '../../../src/encoding/index';
 import { BlobData, BlobImpl } from '../../../src/file/index';
 import { FetchHeaders, type FetchRequest } from '../../../src/fetch/index';
-import {
-  WorkerThread, queueNodeTask, type WorkerThreadInit, type CreatorEnvironmentSnapshot,
-} from '../../../src/browlet/integration/host/index';
+import { queueNodeTask } from '../../../src/browlet/integration/host/index';
+import { WorkerThread, type WorkerThreadInit, type WorkerModuleScriptRequest } from '../../../src/browlet/integration/workers/index';
 import { createWindowEnvironment, createWorkerEnvironment } from '../../../src/browlet/integration/web-idl/index';
-import type { BrowletEnvironment } from '../../../src/browlet/environment/index';
+import type { BrowletEnvironment, CreatorEnvironmentSnapshot } from '../../../src/browlet/environment/index';
 import type { StructuredSerializeWithTransferResult } from '../../../src/browlet/scripting/structured-data/index';
 import {
   AgentCluster, DedicatedWorkerAgent, EventLoop, WindowAgent, createTaskSource, domManipulationTaskSource,
@@ -22,7 +22,7 @@ import { UserAgent } from '../../../src/browlet/user-agent';
 import { BrowsingContext, DocumentState, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
 import { MessageChannelImpl, MessagePortImpl } from '../../../src/browlet/communication/index';
 import { WorkerImpl } from '../../../src/browlet/workers/index';
-import type { ErrorEvent, MessageChannel, MessageEvent, MessagePort, Window, Worker } from '../../../src/browlet/platform';
+import type { Event, ErrorEvent, MessageChannel, MessageEvent, MessagePort, Window, Worker } from '../../../src/browlet/platform';
 import { PolicyContainer } from '../../../src/browlet/browsing/policy/index';
 import { ContentSecurityPolicy, CSPList } from '../../../src/browlet/browsing/policy/csp/index';
 import {
@@ -193,7 +193,8 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
     expect(result).toMatchObject({
       ownsNetworkingTask: true, type: 'default', status: 200, statusMessage: 'OK',
       urls: ['https://creator.test/worker.js', 'https://creator.test/final.js'],
-      bodyBytes: utf8Encode(source), blobPolicyContainer: null, scriptRan: false,
+      bodyBytes: utf8Encode(source), scriptRan: false,
+      policyContainer: { cspList: { policies: [{ disposition: 'enforce' }] } },
     });
     expect((result as { headers: [string, string][]; }).headers).toContainEqual(['Content-Security-Policy', "script-src 'none'"]);
     expect(transport).toHaveBeenCalledTimes(2);
@@ -216,6 +217,1070 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
     expect(transport).not.toHaveBeenCalled();
   });
 
+  describe('module script transport', () => {
+    it.each(['dedicated', 'shared'] as const)('correlates concurrent %s responses independently of completion order', async (kind) => {
+      const creatorEnv = createCreatorEnvironment();
+      const arrivals: (() => void)[] = [];
+      const transport = mockHTTPTransport(creatorEnv.userAgent, (request, listener) => {
+        const url = serializeURL(request.url);
+        arrivals.push(() => {
+          listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+          listener.onData(utf8Encode(`globalThis.scriptRan = true; // ${url}`));
+          listener.onEnd();
+        });
+        if (arrivals.length === 2) { arrivals[1]!(); arrivals[0]!(); }
+      });
+      const { thread, request } = createThread({ kind, creatorEnv, data: {} });
+      await thread.ready;
+      const urls = ['https://creator.test/first.js', 'https://creator.test/second.js'];
+      const result = await request({ type: 'fetch-modules', requests: urls.map((url) => createModuleRequest(url)) });
+      expect(result).toMatchObject([1, 0].map((index) => ({
+        index, ownsNetworkingTask: true, status: 200, urls: [urls[index]],
+        bodyBytes: utf8Encode(`globalThis.scriptRan = true; // ${urls[index]}`), scriptRan: false,
+      })));
+      expect(transport).toHaveBeenCalledTimes(2);
+      // No creator HTML turn is needed for requests or body consumption.
+    });
+
+    it('uses creator credentials, referrer policy, CORS, and module destinations', async () => {
+      const creatorEnv = createCreatorEnvironment();
+      for (const domain of ['creator.test', 'other.test']) {
+        creatorEnv.userAgent.cookieStore.parseAndStoreCookie(
+          `session=${domain}; Secure; SameSite=None`, true, { kind: 'domain', value: domain }, [''], true, false, true,
+        );
+      }
+      const observed: unknown[] = [];
+      mockHTTPTransport(creatorEnv.userAgent, (request, listener) => {
+        const url = serializeURL(request.url);
+        observed.push({
+          url, cookie: request.headers.get('Cookie'), origin: request.headers.get('Origin'),
+          referrer: request.headers.get('Referer'), destination: request.headers.get('Sec-Fetch-Dest'),
+        });
+        const headers = new FetchHeaders([['Content-Type', 'text/javascript']]);
+        if (url.endsWith('/allowed.js')) {
+          headers.append('Access-Control-Allow-Origin', 'https://creator.test');
+          headers.append('Access-Control-Allow-Credentials', 'true');
+        }
+        listener.onHeaders(200, '', headers, true);
+        listener.onData(utf8Encode('export default 1;'));
+        listener.onEnd();
+      });
+      const { thread, request } = createThread({ kind: 'dedicated', creatorEnv, data: {} });
+      await thread.ready;
+      const requests = [
+        createModuleRequest('https://creator.test/local.js', { destination: 'json', credentials: 'omit', referrerPolicy: 'no-referrer' }),
+        createModuleRequest('https://other.test/allowed.js', { credentials: 'include', referrerPolicy: 'origin' }),
+        createModuleRequest('https://other.test/blocked.js', { credentials: 'include', referrerPolicy: 'origin' }),
+      ];
+      const results = await request({ type: 'fetch-modules', requests });
+      expect(results).toEqual(expect.arrayContaining([
+        expect.objectContaining({ index: 0, status: 200 }),
+        expect.objectContaining({ index: 1, status: 200 }),
+        expect.objectContaining({ index: 2, type: 'error', status: 0, bodyBytes: null }),
+      ]));
+      expect(observed).toEqual(expect.arrayContaining([
+        { url: 'https://creator.test/local.js', cookie: null, origin: null, referrer: null, destination: 'json' },
+        { url: 'https://other.test/allowed.js', cookie: 'session=other.test', origin: 'https://creator.test', referrer: 'https://creator.test/', destination: 'worker' },
+        { url: 'https://other.test/blocked.js', cookie: 'session=other.test', origin: 'https://creator.test', referrer: 'https://creator.test/', destination: 'worker' },
+      ]));
+    });
+
+    it('enforces the creator policy without confusing blocked and successful requests', async () => {
+      const creatorEnv = createCreatorEnvironment();
+      creatorEnv.policyContainer.cspList = new CSPList(creatorEnv.origin);
+      creatorEnv.policyContainer.cspList.policies.push(ContentSecurityPolicy.parse("worker-src 'self'", 'header', 'enforce'));
+      const transport = mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
+        listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+        listener.onEnd();
+      });
+      const { thread, request } = createThread({ kind: 'dedicated', creatorEnv, data: {} });
+      await thread.ready;
+      expect(await request({
+        type: 'fetch-modules', requests: [
+          createModuleRequest('https://other.test/blocked.js'), createModuleRequest('https://creator.test/allowed.js'),
+        ],
+      })).toEqual(expect.arrayContaining([
+        expect.objectContaining({ index: 0, ownsNetworkingTask: true, type: 'error', status: 0, bodyBytes: null }),
+        expect.objectContaining({ index: 1, ownsNetworkingTask: true, status: 200, bodyBytes: new Uint8Array() }),
+      ]));
+      expect(transport).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses worker-captured Blob registrations and preserves failed body reads', async () => {
+      const creatorEnv = createCreatorEnvironment();
+      const readable = BlobImpl.create(BlobData.fromBytes(utf8Encode('export default 1;')), 'text/javascript', undefined, creatorEnv);
+      const unreadable = BlobImpl.create(BlobData.fromSource({
+        size: 3, snapshotState: undefined, read: () => Promise.reject(new Error('unreadable module')),
+      }), 'text/javascript', undefined, creatorEnv);
+      const urls = [readable, unreadable].map((blob) => creatorEnv.userAgent.blobURLStore.add(blob, creatorEnv));
+      const { thread, request } = createThread({
+        kind: 'dedicated', creatorEnv, data: {},
+        script: { url: creatorEnv.parseURL('https://creator.test/root.js')!, type: 'module', credentials: 'same-origin', name: '' },
+      });
+      await thread.ready;
+      expect(await request({ type: 'fetch-modules', requests: urls.map((url) => createModuleRequest(url)) }))
+        .toEqual(expect.arrayContaining([
+          expect.objectContaining({ index: 0, status: 200, hasBlobEntry: false, bodyBytes: utf8Encode('export default 1;') }),
+          expect.objectContaining({ index: 1, status: 200, hasBlobEntry: false, bodyBytes: 'failure' }),
+        ]));
+    });
+
+    it('retains integrity checks when the dependency request crosses isolates', async () => {
+      const creatorEnv = createCreatorEnvironment();
+      const source = 'export default 1;';
+      const integrityMetadata = `sha256-${createHash('sha256').update(source).digest('base64')}`;
+      mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
+        listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+        listener.onData(utf8Encode(source));
+        listener.onEnd();
+      });
+      const { thread, request } = createThread({ kind: 'dedicated', creatorEnv, data: {} });
+      await thread.ready;
+      expect(await request({
+        type: 'fetch-modules', requests: [
+          createModuleRequest('https://creator.test/valid.js', { integrityMetadata }),
+          createModuleRequest('https://creator.test/invalid.js', { integrityMetadata: 'sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' }),
+        ],
+      })).toEqual(expect.arrayContaining([
+        expect.objectContaining({ index: 0, status: 200, bodyBytes: utf8Encode(source) }),
+        expect.objectContaining({ index: 1, type: 'error', status: 0, bodyBytes: null }),
+      ]));
+    });
+
+    it('keeps dependency response policies separate from the composed worker environment', async () => {
+      const creatorEnv = createCreatorEnvironment();
+      mockHTTPTransport(creatorEnv.userAgent, (request, listener) => {
+        const root = serializeURL(request.url).endsWith('/root.js');
+        listener.onHeaders(200, '', new FetchHeaders([
+          ['Content-Type', 'text/javascript'], ['Referrer-Policy', root ? 'origin' : 'no-referrer'],
+          ['Content-Security-Policy', root ? "script-src 'self'" : 'sandbox'],
+        ]), true);
+        listener.onEnd();
+      });
+      const { thread, request } = createThread({
+        kind: 'dedicated', creatorEnv, data: { initializeScriptResponse: true },
+        script: { url: creatorEnv.parseURL('https://creator.test/root.js')!, type: 'module', credentials: 'same-origin', name: '' },
+      });
+      await thread.ready;
+      await request({ type: 'fetch-script' });
+      expect(await request({ type: 'fetch-modules', requests: [createModuleRequest('https://creator.test/dependency.js')] }))
+        .toMatchObject([{
+          status: 200, urls: ['https://creator.test/dependency.js'],
+          environment: { url: 'https://creator.test/root.js', policyContainer: { referrerPolicy: 'origin' } },
+          scriptRan: false,
+        }]);
+    });
+
+    it.each(['terminate', 'exit'] as const)('cancels all pending module requests on %s without late delivery', async (ending) => {
+      const creatorEnv = createCreatorEnvironment();
+      const started = Promise.withResolvers<void>();
+      const aborts: (() => void)[] = [];
+      const lateResponses: (() => void)[] = [];
+      vi.spyOn(creatorEnv.userAgent.httpTransport, 'dispatch').mockImplementation((_request, listener) => {
+        const abort = vi.fn();
+        aborts.push(abort);
+        lateResponses.push(() => {
+          listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+          listener.onData(utf8Encode('export default 1;'));
+          listener.onEnd();
+        });
+        if (aborts.length === 2) started.resolve();
+        return { pause() {}, resume() {}, abort };
+      });
+      const state = new Int32Array(new SharedArrayBuffer(4));
+      const { thread } = createThread({ kind: 'dedicated', creatorEnv, data: {} });
+      await thread.ready;
+      thread.send({
+        type: 'fetch-modules', state, requests: [
+          createModuleRequest('https://creator.test/first.js'), createModuleRequest('https://creator.test/second.js'),
+        ],
+      });
+      await started.promise;
+      if (ending === 'terminate') void thread.terminate();
+      else thread.send({ type: 'disconnect' });
+      expect(await thread.closed).toMatchObject({ error: undefined, terminated: ending === 'terminate' });
+      for (const abort of aborts) expect(abort).toHaveBeenCalledOnce();
+      for (const respond of lateResponses) respond();
+      expect(Atomics.load(state, 0)).toBe(0);
+    });
+
+    it.each([1, 2])('attempts every cancellation when %i module transports throw during cleanup', async (failures) => {
+      const { implementation, creatorEnv } = createTerminationWorker();
+      const started = Promise.withResolvers<void>();
+      const errors = [new Error('First module abort failed'), new Error('Second module abort failed')];
+      const aborts: (() => void)[] = [];
+      vi.spyOn(creatorEnv.userAgent.httpTransport, 'dispatch').mockImplementation(() => {
+        const index = aborts.length;
+        const abort = vi.fn(() => { if (index < failures) throw errors[index]!; });
+        aborts.push(abort);
+        if (aborts.length === 2) started.resolve();
+        return { pause() {}, resume() {}, abort };
+      });
+      const { thread } = createThread({ kind: 'dedicated', worker: implementation, data: {} });
+      const completion = Promise.resolve(thread.closed).catch((error: unknown) => error);
+      await thread.ready;
+      thread.connectMessagePort();
+      thread.send({
+        type: 'fetch-modules', requests: [
+          createModuleRequest('https://creator.test/first.js'), createModuleRequest('https://creator.test/second.js'),
+        ],
+      });
+      await started.promise;
+      void thread.terminate();
+      const result = await completion;
+      if (failures === 1) expect(result).toBe(errors[0]);
+      else expect(result).toMatchObject({ name: 'InternalError', cause: errors });
+      for (const abort of aborts) expect(abort).toHaveBeenCalledOnce();
+      expect(implementation.thread).toBeNull();
+      expect(implementation.outsidePort.isEntangledOutsideGlobal()).toBe(false);
+      // This test already consumed the expected cleanup rejection.
+      threads.delete(thread);
+    });
+  });
+
+  describe('initial script startup', () => {
+    it.each([
+      ['dedicated', 'classic'], ['shared', 'classic'], ['dedicated', 'module'], ['shared', 'module'],
+    ] as const)('requests a %s %s root from inside the isolate using the creator stores', async (kind, type) => {
+      const creatorEnv = createCreatorEnvironment();
+      creatorEnv.userAgent.cookieStore.parseAndStoreCookie(
+        'session=creator; Secure; SameSite=None', true, { kind: 'domain', value: 'creator.test' }, [''], true, false, true,
+      );
+      const cookies: (string | null)[] = [];
+      const source = 'globalThis.scriptRan = true;';
+      const transport = mockHTTPTransport(creatorEnv.userAgent, (request, listener) => {
+        cookies.push(request.headers.get('Cookie'));
+        if (serializeURL(request.url).endsWith('/worker.js')) {
+          listener.onHeaders(302, '', new FetchHeaders([['Location', '/final.js']]), false);
+        } else {
+          listener.onHeaders(200, 'OK', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+          listener.onData(utf8Encode(source));
+        }
+        listener.onEnd();
+      });
+      const url = creatorEnv.parseURL('https://creator.test/worker.js')!;
+      const script = { url, type, credentials: 'omit', name: 'root' } as const;
+      const { thread, request } = createThread({ kind, creatorEnv, data: {}, script });
+      const reservation = thread.reservedEnv;
+      assert(reservation !== null);
+      const fetchScript = vi.spyOn(thread, 'fetchScript');
+      await thread.ready;
+      expect(transport).not.toHaveBeenCalled();
+      expect(reservation.id).not.toBe(creatorEnv.id);
+      expect(reservation.userAgent).toBe(creatorEnv.userAgent);
+      expect(reservation.topLevelCreationURL).toBeNull();
+      expect(reservation.topLevelOrigin).toEqual(creatorEnv.topLevelOrigin);
+      expect(reservation.isSecureContext).toBe(creatorEnv.isSecureContext);
+      expect(reservation.executionReady).toBe(false);
+      // Mutating caller-owned input after capture must not retarget the root.
+      url.path = ['changed.js'];
+      expect(await request({ type: 'fetch-script' })).toMatchObject({
+        ownsNetworkingTask: true, status: 200,
+        urls: ['https://creator.test/worker.js', 'https://creator.test/final.js'],
+        bodyBytes: utf8Encode(source), scriptRan: false,
+        script: { type, credentials: 'omit', name: 'root', environmentId: reservation.id },
+      });
+      expect(fetchScript).toHaveBeenCalledOnce();
+      const prepared = fetchScript.mock.calls[0]![0];
+      expect(prepared.client).toBe(creatorEnv);
+      expect(prepared.reservedClient).toBe(reservation);
+      expect(prepared.destination).toBe(kind === 'shared' ? 'sharedworker' : 'worker');
+      expect(prepared.mode).toBe('same-origin');
+      expect(prepared.initiatorType).toBe(type === 'classic' ? 'other' : 'script');
+      expect(prepared.useURLCredentials).toBe(type === 'classic');
+      expect(cookies).toEqual(type === 'classic' ? ['session=creator', 'session=creator'] : [null, null]);
+      expect(serializeURL(reservation.creationURL)).toBe('https://creator.test/final.js');
+      // Download completion does not make the inside environment execution ready.
+      expect(reservation.executionReady).toBe(false);
+      expect(await request({ type: 'fetch-script' })).toEqual({ errorMessage: 'Worker initial script was already requested' });
+      expect(transport).toHaveBeenCalledTimes(2);
+      await thread.terminate();
+      expect(reservation.discarded).toBe(true);
+    });
+
+    it('enforces CSP for a root requested by the worker without dispatching HTTP', async () => {
+      const creatorEnv = createCreatorEnvironment();
+      creatorEnv.policyContainer.cspList = new CSPList(creatorEnv.origin);
+      creatorEnv.policyContainer.cspList.policies.push(ContentSecurityPolicy.parse("worker-src 'none'", 'header', 'enforce'));
+      const transport = mockHTTPTransport(creatorEnv.userAgent, () => { throw new Error('Blocked root reached HTTP'); });
+      const { thread, request } = createThread({
+        kind: 'dedicated', data: {}, creatorEnv,
+        script: { url: creatorEnv.parseURL('https://creator.test/worker.js')!, type: 'classic', credentials: 'include', name: '' },
+      });
+      await thread.ready;
+      expect(await request({ type: 'fetch-script' })).toMatchObject({
+        ownsNetworkingTask: true, type: 'error', status: 0, bodyBytes: null, scriptRan: false,
+      });
+      expect(transport).not.toHaveBeenCalled();
+    });
+
+    it('retains a captured Blob registration through revocation before the worker requests its root', async () => {
+      const creatorEnv = createCreatorEnvironment();
+      const source = 'globalThis.scriptRan = true;';
+      const store = creatorEnv.userAgent.blobURLStore;
+      const blobURL = store.add(new BlobImpl([source], { type: 'text/javascript' }, creatorEnv), creatorEnv);
+      const url = creatorEnv.parseURL(blobURL)!;
+      const { thread, request } = createThread({
+        kind: 'dedicated', data: {}, creatorEnv,
+        script: { url, type: 'classic', credentials: 'same-origin', name: '' },
+      });
+      store.revoke(blobURL, creatorEnv);
+      await thread.ready;
+      expect(await request({ type: 'fetch-script' })).toMatchObject({
+        status: 200, bodyBytes: utf8Encode(source), hasBlobEntry: false, scriptRan: false,
+        policyContainer: creatorEnv.policyContainer.toSnapshot(),
+        script: { url: { blobURLEntry: null } },
+      });
+    });
+
+    it('aborts an inside-requested fetch and discards its reserved client on termination', async () => {
+      const creatorEnv = createCreatorEnvironment();
+      const dispatched = Promise.withResolvers<void>();
+      const abort = vi.fn();
+      vi.spyOn(creatorEnv.userAgent.httpTransport, 'dispatch').mockImplementation(() => {
+        dispatched.resolve();
+        return { pause() {}, resume() {}, abort };
+      });
+      const { thread } = createThread({
+        kind: 'dedicated', data: {}, creatorEnv,
+        script: { url: creatorEnv.parseURL('https://creator.test/worker.js')!, type: 'classic', credentials: 'same-origin', name: '' },
+      });
+      await thread.ready;
+      thread.send({ type: 'fetch-script' });
+      await dispatched.promise;
+      await thread.terminate();
+      expect(abort).toHaveBeenCalledOnce();
+      expect(thread.reservedEnv?.discarded).toBe(true);
+    });
+
+    it('discards the reserved client when the isolate fails before acknowledging startup', async () => {
+      const creatorEnv = createCreatorEnvironment();
+      const { thread } = createThread({
+        kind: 'dedicated', data: { mode: 'throw-before-ready' }, creatorEnv,
+        script: { url: creatorEnv.parseURL('https://creator.test/worker.js')!, type: 'classic', credentials: 'same-origin', name: '' },
+      });
+      await expect(thread.ready).rejects.toThrow('bootstrap failed');
+      await thread.closed;
+      expect(thread.reservedEnv?.discarded).toBe(true);
+    });
+  });
+
+  describe('production startup failures', () => {
+    it.each([
+      ['network', 'classic'], ['network', 'module'],
+      ['creator CSP', 'classic'], ['creator CSP', 'module'],
+      ['worker CSP', 'classic'], ['worker CSP', 'module'], ['COEP', 'classic'],
+      ['HTTP status', 'classic'], ['HTTP status', 'module'],
+      ['null body', 'classic'], ['null body', 'module'],
+      ['body read', 'classic'], ['body read', 'module'],
+      ['MIME', 'classic'], ['MIME', 'module'],
+      ['syntax', 'classic'], ['syntax', 'module'],
+    ] as const)('reports one ordinary error and releases the isolate for %s rejection of a %s root', async (failure, type) => {
+      const { implementation, worker, creatorEnv, drain } = createTerminationWorker(false);
+      const errors: Event[] = [];
+      const sources: unknown[] = [];
+      const report = vi.spyOn(creatorEnv, 'reportErrorInformation');
+      worker.addEventListener('error', (event) => {
+        errors.push(event);
+        sources.push(creatorEnv.responsibleEventLoop.currentlyRunningTask?.source);
+      });
+      if (failure === 'creator CSP') {
+        creatorEnv.policyContainer.cspList = new CSPList(creatorEnv.origin);
+        creatorEnv.policyContainer.cspList.policies.push(ContentSecurityPolicy.parse("worker-src 'none'", 'header', 'enforce'));
+      } else if (failure === 'COEP') {
+        creatorEnv.policyContainer.embedderPolicy.value = 'require-corp';
+      }
+      const transport = mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
+        if (failure === 'network') { listener.onError(new Error('network failed')); return; }
+        const headers = new FetchHeaders([['Content-Type', failure === 'MIME' ? 'text/plain' : 'text/javascript']]);
+        if (failure === 'worker CSP') headers.append('Content-Security-Policy', 'sandbox');
+        listener.onHeaders(failure === 'HTTP status' ? 404 : failure === 'null body' ? 204 : 200, '', headers, true);
+        if (failure === 'body read') { listener.onError(new Error('body failed')); return; }
+        if (failure !== 'null body') {
+          listener.onData(utf8Encode(failure === 'syntax' ? 'const = ;' : 'throw new Error("rejected script ran");'));
+        }
+        listener.onEnd();
+      });
+      const { thread } = createThread({
+        kind: 'dedicated', worker: implementation, data: { mode: 'run-startup' },
+        script: { url: creatorEnv.parseURL('https://creator.test/worker.js')!, type, credentials: 'same-origin', name: '' },
+      });
+      thread.connectMessagePort();
+      await thread.ready;
+      expect(await thread.closed).toMatchObject({ error: undefined, terminated: true });
+      expect(errors).toEqual([]);
+      expect(thread.reservedEnv?.discarded).toBe(true);
+      expect(thread.reservedEnv?.executionReady).toBe(false);
+      expect(implementation.thread).toBeNull();
+      expect(implementation.outsidePort.isEntangledOutsideGlobal()).toBe(false);
+      drain();
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toMatchObject({ type: 'error', isTrusted: true, cancelable: false, bubbles: false });
+      expect(errors[0]!.target).toBe(worker);
+      expect('message' in errors[0]!).toBe(false);
+      expect(sources).toEqual([domManipulationTaskSource]);
+      expect(report).not.toHaveBeenCalled();
+      expect(transport).toHaveBeenCalledTimes(failure === 'creator CSP' ? 0 : 1);
+      drain();
+      expect(errors).toHaveLength(1);
+    });
+
+    it.each(['network', 'syntax'] as const)('cleans up a shared root rejected for %s while outside association remains pending', async (failure) => {
+      const creatorEnv = createCreatorEnvironment();
+      mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
+        if (failure === 'network') { listener.onError(new Error('network failed')); return; }
+        listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+        listener.onData(utf8Encode('const = ;'));
+        listener.onEnd();
+      });
+      const { thread } = createThread({
+        kind: 'shared', creatorEnv, data: { mode: 'run-startup' },
+        script: { url: creatorEnv.parseURL('https://creator.test/shared.js')!, type: 'classic', credentials: 'same-origin', name: 'shared' },
+      });
+      await thread.ready;
+      expect(await thread.closed).toMatchObject({ error: undefined, terminated: true });
+      expect(thread.reservedEnv?.discarded).toBe(true);
+    });
+
+    it.each([
+      ['classic', 'empty'], ['module', 'empty'], ['classic', 'throwing'], ['module', 'throwing'],
+    ] as const)('parses an accepted %s root with an %s body without executing it or reporting a load failure', async (type, body) => {
+      const { implementation, worker, creatorEnv, drain } = createTerminationWorker(false);
+      const errors = vi.fn();
+      worker.addEventListener('error', errors);
+      mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
+        listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+        if (body !== 'empty') listener.onData(utf8Encode('throw new Error("unconnected script ran");'));
+        listener.onEnd();
+      });
+      const { thread } = createThread({
+        kind: 'dedicated', worker: implementation, data: { mode: 'run-startup' },
+        script: { url: creatorEnv.parseURL('https://creator.test/worker.js')!, type, credentials: 'same-origin', name: '' },
+      });
+      await thread.ready;
+      expect(await thread.closed).toMatchObject({
+        error: {
+          message: 'Worker script execution requires owner monitoring and shared services',
+        },
+        terminated: false,
+      });
+      expect(thread.reservedEnv?.discarded).toBe(true);
+      drain();
+      expect(errors).not.toHaveBeenCalled();
+    });
+
+    it('does not report a fetch failure when termination wins while the root is pending', async () => {
+      const { implementation, worker, creatorEnv, drain } = createTerminationWorker(false);
+      const errors = vi.fn();
+      const dispatched = Promise.withResolvers<void>();
+      const abort = vi.fn();
+      worker.addEventListener('error', errors);
+      vi.spyOn(creatorEnv.userAgent.httpTransport, 'dispatch').mockImplementation(() => {
+        dispatched.resolve();
+        return { pause() {}, resume() {}, abort };
+      });
+      const { thread } = createThread({
+        kind: 'dedicated', worker: implementation, data: { mode: 'run-startup' },
+        script: { url: creatorEnv.parseURL('https://creator.test/worker.js')!, type: 'classic', credentials: 'same-origin', name: '' },
+      });
+      await dispatched.promise;
+      worker.terminate();
+      expect(await thread.closed).toMatchObject({ error: undefined, terminated: true });
+      expect(abort).toHaveBeenCalledOnce();
+      expect(thread.reservedEnv?.discarded).toBe(true);
+      drain();
+      expect(errors).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('initial module graph loading', () => {
+    it.each(['dedicated', 'shared'] as const)('links a %s cyclic and diamond graph once in the inside realm without executing it', async (kind) => {
+      const creatorEnv = createCreatorEnvironment();
+      const sources = new Map([
+        ['root.js', 'import "./left.js"; import "./right.js"; globalThis.moduleRan = true;'],
+        ['left.js', 'import "./common.js"; import "./root.js";'],
+        ['right.js', 'import "./common.js";'],
+        ['common.js', 'export const value = 42;'],
+      ]);
+      const fetched: string[] = [];
+      mockHTTPTransport(creatorEnv.userAgent, (request, listener) => {
+        const url = serializeURL(request.url);
+        fetched.push(url);
+        listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+        listener.onData(utf8Encode(sources.get(url.slice(url.lastIndexOf('/') + 1))!));
+        listener.onEnd();
+      });
+      const { thread, request } = createThread({
+        kind, creatorEnv, data: { mode: 'load-startup' },
+        script: { url: creatorEnv.parseURL('https://creator.test/root.js')!, type: 'module', credentials: 'same-origin', name: '' },
+      });
+      await thread.ready;
+      expect(await request({ type: 'fetch-script' })).toEqual({
+        status: 'linked',
+        url: 'https://creator.test/root.js',
+        baseURL: 'https://creator.test/root.js',
+        scriptRan: false,
+        executionReady: false,
+        modules: [...sources.keys()].map((file) => ({
+          url: `https://creator.test/${file}`, type: 'javascript-or-wasm', status: 'linked', sameEnvironment: true,
+        })),
+      });
+      expect(fetched.sort()).toEqual([...sources.keys()].map((file) => `https://creator.test/${file}`).sort());
+      expect(creatorEnv.moduleMap.entries).toEqual([]);
+    });
+
+    it('keeps the original root cache key while resolving descendants against the final URL and response referrer policy', async () => {
+      const creatorEnv = createCreatorEnvironment();
+      creatorEnv.userAgent.cookieStore.parseAndStoreCookie(
+        'session=creator; Secure; SameSite=None', true, { kind: 'domain', value: 'creator.test' }, [''], true, false, true,
+      );
+      const observed: unknown[] = [];
+      mockHTTPTransport(creatorEnv.userAgent, (request, listener) => {
+        const url = serializeURL(request.url);
+        observed.push({ url, referrer: request.headers.get('Referer'), cookie: request.headers.get('Cookie') });
+        if (url.endsWith('/root.js')) {
+          listener.onHeaders(302, '', new FetchHeaders([['Location', '/redirected/start.js']]), false);
+        } else {
+          listener.onHeaders(200, '', new FetchHeaders([
+            ['Content-Type', 'text/javascript'], ['Referrer-Policy', 'no-referrer'],
+          ]), true);
+          listener.onData(utf8Encode(url.endsWith('/start.js') ? 'import "./dependency.js";' : 'export default 42;'));
+        }
+        listener.onEnd();
+      });
+      const { thread, request } = createThread({
+        kind: 'dedicated', creatorEnv, data: { mode: 'load-startup' },
+        script: { url: creatorEnv.parseURL('https://creator.test/root.js')!, type: 'module', credentials: 'omit', name: '' },
+      });
+      await thread.ready;
+      expect(await request({ type: 'fetch-script' })).toMatchObject({
+        status: 'linked',
+        url: 'https://creator.test/redirected/start.js',
+        baseURL: 'https://creator.test/redirected/start.js',
+        modules: [
+          { url: 'https://creator.test/root.js', status: 'linked' },
+          { url: 'https://creator.test/redirected/dependency.js', status: 'linked' },
+        ],
+      });
+      expect(observed).toEqual([
+        { url: 'https://creator.test/root.js', referrer: 'https://creator.test/', cookie: null },
+        { url: 'https://creator.test/redirected/start.js', referrer: 'https://creator.test/', cookie: null },
+        { url: 'https://creator.test/redirected/dependency.js', referrer: null, cookie: null },
+      ]);
+    });
+
+    it('uses import attributes to fetch and link JSON and text dependencies in the worker realm', async () => {
+      const creatorEnv = createCreatorEnvironment();
+      const destinations: (string | null)[] = [];
+      mockHTTPTransport(creatorEnv.userAgent, (request, listener) => {
+        const url = serializeURL(request.url);
+        destinations.push(request.headers.get('Sec-Fetch-Dest'));
+        const [mime, source] = url.endsWith('.json') ? ['application/json', '{"value":42}']
+          : url.endsWith('.txt') ? ['text/plain', 'worker text']
+            : ['text/javascript', 'import json from "./data.json" with { type: "json" }; import text from "./data.txt" with { type: "text" };'];
+        listener.onHeaders(200, '', new FetchHeaders([['Content-Type', mime]]), true);
+        listener.onData(utf8Encode(source));
+        listener.onEnd();
+      });
+      const { thread, request } = createThread({
+        kind: 'dedicated', creatorEnv, data: { mode: 'load-startup' },
+        script: { url: creatorEnv.parseURL('https://creator.test/root.js')!, type: 'module', credentials: 'same-origin', name: '' },
+      });
+      await thread.ready;
+      expect(await request({ type: 'fetch-script' })).toMatchObject({
+        status: 'linked', scriptRan: false, executionReady: false,
+        modules: [
+          { url: 'https://creator.test/root.js', type: 'javascript-or-wasm', status: 'linked', sameEnvironment: true },
+          { url: 'https://creator.test/data.json', type: 'json', status: 'linked', sameEnvironment: true },
+          { url: 'https://creator.test/data.txt', type: 'text', status: 'linked', sameEnvironment: true },
+        ],
+      });
+      expect(destinations).toEqual(['worker', 'json', 'text']);
+    });
+
+    it('resolves and links a Blob dependency through the creator-owned registration', async () => {
+      const creatorEnv = createCreatorEnvironment();
+      const blob = new BlobImpl(['export default 42;'], { type: 'text/javascript' }, creatorEnv);
+      const blobURL = creatorEnv.userAgent.blobURLStore.add(blob, creatorEnv);
+      const transport = mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
+        listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+        listener.onData(utf8Encode(`import value from ${JSON.stringify(blobURL)}; globalThis.moduleRan = value;`));
+        listener.onEnd();
+      });
+      const { thread, request } = createThread({
+        kind: 'dedicated', creatorEnv, data: { mode: 'load-startup' },
+        script: { url: creatorEnv.parseURL('https://creator.test/root.js')!, type: 'module', credentials: 'same-origin', name: '' },
+      });
+      await thread.ready;
+      expect(await request({ type: 'fetch-script' })).toMatchObject({
+        status: 'linked', scriptRan: false,
+        modules: [{ status: 'linked' }, { url: blobURL, status: 'linked', sameEnvironment: true }],
+      });
+      expect(transport).toHaveBeenCalledOnce();
+    });
+
+    it.each(['network', 'HTTP status', 'MIME', 'syntax', 'link', 'CSP', 'CSS type'] as const)(
+      'reports one ordinary load error and releases the worker after a descendant %s failure', async (failure) => {
+        const { implementation, worker, creatorEnv, drain } = createTerminationWorker(false);
+        const errors: Event[] = [];
+        const report = vi.spyOn(creatorEnv, 'reportErrorInformation');
+        worker.addEventListener('error', (event) => { errors.push(event); });
+        if (failure === 'CSP') {
+          creatorEnv.policyContainer.cspList = new CSPList(creatorEnv.origin);
+          creatorEnv.policyContainer.cspList.policies.push(ContentSecurityPolicy.parse("worker-src 'self'", 'header', 'enforce'));
+        }
+        const transport = mockHTTPTransport(creatorEnv.userAgent, (request, listener) => {
+          const root = serializeURL(request.url).endsWith('/root.js');
+          if (!root && failure === 'network') { listener.onError(new Error('dependency failed')); return; }
+          const mime = !root && failure === 'MIME' ? 'text/plain' : 'text/javascript';
+          listener.onHeaders(!root && failure === 'HTTP status' ? 404 : 200, '', new FetchHeaders([['Content-Type', mime]]), true);
+          const source = root ? failure === 'CSS type' ? 'import sheet from "./style.css" with { type: "css" };'
+            : failure === 'CSP' ? 'import value from "https://other.test/dependency.js";'
+              : 'import { value } from "./dependency.js"; globalThis.moduleRan = value;'
+            : failure === 'syntax' ? 'export const = ;'
+              : failure === 'link' ? 'export const different = 42;' : 'export const value = 42;';
+          listener.onData(utf8Encode(source));
+          listener.onEnd();
+        });
+        const { thread } = createThread({
+          kind: 'dedicated', worker: implementation, data: { mode: 'run-startup' },
+          script: { url: creatorEnv.parseURL('https://creator.test/root.js')!, type: 'module', credentials: 'same-origin', name: '' },
+        });
+        thread.connectMessagePort();
+        await thread.ready;
+        expect(await thread.closed).toMatchObject({ error: undefined, terminated: true });
+        expect(thread.reservedEnv?.discarded).toBe(true);
+        expect(thread.reservedEnv?.executionReady).toBe(false);
+        expect(implementation.thread).toBeNull();
+        expect(implementation.outsidePort.isEntangledOutsideGlobal()).toBe(false);
+        drain();
+        expect(errors).toHaveLength(1);
+        expect(errors[0]).toMatchObject({ type: 'error', isTrusted: true, target: worker });
+        expect('message' in errors[0]!).toBe(false);
+        expect(report).not.toHaveBeenCalled();
+        expect(transport).toHaveBeenCalledTimes(failure === 'CSP' || failure === 'CSS type' ? 1 : 2);
+      },
+    );
+
+    it('aborts an in-flight descendant when the outside Worker is terminated', async () => {
+      const { implementation, worker, creatorEnv, drain } = createTerminationWorker(false);
+      const dispatched = Promise.withResolvers<void>();
+      const abort = vi.fn();
+      const errors = vi.fn();
+      worker.addEventListener('error', errors);
+      vi.spyOn(creatorEnv.userAgent.httpTransport, 'dispatch').mockImplementation((request, listener) => {
+        if (serializeURL(request.url).endsWith('/root.js')) {
+          listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+          listener.onData(utf8Encode('import "./pending.js";'));
+          listener.onEnd();
+          return { pause() {}, resume() {}, abort() {} };
+        }
+        dispatched.resolve();
+        return { pause() {}, resume() {}, abort };
+      });
+      const { thread } = createThread({
+        kind: 'dedicated', worker: implementation, data: { mode: 'run-startup' },
+        script: { url: creatorEnv.parseURL('https://creator.test/root.js')!, type: 'module', credentials: 'same-origin', name: '' },
+      });
+      await dispatched.promise;
+      worker.terminate();
+      expect(await thread.closed).toMatchObject({ error: undefined, terminated: true });
+      expect(abort).toHaveBeenCalledOnce();
+      expect(thread.reservedEnv?.discarded).toBe(true);
+      drain();
+      expect(errors).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('inside environment composition', () => {
+    it.each([
+      ['dedicated', 'classic'], ['shared', 'classic'], ['dedicated', 'module'], ['shared', 'module'],
+    ] as const)('composes a %s %s environment before host readiness', async (kind, type) => {
+      const creatorEnv = createCreatorEnvironment();
+      const creatorOrigin = copyOrigin(creatorEnv.origin);
+      const hasCrossSiteAncestor = creatorEnv.hasCrossSiteAncestor;
+      const clusterId = creatorEnv.realm.agent.agentCluster!.id;
+      const { thread, request } = createThread({
+        kind, creatorEnv, data: {},
+        script: { url: creatorEnv.parseURL('https://creator.test/worker.js')!, type, credentials: 'include', name: 'inside', extendedLifetime: true },
+      });
+      const replacement = creatorEnv.createDocument();
+      replacement.origin = createOpaqueOrigin();
+      creatorEnv.window.setAssociatedDocument(replacement);
+      await thread.ready;
+      const result = await request({ type: 'inspect-environment' });
+      expect(result).toMatchObject({
+        id: thread.reservedEnv!.id, origin: creatorOrigin, topLevelOrigin: creatorOrigin,
+        creationURL: 'https://creator.test/worker.js', topLevelCreationURL: null,
+        isSecureContext: true, hasCrossSiteAncestor, realmAttached: true,
+        globalNames: ['Worker', kind === 'shared' ? 'SharedWorker' : 'DedicatedWorker'],
+        name: 'inside', selfIsGlobal: true, hasDocument: false, hasWindow: false,
+        url: 'https://creator.test/worker.js', executionReady: false, type,
+        ...(kind === 'shared' ? { constructorStorageOrigin: creatorOrigin, credentials: 'include', extendedLifetime: true } : {}),
+        sharedServicesError: undefined,
+      });
+      expect(result).toHaveProperty('currentTime', expect.any(Number));
+      expect(result).toHaveProperty('clusterId', kind === 'shared' ? expect.not.stringMatching(clusterId) : clusterId);
+      expect(thread.reservedEnv!.id).not.toBe(creatorEnv.id);
+      expect(thread.reservedEnv!.executionReady).toBe(false);
+    });
+
+    it('gives a data worker a fresh opaque origin while retaining creator ancestry', async () => {
+      const creatorEnv = createCreatorEnvironment();
+      const { thread, request } = createThread({
+        kind: 'dedicated', creatorEnv, data: {},
+        script: { url: parseURL('data:text/javascript,').url!, type: 'classic', credentials: 'same-origin', name: '' },
+      });
+      await thread.ready;
+      const result = await request({ type: 'inspect-environment' });
+      expect(result).toMatchObject({
+        id: thread.reservedEnv!.id, origin: { kind: 'opaque' },
+        topLevelOrigin: creatorEnv.topLevelOrigin, hasCrossSiteAncestor: true,
+        url: 'data:text/javascript,', isSecureContext: true, executionReady: false,
+      });
+      expect(result).toHaveProperty('origin.identity', expect.any(String));
+    });
+
+    it('retains an opaque creator identity and its insecure-context decision', async () => {
+      const creatorEnv = createCreatorEnvironment('http://creator.test/');
+      const origin = createOpaqueOrigin();
+      creatorEnv.window.document.origin = origin;
+      const { thread, request } = createThread({
+        kind: 'dedicated', creatorEnv, data: {},
+        script: { url: parseURL('http://creator.test/worker.js').url!, type: 'module', credentials: 'omit', name: '' },
+      });
+      await thread.ready;
+      expect(await request({ type: 'inspect-environment' })).toMatchObject({
+        origin, isSecureContext: false, realmAttached: true, executionReady: false,
+        sharedServicesError: undefined,
+      });
+    });
+  });
+
+  describe('inside module URL resolution', () => {
+    it('fetches a captured Blob module after revocation but rejects a fresh lookup', async () => {
+      const creatorEnv = createCreatorEnvironment();
+      const { thread, request } = createThread({
+        kind: 'dedicated', creatorEnv, data: {},
+        script: { url: creatorEnv.parseURL('https://creator.test/root.js')!, type: 'module', credentials: 'same-origin', name: '' },
+      });
+      await thread.ready;
+      const source = 'export default 42;';
+      const url = creatorEnv.userAgent.blobURLStore.add(new BlobImpl([source], { type: 'text/javascript' }, creatorEnv), creatorEnv);
+      expect(await request({ type: 'capture-module-url', url })).toEqual({ captured: true });
+      expect(await request({ type: 'revoke-blob', url })).toBe('revoked');
+      expect(creatorEnv.userAgent.blobURLStore.resolve(parseURL(url).url!)).toBeNull();
+      expect(await request({ type: 'fetch-modules', captured: true, requests: [createModuleRequest(url)] }))
+        .toMatchObject([{ status: 200, bodyBytes: utf8Encode(source) }]);
+      expect(await request({ type: 'fetch-modules', requests: [createModuleRequest(url)] }))
+        .toMatchObject([{ type: 'error', status: 0 }]);
+    });
+
+    it('uses the data worker origin for public Blob revocation rather than borrowing its creator identity', async () => {
+      const creatorEnv = createCreatorEnvironment();
+      const { thread, request } = createThread({
+        kind: 'dedicated', creatorEnv, data: {},
+        script: { url: parseURL('data:text/javascript,').url!, type: 'module', credentials: 'same-origin', name: '' },
+      });
+      await thread.ready;
+      const url = creatorEnv.userAgent.blobURLStore.add(new BlobImpl(['private'], {}, creatorEnv), creatorEnv);
+      expect(await request({ type: 'capture-module-url', url })).toEqual({ captured: true });
+      expect(await request({ type: 'revoke-blob', url })).toBe('revoked');
+      expect(creatorEnv.userAgent.blobURLStore.resolve(parseURL(url).url!)).not.toBeNull();
+      expect(await request({ type: 'inspect-environment' })).toMatchObject({ origin: thread.reservedEnv!.origin });
+    });
+
+    it.each(['dedicated', 'shared'] as const)('resolves %s worker imports through its UserAgent without the creator import map', async (kind) => {
+      const creatorEnv = createCreatorEnvironment();
+      creatorEnv.window.importMap.imports.set('package', parseURL('https://creator.test/mapped.js').url);
+      const { thread, request } = createThread({
+        kind, creatorEnv, data: {},
+        script: { url: parseURL('https://creator.test/scripts/root.js').url!, type: 'module', credentials: 'same-origin', name: '' },
+      });
+      await thread.ready;
+      expect(await request({
+        type: 'resolve-module-specifiers',
+        specifiers: ['./dep.js', '../shared.js', '/top.js', '//cdn.test/dep.js', 'https://EXAMPLE.test:443/a/../dep.js',
+          'data:text/javascript,export default 1;', 'package', '?query', '#fragment', 'https://['],
+      })).toEqual([
+        { url: 'https://creator.test/scripts/dep.js' },
+        { url: 'https://creator.test/shared.js' },
+        { url: 'https://creator.test/top.js' },
+        { url: 'https://cdn.test/dep.js' },
+        { url: 'https://example.test/dep.js' },
+        { url: 'data:text/javascript,export default 1;' },
+        ...['package', '?query', '#fragment', 'https://['].map((specifier) => ({
+          error: `The module specifier '${specifier}' could not be resolved`, realmTypeError: true,
+        })),
+      ]);
+      expect(await request({ type: 'inspect-environment' })).toMatchObject({
+        sharedServicesError: undefined, executionReady: false,
+      });
+    });
+
+    it('uses the final worker response URL or the referring module base, separately from the creator URL', async () => {
+      const creatorEnv = createCreatorEnvironment('https://creator.test/document/page.html');
+      mockHTTPTransport(creatorEnv.userAgent, (input, listener) => {
+        if (serializeURL(input.url) === 'https://creator.test/root.js') {
+          listener.onHeaders(302, '', new FetchHeaders([['Location', '/redirected/root.js']]), true);
+        } else {
+          listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+          listener.onData(utf8Encode('export {};'));
+        }
+        listener.onEnd();
+      });
+      const { thread, request } = createThread({
+        kind: 'dedicated', creatorEnv, data: { initializeScriptResponse: true },
+        script: { url: parseURL('https://creator.test/root.js').url!, type: 'module', credentials: 'same-origin', name: '' },
+      });
+      await thread.ready;
+      expect(await request({ type: 'fetch-script' })).toMatchObject({
+        initialized: { url: 'https://creator.test/redirected/root.js' },
+      });
+      expect(await request({ type: 'resolve-module-specifiers', specifiers: ['./dep.js'] }))
+        .toEqual([{ url: 'https://creator.test/redirected/dep.js' }]);
+      expect(await request({
+        type: 'resolve-module-specifiers', referrerURL: 'https://modules.test/library/main.js', specifiers: ['./dep.js'],
+      })).toEqual([{ url: 'https://modules.test/library/dep.js' }]);
+    });
+
+    it('retains opaque-base failures while resolving absolute and unregistered Blob URLs', async () => {
+      const creatorEnv = createCreatorEnvironment();
+      const { thread, request } = createThread({
+        kind: 'dedicated', creatorEnv, data: {},
+        script: { url: parseURL('data:text/javascript,export {};').url!, type: 'module', credentials: 'same-origin', name: '' },
+      });
+      await thread.ready;
+      expect(await request({
+        type: 'resolve-module-specifiers',
+        specifiers: ['./dep.js', 'https://creator.test/dep.js', 'blob:https://creator.test/entry'],
+      })).toEqual([
+        { error: "The module specifier './dep.js' could not be resolved", realmTypeError: true },
+        { url: 'https://creator.test/dep.js' },
+        { url: 'blob:https://creator.test/entry' },
+      ]);
+    });
+  });
+
+  it('reports unconnected worker services explicitly and keeps the worker usable', async () => {
+    const creatorEnv = createCreatorEnvironment();
+    const { thread, request } = createThread({
+      kind: 'dedicated', creatorEnv, data: {},
+      script: { url: creatorEnv.parseURL('https://creator.test/root.js')!, type: 'module', credentials: 'same-origin', name: '' },
+    });
+    await thread.ready;
+    expect(await request({ type: 'inspect-worker-service-failures' })).toEqual([
+      { name: 'createObjectURL', error: 'Worker Blob registration requires cross-isolate Blob backing transport' },
+      { name: 'BroadcastChannel', error: 'Worker UserAgent BroadcastChannel transport is not connected' },
+    ]);
+    expect(await request({ type: 'resolve-module-specifiers', specifiers: ['./still-usable.js'] }))
+      .toEqual([{ url: 'https://creator.test/still-usable.js' }]);
+  });
+
+  it('exposes fetch on the worker global', async () => {
+    const creatorEnv = createCreatorEnvironment();
+    const { thread, request } = createThread({
+      kind: 'dedicated', creatorEnv, data: {},
+      script: { url: creatorEnv.parseURL('https://creator.test/root.js')!, type: 'module', credentials: 'same-origin', name: '' },
+    });
+    await thread.ready;
+    // TODO(HTML §10.3): Forward the existing WindowOrWorkerGlobalScope mixin to workers.
+    expect(await request({ type: 'inspect-fetch-exposure' })).toBe('function');
+  });
+
+  describe('browser scripting policy', () => {
+    it.each(['dedicated', 'shared'] as const)('shares the live preference with a %s worker during script creation', async (kind) => {
+      const creatorEnv = createCreatorEnvironment();
+      creatorEnv.userAgent.scriptingEnabled = false;
+      const { thread, request } = createThread({
+        kind, creatorEnv, data: {},
+        script: { url: creatorEnv.parseURL('https://creator.test/worker.js')!, type: 'classic', credentials: 'same-origin', name: '' },
+      });
+      await thread.ready;
+      for (const enabled of [false, true, false]) {
+        creatorEnv.userAgent.scriptingEnabled = enabled;
+        expect(await request({ type: 'inspect-scripting-policy' })).toMatchObject({
+          enabled, canRun: enabled, classicParseError: enabled, moduleParseError: enabled,
+        });
+        if (enabled) expect(await request({ type: 'dispatch-policy-event' })).toBe('error');
+      }
+      // Other services remain unavailable: this is not a replacement UserAgent.
+      expect(await request({ type: 'inspect-environment' })).toMatchObject({
+        sharedServicesError: undefined, executionReady: false,
+      });
+    });
+
+    it('keeps creator Document sandboxing separate from the worker preference', async () => {
+      const creatorEnv = createCreatorEnvironment();
+      creatorEnv.window.document.activeSandboxingFlagSet.add('sandboxed-scripts');
+      expect(creatorEnv.isScriptingEnabled()).toBe(false);
+      const { thread, request } = createThread({
+        kind: 'dedicated', creatorEnv, data: {},
+        script: { url: creatorEnv.parseURL('https://creator.test/worker.js')!, type: 'classic', credentials: 'same-origin', name: '' },
+      });
+      await thread.ready;
+      expect(await request({ type: 'inspect-scripting-policy' })).toMatchObject({
+        enabled: true, canRun: true, classicParseError: true, moduleParseError: true,
+      });
+    });
+  });
+
+  describe('response policy handoff', () => {
+    it.each(['dedicated', 'shared'] as const)('initializes a %s worker from the redirected response policies', async (kind) => {
+      const creatorEnv = createCreatorEnvironment();
+      mockHTTPTransport(creatorEnv.userAgent, (request, listener) => {
+        if (serializeURL(request.url).endsWith('/worker.js')) {
+          listener.onHeaders(302, '', new FetchHeaders([['Location', '/final.js']]), false);
+        } else {
+          listener.onHeaders(200, 'OK', new FetchHeaders([
+            ['Content-Type', 'text/javascript'],
+            ['Content-Security-Policy', "script-src 'self'; sandbox allow-scripts allow-same-origin; upgrade-insecure-requests"],
+            ['Cross-Origin-Embedder-Policy', 'require-corp'], ['Referrer-Policy', 'no-referrer'],
+            ['Integrity-Policy', 'blocked-destinations=(script), endpoints=(integrity)'],
+          ]), true);
+          listener.onData(utf8Encode('globalThis.scriptRan = true;'));
+        }
+        listener.onEnd();
+      });
+      expect(await loadWorkerResponse(creatorEnv, undefined, kind)).toMatchObject({
+        embedderPolicyAllowed: true, scriptRan: false,
+        initialized: {
+          type: 'default', status: 200, url: 'https://creator.test/final.js', creationURL: 'https://creator.test/final.js',
+          executionReady: false, upgradesInsecureRequests: true, crossOriginIsolatedCapability: false,
+          clusterIsolation: kind === 'shared' ? 'logical' : creatorEnv.realm.agent.agentCluster!.crossOriginIsolationMode,
+          policies: {
+            referrerPolicy: 'no-referrer', embedderPolicy: { value: 'require-corp' },
+            integrityPolicy: { blockedDestinations: ['script'], endpoints: ['integrity'] },
+            cspList: { policies: [{ disposition: 'enforce' }] },
+          },
+        },
+      });
+      expect(creatorEnv.insecureRequestsPolicy.upgrade).toBe(false);
+      expect(creatorEnv.policyContainer.referrerPolicy).not.toBe('no-referrer');
+    });
+
+    it.each([
+      ['Content-Security-Policy', '', 'error', true],
+      ['Content-Security-Policy', 'allow-scripts', 'error', true],
+      ['Content-Security-Policy', 'allow-same-origin', 'error', true],
+      ['Content-Security-Policy-Report-Only', '', 'default', false],
+    ] as const)('applies transported %s sandbox %s on the inside environment', async (header, tokens, type, upgrade) => {
+      const creatorEnv = createCreatorEnvironment();
+      mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
+        listener.onHeaders(200, '', new FetchHeaders([
+          ['Content-Type', 'text/javascript'], [header, `sandbox ${tokens}; upgrade-insecure-requests`],
+        ]), true);
+        listener.onData(utf8Encode('globalThis.scriptRan = true;'));
+        listener.onEnd();
+      });
+      expect(await loadWorkerResponse(creatorEnv)).toMatchObject({
+        scriptRan: false,
+        initialized: { type, executionReady: false, upgradesInsecureRequests: upgrade, url: 'https://creator.test/worker.js' },
+      });
+      expect(creatorEnv.insecureRequestsPolicy.upgrade).toBe(false);
+    });
+
+    it.each([
+      ['dedicated', false, false], ['dedicated', true, true], ['shared', false, true],
+    ] as const)('checks %s creator COEP with report-only=%s through the actual creator', async (kind, reportOnly, allowed) => {
+      const creatorEnv = createCreatorEnvironment();
+      const policy = creatorEnv.policyContainer.embedderPolicy;
+      if (reportOnly) { policy.reportOnlyValue = 'require-corp'; policy.reportOnlyReportingEndpoint = 'coep'; }
+      else { policy.value = 'require-corp'; policy.reportingEndpoint = 'coep'; }
+      const report = vi.spyOn(creatorEnv, 'queueReport');
+      mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
+        listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+        listener.onData(utf8Encode('globalThis.scriptRan = true;'));
+        listener.onEnd();
+      });
+      expect(await loadWorkerResponse(creatorEnv, undefined, kind)).toMatchObject({
+        embedderPolicyAllowed: allowed,
+        initialized: { type: allowed ? 'default' : 'error', executionReady: false, url: 'https://creator.test/worker.js' },
+      });
+      if (kind === 'dedicated') {
+        expect(report).toHaveBeenCalledExactlyOnceWith('coep', 'coep', {
+          type: 'worker initialization', blockedURL: 'https://creator.test/worker.js',
+          disposition: reportOnly ? 'reporting' : 'enforce',
+        });
+      } else {
+        expect(report).not.toHaveBeenCalled();
+      }
+    });
+
+    it('inherits data-worker policies from the retained Document after its Window changes documents', async () => {
+      const creatorEnv = createCreatorEnvironment();
+      const owner = creatorEnv.window.document;
+      owner.policyContainer.referrerPolicy = 'no-referrer';
+      owner.policyContainer.cspList = new CSPList(owner.origin);
+      owner.policyContainer.cspList.policies.push(ContentSecurityPolicy.parse('sandbox; upgrade-insecure-requests', 'meta', 'enforce'));
+      const policies = owner.policyContainer.toSnapshot();
+      const url = creatorEnv.parseURL('data:text/javascript,')!;
+      const { thread, request } = createThread({
+        kind: 'dedicated', creatorEnv, data: { initializeScriptResponse: true },
+        script: { url, type: 'classic', credentials: 'same-origin', name: '' },
+      });
+      const replacement = creatorEnv.createDocument();
+      replacement.origin = creatorEnv.origin;
+      replacement.url = creatorEnv.creationURL;
+      replacement.policyContainer.referrerPolicy = 'unsafe-url';
+      creatorEnv.window.setAssociatedDocument(replacement);
+      await thread.ready;
+      expect(await request({ type: 'fetch-script' })).toMatchObject({
+        policyContainer: policies,
+        initialized: { type: 'default', policies, upgradesInsecureRequests: true, crossOriginIsolatedCapability: false },
+      });
+      expect(owner.policyContainer.toSnapshot()).toEqual(policies);
+      expect(replacement.policyContainer.referrerPolicy).toBe('unsafe-url');
+    });
+
+    it('installs the Blob creator policies without a Blob registration in the receiving isolate', async () => {
+      const creatorEnv = createCreatorEnvironment();
+      creatorEnv.policyContainer.referrerPolicy = 'unsafe-url';
+      const blobCreator = createCreatorEnvironment('https://creator.test/blob-owner', creatorEnv.userAgent);
+      blobCreator.policyContainer.referrerPolicy = 'origin';
+      blobCreator.policyContainer.cspList = new CSPList(blobCreator.origin);
+      blobCreator.policyContainer.cspList.policies.push(ContentSecurityPolicy.parse('upgrade-insecure-requests', 'header', 'enforce'));
+      const url = creatorEnv.userAgent.blobURLStore.add(new BlobImpl([''], { type: 'text/javascript' }, blobCreator), blobCreator);
+      expect(await loadWorkerResponse(creatorEnv, url)).toMatchObject({
+        hasBlobEntry: false,
+        initialized: { type: 'default', policies: blobCreator.policyContainer.toSnapshot(), upgradesInsecureRequests: true },
+      });
+      expect(creatorEnv.insecureRequestsPolicy.upgrade).toBe(false);
+      expect(blobCreator.insecureRequestsPolicy.upgrade).toBe(false);
+    });
+
+    it('keeps a network error free of policy initialization', async () => {
+      const creatorEnv = createCreatorEnvironment();
+      mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => listener.onError(new Error('network failed')));
+      expect(await loadWorkerResponse(creatorEnv)).toMatchObject({
+        policyContainer: null, type: 'error',
+        initialized: { type: 'error', status: 0, executionReady: false, upgradesInsecureRequests: false },
+      });
+    });
+
+    it.each([
+      ['https://creator.test/worker.js', true, true],
+      ['https://creator.test/worker.js', false, false],
+      ['data:text/javascript,', true, false],
+    ] as const)('constrains %s isolation by the creator capability %s', async (url, creatorCapability, expected) => {
+      const creatorEnv = createCreatorEnvironment();
+      // Supply modeled isolation inputs; this does not assert native process isolation.
+      creatorEnv.realm.agent.agentCluster!.crossOriginIsolationMode = 'concrete';
+      vi.spyOn(creatorEnv, 'crossOriginIsolatedCapability', 'get').mockReturnValue(creatorCapability);
+      creatorEnv.policyContainer.embedderPolicy.value = 'require-corp';
+      mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
+        listener.onHeaders(200, '', new FetchHeaders([
+          ['Content-Type', 'text/javascript'], ['Cross-Origin-Embedder-Policy', 'require-corp'],
+        ]), true);
+        listener.onData(utf8Encode(''));
+        listener.onEnd();
+      });
+      expect(await loadWorkerResponse(creatorEnv, url)).toMatchObject({
+        initialized: { type: 'default', clusterIsolation: 'concrete', crossOriginIsolatedCapability: expected },
+      });
+    });
+  });
+
   it('carries captured Blob bytes and creator policies without transporting the live registration', async () => {
     const creatorEnv = createCreatorEnvironment();
     creatorEnv.policyContainer.referrerPolicy = 'no-referrer';
@@ -231,7 +1296,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
     await thread.ready;
     expect(await fetchScript(captured)).toMatchObject({
       ownsNetworkingTask: true, status: 200, urls: [url], hasBlobEntry: false,
-      bodyBytes: utf8Encode(source), blobPolicyContainer: policies, scriptRan: false,
+      bodyBytes: utf8Encode(source), policyContainer: policies, scriptRan: false,
     });
     // A newly parsed URL cannot reacquire the revoked registration.
     expect(await fetchScript(createScriptRequest(creatorEnv, url))).toMatchObject({ type: 'error', status: 0 });
@@ -539,6 +1604,29 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
     expect(messages).toEqual([]);
     expect(() => thread.send({ type: 'inspect' })).toThrow('not running');
     expect(worker.terminate()).toBeUndefined();
+  });
+
+  it.each(['callback', 'reaction'] as const)('Worker.terminate() abandons an active %s and the worker\'s remaining work', async (entry) => {
+    const { producer, implementation, worker, messages, drain } = createTerminationWorker();
+    const state = new Int32Array(new SharedArrayBuffer(24));
+    const { thread, request } = createThread({ kind: 'dedicated', data: {}, worker: implementation });
+    await thread.ready;
+    expect(await request({ type: 'block-worker-script', scriptType: 'classic', entry, state })).toBe('entering worker script');
+    await vi.waitFor(() => { expect(Atomics.load(state, 0)).toBe(1); }, { timeout: 5000 });
+
+    producer.postMessage('queued before termination', []);
+    expect(worker.terminate()).toBeUndefined();
+    expect(await thread.closed).toEqual({ code: 1, error: undefined, terminated: true });
+    drain();
+    // No author catch/finally, second reaction, error handler, later listener,
+    // or queued HTML task runs after the interrupted entry.
+    expect(Array.from(state)).toEqual([1, 0, 0, 0, 0, 0]);
+    expect(messages).toEqual([]);
+    expect(implementation.thread).toBeNull();
+    producer.postMessage('after termination', []);
+    drain();
+    expect(messages).toEqual([]);
+    expect(() => thread.send({ type: 'inspect' })).toThrow('not running');
   });
 
   it('can terminate while host startup is still blocked', async () => {
@@ -1305,6 +2393,14 @@ interface StructuredDataReply {
   serialized: StructuredSerializeWithTransferResult;
 }
 
+/** Resolved dependency inputs without live URL/Blob owners in the transported record. */
+function createModuleRequest(url: string, options: Partial<WorkerModuleScriptRequest> = {}): WorkerModuleScriptRequest {
+  return {
+    url: parseURL(url).url!, referrer: parseURL('https://creator.test/root.js').url!,
+    destination: 'worker', credentials: 'same-origin', referrerPolicy: '', integrityMetadata: '', ...options,
+  };
+}
+
 function createThread(initialization: WorkerThreadInit = { kind: 'dedicated', data: {} }) {
   const messages = new EventEmitter();
   const thread = new WorkerThread(initialization, (message) => { messages.emit('message', message); });
@@ -1322,6 +2418,18 @@ function createThread(initialization: WorkerThreadInit = { kind: 'dedicated', da
       return (await reply)[0];
     },
   };
+}
+
+/** Fetch through the real creator and apply the transported response to the production-composed inside environment. */
+async function loadWorkerResponse(
+  creatorEnv: BrowletEnvironment, url = 'https://creator.test/worker.js', kind: 'dedicated' | 'shared' = 'dedicated',
+): Promise<unknown> {
+  const { thread, request } = createThread({
+    kind, creatorEnv, data: { initializeScriptResponse: true },
+    script: { url: creatorEnv.parseURL(url)!, type: 'classic', credentials: 'same-origin', name: '' },
+  });
+  await thread.ready;
+  return request({ type: 'fetch-script' });
 }
 
 /** Real outside Worker and controlled HTML deliveries; native execution still uses the isolate fixture. */
@@ -1372,7 +2480,7 @@ function createScriptRequest(
 }
 
 /** Real Window/Document owners without navigation or network activity. */
-function createCreatorEnvironment(url = 'https://creator.test/', userAgent = new UserAgent()) {
+function createCreatorEnvironment(url = 'https://creator.test/', userAgent: UserAgent = new UserAgent()) {
   const agent = new WindowAgent(createManualEventLoop());
   new AgentCluster().add(agent);
   const creationURL = parseURL(url).url!;

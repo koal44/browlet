@@ -1,4 +1,5 @@
 export {
-  createWindowEnvironment, createWorkerEnvironment, createSandboxEnvironment, createBrowletEnvironmentInit, browletBindingWorld,
+  createWindowEnvironment, createWorkerEnvironment, createWorkerEnvironmentFromSnapshot,
+  createSandboxEnvironment, createBrowletEnvironmentInit, browletBindingWorld,
 } from './composition';
 export { browletDefinitions } from './web-idl';

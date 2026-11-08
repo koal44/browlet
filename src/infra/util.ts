@@ -1,5 +1,8 @@
 import { InternalError } from './internal-error';
 
+/** Public members of a type, excluding private and protected class state. Nested types are unchanged. */
+export type Public<T> = Pick<T, keyof T>;
+
 export type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
 /** Read a required property's type, or use unknown when the source does not provide it. */

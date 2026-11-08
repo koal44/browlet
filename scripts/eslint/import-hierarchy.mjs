@@ -97,7 +97,7 @@ export const layers = [
   ['browlet/rendering/'],
   // Host and feature adapters do not discover Web IDL composition.
   ['browlet/integration/host/', 'browlet/integration/xhr/', 'browlet/integration/permissions/'],
-  ['browlet/integration/file/'],
+  ['browlet/integration/file/', 'browlet/integration/workers/'],
   ['browlet/integration/'],
   // HTML binding hooks consume implementations; composition assembles their world and environments.
   ['browlet/integration/web-idl/bindings/'],

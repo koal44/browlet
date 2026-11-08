@@ -6,6 +6,7 @@ import type { HTMLIFrameElementImpl } from '../../../src/browlet/dom/nodes/html/
 import type { StorageEvent as StorageEventPlatform, Window as WindowPlatform } from '../../../src/browlet/platform';
 import type { StorageImpl } from '../../../src/browlet/storage/index';
 import { obtainURLOrigin, parseURL } from '../../../src/url/index';
+import type { UserAgent } from '../../../src/browlet/user-agent';
 import { createManualUserAgent } from '../../support/browlet-agent';
 import { getRelevantRealm, unwrap } from '../../support/browlet-binding';
 
@@ -192,7 +193,7 @@ async function createBrowser() {
 
 /** Compose real browsing records while iframe and auxiliary-window creation remain unfinished. */
 function createPage(
-  userAgent = createManualUserAgent(), url = 'https://example.test/',
+  userAgent: UserAgent = createManualUserAgent(), url = 'https://example.test/',
   parent: { navigable: Navigable; window: WindowPlatform; } | null = null,
 ) {
   const [, document] = BrowsingContext.createTopLevel(userAgent);

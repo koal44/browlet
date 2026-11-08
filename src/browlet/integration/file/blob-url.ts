@@ -1,4 +1,4 @@
-import { InternalError } from '../../../infra/index';
+import { InternalError, type Public } from '../../../infra/index';
 import { serializeOrigin, serializeURL, type Origin, type URLRecord } from '../../../url/index';
 import { StorageKey, type StorageEnvironmentBase } from '../../../storage/index';
 import type { BlobImpl } from '../../../file/index';
@@ -60,7 +60,7 @@ export class BlobURLStore {
 
   /** Look up a Blob URL without its fragment; obtaining the object is a separate access check. */
   // https://w3c.github.io/FileAPI/#blob-url-resolve
-  resolve(url: URLRecord): BlobURLEntry | null {
+  resolve(url: URLRecord): Public<BlobURLEntry> | null {
     if (url.scheme !== 'blob') throw new InternalError('Blob URL resolution requires the blob scheme');
     return this.#entries.get(serializeURL(url, true)) ?? null;
   }

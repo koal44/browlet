@@ -3,14 +3,14 @@
 import { threadId, isMainThread, workerData } from 'node:worker_threads';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { WorkerThread, WorkerThreadRuntime } from '../../../../src/browlet/integration/host/index.ts';
+import { WorkerThread, WorkerThreadRuntime } from '../../../../src/browlet/integration/workers/index.ts';
 import {
   AgentCluster, BrowletRealm, ClassicScript, EventLoop, JavaScriptModuleScript, ScriptFetchOptions,
   SharedWorkerAgent, WindowAgent, createTaskSource, networkingTaskSource,
 } from '../../../../src/browlet/scripting/index.ts';
 import { addon, JSThread } from '../../../../src/js-engine/index.ts';
 import { WorkerImpl } from '../../../../src/browlet/workers/index.ts';
-import { createWindowEnvironment, createWorkerEnvironment } from '../../../../src/browlet/integration/web-idl/index.ts';
+import { createWindowEnvironment, createWorkerEnvironment, createWorkerEnvironmentFromSnapshot } from '../../../../src/browlet/integration/web-idl/index.ts';
 import { UserAgent } from '../../../../src/browlet/user-agent.ts';
 import { parseURL, serializeURL } from '../../../../src/url/index.ts';
 import { FetchResponse } from '../../../../src/fetch/index.ts';
@@ -36,14 +36,41 @@ JSThread.initialize(pathToFileURL(filename).href, startFixture);
 
 function startFixture() {
   traceWorker('runtime setup starts');
-  const runtime = new WorkerThreadRuntime();
+  const runtime = new WorkerThreadRuntime(createWorkerEnvironmentFromSnapshot);
+  if (mode === 'run-startup') {
+    runtime.run();
+    return;
+  }
+  if (mode === 'load-startup') {
+    const { serializeURL } = loadTypeScript('../../../../src/url/index.ts', __filename);
+    // Observe the production loading stage without advancing readiness or
+    // replacing its module-map, Fetch, or engine linking algorithms.
+    runtime.start(() => runtime.fetchScript(), (result) => runtime.loadScript(result, (script) => {
+      const env = runtime.environment;
+      runtime.send({
+        status: script === null ? 'fetch-failure' : script.errorToRethrow === null ? 'linked' : 'script-error',
+        url: env.global.location.href,
+        baseURL: script?.baseURL === undefined || script.baseURL === null ? null : serializeURL(script.baseURL),
+        scriptRan: Reflect.has(env.global, 'moduleRan'),
+        executionReady: env.executionReady,
+        modules: env.moduleMap.entries.map(({ key, value }) => ({
+          url: serializeURL(key[0]),
+          type: key[1],
+          status: value?.record?.code.status ?? null,
+          sameEnvironment: value?.env === env,
+        })),
+      });
+    }));
+    return;
+  }
 
-  // This deliberately has no WorkerGlobalScope/settings. The fixture exercises
-  // engine context allocation and task ownership before that integration exists.
-  const realm = new BrowletRealm({ agent: runtime.agent });
-  realm.initialize();
+  // Configured startup now supplies the real inside environment. Agent-only
+  // transport tests still allocate a bare realm without inventing HTML settings.
+  const realm = runtime.environment?.realm ?? new BrowletRealm({ agent: runtime.agent });
+  if (runtime.environment === null) realm.initialize();
   const followupTaskSource = createTaskSource('worker fixture continuation');
   let messagingEnv;
+  let capturedModuleURL;
   runtime.start((message) => {
     switch (message.type) {
       case 'prepare-worker-messages':
@@ -86,6 +113,80 @@ function startFixture() {
           creatorEnvSnapshot: runtime.creatorEnvSnapshot,
         });
         break;
+      case 'inspect-environment': {
+        const env = runtime.environment;
+        const { serializeURL } = loadTypeScript('../../../../src/url/index.ts', __filename);
+        let sharedServicesError;
+        try { void env.userAgent; } catch (error) { sharedServicesError = error.message; }
+        const global = env.globalImplementation;
+        runtime.send({
+          id: env.id, origin: env.origin, topLevelOrigin: env.topLevelOrigin,
+          creationURL: serializeURL(env.creationURL), topLevelCreationURL: env.topLevelCreationURL,
+          isSecureContext: env.isSecureContext, hasCrossSiteAncestor: env.hasCrossSiteAncestor,
+          realmAttached: realm.env === env && realm.baseEnv === env && global.env === env,
+          globalNames: [...realm.globalNames], name: env.global.name, selfIsGlobal: env.global.self === env.global,
+          type: global.type, credentials: global.credentials, extendedLifetime: global.extendedLifetime,
+          hasDocument: Reflect.has(env.global, 'document'), hasWindow: Reflect.has(env.global, 'Window'),
+          url: env.global.location.href, executionReady: env.executionReady,
+          currentTime: env.currentHighResolutionTime().milliseconds,
+          clusterId: runtime.agent.agentCluster.id,
+          constructorStorageOrigin: global.constructorStorageKey?.origin,
+          sharedServicesError,
+        });
+        break;
+      }
+      case 'resolve-module-specifiers': {
+        const { parseURL, serializeURL } = loadTypeScript('../../../../src/url/index.ts', __filename);
+        const { JavaScriptModuleScript, ScriptFetchOptions } =
+          loadTypeScript('../../../../src/browlet/scripting/index.ts', __filename);
+        const env = runtime.environment;
+        const script = message.referrerURL === undefined ? null
+          : new JavaScriptModuleScript('', env, parseURL(message.referrerURL).url, new ScriptFetchOptions());
+        runtime.send(message.specifiers.map((specifier) => {
+          try { return { url: serializeURL(env.resolveModuleSpecifier(script, specifier)) }; }
+          catch (error) { return { error: error.message, realmTypeError: error instanceof env.realm.TypeError }; }
+        }));
+        break;
+      }
+      case 'inspect-worker-service-failures': {
+        const global = runtime.environment.global;
+        const operations = [
+          ['createObjectURL', () => global.URL.createObjectURL(new global.Blob(['worker data']))],
+          ['BroadcastChannel', () => new global.BroadcastChannel('worker-service-probe')],
+        ];
+        void Promise.all(operations.map(async ([name, run]) => {
+          try { await run(); return { name, error: null }; }
+          catch (error) { return { name, error: error.message }; }
+        })).then((results) => runtime.send(results));
+        break;
+      }
+      case 'inspect-fetch-exposure':
+        runtime.send(typeof runtime.environment.global.fetch);
+        break;
+      case 'inspect-scripting-policy': {
+        const { ClassicScript, JavaScriptModuleScript, ScriptFetchOptions } =
+          loadTypeScript('../../../../src/browlet/scripting/index.ts', __filename);
+        const env = runtime.environment;
+        const options = new ScriptFetchOptions();
+        // Invalid source distinguishes disabled scripting's empty script from
+        // actual parsing. Neither case runs author code or needs shared stores.
+        const classic = new ClassicScript('}', env, env.apiBaseURL, options);
+        const module = new JavaScriptModuleScript('}', env, env.apiBaseURL, options);
+        runtime.send({
+          enabled: env.isScriptingEnabled(), canRun: env.canRunScript(),
+          classicParseError: classic.parseError !== null, moduleParseError: module.parseError !== null,
+        });
+        break;
+      }
+      case 'dispatch-policy-event': {
+        const env = runtime.environment;
+        // Use the public handler binding and real dispatch; the target's BiDi
+        // gate must not require a UserAgent object in this isolate.
+        env.global.onerror = realm.evaluate('event => { globalThis.policyEventType = event.type; }');
+        env.globalImplementation.fireEvent('error');
+        runtime.send(env.global.policyEventType);
+        break;
+      }
       case 'nested':
         void inspectNestedWorker(runtime, message.url).catch((error) => {
           runtime.send({ error: error.stack });
@@ -110,6 +211,44 @@ function startFixture() {
         });
         break;
       }
+      case 'fetch-script':
+        try { runtime.fetchScript(); }
+        catch (error) { runtime.send({ errorMessage: error.message }); }
+        break;
+      case 'capture-module-url': {
+        capturedModuleURL = runtime.environment.parseURL(message.url);
+        runtime.send({ captured: capturedModuleURL.blobURLEntry !== null });
+        break;
+      }
+      case 'revoke-blob':
+        runtime.environment.global.URL.revokeObjectURL(message.url);
+        runtime.send('revoked');
+        break;
+      case 'fetch-modules': {
+        const { serializeURL } = loadTypeScript('../../../../src/url/index.ts', __filename);
+        const replies = [];
+        message.requests.forEach((request, index) => {
+          if (message.captured) request.url = capturedModuleURL;
+          else if (runtime.environment !== null) request.url = runtime.environment.parseURL(serializeURL(request.url));
+          runtime.fetchModuleScript(request, (response, bodyBytes) => {
+            if (message.state !== undefined) Atomics.add(message.state, 0, 1);
+            replies.push({
+              index, ownsNetworkingTask: runtime.agent.eventLoop.currentlyRunningTask?.source === networkingTaskSource,
+              type: response.type, status: response.status,
+              urls: response.urlList.map((url) => serializeURL(url)),
+              hasBlobEntry: response.urlList.some((url) => url.blobURLEntry !== null),
+              headers: [...response.headerList], bodyBytes,
+              scriptRan: realm.globalObject.scriptRan === true,
+              environment: runtime.environment === null ? null : {
+                url: serializeURL(runtime.environment.apiBaseURL),
+                policyContainer: runtime.environment.policyContainer.toSnapshot(),
+              },
+            });
+            if (replies.length === message.requests.length) runtime.send(replies);
+          });
+        });
+        break;
+      }
       case 'echo':
         runtime.send(message.data);
         break;
@@ -129,7 +268,7 @@ function startFixture() {
         realm.evaluate('try { Atomics.store(state, 0, 1); for (;;) {} } finally { Atomics.store(state, 1, 1); }', 'worker-block.js');
         break;
       case 'block-worker-script':
-        runBlockingWorkerScript(runtime, message.state, message.scriptType);
+        runBlockingWorkerScript(runtime, message.state, message.scriptType, message.entry);
         break;
       case 'report-worker-error':
         runWorkerError(runtime, message, followupTaskSource);
@@ -147,7 +286,23 @@ function startFixture() {
         runtime.disconnect();
         break;
     }
-  }, ({ response, bodyBytes, blobPolicyContainer }) => {
+  }, (result) => {
+    const { response, bodyBytes, policyContainer, embedderPolicyAllowed } = result;
+    let initialized;
+    if (runtime.data.initializeScriptResponse) {
+      // Use the production-composed environment. It has no UserAgent or local
+      // Blob registrations, so response initialization must use the handoff.
+      const env = runtime.environment;
+      const accepted = env.initializeScriptResponse(result);
+      initialized = {
+        type: accepted.type, status: accepted.status, url: serializeURL(env.apiBaseURL),
+        creationURL: serializeURL(env.creationURL), policies: env.policyContainer.toSnapshot(),
+        upgradesInsecureRequests: env.insecureRequestsPolicy.upgrade,
+        crossOriginIsolatedCapability: env.crossOriginIsolatedCapability,
+        clusterIsolation: runtime.agent.agentCluster.crossOriginIsolationMode,
+        executionReady: env.executionReady,
+      };
+    }
     runtime.send({
       ownsNetworkingTask: runtime.agent.eventLoop.currentlyRunningTask?.source === networkingTaskSource,
       type: response.type, aborted: response.aborted, status: response.status,
@@ -155,8 +310,9 @@ function startFixture() {
       urls: response.urlList.map((url) => serializeURL(url)),
       hasBlobEntry: response.urlList.some((url) => url.blobURLEntry !== null),
       headers: [...response.headerList], bodyBytes,
-      blobPolicyContainer: blobPolicyContainer?.toSnapshot() ?? null,
+      policyContainer: policyContainer?.toSnapshot() ?? null, embedderPolicyAllowed, initialized,
       scriptRan: realm.globalObject.scriptRan === true,
+      script: runtime.script,
     });
   });
   traceWorker('runtime ready sent');
@@ -338,7 +494,7 @@ function runWorkerError(runtime, message, followupTaskSource) {
   runtime.agent.eventLoop.queueTask(followupTaskSource, null, () => runtime.send(events));
 }
 
-function runBlockingWorkerScript(runtime, state, scriptType) {
+function runBlockingWorkerScript(runtime, state, scriptType, entry = 'script') {
   const env = createFixtureWorkerEnvironment(runtime, 'https://creator.test/blocked.js', scriptType);
   env.markExecutionReady();
   env.global.state = state;
@@ -347,8 +503,7 @@ function runBlockingWorkerScript(runtime, state, scriptType) {
   // These are actual HTML script runners in the worker environment. The shared
   // array observes what survives native interruption without requiring delivery
   // of another message from the blocked worker.
-  const source = `
-    Promise.resolve().then(() => Atomics.store(state, 3, 1));
+  const loop = `
     try {
       announce();
       Atomics.store(state, 0, 1);
@@ -359,6 +514,27 @@ function runBlockingWorkerScript(runtime, state, scriptType) {
       Atomics.store(state, 2, 1);
     }
   `;
+  let source;
+  if (entry === 'reaction') {
+    source = `
+      Promise.resolve().then(() => { ${loop} });
+      Promise.resolve().then(() => Atomics.store(state, 3, 1));
+    `;
+  } else if (entry === 'callback') {
+    source = `
+      Promise.resolve().then(() => Atomics.store(state, 3, 1));
+      addEventListener('abort-probe', () => { ${loop} });
+      addEventListener('abort-probe', () => Atomics.store(state, 5, 1));
+      dispatchEvent(new Event('abort-probe'));
+    `;
+  } else {
+    source = `Promise.resolve().then(() => Atomics.store(state, 3, 1)); ${loop}`;
+  }
+  if (entry !== 'script') {
+    // A later HTML task must be discarded too; restoring a healthy callback or
+    // promise checkpoint would be the wrong contract for Worker.terminate().
+    env.queueTask('dom-manipulation', () => { Atomics.store(state, 5, 1); });
+  }
   const Script = scriptType === 'classic' ? ClassicScript : JavaScriptModuleScript;
   const script = new Script(source, env, env.apiBaseURL, new ScriptFetchOptions());
   if (scriptType === 'module') script.record.link();
@@ -390,7 +566,7 @@ async function inspectNestedWorker(runtime, url) {
 // owner or a cloned UserAgent. No fetching, storage, or lifetime service is used.
 // The actual received Origin records and runtime cluster feed a real worker
 // environment, which then creates a child through the production host adapter.
-function createFixtureWorkerEnvironment(runtime, url, type = 'classic') {
+function createFixtureWorkerEnvironment(runtime, url, type = 'classic', initializePolicies = true) {
   traceWorker('environment construction starts');
   const creator = runtime.creatorEnvSnapshot;
   const userAgent = new UserAgent();
@@ -414,9 +590,11 @@ function createFixtureWorkerEnvironment(runtime, url, type = 'classic') {
   });
   // Apply the real local/response policy selection without pretending to fetch.
   // In particular, data workers inherit their owner's copied policy container.
-  const response = new FetchResponse();
-  response.urlList.push(env.apiBaseURL);
-  env.globalImplementation.initializePolicyContainer(response, env);
+  if (initializePolicies) {
+    const response = new FetchResponse();
+    response.urlList.push(env.apiBaseURL);
+    env.globalImplementation.initializePolicyContainer(response, env);
+  }
   traceWorker('fixture worker environment ready');
   return env;
 }

@@ -64,7 +64,7 @@ export class WindowOrWorkerGlobalScopeMixin {
     this.trustedTypes = new TrustedTypePolicyFactoryImpl(env);
     this.timers = new GlobalTimers({
       eventLoop: env.responsibleEventLoop,
-      host: env.userAgent.timerHost,
+      host: env.timerHost,
       queueTask: (steps, options) => env.queueTask('timer', steps, options),
       time: env,
     });

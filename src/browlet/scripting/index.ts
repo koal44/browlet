@@ -21,6 +21,7 @@ export {
 export { installHostHooks, installRealmHostHooks } from './host-hooks';
 export { JSExecutionContext } from './execution-context';
 export type { BrowletGlobalObject } from './global-object';
+export type { ScriptEnvironment, ScriptSourceCallback } from './environment';
 export {
   ImportMap, ImportMapParseResult, resolveModuleSpecifier, mergeExistingAndNewImportMaps,
   type ModuleSpecifierMap, type ModuleIntegrityMap, type SpecifierResolutionRecord,
@@ -33,8 +34,10 @@ export {
 } from './script';
 export { ModuleMap, type ModuleMapKey, type ModuleMapEntry, type ModuleFetchCallback } from './module-map';
 export { ScriptFetchOptions } from './script-fetch-options';
+export { ScriptingPolicy } from './scripting-policy';
 export {
-  fetchClassicScript, fetchClassicWorkerScript, fetchClassicWorkerImportedScript,
+  fetchClassicScript, createWorkerScriptRequest, fetchClassicWorkerScript, fetchClassicWorkerImportedScript,
+  createClassicWorkerScriptFromResponse, createModuleScriptFromResponse, createModuleScriptRequest,
   fetchExternalModuleScriptGraph, fetchModulepreloadModuleScriptGraph, fetchInlineModuleScriptGraph, fetchDescendantsAndLink,
   fetchModuleWorkerScriptGraph, fetchWorkletScriptGraph, fetchWorkletModuleWorkerScriptGraph,
   fetchSingleModuleScript, fetchSingleImportedModuleScript, fetchDestinationFromModuleType,

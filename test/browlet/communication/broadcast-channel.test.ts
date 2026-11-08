@@ -530,7 +530,7 @@ function createWorker(outsideEnv: BrowletEnvironment, shared: boolean) {
 
 /** Real Window bindings, with explicit UserAgent ownership and manual task turns. */
 function createWindow(
-  userAgent = new UserAgent(), url = 'https://example.test/',
+  userAgent: UserAgent = new UserAgent(), url = 'https://example.test/',
   agent = new WindowAgent(createManualEventLoop()), originOverride?: Origin,
 ) {
   if (agent.agentCluster === null) new AgentCluster().add(agent);

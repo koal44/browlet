@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { once } from 'node:events';
+import { on, once } from 'node:events';
 import { cpSync, mkdtempSync, readdirSync, realpathSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join, resolve, sep } from 'node:path';
@@ -36,15 +36,65 @@ for (const extension of ['mjs', 'cjs']) {
 
   for (const kind of ['dedicated', 'shared']) {
     test(`relocated ${extension} package is its own ${kind} worker entry`, { timeout: 30_000 }, async (t) => {
-      const { thread, errors } = start(t, entryPath, { jsThreadEntry: entryURL, data: { kind, data: undefined, creatorEnvSnapshot: null } });
+      const { thread, errors } = start(t, entryPath, { jsThreadEntry: entryURL, data: { kind, data: undefined, creatorEnvSnapshot: null, script: null } });
+      assert.deepEqual(await once(thread, 'message'), [{ type: 'ready' }]);
+      assert.equal(await thread.terminate(), 1);
+      assert.deepEqual(errors, []);
+    });
+
+    test(`relocated ${extension} package composes its ${kind} inside environment`, { timeout: 30_000 }, async (t) => {
+      const { thread, errors } = start(t, entryPath, { jsThreadEntry: entryURL, data: configuredStartup(kind) });
+      // Readiness is emitted only after production realm/environment composition.
+      // There is no source fixture or replacement Window/UserAgent in this isolate.
       assert.deepEqual(await once(thread, 'message'), [{ type: 'ready' }]);
       assert.equal(await thread.terminate(), 1);
       assert.deepEqual(errors, []);
     });
   }
 
+  test(`${extension} production startup requests its root and reports a rejected response`, { timeout: 30_000 }, async (t) => {
+    const { thread, errors } = start(t, entryPath, { jsThreadEntry: entryURL, data: configuredStartup('dedicated') });
+    const messages = on(thread, 'message');
+    t.after(async () => { await messages.return(); });
+    assert.deepEqual((await messages.next()).value, [{ type: 'ready' }]);
+    assert.deepEqual((await messages.next()).value, [{ type: 'fetch-script' }]);
+    thread.postMessage({
+      type: 'script-response', snapshot: {
+        type: 'error', aborted: false, urlList: [], status: 0, statusMessage: '', headers: [], bodyBytes: null,
+        policyContainer: null, embedderPolicyAllowed: true, outsideCrossOriginIsolatedCapability: false,
+      },
+    });
+    assert.deepEqual((await messages.next()).value, [{ type: 'script-fetch-failed' }]);
+    // The real parent WorkerThread consumes this message and terminates the
+    // execution owner. This raw transport test performs that final host action.
+    assert.equal(await thread.terminate(), 1);
+    assert.deepEqual(errors, []);
+  });
+
+  test(`${extension} production startup retains the accepted-response service dependency`, { timeout: 30_000 }, async (t) => {
+    const startup = configuredStartup('dedicated');
+    const { thread, exited } = start(t, entryPath, { jsThreadEntry: entryURL, data: startup });
+    const messages = on(thread, 'message');
+    t.after(async () => { await messages.return(); });
+    assert.deepEqual((await messages.next()).value, [{ type: 'ready' }]);
+    assert.deepEqual((await messages.next()).value, [{ type: 'fetch-script' }]);
+    await messages.return();
+    const failure = once(thread, 'error');
+    thread.postMessage({
+      type: 'script-response', snapshot: {
+        type: 'default', aborted: false, urlList: [startup.script.url], status: 200, statusMessage: 'OK',
+        headers: [['Content-Type', 'text/javascript']], bodyBytes: new TextEncoder().encode('throw new Error("script ran");'),
+        policyContainer: startup.creatorEnvSnapshot.policyContainer,
+        embedderPolicyAllowed: true, outsideCrossOriginIsolatedCapability: false,
+      },
+    });
+    const [error] = await failure;
+    assert.equal(error.message, 'Worker script execution requires owner monitoring and shared services');
+    assert.equal(await exited, 1);
+  });
+
   test(`${extension} startup can be cancelled before host readiness`, { timeout: 30_000 }, async (t) => {
-    const { thread, errors } = start(t, entryPath, { jsThreadEntry: entryURL, data: { kind: 'dedicated', creatorEnvSnapshot: null } });
+    const { thread, errors } = start(t, entryPath, { jsThreadEntry: entryURL, data: { kind: 'dedicated', creatorEnvSnapshot: null, script: null } });
     const messages = [];
     thread.on('message', (message) => { messages.push(message); });
     // Native cancellation before any execution may report normal exit rather
@@ -54,19 +104,19 @@ for (const extension of ['mjs', 'cjs']) {
     assert.deepEqual(errors, []);
   });
 
-  test(`${extension} worker reports the unfinished settings/service boundary`, { timeout: 30_000 }, async (t) => {
-    const { thread, exited } = start(t, entryPath, { jsThreadEntry: entryURL, data: { kind: 'dedicated', creatorEnvSnapshot: null } });
+  test(`${extension} worker reports the unfinished service/execution boundary`, { timeout: 30_000 }, async (t) => {
+    const { thread, exited } = start(t, entryPath, { jsThreadEntry: entryURL, data: configuredStartup('dedicated') });
     await once(thread, 'message');
     const failure = once(thread, 'error');
     thread.postMessage({ type: 'message', data: { type: 'start', url: 'https://example.test/worker.js' } });
     const [error] = await failure;
-    assert.equal(error.message, 'Worker settings and shared-service transport are not implemented');
+    assert.equal(error.message, 'Worker shared services and script execution are not implemented');
     assert.equal(await exited, 1);
   });
 
   for (const message of [{ type: 'unexpected' }, {}]) {
     test(`${extension} worker diagnoses unknown input kind: ${JSON.stringify(message)}`, { timeout: 30_000 }, async (t) => {
-      const { thread, exited } = start(t, entryPath, { jsThreadEntry: entryURL, data: { kind: 'dedicated', creatorEnvSnapshot: null } });
+      const { thread, exited } = start(t, entryPath, { jsThreadEntry: entryURL, data: { kind: 'dedicated', creatorEnvSnapshot: null, script: null } });
       await once(thread, 'message');
       const failure = once(thread, 'error');
       // Deliberately bypass the typed host sender to test the receive boundary.
@@ -89,6 +139,32 @@ for (const extension of ['mjs', 'cjs']) {
         assert.deepEqual(errors, []);
       });
   }
+}
+
+/** Supply only the private wire records; the relocated bundle must construct all implementations itself. */
+function configuredStartup(kind) {
+  const host = { kind: 'domain', value: 'creator.test' };
+  const origin = { kind: 'tuple', scheme: 'https', host, port: null, domain: null };
+  const url = {
+    scheme: 'https', username: '', password: '', host, port: null,
+    path: ['worker.js'], query: null, fragment: null, blobURLEntry: null,
+  };
+  return {
+    kind, data: undefined,
+    scriptingPolicy: new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)).fill(1),
+    script: { url, type: 'classic', credentials: 'same-origin', name: 'artifact', environmentId: 'worker-client', extendedLifetime: false },
+    creatorEnvSnapshot: {
+      environmentId: 'creator-client', agentClusterId: 'creator-cluster', crossOriginIsolationMode: 'none', isOriginKeyed: false,
+      creationURL: url, apiBaseURL: url, topLevelCreationURL: url, origin, topLevelOrigin: origin,
+      isSecureContext: true, hasCrossSiteAncestor: false, crossOriginIsolatedCapability: false,
+      policyContainer: {
+        cspList: undefined, referrerPolicy: 'strict-origin-when-cross-origin',
+        embedderPolicy: { value: 'unsafe-none', reportingEndpoint: '', reportOnlyValue: 'unsafe-none', reportOnlyReportingEndpoint: '' },
+        integrityPolicy: { sources: [], blockedDestinations: [], endpoints: [] },
+        reportOnlyIntegrityPolicy: { sources: [], blockedDestinations: [], endpoints: [] },
+      },
+    },
+  };
 }
 
 function start(t, entryPath, workerData) {

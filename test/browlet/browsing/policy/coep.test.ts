@@ -109,7 +109,7 @@ describe.each(['navigation', 'worker initialization'] as const)('COEP %s inherit
     } else {
       const worker = new TestDedicatedWorker('classic', '', createSandboxEnvironment(owner.env.userAgent));
       worker.embedderPolicy = policy;
-      expect(worker.checkEmbedderPolicy(owner.env, response)).toBe(allowed);
+      expect(worker.checkEmbedderPolicy(response, owner.env)).toBe(allowed);
     }
     expect(owner.scope.reports.map((report) => ({ endpoint: report.destination, body: report.data }))).toEqual(
       dispositions.map((disposition) => ({
@@ -180,7 +180,7 @@ describe('COEP worker ownership', () => {
     owner.env.policyContainer.embedderPolicy.value = 'require-corp';
     owner.env.policyContainer.embedderPolicy.reportOnlyValue = 'credentialless';
     const worker = new TestOtherWorker('classic', '', createSandboxEnvironment(owner.env.userAgent));
-    expect(worker.checkEmbedderPolicy(owner.env, makeResponse())).toBe(true);
+    expect(worker.checkEmbedderPolicy(makeResponse(), owner.env)).toBe(true);
     expect(owner.scope.reports).toEqual([]);
   });
 

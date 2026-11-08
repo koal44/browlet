@@ -6,13 +6,14 @@ import { fetch, FetchResponse, isFilteredResponse, type RequestCredentials } fro
 import type { EventTargetImpl } from '../dom/events/index';
 import {
   SharedWorkerAgent, type BrowletRealm, type DedicatedWorkerAgent, type ModuleMap,
-  type ClassicScript, type ModuleScript, type PerformScriptFetch,
+  type ClassicScript, type ModuleScript, type PerformScriptFetch, type CrossOriginIsolationMode,
 } from '../scripting/index';
-import { EmbedderPolicy, type PolicyContainer } from '../browsing/policy/index';
+import { EmbedderPolicy, type PolicyContainer, type PolicyContainerSnapshot } from '../browsing/policy/index';
 import { MessageEventImpl, type MessagePortImpl } from '../communication/index';
 import type { WorkerGlobalImpl, WorkerType } from '../workers/index';
+import type { UserAgent } from '../user-agent';
 
-import { BrowletEnvironment, type BrowletEnvironmentBase, type BrowletEnvironmentInit } from './environment';
+import { BrowletEnvironment, BrowletEnvironmentBase, type BrowletEnvironmentBaseInit, type BrowletEnvironmentInit } from './environment';
 import { WindowOrWorkerGlobalScopeMixin } from './global-scope';
 
 /** Settings for a dedicated/shared worker; the global supplies its changing URL and policy state. */
@@ -26,10 +27,10 @@ export class WorkerEnvironment extends BrowletEnvironment {
   #globalScopeMixin: WindowOrWorkerGlobalScopeMixin;
 
   constructor(
-    realm: BrowletRealm, baseEnv: BrowletEnvironmentBase, initialization: BrowletEnvironmentInit,
+    realm: BrowletRealm, baseEnv: BrowletEnvironmentBase, init: BrowletEnvironmentInit,
     settings: WorkerSettings,
   ) {
-    super(realm, baseEnv, initialization);
+    super(realm, baseEnv, init);
     this.#settings = settings;
     this.#globalScopeMixin = new WindowOrWorkerGlobalScopeMixin(this);
   }
@@ -92,7 +93,19 @@ export class WorkerEnvironment extends BrowletEnvironment {
           // Script fetching consumes the internal response, including policies
           // which a filtered response need not expose.
           if (isFilteredResponse(response)) response = response.internalResponse;
-          processResponse(this.#initializeScriptResponse(response, outsideEnv), bytes);
+          if (response.type === 'error') { processResponse(response, bytes); return; }
+          global.url = response.url;
+          global.initializePolicyContainer(response, this);
+          const policyContainer = global.policyContainer;
+          let initialized = this.initializeScriptResponse({
+            response, bodyBytes: bytes, policyContainer,
+            // In one isolate, retain HTML's CSP-before-COEP initialization order.
+            // Transported responses instead carry the creator-side check result.
+            embedderPolicyAllowed: true,
+            outsideCrossOriginIsolatedCapability: outsideEnv.crossOriginIsolatedCapability,
+          });
+          if (!global.checkEmbedderPolicy(response, outsideEnv)) initialized = FetchResponse.networkError();
+          processResponse(initialized, bytes);
         },
       }, outsideEnv);
     };
@@ -155,16 +168,22 @@ export class WorkerEnvironment extends BrowletEnvironment {
     // queue. No container/client-message-queue implementation exists yet.
   }
 
-  /** Install the root response's settings; rejected responses remain script-fetch failures. */
-  #initializeScriptResponse(response: FetchResponse, outsideEnv: BrowletEnvironment): FetchResponse {
+  /** Install resolved root policies on this worker before parsing; rejected responses remain script-fetch failures. */
+  // Transport supplies resolved policies and the creator-side COEP result.
+  // No live creator or Blob registration is consulted here.
+  // CSP initialization belongs here: warnings and upgrade-insecure-requests
+  // must affect this worker, never its creator's environment.
+  initializeScriptResponse(result: WorkerScriptResponse): FetchResponse {
+    const { response, policyContainer } = result;
     // Network errors have no URL or policies to install.
     if (response.type === 'error') return response;
     const url = response.url;
     if (url === null) throw new InternalError('Worker script response requires a URL');
+    if (policyContainer === null) throw new InternalError('Worker script response requires resolved policies');
     const global = this.globalImplementation;
     global.url = url;
     this.creationURL = url;
-    global.initializePolicyContainer(response, this);
+    global.policyContainer = policyContainer;
     global.embedderPolicy = global.policyContainer.embedderPolicy;
     let blocked = global.policyContainer.cspList?.initializeWorker(global) ?? false;
     const agent = this.realm.agent;
@@ -178,13 +197,27 @@ export class WorkerEnvironment extends BrowletEnvironment {
     // SPEC_CLASH(worker-rejected-response-url): HTML replaces response with a
     // network error, then still uses its URL for reports and the data: check.
     // Retain the original response for those steps; return the rejection below.
-    if (!global.checkEmbedderPolicy(outsideEnv, response)) blocked = true;
+    if (!result.embedderPolicyAllowed) blocked = true;
     global.crossOriginIsolatedCapability = cluster.crossOriginIsolationMode === 'concrete';
-    if (!(agent instanceof SharedWorkerAgent) && (!outsideEnv.crossOriginIsolatedCapability || url.scheme === 'data')) {
+    if (!(agent instanceof SharedWorkerAgent) && (!result.outsideCrossOriginIsolatedCapability || url.scheme === 'data')) {
       global.crossOriginIsolatedCapability = false;
     }
     return blocked ? FetchResponse.networkError() : response;
   }
+}
+
+/** Consumed root response and resolved creator-side decisions, ready for the inside environment. */
+export interface WorkerScriptResponse {
+  /** Unfiltered metadata; retain the original URL even when policy checks will block execution. */
+  response: FetchResponse;
+  /** Consumed bytes, null for an absent body, or failure when body consumption failed. */
+  bodyBytes: Uint8Array | null | 'failure';
+  /** Independent worker policies; null only for a network error without a resource URL. */
+  policyContainer: PolicyContainer | null;
+  /** Transported creator-side COEP result; local fetching performs its check after CSP initialization. */
+  embedderPolicyAllowed: boolean;
+  /** Creator capability used to constrain a dedicated worker's effective isolation. */
+  outsideCrossOriginIsolatedCapability: boolean;
 }
 
 /** Creator-derived values that remain fixed when the script response updates the worker's URL. */
@@ -204,4 +237,57 @@ export interface WorkerEnvironmentInit {
   name: string;
   credentials: RequestCredentials;
   extendedLifetime: boolean;
+}
+
+/** Inside composition inputs; the live creator and browser stores remain outside the isolate. */
+export interface WorkerEnvironmentSnapshotInit extends Omit<WorkerEnvironmentInit, 'outsideEnv'> {
+  creatorEnvSnapshot: CreatorEnvironmentSnapshot;
+  /** Fetch reservation identity selected before starting this isolate. */
+  environmentId: string;
+  /** The same security origin used by the outside reservation, including a data worker's opaque identity. */
+  origin: Origin;
+  /** Worker-local connection to the original browser owner. */
+  userAgent: UserAgent;
+}
+
+/** Outside Fetch reservation with the worker's established security origin for partition checks. */
+export class WorkerEnvironmentBase extends BrowletEnvironmentBase {
+  /** Transported unchanged to the inside settings object. */
+  origin: Origin;
+
+  constructor(init: BrowletEnvironmentBaseInit, origin: Origin) {
+    super(init);
+    this.origin = origin;
+  }
+}
+
+/** Creator values captured before startup; neither an Environment nor a Fetch client. */
+// Origin and URL records retain portable identity, without live Blob registrations.
+export interface CreatorEnvironmentSnapshot {
+  /** Existing HTML environment ID, distinct from a Document's lifetime. */
+  environmentId: string;
+  /** Dedicated workers inherit this cluster; shared workers get a new one. */
+  agentClusterId: string;
+  /** Cluster-wide isolation mode, separate from the creator environment's effective capability. */
+  crossOriginIsolationMode: CrossOriginIsolationMode;
+  /** Whether the inherited cluster is keyed by origin rather than site. */
+  isOriginKeyed: boolean;
+  /** Creator's original creation URL, not the new worker's script URL. */
+  creationURL: URLRecord;
+  /** Creator's current base URL for resolving API inputs. */
+  apiBaseURL: URLRecord;
+  /** Retained top-level creation URL, or null when the creator has no such association. */
+  topLevelCreationURL: URLRecord | null;
+  /** Creator origin, including the portable identity of an opaque origin. */
+  origin: Origin;
+  /** Top-level origin used for inherited ancestry and policy decisions; may be absent. */
+  topLevelOrigin: Origin | null;
+  /** Creator's secure-context result at capture time. */
+  isSecureContext: boolean;
+  /** Whether the creator's ancestry contains a cross-site boundary. */
+  hasCrossSiteAncestor: boolean;
+  /** Creator's effective capability, which may be narrower than its cluster's isolation mode. */
+  crossOriginIsolatedCapability: boolean;
+  /** Policy values only; no live owner, report queue, or Blob registration. */
+  policyContainer: PolicyContainerSnapshot;
 }

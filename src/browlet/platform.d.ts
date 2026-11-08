@@ -574,6 +574,13 @@ export interface WorkerOptions {
   type?: WorkerType;
 }
 
+export interface SharedWorkerOptions {
+  credentials?: RequestCredentials;
+  name?: string;
+  type?: WorkerType;
+  extendedLifetime?: boolean;
+}
+
 export interface PromiseRejectionEventInit {
   bubbles?: boolean;
   cancelable?: boolean;
@@ -3478,6 +3485,17 @@ export interface WorkerConstructor extends Ctor<EventTargetConstructor> {
   new (scriptURL: TrustedScriptURL | string, options?: WorkerOptions): Worker;
 }
 
+export interface SharedWorker extends EventTarget {
+  readonly port: MessagePort;
+  onerror: EventHandlerNonNull | null;
+}
+
+export interface SharedWorkerConstructor extends Ctor<EventTargetConstructor> {
+  readonly prototype: SharedWorker;
+  [Symbol.hasInstance](value: unknown): value is SharedWorker;
+  new (scriptURL: TrustedScriptURL | string, options?: string | SharedWorkerOptions): SharedWorker;
+}
+
 export interface ServiceWorker extends EventTarget {
   onerror: EventHandlerNonNull | null;
 }
@@ -3834,6 +3852,7 @@ export interface Window extends EventTarget {
   BroadcastChannel: BroadcastChannelConstructor;
   EventSource: EventSourceConstructor;
   Worker: WorkerConstructor;
+  SharedWorker: SharedWorkerConstructor;
   ServiceWorker: ServiceWorkerConstructor;
   PromiseRejectionEvent: PromiseRejectionEventConstructor;
   Window: WindowConstructor;

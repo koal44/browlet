@@ -213,7 +213,7 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
 
   /** Non-dedicated workers do not participate in the owner's COEP inheritance check. */
   // https://html.spec.whatwg.org/multipage/browsers.html#check-a-global-object's-embedder-policy
-  checkEmbedderPolicy(_ownerEnv: BrowletEnvironment, _response: FetchResponse): boolean {
+  checkEmbedderPolicy(_response: FetchResponse, _ownerEnv: BrowletEnvironment): boolean {
     return true;
   }
 

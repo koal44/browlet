@@ -1,12 +1,12 @@
 import { EOL } from 'node:os';
 
 import { InternalError } from '../../../infra/index';
-import { isObject } from '../../../js-engine/index';
+import { isObject, JSThread } from '../../../js-engine/index';
 import {
   PlatformRecordSource, BindingWorld, QuotaExceededErrorImpl, reference, type BindingContext, type ImplementationClass,
   type StampedPlatformObject, type RealmBinding,
 } from '../../../web-idl/index';
-import { createOpaqueOrigin } from '../../../url/index';
+import { copyOrigin, copyURL, createOpaqueOrigin } from '../../../url/index';
 import { type PermissionDescriptor } from '../../../permissions/index';
 import { StorageKey } from '../../../storage/index';
 
@@ -21,15 +21,16 @@ import { WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
 import {
   type WindowEnvironmentInit, BrowletEnvironmentBase, SandboxEnvironment, WindowEnvironment,
   type BrowletEnvironment, type BrowletEnvironmentInit, WindowOrWorkerGlobalScopeMixin,
-  WorkerEnvironment, type WorkerEnvironmentInit,
+  WorkerEnvironment, type WorkerEnvironmentInit, type WorkerEnvironmentSnapshotInit, type WorkerSettings,
 } from '../../environment/index';
 import {
   structuredDeserialize, type SerializedRecord, structuredSerialize, structuredSerializeForStorage, structuredClone,
   structuredSerializeWithTransfer, structuredDeserializeWithTransfer,
 } from '../../scripting/structured-data/index';
-import { DedicatedWorkerGlobalImpl, SharedWorkerGlobalImpl, WorkerGlobalImpl } from '../../workers/index';
+import { DedicatedWorkerGlobalImpl, SharedWorkerGlobalImpl, WorkerGlobalImpl, type WorkerOwner } from '../../workers/index';
 import { queueNodeTask } from '../host/index';
 import { PermissionStatusImpl } from '../permissions/index';
+import { WorkerThreadRuntime } from '../workers/index';
 import { htmlExtendedAttributeHooks, getWindowProxyAccess, installWasmIntrinsics, installWasmExceptionBinding } from './bindings/index';
 import type { QuotaExceededError } from '../../platform';
 import type { UserAgent } from '../../user-agent';
@@ -160,10 +161,8 @@ export function createWindowEnvironment(
 // This is only the setup portion. The processing-model caller must supply independent
 // execution, fetch/initialize the response policies, and mark execution readiness.
 export function createWorkerEnvironment(initialization: WorkerEnvironmentInit): WorkerEnvironment {
-  const { agent, outsideEnv, url, unsafeWorkerCreationTime, type, name, credentials, extendedLifetime } = initialization;
+  const { outsideEnv, url, unsafeWorkerCreationTime } = initialization;
   const owner = WorkerGlobalImpl.getRelevantOwner(outsideEnv);
-  const isShared = agent instanceof SharedWorkerAgent;
-  const globalName = isShared ? 'SharedWorker' : 'DedicatedWorker';
   const isData = url.scheme === 'data';
   const baseEnv = new BrowletEnvironmentBase({
     userAgent: outsideEnv.userAgent, creationURL: url, topLevelCreationURL: null,
@@ -177,6 +176,36 @@ export function createWorkerEnvironment(initialization: WorkerEnvironmentInit): 
     hasCrossSiteAncestor: outsideEnv.hasCrossSiteAncestor || isData,
     unsafeWorkerCreationTime,
   };
+  return createWorkerRealm(initialization, baseEnv, settings, owner, StorageKey.obtainForNonStoragePurposes(outsideEnv));
+}
+
+/** Compose the real inside realm from transported creator values and local host facilities. */
+// https://html.spec.whatwg.org/multipage/workers.html#set-up-a-worker-environment-settings-object
+// This does not manufacture a creator Window or a second UserAgent. Shared
+// services and the original owner's lifetime remain explicit startup dependencies.
+export function createWorkerEnvironmentFromSnapshot(initialization: WorkerEnvironmentSnapshotInit): WorkerEnvironment {
+  const { creatorEnvSnapshot: creator, environmentId, unsafeWorkerCreationTime } = initialization;
+  const url = copyURL(initialization.url);
+  const isData = url.scheme === 'data';
+  const baseEnv = new BrowletEnvironmentBase({
+    id: environmentId, userAgent: initialization.userAgent, creationURL: url, topLevelCreationURL: null,
+    topLevelOrigin: creator.topLevelOrigin === null ? null : copyOrigin(creator.topLevelOrigin),
+    targetBrowsingContext: null, isSecureContext: creator.isSecureContext,
+  });
+  return createWorkerRealm({ ...initialization, url }, baseEnv, {
+    origin: copyOrigin(initialization.origin),
+    hasCrossSiteAncestor: creator.hasCrossSiteAncestor || isData, unsafeWorkerCreationTime,
+  }, null, new StorageKey(copyOrigin(creator.origin)));
+}
+
+/** Share realm/global projection between local creation and the transported inside environment. */
+function createWorkerRealm(
+  initialization: Omit<WorkerEnvironmentInit, 'outsideEnv'>, baseEnv: BrowletEnvironmentBase, settings: WorkerSettings,
+  owner: WorkerOwner | null, constructorStorageKey: StorageKey,
+): WorkerEnvironment {
+  const { agent, url, type, name, credentials, extendedLifetime } = initialization;
+  const isShared = agent instanceof SharedWorkerAgent;
+  const globalName = isShared ? 'SharedWorker' : 'DedicatedWorker';
   let env!: WorkerEnvironment;
   let context!: BindingContext<BrowletEnvironment>;
   const realm = new BrowletRealm({ agent, baseEnv, globalNames: ['Worker', globalName] });
@@ -188,7 +217,7 @@ export function createWorkerEnvironment(initialization: WorkerEnvironmentInit): 
       });
       let global: DedicatedWorkerGlobalImpl | SharedWorkerGlobalImpl;
       if (agent instanceof SharedWorkerAgent) {
-        global = new SharedWorkerGlobalImpl(type, name, StorageKey.obtainForNonStoragePurposes(outsideEnv),
+        global = new SharedWorkerGlobalImpl(type, name, constructorStorageKey,
           url, credentials, extendedLifetime, env);
         agent.globalScope = global;
       } else {
@@ -200,7 +229,9 @@ export function createWorkerEnvironment(initialization: WorkerEnvironmentInit): 
       // computes initial settings from its separate script_url creation parameter.
       // The Fetch hook must replace both global.url and env.creationURL on success.
       global.url = url;
-      global.ownerSet.add(owner);
+      // TODO(HTML §10.2.4): Transport owner activity before running lifetime
+      // checks for a remote creator. Its Document/global remains in its isolate.
+      if (owner !== null) global.ownerSet.add(owner);
       env.globalImplementation = global;
       installWasmExceptionBinding(browletBindingWorld.getRealmBinding(realm)! as RealmBinding<BrowletEnvironment>);
       return context.projectGlobalObject(global, `${globalName}GlobalScope`);
@@ -311,4 +342,12 @@ export const browletBindingWorld = new BindingWorld<BrowletEnvironment>(browletD
     if (loop.executionContextStack.length === 0 && loop.backupIncumbentEnvironmentStack.length === 0) return undefined;
     return loop.getIncumbentEnvironment();
   },
+});
+
+// Browlet's composition root owns the fixed bundle entry and supplies Binding
+// to the lower host transport. JS Engine handles the private startup marker and
+// waits for module evaluation; ordinary imports do not create a worker.
+JSThread.initialize(import.meta.url, () => {
+  const runtime = new WorkerThreadRuntime(createWorkerEnvironmentFromSnapshot);
+  runtime.run();
 });

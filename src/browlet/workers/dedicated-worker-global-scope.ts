@@ -6,7 +6,6 @@ import type { FetchResponse } from '../../fetch/index';
 
 import type { ErrorInformation } from '../dom/events/index';
 import { AnimationFrameController, EventHandlerMap, type EventHandlerCallback, type FrameRequestCallback } from '../scripting/index';
-import { EmbedderPolicy, queueCOEPInheritanceViolation } from '../browsing/policy/index';
 import { MessageEventTargetMixin, MessagePortImpl } from '../communication/index';
 import type { BrowletEnvironment } from '../environment/index';
 import type { StructuredSerializeOptions } from '../scripting/structured-data/index';
@@ -96,15 +95,8 @@ export class DedicatedWorkerGlobalImpl extends WorkerGlobalImpl {
   }
 
   // https://html.spec.whatwg.org/multipage/browsers.html#check-a-global-object's-embedder-policy
-  override checkEmbedderPolicy(ownerEnv: BrowletEnvironment, response: FetchResponse): boolean {
-    const ownerPolicy = ownerEnv.policyContainer.embedderPolicy;
-    const compatible = EmbedderPolicy.isCompatibleWithCrossOriginIsolation(this.embedderPolicy.value);
-    if (EmbedderPolicy.isCompatibleWithCrossOriginIsolation(ownerPolicy.reportOnlyValue) && !compatible) {
-      queueCOEPInheritanceViolation(response, 'worker initialization', ownerPolicy.reportOnlyReportingEndpoint, 'reporting', ownerEnv);
-    }
-    if (!EmbedderPolicy.isCompatibleWithCrossOriginIsolation(ownerPolicy.value) || compatible) return true;
-    queueCOEPInheritanceViolation(response, 'worker initialization', ownerPolicy.reportingEndpoint, 'enforce', ownerEnv);
-    return false;
+  override checkEmbedderPolicy(response: FetchResponse, ownerEnv: BrowletEnvironment): boolean {
+    return this.embedderPolicy.checkWorkerInheritance(response, ownerEnv);
   }
 
   #requireAnimationFrameSupport(): void {
