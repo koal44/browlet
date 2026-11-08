@@ -88,6 +88,7 @@ export function createFetchUserAgent(): FetchUserAgent {
     supportedContentCodings: new Set(),
     createContentDecoder() { throw new Error('This fixture has no HTTP codecs'); },
     runInParallel: queueNodeTask,
+    getKeepaliveEnvironment: (env) => env,
     unsafeSharedCurrentTime: () => performance.now(),
     potentiallyOverrideResponse: () => null,
     handleFetch: () => NodePromise.try(() => null, internalType<null>()),

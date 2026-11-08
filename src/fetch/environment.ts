@@ -193,6 +193,8 @@ export interface FetchUserAgent extends StorageUserAgent {
   HostPromise: typeof InternalPromise;
   /** Schedule background processing without entering an HTML global task. */
   runInParallel(this: void, steps: () => void): void;
+  /** Select existing browser-owned execution for Fetch work that outlives its caller. */
+  getKeepaliveEnvironment(env: FetchEnvironment): FetchEnvironment;
   /** Read the browser's shared monotonic clock in milliseconds. */
   unsafeSharedCurrentTime(): number;
   /** Supply a browser-policy response, or null to continue normal Fetch dispatch. */

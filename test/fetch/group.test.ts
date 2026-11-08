@@ -55,15 +55,20 @@ describe('Fetch groups', () => {
     expect(group.cancel()).toBe(false);
   });
 
-  it('reports the keepalive dependency before partially canceling a group', () => {
+  it('preserves keepalive transport and delivery while canceling ordinary requests', () => {
     const group = new FetchGroup();
     const ordinary = { request: createFetchRequest(), controller: new FetchController() };
     const keepalive = { request: createFetchRequest(), controller: new FetchController() };
     keepalive.request.keepalive = true;
+    const cancel = vi.fn();
+    keepalive.controller.addDeliveryCancellationSteps(cancel);
     group.fetchRecords.push(ordinary, keepalive);
-    expect(() => group.cancel()).toThrow('Document cancellation of keepalive fetches is not implemented');
-    expect(ordinary.controller.state).toBe('ongoing');
+    expect(group.cancel()).toBe(true);
+    expect(ordinary.controller.state).toBe('terminated');
     expect(keepalive.controller.state).toBe('ongoing');
+    expect(keepalive.controller.responseDeliveryCanceled).toBe(false);
+    expect(cancel).not.toHaveBeenCalled();
+    expect(group.cancel()).toBe(false);
   });
 
   it('leaves deferred requests with their invocation owner', () => {

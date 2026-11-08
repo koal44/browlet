@@ -141,8 +141,8 @@ transport or delivery. Existing aborted/terminated states and serialized reasons
 are retained; an ongoing controller is terminated. Completed requests without
 pending delivery and absent controllers are left alone. Newly registered
 requests are outside the snapshot, and unsent deferred requests stay with their
-invocation owner. Pending keepalive requests hit an explicit throwing boundary
-before partially canceling the group, as Eric approved.
+invocation owner. Keepalive requests remain active through stop; destruction
+separately retires their page delivery, as described below.
 
 `SPEC_GAP(document-fetch-cancellation)`: HTML says to cancel fetch algorithms but
 does not specify which Fetch controller transition implements that instruction.
@@ -161,6 +161,7 @@ WebKit had not delivered a result 200 ms after that reply. After headers, Chromi
 failed the body and closed the connection, Firefox continued to its complete body,
 and WebKit closed the connection but fulfilled the body with the partial prefix.
 These observations do not supply one interoperable detached-fetch lifecycle.
+Eric approved Firefox's stop behavior in the keepalive slice below.
 FetchGroup.terminate retains its specified keepalive exemption.
 
 Sources: [HTML abortion](https://html.spec.whatwg.org/multipage/document-lifecycle.html#abort-a-document),
@@ -262,15 +263,55 @@ Fetch skips cancellation registration when immediate discard has already finishe
 delivery. Real local Fetch tests cover pending headers/body and acquired upload
 readers without restarting the worker loop. Cross-isolate service cancellation and
 forced termination remain with Pip's worker ownership work.
-EventSource now treats Document cancellation as permanent failure, and multipart's
-outer navigation reader retains its own navigable/Document lifetime connection.
-Keepalive detachment and deferred invocation remain explicit §7.5.11 dependencies.
-Eric approved retaining the keepalive throwing boundary during the shared ownership
-batch: its upload, redirect, and response work needs a browser-owned execution lifetime;
-skipping controller termination alone strands work on the destroyed page, and changing
-`params.env` to a sandbox would lose stream/realm ownership. The existing browser-only
-probe was rerun on Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2: all preserve
-transport before headers after stop(), but promise/body outcomes still differ as recorded above.
+EventSource now treats Document cancellation as permanent failure. Multipart's
+outer reader stays with Navigable; each Document owns only its individual part.
+The shared ownership batch retained keepalive's throwing boundary until upload,
+redirect, and response execution could move together. That boundary is now replaced
+for Windows by the ownership split below. Deferred invocation remains explicit.
+
+## Keepalive execution and delivery
+
+The existing UserAgent sandbox owns keepalive's internal Fetch work, selected by
+`getKeepaliveEnvironment()`. The request retains its original client for origin,
+policy, partitioning, and the existing 64 KiB quota. `FetchParams.responseEnv`
+retains the original response owner independently of its execution `env`.
+Encoded bytes and immutable Blob/FormData backing data supply new internal upload
+streams; no author stream changes owner. The original Request body is consumed.
+Redirects replay the same retained source after page destruction.
+
+`SPEC_CLASH(keepalive-document-stop)`: the live three-engine probe above was rerun
+on 2026-11-07 with the same results. Browlet follows Firefox: stop leaves both
+transport and response delivery usable. An author AbortSignal or body cancellation
+still cancels transport. Completed response bytes survive Document destruction.
+
+`SPEC_GAP(keepalive-delivery-lifetime)`: [HTML #4483](https://github.com/whatwg/html/issues/4483)
+remains open. Browlet keeps internal processing on its browser owner while normal
+page delivery retains the page's activity gate. A byte-stream delivery bridge keeps
+backpressure, BYOB support, and response/chunk identity in the original realm. Its
+internal failure is copied into that realm through existing serialization. On
+destruction, delivery fails and the internal body drains without accumulating the
+remaining response or canceling transport. Opaque/unobserved bodies also drain.
+Discarded header and whole-body callbacks cannot strand request completion.
+
+The initial regression failed at Document destruction's keepalive stub. Further
+regressions exposed unfinished requests after discarded callbacks and a browser-
+realm TypeError escaping through a page response; both are corrected. Coverage
+includes stop before/after headers, destruction before upload and during reading,
+POST/Blob/FormData redirects, client Origin/CSP and quota, opaque responses, explicit
+abort/cancel, completed bodies, and realm-owned BYOB/error delivery.
+
+Worker keepalive is an explicit throwing dependency: surviving isolate shutdown
+requires a parent-browser request handoff. A worker-local sandbox is insufficient.
+Existing Service Worker interception, preload production, and deferred invocation
+remain with their named owners; this slice does not implement those producers.
+
+Validation: all 54 affected Fetch, body/delivery, reporting, and multipart suites
+pass across Node 24.19.0, 26.8.1, and custom 27.0.0-pre in stock/compat modes.
+Each compat run has 1,828 ordinary passes and one existing expected failure;
+each stock run has 1,824 ordinary passes and five existing expected failures.
+All 16 new keepalive cases pass in every configuration. Generated declarations,
+typecheck, type contracts, ESLint, import boundaries, and whitespace checks pass.
+No addon or engine changes were needed.
 
 ## Owner integration gates
 

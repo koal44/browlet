@@ -38,11 +38,14 @@ export class FetchParams {
   preloadedResponseCandidate: FetchResponse | InternalPromise<FetchResponse> | null = null;
   /** Execution owner for body streams, separate from the request's optional client. */
   env: FetchEnvironment;
+  /** Original owner of delivered responses, distinct from keepalive's browser execution. */
+  responseEnv: FetchEnvironment;
 
   constructor(request: FetchRequest, timingInfo: FetchTimingInfo, env: FetchEnvironment) {
     this.request = request;
     this.timingInfo = timingInfo;
     this.env = env;
+    this.responseEnv = env;
   }
 
   // https://fetch.spec.whatwg.org/#fetch-params-aborted

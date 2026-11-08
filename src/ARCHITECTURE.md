@@ -650,7 +650,12 @@ alongside its existing timers, ports, and EventSource cleanup. Closing removes q
 tasks with discard notification; refused late tasks notify immediately without restarting
 the worker loop. Fetch therefore must not register cancellation after immediate discard
 has already completed its callback. Cross-isolate service cancellation, forced termination,
-and detached keepalive transport retain their separate owners.
+and worker keepalive handoff retain their separate owners. Window keepalive uses
+the existing UserAgent sandbox for internal Fetch execution and retained upload
+sources. Its request client still owns policy/accounting; `FetchParams.responseEnv`
+owns the delivered byte stream. Destruction retires that delivery and drains the
+browser-owned body without terminating transport. No author stream changes realm.
+See [keepalive execution and delivery](fetch/ROADMAP.md#keepalive-execution-and-delivery).
 Stylelet uses Fetch's complete environment contract. CSSOM implementations
 report Core `DOMExceptionImpl` failures; the active host binding realizes those
 failures as Platform exceptions in the appropriate realm. MediaList needs no

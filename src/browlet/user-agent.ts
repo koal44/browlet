@@ -283,6 +283,16 @@ class BrowletUserAgent implements
   /** Node host chooser; absent UI denies selection. Pending UI cancellation is the same dependency as prompting. */
   onPermissionChoice: PermissionChooser = () => 'denied';
 
+  /** Keep Window requests on this browser's existing execution owner after page destruction. */
+  getKeepaliveEnvironment(env: FetchEnvironment): BrowletEnvironment {
+    // TODO(Worker Fetch lifetime): Transfer keepalive requests to the parent browser before
+    // terminating a worker isolate; its local sandbox cannot survive isolate shutdown.
+    if (!env.isWindow && env !== this.sandbox) {
+      throw new InternalError('Worker keepalive Fetch handoff is not implemented');
+    }
+    return this.sandbox;
+  }
+
   /** Release an existing lock after DOM unlinking without allocating an unused controller. */
   // https://w3c.github.io/pointerlock/#requirements
   // SPEC_CLASH(pointer-lock-state-preserving-move): DOM moveBefore bypasses removal, preserving lock; the Chromium/Firefox probe releases it.

@@ -1970,7 +1970,7 @@ Remaining teardown connections before declaring the lifecycle work complete:
 | Owner | Remaining work |
 | --- | --- |
 | Worker shutdown | Local cooperative cleanup is connected; retain Pip's worker-finish/remote-owner integration during consolidation. Remote Fetch and forced termination retain their owners |
-| Fetch keepalive/deferred fetch | Implement detached transport ownership and deferred invocation; pending cases still throw explicitly |
+| Fetch keepalive/deferred fetch | Window keepalive is connected below; worker handoff to the parent browser and deferred invocation remain explicit |
 | BlobByteSource | Add an actual host-read interruption contract; consumer cancellation currently ignores late results |
 | Synthetic navigation history | Capture referrer metadata for null-request responses; the full multipart replacement test remains expected-failing |
 
@@ -2005,14 +2005,16 @@ cleanup; the shared hook replaces its separate FileReader registry while retaini
 the same `stop()` behavior. Remote services, forced/native worker termination, and
 Service Worker lifetime remain distinct dependencies.
 
-Eric approved keeping keepalive's existing throwing boundary for a dedicated
-browser-owned Fetch lifetime change. Upload, redirect, and response processing must
+This checkpoint retained keepalive's throwing boundary for a dedicated
+browser-owned Fetch lifetime change, now implemented for Windows in the
+[Fetch keepalive slice](../../fetch/ROADMAP.md#keepalive-execution-and-delivery).
+Upload, redirect, and response processing must
 outlive the page together; merely skipping termination leaves work on dead task
 queues, and swapping the execution environment to the sandbox loses existing stream
 ownership. The existing live probe was rerun on Chromium 156.0.8078.4, Firefox 157.0,
 and WebKit 27.2. All retain pre-header keepalive transport after stop(); page promise
-settlement and post-header body behavior still differ. No new keepalive behavior was
-chosen or silently supplied. Deferred invocation and host Blob-read interruption
+settlement and post-header body behavior still differ. The later keepalive slice
+records Eric's choice and the worker handoff boundary. Deferred invocation and host Blob-read interruption
 remain separately named dependencies, as does synthetic history-referrer capture.
 
 Validation: all 12 affected suites pass on Node 24.19.0, 26.8.1, and custom
@@ -2063,7 +2065,7 @@ Synthetic history-referrer capture remains the approved expected failure;
 passing replacement coverage supplies that metadata explicitly. Local-URL part
 CSP composition, transfer decoding, nested multipart, malformed-response
 presentation, and full per-part timing remain explicit dependencies. Dedicated
-keepalive lifetime work follows this review; this slice does not close §7.5.
+keepalive lifetime work follows this checkpoint; this slice does not close §7.5.
 
 Validation: all 14 affected loader, parser, history-population, and lifecycle
 suites pass on Node 24.19.0, 26.8.1, and custom 27.0.0-pre, in stock/compat
@@ -2071,6 +2073,23 @@ modes: 296 ordinary passes and the one approved synthetic-referrer expected
 failure per configuration. Generated declarations, typecheck, type contracts,
 changed-file ESLint, import boundaries, and whitespace checks pass. No addon
 or engine changes were needed.
+
+## Window keepalive lifetime
+
+The [Fetch keepalive slice](../../fetch/ROADMAP.md#keepalive-execution-and-delivery)
+now completes Window requests independently of Document destruction, including
+queued uploads, redirect replay, and response draining. Stop retains the request
+and delivery; actual destruction retires page delivery. Original client policy,
+origin, and quota remain separate from browser execution. The delivered byte
+stream, BYOB values, and failures belong to the original response realm.
+
+All 16 new regressions pass in the six runtime configurations. The broader
+54-suite run passes with its existing expected failures; see Fetch's validation
+counts. The remaining teardown inventory above is still the consolidation review
+boundary: cross-isolate worker/keepalive ownership, deferred invocation, host Blob
+I/O interruption, and synthetic history-referrer capture. Previously deferred
+parsing, media/rendering, and multipart dependencies retain their named owners.
+This work remains within §7.5; it does not advance to §7.6.
 
 ## Removal condition
 

@@ -25,9 +25,10 @@ export class FetchGroup {
     for (const { request, controller } of this.fetchRecords) {
       if (controller === null) continue;
       if ((request.done || controller.state !== 'ongoing') && !controller.hasPendingDelivery) continue;
-      // TODO(HTML §7.5.11 / #4483): Keepalive transport can outlive its Document's
-      // delivery. Its detached lifetime must be handled before canceling this group.
-      if (request.keepalive) throw new InternalError('Document cancellation of keepalive fetches is not implemented');
+      // SPEC_CLASH(keepalive-document-stop): Firefox preserves transport and delivery through
+      // stop(); Chromium/WebKit retire delivery and can cancel an already-delivered body.
+      // Destruction separately detaches delivery from browser-owned keepalive execution.
+      if (request.keepalive) continue;
       controllers.add(controller);
     }
     // SPEC_GAP(document-fetch-cancellation): HTML does not select Fetch's controller state.

@@ -24,18 +24,16 @@ export class FetchController {
   #cancellationSteps = new Set<() => void>();
   /** Fetch-owned reads and callbacks awaiting delivery, even after transport completion. */
   #deliveryCancellationSteps = new Set<() => void>();
-  /** Release the execution owner's destruction registration once Fetch delivery finishes. */
+  /** Release the original response owner's destruction registration once Fetch delivery finishes. */
   #removeDestructionSteps: (() => void) | null = null;
 
   get hasPendingDelivery(): boolean { return this.#deliveryCancellationSteps.size !== 0; }
 
-  /** Stop this subresource fetch when its execution owner is destroyed, independently of the client. */
+  /** Retire page delivery on destruction; browser-owned keepalive transport continues. */
   observeDestruction(request: FetchRequest, env: FetchEnvironment): void {
     this.#removeDestructionSteps = env.addDestructionSteps(() => {
-      // TODO(HTML §7.5.11): Detach keepalive transport before releasing its execution owner.
-      if (request.keepalive) throw new InternalError('Execution-owner destruction of keepalive fetches is not implemented');
       this.cancelResponseDelivery();
-      if (this.state === 'ongoing') this.terminate();
+      if (!request.keepalive && this.state === 'ongoing') this.terminate();
     });
   }
 

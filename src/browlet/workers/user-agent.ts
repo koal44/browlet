@@ -117,6 +117,8 @@ export class WorkerUserAgent implements UserAgent {
   get storageObjects(): never { return unconnected('storage'); }
   /** Report delivery and clientless Fetch require a browser-side execution owner. */
   get sandbox(): never { return unconnected('clientless Fetch'); }
+  /** Surviving worker termination requires a parent-browser request handoff. */
+  get getKeepaliveEnvironment(): never { return unconnected('keepalive Fetch handoff'); }
   get sendReports(): never { return unconnected('reporting'); }
   get createPolicyContainerFromResponse(): never { return unconnected('response policy inheritance'); }
   get createPotentialCORSRequest(): never { return unconnected('clientless Fetch'); }

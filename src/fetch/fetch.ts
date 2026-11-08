@@ -30,6 +30,7 @@ import {
   parseCORSTokenList, parseSingleRangeHeaderValue, serializeInteger,
 } from './headers';
 import { bytesMatchIntegrityMetadata } from './integrity';
+import { deliverKeepaliveResponse } from './keepalive';
 import { FetchParams } from './params';
 import { isBlockedByBadPort, isBlockedByMIMEType, isBlockedByNosniff } from './policy';
 import { FetchRequest } from './request';
@@ -55,6 +56,7 @@ export function fetch(
   timing.startTime = timing.postRedirectStartTime = coarsenTime(userAgent.unsafeSharedCurrentTime(), isolated);
   timing.renderBlocking = request.renderBlocking;
   const params = new FetchParams(request, timing, env);
+  if (request.keepalive) params.env = userAgent.getKeepaliveEnvironment(env);
   params.taskDestination = options.useParallelQueue
     ? new ParallelQueue(userAgent.runInParallel)
     : client?.global ?? null;
@@ -66,7 +68,16 @@ export function fetch(
   params.processResponseEndOfBody = options.processResponseEndOfBody ?? null;
   params.processResponseConsumeBody = options.processResponseConsumeBody ?? null;
 
-  if (request.body instanceof Uint8Array) request.body = FetchBody.fromBytes(request.body, env);
+  if (request.body instanceof Uint8Array) {
+    request.body = FetchBody.fromBytes(request.body, params.env);
+  } else if (request.body instanceof FetchBody && params.env !== env) {
+    const source = request.body.source;
+    if (source === null) throw new TypeError('A keepalive request cannot have a streaming body');
+    // Retain encoded bytes/Blob data, not the page's stream or mutable BodyInit value.
+    // Consume the original request body while browser-owned production reads its replay source.
+    request.body.stream.cancelInternal(undefined).observe(() => {}, () => {});
+    request.body = FetchBody.fromSource(source, params.env);
+  }
   userAgent.webDriverBiDiCloneNetworkRequestBody(request);
 
   if (isHTTPScheme(request.url.scheme) &&
@@ -126,7 +137,8 @@ export function fetch(
   if (request.isSubresource) {
     if (client === null) throw new InternalError('A subresource request requires a client');
     client.fetchGroup.fetchRecords.push({ request, controller: params.controller });
-    // The client owns policy and accounting; the execution owner owns streams and pending I/O.
+    // The client owns policy/accounting. Observe the original response owner; keepalive's
+    // internal execution owner survives it and drains the detached response.
     params.controller.observeDestruction(request, env);
   }
   mainFetch(params);
@@ -820,11 +832,15 @@ function fetchFinale(params: FetchParams, response: FetchResponse): void {
   // only retains it for document. Retain all navigation destinations; see HTML #12890.
   if (request.isNavigation) params.controller.fullTimingInfo = timingInfo;
   const endOfBody = () => endResponseBody(params, response);
+  const deliveredResponse = request.keepalive ? deliverKeepaliveResponse(params, response) : response;
   if (params.processResponse !== null) {
     const processResponse = params.processResponse;
     queueTask(params, {
-      run: () => processResponse(response),
-      discard: () => processResponse(discardedResponse(params)),
+      run: () => processResponse(deliveredResponse),
+      discard: () => {
+        if (request.keepalive) params.controller.cancelResponseDelivery();
+        processResponse(discardedResponse(params));
+      },
     });
   }
   if (response.type === 'error') request.env.userAgent.webDriverBiDiFetchError(request);

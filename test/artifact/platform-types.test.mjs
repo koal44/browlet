@@ -26,8 +26,9 @@ const consumers = [{
   const wrongCount: string = clone.count;
   // @ts-expect-error packaged declarations retain CustomEvent inference
   const wrongDetail: number = event.detail;
+  const alertResult: void = window.alert('hello');
   // @ts-expect-error only registered declarations describe the generated Window
-  window.alert('hello');
+  window.unregisteredMember();
 `,
 }, {
   name: 'browlet', types: ['node'], source: `
@@ -37,8 +38,9 @@ const consumers = [{
   const window: WindowProxy = browlet.window;
   const document: Document = browlet.document;
   const navigation: Promise<WindowProxy> = browlet.navigate('https://example.test/');
+  const alertResult: void = browlet.window.alert('hello');
   // @ts-expect-error the public API retains the generated Window surface
-  browlet.window.alert('hello');
+  browlet.window.unregisteredMember();
   // @ts-expect-error the public API retains the generated Document surface
   browlet.document.unregisteredMember();
 `,

@@ -1908,7 +1908,10 @@ and invokes recursive abortion; calls during unloading are ignored. Descendant
 abortion retains the ordinary global-task activity gate and does not delay the
 caller's return. FetchGroup.cancel() now stops ordinary pending requests, discards
 their transport's buffered/future bytes, and invalidates queued successful Fetch
-callback delivery. Pending keepalive requests explicitly throw before partial group cancellation.
+callback delivery. Window keepalive requests survive stop; destruction retires page
+delivery while browser-owned uploads, redirects, and response draining continue.
+Author abort/cancel still terminates transport. Worker keepalive still throws at
+the missing parent-browser handoff; a worker-local sandbox cannot survive shutdown.
 Queued Fetch-owned body tasks are removed and their internal waits fail once, including
 after request completion or destruction of the failure-delivery task. Later author
 consumption of a completed response remains independent of that cancellation.
@@ -1930,7 +1933,7 @@ on Document cancellation; an already-scheduled retry with no pending request sur
 stop(), while destruction closes all sources. Cooperative dedicated/shared worker
 shutdown now runs the same local destruction hooks after the final checkpoint, and
 discards queued/late work without restarting the loop. Cross-isolate service shutdown,
-forced termination, keepalive detachment, and interruption of the backing host read
+forced termination, worker keepalive handoff, and interruption of the backing host read
 itself remain unfinished. See the
 [abortion audit](browlet/loader/ROADMAP.md#html-7511-recursive-abortion-and-stopping-navigation).
 Multipart framing now feeds independently readable part responses into the
