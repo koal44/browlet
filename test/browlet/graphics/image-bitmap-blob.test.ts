@@ -216,8 +216,8 @@ function createFixture() {
   const env = traversable.activeWindow!.env;
   const queued = Promise.withResolvers<void>();
   const queue = env.queueTask.bind(env);
-  vi.spyOn(env, 'queueTask').mockImplementation((source, steps, settings) => {
-    const handle = queue(source, steps, settings);
+  vi.spyOn(env, 'queueTask').mockImplementation((source, task) => {
+    const handle = queue(source, task);
     if (source === 'bitmap') queued.resolve();
     return handle;
   });

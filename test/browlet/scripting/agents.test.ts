@@ -183,7 +183,7 @@ describe('BrowsingContextGroup.obtainSimilarOriginWindowAgent', () => {
     for (const loop of [agent.eventLoop, userAgent.sandbox.responsibleEventLoop]) {
       const completed = Promise.withResolvers<void>();
       const task = vi.fn(() => { completed.resolve(); });
-      loop.queueTask(networkingTaskSource, null, task);
+      loop.queueTask(networkingTaskSource, null, { run: task });
       expect(task).not.toHaveBeenCalled();
       await completed.promise;
       expect(task).toHaveBeenCalledOnce();

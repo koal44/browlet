@@ -27,7 +27,7 @@ describe('parallel navigation cancellation and abortion', () => {
     expect(abort).not.toHaveBeenCalled();
     await resumeNavigation(turns);
     expect(check).toHaveBeenCalledExactlyOnceWith([navigable]);
-    expect(queueTask).toHaveBeenCalledExactlyOnceWith('navigation-and-traversal', expect.any(Function));
+    expect(queueTask).toHaveBeenCalledExactlyOnceWith('navigation-and-traversal', { run: expect.any(Function) as unknown });
     expect(populate).toHaveBeenCalledOnce();
     expect(abort).not.toHaveBeenCalled();
     expect(navigable.activeSessionHistoryEntry).toBe(entry);

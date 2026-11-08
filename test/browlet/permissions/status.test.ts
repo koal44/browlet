@@ -165,7 +165,7 @@ describe('Permissions §6.3: PermissionStatus', () => {
     const updates = captureUpdates(getRelevantRealm(browser.window).env);
     const { env } = updates;
     const document = env.getAssociatedDocument()!;
-    env.queueTask('permissions', () => { document.destroy(); });
+    env.queueTask('permissions', { run: () => { document.destroy(); } });
     env.userAgent.storagePersistence.setPermission(env.origin, 'granted');
     updates.runBackground();
     expect(env.responsibleEventLoop.getTaskQueue(permissionsTaskSource).size).toBe(2);

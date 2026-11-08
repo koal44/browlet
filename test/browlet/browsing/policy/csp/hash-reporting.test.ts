@@ -100,14 +100,18 @@ describe('CSP hash reports', () => {
     const stream = ReadableStreamImpl.createWithByteReadingSupport(undefined, undefined, 0, env);
     response.body = new FetchBody(stream, env);
     response.isBlockedByCSP(request);
-    await new Promise<void>((resolve) => realm.queueGlobalTask(networkingTaskSource, () => {
-      stream.enqueueChunk(new env.realm.Uint8Array(utf8Encode('a')));
-      resolve();
+    await new Promise<void>((resolve) => realm.queueGlobalTask(networkingTaskSource, {
+      run: () => {
+        stream.enqueueChunk(new env.realm.Uint8Array(utf8Encode('a')));
+        resolve();
+      },
     }));
     expect(scope.reports).toHaveLength(0);
-    realm.queueGlobalTask(networkingTaskSource, () => {
-      stream.enqueueChunk(new env.realm.Uint8Array(utf8Encode('bc')));
-      stream.close();
+    realm.queueGlobalTask(networkingTaskSource, {
+      run: () => {
+        stream.enqueueChunk(new env.realm.Uint8Array(utf8Encode('bc')));
+        stream.close();
+      },
     });
     await reported;
     expect(scope.reports[0]!.data).toMatchObject({ hash: sha256ABC });
@@ -207,8 +211,8 @@ describe('CSP hash disclosure and read failures', () => {
     const failure = new window.TypeError('Network read failed');
     const read = new Promise<Uint8Array>((resolve, reject) => response.body!.readAll(resolve, reject, env.global));
     const rejected = expect(read).rejects.toBe(failure);
-    realm.queueGlobalTask(networkingTaskSource, () => stream.enqueueChunk(new env.realm.Uint8Array(utf8Encode('a'))));
-    realm.queueGlobalTask(networkingTaskSource, () => stream.error(failure));
+    realm.queueGlobalTask(networkingTaskSource, { run: () => stream.enqueueChunk(new env.realm.Uint8Array(utf8Encode('a'))) });
+    realm.queueGlobalTask(networkingTaskSource, { run: () => stream.error(failure) });
     await rejected;
     expect(scope.reports).toHaveLength(0);
     expect(response.body.stream.isErrored).toBe(true);

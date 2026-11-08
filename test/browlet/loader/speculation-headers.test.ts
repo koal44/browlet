@@ -239,20 +239,20 @@ describe('Speculation-Rules response headers', () => {
     vi.spyOn(env, 'runInParallel').mockImplementation((steps) => steps());
     response.headerList.append('Speculation-Rules', '"/rules"');
     let destroyed = false;
-    env.queueTask('dom-manipulation', () => {
-      processSpeculationRulesHeader(document, response);
-      expect(loop.getTaskQueue(speculationRulesTaskSource).size).toBe(1);
-      document.destroy();
-      destroyed = true;
+    env.queueTask('dom-manipulation', {
+      run: () => {
+        processSpeculationRulesHeader(document, response);
+        expect(loop.getTaskQueue(speculationRulesTaskSource).size).toBe(1);
+        document.destroy();
+        destroyed = true;
+      },
     });
     await expect.poll(() => destroyed).toBe(true);
     expect(loop.getTaskQueue(speculationRulesTaskSource).size).toBe(0);
     expect(started).toEqual([]);
   });
 
-  // Approved expected failure: FetchGroup.cancel() is still an explicit no-op.
-  // Keep the required body-failure delivery assertion until shared Document abortion is implemented.
-  it.fails('cancels an in-flight rule body through the Document fetch group on abortion', async () => {
+  it('cancels an in-flight rule body through the Document fetch group on abortion', async () => {
     let received = false;
     const { document, response, completed } = await fixture((_request, response) => {
       response.writeHead(200, { 'Content-Type': 'application/speculationrules+json' });
@@ -263,7 +263,7 @@ describe('Speculation-Rules response headers', () => {
     response.headerList.append('Speculation-Rules', '"/pending"');
     processSpeculationRulesHeader(document, response);
     await expect.poll(() => received).toBe(true);
-    document.env.queueTask('dom-manipulation', () => document.abort());
+    document.env.queueTask('dom-manipulation', { run: () => document.abort() });
     await expect.poll(() => completed.length).toBe(1);
     expect(parse).not.toHaveBeenCalled();
     expect(document.speculationRuleSets).toEqual([]);

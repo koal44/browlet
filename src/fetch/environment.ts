@@ -1,6 +1,7 @@
 import { ParallelQueue } from '../infra/parallel-queue';
 import type { JSONValue } from '../infra/json';
 import type { InternalPromise } from '../infra/promises';
+import type { TaskRecord, TaskHandle } from '../infra/tasks';
 import type { GlobalObject } from '../js-engine/index';
 import type { DOMExceptionConstructor } from '../web-idl/core/index';
 import type { BlobURLEntry, Host, Origin, URLRecord } from '../url/index';
@@ -23,15 +24,15 @@ import type { FetchMode, FetchRequest, RequestCredentials, RequestInternalPriori
 import type { CacheUsage, FetchResponse } from './response';
 import type { FetchTimingInfo, ResponseBodyInfo, ServiceWorkerTimingInfo } from './timing';
 
-/** Deliver Fetch steps to the selected global or parallel queue. */
+/** Deliver a Fetch task to the selected global or parallel queue, retaining removal ownership. */
 // https://fetch.spec.whatwg.org/#queue-a-fetch-task
 export function queueFetchTask(
-  steps: () => void, destination: GlobalObject | ParallelQueue, env: FetchEnvironment,
-): void {
+  task: TaskRecord, destination: GlobalObject | ParallelQueue, env: FetchEnvironment,
+): TaskHandle {
   if (destination instanceof ParallelQueue) {
-    destination.enqueue(steps);
+    return destination.enqueue(task);
   } else {
-    env.queueGlobalFetchTask(destination, steps);
+    return env.queueGlobalFetchTask(destination, task);
   }
 }
 
@@ -47,7 +48,7 @@ export interface FetchEnvironment extends FetchClient, FileEnvironment {
   /** DOMException constructor owned by this environment's binding. */
   DOMException: DOMExceptionConstructor;
   /** Queue on the destination global's networking task source, which can differ from the body owner's. */
-  queueGlobalFetchTask(global: GlobalObject, steps: () => void): void;
+  queueGlobalFetchTask(global: GlobalObject, task: TaskRecord): TaskHandle;
   /** Current base URL used to resolve relative URLs supplied through Fetch APIs. */
   apiBaseURL: URLRecord;
   /** Parse through this environment's user agent; omitted base means null and encoding defaults to UTF-8. */

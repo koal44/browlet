@@ -19,6 +19,7 @@ it('fetches a CSS resource through a standalone host with its own bindings and t
 
   expect(result.response.status).toBe(200);
   expect(result.body).toEqual(new TextEncoder().encode('standalone'));
-  expect(tasks).toHaveBeenCalledWith(env.realm.globalObject, expect.any(Function));
+  const delivery = tasks.mock.calls.find(([global]) => global === env.realm.globalObject);
+  expect(delivery?.[1].run).toBeTypeOf('function');
   tasks.mockRestore();
 });

@@ -35,6 +35,8 @@ export class FileReaderImpl extends EventTargetImpl {
   #state: FileReaderState = 'empty';
   /** Identity and pending tasks of the read that may still deliver events. */
   #operation: FileReadOperation | null = null;
+  /** Release the global's cleanup registration when this read finishes. */
+  #removeDestructionSteps: (() => void) | null = null;
 
   constructor(env: BrowletEnvironment) {
     super(env);
@@ -135,19 +137,20 @@ export class FileReaderImpl extends EventTargetImpl {
 
     // The current draft does not set error to AbortError. Blink, Gecko, and
     // WebKit do; keep the normative state until that divergence is resolved.
-    ProgressEventImpl.fire('abort', this, operation.loaded, operation.total);
+    this.#fireProgressEvent('abort', operation.loaded, operation.total);
     if (!this.#isLoading()) {
-      ProgressEventImpl.fire('loadend', this, operation.loaded, operation.total);
+      this.#fireProgressEvent('loadend', operation.loaded, operation.total);
     }
   }
 
-  /** Cancel an active read and queued notifications without firing events during global teardown. */
+  /** Cancel an unfinished read during global teardown without dispatching author events. */
+  // SPEC_GAP(file-reader-global-destruction): File API does not connect reads to global teardown.
+  // SPEC_CLASH(file-reader-destruction-state): Follow Chromium/WebKit's synchronous DONE with null
+  // error; Firefox finishes later with NotReadableError.
   stop(): void {
     const operation = this.#operation;
     if (operation === null) return;
-    this.#state = 'done';
-    this.#operation = null;
-    this.env.getWindowOrWorkerGlobalScopeMixin().fileReaders.delete(this);
+    this.#finishRead();
     for (const task of operation.tasks) task.remove();
     operation.tasks.clear();
     operation.cancel();
@@ -162,6 +165,11 @@ export class FileReaderImpl extends EventTargetImpl {
   ): void {
     if (this.#isLoading()) {
       throw new DOMExceptionImpl('', DOMExceptionNames.invalidState);
+    }
+    // SPEC_CLASH(file-reader-after-destruction): Follow Chromium's immediate AbortError;
+    // Firefox fails asynchronously and WebKit retains LOADING in the removal probe.
+    if (this.env.getAssociatedDocument()?.isDestroyed) {
+      throw new DOMExceptionImpl('', DOMExceptionNames.abort);
     }
 
     this.#state = 'loading';
@@ -182,21 +190,23 @@ export class FileReaderImpl extends EventTargetImpl {
       total: blob.size,
     };
     this.#operation = operation;
-    this.env.getWindowOrWorkerGlobalScopeMixin().fileReaders.add(this);
+    this.#removeDestructionSteps = this.env.addDestructionSteps(() => this.stop());
     const chunks: Uint8Array[] = [];
     let isFirstChunk = true;
     let lastProgressTime: number | undefined;
     let lastProgressByteLength = 0;
 
     const fire = (name: string): void => {
-      ProgressEventImpl.fire(name, this, operation.loaded, operation.total);
+      this.#fireProgressEvent(name, operation.loaded, operation.total);
     };
 
     const queueTask = (steps: () => void): void => {
       if (this.#operation !== operation) return;
-      const task = this.env.queueTask('file', () => {
-        operation.tasks.delete(task);
-        if (this.#operation === operation) steps();
+      const task = this.env.queueTask('file', {
+        run: () => {
+          operation.tasks.delete(task);
+          if (this.#operation === operation) steps();
+        },
       });
       operation.tasks.add(task);
     };
@@ -205,7 +215,7 @@ export class FileReaderImpl extends EventTargetImpl {
       if (!isFirstChunk) return;
       isFirstChunk = false;
       queueTask(() => {
-        ProgressEventImpl.fire('loadstart', this, 0, blob.size);
+        this.#fireProgressEvent('loadstart', 0, blob.size);
       });
     };
 
@@ -227,7 +237,7 @@ export class FileReaderImpl extends EventTargetImpl {
             lastProgressByteLength = transmitted;
             lastProgressTime = now;
             queueTask(() => {
-              ProgressEventImpl.fire('progress', this, transmitted, blob.size);
+              this.#fireProgressEvent('progress', transmitted, blob.size);
             });
           }
           void P.resolve(undefined, idlType.undefined).then(readNextChunk);
@@ -241,9 +251,7 @@ export class FileReaderImpl extends EventTargetImpl {
               if (this.#operation !== operation) return;
             }
 
-            this.#state = 'done';
-            this.#operation = null;
-            this.env.getWindowOrWorkerGlobalScopeMixin().fileReaders.delete(this);
+            this.#finishRead();
             const bytes = new Uint8Array(operation.loaded);
             let offset = 0;
             for (const chunk of chunks) {
@@ -270,9 +278,7 @@ export class FileReaderImpl extends EventTargetImpl {
         errorSteps: (error) => {
           if (this.#operation !== operation) return;
           queueTask(() => {
-            this.#state = 'done';
-            this.#operation = null;
-            this.env.getWindowOrWorkerGlobalScopeMixin().fileReaders.delete(this);
+            this.#finishRead();
             if (!DOMExceptionImpl.is(error)) throw error;
             this.error = error;
             fire('error');
@@ -283,6 +289,22 @@ export class FileReaderImpl extends EventTargetImpl {
     };
 
     runInParallel(readNextChunk);
+  }
+
+  /** Release this read before callbacks can start another one. */
+  #finishRead(): void {
+    this.#state = 'done';
+    this.#operation = null;
+    // SPEC_CLASH(file-reader-completed-destruction): Retain completed results like Firefox;
+    // Chromium/WebKit clear them. A completed reader no longer participates in teardown.
+    this.#removeDestructionSteps?.();
+    this.#removeDestructionSteps = null;
+  }
+
+  /** Suppress remaining notifications when an earlier callback destroyed the Document. */
+  #fireProgressEvent(name: string, loaded: number, total: number): void {
+    if (this.env.getAssociatedDocument()?.isDestroyed) return;
+    ProgressEventImpl.fire(name, this, loaded, total);
   }
 
   /** Recheck state after author callbacks, which may have started another read. */

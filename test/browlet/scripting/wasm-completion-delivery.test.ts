@@ -40,7 +40,7 @@ describe('WebAssembly completion task delivery', () => {
     const { document, notify } = fixture();
     const loop = document.env.responsibleEventLoop;
     const complete = vi.fn();
-    loop.queueTask(jsEngineTaskSource, document, () => { document.destroy(); });
+    loop.queueTask(jsEngineTaskSource, document, { run: () => { document.destroy(); } });
     notify(complete, source);
     await runInHostTask(() => { expect(loop.runTaskTurn()).toBe(true); });
 

@@ -161,7 +161,7 @@ describe('idle callback scheduling', () => {
     const order: string[] = [];
     fixture.window.requestIdleCallback(() => {
       order.push('first');
-      fixture.loop.queueTask(domManipulationTaskSource, null, () => { order.push('ordinary'); });
+      fixture.loop.queueTask(domManipulationTaskSource, null, { run: () => { order.push('ordinary'); } });
     }, {});
     fixture.window.requestIdleCallback(() => { order.push('second'); }, {});
     fixture.flush();
@@ -278,7 +278,7 @@ describe('idle callback scheduling', () => {
     const fixture = createFixture();
     const callback = vi.fn<IdleRequestCallback>();
     fixture.window.requestIdleCallback(callback, { timeout: 10 });
-    fixture.loop.queueTask(domManipulationTaskSource, fixture.window.document, () => { fixture.window.document.destroy(); });
+    fixture.loop.queueTask(domManipulationTaskSource, fixture.window.document, { run: () => { fixture.window.document.destroy(); } });
     fixture.flush();
     fixture.advance(100);
     fixture.flush();

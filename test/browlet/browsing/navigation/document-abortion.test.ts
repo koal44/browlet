@@ -132,7 +132,7 @@ describe('Document and descendant abortion', () => {
     const f = fixture(new UserAgent());
     const child = load(addChild(f.document).getNodeNavigable()!, 'https://foreign.test/');
     const parser = new HTMLDocumentParser(child, () => {});
-    f.document.env.queueTask('navigation-and-traversal', () => f.document.abortAndDescendants());
+    f.document.env.queueTask('navigation-and-traversal', { run: () => f.document.abortAndDescendants() });
     await expect.poll(() => parser.stopped).toBe(true);
     expect(f.document.salvageable).toBe(false);
   });
@@ -231,7 +231,7 @@ function fixture(userAgent = createManualUserAgent()) {
 }
 
 function run(document: DocumentImpl, steps: () => void): void {
-  document.env.queueTask('navigation-and-traversal', steps);
+  document.env.queueTask('navigation-and-traversal', { run: steps });
   expect(document.env.responsibleEventLoop.runTaskTurn()).toBe(true);
 }
 

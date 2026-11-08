@@ -16,7 +16,7 @@ describe('fully active Documents', () => {
     const child = createChild(parent.navigable);
     const previousEntry = parent.navigable.activeSessionHistoryEntry;
     const location = child.document.location;
-    const task = new Task(domManipulationTaskSource, child.document, () => {});
+    const task = new Task(domManipulationTaskSource, child.document, { run: () => {} });
     const activity: boolean[] = [];
     child.document.observeFullyActiveState((active) => { activity.push(active); });
     expect(location).not.toBeNull();

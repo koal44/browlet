@@ -32,7 +32,7 @@ describe('Storage §7.1: session lifetime', () => {
 
     const document = retired.activeDocument!;
     const env = retired.activeWindow!.env;
-    env.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { document.destroy(); });
+    env.realm.queueGlobalTask(navigationAndTraversalTaskSource, { run: () => { document.destroy(); } });
     expect(env.responsibleEventLoop.runTaskTurn()).toBe(true);
     expect(retired.activeDocument).toBeNull();
     expect(first.view.get('saved')).toBe('session');

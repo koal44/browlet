@@ -16,7 +16,7 @@ export type {
 } from './dom-standard';
 export { RangeError, SyntaxError, TypeError, ExceptionRequestStamper } from './exceptions';
 export type { AbortController, AbortSignal, AbortAlgorithmHandle } from './abort';
-export { nativeTimerHost, type TaskCreationOptions, type TaskHandle, type TaskSourceKey, type TimerHost } from './tasks';
+export { nativeTimerHost, type TaskRecord, type TaskHandle, type TaskSourceKey, type TimerHost } from './tasks';
 export { InternalError } from './internal-error';
 export { endOfIteration, type AsyncIterator } from './iteration';
 export { convertJSONDerivedValueToInfra, type JSONValue, type InfraValue } from './json';

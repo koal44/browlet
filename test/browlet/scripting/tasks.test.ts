@@ -53,12 +53,12 @@ describe('task queues', () => {
     const first = vi.fn();
     const second = vi.fn();
 
-    eventLoop.queueTask(source, null, first);
-    eventLoop.queueTask(source, null, second);
+    eventLoop.queueTask(source, null, { run: first });
+    eventLoop.queueTask(source, null, { run: second });
 
     const tasks = [...eventLoop.getTaskQueue(source)];
     expect(tasks.every((task) => task instanceof Task)).toBe(true);
-    expect(tasks.map((task) => task.steps)).toEqual([first, second]);
+    expect(tasks.map((task) => task.run)).toEqual([first, second]);
     expect(tasks.map((task) => task.source)).toEqual([source, source]);
     expect(tasks.map((task) => task.document)).toEqual([null, null]);
     expect(tasks.every((task) =>
@@ -78,9 +78,9 @@ describe('task queues', () => {
     const first = vi.fn();
     const second = vi.fn();
     const source = createTaskSource('removable');
-    const firstTask = realm.queueGlobalTask(source, first);
+    const firstTask = realm.queueGlobalTask(source, { run: first });
 
-    realm.queueGlobalTask(source, second);
+    realm.queueGlobalTask(source, { run: second });
 
     expect(firstTask.remove()).toBe(true);
     expect(firstTask.remove()).toBe(false);
@@ -94,10 +94,10 @@ describe('task queues', () => {
     const document = createTestDocument();
     const otherDocument = createTestDocument();
     const canceled = vi.fn();
-    eventLoop.queueTask(networkingTaskSource, document, canceled);
-    eventLoop.queueTask(domManipulationTaskSource, document, canceled);
-    const other = eventLoop.queueTask(networkingTaskSource, otherDocument, vi.fn());
-    const host = eventLoop.queueTask(domManipulationTaskSource, null, vi.fn());
+    eventLoop.queueTask(networkingTaskSource, document, { run: canceled });
+    eventLoop.queueTask(domManipulationTaskSource, document, { run: canceled });
+    const other = eventLoop.queueTask(networkingTaskSource, otherDocument, { run: vi.fn() });
+    const host = eventLoop.queueTask(domManipulationTaskSource, null, { run: vi.fn() });
 
     eventLoop.removeTasksForDocument(document);
 
@@ -114,7 +114,7 @@ describe('task queues', () => {
       expect(eventLoop.removeTask(task)).toBe(false);
       expect(eventLoop.currentlyRunningTask).toBeNull();
     });
-    const task = eventLoop.queueTask(networkingTaskSource, null, steps, { discardSteps: discarded });
+    const task = eventLoop.queueTask(networkingTaskSource, null, { run: steps, discard: discarded });
     expect(eventLoop.removeTask(task)).toBe(true);
     expect(eventLoop.removeTask(task)).toBe(false);
     expect(discarded).toHaveBeenCalledOnce();
@@ -125,11 +125,31 @@ describe('task queues', () => {
     const eventLoop = createEventLoop();
     const discarded = vi.fn();
     const steps = vi.fn();
-    const task = eventLoop.queueTask(networkingTaskSource, null, steps, { discardSteps: discarded });
+    const task = eventLoop.queueTask(networkingTaskSource, null, { run: steps, discard: discarded });
     expect(eventLoop.runTaskTurn()).toBe(true);
     expect(eventLoop.removeTask(task)).toBe(false);
     expect(steps).toHaveBeenCalledOnce();
     expect(discarded).not.toHaveBeenCalled();
+  });
+
+  it('retains blocked tasks and their timer metadata until readiness changes', () => {
+    const eventLoop = createEventLoop();
+    let ready = false;
+    const discard = vi.fn();
+    const run = vi.fn(() => {
+      expect(eventLoop.currentlyRunningTask?.timerNestingLevel).toBe(7);
+    });
+    const task = eventLoop.queueTask(networkingTaskSource, null, {
+      run, discard, isRunnable: () => ready, timerNestingLevel: 7,
+    });
+    expect(eventLoop.runTaskTurn()).toBe(false);
+    expect(eventLoop.getTaskQueue(networkingTaskSource).has(task)).toBe(true);
+    expect(run).not.toHaveBeenCalled();
+    expect(discard).not.toHaveBeenCalled();
+    ready = true;
+    expect(eventLoop.runTaskTurn()).toBe(true);
+    expect(run).toHaveBeenCalledOnce();
+    expect(discard).not.toHaveBeenCalled();
   });
 
   it('detaches all Document tasks before notification and releases every waiter even if a callback throws', () => {
@@ -144,9 +164,9 @@ describe('task queues', () => {
     });
     const second = vi.fn();
     const other = vi.fn();
-    eventLoop.queueTask(networkingTaskSource, document, vi.fn(), { discardSteps: first });
-    const secondTask = eventLoop.queueTask(domManipulationTaskSource, document, vi.fn(), { discardSteps: second });
-    const otherTask = eventLoop.queueTask(networkingTaskSource, otherDocument, vi.fn(), { discardSteps: other });
+    eventLoop.queueTask(networkingTaskSource, document, { run: vi.fn(), discard: first });
+    const secondTask = eventLoop.queueTask(domManipulationTaskSource, document, { run: vi.fn(), discard: second });
+    const otherTask = eventLoop.queueTask(networkingTaskSource, otherDocument, { run: vi.fn(), discard: other });
     expect(() => eventLoop.removeTasksForDocument(document)).toThrow(failure);
     eventLoop.removeTasksForDocument(document);
     expect(first).toHaveBeenCalledOnce();
@@ -162,9 +182,9 @@ describe('task queues', () => {
     const firstSource = createTaskSource('same diagnostic name');
     const secondSource = createTaskSource('same diagnostic name');
 
-    firstLoop.queueTask(firstSource, null, vi.fn());
-    firstLoop.queueTask(secondSource, null, vi.fn());
-    secondLoop.queueTask(firstSource, null, vi.fn());
+    firstLoop.queueTask(firstSource, null, { run: vi.fn() });
+    firstLoop.queueTask(secondSource, null, { run: vi.fn() });
+    secondLoop.queueTask(firstSource, null, { run: vi.fn() });
 
     expect(firstLoop.getTaskQueues().size).toBe(2);
     expect(secondLoop.getTaskQueues().size).toBe(1);
@@ -179,9 +199,11 @@ describe('task queues', () => {
     const unrelated = new AsyncLocalStorage<string>();
     const observed: (string | undefined)[] = [];
     unrelated.run('registration', () => {
-      realm.queueGlobalTask(networkingTaskSource, () => {
-        observed.push(unrelated.getStore());
-        void Promise.resolve().then(() => { observed.push(unrelated.getStore()); });
+      realm.queueGlobalTask(networkingTaskSource, {
+        run: () => {
+          observed.push(unrelated.getStore());
+          void Promise.resolve().then(() => { observed.push(unrelated.getStore()); });
+        },
       });
     });
     unrelated.run('draining turn', () => {
@@ -206,17 +228,17 @@ describe('task queues', () => {
     const inactiveSteps = vi.fn();
     const order: string[] = [];
     const runnableSteps = vi.fn(() => {
-      expect(eventLoop.currentlyRunningTask?.steps).toBe(runnableSteps);
+      expect(eventLoop.currentlyRunningTask?.run).toBe(runnableSteps);
       order.push('task');
     });
 
-    eventLoop.queueTask(source, inactiveDocument, inactiveSteps);
-    eventLoop.queueTask(source, null, runnableSteps);
+    eventLoop.queueTask(source, inactiveDocument, { run: inactiveSteps });
+    eventLoop.queueTask(source, null, { run: runnableSteps });
 
     expect(eventLoop.runTaskTurn()).toBe(true);
     expect(order).toEqual(['task', 'checkpoint']);
     expect(inactiveSteps).not.toHaveBeenCalled();
-    expect([...eventLoop.getTaskQueue(source)].map((task) => task.steps)).toEqual([inactiveSteps]);
+    expect([...eventLoop.getTaskQueue(source)].map((task) => task.run)).toEqual([inactiveSteps]);
   });
 
   it('uses its scheduling policy to choose among runnable task queues', () => {
@@ -229,8 +251,8 @@ describe('task queues', () => {
     const firstQueue = eventLoop.getTaskQueue(firstSource);
     const secondQueue = eventLoop.getTaskQueue(secondSource);
 
-    eventLoop.queueTask(firstSource, null, first);
-    eventLoop.queueTask(secondSource, null, second);
+    eventLoop.queueTask(firstSource, null, { run: first });
+    eventLoop.queueTask(secondSource, null, { run: second });
     eventLoop.runTaskTurn();
 
     expect(selectTaskQueue).toHaveBeenCalledWith([firstQueue, secondQueue]);
@@ -243,7 +265,7 @@ describe('task queues', () => {
     const eventLoop = createEventLoop({}, createMicrotaskQueue({ performMicrotaskCheckpoint: checkpoint }));
     const source = createTaskSource('inactive');
     const steps = vi.fn();
-    eventLoop.queueTask(source, createTestDocument(), steps);
+    eventLoop.queueTask(source, createTestDocument(), { run: steps });
 
     expect(eventLoop.runTaskTurn()).toBe(false);
     expect(steps).not.toHaveBeenCalled();
@@ -257,7 +279,7 @@ describe('task queues', () => {
     const eventLoop = createEventLoop({ longTaskReporter }, createMicrotaskQueue({ performMicrotaskCheckpoint: checkpoint }));
     const source = createTaskSource('throwing');
     const error = new Error('task failed');
-    eventLoop.queueTask(source, null, () => { throw error; });
+    eventLoop.queueTask(source, null, { run: () => { throw error; } });
 
     expect(() => eventLoop.runTaskTurn()).toThrow(error);
     expect(eventLoop.currentlyRunningTask).toBeNull();
@@ -296,7 +318,7 @@ describe('task queues', () => {
     const eventLoop = createEventLoop({ longTaskReporter, taskTiming }, createMicrotaskQueue({
       performMicrotaskCheckpoint() { order.push('checkpoint'); },
     }));
-    const task = eventLoop.queueTask(createTaskSource('accounting'), document, () => { order.push('task'); });
+    const task = eventLoop.queueTask(createTaskSource('accounting'), document, { run: () => { order.push('task'); } });
 
     eventLoop.runTaskTurn();
 
@@ -308,7 +330,7 @@ describe('task queues', () => {
     const longTaskReporter = createLongTaskReporter();
     const taskTiming = createTaskTimingHooks();
     const eventLoop = createEventLoop({ longTaskReporter, taskTiming });
-    eventLoop.queueTask(createTaskSource('null Document'), null, vi.fn());
+    eventLoop.queueTask(createTaskSource('null Document'), null, { run: vi.fn() });
     eventLoop.runTaskTurn();
 
     expect(taskTiming.recordTaskStartTime).not.toHaveBeenCalled();
@@ -325,8 +347,8 @@ describe('task queues', () => {
     const source = createTaskSource('scheduled');
     expect(turns).toEqual([]);
 
-    eventLoop.queueTask(source, null, () => { order.push('first'); });
-    eventLoop.queueTask(source, null, () => { order.push('second'); });
+    eventLoop.queueTask(source, null, { run: () => { order.push('first'); } });
+    eventLoop.queueTask(source, null, { run: () => { order.push('second'); } });
 
     expect(turns).toHaveLength(1);
     turns.shift()?.();
@@ -343,15 +365,15 @@ describe('task queues', () => {
     const source = createTaskSource('late');
     expect(turns).toEqual([]);
 
-    eventLoop.queueTask(source, null, vi.fn());
-    eventLoop.queueTask(source, null, vi.fn());
+    eventLoop.queueTask(source, null, { run: vi.fn() });
+    eventLoop.queueTask(source, null, { run: vi.fn() });
     expect(turns).toHaveLength(1);
   });
 
   it('does not request a host turn for inactive Document work', () => {
     const requestTurn = vi.fn();
     const eventLoop = createEventLoop({ requestTurn });
-    eventLoop.queueTask(createTaskSource('inactive scheduled'), createTestDocument(), vi.fn());
+    eventLoop.queueTask(createTaskSource('inactive scheduled'), createTestDocument(), { run: vi.fn() });
     expect(requestTurn).not.toHaveBeenCalled();
   });
 
@@ -359,10 +381,12 @@ describe('task queues', () => {
     const eventLoop = createEventLoop();
     const source = createTaskSource('reentrant');
     const second = vi.fn();
-    eventLoop.queueTask(source, null, () => {
-      expect(() => eventLoop.runTaskTurn()).toThrow('An event loop cannot run a task reentrantly');
+    eventLoop.queueTask(source, null, {
+      run: () => {
+        expect(() => eventLoop.runTaskTurn()).toThrow('An event loop cannot run a task reentrantly');
+      },
     });
-    eventLoop.queueTask(source, null, second);
+    eventLoop.queueTask(source, null, { run: second });
     eventLoop.runTaskTurn();
 
     expect(second).not.toHaveBeenCalled();
@@ -382,7 +406,7 @@ describe('task queues', () => {
     }
     const source = createTaskSource('global');
 
-    getRelevantRealm(window).queueGlobalTask(source, vi.fn());
+    getRelevantRealm(window).queueGlobalTask(source, { run: vi.fn() });
 
     const [task] = requireEventLoop(window).getTaskQueue(source);
     expect(task!.document).toBe(document);
@@ -417,9 +441,9 @@ describe('task queues', () => {
     const replacement = createTestDocument(realm.env);
     const source = createTaskSource('document replacement');
 
-    realm.queueGlobalTask(source, vi.fn());
+    realm.queueGlobalTask(source, { run: vi.fn() });
     window.setAssociatedDocument(replacement);
-    realm.queueGlobalTask(source, vi.fn());
+    realm.queueGlobalTask(source, { run: vi.fn() });
 
     expect([...requireEventLoop(window).getTaskQueue(source)].map((task) => task.document))
       .toEqual([firstDocument, replacement]);
@@ -432,7 +456,7 @@ describe('task queues', () => {
     });
     const eventLoop = createEventLoop({}, microtaskQueue);
     const steps = vi.fn(() => {
-      expect(eventLoop.currentlyRunningTask?.steps).toBe(steps);
+      expect(eventLoop.currentlyRunningTask?.run).toBe(steps);
     });
 
     eventLoop.queueMicrotask(steps);
@@ -490,7 +514,7 @@ describe('task queues', () => {
       );
     });
 
-    eventLoop.queueTask(source, null, outer);
+    eventLoop.queueTask(source, null, { run: outer });
     eventLoop.runTaskTurn();
 
     expect(microtask).toHaveBeenCalledOnce();
@@ -556,7 +580,7 @@ function requireEventLoop(global: object): EventLoop {
 }
 
 function createTask(document: DocumentImpl | null): Task {
-  return new Task(createTaskSource('runnable'), document, () => {});
+  return new Task(createTaskSource('runnable'), document, { run: () => {} });
 }
 
 function createEventLoop(init: Partial<EventLoopInit> = {}, microtaskQueue = createMicrotaskQueue()): EventLoop {

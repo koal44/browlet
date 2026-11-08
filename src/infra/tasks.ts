@@ -18,12 +18,13 @@ export type TaskSourceKey =
   | 'speculation-rules'
   | 'report' | 'performance-timeline' | 'automation' | 'timer' | 'storage' | 'permissions' | 'clipboard' | 'bitmap' | 'engine';
 
-/** Metadata carried by a queued task. */
-export type TaskCreationOptions = {
+/** Work queued for execution, with internal cleanup if removed before it runs. */
+export type TaskRecord = {
+  run: () => void;
+  /** Notify the owner on removal or refused admission, without running the task or entering author script. */
+  discard?: () => void;
   /** Additional readiness condition, such as a MessagePort queue being enabled. */
   isRunnable?: () => boolean;
-  /** Internal owner notification when pending work is removed, without executing the task or entering author script. */
-  discardSteps?: () => void;
   /** Nesting level inherited by timers created inside this task; absent for other work. */
   timerNestingLevel?: number;
 };

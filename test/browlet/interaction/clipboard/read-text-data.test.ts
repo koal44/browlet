@@ -147,13 +147,13 @@ describe('Clipboard §7.3.2: plain-text format snapshots', () => {
     f.bytes.mockReturnValue(f.env.userAgent.HostPromise.resolve(view, internalType<Uint8Array | null>()));
     const queued = Promise.withResolvers<void>(); const fileTasks: (() => void)[] = [];
     const queue = f.env.queueTask.bind(f.env);
-    const tasks = vi.spyOn(f.env, 'queueTask').mockImplementation((source, steps) => {
-      if (source !== 'file') return queue(source, steps);
-      fileTasks.push(steps); queued.resolve(); return { remove() {} };
+    const tasks = vi.spyOn(f.env, 'queueTask').mockImplementation((source, task) => {
+      if (source !== 'file') return queue(source, task);
+      fileTasks.push(task.run); queued.resolve(); return { remove() {} };
     });
     const result = outcome(f.browser); await queued.promise;
     bytes.fill(120); tasks.mockRestore();
-    for (const step of fileTasks) queue('file', step);
+    for (const run of fileTasks) queue('file', { run });
     expect(await result).toMatchObject({ value: 'hello' });
   });
 
@@ -161,13 +161,13 @@ describe('Clipboard §7.3.2: plain-text format snapshots', () => {
     const f = await createFixture();
     const queued = Promise.withResolvers<void>(); const fileTasks: (() => void)[] = [];
     const queue = f.env.queueTask.bind(f.env);
-    const tasks = vi.spyOn(f.env, 'queueTask').mockImplementation((source, steps) => {
-      if (source !== 'file') return queue(source, steps);
-      fileTasks.push(steps); queued.resolve(); return { remove() {} };
+    const tasks = vi.spyOn(f.env, 'queueTask').mockImplementation((source, task) => {
+      if (source !== 'file') return queue(source, task);
+      fileTasks.push(task.run); queued.resolve(); return { remove() {} };
     });
     const result = outcome(f.browser); await queued.promise;
     f.state.token = new Uint8Array([2]); tasks.mockRestore();
-    for (const step of fileTasks) queue('file', step);
+    for (const run of fileTasks) queue('file', { run });
     expect(await result).toMatchObject({ error: 'InvalidStateError', realm: true });
   });
 
@@ -176,9 +176,9 @@ describe('Clipboard §7.3.2: plain-text format snapshots', () => {
     if (change === 'absent-generation') f.snapshot.items = [];
     const queued = Promise.withResolvers<void>(); const delivery: (() => void)[] = [];
     const queue = f.env.queueTask.bind(f.env);
-    vi.spyOn(f.env, 'queueTask').mockImplementation((source, steps) => {
-      if (source !== 'clipboard') return queue(source, steps);
-      delivery.push(steps); queued.resolve(); return { remove() {} };
+    vi.spyOn(f.env, 'queueTask').mockImplementation((source, task) => {
+      if (source !== 'clipboard') return queue(source, task);
+      delivery.push(task.run); queued.resolve(); return { remove() {} };
     });
     let settled = false;
     const result = outcome(f.browser).then((value) => { settled = true; return value; });
@@ -187,9 +187,11 @@ describe('Clipboard §7.3.2: plain-text format snapshots', () => {
     if (generation) f.state.token = new Uint8Array([2]);
     if (change === 'focus') f.focus.mockReturnValue(false);
     // Enter the task normally before exercising the operation's own activity check.
-    f.env.realm.queueGlobalTask(clipboardTaskSource, () => {
-      const active = change === 'activity' ? vi.spyOn(f.document, 'isFullyActive').mockReturnValue(false) : null;
-      try { delivery[0]!(); } finally { active?.mockRestore(); }
+    f.env.realm.queueGlobalTask(clipboardTaskSource, {
+      run: () => {
+        const active = change === 'activity' ? vi.spyOn(f.document, 'isFullyActive').mockReturnValue(false) : null;
+        try { delivery[0]!(); } finally { active?.mockRestore(); }
+      },
     });
     expect(await result).toMatchObject({ error: generation ? 'InvalidStateError' : 'NotAllowedError', realm: true });
   });

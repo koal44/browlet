@@ -60,10 +60,12 @@ describe('implementation Promise delivery', () => {
         void readFile('package.json').then((bytes) => {
           expect(bytes.length).toBeGreaterThan(0);
           expect(unrelated.getStore()).toBe('backend library');
-          a.realm.queueGlobalTask(networkingTaskSource, () => {
-            expect(unrelated.getStore()).toBe('backend library');
-            trace.push('completion task');
-            pending.resolve('done');
+          a.realm.queueGlobalTask(networkingTaskSource, {
+            run: () => {
+              expect(unrelated.getStore()).toBe('backend library');
+              trace.push('completion task');
+              pending.resolve('done');
+            },
           });
           ready.resolve();
         }, ready.reject);

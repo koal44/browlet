@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { threadId, type WorkerOptions } from 'node:worker_threads';
 import type * as WorkerThreads from 'node:worker_threads';
-import { afterEach, assert, beforeEach, describe, expect, inject, it, vi } from 'vitest';
+import { afterAll, afterEach, assert, beforeEach, describe, expect, inject, it, vi } from 'vitest';
 
 import { addon, JSThread, type JSThreadExit } from '../../../src/js-engine/index';
 import { utf8Encode } from '../../../src/encoding/index';
@@ -40,7 +40,11 @@ import { mockHTTPTransport } from '../../fetch/transport-fixture';
 // Production owns a fixed entry. Redirect only the native loader in these
 // lifecycle tests so the fixture can block or fail without production commands.
 // The real JSThread still performs execution, cloning, and teardown.
-const entry = vi.hoisted((): { path: string | null; worker: WorkerThreads.Worker | null; } => ({ path: null, worker: null }));
+const entry = vi.hoisted((): { path: string | null; worker: WorkerThreads.Worker | null; } => {
+  // Shared unit modules must load JSThread with this suite's Worker constructor.
+  vi.resetModules();
+  return { path: null, worker: null };
+});
 vi.mock('node:worker_threads', async (importOriginal) => {
   const original = await importOriginal<typeof WorkerThreads>();
   return {
@@ -79,6 +83,12 @@ afterEach(async () => {
     entry.worker = null;
     vi.restoreAllMocks();
   }
+});
+
+afterAll(() => {
+  // Do not leave this fixture's loader captured in another suite's JSThread.
+  vi.doUnmock('node:worker_threads');
+  vi.resetModules();
 });
 
 // Each entry loads the compiled production graph in a fresh isolate. Source
@@ -175,7 +185,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
       expect(document.ownedWorkers[0]!.ownerSet.has(document)).toBe(true);
       if (ready) await thread.ready;
 
-      creatorEnv.queueTask('dom-manipulation', () => { document.destroy(); });
+      creatorEnv.queueTask('dom-manipulation', { run: () => { document.destroy(); } });
       expect(creatorEnv.responsibleEventLoop.runTaskTurn()).toBe(true);
 
       expect(await thread.closed).toEqual({ code: 0, error: undefined, terminated: false });
@@ -193,7 +203,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
       await Promise.all(workers.map((thread) => thread.ready));
       expect(document.ownedWorkers).toHaveLength(2);
 
-      creatorEnv.queueTask('dom-manipulation', () => { document.destroy(); });
+      creatorEnv.queueTask('dom-manipulation', { run: () => { document.destroy(); } });
       creatorEnv.responsibleEventLoop.runTaskTurn();
 
       expect(await Promise.all(workers.map((thread) => thread.closed)))
@@ -230,7 +240,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
       });
       const finishResponse = await dispatched.promise;
       expect(document.ownedWorkers).toHaveLength(1);
-      creatorEnv.queueTask('dom-manipulation', () => { document.destroy(); });
+      creatorEnv.queueTask('dom-manipulation', { run: () => { document.destroy(); } });
       drain();
       expect(await thread.closed).toEqual({ code: 0, error: undefined, terminated: false });
       expect(abort).toHaveBeenCalledOnce();
@@ -257,7 +267,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
         worker.addEventListener('error', errors);
         await vi.waitFor(() => { drain(); expect(messages).toEqual(['running']); }, { timeout: 5000 });
 
-        creatorEnv.queueTask('dom-manipulation', () => { document.destroy(); });
+        creatorEnv.queueTask('dom-manipulation', { run: () => { document.destroy(); } });
         drain();
         // Closing must release timers and host channels without waiting for a
         // module's pending evaluation Promise to settle.
@@ -297,7 +307,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
       });
       await thread.ready;
       if (change === 'abort') {
-        creatorEnv.queueTask('dom-manipulation', () => { document.abort(); });
+        creatorEnv.queueTask('dom-manipulation', { run: () => { document.abort(); } });
         creatorEnv.responsibleEventLoop.runTaskTurn();
       } else {
         document.browsingContext = null;
@@ -325,9 +335,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
       expect(document.ownedWorkers).toEqual([]);
     });
 
-    // Expected dependency failure: HTML §7.5.10 destroyAndDescendants() still
-    // throws its explicit stub. Keep the worker-exit assertion for its implementation.
-    it.fails('closes dedicated isolates through recursive Document destruction', async () => {
+    it('closes dedicated isolates through recursive Document destruction', async () => {
       const document = TopLevelTraversable.create(new UserAgent(), null, '').activeDocument!;
       const creatorEnv = document.env;
       const { thread } = createThread({
@@ -1188,7 +1196,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
         worker.onmessage = (event) => { messages.push((event as MessageEvent).data); };
         await vi.waitFor(() => { drain(); expect(messages).toEqual(['running']); }, { timeout: 5000 });
         const document = creatorEnv.window.document;
-        creatorEnv.queueTask('dom-manipulation', () => { document.destroy(); });
+        creatorEnv.queueTask('dom-manipulation', { run: () => { document.destroy(); } });
         drain();
         expect(await thread.closed).toEqual({ code: 0, error: undefined, terminated: false });
         expect(document.ownedWorkers).toEqual([]);
@@ -2842,7 +2850,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
     await vi.waitFor(() => { expect(Atomics.load(state, 0)).toBe(1); }, { timeout: 5000 });
     const creator = new WindowAgent(new EventLoop({ requestTurn: queueNodeTask }));
     const progressed = Promise.withResolvers<boolean>();
-    creator.eventLoop.queueTask(createTaskSource('creator progress'), null, () => { progressed.resolve(true); });
+    creator.eventLoop.queueTask(createTaskSource('creator progress'), null, { run: () => { progressed.resolve(true); } });
     expect(await progressed.promise).toBe(true);
     const exit = await thread.terminate();
     expect(exit).toEqual({ code: 1, error: undefined, terminated: true });
@@ -3965,7 +3973,7 @@ describe('Shared worker Document ownership across isolates', { timeout: 30_000 }
     await vi.waitFor(async () => {
       expect(await request({ type: 'inspect-shared-connections' })).toMatchObject({ connections: 3 });
     });
-    first.creatorEnv.queueTask('dom-manipulation', () => { firstDocument.destroy(); });
+    first.creatorEnv.queueTask('dom-manipulation', { run: () => { firstDocument.destroy(); } });
     first.drain();
     expect([...registration.ownerSet]).toEqual([secondDocument]);
     expect(thread.closing).toBe(false);
@@ -3992,7 +4000,7 @@ describe('Shared worker Document ownership across isolates', { timeout: 30_000 }
     const registrations = [...document.ownedWorkers];
     expect(registrations).toHaveLength(3);
     await Promise.all(workers.map((thread) => thread.ready));
-    client.creatorEnv.queueTask('dom-manipulation', () => { document.destroy(); });
+    client.creatorEnv.queueTask('dom-manipulation', { run: () => { document.destroy(); } });
     client.drain();
     expect(registrations.every((registration) => registration.ownerSet.size === 0)).toBe(true);
     await Promise.all(workers.map((thread) => thread.terminate()));

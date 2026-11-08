@@ -32,6 +32,8 @@ export class EventSourceImpl extends EventTargetImpl {
   #url: URLRecord;
   #request: FetchRequest;
   #controller?: FetchController;
+  /** Observe external cancellation only while this connection is in flight. */
+  #removeCancellationSteps?: () => void;
   #reconnectionTime = 3000;
   #lastEventID = '';
   #retryTimer?: TaskHandle;
@@ -71,7 +73,9 @@ export class EventSourceImpl extends EventTargetImpl {
     this.readyState = EventSourceState.Closed;
     this.#retryTimer?.remove();
     this.#retryTimer = undefined;
-    this.#controller?.abort(this.env);
+    this.#removeCancellationSteps?.();
+    this.#removeCancellationSteps = undefined;
+    if (this.#controller?.state === 'ongoing') this.#controller.abort(this.env);
     this.env.getWindowOrWorkerGlobalScopeMixin().eventSources.delete(this);
   }
 
@@ -80,6 +84,12 @@ export class EventSourceImpl extends EventTargetImpl {
     this.#controller = fetch(this.#request, {
       processResponse: (response) => this.#processResponse(response),
     }, this.env);
+    const controller = this.#controller;
+    this.#removeCancellationSteps = controller.addCancellationSteps(() => {
+      // Document cancellation uses termination rather than a serialized author abort reason.
+      // It still fails EventSource permanently, including before a Response was delivered.
+      if (controller.responseDeliveryCanceled || controller.state === 'aborted') this.#failConnection();
+    });
   }
 
   #processResponse(response: FetchResponse): void {
@@ -95,10 +105,12 @@ export class EventSourceImpl extends EventTargetImpl {
       this.#failConnection();
       return;
     }
-    this.env.realm.queueGlobalTask(remoteEventTaskSource, () => {
-      if (this.readyState === EventSourceState.Closed) return;
-      this.readyState = EventSourceState.Open;
-      this.fireEvent('open');
+    this.env.realm.queueGlobalTask(remoteEventTaskSource, {
+      run: () => {
+        if (this.readyState === EventSourceState.Closed || this.#controller?.responseDeliveryCanceled) return;
+        this.readyState = EventSourceState.Open;
+        this.fireEvent('open');
+      },
     });
     this.#interpret(response);
   }
@@ -106,11 +118,19 @@ export class EventSourceImpl extends EventTargetImpl {
   // https://html.spec.whatwg.org/multipage/server-sent-events.html#reestablish-the-connection
   #reestablishConnection(): void {
     if (this.readyState === EventSourceState.Closed) return;
+    if (this.#controller?.responseDeliveryCanceled || this.#controller?.state === 'aborted') {
+      this.#failConnection();
+      return;
+    }
+    this.#removeCancellationSteps?.();
+    this.#removeCancellationSteps = undefined;
     const { env } = this;
-    env.realm.queueGlobalTask(remoteEventTaskSource, () => {
-      if (this.readyState === EventSourceState.Closed) return;
-      this.readyState = EventSourceState.Connecting;
-      this.fireEvent('error');
+    env.realm.queueGlobalTask(remoteEventTaskSource, {
+      run: () => {
+        if (this.readyState === EventSourceState.Closed) return;
+        this.readyState = EventSourceState.Connecting;
+        this.fireEvent('error');
+      },
     });
     const deadline = env.userAgent.unsafeSharedCurrentTime() + this.#reconnectionTime;
     const retry = (): void => {
@@ -122,15 +142,17 @@ export class EventSourceImpl extends EventTargetImpl {
       }
       this.#retryTimer = undefined;
       // The same task source places this after the CONNECTING/error task, even for retry: 0.
-      env.realm.queueGlobalTask(remoteEventTaskSource, () => {
-        if (this.readyState !== EventSourceState.Connecting) return;
-        if (this.#lastEventID !== '') {
-          this.#request.headerList.set('Last-Event-ID', isomorphicDecode(utf8Encode(this.#lastEventID)));
-        } else {
-          // SPEC_CLASH(eventsource-empty-last-event-id): The reconnection steps only set nonempty IDs; the reset example requires removing the previous header.
-          this.#request.headerList.delete('Last-Event-ID');
-        }
-        this.#connect();
+      env.realm.queueGlobalTask(remoteEventTaskSource, {
+        run: () => {
+          if (this.readyState !== EventSourceState.Connecting) return;
+          if (this.#lastEventID !== '') {
+            this.#request.headerList.set('Last-Event-ID', isomorphicDecode(utf8Encode(this.#lastEventID)));
+          } else {
+            // SPEC_CLASH(eventsource-empty-last-event-id): The reconnection steps only set nonempty IDs; the reset example requires removing the previous header.
+            this.#request.headerList.delete('Last-Event-ID');
+          }
+          this.#connect();
+        },
       });
     };
     this.#retryTimer = env.userAgent.timerHost.scheduleTimeout(this.#reconnectionTime, retry);
@@ -138,10 +160,16 @@ export class EventSourceImpl extends EventTargetImpl {
 
   // https://html.spec.whatwg.org/multipage/server-sent-events.html#fail-the-connection
   #failConnection(): void {
-    this.env.realm.queueGlobalTask(remoteEventTaskSource, () => {
-      if (this.readyState === EventSourceState.Closed) return;
-      this.close();
-      this.fireEvent('error');
+    this.#removeCancellationSteps?.();
+    this.#removeCancellationSteps = undefined;
+    this.#retryTimer?.remove();
+    this.#retryTimer = undefined;
+    this.env.realm.queueGlobalTask(remoteEventTaskSource, {
+      run: () => {
+        if (this.readyState === EventSourceState.Closed) return;
+        this.close();
+        this.fireEvent('error');
+      },
     });
   }
 
@@ -169,8 +197,10 @@ export class EventSourceImpl extends EventTargetImpl {
           event.data = data.slice(0, -1);
           event.setOrigin(origin);
           event.lastEventId = lastEventID;
-          this.env.realm.queueGlobalTask(remoteEventTaskSource, () => {
-            if (this.readyState !== EventSourceState.Closed) this.dispatch(event);
+          this.env.realm.queueGlobalTask(remoteEventTaskSource, {
+            run: () => {
+              if (this.readyState !== EventSourceState.Closed && !this.#controller?.responseDeliveryCanceled) this.dispatch(event);
+            },
           });
         }
         data = eventType = '';
@@ -210,7 +240,7 @@ export class EventSourceImpl extends EventTargetImpl {
       // Discard unterminated lines/events. Finish reading before reconnecting so
       // the last message tasks precede the error task, including at immediate EOF.
       this.#reestablishConnection();
-    }, () => this.#reestablishConnection(), this.env.realm.globalObject);
+    }, () => this.#reestablishConnection(), this.env.realm.globalObject, this.#controller);
   }
 }
 

@@ -368,9 +368,9 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
   // https://html.spec.whatwg.org/multipage/workers.html#close-a-worker
   close(): void {
     const loop = this.env.responsibleEventLoop;
-    for (const queue of loop.getTaskQueues()) queue.clear();
     this.closing = true;
-    loop.notifyTaskRunnabilityChanged();
+    try { loop.removeAllTasks(); }
+    finally { loop.notifyTaskRunnabilityChanged(); }
   }
 
   /** Release the worker's resources after its event loop has been destroyed. */
@@ -379,19 +379,20 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
   finishRunning(): void {
     // TODO(HTML §10.2.4): Connect Fetch cancellation to shared-service owners;
     // local cleanup cannot release requests retained in another isolate.
-    const resources = this.getWindowOrWorkerGlobalScopeMixin();
-    resources.timers.clear();
-    for (const port of this.ports) port.disentangle();
-    // SPEC_GAP(worker-eventsource-shutdown): HTML's worker tail omits EventSource disposal.
-    // Blink closes EventSources on context destruction. Reuse the same local
-    // close path here to abort requests, cancel retries, and release retention.
-    for (const source of resources.eventSources) source.close();
-    // SPEC_GAP(worker-file-reader-shutdown): HTML's worker tail omits FileReader disposal.
-    // Blink, Gecko, and WebKit cancel pending reads on context destruction,
-    // without the author events fired by FileReader.abort().
-    for (const reader of resources.fileReaders) reader.stop();
-    this.ownerSet.clear();
-    this.remoteOwner = null;
+    const resources = this.env.getWindowOrWorkerGlobalScopeMixin();
+    try {
+      // The same lifetime registration releases local Fetch, Blob, and FileReader work.
+      resources.runDestructionSteps();
+    } finally {
+      resources.timers.clear();
+      for (const port of this.ports) port.disentangle();
+      // SPEC_GAP(worker-eventsource-shutdown): HTML's worker tail omits EventSource disposal.
+      // Blink closes EventSources on context destruction. Reuse the same local
+      // close path here to abort requests, cancel retries, and release retention.
+      for (const source of resources.eventSources) source.close();
+      this.ownerSet.clear();
+      this.remoteOwner = null;
+    }
   }
 
   /** Local non-Blob workers inherit their owner's policies; other workers use the response. */

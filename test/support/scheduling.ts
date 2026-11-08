@@ -1,5 +1,5 @@
 import { InternalPromise } from '../../src/infra/promises';
-import type { TaskSourceKey, TimerHost } from '../../src/infra/tasks';
+import type { TaskRecord, TaskSourceKey, TimerHost } from '../../src/infra/tasks';
 
 /** Test-host Promise observation and deferred work, controlled by the supplied timer host. */
 export function createTestScheduling(timerHost: TimerHost) {
@@ -13,6 +13,17 @@ export function createTestScheduling(timerHost: TimerHost) {
   return {
     InternalPromise: PromiseConstructor,
     runInParallel: (steps: () => void) => { timerHost.scheduleTimeout(0, steps); },
-    queueTask: (_source: TaskSourceKey, steps: () => void) => timerHost.scheduleTimeout(0, steps),
+    queueTask: (_source: TaskSourceKey, task: TaskRecord) => {
+      let pending = true;
+      const timer = timerHost.scheduleTimeout(0, () => { pending = false; task.run(); });
+      return {
+        remove() {
+          if (!pending) return;
+          pending = false;
+          timer.remove();
+          task.discard?.();
+        },
+      };
+    },
   };
 }

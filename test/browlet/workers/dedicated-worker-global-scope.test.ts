@@ -131,16 +131,18 @@ describe('DedicatedWorkerGlobalScope (HTML §10.2.1.2)', () => {
     const second = createTaskSource('second worker source');
     const trace: string[] = [];
     expect(implementation.closing).toBe(false);
-    realm.queueGlobalTask(first, () => {
-      trace.push('before close');
-      realm.queueMicrotask(() => { trace.push('microtask'); });
-      scope.close();
-      scope.close();
-      trace.push('after close');
-      const dropped = realm.queueGlobalTask(second, () => { trace.push('new task'); });
-      expect(dropped.remove()).toBe(false);
+    realm.queueGlobalTask(first, {
+      run: () => {
+        trace.push('before close');
+        realm.queueMicrotask(() => { trace.push('microtask'); });
+        scope.close();
+        scope.close();
+        trace.push('after close');
+        const dropped = realm.queueGlobalTask(second, { run: () => { trace.push('new task'); } });
+        expect(dropped.remove()).toBe(false);
+      },
     });
-    const pending = realm.queueGlobalTask(second, () => { trace.push('old task'); });
+    const pending = realm.queueGlobalTask(second, { run: () => { trace.push('old task'); } });
     drain(loop);
     expect(implementation.closing).toBe(true);
     expect(pending.remove()).toBe(false);
@@ -171,9 +173,9 @@ describe('DedicatedWorkerGlobalScope (HTML §10.2.1.2)', () => {
     const { implementation, loop } = createWorker();
     const source = createTaskSource('worker task');
     const trace: string[] = [];
-    loop.queueTask(source, null, () => { trace.push('old'); });
+    loop.queueTask(source, null, { run: () => { trace.push('old'); } });
     implementation.closing = true;
-    loop.queueTask(source, null, () => { trace.push('new'); });
+    loop.queueTask(source, null, { run: () => { trace.push('new'); } });
     drain(loop);
     expect(trace).toEqual(['old']);
   });

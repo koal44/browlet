@@ -155,13 +155,15 @@ describe('File API §6.2: FileReader reads', () => {
       const tasks = queues[index]!;
       return [
         vi.spyOn(env, 'runInParallel').mockImplementation((steps) => { steps(); }),
-        vi.spyOn(env, 'queueTask').mockImplementation((source, steps) => {
+        vi.spyOn(env, 'queueTask').mockImplementation((source, { run, discard }) => {
           expect(source).toBe('file');
-          tasks.push(steps);
+          tasks.push(run);
           return {
             remove() {
-              const position = tasks.indexOf(steps);
-              if (position !== -1) tasks.splice(position, 1);
+              const position = tasks.indexOf(run);
+              if (position === -1) return;
+              tasks.splice(position, 1);
+              discard?.();
             },
           };
         }),
@@ -384,14 +386,18 @@ describe('File API §6.2: FileReader reads', () => {
       .mockImplementation(() => new UnsafeMoment(monotonicClock, now));
     const blob = BlobImpl.create(BlobData.fromOwnedBytes(new Uint8Array(size)), '', undefined, {
       ...env,
-      queueTask(source, steps) {
+      addDestructionSteps: (steps) => env.addDestructionSteps(steps),
+      queueTask(source, task) {
         expect(source).toBe('file');
         // Three 64 KiB chunks, one final byte, then stream close.
         // Control delivery time, rather than assuming backing-read delays survive queuing.
         const time = deliveryTimes[deliveryIndex++]!;
-        return env.queueTask(source, () => {
-          now = time;
-          steps();
+        return env.queueTask(source, {
+          ...task,
+          run: () => {
+            now = time;
+            task.run();
+          },
         });
       },
     });
@@ -456,7 +462,9 @@ describe('File API §6.2: FileReader reads', () => {
     await secondDone;
     expect(second.result).toBe('second');
     expect(firstEvents).toEqual(['abort', 'loadend']);
-    expect(context.getEnvironment().getWindowOrWorkerGlobalScopeMixin().fileReaders.size).toBe(0);
+    const stops = [first, second].map((reader) => vi.spyOn(reader, 'stop'));
+    context.getEnvironment().getWindowOrWorkerGlobalScopeMixin().runDestructionSteps();
+    for (const stop of stops) expect(stop).not.toHaveBeenCalled();
   });
 
   it('clears a completed result without firing events when aborted', async () => {
@@ -654,10 +662,13 @@ describe('File API §6.2: FileReader reads', () => {
       reader.onloadend = () => { events.push('loadend'); };
       const taskErrors: unknown[] = [];
       const queueTask = env.queueTask.bind(env);
-      const taskDelivery = vi.spyOn(env, 'queueTask').mockImplementation((source, steps) =>
-        queueTask(source, () => {
-          try { steps(); }
-          catch (error) { taskErrors.push(error); }
+      const taskDelivery = vi.spyOn(env, 'queueTask').mockImplementation((source, task) =>
+        queueTask(source, {
+          ...task,
+          run: () => {
+            try { task.run(); }
+            catch (error) { taskErrors.push(error); }
+          },
         }),
       );
       const source: BlobByteSource = {
@@ -699,10 +710,13 @@ describe('File API §6.2: FileReader reads', () => {
     const reader = createReader(context);
     const taskErrors: unknown[] = [];
     const queueTask = env.queueTask.bind(env);
-    const taskDelivery = vi.spyOn(env, 'queueTask').mockImplementation((source, steps) =>
-      queueTask(source, () => {
-        try { steps(); }
-        catch (error) { taskErrors.push(error); }
+    const taskDelivery = vi.spyOn(env, 'queueTask').mockImplementation((source, task) =>
+      queueTask(source, {
+        ...task,
+        run: () => {
+          try { task.run(); }
+          catch (error) { taskErrors.push(error); }
+        },
       }),
     );
     const data = BlobData.fromSource({
@@ -753,7 +767,9 @@ describe('File API §6.2: FileReader reads', () => {
 
     expect(events).toEqual(['error', 'loadend']);
     expect(reader.readyState).toBe(2);
-    expect(context.getEnvironment().getWindowOrWorkerGlobalScopeMixin().fileReaders.size).toBe(0);
+    const stop = vi.spyOn(reader, 'stop');
+    context.getEnvironment().getWindowOrWorkerGlobalScopeMixin().runDestructionSteps();
+    expect(stop).not.toHaveBeenCalled();
     expect(reader.result).toBeNull();
     expect(reader.error).toBeInstanceOf(DOMExceptionImpl);
     expect(reader.error).toMatchObject({ name });

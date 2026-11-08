@@ -2,6 +2,7 @@ import { TypeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
 import { ParallelQueue } from '../infra/parallel-queue';
 import type { InternalPromise, PromiseResultType } from '../infra/promises';
+import type { TaskHandle } from '../infra/tasks';
 import { getBufferSourceCopy, isUint8Array, type GlobalObject } from '../js-engine/index';
 import {
   defineInterfaceMixin, defineTypedef, idlType, nullable, op, promise, reference, roAttr, union, xattr,
@@ -14,6 +15,7 @@ import { BlobData, BlobImpl } from '../file/index';
 import { FormDataImpl, type FormDataEntry } from '../xhr/index';
 
 import { queueFetchTask, type FetchEnvironment } from './environment';
+import { deserializeAbortReason, type FetchController } from './controller';
 import { encodeMultipartFormData, parseMultipartFormData } from './multipart';
 import type { FetchRequest } from './request';
 import type { FetchResponse } from './response';
@@ -41,11 +43,17 @@ export class FetchBody {
   static fromBytes(bytes: Uint8Array, env: FetchEnvironment): FetchBody {
     const stream = ReadableStreamImpl.createWithByteReadingSupport(undefined, undefined, 0, env);
     // The bytes are already available; only delivery to the owning loop is deferred.
-    env.queueTask('network', () => {
-      if (bytes.length > 0 && !stream.isErrored) {
-        stream.enqueueChunk(new env.realm.Uint8Array(bytes));
-      }
-      stream.close();
+    env.queueTask('network', {
+      run: () => {
+        if (bytes.length > 0 && !stream.isErrored) {
+          stream.enqueueChunk(new env.realm.Uint8Array(bytes));
+        }
+        stream.close();
+      },
+      // SPEC_GAP(body-production-discard): Fetch omits completion when the task is discarded.
+      // SPEC_CLASH(body-production-destruction): Chromium stops production after removal;
+      // Firefox/WebKit can retain byte bodies. Fail unfinished production without stranding reads.
+      discard: () => stream.error(new TypeError('Body production was discarded')),
     });
     const body = new FetchBody(stream, env);
     body.source = bytes;
@@ -107,13 +115,17 @@ export class FetchBody {
     return clone;
   }
 
-  /** Deliver copied chunks and completion through tasks on the selected destination. */
+  /**
+   * Deliver copied chunks and completion through tasks on the selected destination.
+   * Supply a controller only when these reads belong to its fetch operation.
+   */
   // https://fetch.spec.whatwg.org/#body-incrementally-read
   incrementallyRead(
     processBodyChunk: (bytes: Uint8Array) => void,
     processEndOfBody: () => void,
     processBodyError: (error: unknown) => void,
     taskDestination: GlobalObject | ParallelQueue | null = null,
+    controller: FetchController | null = null,
   ): void {
     const env = this.#env;
     const destination = taskDestination ?? new ParallelQueue(env.runInParallel);
@@ -122,7 +134,7 @@ export class FetchBody {
       this.readChunk(reader, destination, (bytes) => {
         processBodyChunk(bytes);
         readLoop();
-      }, processEndOfBody, processBodyError);
+      }, processEndOfBody, processBodyError, controller);
     };
     readLoop();
   }
@@ -130,55 +142,117 @@ export class FetchBody {
   /**
    * Deliver one copied byte chunk, EOF, or error through a Fetch task.
    * The caller supplies this body's reader and owns further reads and lock release.
+   * A supplied controller owns cancellation through delivery of this result.
    */
   // One iteration of Fetch's incrementally-read loop; the caller supplies continuation.
   // https://fetch.spec.whatwg.org/#incrementally-read-loop
-  // SPEC_MISMATCH: incrementally-read loop(reader, taskDestination, processBodyChunk, processEndOfBody, processBodyError) -> nothing
   readChunk(
     reader: ReadableStreamDefaultReaderImpl,
     taskDestination: GlobalObject | ParallelQueue,
     processBodyChunk: (bytes: Uint8Array) => void,
     processEndOfBody: () => void,
     processBodyError: (error: unknown) => void,
+    controller: FetchController | null = null,
   ): void {
-    const env = this.#env;
-    reader.readChunk({
-      chunkSteps(chunk) {
-        let continueAlgorithm: () => void;
-        if (!isUint8Array(chunk)) {
-          continueAlgorithm = () => processBodyError(new TypeError('Body stream produced a non-Uint8Array chunk'));
-        } else {
-          const bytes = getBufferSourceCopy(chunk);
-          continueAlgorithm = () => processBodyChunk(bytes);
-        }
-        queueFetchTask(continueAlgorithm, taskDestination, env);
-      },
-      closeSteps: () => queueFetchTask(processEndOfBody, taskDestination, env),
-      errorSteps: (error) => queueFetchTask(() => processBodyError(error), taskDestination, env),
-    });
+    const delivery = this.#prepareDelivery(processBodyError, taskDestination, controller);
+    if (delivery === null) return;
+    try {
+      reader.readChunk({
+        chunkSteps(chunk) {
+          let continueAlgorithm: () => void;
+          if (!isUint8Array(chunk)) {
+            continueAlgorithm = () => processBodyError(new TypeError('Body stream produced a non-Uint8Array chunk'));
+          } else {
+            const bytes = getBufferSourceCopy(chunk);
+            continueAlgorithm = () => processBodyChunk(bytes);
+          }
+          delivery.queue(continueAlgorithm);
+        },
+        closeSteps: () => delivery.queue(processEndOfBody),
+        errorSteps: (error) => delivery.queue(() => processBodyError(error)),
+      });
+    } catch (error) {
+      delivery.finish();
+      throw error;
+    }
   }
 
-  /** Queue the complete bytes or read failure on the selected task destination. */
+  /**
+   * Queue the complete bytes or read failure on the selected task destination.
+   * Supply a controller only when this read belongs to its fetch operation.
+   */
   // https://fetch.spec.whatwg.org/#body-fully-read
   readAll(
     processBody: (bytes: Uint8Array<ArrayBuffer>) => void,
     processBodyError: (error?: unknown) => void,
     taskDestination: GlobalObject | ParallelQueue | null = null,
+    controller: FetchController | null = null,
   ): void {
     const env = this.#env;
     const destination = taskDestination ?? new ParallelQueue(env.runInParallel);
-    const successSteps = (bytes: Uint8Array<ArrayBuffer>) =>
-      queueFetchTask(() => processBody(bytes), destination, env);
-    const errorSteps = (error?: unknown) =>
-      queueFetchTask(() => processBodyError(error), destination, env);
-    let reader: ReturnType<ReadableStreamImpl['getDefaultReader']>;
+    const delivery = this.#prepareDelivery(processBodyError, destination, controller);
+    if (delivery === null) return;
+    let reader: ReadableStreamDefaultReaderImpl;
     try {
       reader = this.stream.getDefaultReader();
     } catch (error) {
-      errorSteps(error);
+      delivery.queue(() => processBodyError(error));
       return;
     }
-    reader.readAllBytes(successSteps, errorSteps);
+    try {
+      reader.readAllBytes(
+        (bytes) => delivery.queue(() => processBody(bytes)),
+        (error) => delivery.queue(() => processBodyError(error)),
+      );
+    } catch (error) {
+      delivery.finish();
+      throw error;
+    }
+  }
+
+  /** Prepare queued delivery and cleanup independently of reading the stream. */
+  #prepareDelivery(
+    processError: (error: unknown) => void,
+    destination: GlobalObject | ParallelQueue,
+    controller: FetchController | null,
+  ) {
+    const env = this.#env;
+    const fail = (): void => processError(controller?.state === 'aborted'
+      ? deserializeAbortReason(controller.serializedAbortReason, env)
+      : new TypeError('Fetch body delivery was canceled'));
+    if (controller?.responseDeliveryCanceled) {
+      queueFetchTask({ run: fail, discard: fail }, destination, env);
+      return null;
+    }
+    let pending: TaskHandle | undefined;
+    let finished = false;
+    let canceled = false;
+    let removeCancellation = (): void => {};
+    const finish = (): void => { finished = true; pending = undefined; removeCancellation(); };
+    removeCancellation = controller?.addDeliveryCancellationSteps(() => {
+      canceled = true;
+      pending?.remove();
+      finish();
+      queueFetchTask({ run: fail, discard: fail }, destination, env);
+    }) ?? removeCancellation;
+    return {
+      queue: (steps: () => void): void => {
+        if (finished) return;
+        pending = queueFetchTask({
+          run: () => {
+            finish();
+            steps();
+          },
+          discard: () => {
+            finish();
+            // Removal by Document destruction must also release the internal reader's wait.
+            // Explicit abortion queues its failure on the original destination instead.
+            if (!canceled) fail();
+          },
+        }, destination, env);
+      },
+      finish,
+    };
   }
 }
 

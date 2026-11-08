@@ -45,7 +45,7 @@ describe('microtask checkpoint integration', () => {
       order.push('synchronous');
     }));
     const nextTask = vi.fn();
-    loop.queueTask(networkingTaskSource, null, nextTask);
+    loop.queueTask(networkingTaskSource, null, { run: nextTask });
 
     await runInHostTask(() => {
       expect(loop.runTaskTurn()).toBe(true);
@@ -101,7 +101,7 @@ describe('microtask checkpoint integration', () => {
     const { realm, responsibleEventLoop: loop } = document.env;
     const order: string[] = [];
     const task = vi.fn();
-    realm.queueGlobalTask(networkingTaskSource, task);
+    realm.queueGlobalTask(networkingTaskSource, { run: task });
     realm.queueMicrotask(() => {
       order.push('first');
       expect(loop.currentlyRunningTask?.document).toBe(document);

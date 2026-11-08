@@ -4499,7 +4499,7 @@ No failures were reclassified and no native artifacts were rebuilt.
 
 ## HTML §7.4.6.1: Completion when queued work is discarded
 
-`TaskCreationOptions.discardSteps` is internal completion bookkeeping, not an
+`Task.discard` is internal completion bookkeeping, not an
 additional HTML task execution. `EventLoop.removeTask()` and
 `removeTasksForDocument()` remove pending work before notifying its owner. The
 Document-wide operation detaches the entire batch first, notifies every waiting

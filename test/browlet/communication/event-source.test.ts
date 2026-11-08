@@ -274,6 +274,56 @@ describe('EventSource (§9.2)', () => {
     expect(f.clock.pending()).toEqual([]);
   });
 
+  it.each([false, true])('fails without retrying when Document abortion cancels Fetch (after headers: %s)', async (afterHeaders) => {
+    const f = await fixture();
+    const source = new f.window.EventSource('/events');
+    const errors = vi.fn();
+    const message = vi.fn();
+    source.onerror = errors;
+    source.onmessage = message;
+    const exchange = await f.exchange();
+    if (afterHeaders) {
+      const opened = once(source, 'open');
+      exchange.respond();
+      await opened;
+    }
+    await new Promise<void>((resolve) => f.env.queueTask('dom-manipulation', {
+      run: () => { f.window.stop(); resolve(); },
+    }));
+    await expect.poll(() => errors.mock.calls.length).toBe(1);
+    expect(source.readyState).toBe(source.CLOSED);
+    expect(message).not.toHaveBeenCalled();
+    expect(exchange.abort).toHaveBeenCalledOnce();
+    expect(f.clock.pending()).toEqual([]);
+    expect(f.env.fetchGroup.fetchRecords.at(-1)!.controller!.state).toBe('terminated');
+    f.clock.advance(3000);
+    await settleTasks(f.env);
+    expect(f.transport.exchanges).toHaveLength(1);
+    expect(errors).toHaveBeenCalledOnce();
+  });
+
+  it('retains an already-scheduled retry when stop has no in-flight request to cancel', async () => {
+    const f = await fixture();
+    const source = new f.window.EventSource('/events');
+    const disconnected = once(source, 'error');
+    const first = await f.exchange();
+    first.respond();
+    first.send('retry: 40\ndata: first\n\n');
+    first.listener.onEnd();
+    await disconnected;
+    await new Promise<void>((resolve) => f.env.queueTask('dom-manipulation', {
+      run: () => { f.window.stop(); resolve(); },
+    }));
+    expect(source.readyState).toBe(source.CONNECTING);
+    expect(f.clock.pending()).toHaveLength(1);
+    f.clock.advance(40);
+    const second = await f.exchange(2);
+    const opened = once(source, 'open');
+    second.respond();
+    await opened;
+    expect(source.readyState).toBe(source.OPEN);
+  });
+
   it('drops queued messages and reconnect notifications when a message handler closes', async () => {
     const f = await fixture();
     const source = new f.window.EventSource('/events');
@@ -327,9 +377,11 @@ describe('EventSource (§9.2)', () => {
     await Promise.all([opened, disconnected]);
     expect(f.clock.pending()).toHaveLength(1);
     await new Promise<void>((resolve) => {
-      f.env.queueTask('dom-manipulation', () => {
-        f.env.getAssociatedDocument()!.destroy();
-        resolve();
+      f.env.queueTask('dom-manipulation', {
+        run: () => {
+          f.env.getAssociatedDocument()!.destroy();
+          resolve();
+        },
       });
     });
     expect([first.readyState, second.readyState]).toEqual([2, 2]);

@@ -156,11 +156,18 @@ export class ResourceReader {
     if (body === null) {
       complete.resolve(undefined);
     } else {
-      body.stream.env.queueTask('network', () => {
-        try {
-          body.stream.cancelInternal(reason).observe(complete.resolve, complete.reject);
+      body.stream.env.queueTask('network', {
+        run: () => {
+          try {
+            body.stream.cancelInternal(reason).observe(complete.resolve, complete.reject);
+            this.#releaseStreamReader();
+          } catch (error) { complete.reject(error); }
+        },
+        discard: () => {
+          // Teardown cannot run the removed source-cancellation task, but must release our wait and lock.
           this.#releaseStreamReader();
-        } catch (error) { complete.reject(error); }
+          complete.reject(new InternalError('Resource cancellation task was discarded'));
+        },
       });
     }
     return complete.promise;
@@ -182,20 +189,29 @@ export class ResourceReader {
       return result.promise;
     }
     const env = body.stream.env;
-    env.queueTask('network', () => {
-      if (this.#end !== undefined) return;
-      try {
-        this.#streamReader ??= body.stream.getDefaultReader();
-        body.readChunk(this.#streamReader, env.realm.globalObject,
-          (chunk) => {
-            // Fetch may have queued this delivery before cancellation began.
-            if (this.#end !== undefined) return;
-            result.resolve(chunk);
-          },
-          () => this.#endSource('eof'),
-          (error) => this.#endSource({ error }),
-        );
-      } catch (error) { this.#endSource({ error }); }
+    env.queueTask('network', {
+      run: () => {
+        if (this.#end !== undefined) return;
+        try {
+          this.#streamReader ??= body.stream.getDefaultReader();
+          body.readChunk(this.#streamReader, env.realm.globalObject,
+            (chunk) => {
+              // Fetch may have queued this delivery before cancellation began.
+              if (this.#end !== undefined) return;
+              result.resolve(chunk);
+            },
+            () => this.#endSource('eof'),
+            (error) => this.#endSource({ error }),
+          );
+        } catch (error) { this.#endSource({ error }); }
+      },
+      discard: () => {
+        // The source may already have failed during destruction; retain that failure when available.
+        const state = body.stream.state;
+        this.#endSource({
+          error: state.state === 'errored' ? state.storedError : new InternalError('Resource read task was discarded'),
+        });
+      },
     });
     return result.promise;
   }

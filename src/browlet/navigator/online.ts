@@ -28,7 +28,7 @@ export class NavigatorOnLineMixin {
     if (!EventTargetImpl.is(global)) throw new InternalError('Navigator connectivity changes require a Window or worker event target');
     // SPEC_CLASH(navigator-online-worker-notifications): Follow HTML/WebKit; Chromium's emulation probe changed worker onLine without events.
     // Capture the transition, not its eventual getter value: later changes do not cancel this event.
-    this.env.queueTask('network', () => { global.fireEvent(type); });
+    this.env.queueTask('network', { run: () => { global.fireEvent(type); } });
   }
 }
 

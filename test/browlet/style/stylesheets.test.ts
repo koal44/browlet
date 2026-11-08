@@ -44,7 +44,7 @@ describe('stylesheet integration', () => {
     expect(sheet.cssRules).toHaveLength(1);
     expect(background).toHaveBeenCalledOnce();
     expect(delivery).toHaveBeenCalledOnce();
-    expect(delivery).toHaveBeenCalledWith('dom-manipulation', expect.any(Function));
+    expect(delivery).toHaveBeenCalledWith('dom-manipulation', { run: expect.any(Function) as unknown });
   });
 
   it('creates and associates parser-created inline style sheets', () => {

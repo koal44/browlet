@@ -108,7 +108,7 @@ describe('media Document loading', () => {
     const { navigable, params, load } = await fixture('image/png');
     vi.spyOn(HTMLImageElementImpl.prototype, 'loadDocumentResource').mockImplementation(() => {});
     const document = (await load())!;
-    document.env.queueTask('network', () => { document.destroy(); });
+    document.env.queueTask('network', { run: () => { document.destroy(); } });
     const queue = vi.spyOn(document.env, 'queueTask');
     const finish = vi.spyOn(document, 'finishLoading');
     navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));

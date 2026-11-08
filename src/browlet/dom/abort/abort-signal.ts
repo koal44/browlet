@@ -264,7 +264,7 @@ export const abortSignalIDL = defineInterface<BrowletEnvironment>({
             const timers = env.getWindowOrWorkerGlobalScopeMixin().timers;
             return (milliseconds: number, steps: () => void) => {
               timers.runStepsAfterTimeout('AbortSignal-timeout', milliseconds, () => {
-                env.queueTask('timer', steps);
+                env.queueTask('timer', { run: steps });
               });
             };
           }),

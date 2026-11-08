@@ -6,8 +6,8 @@ implemented for the current Window host. Memory-backed Blob/File messaging and
 worker-created Blob URLs also cross isolates through the browser owner.
 FileReaderSync reads memory-backed data in dedicated and shared workers. Fetch
 consumes the same backing data and registered Blob URLs. Remaining work concerns
-global teardown, host-selected files, general worker Fetch, MediaSource, and the
-final conformance audit.
+forced/native worker teardown, host-selected files, general worker Fetch,
+MediaSource, and the final conformance audit.
 
 ## Current ownership
 
@@ -44,9 +44,26 @@ an implementation of file selection or filesystem access.
 
 Blob/File retain `env`; slices preserve it and deserialization uses the target
 environment. Background reads deliver bytes/failure/completion through
-`env.queueTask('file', steps)`. Promise reads use the owner's internal
+`env.queueTask('file', { run: steps })`. Promise reads use the owner's internal
 Promise facility; `textStream()` pipes through TextDecoderStream's associated TransformStream.
 Blob text is UTF-8; FileReader text instead applies label/MIME/BOM rules.
+
+Discarding queued Blob data, EOF, or failure tasks now stops that producer and
+errors its unfinished stream with TypeError. A backing read that finishes after
+cancellation is ignored. HTML admits late production only as discard cleanup on
+the original loop; inactive Documents still retain their ordinary tasks for
+reactivation. Fully produced streams and the immutable Blob data remain usable.
+`SPEC_GAP(body-production-discard)` records File API's missing discard completion;
+`SPEC_CLASH(body-production-destruction)` records the approved browser choice in
+the [loader audit](../browlet/loader/ROADMAP.md#byte-and-cache-body-production).
+Blob production now registers destruction cleanup with its existing execution
+owner, so a pending backing read fails immediately even with no queued task.
+Completion, failure, or cancellation removes the registration; EOF releases it
+before the consumer drains retained bytes. Late backing results are ignored,
+and a stream created after destruction never starts its source read. This extends
+the approved body-production decision; see the
+[owner-lifetime slice](../browlet/loader/ROADMAP.md#execution-owner-destruction-without-queued-work).
+Interrupting the host read itself and connecting worker shutdown remain explicit.
 
 Constructed File modification time is captured once. A host file with unknown
 modification time uses the specified current-time fallback. FileList mutation
@@ -65,7 +82,25 @@ descriptors exist; native cloning must not discard their private state silently.
 
 FileReader uses Browlet's EventTarget and XHR's ProgressEvent. Its read operation
 owns its removable tasks, reader, progress clock, and final result. Abort and
-reentrant reads suppress stale tasks/events; global teardown remains below.
+reentrant reads suppress stale tasks/events. Each active read now registers with
+the existing global destruction hook; completion, failure, or abort unregisters
+before author callbacks can start another read. Document destruction invokes
+internal `stop()`, cancelling the active reader and queued notifications without
+events. It sets DONE synchronously, leaves error null, and ignores late backing
+results. This preserves Pip's worker stop behavior while sharing registration
+with Fetch and Blob production instead of adding another FileReader registry.
+
+`SPEC_GAP(file-reader-global-destruction)` records the missing File API lifecycle
+connection. Eric approved three browser choices: synchronous stop with null error
+(Chromium/WebKit), retaining completed results (Firefox), and immediate AbortError
+when starting a read after Document destruction (Chromium). The corresponding
+`SPEC_CLASH(file-reader-destruction-state)`,
+`SPEC_CLASH(file-reader-completed-destruction)`, and
+`SPEC_CLASH(file-reader-after-destruction)` markers retain these disagreements.
+Destroying the Document inside a notification also suppresses later notifications,
+including loadend after a completed load; all three engines do this. Evidence and
+the worker consolidation boundary are in the
+[FileReader teardown audit](../browlet/loader/ROADMAP.md#filereader-document-destruction).
 
 ### FileReader failure state
 
@@ -122,16 +157,11 @@ A fake MediaSource or generic `object` would hide the missing dependency.
 
 ## Remaining work
 
-1. **Window teardown and host I/O cancellation.** Active FileReaders use the
-   existing global resource owner. Cooperative worker shutdown cancels their
-   streams and queued notifications after the final checkpoint, without author
-   events; completion and abort release normal reads. Connect the same stop
-   operation to permanent Window destruction through the
-   [browsing lifecycle](../browlet/browsing/ROADMAP.md). Inactive-Document task
-   gating alone does not release a read, and retention for history is not
-   destruction. BlobByteSource still needs cancellation of an already-issued
-   host read; stream cancellation currently stops subsequent reads and delivery.
-   See the [worker cleanup evidence](../browlet/workers/ROADMAP.md#filereader-shutdown).
+1. **Host I/O cancellation and forced worker teardown.** Document destruction and
+   cooperative worker shutdown now use the shared global destruction hook to
+   stop pending reads without author events. Inactive Documents retain reads
+   for reactivation. Host backing reads still lack an interrupt operation; late
+   results are ignored. Forced/native termination remains a separate boundary.
 
 2. **Worker Fetch and host-file reads.** Blob/File/FileList are exposed in worker
    globals, and memory-backed Blob/File messaging is connected across isolates.
@@ -177,6 +207,7 @@ A fake MediaSource or generic `object` would hide the missing dependency.
 metadata, source failures, and packaging. Browser tests cover
 [projected File APIs](../../test/browlet/file-api.test.ts),
 [FileReader](../../test/browlet/file-reader.test.ts),
+[FileReader destruction](../../test/browlet/file-reader-destruction.test.ts),
 [the Blob URL store](../../test/browlet/blob-url.test.ts), and
 [public object URLs](../../test/browlet/object-url.test.ts).
 Structured-data tests check destination realms, storage cloning, and graph identity.

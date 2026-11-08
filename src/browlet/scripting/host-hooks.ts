@@ -78,12 +78,14 @@ export function installRealmHostHooks(
     // completion in a queue whose Document can never become active again.
     const document = env.realm.getAssociatedDocument();
     if (document !== null && document.browsingContext === null) return;
-    env.realm.queueGlobalTask(taskSources[source], () => {
-      if (!env.canRunScript()) return;
-      const loop = env.responsibleEventLoop;
-      loop.prepareToRunScript(env);
-      try { complete(); }
-      finally { loop.cleanUpAfterRunningScript(env); }
+    env.realm.queueGlobalTask(taskSources[source], {
+      run: () => {
+        if (!env.canRunScript()) return;
+        const loop = env.responsibleEventLoop;
+        loop.prepareToRunScript(env);
+        try { complete(); }
+        finally { loop.cleanUpAfterRunningScript(env); }
+      },
     });
   });
   // https://html.spec.whatwg.org/multipage/webappapis.html#hostsystemutcepochnanoseconds
@@ -208,7 +210,7 @@ function enqueueGenericJob(job: () => void, realm: JSRealm | null): false | void
   if (!(realm instanceof BrowletRealm) || !realm.hasEnvironment) return false;
   // Steps 1–2: the supplied realm selects its global's loop and Document.
   // This is an engine task; author Promise reactions use their separate hook.
-  realm.queueGlobalTask(jsEngineTaskSource, job);
+  realm.queueGlobalTask(jsEngineTaskSource, { run: job });
 }
 
 // https://html.spec.whatwg.org/multipage/webappapis.html#hostenqueuetimeoutjob
@@ -225,6 +227,6 @@ function enqueueTimeoutJob(
   // created by setTimeout/setInterval, without their nesting or delay clamping.
   const timers = realm.env.getWindowOrWorkerGlobalScopeMixin().timers;
   timers.runStepsAfterTimeout('JavaScript', milliseconds, () => {
-    realm.queueGlobalTask(jsEngineTaskSource, job);
+    realm.queueGlobalTask(jsEngineTaskSource, { run: job });
   });
 }

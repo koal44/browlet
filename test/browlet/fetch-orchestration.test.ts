@@ -407,9 +407,11 @@ describe('Fetch body completion', () => {
     const stream = ReadableStreamImpl.createDefault(undefined, undefined, 0, () => 1, env);
     reply.response.body = new FetchBody(stream, env);
     if (mode === 'already-closed') stream.close();
-    const run = (steps: () => void) => new Promise<void>((resolve, reject) => queueFetchTask(() => {
-      try { steps(); resolve(); }
-      catch (error) { reject(new Error('Body task failed', { cause: error })); }
+    const run = (steps: () => void) => new Promise<void>((resolve, reject) => queueFetchTask({
+      run: () => {
+        try { steps(); resolve(); }
+        catch (error) { reject(new Error('Body task failed', { cause: error })); }
+      },
     }, env.realm.globalObject, env));
     const events: string[] = [];
     operation.options.processResponse = () => { events.push('response'); };
@@ -420,8 +422,10 @@ describe('Fetch body completion', () => {
       await run(() => { stream.enqueueChunk(Uint8Array.of(1, 2, 3)); stream.close(); });
       expect(events).toEqual(['response']);
       expect(request.done).toBe(false);
-      const bytes = await new Promise((resolve, reject) => queueFetchTask(() => {
-        stream.getDefaultReader().readAllBytes(resolve, reject);
+      const bytes = await new Promise((resolve, reject) => queueFetchTask({
+        run: () => {
+          stream.getDefaultReader().readAllBytes(resolve, reject);
+        },
       }, env.realm.globalObject, env));
       expect(bytes).toEqual(Uint8Array.of(1, 2, 3));
     } else if (mode === 'cancel') {

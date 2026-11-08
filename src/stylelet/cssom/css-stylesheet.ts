@@ -180,17 +180,19 @@ export class CSSStyleSheetImpl
       try {
         // CSSOM removes imports from replacement input; discard them during parsing.
         const rules = parseStylesheetContents(text, new RuleListContext(this.ruleList, null, this.#constructed, this.env));
-        this.env.queueTask('dom-manipulation', () => {
-          try {
-            this.replaceRules(rules);
-            this.#disallowModification = false;
-            result.resolve(this);
-          } catch (error) {
-            reject(error);
-          }
+        this.env.queueTask('dom-manipulation', {
+          run: () => {
+            try {
+              this.replaceRules(rules);
+              this.#disallowModification = false;
+              result.resolve(this);
+            } catch (error) {
+              reject(error);
+            }
+          },
         });
       } catch (error) {
-        this.env.queueTask('dom-manipulation', () => { reject(error); });
+        this.env.queueTask('dom-manipulation', { run: () => { reject(error); } });
       }
     });
     return result.promise;

@@ -11,8 +11,8 @@ describe('Permissions §3.4: permissions task source', () => {
     const otherEnv = TopLevelTraversable.create(userAgent, null, '').activeWindow!.env;
     const loop = env.responsibleEventLoop;
     const trace: string[] = [];
-    env.queueTask('permissions', () => { trace.push('first'); });
-    env.queueTask('permissions', () => { trace.push('second'); });
+    env.queueTask('permissions', { run: () => { trace.push('first'); } });
+    env.queueTask('permissions', { run: () => { trace.push('second'); } });
 
     expect(trace).toEqual([]);
     expect([...loop.getTaskQueue(permissionsTaskSource)].map((task) => task.document))
@@ -29,8 +29,8 @@ describe('Permissions §3.4: permissions task source', () => {
     const env = traversable.activeWindow!.env;
     const document = traversable.activeDocument!;
     const steps = vi.fn();
-    env.queueTask('permissions', () => { document.destroy(); });
-    env.queueTask('permissions', steps);
+    env.queueTask('permissions', { run: () => { document.destroy(); } });
+    env.queueTask('permissions', { run: steps });
     env.responsibleEventLoop.runTaskTurn();
     expect(env.responsibleEventLoop.getTaskQueue(permissionsTaskSource).size).toBe(0);
     expect(env.responsibleEventLoop.runTaskTurn()).toBe(false);

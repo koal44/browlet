@@ -38,40 +38,42 @@ export class SharedWorkerManager {
     // native pipe now; its receiving endpoint waits for the selected isolate.
     const channel = new JSMessageChannel<MessagePortTransportMessage>();
     worker.port.entangleRemote(channel.port1);
-    this.#queue.enqueue(() => {
-      let thread: WorkerThread | undefined;
-      let created = false;
-      try {
-        for (;;) {
-          const found = this.find(url, options, storageKey, isSecureContext);
-          if (found === 'incompatible') {
-            worker.port.disentangle();
-            channel.port2.close();
-            worker.queueError();
+    this.#queue.enqueue({
+      run: () => {
+        let thread: WorkerThread | undefined;
+        let created = false;
+        try {
+          for (;;) {
+            const found = this.find(url, options, storageKey, isSecureContext);
+            if (found === 'incompatible') {
+              worker.port.disentangle();
+              channel.port2.close();
+              worker.queueError();
+              return;
+            }
+            created = found === null;
+            thread = found ?? new WorkerThread({
+              kind: 'shared', creatorEnv: worker.env, script: { url, ...options }, data: undefined,
+            }, () => { throw new InternalError('Production shared worker emitted a private command'); });
+            if (created) {
+              thread.closed.observe((exit) => {
+              // eslint-disable-next-line @typescript-eslint/only-throw-error -- Preserve uncaught native host failures.
+                if (exit.error !== undefined) throw exit.error;
+              }, (error) => { throw error; });
+            }
+            // The other isolate can close after lookup. Keep this same pipe and
+            // its queued messages while selecting a replacement execution.
+            const registration = this.#registrations.get(thread)!;
+            if (!registration.attach(worker, channel.port2, created)) continue;
             return;
           }
-          created = found === null;
-          thread = found ?? new WorkerThread({
-            kind: 'shared', creatorEnv: worker.env, script: { url, ...options }, data: undefined,
-          }, () => { throw new InternalError('Production shared worker emitted a private command'); });
-          if (created) {
-            thread.closed.observe((exit) => {
-              // eslint-disable-next-line @typescript-eslint/only-throw-error -- Preserve uncaught native host failures.
-              if (exit.error !== undefined) throw exit.error;
-            }, (error) => { throw error; });
-          }
-          // The other isolate can close after lookup. Keep this same pipe and
-          // its queued messages while selecting a replacement execution.
-          const registration = this.#registrations.get(thread)!;
-          if (!registration.attach(worker, channel.port2, created)) continue;
-          return;
+        } catch (error) {
+          worker.port.disentangle();
+          channel.port2.close();
+          if (created) void thread?.terminate();
+          throw error;
         }
-      } catch (error) {
-        worker.port.disentangle();
-        channel.port2.close();
-        if (created) void thread?.terminate();
-        throw error;
-      }
+      },
     });
   }
 

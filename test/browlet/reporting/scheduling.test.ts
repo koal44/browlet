@@ -26,8 +26,8 @@ describe('Browser-owned Reporting scheduling', () => {
     const completion = new Promise<void>((resolve) => {
       userAgent.queueReportingTask(() => { trace.push('report'); resolve(); });
     });
-    realm.queueGlobalTask(source, () => { trace.push('first page task'); });
-    realm.queueGlobalTask(source, () => { trace.push('second page task'); });
+    realm.queueGlobalTask(source, { run: () => { trace.push('first page task'); } });
+    realm.queueGlobalTask(source, { run: () => { trace.push('second page task'); } });
     await completion;
     expect(trace).toEqual(['first page task', 'second page task', 'report']);
   });
@@ -38,7 +38,7 @@ describe('Browser-owned Reporting scheduling', () => {
     const eventLoop = getRelevantRealm(traversable.activeWindow!).agent.eventLoop;
     const source = createTaskSource('inactive reporting scheduling test');
     const trace: string[] = [];
-    eventLoop.queueTask(source, createTestDocument(), () => { trace.push('inactive task'); });
+    eventLoop.queueTask(source, createTestDocument(), { run: () => { trace.push('inactive task'); } });
     await new Promise<void>((resolve) => {
       userAgent.queueReportingTask(() => { trace.push('report'); resolve(); });
     });

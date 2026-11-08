@@ -21,7 +21,18 @@ export function createClientEnvironment(
   url = 'https://example.test/', env: TestEnvironment = createEnvironment(),
 ): ClientEnvironment {
   const topLevelCreationURL = parseURL(url).url!;
-  const queueGlobalFetchTask: FetchEnvironment['queueGlobalFetchTask'] = (_global, steps) => { setImmediate(steps); };
+  const queueGlobalFetchTask: FetchEnvironment['queueGlobalFetchTask'] = (_global, task) => {
+    let pending = true;
+    const timer = setImmediate(() => { pending = false; task.run(); });
+    return {
+      remove() {
+        if (!pending) return;
+        pending = false;
+        clearImmediate(timer);
+        task.discard?.();
+      },
+    };
+  };
   const reportCSPViolation: FetchEnvironment['reportCSPViolation'] = () => {
     throw new Error('This fixture has no CSP reporting implementation');
   };

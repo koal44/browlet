@@ -20,9 +20,9 @@ describe('queue an element task', () => {
     const element = unwrap<ElementImpl>(source.document.createElementNS(namespace, name));
     const observed: string[] = [];
 
-    element.queueTask(domManipulationTaskSource, () => { observed.push('element:first'); });
-    source.realm.queueGlobalTask(domManipulationTaskSource, () => { observed.push('global'); });
-    element.queueTask(domManipulationTaskSource, () => { observed.push('element:last'); });
+    element.queueTask(domManipulationTaskSource, { run: () => { observed.push('element:first'); } });
+    source.realm.queueGlobalTask(domManipulationTaskSource, { run: () => { observed.push('global'); } });
+    element.queueTask(domManipulationTaskSource, { run: () => { observed.push('element:last'); } });
 
     expect(observed).toEqual([]);
     for (const task of source.loop.getTaskQueue(domManipulationTaskSource)) {
@@ -47,7 +47,7 @@ describe('queue an element task', () => {
     expect(getRelevantRealm(platform)).toBe(source.realm);
     expect(element.nodeDocument.isFullyActive()).toBe(false);
 
-    element.queueTask(domManipulationTaskSource, steps);
+    element.queueTask(domManipulationTaskSource, { run: steps });
 
     const [task] = source.loop.getTaskQueue(domManipulationTaskSource);
     expect(task?.document).toBe(source.documentImpl);
@@ -65,11 +65,11 @@ describe('queue an element task', () => {
       const observed: string[] = [];
       expect(destination.loop).not.toBe(source.loop);
 
-      element.queueTask(domManipulationTaskSource, () => { observed.push('before adoption'); });
+      element.queueTask(domManipulationTaskSource, { run: () => { observed.push('before adoption'); } });
       expect(destination.document.adoptNode(platform)).toBe(platform);
       expect(platform.ownerDocument).toBe(destination.document);
       expect(getRelevantRealm(platform)).toBe(source.realm);
-      element.queueTask(domManipulationTaskSource, () => { observed.push('after adoption'); });
+      element.queueTask(domManipulationTaskSource, { run: () => { observed.push('after adoption'); } });
 
       const paused = inactive === 'source' ? source : inactive === 'destination' ? destination : null;
       const activeEntry = paused?.traversable.activeSessionHistoryEntry;

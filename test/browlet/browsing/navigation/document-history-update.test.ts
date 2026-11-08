@@ -81,7 +81,7 @@ describe('existing-Document history-step updates', () => {
     const { document, platform, target, order } = fixture();
     platform.addEventListener('popstate', () => {
       platform.queueMicrotask(() => { order.push('microtask'); });
-      document.env.queueTask('timer', () => { order.push('timer'); });
+      document.env.queueTask('timer', { run: () => { order.push('timer'); } });
     });
     await inTask(document, () => document.updateForHistoryStepApplication(target, true, 2, 1, 'traverse'));
     expect(order.indexOf('microtask')).toBeGreaterThan(order.indexOf('popstate'));
@@ -226,7 +226,7 @@ function fixture(path = '/page#new') {
 }
 
 async function inTask(document: DocumentImpl, steps: () => void): Promise<void> {
-  document.env.queueTask('navigation-and-traversal', steps);
+  document.env.queueTask('navigation-and-traversal', { run: steps });
   await runTask(document);
 }
 

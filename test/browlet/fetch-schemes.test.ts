@@ -307,9 +307,11 @@ describe('Scheme responses through main Fetch', () => {
     request.client = env;
     const sandbox = env.userAgent.sandbox;
     const destroyed = Promise.withResolvers<void>();
-    realm.queueGlobalTask(navigationAndTraversalTaskSource, () => {
-      realm.getAssociatedDocument().destroy();
-      destroyed.resolve();
+    realm.queueGlobalTask(navigationAndTraversalTaskSource, {
+      run: () => {
+        realm.getAssociatedDocument().destroy();
+        destroyed.resolve();
+      },
     });
     await destroyed.promise;
     expect(env.parseURL(url)!.blobURLEntry).toBeNull();

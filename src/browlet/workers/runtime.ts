@@ -141,7 +141,7 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
           const continuation = this.#onLifetimeReady;
           this.#onLifetimeReady = null;
           if (continuation === null) throw new InternalError('Worker lifetime monitoring was not requested');
-          this.agent.eventLoop.queueTask(workerHostTaskSource, null, continuation);
+          this.agent.eventLoop.queueTask(workerHostTaskSource, null, { run: continuation });
           break;
         }
         case 'owner-removed':
@@ -151,10 +151,12 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
           this.agent.eventLoop.notifyTaskRunnabilityChanged();
           break;
         case 'connect-port':
-          this.agent.eventLoop.queueTask(workerHostTaskSource, null, () => {
-            this.#messagePort?.close();
-            this.#messagePort = new JSMessagePort(message.handle);
-            this.connectMessagePort();
+          this.agent.eventLoop.queueTask(workerHostTaskSource, null, {
+            run: () => {
+              this.#messagePort?.close();
+              this.#messagePort = new JSMessagePort(message.handle);
+              this.connectMessagePort();
+            },
           });
           break;
         case 'connect-shared-port': {
@@ -177,28 +179,32 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
           break;
         }
         case 'message':
-          this.agent.eventLoop.queueTask(workerHostTaskSource, null, () => { onMessage(message.data); });
+          this.agent.eventLoop.queueTask(workerHostTaskSource, null, { run: () => { onMessage(message.data); } });
           break;
         case 'script-response':
-          this.agent.eventLoop.queueTask(networkingTaskSource, null, () => {
-            const onResponse = this.#onScriptResponse;
-            if (onResponse === undefined) throw new InternalError('Worker script response consumer is not connected');
-            const snapshot = message.snapshot;
-            onResponse({
-              response: WorkerThreadRuntime.#restoreScriptResponse(snapshot), bodyBytes: snapshot.bodyBytes,
-              policyContainer: snapshot.policyContainer === null ? null : PolicyContainer.fromSnapshot(snapshot.policyContainer),
-              embedderPolicyAllowed: snapshot.embedderPolicyAllowed,
-              outsideCrossOriginIsolatedCapability: snapshot.outsideCrossOriginIsolatedCapability,
-            });
+          this.agent.eventLoop.queueTask(networkingTaskSource, null, {
+            run: () => {
+              const onResponse = this.#onScriptResponse;
+              if (onResponse === undefined) throw new InternalError('Worker script response consumer is not connected');
+              const snapshot = message.snapshot;
+              onResponse({
+                response: WorkerThreadRuntime.#restoreScriptResponse(snapshot), bodyBytes: snapshot.bodyBytes,
+                policyContainer: snapshot.policyContainer === null ? null : PolicyContainer.fromSnapshot(snapshot.policyContainer),
+                embedderPolicyAllowed: snapshot.embedderPolicyAllowed,
+                outsideCrossOriginIsolatedCapability: snapshot.outsideCrossOriginIsolatedCapability,
+              });
+            },
           });
           break;
         case 'module-response':
-          this.agent.eventLoop.queueTask(networkingTaskSource, null, () => {
-            const onResponse = this.#moduleResponses.get(message.id);
-            // Disconnect may have discarded a consumer after this reply was queued.
-            if (onResponse === undefined) return;
-            this.#moduleResponses.delete(message.id);
-            onResponse.callback(WorkerThreadRuntime.#restoreScriptResponse(message.snapshot), message.snapshot.bodyBytes);
+          this.agent.eventLoop.queueTask(networkingTaskSource, null, {
+            run: () => {
+              const onResponse = this.#moduleResponses.get(message.id);
+              // Disconnect may have discarded a consumer after this reply was queued.
+              if (onResponse === undefined) return;
+              this.#moduleResponses.delete(message.id);
+              onResponse.callback(WorkerThreadRuntime.#restoreScriptResponse(message.snapshot), message.snapshot.bodyBytes);
+            },
           });
           break;
         default:

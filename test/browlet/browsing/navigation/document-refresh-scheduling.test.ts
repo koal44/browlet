@@ -161,7 +161,7 @@ describe('Document HTTP Refresh scheduling', () => {
     document.cancelDeclarativeRefresh();
     expect(navigationTasks(document)).toHaveLength(0);
     // Even a retained continuation cannot revive canceled work.
-    await runInHostTask(() => { task!.steps(); });
+    await runInHostTask(() => { task!.run(); });
     expect(navigate).not.toHaveBeenCalled();
   });
 
@@ -178,9 +178,11 @@ describe('Document HTTP Refresh scheduling', () => {
     const { document, wakeups, setTime } = fixture();
     document.processDeclarativeRefresh('1;url=/next');
     document.completelyFinishLoading();
-    document.env.queueTask('navigation-and-traversal', () => {
-      if (operation === 'stop') (project(document.getRelevantGlobalObject()!) as Window).stop();
-      else document[operation]();
+    document.env.queueTask('navigation-and-traversal', {
+      run: () => {
+        if (operation === 'stop') (project(document.getRelevantGlobalObject()!) as Window).stop();
+        else document[operation]();
+      },
     });
     await runTurn(document);
     expect(wakeups[0]!.remove).toHaveBeenCalledOnce();

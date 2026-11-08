@@ -126,8 +126,10 @@ export class WasmImpl {
     // Converted options contain no author accessors; native compilation copies this view now.
     const view = getBufferSourceView(bytes);
     if (new Set(options.builtins).size !== options.builtins.length) {
-      env.queueTask(source, () => {
-        compiled.reject(new env.realm.WebAssemblyCompileError('Duplicate WebAssembly builtin names'));
+      env.queueTask(source, {
+        run: () => {
+          compiled.reject(new env.realm.WebAssemblyCompileError('Duplicate WebAssembly builtin names'));
+        },
       });
       return;
     }
@@ -138,13 +140,15 @@ export class WasmImpl {
       (value) => {
         // Promise observation runs a microtask. The public resolution, including
         // author Module.prototype.then access, belongs to the API's task source.
-        env.queueTask(source, () => { compiled.resolve(new WasmModuleImpl(value as JSWasmModule)); });
+        env.queueTask(source, { run: () => { compiled.resolve(new WasmModuleImpl(value as JSWasmModule)); } });
       },
       (reason) => {
-        env.queueTask(source, () => {
-          // Correct only private native compilation failures. Public then getters
-          // run during compiled.resolve(), after this boundary, and keep their errors.
-          compiled.reject(responseURL === undefined ? reason : env.realm.realizeWebAssemblyCompilationError(reason));
+        env.queueTask(source, {
+          run: () => {
+            // Correct only private native compilation failures. Public then getters
+            // run during compiled.resolve(), after this boundary, and keep their errors.
+            compiled.reject(responseURL === undefined ? reason : env.realm.realizeWebAssemblyCompilationError(reason));
+          },
         });
       },
     );

@@ -58,8 +58,10 @@ export class WindowRenderingController {
     this.#agent.eventLoop.lastRenderOpportunityTime =
       this.#host.unsafeSharedCurrentTime();
     for (const realm of realms) {
-      realm.queueGlobalTask(renderingTaskSource, () => {
-        this.#updateRendering();
+      realm.queueGlobalTask(renderingTaskSource, {
+        run: () => {
+          this.#updateRendering();
+        },
       });
     }
   }

@@ -4,6 +4,10 @@ The current `BrowletRoute` returns source text synchronously. This directory
 will replace that test-oriented seam with response-bearing loading while
 leaving Fetch's protocol algorithms in the Fetch implementation.
 
+Current review boundary: remain within HTML §7.5. Before consolidation, review
+the remaining explicit dependencies and decide which can be completed now.
+Do not advance to §7.6 as part of this work.
+
 The implemented sibling `src/fetch` project supplies request,
 response, header, body, cancellation, and fetch-algorithm semantics. This
 directory supplies HTML settings, policy, task, navigation, and element inputs;
@@ -350,6 +354,8 @@ Terminal EOF or failure remains available to later reads without
 reacquiring the stream. The resource owner releases its
 lock on EOF, failure, or cancellation, cancels the body in its stream's
 environment, and discards deliveries queued before cancellation.
+Discarding a queued source-read or cancellation task now releases its internal
+wait and any acquired lock; see the [teardown audit](#resource-reader-task-discard).
 `FetchBody.incrementallyRead()` reuses the same primitive for its automatic loop.
 `readAll()` waits for EOF, and `BodyMixin.textStream()` always decodes UTF-8,
 so neither supplies this bounded byte-reading contract.
@@ -587,12 +593,13 @@ The rule parser still throws at `SpeculationRuleSet.parse()`. The data model,
 candidate matching, coalesced reconsideration, and actual prefetch/prerender
 lifecycles remain §7.6 work; `considerSpeculativeLoads()` is still a marked no-op.
 This slice fetches rule-set resources, not their proposed navigation targets.
-Shared cancellation also remains explicit: `Document.abort()` reaches the
-no-op `FetchGroup.cancel()`. The new real-Fetch regression failed waiting for
-body-failure delivery, and Eric approved retaining that strict assertion as an
-expected failure until §7.5.11/Fetch cancellation is implemented. Destruction
-already removes queued rule-request tasks; inactive Documents' tasks wait for
-activation through the existing event loop.
+The real-Fetch cancellation regression initially failed waiting for body-failure
+delivery, and Eric approved retaining that strict assertion as an expected failure.
+The §7.5.11 follow-up now connects ordinary group cancellation, so that regression
+passes normally. Already-queued body-consumer delivery is now removed too, including
+after the request is done; cancellation still releases the consumer with failure.
+Destruction removes queued rule-request tasks; inactive Documents' tasks
+wait for activation through the existing event loop.
 
 The §7.5.1 pass is now through its return: step 21 already invokes the deferred
 Fetch quota owner, and its existing dedicated tests remain part of validation.
@@ -601,8 +608,8 @@ The following §7.5.2 audit covers the connected loader/parser handoffs.
 
 Validation: 23 header-loader cases cover selection, URL snapshots, MIME/status,
 body failure, UTF-8, redirects, parse errors, real CORS/cookies/CSP, incoming
-Document activation, child exclusion, and teardown. The cancellation case is the
-one approved expected failure. Seven focused suites (including request
+Document activation, child exclusion, and teardown. At this initial checkpoint the
+cancellation case was the one approved expected failure (resolved in §7.5.11 below). Seven focused suites (including request
 classification, CSP, inline-rule lifecycle, Document loading/creation, and quota)
 pass on Node 24.19.0, 26.8.1, and custom 27.0.0-pre with stock/matching addons:
 212 passes plus one expected failure with addons; 209 passes plus that failure
@@ -827,9 +834,10 @@ multipart lifecycle support. Explicit dependencies remain:
 - Recursive abortion and unloading coordination are connected; Fetch cancellation
   and visibility/cache owners still constrain automatic later replacements. Window transient-activation queries now work;
   input/automation notification remains with HTML §6.4.2.
-- Window.stop()/Document-wide abortion and destruction must cancel the outer
-  reader even after the current part has closed. Active-body cancellation and
-  navigation supersession are connected now.
+- Part retirement and navigation-owned cancellation are connected, including
+  Stop and navigable destruction after part EOF or before first commitment.
+  Document abortion stops its part; it does not own the outer stream. See the
+  multipart ownership audit below for rejected replacements and failure cleanup.
 - Local-URL part CSP composition, non-identity Content-Transfer-Encoding, and
   nested multipart coordination throw explicitly. HTTP multipart CSP admission
   is covered by the following slice; inherited local policies are not overwritten.
@@ -1316,14 +1324,13 @@ Browlet's particular history representation.
 
 - Recursive teardown, inactive-task delivery, repeated requests, and completion
   are covered by the subsequent slice below.
-- Destruction after initial-Window reuse still throws before cleanup. The old
-  initial about:blank Document must not close resources now owned by its
-  replacement's shared Window/environment. That lifetime separation is unfinished.
+- Destruction after initial-Window reuse is connected in the shared ownership
+  batch below. Old Document state is removed without closing the reused global.
 - An incoming Document held only by an uncommitted population operation still
   needs that operation to release its entry and cancel pending work. Selected
   current entries are covered here; this does not finish superseded admission.
-- `FetchGroup.cancel()` still discards no Fetch work; real network/body abortion
-  belongs to §7.5.11 and Fetch. Fullscreen, media, service-worker, and lock cleanup
+- `FetchGroup.cancel()` now terminates ordinary requests and removes pending body
+  delivery; remaining bookkeeping disposal and keepalive lifecycle stay with §7.5.11 and Fetch. Fullscreen, media, service-worker, and lock cleanup
   retain the named dependencies in `runUnloadingCleanup()`.
 - Automatic cache eviction and browser-context collection remain unfinished. This work does not
   provide an end-to-end back/forward cache.
@@ -1396,7 +1403,7 @@ No author Promise or new event-loop mechanism is introduced.
 
 ### Remaining dependencies
 
-Destruction after initial-Window reuse remains an explicit throwing boundary.
+Destruction after initial-Window reuse is covered by the shared ownership batch below.
 Automatic element removal/startup, full history application, cache admission and
 memory-pressure eviction policy, and automatic browsing-context collection remain
 separate owners. Recursive abortion is connected in the §7.5.11 slice below;
@@ -1463,13 +1470,11 @@ this slice does not choose a Fetch cancellation policy from those results.
 
 ### Remaining dependencies and validation
 
-`Document.abort()` still reaches the explicit provisional `FetchGroup.cancel()`
-no-op. The next slice must cancel transport, selectively discard queued Fetch
-delivery and subsequent data, report whether anything was discarded, and connect
-multipart outer-reader cancellation after part EOF. Fetch task scheduling currently
-returns no cancellation handle. Group termination already preserves keepalive
-requests and therefore cannot simply replace Document cancellation. The approved
-expected failure for in-flight Speculation-Rules body cancellation remains enabled.
+The following slices connect `FetchGroup.cancel()` for ordinary pending requests,
+retained body delivery, and queued upload/response callbacks. Execution-owner
+stream teardown and multipart outer-reader cancellation after part EOF remain unfinished. Fetch task
+scheduling now returns removal handles. Group termination preserves keepalive
+requests and cannot simply replace Document cancellation.
 
 Browser-UI stopping of a traversal remains separate and unspecified
 ([HTML #6905](https://github.com/whatwg/html/issues/6905)); Document.open integration,
@@ -1488,6 +1493,584 @@ suites pass on Node 24.19.0, 26.8.1, and custom 27.0.0-pre, stock and with match
 addons. Each configuration passes 361 checks and retains the same one approved
 Speculation-Rules cancellation expected failure. Typecheck/generated declarations,
 declaration contracts, changed-file ESLint, and import boundaries pass.
+
+### Ordinary Fetch cancellation
+
+`FetchGroup.cancel()` snapshots unfinished requests with an ongoing controller,
+rejects pending keepalive handling at its explicit boundary, then terminates each
+selected controller once. Requests created during cancellation belong to a later
+operation; already-aborted requests retain their state and reason. Deferred
+requests remain with their invocation owner. The body-delivery follow-up below also
+selects pending reads after transport completion. Document records `fetch` as a cache
+blocker only when this operation cancels transport or delivery.
+
+Existing transport cancellation clears buffered bytes, stops upload/decoding and
+the network exchange, and schedules body failure on the owning loop. It also wakes
+Fetch's pending response wait. A Document-specific controller flag prevents an
+already-queued successful response from being delivered after abortion. This must
+remain separate from ordinary transport termination: a decoding error can still
+deliver its Response with an errored body. The new regression first received status
+200 after Document abortion instead of TypeError; the delivery check fixes that
+race without changing the decoding/cache contracts.
+
+The previously expected-failing Speculation-Rules cancellation test now passes
+normally. Public Window.stop() regressions cover cancellation before headers and
+during body consumption, owning-realm TypeErrors, closed network connections,
+the `fetch` blocking reason, and successful subsequent fetching. The existing
+destruction test now records `fetch` for its canceled EventSource request as well
+as `websocket` for its socket cleanup.
+
+Eric approved termination/TypeError and leaving keepalive at a throwing boundary.
+See the [Fetch audit](../../fetch/ROADMAP.md#document-fetch-cancellation) for the
+browser distinctions and open HTML integration issue. This does not claim full
+task disposal: execution-owner stream teardown and retrying-consumer behavior remain,
+and multipart's outer navigation response is not an ordinary subresource record.
+Pending keepalive and deferred-fetch behavior retain their named owners.
+
+Validation (2026-11-07): all 51 affected Fetch, lifecycle, navigation, loader,
+reporting, and Resource Timing suites pass on Node 24.19.0, 26.8.1, and custom
+27.0.0-pre, stock and with matching addons. Each configuration passes 1,664 tests
+and retains one previously approved MIME-support expected failure. The former
+Speculation-Rules cancellation failure is enabled and passes in all six runs.
+Typecheck/generated declarations, declaration contracts, changed-file ESLint,
+and import boundaries pass.
+
+### Pending body delivery
+
+Fetch-owned body reads receive their FetchController explicitly and stay
+registered until their destination consumes or discards the result. Group
+cancellation considers that delivery even when the request is done or already
+aborted. Existing abort reasons remain intact. `readAll()` and `readChunk()` own
+reading the stream; the private `#prepareDelivery()` helper prepares queueing,
+cancellation, and cleanup without starting a read.
+
+Queued work now carries `run` and `discard` in one task object, through both
+parallel and HTML delivery. `finish()` releases the read's cancellation registration;
+discarding a queued task additionally reports failure to its waiting consumer.
+The [task contract](../scripting/EVENT-LOOP-ARCHITECTURE.md) retains HTML's readiness,
+Document, and timer ownership without moving them into parallel queues.
+
+Bodies and clones retain no controller. A browser comparison verified that later
+author consumption of a completed HTTP or data response survives `window.stop()`
+in Chromium, Firefox, and WebKit. Browlet's two regressions initially rejected
+with TypeError and now pass with per-read ownership. The third regression
+initially reached stopLoading's owning-task assertion from a body-promise
+continuation. Abortion now accepts execution during the owning loop's checkpoint,
+including backends without individual Promise-job hooks. Calls outside that loop
+remain rejected; native scheduling is unchanged. Experimental's
+`fetch-completed-body-stop.mjs` and `FETCH-COMPLETED-BODY-STOP.md` retain the
+browser comparison and source audit.
+
+Queueing returns the existing TaskHandle for both global tasks and parallel
+steps. Cancellation removes the stale byte callback and queues failure on the
+same destination. Late read results are ignored. Destruction of that failure
+task releases the internal waiter as well. This preserves the distinction between
+internal completion and author event delivery. No task is removed after it starts,
+and unrelated work on the destination retains its order. The parallel queue keeps
+its existing serialized drain and host wake-up coalescing.
+
+The queueFetchTask result and internal discard callback differ from Fetch's
+void-returning algorithm. Body-read methods also accept an optional internal
+controller last. Eric accepted these callable shapes; the review markers are removed.
+The approved TypeError termination rule remains; keepalive detachment, remaining
+execution-owner stream teardown, EventSource retry policy, and multipart's outer-reader
+lifetime remain explicit.
+
+Validation (2026-11-07): 61 selected Fetch, loader, lifecycle, reporting, performance,
+and scheduling suites cover 1,791 cases per runtime configuration. All six runs
+complete successfully, with every new regression enabled and passing.
+
+| Runtime configuration | Passing | Existing expected failures | Existing TODOs |
+| --- | ---: | ---: | ---: |
+| Node 24.19.0, 26.8.1, and custom 27, stock (each) | 1,778 | 13 | 0 |
+| Node 24.19.0 and 26.8.1, compatibility addon (each) | 1,779 | 8 | 4 |
+| Custom Node 27, compatibility addon | 1,790 | 1 | 0 |
+
+The expected failures cover existing Promise-job/explicit-queue capabilities and
+MIME support; the four TODOs are the existing raw Node/Window Promise handoffs on
+official addons. Typecheck/generated declarations, declaration contracts,
+changed-file ESLint, import boundaries, and whitespace checks pass.
+
+### Queued upload and response callbacks
+
+Callback tasks now share the controller's existing delivery registration with
+body reads. Cancellation removes queued upload progress, Early Hints, response,
+null-body consumption, and end-of-body tasks. Completion callbacks still finish
+once on the original destination, with failure instead of obsolete success.
+Discarding end-of-body work still sets `request.done` and records timing. A
+callback already running is unregistered before invocation, preserving reentrant
+cancellation and later independent consumption of completed responses.
+
+The separate-client/execution-owner regression also exposed late completion after
+Document destruction: its tasks were queued after removal and never ran. The
+Fetch-to-HTML handoff now selects only internal `discard` cleanup on the destroyed
+destination's owning loop, without a Document activity gate. Inactive retained
+Documents still hold ordinary callbacks for reactivation. This extends the
+existing `SPEC_GAP(document-fetch-cancellation)` boundary; see the
+[Fetch audit](../../fetch/ROADMAP.md#document-fetch-cancellation).
+
+Pip's background cache revalidation correction preserves the supplied execution
+environment and parallel callback destination while cancellation remains with
+the initiating client's group. The combined implementation also passes its
+controller into the body drain. Tests exercise both cancellation and termination
+with a separate sandbox execution owner. Worker-environment changes remain with Pip.
+
+That slice completed callback-queue disposal. The following slice covers queued
+HTTP stream teardown; the remaining dependencies are listed below. §7.5.11 is
+still the current section.
+
+Validation (2026-11-07): 20 focused Fetch, lifecycle, loader, task, EventSource,
+and Resource Timing suites cover 407 cases in each of the six runtime configurations.
+Node 24.19.0, 26.8.1, and custom 27 each pass 399 cases with stock runtime and
+406 with the matching addon. The remaining eight/one cases are existing approved
+Promise/backend and MIME-support expected failures; no new expected failures or
+skips were introduced. Typecheck/generated declarations, declaration contracts,
+changed-file ESLint, import boundaries, and whitespace checks pass.
+
+### Queued HTTP stream teardown
+
+Network upload reads and body delivery now use Fetch's existing owner-global task
+handoff. Discarding queued upload work settles the transport's pending read and
+releases an acquired reader. Ordinary cancellation still invokes the source's
+cancel algorithm on its owning task; discarded cancellation work only releases
+internal ownership and does not invoke a potentially scripted source.
+
+Discarding a queued network-body task drops buffered bytes, terminates an ongoing
+controller without replacing an existing abort reason, and errors the stream.
+This releases both its pending read and its end-of-body completion. Late data
+cannot become a successful read. No new queue, Promise abstraction, or native
+runtime change is introduced.
+
+Document now commits its existing destruction flag immediately before task
+discard notifications. The regression first errored the stream but left the
+request unfinished: its completion was queued reentrantly while the Document
+still appeared live. The existing cleanup route now admits that work on the
+owning loop, without reviving ordinary Document tasks.
+
+The regressions cover pending and queued response reads, ordinary abort versus
+destruction of upload cancellation, queued and late upload reads, and a separate
+active client whose execution Window is destroyed. The following slice completes
+queued preparation and response handoff; byte/cache stream producers remain open.
+Independent execution-owner lifetime without queued work also needs an audit;
+worker shutdown remains coordinated with Pip. Keepalive, retry policy, and the
+multipart outer-reader connection retain their explicit dependencies.
+
+Validation (2026-11-07): 24 focused Fetch, task, loader, and Document-lifecycle
+suites cover 469 cases in each runtime configuration. Node 24.19.0, 26.8.1, and
+custom 27 each pass 461 cases with stock runtime and 468 with the matching addon.
+The existing eight/one expected failures are unchanged; this slice adds six
+enabled regressions. Typecheck/generated declarations, declaration contracts,
+changed-file ESLint, import boundaries, and whitespace checks pass.
+
+### Queued Fetch preparation and response handoff
+
+Discarded request preparation, cache lookup, and network-dispatch tasks now
+settle their internal waiters instead of leaving the request unfinished. This
+also covers tasks queued after execution-Document destruction, while the separate
+initiating client remains active. An ongoing controller is terminated; an existing
+abort reason is preserved. Failure callbacks retain their original destination.
+
+Body preparation uses a private discard signal to unwind its existing Promise
+chain into a failed response. It is not an author error or a new result contract;
+unexpected implementation exceptions retain their separate error path. Main
+fetch and manual redirects share the response-processing handoff. Discarding
+that handoff releases the selected network body and completes failure once.
+Ordinary delivery retains received headers when a later body-framing error occurs.
+
+Nine new regressions cover the three preparation gates, preserved abort state,
+inactive-owner reactivation, a separate live client, late filtered preload
+delivery, queued response handoff, and manual-redirect body replay. The existing
+HTTP/2 framing regression also verifies that body failure does not erase headers.
+Pip's client/execution split is now committed as `5721dcc1` on his branch; this
+slice continues using the execution environment and preserves our task contract.
+
+Validation (2026-11-07): 34 focused suites cover 774 cases in each of the six
+runtime configurations. Node 24.19.0, 26.8.1, and custom 27 each pass 766 cases
+with stock runtime and 773 with the matching addon; the existing eight/one
+expected failures are unchanged. Typecheck/generated declarations, declaration
+contracts, changed-file ESLint, import boundaries, and whitespace checks pass.
+
+The following slice covers byte/cache stream producers, including
+`FetchBody.fromBytes()` and retained Blob data. Independent execution-owner lifetime
+with no queued work, keepalive
+detachment, retrying-consumer policy, and multipart's outer-reader connection
+remain explicit. We are still within §7.5.11 and will review the outstanding
+dependencies before consolidation, without entering §7.6.
+
+### Byte and cache body production
+
+Discarding pending byte/Blob production now errors the unfinished stream with
+TypeError, releasing its internal reader. Blob data, EOF, and failure tasks share
+one discard operation; a late backing result after cancellation is ignored.
+Finished body streams and immutable Blob/cache storage survive. A second Window
+can materialize the same cache entry after the first reader's destruction.
+
+Fetch's late-discard rule now lives in `BrowletRealm.queueGlobalTask()`, so file
+production uses the same HTML admission rule. A destroyed Document gets only an
+internal cleanup task on its owning loop and original task source. Ordinary page
+work never resumes; inactivity alone still waits for reactivation. No additional
+queue, promise abstraction, or subsystem environment was introduced.
+
+`SPEC_GAP(body-production-discard)`: [File API's get stream algorithm](https://w3c.github.io/FileAPI/#blob-get-stream)
+queues production on the Blob's global. [HTML destruction](https://html.spec.whatwg.org/multipage/document-lifecycle.html#destroy-a-document)
+removes the Document's queued tasks, but neither algorithm completes the stream
+when that work is discarded. Fetch's byte-body production has the same missing
+lifetime connection. The approved TypeError completes internal waits instead of
+leaving them pending, following our existing HTTP cleanup boundary.
+
+`SPEC_CLASH(body-production-destruction)`: the browser-only iframe-removal probe
+uses empty and 131,073-byte bodies, starts reading before or after removal, and
+retains the reader in the parent. Chromium 156.0.8078.4 rejects new reads with
+TypeError; already-pending reads do not settle within the probe's 750ms window.
+Firefox 157.0 completes Blob streams and both byte/Blob-backed Responses. WebKit
+27.2 completes byte-backed Responses, leaves direct Blob reads pending in the
+probe, and rejects Blob-backed Response reads with undefined or TypeError.
+Eric approved stopping discarded production with a consistent TypeError and
+preserving already-finished bodies on 2026-11-07. These are differing lifecycle
+policies, not evidence that all browsers reject pending reads the same way.
+
+The local sources support that distinction: Blink `BodyStreamBuffer::ContextDestroyed`
+cancels its consumer and releases retention; Gecko's Blob stream uses a native
+pull algorithm; WebKit's Blob source couples a FileReaderLoader with a separate
+stream queue. Snapshots are Chromium `1136757f47`, Gecko `d92a7ec0e622`, and WebKit
+`713192fa`. The reproducible probe and findings remain in Experimental as
+`body-producer-destruction.mjs` and `BODY-PRODUCER-DESTRUCTION.md`.
+
+Fourteen focused expectations first failed: pending reads never received failure,
+late tasks retained the destroyed Document's activity gate, and canceled backing
+reads still queued delivery. Nineteen enabled cases now also cover empty bodies,
+EOF after partial delivery, owning-realm errors observed by another Window,
+completed producers, and reuse of a cache entry. Existing inactive-Document
+delivery tests remain enabled.
+
+Validation (2026-11-07): the 103-suite Fetch, File, scripting, lifecycle, and
+integration selection passes in all six configurations. All nineteen new cases
+are ordinary passing tests. Existing expected failures, skips, and TODOs are
+unchanged; the totals differ where runtime capabilities select additional cases.
+
+| Node base | Runtime | Passed | Expected failures | Skipped | TODO |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 24.19.0 | stock | 1548 | 87 | 3 | 0 |
+| 24.19.0 | compat | 1590 | 85 | 3 | 4 |
+| 26.8.1 | stock | 1549 | 86 | 3 | 0 |
+| 26.8.1 | compat | 1591 | 84 | 3 | 4 |
+| custom 27 | stock | 1549 | 86 | 3 | 0 |
+| custom 27 | compat | 1676 | 3 | 3 | 0 |
+
+Typecheck/generated declarations, declaration contracts, changed-file ESLint,
+import boundaries, and whitespace checks pass. No native runtime changes.
+
+The next slice connects destruction while no task is queued, below. Interrupting
+the backing host read itself remains separate from releasing its stream's waiter.
+
+### Execution-owner destruction without queued work
+
+The regressions initially left `request.done` false after destroying an execution
+Window while its separate client remained active, and left a Blob reader without
+any failure until the backing source answered. Both had empty task queues, so task
+discard could not notify their owners. A pending preload reproduced the same wait
+even after the controller was terminated.
+
+Eric approved `addDestructionSteps()` on the owning environment, backed by its
+existing global owner. The WindowOrWorkerGlobalScopeMixin retains the registrations;
+Document destruction closes registration and runs remaining internal cleanup on its
+owning loop before removing tasks. Completed operations unregister. Registration
+after destruction invokes cleanup immediately, without author script or new page
+work. No new lifetime object or alternate queue was added. This is the implementation
+connection for the existing `document-fetch-cancellation` and
+`body-production-discard` gaps and their approved termination/TypeError choices.
+
+Subresource Fetch registers through its execution environment, preserving the
+initiating client's FetchGroup and security ownership. Destruction terminates
+ongoing work and invalidates delivery without replacing an existing abort reason.
+End-of-body completion removes the registration. Preload waits now observe
+controller cancellation and release late response bodies. Blob streams register
+the same cleanup until production, error, or cancellation finishes; finishing
+production preserves buffered bytes for later consumption. A source that answers
+after destruction cannot enqueue more data or overwrite the stream's failure.
+
+The destruction registration belongs privately to FetchController alongside its
+cancellation and delivery state, rather than being copied with FetchParams.
+Fetch still registers at subresource startup and unregisters at end-of-body
+delivery. Abort/termination alone does not release an unfinished delivery's lifetime.
+
+Pip's current head, `65e22d3c`, adds SharedWorker discovery/closing on top of his
+FetchClient split and FileReader shutdown work. It does not supply this execution
+lifetime hook. Consolidation must retain his client/execution separation, his
+global-owned FileReader registration, and this branch's TaskRecord/discard contracts.
+Worker shutdown's hook connection remains explicit in `finishRunning()` alongside
+the shared-service cancellation dependency; this slice does not replace that work.
+
+Validation: the 108-suite Fetch, File, scripting, lifecycle, loader, and consumer
+selection passes in all six supported configurations. All 45 focused delivery
+and body-production cases are ordinary passing expectations. Existing expected
+failures, skipped cases, and TODOs retain their prior classifications.
+
+| Node base | Runtime | Passed | Expected failures | Skipped | TODO |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 24.19.0 | stock | 1615 | 87 | 3 | 0 |
+| 24.19.0 | compat | 1657 | 85 | 3 | 4 |
+| 26.8.1 | stock | 1616 | 86 | 3 | 0 |
+| 26.8.1 | compat | 1658 | 84 | 3 | 4 |
+| custom 27 | stock | 1616 | 86 | 3 | 0 |
+| custom 27 | compat | 1743 | 3 | 3 | 0 |
+
+Typecheck/generated declarations, declaration contracts, changed-file ESLint,
+import boundaries, and whitespace checks pass. No addon or engine changes.
+After moving lifetime retention privately to FetchController, the seven affected
+controller, delivery, body, CORS, cache, and cancellation suites pass again in all
+six configurations: 159 ordinary passing cases each. Typecheck and changed-file
+lint also pass after that ownership cleanup.
+
+Outstanding: the host BlobByteSource still has no cancellation operation, so the
+stream settles but the underlying I/O must finish independently. Pending keepalive
+detachment and deferred invocation retain explicit owners. EventSource and multipart
+shutdown are connected in the combined loader batch below. The FileReader Window counterpart of
+Pip's worker stop path is covered below. This remains §7.5.11; complete the final
+dependency review before consolidation. Do not enter §7.6.
+
+### FileReader Document destruction
+
+Active FileReader operations now use the shared global destruction registration.
+Internal `stop()` preserves Pip's cancellation behavior: synchronously set DONE,
+detach the operation, remove queued notifications, cancel the stream reader, and
+dispatch no author events. Success, failure, or public abort releases registration
+before callbacks can start another read. Completed results remain retained; a new
+read after destruction throws AbortError before allocating a stream or starting
+its backing source. Notifications also check destruction, so a load callback that
+destroys its Document cannot subsequently emit loadend.
+
+`SPEC_GAP(file-reader-global-destruction)`: the File API
+[read operation](https://w3c.github.io/FileAPI/#readOperation) and
+[abort algorithm](https://w3c.github.io/FileAPI/#abort) do not connect pending reads
+to global destruction. Eric approved these choices from the retained-iframe probe
+in Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2:
+
+| Case | Browlet choice | Browser evidence |
+| --- | --- | --- |
+| Pending read at destruction | Synchronous DONE, null error, no events | Chromium/WebKit agree; Firefox completes later with NotReadableError |
+| Completed read at destruction | Keep its result | Firefox agrees; Chromium/WebKit clear the result |
+| New read after destruction | Throw AbortError before starting | Chromium agrees; Firefox fails asynchronously; WebKit stayed LOADING throughout the 250 ms probe |
+| Removal inside loadstart, progress, or load | Suppress later notifications | All three agree, including suppression of loadend after load |
+
+Source markers `file-reader-destruction-state`, `file-reader-completed-destruction`,
+and `file-reader-after-destruction` retain the browser disagreements. Blink's
+[`ContextDestroyed()` and `Terminate()`](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/fileapi/file_reader.cc)
+and WebKit's [`FileReader::stop()`](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/fileapi/FileReader.cpp)
+confirm cancellation at the existing global owner. The independent Experimental
+probe is `file-reader-destruction.mjs`, with concise findings in
+`FILE-READER-DESTRUCTION.md`.
+
+The regression first failed because five pending readers stayed LOADING and a
+post-destruction read did not throw. A further callback regression exposed loadend
+after destruction from load. Coverage includes pending sources owned by the same
+or another global, late success/failure, destruction from callbacks, retained
+completed results, independent globals, and the projected AbortError boundary.
+
+Pip's `eb829bfc` already has worker-owned FileReader registration and the same
+eventless `stop()` contract. This slice leaves his worktree untouched. During
+consolidation, retain the now-connected `runDestructionSteps()` worker shutdown and replace the
+separate FileReader registry with this shared registration; retain worker event
+suppression and this branch's TaskRecord/discard behavior. Interrupting host
+BlobByteSource I/O remains explicit; cancellation here releases the consumer and
+ignores late results. No addon or engine changes are needed.
+
+Validation: the 12 affected File, FileReader, body-production, parallel-delivery,
+and Document lifecycle suites pass across all six runtime configurations. Each
+compat run has 199 ordinary passes; each stock run has 196 passes and the three
+existing Window global identity/immutability expected failures. All nine new
+FileReader destruction cases pass normally in every configuration. Typecheck,
+generated declarations, changed-file ESLint, and whitespace checks pass.
+
+### Resource-reader task discard
+
+Four initial regressions showed that removing ResourceReader's queued source-read
+or cancellation task stranded its internal promise. The source-read cases covered
+MIME sniffing and ordinary body consumption; cancellation failed both when queued
+before destruction and when requested afterward. These tasks now use the existing
+TaskRecord discard contract. No new lifecycle registration or queue was added.
+
+A discarded read retains an existing stream failure, or reports an InternalError
+when it never reached the source. A discarded cancellation releases the held
+reader and rejects its completion with InternalError. The read itself keeps the
+original cancellation reason. Source cancellation is not falsely reported as
+successful, and the removed task's source algorithm is not invoked by cleanup.
+The existing producer owns transport/backing-I/O teardown. These are internal
+loader failures, consistent with navigation's discarded-task failures; no author
+event or new platform exception policy is introduced.
+
+[HTML destruction](https://html.spec.whatwg.org/multipage/document-lifecycle.html#destroy-a-document)
+removes associated tasks without running their bodies. ResourceReader still uses
+[Streams cancellation](https://streams.spec.whatwg.org/#readable-stream-cancel)
+for normal cancellation and releases its source reader at EOF, failure, or cleanup.
+Tests additionally retain failure identity, check that source cancellation is not
+called after task removal, and cover a throwing source-cancellation algorithm.
+
+Validation: all 183 cases in the ten affected loader, navigation, body-production,
+and parallel-delivery suites pass normally in each of the six runtime configurations.
+Typecheck/generated declarations, changed-file ESLint, and whitespace checks pass.
+No addon or engine changes.
+
+### Combined loader shutdown
+
+The parser, EventSource, and multipart connections are implemented together using
+the existing task discard and Fetch cancellation contracts:
+
+- Parser input and completion tasks retain the parser's original Document even
+  after Window reuse. Discarding input stops its stream; discarding completion
+  rejects the internal wait with AbortError. A late Node completion enters the
+  original owning loop as internal cleanup, without reviving a destroyed page's
+  task or executing author script. Script/stylesheet continuations remain guarded
+  by the stopped stream. Retired-Document destruction after Window reuse is
+  connected in the shared ownership batch below.
+- An in-flight EventSource observes Fetch cancellation and fails permanently with
+  one error event. Queued open/message delivery is suppressed, and close preserves
+  an already-terminated controller. Ordinary EOF/network failure still reconnects.
+  Window.stop() leaves an already-scheduled retry alone when no request remains in
+  flight; permanent Document destruction continues to close all sources and timers.
+- Navigable retains the outer multipart reader before first admission, across
+  part EOF, and through replacement. The ownership audit below removes the
+  initial current-Document reference and abortion exception: each Document now
+  consumes only its part. Stop and navigable destruction cancel the outer reader
+  once and release navigation retention. EOF releases retention without
+  canceling completed bodies.
+
+No new promise type, task queue, or native hook was added.
+
+The initial regressions reproduced three stranded parser completions, two multipart
+post-part-EOF leaks, and two EventSource reconnects after stop. Follow-up coverage
+caught controller-state overwriting and multipart retention before commitment;
+it also covers child/top-level destruction, Window reuse, late script resumption,
+normal EOF, and the real replacement handoff with supplied history-referrer input.
+
+The strict full replacement test remains an Eric-approved expected failure at
+`Synthetic navigation history referrer capture is not implemented` (§7.4.5).
+It still requires successful replacement. A separate passing case supplies that
+missing metadata explicitly; cache policy is controlled and the old Document is
+hidden so unrelated visibility policy does not obscure this shutdown test.
+The direct child fixture leaves full nested-history application to its existing owner.
+
+Live EventSource probes on Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2
+agree on closing in-flight requests before/after headers and retaining a pending
+retry after EOF. Source counterparts are Blink `EventSource::DidFail`, Gecko
+`EventSourceImpl::OnStopRequest`, and WebKit `EventSource::didFail`.
+The browser-only probe and findings live in Experimental as
+`eventsource-document-stop.mjs` and `EVENTSOURCE-DOCUMENT-STOP.md`.
+Sources: [HTML abortion](https://html.spec.whatwg.org/multipage/document-lifecycle.html#abort-a-document)
+and [EventSource processing](https://html.spec.whatwg.org/multipage/server-sent-events.html#processing-model).
+
+Validation: the 18 affected loader, parser, EventSource, lifecycle, Fetch-body,
+and delivery suites pass on Node 24.19.0, 26.8.1, and custom 27.0.0-pre, each in
+stock/compat modes: 319 ordinary passes and the one approved referrer expected
+failure per configuration. Typecheck, generated declarations, type contracts,
+changed-file ESLint, import boundaries, and whitespace checks pass.
+
+Remaining teardown connections before declaring the lifecycle work complete:
+
+| Owner | Remaining work |
+| --- | --- |
+| Worker shutdown | Local cooperative cleanup is connected; retain Pip's worker-finish/remote-owner integration during consolidation. Remote Fetch and forced termination retain their owners |
+| Fetch keepalive/deferred fetch | Implement detached transport ownership and deferred invocation; pending cases still throw explicitly |
+| BlobByteSource | Add an actual host-read interruption contract; consumer cancellation currently ignores late results |
+| Synthetic navigation history | Capture referrer metadata for null-request responses; the full multipart replacement test remains expected-failing |
+
+This inventory concerns teardown, not the separately deferred XML/media, parser,
+rendering, or host UI implementations. The shared ownership batch below completes
+the local Window/worker connections. The final integration and dependency review
+remains before consolidation. Remain within §7.5.
+
+### Shared ownership shutdown
+
+Retiring an initial about:blank Document after Window reuse now removes its own
+parser, queued tasks, history references, and Document state. Only the Document
+still associated with the environment can cancel its Fetch group, run global
+destruction registrations, or close its timers, ports, reporting state, and Blob
+URLs. The new regression first failed at the old throwing guard; it now verifies
+that the replacement's work survives and that destroying the replacement later
+does release those resources.
+
+Cooperative dedicated/shared worker shutdown runs the same destruction registrations
+after its final checkpoint. Queued tasks are removed as a batch before notifying
+their internal discard steps. New tasks refused by a closing/destroyed worker notify
+discard immediately, without running author steps or reviving the loop. This exposed
+and fixed duplicate Fetch failure delivery: Fetch no longer registers cancellation
+after synchronous admission failure has already finished delivery. Destruction-hook
+failure still releases the remaining timers, ports, EventSources, and owner set.
+Local tests cover pending Fetch headers/body, upload reader release, delayed Blob
+production, eventless FileReader stop, completed results, and late completion.
+
+Pip's current worker implementation was inspected without editing its worktree.
+Consolidation must preserve its `onWorkerFinish` notification and `remoteOwner`
+cleanup; the shared hook replaces its separate FileReader registry while retaining
+the same `stop()` behavior. Remote services, forced/native worker termination, and
+Service Worker lifetime remain distinct dependencies.
+
+Eric approved keeping keepalive's existing throwing boundary for a dedicated
+browser-owned Fetch lifetime change. Upload, redirect, and response processing must
+outlive the page together; merely skipping termination leaves work on dead task
+queues, and swapping the execution environment to the sandbox loses existing stream
+ownership. The existing live probe was rerun on Chromium 156.0.8078.4, Firefox 157.0,
+and WebKit 27.2. All retain pre-header keepalive transport after stop(); page promise
+settlement and post-header body behavior still differ. No new keepalive behavior was
+chosen or silently supplied. Deferred invocation and host Blob-read interruption
+remain separately named dependencies, as does synthetic history-referrer capture.
+
+Validation: all 12 affected suites pass on Node 24.19.0, 26.8.1, and custom
+27.0.0-pre in stock/compat modes: 234 ordinary passes and the existing approved
+multipart-referrer expected failure per configuration. The expanded 26-suite run,
+including every worker suite, also passed in both Node 26 modes before the final
+blocked-task wake-up regression; that regression is included in all six focused runs.
+Generated declarations, typecheck, type contracts, changed-file ESLint, import
+boundaries, and whitespace checks pass. No addon or engine changes were needed.
+
+### Multipart ownership audit
+
+The outer `MultipartResourceReader` now belongs to Navigable throughout its
+load. Documents retain only their parser/part consumption. The reader no longer
+stores a current Document, and `abort()`/`abortAndDescendants()` are parameterless
+again. Existing navigation-change observation handles supersession; the reader's
+cancellation state replaces the loader's duplicate stopped flag.
+
+`SPEC_GAP(multipart-part-retirement)` records the boundary HTML §7.5.5 leaves
+unspecified. Eric approved separating part and whole-load cancellation. Canceling
+a part closes its consumer immediately; further part demand drains its remaining
+bytes without enqueueing them. This keeps bulk framing, borrowed byte views,
+and backpressure. Gecko's `nsPartChannel::Cancel` explicitly does not cancel its
+outer channel; WebKit retains its `DocumentLoader` during multipart replacement.
+These support the separation without dictating Browlet's class arrangement.
+Sources: [HTML multipart loading](https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-multipart-x-mixed-replace),
+[Gecko part cancellation](https://searchfox.org/mozilla-central/source/netwerk/streamconv/converters/nsMultiMixedConv.cpp#137),
+and [WebKit multipart replacement](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/loader/FrameLoader.cpp).
+
+Navigation disposes an unused supplied body after admission/event/unload veto,
+an empty response, or a blocked download, allowing the next part to proceed.
+Accepted downloads retain their bodies with the download owner. A replacement
+implementation failure cancels the outer load and remains reported even after
+transport EOF. Stop, supersession, and navigable destruction cancel the whole
+load; parent stopping/navigation/destruction also releases child loads. Late
+cleanup of a retired Document cannot cancel the replacement. Destroying an
+uncommitted first Document rejects its existing script-readiness promise and
+releases admission. No additional lifetime object or callback registry is used.
+
+Regressions first reproduced canceled-part propagation, stranded vetoed/empty
+responses, asynchronous replacement failures, a swallowed post-EOF failure,
+uncommitted Document destruction, and child-load retention during parent cleanup.
+Coverage also retains pending and already-finished part bodies, Stop before
+commitment, reentrant supersession, real replacement, and automatic Promise
+delivery across the nested readers.
+
+Synthetic history-referrer capture remains the approved expected failure;
+passing replacement coverage supplies that metadata explicitly. Local-URL part
+CSP composition, transfer decoding, nested multipart, malformed-response
+presentation, and full per-part timing remain explicit dependencies. Dedicated
+keepalive lifetime work follows this review; this slice does not close §7.5.
+
+Validation: all 14 affected loader, parser, history-population, and lifecycle
+suites pass on Node 24.19.0, 26.8.1, and custom 27.0.0-pre, in stock/compat
+modes: 296 ordinary passes and the one approved synthetic-referrer expected
+failure per configuration. Generated declarations, typecheck, type contracts,
+changed-file ESLint, import boundaries, and whitespace checks pass. No addon
+or engine changes were needed.
 
 ## Removal condition
 

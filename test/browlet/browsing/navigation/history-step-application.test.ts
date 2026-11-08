@@ -229,7 +229,7 @@ describe('history-step current entries and Navigation cleanup', () => {
     expect(top.ongoingNavigation).toBe('traversal');
     expect(navigation.ongoingNavigateEvent).toBe(event);
     expect(navigation.ongoingAPIMethodTracker).toBe(tracker);
-    expect(tasks).toHaveBeenCalledExactlyOnceWith('navigation-and-traversal', expect.any(Function));
+    expect(tasks).toHaveBeenCalledExactlyOnceWith('navigation-and-traversal', { run: expect.any(Function) as unknown });
     await runDocumentTask(document);
     expect(navigation.ongoingNavigateEvent).toBeNull();
     expect(navigation.ongoingAPIMethodTracker).toBeNull();
@@ -316,7 +316,7 @@ describe('history-step current entries and Navigation cleanup', () => {
     expect(child.ongoingNavigation).toBe('traversal');
     expect(navigation.ongoingNavigateEvent).toBe(event);
     expect(topTasks).not.toHaveBeenCalled();
-    expect(childTasks).toHaveBeenCalledExactlyOnceWith('navigation-and-traversal', expect.any(Function));
+    expect(childTasks).toHaveBeenCalledExactlyOnceWith('navigation-and-traversal', { run: expect.any(Function) as unknown });
     expect(grandchildTasks).not.toHaveBeenCalled();
     expect(grandchild.ongoingNavigation).toBeNull();
     await runDocumentTask(childDocument);

@@ -220,7 +220,7 @@ async function checkpoint(document: DocumentImpl): Promise<void> {
 }
 
 async function inTask(document: DocumentImpl, steps: () => void): Promise<void> {
-  document.env.queueTask('navigation-and-traversal', steps);
+  document.env.queueTask('navigation-and-traversal', { run: steps });
   await runInHostTask(() => { expect(document.env.responsibleEventLoop.runTaskTurn()).toBe(true); });
 }
 

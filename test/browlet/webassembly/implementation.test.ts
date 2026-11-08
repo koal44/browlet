@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { TaskSourceKey } from '../../../src/infra/index';
+import type { TaskRecord, TaskSourceKey } from '../../../src/infra/index';
 
 import { BindingWorld } from '../../../src/web-idl/index';
 import type { WebAssembly as WebAssemblyAPI } from '../../../src/browlet/platform';
@@ -68,7 +68,7 @@ describe('WebAssembly with a standalone binding', () => {
     const result = api.compile(bytes, options);
     const rejected = expect(result).rejects.toBeInstanceOf(realm.WebAssemblyCompileError);
     expect(tasks.map((task) => task.source)).toEqual(['engine']);
-    tasks.shift()!.steps();
+    tasks.shift()!.run();
     await rejected;
   });
 });
@@ -88,7 +88,7 @@ describe('WebAssembly implementation', () => {
 
 function fixture() {
   const realm = new TestRealm();
-  const tasks: { source: TaskSourceKey; steps: () => void; }[] = [];
+  const tasks: (TaskRecord & { source: TaskSourceKey; })[] = [];
   // This host tests the JS namespace without browser Fetch/Response integration.
   const definitions = wasmIDLDefinitions.filter((definition) => definition !== wasmStreamingIDL);
   const world = new BindingWorld<WasmEnvironment & { realm: TestRealm; }>(definitions, {
@@ -100,8 +100,10 @@ function fixture() {
     project: (implInst) => ctx.project(implInst.constructor, implInst),
     unwrap: (platformObject) => ctx.unwrap(platformObject),
     runInParallel: (steps) => { queueMicrotask(steps); },
-    queueTask(source, steps) {
-      const task = { source, steps };
+    // This standalone host has no Document or worker destruction lifecycle.
+    addDestructionSteps: () => () => {},
+    queueTask(source, init) {
+      const task = { source, ...init };
       tasks.push(task);
       // This standalone host must deliver the public compilation-resolution task,
       // as well as allowing the rejection test to deliver its queued task manually.
@@ -109,9 +111,16 @@ function fixture() {
         const index = tasks.indexOf(task);
         if (index === -1) return;
         tasks.splice(index, 1);
-        steps();
+        task.run();
       });
-      return { remove() { const index = tasks.indexOf(task); if (index !== -1) tasks.splice(index, 1); } };
+      return {
+        remove() {
+          const index = tasks.indexOf(task);
+          if (index === -1) return;
+          tasks.splice(index, 1);
+          task.discard?.();
+        },
+      };
     },
   }));
   const api = world.getRealmBinding(realm)!.installDefinitions().get('WebAssembly') as WebAssemblyAPI;

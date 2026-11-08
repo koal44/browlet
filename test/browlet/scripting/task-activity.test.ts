@@ -21,7 +21,7 @@ describe('task runnability after document activity changes', () => {
     const child = new Navigable(DocumentState.create(document), parent);
     const steps = vi.fn();
 
-    document.env.realm.queueGlobalTask(networkingTaskSource, steps);
+    document.env.realm.queueGlobalTask(networkingTaskSource, { run: steps });
     expect(document.isFullyActive()).toBe(false);
     expect(turns).toHaveLength(0);
 
@@ -51,7 +51,7 @@ describe('task runnability after document activity changes', () => {
     // when the parent loop already has work. Child creation itself is unfinished.
     expect(new Set(loops).size).toBe(3);
     for (const [index, document] of documents.entries()) {
-      document.env.realm.queueGlobalTask(networkingTaskSource, () => { observed.push(`${index}:first`); });
+      document.env.realm.queueGlobalTask(networkingTaskSource, { run: () => { observed.push(`${index}:first`); } });
     }
     expect(turns).toHaveLength(3);
 
@@ -61,7 +61,7 @@ describe('task runnability after document activity changes', () => {
     expect(observed).toEqual([]);
     expect(turns).toHaveLength(0);
     for (const [index, document] of documents.entries()) {
-      document.env.realm.queueGlobalTask(networkingTaskSource, () => { observed.push(`${index}:second`); });
+      document.env.realm.queueGlobalTask(networkingTaskSource, { run: () => { observed.push(`${index}:second`); } });
     }
     expect(turns).toHaveLength(0);
 

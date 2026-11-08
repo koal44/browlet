@@ -21,7 +21,7 @@ describe('pausing an event loop', () => {
       const task = loop.currentlyRunningTask;
       const stack = loop.executionContextStack;
       const entries = [...stack];
-      loop.queueTask(networkingTaskSource, null, () => { order.push('task'); });
+      loop.queueTask(networkingTaskSource, null, { run: () => { order.push('task'); } });
       loop.queueMicrotask(() => { order.push('microtask'); });
 
       loop.pauseUntil(() => {
@@ -35,7 +35,7 @@ describe('pausing an event loop', () => {
         expect(loop.executionContextStack).toBe(stack);
         expect(stack).toEqual(entries);
         expect(order).toEqual(['wait']);
-        loop.queueTask(networkingTaskSource, null, () => { order.push('queued while paused'); });
+        loop.queueTask(networkingTaskSource, null, { run: () => { order.push('queued while paused'); } });
         expect(turns).toEqual([]);
       }, env);
 
@@ -135,7 +135,7 @@ describe('pausing an event loop', () => {
     const order: string[] = [];
     expect(() => loop.runScriptEvaluation(env, () => {
       loop.pauseUntil(() => {
-        loop.queueTask(networkingTaskSource, null, () => { order.push('task'); });
+        loop.queueTask(networkingTaskSource, null, { run: () => { order.push('task'); } });
         loop.queueMicrotask(() => { order.push('microtask'); });
         throw failure;
       }, env);
@@ -151,7 +151,7 @@ describe('pausing an event loop', () => {
     const { loop, env } = createFixture();
     const otherLoop = createManualEventLoop();
     const steps = vi.fn();
-    otherLoop.queueTask(networkingTaskSource, null, steps);
+    otherLoop.queueTask(networkingTaskSource, null, { run: steps });
     loop.runScriptEvaluation(env, () => {
       loop.pauseUntil(() => {
         expect(otherLoop.runTaskTurn()).toBe(true);

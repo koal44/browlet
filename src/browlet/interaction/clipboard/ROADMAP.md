@@ -762,9 +762,11 @@ and write permission; writeText remains the explicit §7.3.4 stub.
   and collective commit. A delayed adapter must recheck the Document immediately
   before changing the OS clipboard. Native echo suppression for the initiating
   Document is the already-approved event-write contract.
-- Document.hasFocus(), Window.hasTransientActivation(), and broader permission
-  prompt/revocation lifetimes retain their existing owners. No fake system
-  clipboard or permissive native fallback is introduced.
+- Document.hasFocus(), activation notification, and broader permission
+  prompt/revocation lifetimes retain their existing owners. The Window transient
+  activation predicate is implemented; the read regression verifies NotAllowedError
+  without activation, rather than expecting that predicate to throw. No fake
+  system clipboard or permissive native fallback is introduced.
 
 ### Conflicts, gaps and evidence
 

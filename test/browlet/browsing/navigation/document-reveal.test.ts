@@ -189,6 +189,6 @@ function fixture() {
 }
 
 async function inRenderingTask(document: DocumentImpl, steps: () => void): Promise<void> {
-  document.env.realm.queueGlobalTask(renderingTaskSource, steps);
+  document.env.realm.queueGlobalTask(renderingTaskSource, { run: steps });
   await runInHostTask(() => { expect(document.env.responsibleEventLoop.runTaskTurn()).toBe(true); });
 }

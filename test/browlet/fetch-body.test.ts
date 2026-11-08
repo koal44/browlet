@@ -93,8 +93,8 @@ describe('Fetch body delivery through HTML', () => {
     const firstTasks = firstRealm.agent.eventLoop.getTaskQueue(networkingTaskSource);
     const secondTasks = secondRealm.agent.eventLoop.getTaskQueue(networkingTaskSource);
     const previousTasks = new Set([...firstTasks, ...secondTasks]);
-    firstRealm.env.queueGlobalFetchTask(firstRealm.globalObject, vi.fn());
-    firstRealm.env.queueGlobalFetchTask(proxy, vi.fn());
+    firstRealm.env.queueGlobalFetchTask(firstRealm.globalObject, { run: vi.fn() });
+    firstRealm.env.queueGlobalFetchTask(proxy, { run: vi.fn() });
 
     const documents = [...new Set([...firstTasks, ...secondTasks])]
       .filter((task) => !previousTasks.has(task))

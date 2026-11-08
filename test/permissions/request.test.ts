@@ -143,10 +143,10 @@ function createEnvironment(features: PermissionFeature[] = [new PermissionFeatur
 } {
   const tasks: (() => void)[] = [];
   const env = createPermissionEnvironment(createPermissionUserAgent(new PermissionStore(features)));
-  env.queueTask = (source, steps) => {
+  env.queueTask = (source, task) => {
     expect(source).toBe('permissions');
-    tasks.push(steps);
-    return { remove() { const index = tasks.indexOf(steps); if (index !== -1) tasks.splice(index, 1); } };
+    tasks.push(task.run);
+    return { remove() { const index = tasks.indexOf(task.run); if (index !== -1) tasks.splice(index, 1); } };
   };
   return { env, tasks };
 }

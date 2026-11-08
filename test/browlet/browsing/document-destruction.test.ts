@@ -61,9 +61,9 @@ describe('Document destruction', () => {
     const networkingCallback = vi.fn();
     const observer = new ReportingObserverImpl(observerCallback, { buffered: false }, env);
     observer.observe();
-    env.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { document.destroy(); });
+    env.realm.queueGlobalTask(navigationAndTraversalTaskSource, { run: () => { document.destroy(); } });
     global.queueReport('coep', 'default', corpBody);
-    env.realm.queueGlobalTask(networkingTaskSource, networkingCallback);
+    env.realm.queueGlobalTask(networkingTaskSource, { run: networkingCallback });
 
     eventLoop.runTaskTurn();
 
@@ -85,8 +85,10 @@ describe('Document destruction', () => {
 
     expect(retired.getNodeNavigable()).toBeNull();
     // Destruction must execute on the retained Document's loop without requiring full activity.
-    loop.queueTask(navigationAndTraversalTaskSource, null, () => {
-      try { retired.destroy(); } catch (error) { failure = error; }
+    loop.queueTask(navigationAndTraversalTaskSource, null, {
+      run: () => {
+        try { retired.destroy(); } catch (error) { failure = error; }
+      },
     });
     loop.runTaskTurn();
 
@@ -106,8 +108,10 @@ describe('Document destruction', () => {
     firstEntry.documentState = currentEntry.documentState;
     const loop = retired.env.responsibleEventLoop;
     let failure: unknown;
-    loop.queueTask(navigationAndTraversalTaskSource, null, () => {
-      try { retired.destroy(); } catch (error) { failure = error; }
+    loop.queueTask(navigationAndTraversalTaskSource, null, {
+      run: () => {
+        try { retired.destroy(); } catch (error) { failure = error; }
+      },
     });
     loop.runTaskTurn();
 
@@ -115,6 +119,55 @@ describe('Document destruction', () => {
     expect(retainedEntry.document).toBeNull();
     expect(firstEntry.document).toBe(current);
     expect(currentEntry.document).toBe(current);
+  });
+
+  it('retires the initial Document without destroying its reused Window resources', () => {
+    const { document: retired, traversable, env, global } = createDocument(createManualUserAgent());
+    const initialEntry = traversable.activeSessionHistoryEntry;
+    const params = traversable.createNavigationParamsFromSource(parseURL('about:blank?replacement').url!);
+    params.origin = retired.origin;
+    const current = traversable.createAndInitializeDocument('html', 'text/html', params);
+    const currentEntry = traversable.createHistoryEntry(current, params);
+    traversable.currentSessionHistoryEntry = traversable.activeSessionHistoryEntry = currentEntry;
+    traversable.sessionHistoryEntries.push(currentEntry);
+    current.makeActive();
+    expect(current.env).toBe(env);
+    const canceled = vi.spyOn(env.fetchGroup, 'cancel');
+    const destroyed = vi.fn();
+    env.addDestructionSteps(destroyed);
+    const channel = new MessageChannelImpl(env);
+    const disentangle = vi.spyOn(channel.port1, 'disentangle');
+    const blobURL = parseURL(env.userAgent.blobURLStore.add(new BlobImpl(['retained'], {}, env), env)).url!;
+    global.timers.setTimeout(() => {}, 1000, []);
+    const discarded = vi.fn();
+    const work = vi.fn();
+    const loop = env.responsibleEventLoop;
+    let failure: unknown;
+    loop.queueTask(navigationAndTraversalTaskSource, null, {
+      run: () => { try { retired.destroy(); } catch (error) { failure = error; } },
+    });
+    loop.queueTask(networkingTaskSource, retired, { run: () => {}, discard: discarded });
+    env.queueTask('network', { run: work });
+    loop.runTaskTurn();
+    expect(failure).toBeUndefined();
+    expect(retired.isDestroyed).toBe(true);
+    expect(retired.browsingContext).toBeNull();
+    expect(initialEntry.document).toBeNull();
+    expect(traversable.activeDocument).toBe(current);
+    expect(canceled).not.toHaveBeenCalled();
+    expect(destroyed).not.toHaveBeenCalled();
+    expect(disentangle).not.toHaveBeenCalled();
+    expect(env.userAgent.blobURLStore.resolve(blobURL)).not.toBeNull();
+    expect(global.timers.hasOutstandingTimers()).toBe(true);
+    expect(discarded).toHaveBeenCalledOnce();
+    loop.runTaskTurn();
+    expect(work).toHaveBeenCalledOnce();
+    env.queueTask('navigation-and-traversal', { run: () => current.destroy() });
+    while (loop.runTaskTurn()) { /* Retiring the final Document does destroy the global. */ }
+    expect(destroyed).toHaveBeenCalledOnce();
+    expect(disentangle).toHaveBeenCalledOnce();
+    expect(global.timers.hasOutstandingTimers()).toBe(false);
+    expect(env.userAgent.blobURLStore.resolve(blobURL)).toBeNull();
   });
 
   it('preserves the displayed page\'s evaluation and tasks when destroying a retained Document', () => {
@@ -126,11 +179,13 @@ describe('Document destruction', () => {
     const currentWork = vi.fn();
     const loop = retired.env.responsibleEventLoop;
     let failure: unknown;
-    loop.queueTask(navigationAndTraversalTaskSource, null, () => {
-      try { retired.destroy(); } catch (error) { failure = error; }
+    loop.queueTask(navigationAndTraversalTaskSource, null, {
+      run: () => {
+        try { retired.destroy(); } catch (error) { failure = error; }
+      },
     });
-    retired.env.queueTask('network', retainedWork, { discardSteps: discarded });
-    current.env.queueTask('network', currentWork);
+    retired.env.queueTask('network', { run: retainedWork, discard: discarded });
+    current.env.queueTask('network', { run: currentWork });
     loop.runTaskTurn();
     current.env.responsibleEventLoop.runTaskTurn();
 
@@ -160,8 +215,10 @@ describe('Document destruction', () => {
     });
     const loop = retired.env.responsibleEventLoop;
     let failure: unknown;
-    loop.queueTask(navigationAndTraversalTaskSource, null, () => {
-      try { retired.destroy(); } catch (error) { failure = error; }
+    loop.queueTask(navigationAndTraversalTaskSource, null, {
+      run: () => {
+        try { retired.destroy(); } catch (error) { failure = error; }
+      },
     });
     loop.runTaskTurn();
 
@@ -181,8 +238,10 @@ describe('Document destruction', () => {
     traversable.currentSessionHistoryEntry = pendingEntry;
     const loop = pending.env.responsibleEventLoop;
     let failure: unknown;
-    loop.queueTask(navigationAndTraversalTaskSource, null, () => {
-      try { pending.destroy(); } catch (error) { failure = error; }
+    loop.queueTask(navigationAndTraversalTaskSource, null, {
+      run: () => {
+        try { pending.destroy(); } catch (error) { failure = error; }
+      },
     });
     loop.runTaskTurn();
 
@@ -199,8 +258,10 @@ describe('Document destruction', () => {
     traversable.sessionHistoryEntries = [currentEntry];
     const loop = retired.env.responsibleEventLoop;
     let failure: unknown;
-    loop.queueTask(navigationAndTraversalTaskSource, null, () => {
-      try { retired.destroy(); } catch (error) { failure = error; }
+    loop.queueTask(navigationAndTraversalTaskSource, null, {
+      run: () => {
+        try { retired.destroy(); } catch (error) { failure = error; }
+      },
     });
     loop.runTaskTurn();
 
@@ -227,14 +288,15 @@ describe('Document destruction', () => {
     document.ownedWorkers.push({ ownerSet });
     document.workletGlobalScopes.push({ terminate });
 
-    env.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { document.destroy(); });
+    env.realm.queueGlobalTask(navigationAndTraversalTaskSource, { run: () => { document.destroy(); } });
     env.responsibleEventLoop.runTaskTurn();
 
     for (const operation of [disentangle, makeDisappear, cleanup, close, terminate]) {
       expect(operation).toHaveBeenCalledExactlyOnceWith();
     }
     expect(ownerSet).toEqual(new Set([otherDocument]));
-    expect([...document.bfcacheBlockingDetails]).toEqual([{ reason: 'websocket' }]);
+    // Destruction now cancels the EventSource's pending fetch before socket cleanup.
+    expect([...document.bfcacheBlockingDetails]).toEqual([{ reason: 'fetch' }, { reason: 'websocket' }]);
     expect(otherDocument.browsingContext).not.toBeNull();
   });
 
@@ -246,7 +308,7 @@ describe('Document destruction', () => {
     vi.spyOn(env, 'currentHighResolutionTime').mockReturnValue(new Duration(0));
     expect(script.isRenderBlocking()).toBe(true);
 
-    env.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { document.destroy(); });
+    env.realm.queueGlobalTask(navigationAndTraversalTaskSource, { run: () => { document.destroy(); } });
     env.responsibleEventLoop.runTaskTurn();
 
     expect(document.browsingContext).toBeNull();
@@ -265,7 +327,7 @@ describe('Document destruction', () => {
     expect(store.resolve(firstURL)).not.toBeNull();
     expect(store.resolve(secondURL)).not.toBeNull();
 
-    first.env.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { first.document.destroy(); });
+    first.env.realm.queueGlobalTask(navigationAndTraversalTaskSource, { run: () => { first.document.destroy(); } });
     first.env.responsibleEventLoop.runTaskTurn();
 
     expect(store.resolve(firstURL)).toBeNull();
@@ -278,7 +340,7 @@ describe('Document destruction', () => {
     const notifyAborted = vi.spyOn(env.userAgent, 'webDriverBiDiNavigationAborted');
     document.duringLoadingNavigationID = 'navigation-1';
 
-    env.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { document.abort(); });
+    env.realm.queueGlobalTask(navigationAndTraversalTaskSource, { run: () => { document.abort(); } });
     env.responsibleEventLoop.runTaskTurn();
 
     expect(abort).toHaveBeenCalledExactlyOnceWith();

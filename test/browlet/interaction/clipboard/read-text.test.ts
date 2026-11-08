@@ -58,9 +58,9 @@ describe('Clipboard §7.3.2: readText', () => {
     f.read.mockImplementation(() => { started.resolve(); return data.promise; });
     const delivery: (() => void)[] = [];
     const queue = f.env.queueTask.bind(f.env);
-    vi.spyOn(f.env, 'queueTask').mockImplementation((source, steps) => {
-      if (source !== 'clipboard') return queue(source, steps);
-      delivery.push(steps); queued.resolve(); return { remove() {} };
+    vi.spyOn(f.env, 'queueTask').mockImplementation((source, task) => {
+      if (source !== 'clipboard') return queue(source, task);
+      delivery.push(task.run); queued.resolve(); return { remove() {} };
     });
     let settled = false;
     const result = outcome(f.browser).then((value) => { settled = true; return value; });
@@ -68,7 +68,7 @@ describe('Clipboard §7.3.2: readText', () => {
     expect(delivery).toEqual([]); expect(settled).toBe(false);
     data.resolve(textSnapshot('later')); await queued.promise;
     expect(delivery).toHaveLength(1); expect(settled).toBe(false);
-    f.env.realm.queueGlobalTask(clipboardTaskSource, delivery[0]!);
+    f.env.realm.queueGlobalTask(clipboardTaskSource, { run: delivery[0]! });
     expect(await result).toEqual({ value: 'later', promise: true });
   });
 

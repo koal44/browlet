@@ -53,7 +53,7 @@ export class SharedWorkerImpl extends EventTargetImpl {
   // SPEC_CLASH(shared-worker-load-error-cancelability): Follow HTML/Firefox's
   // noncancelable event; Chromium makes load/parse errors cancelable, WebKit only load errors.
   queueError(): void {
-    this.env.queueTask('dom-manipulation', () => { this.fireEvent('error'); });
+    this.env.queueTask('dom-manipulation', { run: () => { this.fireEvent('error'); } });
   }
 }
 

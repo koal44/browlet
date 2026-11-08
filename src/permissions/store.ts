@@ -125,17 +125,19 @@ export class PermissionStore {
       let remaining = targets.length;
       let applied = false;
       for (const target of targets) {
-        target.queueTask('permissions', () => {
-          if (result.isResolved) return;
-          try {
-            if (!applied) {
-              apply();
-              applied = true;
+        target.queueTask('permissions', {
+          run: () => {
+            if (result.isResolved) return;
+            try {
+              if (!applied) {
+                apply();
+                applied = true;
+              }
+              if (--remaining === 0) result.resolve(undefined);
+            } catch (error) {
+              result.reject(error);
             }
-            if (--remaining === 0) result.resolve(undefined);
-          } catch (error) {
-            result.reject(error);
-          }
+          },
         });
       }
       return result.promise;

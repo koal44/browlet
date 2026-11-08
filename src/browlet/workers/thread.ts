@@ -144,7 +144,7 @@ export class WorkerThread {
           // Fetch failure fires an ordinary Event, not a runtime ErrorEvent or
           // an uncanceled exception report. Keep delivery on the outside loop.
             const worker = this.#worker;
-            if (worker !== null) worker.env.queueTask('dom-manipulation', () => { worker.fireEvent('error'); });
+            if (worker !== null) worker.env.queueTask('dom-manipulation', { run: () => { worker.fireEvent('error'); } });
             else if (this.#sharedClosing !== null) env.userAgent.sharedWorkerManager.reportScriptFetchFailure(this);
             // The inside settings have been discarded. Release their execution
             // owner and native endpoints even when no author script ever ran.

@@ -1,4 +1,4 @@
-import { HTML_NAMESPACE, type TextDirection, asciiLower, asciiUpper, InternalError, type InternalPromise } from '../../../infra/index';
+import { HTML_NAMESPACE, type TaskRecord, type TextDirection, asciiLower, asciiUpper, InternalError, type InternalPromise } from '../../../infra/index';
 import {
   arg, attr, defineDictionary, defineIncludes, defineInterface, dictMember, idlType, impl,
   nullable, op, reference, roAttr, sequence, union, xattr,
@@ -214,10 +214,10 @@ export class ElementImpl extends NodeImpl {
     this.#slottableMixin.manualSlotAssignment = slot;
   }
 
-  /** Queue steps on this element's creation global, retained across document adoption. */
+  /** Queue a task on this element's creation global, retained across document adoption. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#queue-an-element-task
-  queueTask(source: TaskSource, steps: () => void): void {
-    this.env.realm.queueGlobalTask(source, steps);
+  queueTask(source: TaskSource, task: TaskRecord): void {
+    this.env.realm.queueGlobalTask(source, task);
   }
 
   /** Dispatch a synthetic pointer event, returning false when a listener cancels it. */

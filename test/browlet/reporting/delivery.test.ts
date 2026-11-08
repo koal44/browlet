@@ -210,7 +210,7 @@ describe('Reporting delivery', () => {
     scope.queueReport('coep', 'default', {
       type: 'corp', blockedURL: 'https://resource.test/', destination: 'script', disposition: 'enforce',
     });
-    realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { document.destroy(); });
+    realm.queueGlobalTask(navigationAndTraversalTaskSource, { run: () => { document.destroy(); } });
     const eventLoop = realm.agent.eventLoop;
     eventLoop.runTaskTurn();
     expect(scope.reports).toEqual([]);

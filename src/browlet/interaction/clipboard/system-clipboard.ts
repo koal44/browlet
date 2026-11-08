@@ -29,8 +29,10 @@ export class SystemClipboard {
   // SPEC_GAP(clipboard-change-task-source): The draft omits notification scheduling. Use the owning Document's user-interaction source.
   // TODO(Clipboard host): register native change observation and route it to the affected Documents.
   queueChange(document: DocumentImpl): void {
-    document.env.responsibleEventLoop.queueTask(userInteractionTaskSource, document, () => {
-      this.fireChange(document);
+    document.env.responsibleEventLoop.queueTask(userInteractionTaskSource, document, {
+      run: () => {
+        this.fireChange(document);
+      },
     });
   }
 
@@ -40,15 +42,19 @@ export class SystemClipboard {
   // after uncanceled keydown and before keyup; queueing again could reverse that order.
   // https://w3c.github.io/clipboard-apis/#otherevents
   queueAction(type: ClipboardEventType, document: DocumentImpl): void {
-    document.env.responsibleEventLoop.queueTask(userInteractionTaskSource, document, () => {
-      this.runAction(type, document, 'user');
+    document.env.responsibleEventLoop.queueTask(userInteractionTaskSource, document, {
+      run: () => {
+        this.runAction(type, document, 'user');
+      },
     });
   }
 
   /** Queue the Clipboard contribution after HTML reports that this Document gained system focus. */
   queueFocus(document: DocumentImpl): void {
-    document.env.responsibleEventLoop.queueTask(userInteractionTaskSource, document, () => {
-      this.runDocumentFocusSteps(document);
+    document.env.responsibleEventLoop.queueTask(userInteractionTaskSource, document, {
+      run: () => {
+        this.runDocumentFocusSteps(document);
+      },
     });
   }
 

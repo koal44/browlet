@@ -376,10 +376,10 @@ function startFixture() {
       case 'checkpoint': {
         const trace = ['task'];
         runtime.agent.eventLoop.queueMicrotask(() => { trace.push('microtask'); });
-        runtime.agent.eventLoop.queueTask(followupTaskSource, null, () => {
+        runtime.agent.eventLoop.queueTask(followupTaskSource, null, { run: () => {
           trace.push('next task');
           runtime.send(trace);
-        });
+        } });
         break;
       }
       case 'block':
@@ -694,7 +694,7 @@ function runWorkerError(runtime, message, followupTaskSource) {
   script.run();
   traceWorker('error script returned');
   // Module rejection reporting finishes at the checkpoint before this reply.
-  runtime.agent.eventLoop.queueTask(followupTaskSource, null, () => runtime.send(events));
+  runtime.agent.eventLoop.queueTask(followupTaskSource, null, { run: () => runtime.send(events) });
 }
 
 /** Schedule through the projected worker API and observe delivery on the HTML timer queue. */
@@ -781,7 +781,7 @@ function runBlockingWorkerScript(runtime, state, scriptType, entry = 'script') {
   if (entry !== 'script') {
     // A later HTML task must be discarded too; restoring a healthy callback or
     // promise checkpoint would be the wrong contract for Worker.terminate().
-    env.queueTask('dom-manipulation', () => { Atomics.store(state, 5, 1); });
+    env.queueTask('dom-manipulation', { run: () => { Atomics.store(state, 5, 1); } });
   }
   const Script = scriptType === 'classic' ? ClassicScript : JavaScriptModuleScript;
   const script = new Script(source, env, env.apiBaseURL, new ScriptFetchOptions());

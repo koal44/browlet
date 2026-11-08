@@ -1758,9 +1758,58 @@ ordinary passes and two existing expected failures; each stock run has 111 passe
 and three existing expected failures. All three new regressions pass everywhere.
 Typechecking, declaration contracts, touched-file ESLint, and diff checks pass.
 
+### Shared task input and removal ownership
+
+Queued work now supplies one `TaskRecord`: `run`, optional internal `discard`,
+an optional `isRunnable` predicate, and optional `timerNestingLevel`.
+Those fields no longer travel in separate creation options or an init type.
+The existing HTML `Task` adds its source, associated Document, and execution
+state. Its runnable check still combines the supplied predicate with Document
+activity. Only `run` captures the asynchronous execution context; readiness and
+discard callbacks remain implementation work.
+
+Fetch and parallel queues use the same `TaskRecord` contract, consuming `run` and `discard`.
+Each enqueue captures a distinct task identity, including when the same input
+object is submitted more than once. Existing queue ordering, wake-up coalescing,
+and removal handles are unchanged. Fetch's delivery helper prepares `run` and
+`discard` together; normal completion releases its cancellation registration
+through `finish`, while removal invokes the queued task's `discard` callback.
+
+The task regressions cover readiness changes, retained timer nesting, removal,
+and repeated submission of the same input. The history destruction regression
+also caught an old `discardSteps` property surviving in spread options during
+migration: its waiting operation received no failure notification. Moving that
+callback into the task's `discard` member restores completion; the 140 focused
+history tests pass. Missing Fetch keepalive and remaining loader lifecycle work
+stay explicit in their owning roadmaps.
+
+The broader run also reached two obsolete activation-stub expectations; they now
+verify Clipboard/Pointer Lock permission rejection using the implemented Window
+predicate. Worker fixtures use the same task objects. Their native-loader mock
+is isolated with module-cache setup and cleanup, so running the low-level
+MessageChannel suite before or after them selects the correct worker entry.
+Both file orders pass without a production thread or addon change.
+Main independently fixes the same fixture leak in `954debb4` by releasing its
+entry override. Reconcile these fixture changes during consolidation, preserving
+coverage of both suite orders; this checkout does not yet contain main's newer
+worker fixture precompilation or between-file memory collection.
+
+Validation (2026-11-07): the full 877-file unit suite passes on custom Node with
+and without the addon, and on stock Node 24.19.0. After those runs, the automatic
+broad sweep was intentionally interrupted as Node 24's addon run began; the
+remaining configurations use 28 focused task, Fetch, loader, and teardown suites
+(492 cases each). Node 24.19.0 and 26.8.1 with the addon each pass 483 cases with
+nine existing expected failures; stock Node 26.8.1 passes 473 with 19 existing
+expected failures. No new expected failures or skips were introduced. Reserve
+the next full six-configuration sweep for the consolidated tree.
+
+The 33 stylesheet-loading scenarios pass across Chromium, Firefox, and WebKit.
+Typechecking, declaration contracts, changed-file ESLint, import boundaries,
+and whitespace checks pass.
+
 ### HTML §8.1.7.2 element tasks
 
-`ElementImpl.queueTask(source, steps)` implements
+`ElementImpl.queueTask(source, task)` implements
 [queue an element task](https://html.spec.whatwg.org/multipage/webappapis.html#queue-an-element-task)
 through the element's retained environment and existing global-task routing.
 Adoption changes its node document, not its relevant global. The task therefore
@@ -1920,6 +1969,14 @@ queued by that listener. Internal microtask steps still drain when their Documen
 becomes inactive, while ordinary tasks remain queued; author callback invocation
 retains its separate can-run-script check. Existing rejection tests cover the
 post-drain notification task, same-checkpoint handling, and multiple Windows.
+
+Document abortion and Window.stop() accept either an owning task or the owning
+loop's active microtask checkpoint. Backends without individual Promise-job hooks
+cannot install a Task for each native continuation; the checkpoint still
+establishes which loop is executing it. A response-body Promise regression first
+failed the old task-only assertion and now passes. Calls outside the owning loop
+remain invalid. This uses existing checkpoint state without changing queueing or
+native job scheduling.
 
 Two specification-owned consumers remain absent:
 
@@ -3123,7 +3180,7 @@ media, or parser caller is not by itself a reason to omit the scheduling operati
 
 | Operation | Work available in Browlet | Exact remaining dependency or boundary |
 | --- | --- | --- |
-| [Queue an element task](https://html.spec.whatwg.org/multipage/webappapis.html#queue-an-element-task) | Implemented on `ElementImpl.queueTask()`, forwarding to its retained creation realm's global-task operation. | No missing scheduling dependency. Adoption changes the node document but not the task's global; future element algorithms supply the source and steps. |
+| [Queue an element task](https://html.spec.whatwg.org/multipage/webappapis.html#queue-an-element-task) | Implemented on `ElementImpl.queueTask()`, forwarding to its retained creation realm's global-task operation. | No missing scheduling dependency. Adoption changes the node document but not the task's global; future element algorithms supply the source and task. |
 | [Await a stable state](https://html.spec.whatwg.org/multipage/webappapis.html#await-a-stable-state) | Implemented on `env.awaitStableState()`, with shared-queue idle wake-ups and optional parallel continuation. | Image/media algorithms still need to supply their own synchronous sections and continuations; the scheduling operation itself is implemented. |
 | [Spin the event loop](https://html.spec.whatwg.org/multipage/webappapis.html#spin-the-event-loop) | Implemented on `EventLoop.spinUntil()`: suspend modeled state, checkpoint, register the wait, and resume on the original task source with saved state and metadata. | Callers must lower their remaining steps and cleanup into the continuation. The parser already has stylesheet/script continuations to migrate; complete preparation, readiness, nesting, and abort handling belong to its [script runner](../html/parser/ROADMAP.md). Arbitrary synchronous author calls are not resumable through this helper. |
 | [Pause](https://html.spec.whatwg.org/multipage/webappapis.html#pause) | `EventLoop.pauseUntil()` retains the task/stack, samples the current global's clock, and suppresses tasks/checkpoints throughout a caller-supplied synchronous wait. | Dialog and synchronous Fetch callers need real blocking host effects whose goals can progress without this thread's callbacks. A UI host must reflect pending state where necessary. [Record pause duration](https://w3c.github.io/long-animation-frames/#record-pause-duration) separately needs Document frame timing and a pending script entry; its call site is present. |

@@ -176,7 +176,7 @@ describe('population MIME preparation', () => {
       navigationId: 'dispatch', navigationParams: params, completionSteps: complete, failureSteps: failed,
     });
     expect(env.responsibleEventLoop.runTaskTurn()).toBe(true);
-    env.queueTask('navigation-and-traversal', () => { document.destroy(); });
+    env.queueTask('navigation-and-traversal', { run: () => { document.destroy(); } });
     if (outcome === 'failed') stream.error(new Error('response body failed'));
     else stream.close();
     await expect.poll(() => queue.mock.calls.length).toBe(3);
@@ -197,14 +197,14 @@ describe('population MIME preparation', () => {
     const load = vi.spyOn(navigable, 'loadDocument');
     const complete = vi.fn();
     const failed = vi.fn();
-    const queue = vi.spyOn(env.responsibleEventLoop, 'queueTask');
     navigable.populateHistoryEntryDocument(entry, 'navigate', source, navigable.snapshotTargetParams(), 'none', {
       navigationId: 'dispatch', navigationParams: params, completionSteps: complete, failureSteps: failed,
     });
     expect(env.responsibleEventLoop.runTaskTurn()).toBe(true);
     const queued = Promise.withResolvers<void>();
-    const queueTask = env.queueTask.bind(env);
-    vi.spyOn(env, 'queueTask').mockImplementationOnce((...args) => {
+    const loop = env.responsibleEventLoop;
+    const queueTask = loop.queueTask.bind(loop);
+    vi.spyOn(loop, 'queueTask').mockImplementationOnce((...args) => {
       const task = queueTask(...args);
       queued.resolve();
       return task;

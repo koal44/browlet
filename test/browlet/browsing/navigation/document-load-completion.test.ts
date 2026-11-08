@@ -153,7 +153,7 @@ describe('completely finishing Document loading', () => {
   it('discards the container task if its owning Document is destroyed first', () => {
     const { iframe, document, parent } = iframeFixture();
     const event = vi.spyOn(iframe, 'runLoadEventSteps');
-    parent.env.queueTask('network', () => { parent.destroy(); });
+    parent.env.queueTask('network', { run: () => { parent.destroy(); } });
     document.completelyFinishLoading();
     const loop = parent.env.responsibleEventLoop;
     expect(loop.runTaskTurn()).toBe(true);

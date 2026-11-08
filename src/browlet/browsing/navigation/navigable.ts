@@ -61,6 +61,8 @@ export class Navigable {
   isClosing = false;
   /** Whether its navigation is delaying the container document's load event. */
   isDelayingLoadEvents = false;
+  /** Outer replacement stream, including intervals without an admitted or committed part Document. */
+  multipartResource: MultipartResourceReader | null = null;
   /** Navigation UUID, "traversal" while applying history, or null when no navigation is ongoing. */
   #ongoingNavigation: string | null = null;
   /** Parallel waits observing changes to the ongoing navigation, without polling its Document. */
@@ -143,6 +145,8 @@ export class Navigable {
     if (navigable === null) return;
     const env = container.nodeDocument.env;
     container.contentNavigable = null;
+    // A pending first part need not belong to any committed Document yet.
+    navigable.multipartResource?.cancel(new DOMExceptionImpl('', 'AbortError')).observe(() => {}, () => {});
     // TODO(HTML §7.5.10): Off-loop abortion is queued against this now-inactive Document; resolve delivery with teardown.
     navigable.informNavigationAPIAboutChildNavigableDestruction(env.responsibleEventLoop);
     const document = navigable.activeDocument;
@@ -184,10 +188,13 @@ export class Navigable {
       const queueCheck = (document: DocumentImpl, steps: () => void) => {
         const completion = P.withResolvers(internalType<void>());
         // Tasks retain their global's activity gate; removal rejects the internal wait without firing author events.
-        document.env.queueTask('navigation-and-traversal', () => {
-          try { steps(); completion.resolve(); }
-          catch (error) { completion.reject(error); }
-        }, { discardSteps: () => { completion.reject(new InternalError('Unload check task was discarded')); } });
+        document.env.queueTask('navigation-and-traversal', {
+          run: () => {
+            try { steps(); completion.resolve(); }
+            catch (error) { completion.reject(error); }
+          },
+          discard: () => { completion.reject(new InternalError('Unload check task was discarded')); },
+        });
         return completion.promise;
       };
       const checkRemainingDocuments = () => {
@@ -425,6 +432,7 @@ export class Navigable {
   releaseDestroyedChildNavigables(document: DocumentImpl): void {
     for (const child of this.#childNavigables) {
       if (child.containerDocument !== document || child.activeDocument !== null) continue;
+      child.multipartResource?.cancel(new DOMExceptionImpl('', 'AbortError')).observe(() => {}, () => {});
       child.container!.contentNavigable = null;
       this.#childNavigables.delete(child);
       // Retain the parent identity for history and pending lifecycle work.
@@ -613,6 +621,18 @@ export class Navigable {
     options: NavigateOptions = {}, env: BrowletEnvironment | null = null,
   ): void {
     // Capture the source state and check its permission to navigate this destination.
+    const discardResponse = () => {
+      options.response?.body?.stream.cancelInternal(undefined).observe(() => {}, () => {});
+    };
+    const runSteps = (steps: () => void) => {
+      try { steps(); }
+      catch (error) {
+        discardResponse();
+        // An implementation failure stops the load; an ordinary navigation veto retires only its part.
+        options.multipartResource?.cancel(error).observe(() => {}, () => {});
+        throw error;
+      }
+    };
     const cspNavigationType = (options.formDataEntryList ?? null) === null ? 'other' : 'form-submission';
     const sourceSnapshotParams = new SourceSnapshotParams(sourceDocument);
     let initiatorOriginSnapshot: Origin = createOpaqueOrigin();
@@ -629,6 +649,7 @@ export class Navigable {
       const sourceNavigable = sourceDocument.getNodeNavigable();
       if (sourceNavigable === null) throw new InternalError('Navigation requires the source Document\'s node navigable');
       if (!sourceNavigable.isAllowedBySandboxingToNavigate(this, sourceSnapshotParams)) {
+        discardResponse();
         if (options.exceptionsEnabled === true) throw new DOMExceptionImpl('Sandboxing prevents navigation', 'SecurityError');
         return;
       }
@@ -646,6 +667,7 @@ export class Navigable {
       if (document === null) throw new InternalError('Navigation requires an active Document');
       const userAgent = document.env.userAgent;
       if (document.unloadCounter > 0) {
+        discardResponse();
         userAgent.webDriverBiDiNavigationFailed(this, { id: navigationId, status: 'canceled', url });
         return;
       }
@@ -655,6 +677,7 @@ export class Navigable {
         container.lazyLoadResumptionSteps = null;
       }
       if (this.isNavigationOrHistoryUpdateBlocked()) {
+        discardResponse();
         userAgent.webDriverBiDiNavigationFailed(this, { id: navigationId, status: 'canceled', url });
         return;
       }
@@ -677,6 +700,7 @@ export class Navigable {
       const targetSnapshotParams = this.snapshotTargetParams();
       userAgent.webDriverBiDiNavigationStarted(this, { id: navigationId, status: 'pending', url });
       if (this.ongoingNavigation === 'traversal') {
+        discardResponse();
         userAgent.webDriverBiDiNavigationFailed(this, { id: navigationId, status: 'canceled', url });
         return;
       }
@@ -689,10 +713,12 @@ export class Navigable {
         const request: NavigationRequest = Object.assign(new FetchRequest(url, activeEnv), {
           client: sourceSnapshotParams.fetchClient, policyContainer: sourceSnapshotParams.sourcePolicyContainer,
         });
-        activeEnv.queueTask('navigation-and-traversal', () => this.navigateToJavaScriptURL(
-          request, historyHandling, initiatorOriginSnapshot, userInvolvement,
-          cspNavigationType, options.initialInsertion ?? false, navigationId, targetSnapshotParams,
-        ));
+        activeEnv.queueTask('navigation-and-traversal', {
+          run: () => this.navigateToJavaScriptURL(
+            request, historyHandling, initiatorOriginSnapshot, userInvolvement,
+            cspNavigationType, options.initialInsertion ?? false, navigationId, targetSnapshotParams,
+          ),
+        });
         return;
       }
 
@@ -713,7 +739,7 @@ export class Navigable {
           navigationAPIState: options.navigationAPIState ?? navigation.env.serializeForStorage(undefined),
           apiMethodTracker: options.apiMethodTracker ?? null,
         });
-        if (!shouldContinue) return;
+        if (!shouldContinue) { discardResponse(); return; }
       }
       const currentContainer = this.container;
       // SPEC_GAP(deferred-fetch-null-container): Browser-UI top-level navigation has neither
@@ -723,21 +749,27 @@ export class Navigable {
       }
 
       // In parallel, check unloading and populate an entry before queued history finalization.
-      userAgent.runInParallel(() => {
+      userAgent.runInParallel(() => runSteps(() => {
         const activeDocument = this.activeDocument;
         if (activeDocument === null) throw new InternalError('Navigation requires an active Document');
         userAgent.checkIfUnloadingIsCanceled(activeDocument.getInclusiveDescendantNavigables()).observe((unloadStatus) => {
-          userAgent.runInParallel(() => {
+          userAgent.runInParallel(() => runSteps(() => {
             if (unloadStatus !== 'continue' || this.ongoingNavigation !== navigationId) {
+              discardResponse();
               activeDocument.env.userAgent.webDriverBiDiNavigationFailed(this, { id: navigationId, status: 'canceled', url });
               return;
             }
             const activeEnv = this.activeWindow?.env;
             if (activeEnv === undefined) throw new InternalError('Navigation requires an active Window');
-            activeEnv.queueTask('navigation-and-traversal', () => {
-              const documentToAbort = this.activeDocument;
-              if (documentToAbort === null) throw new InternalError('Navigation abortion requires an active Document');
-              documentToAbort.abortAndDescendants();
+            activeEnv.queueTask('navigation-and-traversal', {
+              run: () => {
+                const documentToAbort = this.activeDocument;
+                if (documentToAbort === null) throw new InternalError('Navigation abortion requires an active Document');
+                for (const descendant of documentToAbort.getDescendantNavigables()) {
+                  descendant.multipartResource?.cancel(new DOMExceptionImpl('', 'AbortError')).observe(() => {}, () => {});
+                }
+                documentToAbort.abortAndDescendants();
+              },
             });
             const documentState = DocumentState.createForNavigation(
               url, initiatorOriginSnapshot, initiatorBaseURLSnapshot,
@@ -750,6 +782,9 @@ export class Navigable {
             );
             this.populateHistoryEntryDocument(historyEntry, 'navigate', sourceSnapshotParams, targetSnapshotParams, userInvolvement, {
               navigationId, navigationParams, cspNavigationType, allowPOST: true,
+              failureSteps: options.multipartResource === undefined ? undefined : (error) => {
+                userAgent.runInParallel(() => runSteps(() => { throw error; }));
+              },
               completionSteps: () => {
                 this.traversable.appendSessionHistoryTraversalSteps(() => {
                   // TODO(HTML §7.4.6): History application still needs unloading and updates for every affected navigable.
@@ -757,13 +792,13 @@ export class Navigable {
                 });
               },
             });
-          });
-        }, (error) => { userAgent.runInParallel(() => { throw error; }); });
-      });
+          }));
+        }, (error) => { userAgent.runInParallel(() => runSteps(() => { throw error; })); });
+      }));
     };
 
-    if (env?.realm.agent === targetEnv.realm.agent) steps();
-    else targetEnv.queueTask('navigation-and-traversal', steps);
+    if (env?.realm.agent === targetEnv.realm.agent) runSteps(steps);
+    else targetEnv.queueTask('navigation-and-traversal', { run: () => runSteps(steps), discard: discardResponse });
   }
 
   /** Queue preparation before unloading/activation; supplied failure steps take responsibility for asynchronous errors. */
@@ -784,98 +819,99 @@ export class Navigable {
     };
     const window = this.activeWindow;
     if (window === null) throw new InternalError('History preparation requires an active Window');
-    const taskOptions = {
-      discardSteps: failureSteps === undefined ? undefined : () => { failureSteps(new InternalError('History preparation task was discarded')); },
-    };
-    window.env.queueTask('navigation-and-traversal', () => runSteps(() => {
-      const displayedEntry = this.activeSessionHistoryEntry;
-      const targetEntry = this.currentSessionHistoryEntry;
-      const displayedDocument = displayedEntry.document;
-      if (displayedDocument === null) throw new InternalError('History preparation requires a displayed Document');
-      const continuation: ChangingNavigableContinuationState = {
-        displayedDocument, targetEntry, navigable: this, updateOnly: false,
-      };
-      if (displayedEntry === targetEntry && !targetEntry.documentState.reloadPending) {
-        continuation.updateOnly = true;
-        completionSteps(continuation);
-        return;
-      }
-
-      switch (navigationType) {
-        case 'reload':
-          if (!targetEntry.documentState.reloadPending) throw new InternalError('History reload requires a pending reload');
-          break;
-        case 'traverse':
-          if (!targetEntry.documentState.everPopulated) throw new InternalError('History traversal requires a previously populated entry');
-          break;
-        case 'replace':
-          if (targetEntry.step !== displayedEntry.step || targetEntry.documentState.everPopulated) {
-            throw new InternalError('History replacement requires a new Document at the displayed step');
-          }
-          break;
-        case 'push':
-          if (displayedEntry.step === 'pending' || targetEntry.step !== displayedEntry.step + 1 || targetEntry.documentState.everPopulated) {
-            throw new InternalError('History push requires a new Document at the next step');
-          }
-          break;
-        case null: break;
-        default: assertNever(navigationType);
-      }
-
-      const oldOrigin = targetEntry.documentState.origin;
-      const displayedOrigin = displayedEntry.documentState.origin;
-      if (navigationType === 'traverse' && this !== (traversable as Navigable) && targetEntry !== displayedEntry &&
-        oldOrigin !== null && displayedOrigin !== null && areSameOrigin(oldOrigin, displayedOrigin)) {
-        this.activeWindow!.navigation.fireTraverseNavigateEvent(targetEntry, userInvolvement);
-      }
-
-      const afterDocumentPopulated = () => {
-        const document = targetEntry.document;
-        if (document === null) {
-          // SPEC_GAP(history-population-null-document): HTML marks update-only, then dereferences the null Document.
-          // Keep the displayed page, as browsers do, without resetting retained origin-dependent state.
+    const discard = failureSteps === undefined ? undefined : () => { failureSteps(new InternalError('History preparation task was discarded')); };
+    window.env.queueTask('navigation-and-traversal', {
+      run: () => runSteps(() => {
+        const displayedEntry = this.activeSessionHistoryEntry;
+        const targetEntry = this.currentSessionHistoryEntry;
+        const displayedDocument = displayedEntry.document;
+        if (displayedDocument === null) throw new InternalError('History preparation requires a displayed Document');
+        const continuation: ChangingNavigableContinuationState = {
+          displayedDocument, targetEntry, navigable: this, updateOnly: false,
+        };
+        if (displayedEntry === targetEntry && !targetEntry.documentState.reloadPending) {
           continuation.updateOnly = true;
-        } else if (oldOrigin === null || !areSameOrigin(document.origin, oldOrigin)) {
-          targetEntry.classicHistoryAPIState = displayedDocument.env.serializeForStorage(null);
-          const context = document.browsingContext;
-          if (this.parent === null && !(context?.isAuxiliary && context.openerBrowsingContext !== null)) {
-            targetEntry.documentState.navigableTargetName = '';
-          }
+          completionSteps(continuation);
+          return;
         }
-        completionSteps(continuation);
-      };
-      if (targetEntry.document === null || targetEntry.documentState.reloadPending) {
-        const navigationTimingType = targetEntry.document === null ? 'back_forward' : 'reload';
-        const targetSnapshotParams = this.snapshotTargetParams();
-        let source = sourceSnapshotParams;
-        if (source === null) {
-          const activeDocument = this.activeDocument;
-          if (activeDocument === null) throw new InternalError('History source snapshot requires an active Document');
-          source = new SourceSnapshotParams(activeDocument);
+
+        switch (navigationType) {
+          case 'reload':
+            if (!targetEntry.documentState.reloadPending) throw new InternalError('History reload requires a pending reload');
+            break;
+          case 'traverse':
+            if (!targetEntry.documentState.everPopulated) throw new InternalError('History traversal requires a previously populated entry');
+            break;
+          case 'replace':
+            if (targetEntry.step !== displayedEntry.step || targetEntry.documentState.everPopulated) {
+              throw new InternalError('History replacement requires a new Document at the displayed step');
+            }
+            break;
+          case 'push':
+            if (displayedEntry.step === 'pending' || targetEntry.step !== displayedEntry.step + 1 || targetEntry.documentState.everPopulated) {
+              throw new InternalError('History push requires a new Document at the next step');
+            }
+            break;
+          case null: break;
+          default: assertNever(navigationType);
         }
-        // Optional user-agent repost confirmation has no host integration yet.
-        const allowPOST = targetEntry.documentState.reloadPending;
-        window.env.userAgent.runInParallel(() => runSteps(() => {
-          try {
-            // SPEC_GAP(history-population-timing-input): HTML computes navTimingType but omits it from this call.
-            this.populateHistoryEntryDocument(targetEntry, navigationTimingType, source, targetSnapshotParams, userInvolvement, {
-              allowPOST, failureSteps,
-              completionSteps: () => {
-                const activeWindow = this.activeWindow;
-                if (activeWindow === null) throw new InternalError('History population completion requires an active Window');
-                activeWindow.env.queueTask('navigation-and-traversal', () => runSteps(afterDocumentPopulated), taskOptions);
-              },
-            });
-          } finally {
-            // SPEC_CLASH(history-reload-pending-inputs): HTML clears this before both POST admission and request flags (#12760).
-            // Preserve it until synchronous request construction has captured reloadNavigation; no response wait is needed.
-            targetEntry.documentState.reloadPending = false;
+
+        const oldOrigin = targetEntry.documentState.origin;
+        const displayedOrigin = displayedEntry.documentState.origin;
+        if (navigationType === 'traverse' && this !== (traversable as Navigable) && targetEntry !== displayedEntry &&
+          oldOrigin !== null && displayedOrigin !== null && areSameOrigin(oldOrigin, displayedOrigin)) {
+          this.activeWindow!.navigation.fireTraverseNavigateEvent(targetEntry, userInvolvement);
+        }
+
+        const afterDocumentPopulated = () => {
+          const document = targetEntry.document;
+          if (document === null) {
+            // SPEC_GAP(history-population-null-document): HTML marks update-only, then dereferences the null Document.
+            // Keep the displayed page, as browsers do, without resetting retained origin-dependent state.
+            continuation.updateOnly = true;
+          } else if (oldOrigin === null || !areSameOrigin(document.origin, oldOrigin)) {
+            targetEntry.classicHistoryAPIState = displayedDocument.env.serializeForStorage(null);
+            const context = document.browsingContext;
+            if (this.parent === null && !(context?.isAuxiliary && context.openerBrowsingContext !== null)) {
+              targetEntry.documentState.navigableTargetName = '';
+            }
           }
-        }));
-      } else {
-        afterDocumentPopulated();
-      }
-    }), taskOptions);
+          completionSteps(continuation);
+        };
+        if (targetEntry.document === null || targetEntry.documentState.reloadPending) {
+          const navigationTimingType = targetEntry.document === null ? 'back_forward' : 'reload';
+          const targetSnapshotParams = this.snapshotTargetParams();
+          let source = sourceSnapshotParams;
+          if (source === null) {
+            const activeDocument = this.activeDocument;
+            if (activeDocument === null) throw new InternalError('History source snapshot requires an active Document');
+            source = new SourceSnapshotParams(activeDocument);
+          }
+          // Optional user-agent repost confirmation has no host integration yet.
+          const allowPOST = targetEntry.documentState.reloadPending;
+          window.env.userAgent.runInParallel(() => runSteps(() => {
+            try {
+              // SPEC_GAP(history-population-timing-input): HTML computes navTimingType but omits it from this call.
+              this.populateHistoryEntryDocument(targetEntry, navigationTimingType, source, targetSnapshotParams, userInvolvement, {
+                allowPOST, failureSteps,
+                completionSteps: () => {
+                  const activeWindow = this.activeWindow;
+                  if (activeWindow === null) throw new InternalError('History population completion requires an active Window');
+                  activeWindow.env.queueTask('navigation-and-traversal', { run: () => runSteps(afterDocumentPopulated), discard });
+                },
+              });
+            } finally {
+              // SPEC_CLASH(history-reload-pending-inputs): HTML clears this before both POST admission and request flags (#12760).
+              // Preserve it until synchronous request construction has captured reloadNavigation; no response wait is needed.
+              targetEntry.documentState.reloadPending = false;
+            }
+          }));
+        } else {
+          afterDocumentPopulated();
+        }
+      }),
+      discard,
+    });
   }
 
   /** Save the displayed entry's state, then activate a populated entry and initialize its Document's visibility. */
@@ -909,9 +945,7 @@ export class Navigable {
     const failureSteps = options.failureSteps;
     // TODO(HTML §7.5.10): Teardown must also cancel in-flight Fetch/body reads and settle their waiting owner
     // when there is no queued task to discard; later callbacks must not enqueue work for a destroyed Document.
-    const taskOptions = {
-      discardSteps: failureSteps === undefined ? undefined : () => { failureSteps(new InternalError('History population task was discarded')); },
-    };
+    const discard = failureSteps === undefined ? undefined : () => { failureSteps(new InternalError('History population task was discarded')); };
     const runSteps = (steps: () => void) => {
       try { steps(); }
       catch (error) {
@@ -922,104 +956,115 @@ export class Navigable {
     const queueResponse = (params: NavigationParams | NonFetchSchemeNavigationParams | null | undefined) => {
       const window = this.activeWindow;
       if (window === null) throw new InternalError('History population requires an active Window');
-      window.env.queueTask('navigation-and-traversal', () => runSteps(() => {
-        // Fetch's bare return is cancellation, even if another navigation reuses the null ID.
-        if (params === undefined || this.ongoingNavigation !== expectedNavigation) {
-          completionSteps?.();
-          return;
-        }
-        let saveExtraDocumentState = true;
-        const complete = () => {
-          // Non-fetch/error pages retain the entry's origin and history policies.
-          const document = entry.document;
-          if (document !== null) {
-            entry.documentState.everPopulated = true;
-            if (saveExtraDocumentState && params instanceof NavigationParams) {
-              entry.documentState.origin = document.origin;
-              if (PolicyContainer.requiresStorageInHistory(document.url)) {
-                entry.documentState.historyPolicyContainer = params.policyContainer;
+      window.env.queueTask('navigation-and-traversal', {
+        run: () => runSteps(() => {
+          // Fetch's bare return is cancellation, even if another navigation reuses the null ID.
+          if (params === undefined || this.ongoingNavigation !== expectedNavigation) {
+            if (params instanceof NavigationParams) params.response.body?.stream.cancelInternal(undefined).observe(() => {}, () => {});
+            completionSteps?.();
+            return;
+          }
+          let saveExtraDocumentState = true;
+          const complete = () => {
+            // Non-fetch/error pages retain the entry's origin and history policies.
+            const document = entry.document;
+            if (document !== null) {
+              entry.documentState.everPopulated = true;
+              if (saveExtraDocumentState && params instanceof NavigationParams) {
+                entry.documentState.origin = document.origin;
+                if (PolicyContainer.requiresStorageInHistory(document.url)) {
+                  entry.documentState.historyPolicyContainer = params.policyContainer;
+                }
+              }
+              if (entry.documentState.requestReferrer === undefined && params instanceof NavigationParams) {
+                // SPEC_GAP(navigation-history-null-request): HTML asserts a request exists, although synthetic params can omit it.
+                // TODO(HTML §7.4.5): Resolve synthetic referrer persistence before enabling the inline/Document loaders.
+                if (params.request === null) throw new InternalError('Synthetic navigation history referrer capture is not implemented');
+                entry.documentState.requestReferrer = params.request.referrer;
               }
             }
-            if (entry.documentState.requestReferrer === undefined && params instanceof NavigationParams) {
-              // SPEC_GAP(navigation-history-null-request): HTML asserts a request exists, although synthetic params can omit it.
-              // TODO(HTML §7.4.5): Resolve synthetic referrer persistence before enabling the inline/Document loaders.
-              if (params.request === null) throw new InternalError('Synthetic navigation history referrer capture is not implemented');
-              entry.documentState.requestReferrer = params.request.referrer;
-            }
-          }
-          completionSteps?.();
-        };
-        if (params !== null && !(params instanceof NavigationParams)) {
-          entry.documentState.document = this.attemptToCreateNonFetchSchemeDocument(params);
-          saveExtraDocumentState = false;
-        } else if (
-          params === null ||
-          params.policyContainer.cspList?.isNavigationResponseBlocked(
-            params.request, params.response, cspNavigationType, this, window.env.userAgent,
-          ) ||
-          (params.reservedEnv !== null && !this.checkResponseEmbedderPolicy(params.response, params.policyContainer.embedderPolicy)) ||
-          !this.checkResponseFrameOptions(params.response, params.policyContainer.cspList)
-        ) {
-          // TODO(HTML §7.5.7): The inline-content owner must accept the failure description when it implements error pages.
-          const document = this.createDocumentForInlineContent(null, navigationTimingType, userInvolvement, params?.url ?? entry.url);
-          entry.documentState.document = document;
-          document.makeUnsalvageable('navigation-failure');
-          saveExtraDocumentState = false;
-          if (params !== null) {
-            // SPEC_GAP(navigation-failure-null-environment): HTML discards a nullable reservation; synthetic responses have none.
-            params.reservedEnv?.discard();
-            window.env.userAgent.webDriverBiDiNavigationFailed(this, {
-              id: navigationId, status: 'canceled', url: params.url,
-            });
-          }
-        } else if (params.response.hasAttachmentDisposition()) {
-          if (sourceSnapshotParams.allowsDownloading && !params.finalSandboxingFlagSet.has('sandboxed-downloads') &&
-            window.env.userAgent.isNavigationDownloadAllowed(params.response, sourceSnapshotParams)) {
-            window.env.userAgent.handleAsDownload(params.response, this, navigationId);
-          }
-          // SPEC_CLASH(navigation-empty-attachment): HTML/Chromium/WebKit select downloads before 204/205;
-          // Firefox ignores those statuses without downloading. Both branches leave the entry unpopulated.
-        } else if (params.response.status !== 204 && params.response.status !== 205) {
-          const resource = new ResourceReader(params.response, window.env.userAgent);
-          // Creating the incoming Document can reuse this Window and change its associated
-          // Document before history activation. Keep admission tasks on the still-active Document.
-          const taskDocument = this.activeDocument;
-          const queueAdmission = (steps: () => void) => window.env.responsibleEventLoop.queueTask(
-            taskSources['navigation-and-traversal'], taskDocument, bindAsyncContext(() => runSteps(steps)), taskOptions,
-          );
-          const fail = (error: unknown) => queueAdmission(() => { throw error; });
-          // Sniffing can wait for bytes. Resume Document creation and retained-state updates on the destination's task.
-          // TODO(HTML §7.5): Document teardown must cancel the retained reader if it discards this continuation task.
-          resource.determineMIMEType().observe(() => window.env.queueTask('navigation-and-traversal', () => runSteps(() => {
-            if (this.ongoingNavigation !== expectedNavigation) {
-              // Cleanup can fail after completion; report it separately rather than failing the completed job.
-              resource.cancel().observe(() => {}, (error) => {
-                window.env.queueTask('navigation-and-traversal', () => { throw error; });
+            completionSteps?.();
+          };
+          if (params !== null && !(params instanceof NavigationParams)) {
+            entry.documentState.document = this.attemptToCreateNonFetchSchemeDocument(params);
+            saveExtraDocumentState = false;
+          } else if (
+            params === null ||
+            params.policyContainer.cspList?.isNavigationResponseBlocked(
+              params.request, params.response, cspNavigationType, this, window.env.userAgent,
+            ) ||
+            (params.reservedEnv !== null && !this.checkResponseEmbedderPolicy(params.response, params.policyContainer.embedderPolicy)) ||
+            !this.checkResponseFrameOptions(params.response, params.policyContainer.cspList)
+          ) {
+            // TODO(HTML §7.5.7): The inline-content owner must accept the failure description when it implements error pages.
+            const document = this.createDocumentForInlineContent(null, navigationTimingType, userInvolvement, params?.url ?? entry.url);
+            entry.documentState.document = document;
+            document.makeUnsalvageable('navigation-failure');
+            saveExtraDocumentState = false;
+            if (params !== null) {
+              // SPEC_GAP(navigation-failure-null-environment): HTML discards a nullable reservation; synthetic responses have none.
+              params.reservedEnv?.discard();
+              window.env.userAgent.webDriverBiDiNavigationFailed(this, {
+                id: navigationId, status: 'canceled', url: params.url,
               });
-              completionSteps?.();
-              return;
             }
-            // SPEC_GAP(navigation-timing-history-input): The incoming Document has no node navigable yet.
-            // Forward its target state's already-masked diagnostics after redirects, before loader callbacks.
-            // Child states hold raw collection data and must not be exposed through their own timing entries.
-            params.notRestoredReasons = this.isTopLevelTraversable ? entry.documentState.notRestoredReasons : null;
-            this.loadDocument(params, sourceSnapshotParams, entry.documentState.initiatorOrigin, resource).observe((document) => {
-              queueAdmission(() => {
+          } else if (params.response.hasAttachmentDisposition()) {
+            if (sourceSnapshotParams.allowsDownloading && !params.finalSandboxingFlagSet.has('sandboxed-downloads') &&
+              window.env.userAgent.isNavigationDownloadAllowed(params.response, sourceSnapshotParams)) {
+              window.env.userAgent.handleAsDownload(params.response, this, navigationId);
+            } else {
+              params.response.body?.stream.cancelInternal(undefined).observe(() => {}, () => {});
+            }
+            // SPEC_CLASH(navigation-empty-attachment): HTML/Chromium/WebKit select downloads before 204/205;
+            // Firefox ignores those statuses without downloading. Both branches leave the entry unpopulated.
+          } else if (params.response.status !== 204 && params.response.status !== 205) {
+            const resource = new ResourceReader(params.response, window.env.userAgent);
+            // Creating the incoming Document can reuse this Window and change its associated
+            // Document before history activation. Keep admission tasks on the still-active Document.
+            const taskDocument = this.activeDocument;
+            const queueAdmission = (steps: () => void) => window.env.responsibleEventLoop.queueTask(
+              taskSources['navigation-and-traversal'], taskDocument, { run: bindAsyncContext(() => runSteps(steps)), discard },
+            );
+            const fail = (error: unknown) => queueAdmission(() => { throw error; });
+            // Sniffing can wait for bytes. Resume Document creation and retained-state updates on the destination's task.
+            // TODO(HTML §7.5): Document teardown must cancel the retained reader if it discards this continuation task.
+            resource.determineMIMEType().observe(() => window.env.queueTask('navigation-and-traversal', {
+              run: () => runSteps(() => {
                 if (this.ongoingNavigation !== expectedNavigation) {
-                  resource.cancel().observe(() => {}, fail);
-                  // TODO(HTML §7.5.10): Dispose an incoming Document whose asynchronous admission was superseded.
+                  // Cleanup can fail after completion; report it separately rather than failing the completed job.
+                  resource.cancel().observe(() => {}, (error) => {
+                    window.env.queueTask('navigation-and-traversal', { run: () => { throw error; } });
+                  });
                   completionSteps?.();
                   return;
                 }
-                entry.documentState.document = document;
-                complete();
-              });
-            }, fail);
-          }), taskOptions), fail);
-          return;
-        }
-        complete();
-      }), taskOptions);
+                // SPEC_GAP(navigation-timing-history-input): The incoming Document has no node navigable yet.
+                // Forward its target state's already-masked diagnostics after redirects, before loader callbacks.
+                // Child states hold raw collection data and must not be exposed through their own timing entries.
+                params.notRestoredReasons = this.isTopLevelTraversable ? entry.documentState.notRestoredReasons : null;
+                this.loadDocument(params, sourceSnapshotParams, entry.documentState.initiatorOrigin, resource).observe((document) => {
+                  queueAdmission(() => {
+                    if (this.ongoingNavigation !== expectedNavigation) {
+                      resource.cancel().observe(() => {}, fail);
+                      // TODO(HTML §7.5.10): Dispose an incoming Document whose asynchronous admission was superseded.
+                      completionSteps?.();
+                      return;
+                    }
+                    entry.documentState.document = document;
+                    complete();
+                  });
+                }, fail);
+              }),
+              discard,
+            }), fail);
+            return;
+          } else {
+            params.response.body?.stream.cancelInternal(undefined).observe(() => {}, () => {});
+          }
+          complete();
+        }),
+        discard,
+      });
     };
 
     let params: NavigationParams | NonFetchSchemeNavigationParams | null = options.navigationParams ?? null;
@@ -1261,11 +1306,13 @@ export class Navigable {
     // empty policies. Do not run the original response's policy preparation for browser-owned content.
     const document = this.createAndInitializeDocument('html', 'text/html', params);
     env.userAgent.renderInlineDocument(document, resource);
-    document.waitForScriptsMayRun().observe(() => document.env.queueTask('network', () => {
-      // TODO(HTML stop-parsing/§7.5.8): Replace provisional completion with the full lifecycle,
-      // including iframe load steps for both blocked responses and network errors.
-      document.finishLoading();
-    }), (error) => document.env.queueTask('network', () => { throw error; }));
+    document.waitForScriptsMayRun().observe(() => document.env.queueTask('network', {
+      run: () => {
+        // TODO(HTML stop-parsing/§7.5.8): Replace provisional completion with the full lifecycle,
+        // including iframe load steps for both blocked responses and network errors.
+        document.finishLoading();
+      },
+    }), (error) => document.env.queueTask('network', { run: () => { throw error; } }));
     return document;
   }
 
@@ -1296,12 +1343,17 @@ export class Navigable {
   stopLoading(): void {
     const document = this.activeDocument;
     if (document === null) throw new InternalError('Stopping navigation requires an active Document');
-    if (document.env.responsibleEventLoop.currentlyRunningTask === null) {
+    if (!document.env.responsibleEventLoop.isRunningTaskOrCheckpoint) {
       throw new InternalError('Stopping navigation requires a task on its owning event loop');
     }
     // SPEC_CLASH(stop-during-unload): HTML only preserves the navigation ID; browsers also leave parsing
     // untouched during dismissal. Ignore the whole stop while the Document's unload counter is nonzero.
     if (document.unloadCounter !== 0) return;
+    for (const navigable of document.getInclusiveDescendantNavigables()) {
+      if (navigable.multipartResource === null) continue;
+      navigable.multipartResource.cancel(new DOMExceptionImpl('', 'AbortError')).observe(() => {}, () => {});
+      navigable.activeDocument?.makeUnsalvageable('fetch');
+    }
     if (this.ongoingNavigation !== null && this.ongoingNavigation !== 'traversal') {
       this.setOngoingNavigation(null, document.env);
     }
@@ -1337,7 +1389,7 @@ export class Navigable {
       while (navigation.ongoingNavigateEvent !== null) navigation.abortOngoingNavigation();
     };
     if (callerEventLoop === window.env.responsibleEventLoop) abort();
-    else window.env.queueTask('navigation-and-traversal', abort);
+    else window.env.queueTask('navigation-and-traversal', { run: abort });
   }
 
   /** Notify abortion, then reject the pending traversal requests for the selected child Window. */
@@ -1352,8 +1404,10 @@ export class Navigable {
     } else {
       // SPEC_CLASH(document-destruction-task-activity): Detachment must not strand this teardown notification.
       // Ordinary navigation abortion retains its global-task activity gate.
-      eventLoop.queueTask(taskSources['navigation-and-traversal'], null, () => {
-        this.informNavigationAPIAboutAbortingNavigation(eventLoop);
+      eventLoop.queueTask(taskSources['navigation-and-traversal'], null, {
+        run: () => {
+          this.informNavigationAPIAboutAbortingNavigation(eventLoop);
+        },
       });
     }
     // HTML queues only the abortion notification when called from another loop.
@@ -1519,7 +1573,7 @@ export class Navigable {
       document.populateWithHTMLHeadBody();
       // There is no parser EOF on this branch. Finish through the same queued lifecycle
       // handoff after history activation, retaining finishLoading's explicit dependencies.
-      env.queueTask('network', () => { document.finishLoading(); });
+      env.queueTask('network', { run: () => { document.finishLoading(); } });
       return document;
     }
 
@@ -1540,13 +1594,17 @@ export class Navigable {
       () => document.processLinkHeaders(params.response, 'media'),
     );
     parsing.observe(
-      () => env.queueTask('network', () => {
-        document.finishLoading();
+      () => env.queueTask('network', {
+        run: () => {
+          document.finishLoading();
+        },
       }),
-      (error) => env.queueTask('network', () => {
-        document.abort();
-        // An unfinished implementation must remain visible; ordinary body failures abort loading.
-        if (error instanceof InternalError) throw error;
+      (error) => env.queueTask('network', {
+        run: () => {
+          document.abort();
+          // An unfinished implementation must remain visible; ordinary body failures abort loading.
+          if (error instanceof InternalError) throw error;
+        },
       }),
     );
     return document;
@@ -1580,10 +1638,12 @@ export class Navigable {
     // For now reuse BOM/transport decoding; the remaining policies are inventoried in loader/ROADMAP.md.
     const parsing = parser.parseBytes(resource, () => document.processLinkHeaders(params.response, 'media'));
     parsing.observe(
-      () => env.queueTask('network', () => { document.finishLoading(); }),
-      (error) => env.queueTask('network', () => {
-        document.abort();
-        if (error instanceof InternalError) throw error;
+      () => env.queueTask('network', { run: () => { document.finishLoading(); } }),
+      (error) => env.queueTask('network', {
+        run: () => {
+          document.abort();
+          if (error instanceof InternalError) throw error;
+        },
       }),
     );
     return document;
@@ -1597,15 +1657,17 @@ export class Navigable {
   ): InternalPromise<DocumentImpl | null> {
     const env = this.activeWindow!.env;
     const userAgent = env.userAgent;
-    const parts = new MultipartResourceReader(resource, userAgent);
+    const parts = new MultipartResourceReader(resource, userAgent, (reason) => { finish(); result.reject(reason); });
+    this.multipartResource = parts;
     const result = userAgent.HostPromise.withResolvers(internalType<DocumentImpl | null>());
     let ownedNavigation = this.ongoingNavigation;
     let replacing = false;
-    let stopped = false;
-    const stop = (reason: unknown) => {
-      if (stopped) return;
-      stopped = true;
+    const finish = () => {
+      if (this.multipartResource === parts) this.multipartResource = null;
       this.#navigationChangeSteps.delete(changed);
+    };
+    const stop = (reason: unknown) => {
+      if (parts.isCanceled) return;
       parts.cancel(reason).observe(() => {}, (error) => {
         // Canceling an already-errored stream rejects with that same stored failure.
         if (error !== reason) userAgent.runInParallel(() => { throw error; });
@@ -1620,71 +1682,82 @@ export class Navigable {
       else if (this.ongoingNavigation !== null && this.ongoingNavigation !== ownedNavigation) {
         const reason = new InternalError('Multipart navigation was superseded');
         stop(reason);
-        result.reject(reason);
       }
     };
     const fail = (error: unknown) => {
-      if (stopped) return;
-      stop(error);
+      if (parts.isCanceled) return;
       if (!result.isResolved) result.reject(error);
       else if (error instanceof InternalError) userAgent.runInParallel(() => { throw error; });
+      stop(error);
     };
     const next = () => parts.readPart().observe((response) => {
-      if (stopped) return;
-      if (response === null) { this.#navigationChangeSteps.delete(changed); return; }
+      if (parts.isCanceled) return;
+      if (response === null) {
+        finish();
+        return;
+      }
       const window = this.activeWindow;
       if (window === null) { stop(new InternalError('Multipart navigable was destroyed')); return; }
-      window.env.queueTask('navigation-and-traversal', () => {
-        if (stopped) return;
-        try {
-          const document = this.activeDocument;
-          if (document === null) { stop(new InternalError('Multipart navigable was destroyed')); return; }
-          // SPEC_CLASH(multipart-replacement-inputs): HTML reuses the outer response and first Document;
-          // use the new part and current Document, so replacement consumes new bytes with a live source.
-          // SPEC_GAP(multipart-null-request): Supplied responses have no request; retain their final URL.
-          replacing = true;
-          this.navigate(params.request?.currentURL ?? params.url, document, { response, historyHandling: 'replace' }, document.env);
-          // TODO(HTML §7.5.9/§7.5.11): navigate() still reaches the explicit recursive
-          // abortion/unloading dependencies. Do not bypass them for multipart replacement.
-          next();
-        } catch (error) { fail(error); }
-        finally { replacing = false; }
-      }, { discardSteps: () => stop(new InternalError('Multipart replacement task was discarded')) });
+      window.env.queueTask('navigation-and-traversal', {
+        run: () => {
+          if (parts.isCanceled) return;
+          try {
+            const document = this.activeDocument;
+            if (document === null) { stop(new InternalError('Multipart navigable was destroyed')); return; }
+            // SPEC_CLASH(multipart-replacement-inputs): HTML reuses the outer response and first Document;
+            // use the new part and current Document, so replacement consumes new bytes with a live source.
+            // SPEC_GAP(multipart-null-request): Supplied responses have no request; retain their final URL.
+            replacing = true;
+            this.navigate(params.request?.currentURL ?? params.url, document, {
+              response, historyHandling: 'replace', multipartResource: parts,
+            }, document.env);
+            next();
+          } catch (error) { fail(error); }
+          finally { replacing = false; }
+        },
+        discard: () => stop(new InternalError('Multipart replacement task was discarded')),
+      });
     }, fail);
     this.#navigationChangeSteps.add(changed);
     parts.readPart().observe((response) => {
-      if (stopped) return;
-      if (response === null) { this.#navigationChangeSteps.delete(changed); result.resolve(null); return; }
+      if (parts.isCanceled) return;
+      if (response === null) {
+        finish();
+        result.resolve(null);
+        return;
+      }
       const partResource = new ResourceReader(response, userAgent);
-      partResource.determineMIMEType().observe((type) => env.queueTask('navigation-and-traversal', () => {
-        try {
-          if (result.isResolved) return;
-          if (getMIMETypeEssence(type) === 'multipart/x-mixed-replace') {
-            // TODO(HTML §7.5.5/RFC 2046 §5.1.2): Coordinate nested replacement streams and their cancellation owners.
-            throw new InternalError('Nested multipart Document loading is not implemented');
-          }
-          const partParams = params.withMultipartResponse(response);
-          if (partParams.policyContainer.cspList?.isNavigationResponseBlocked(partParams.request, response, 'other', this, userAgent)) {
-            // TODO(HTML §7.5.7): Supply the blocked-part diagnosis to the unfinished browser renderer.
-            const document = this.createDocumentForInlineContent(null, params.navigationTimingType, params.userInvolvement, partParams.url);
-            document.makeUnsalvageable('navigation-failure');
-            partParams.reservedEnv?.discard();
-            userAgent.webDriverBiDiNavigationFailed(this, { id: params.id, status: 'canceled', url: partParams.url });
-            result.resolve(document);
-            stop(new InternalError('Multipart part was blocked by CSP'));
-            return;
-          }
-          this.loadDocument(partParams, sourceSnapshotParams, initiatorOrigin, partResource).observe((document) => {
-            result.resolve(document);
-            if (document === null) { stop(new InternalError('Multipart first part produced no Document')); return; }
-            // History initialization releases this gate. No replacement may use an uncommitted source Document.
-            document.waitForScriptsMayRun().observe(next, fail);
-          }, fail);
-        } catch (error) { fail(error); }
-      }, { discardSteps: () => fail(new InternalError('Multipart admission task was discarded')) }), fail);
+      partResource.determineMIMEType().observe((type) => env.queueTask('navigation-and-traversal', {
+        run: () => {
+          try {
+            if (result.isResolved || parts.isCanceled) return;
+            if (getMIMETypeEssence(type) === 'multipart/x-mixed-replace') {
+              // TODO(HTML §7.5.5/RFC 2046 §5.1.2): Coordinate nested replacement streams and their cancellation owners.
+              throw new InternalError('Nested multipart Document loading is not implemented');
+            }
+            const partParams = params.withMultipartResponse(response);
+            if (partParams.policyContainer.cspList?.isNavigationResponseBlocked(partParams.request, response, 'other', this, userAgent)) {
+              // TODO(HTML §7.5.7): Supply the blocked-part diagnosis to the unfinished browser renderer.
+              const document = this.createDocumentForInlineContent(null, params.navigationTimingType, params.userInvolvement, partParams.url);
+              document.makeUnsalvageable('navigation-failure');
+              partParams.reservedEnv?.discard();
+              userAgent.webDriverBiDiNavigationFailed(this, { id: params.id, status: 'canceled', url: partParams.url });
+              result.resolve(document);
+              stop(new InternalError('Multipart part was blocked by CSP'));
+              return;
+            }
+            this.loadDocument(partParams, sourceSnapshotParams, initiatorOrigin, partResource).observe((document) => {
+              if (parts.isCanceled) { fail(new DOMExceptionImpl('', 'AbortError')); return; }
+              result.resolve(document);
+              if (document === null) { stop(new InternalError('Multipart first part produced no Document')); return; }
+              // History initialization releases this gate. No replacement may use an uncommitted source Document.
+              document.waitForScriptsMayRun().observe(next, fail);
+            }, fail);
+          } catch (error) { fail(error); }
+        },
+        discard: () => fail(new InternalError('Multipart admission task was discarded')),
+      }), fail);
     }, fail);
-    // TODO(HTML §7.5.11): Window.stop()/Document abortion must cancel the outer reader
-    // after a part has reached EOF; a completed part stream alone cannot carry that signal.
     return result.promise;
   }
 
@@ -1710,11 +1783,13 @@ export class Navigable {
     document.processLinkHeaders(params.response, 'media');
     // No optional user-agent scripts are added. Completion events can execute author callbacks,
     // so they must wait for history initialization to release the new Document's script gate.
-    document.waitForScriptsMayRun().observe(() => document.env.queueTask('network', () => {
-      // TODO(HTML stop-parsing): Replace the provisional finishLoading path with the full lifecycle,
-      // including media load-event delays, readiness milestones, and separate DOM tasks.
-      document.finishLoading();
-    }), (error) => document.env.queueTask('network', () => { throw error; }));
+    document.waitForScriptsMayRun().observe(() => document.env.queueTask('network', {
+      run: () => {
+        // TODO(HTML stop-parsing): Replace the provisional finishLoading path with the full lifecycle,
+        // including media load-event delays, readiness milestones, and separate DOM tasks.
+        document.finishLoading();
+      },
+    }), (error) => document.env.queueTask('network', { run: () => { throw error; } }));
     return document;
   }
 
@@ -1995,6 +2070,8 @@ export type NavigateOptions = {
   sourceElement?: ElementImpl | null;
   initialInsertion?: boolean;
   apiMethodTracker?: NavigationAPIMethodTracker | null;
+  /** The navigation-owned outer load supplying this replacement part. */
+  multipartResource?: MultipartResourceReader;
 };
 
 /** Optional population inputs; IDs/params default to null, CSP type to other, POST to false, and completion to no steps. */
@@ -2275,11 +2352,13 @@ export class Traversable extends Navigable implements FetchPromptTarget {
           if (targetEntry.document !== navigable.activeDocument) {
             const window = navigable.activeWindow;
             if (window === null) throw new InternalError('History-step Navigation cleanup requires an active Window');
-            window.env.queueTask('navigation-and-traversal', () => {
-              const navigation = navigable.activeWindow?.navigation;
-              if (navigation === undefined) throw new InternalError('History-step Navigation cleanup requires an active Window');
-              navigation.ongoingNavigateEvent = null;
-              navigation.ongoingAPIMethodTracker = null;
+            window.env.queueTask('navigation-and-traversal', {
+              run: () => {
+                const navigation = navigable.activeWindow?.navigation;
+                if (navigation === undefined) throw new InternalError('History-step Navigation cleanup requires an active Window');
+                navigation.ongoingNavigateEvent = null;
+                navigation.ongoingAPIMethodTracker = null;
+              },
             });
           }
           // Assignment wakes parallel waits without aborting the successful navigation's event or tracker.
@@ -2498,6 +2577,8 @@ export class TopLevelTraversable extends Traversable {
     const group = browsingContext.group;
     if (group === null) throw new InternalError('Top-level destruction requires a browsing context group');
     const userAgent = group.userAgent;
+    // Cancel even while the first part is still awaiting history commitment.
+    this.multipartResource?.cancel(new DOMExceptionImpl('', 'AbortError')).observe(() => {}, () => {});
     // SPEC_GAP(top-level-destruction-order): HTML leaves entry order open; request teardown in retained-list order.
     const documents = new Set(this.sessionHistoryEntries.map((entry) => entry.documentState.document));
     for (const document of documents) {

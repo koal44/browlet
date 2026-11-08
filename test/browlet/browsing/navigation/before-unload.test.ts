@@ -95,7 +95,7 @@ describe('HTML steps to fire beforeunload', () => {
       expect(received).toBe(document);
       expect([document.unloadCounter, loop.terminationNestingLevel]).toEqual([1, 0]);
       order.push('confirm');
-      loop.queueTask(navigationAndTraversalTaskSource, null, () => { order.push('task'); });
+      loop.queueTask(navigationAndTraversalTaskSource, null, { run: () => { order.push('task'); } });
       loop.queueMicrotask(() => { order.push('microtask'); });
       expect(loop.runTaskTurn()).toBe(false);
       loop.performMicrotaskCheckpoint();

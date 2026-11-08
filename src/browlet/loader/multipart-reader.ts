@@ -22,12 +22,17 @@ export class MultipartResourceReader {
   #part: FetchResponse | null = null;
   #ended = false;
   #failure?: { reason: unknown; };
+  /** Shared cancellation completion, including repeated stop/destruction requests. */
+  #cancellation?: InternalPromise<void>;
+  /** Release navigation ownership even when no part read is waiting, such as before commitment. */
+  #cancelSteps?: (reason: unknown) => void;
 
-  constructor(resource: ResourceReader, userAgent: UserAgent) {
+  constructor(resource: ResourceReader, userAgent: UserAgent, cancelSteps?: (reason: unknown) => void) {
     const boundary = resource.mimeType.parameters.get('boundary');
     if (boundary === undefined) throw new InternalError('Multipart response has no boundary');
     this.#resource = resource;
     this.#userAgent = userAgent;
+    this.#cancelSteps = cancelSteps;
     for (const [name, value] of resource.response.headerList) {
       const lower = asciiLower(name);
       if (lower === 'content-security-policy' || lower === 'content-security-policy-report-only') {
@@ -40,16 +45,18 @@ export class MultipartResourceReader {
         const part = this.#part!;
         part.bodyInfo.encodedSize += bytes.length;
         part.bodyInfo.decodedSize += bytes.length;
-        part.body!.stream.enqueueChunk(bytes);
+        if (part.body!.stream.isReadable) part.body!.stream.enqueueChunk(bytes);
       },
       onPartEnd: () => {
-        this.#part!.body!.stream.close();
+        if (this.#part!.body!.stream.isReadable) this.#part!.body!.stream.close();
         this.#part = null;
       },
     });
   }
 
-  /** Return the next part at its headers. Consume its body before requesting further input. */
+  get isCanceled(): boolean { return this.#cancellation !== undefined; }
+
+  /** Return the next part at its headers, after the previous body is consumed or canceled. */
   readPart(): InternalPromise<FetchResponse | null> {
     const Promise = this.#userAgent.HostPromise;
     const type = internalType<FetchResponse | null>();
@@ -66,16 +73,23 @@ export class MultipartResourceReader {
 
   /** Cancel every unfinished part and the outer source; cancellation is not a part boundary. */
   cancel(reason: unknown): InternalPromise<void> {
+    if (this.#cancellation !== undefined) return this.#cancellation;
     const result = this.#userAgent.HostPromise.withResolvers(internalType<void>());
-    this.#userAgent.sandbox.queueTask('network', () => {
-      this.#fail(reason);
-      this.#resource.cancel(reason).observe(result.resolve, result.reject);
+    this.#cancellation = result.promise;
+    const cancelSteps = this.#cancelSteps;
+    this.#cancelSteps = undefined;
+    cancelSteps?.(reason);
+    this.#userAgent.sandbox.queueTask('network', {
+      run: () => {
+        this.#fail(reason);
+        this.#resource.cancel(reason).observe(result.resolve, result.reject);
+      },
     });
     return result.promise;
   }
 
   #findNextPart(): void {
-    if (this.#next === undefined || this.#part !== null || this.#ended) return;
+    if (this.#next === undefined || this.#part?.body?.stream.isReadable || this.#ended) return;
     // #read also wakes header discovery when a body pull encounters its boundary.
     this.#read().observe(() => {}, () => {});
   }
@@ -88,39 +102,47 @@ export class MultipartResourceReader {
     if (this.#failure !== undefined) return userAgent.HostPromise.reject(this.#failure.reason, internalType<void>());
     if (this.#ended) return userAgent.HostPromise.resolve(undefined, internalType<void>());
     this.#reading = result.promise;
-    this.#resource.read().observe((bytes) => userAgent.sandbox.queueTask('network', () => {
-      try {
-        if (this.#failure !== undefined) throw this.#failure.reason;
-        const valid = bytes === null ? this.#parser.finish() : this.#parser.appendData(bytes);
-        // TODO(HTML §7.5.5): Audit recovery for malformed/truncated multipart Documents.
-        if (!valid) throw new InternalError('Malformed multipart response');
-        if (bytes === null) {
-          this.#ended = true;
-          this.#next?.resolve(null);
-          this.#next = undefined;
+    this.#resource.read().observe((bytes) => userAgent.sandbox.queueTask('network', {
+      run: () => {
+        try {
+          if (this.#failure !== undefined) throw this.#failure.reason;
+          const valid = bytes === null ? this.#parser.finish() : this.#parser.appendData(bytes);
+          // TODO(HTML §7.5.5): Audit recovery for malformed/truncated multipart Documents.
+          if (!valid) throw new InternalError('Malformed multipart response');
+          if (bytes === null) {
+            this.#ended = true;
+            this.#cancelSteps = undefined;
+            this.#next?.resolve(null);
+            this.#next = undefined;
+          }
+          this.#reading = undefined;
+          result.resolve(undefined);
+          this.#findNextPart();
+        } catch (error) {
+          this.#fail(error);
+          this.#reading = undefined;
+          result.reject(error);
+          this.#resource.cancel(error).observe(() => {}, (cancelError) => {
+            if (cancelError !== error) userAgent.runInParallel(() => { throw cancelError; });
+          });
         }
-        this.#reading = undefined;
-        result.resolve(undefined);
-        this.#findNextPart();
-      } catch (error) {
+      },
+    }), (error) => userAgent.sandbox.queueTask('network', {
+      run: () => {
         this.#fail(error);
         this.#reading = undefined;
         result.reject(error);
-        this.#resource.cancel(error).observe(() => {}, (cancelError) => {
-          if (cancelError !== error) userAgent.runInParallel(() => { throw cancelError; });
-        });
-      }
-    }), (error) => userAgent.sandbox.queueTask('network', () => {
-      this.#fail(error);
-      this.#reading = undefined;
-      result.reject(error);
+      },
     }));
     return result.promise;
   }
 
   #startPart(headers: MultipartHeaders): void {
     const env = this.#userAgent.sandbox;
-    const stream = ReadableStreamImpl.createDefault(() => this.#read(), (reason) => this.cancel(reason), 0, () => 1, env);
+    // SPEC_GAP(multipart-part-retirement): HTML does not define cancellation between parts.
+    // Canceling a part releases its consumer; only Navigable cancels the outer load.
+    // The stream is already closed when its cancel steps resume boundary discovery.
+    const stream = ReadableStreamImpl.createDefault(() => this.#read(), () => this.#findNextPart(), 0, () => 1, env);
     const response = this.#resource.response.copy(new FetchBody(stream, env));
     // The transport has already decoded its body; each part has its own entity metadata.
     for (const name of ['Content-Type', 'Content-Length', 'Content-Encoding', 'Content-Range']) response.headerList.delete(name);

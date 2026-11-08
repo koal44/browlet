@@ -197,7 +197,7 @@ describe('Permissions §6.2: query()', () => {
     const query = vi.spyOn(env.permissions, 'runPermissionQuery');
     const settled = vi.fn();
     // Document destruction runs on its owning loop, ahead of the pending query.
-    if (outcome === 'destruction') env.queueTask('permissions', () => { document.destroy(); });
+    if (outcome === 'destruction') env.queueTask('permissions', { run: () => { document.destroy(); } });
     const promise = window.navigator.permissions.query({ name: 'persistent-storage' });
     const observed = observeBrowletPromise(window, promise).then(settled, settled);
     traversable.activeSessionHistoryEntry = env.createSessionHistoryEntry(activeEntry.url, new DocumentState());
@@ -239,7 +239,7 @@ describe('Permissions §6.2: query()', () => {
     expect(status.state).toBe('denied');
     expect(status).toBeInstanceOf(second.window.PermissionStatus);
     expect(getRelevantRealm(status)).toBe(secondEnv.realm);
-    expect(delivery).toHaveBeenCalledWith('permissions', expect.any(Function));
+    expect(delivery).toHaveBeenCalledWith('permissions', { run: expect.any(Function) as unknown });
     expect(otherDelivery).not.toHaveBeenCalled();
 
     vi.spyOn(secondEnv.getAssociatedDocument()!, 'isFullyActive').mockReturnValue(false);
@@ -258,7 +258,7 @@ describe('Permissions §6.2: query()', () => {
     const delivery = vi.spyOn(env, 'queueTask');
     await expect(browser.evaluate(() => navigator.permissions.query({ name: 'persistent-storage' })))
       .rejects.toThrow('Feature query failed');
-    expect(delivery).toHaveBeenCalledWith('permissions', expect.any(Function));
+    expect(delivery).toHaveBeenCalledWith('permissions', { run: expect.any(Function) as unknown });
   });
 
   it('runs a feature query override with the converted descriptor and retained result', async () => {

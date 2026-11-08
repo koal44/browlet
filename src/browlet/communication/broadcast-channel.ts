@@ -65,21 +65,23 @@ export class BroadcastChannelImpl extends EventTargetImpl implements BroadcastCh
 
   /** Queue reconstruction in this channel's realm after the sender has selected destinations. */
   receiveMessage(serialized: SerializedRecord, sourceOrigin: Origin): void {
-    this.env.realm.queueGlobalTask(domManipulationTaskSource, () => {
-      if (this.#closed) return;
-      let data;
-      try {
-        data = this.env.deserialize(serialized);
-      } catch {
-        this.fireEvent('messageerror', MessageEventImpl, (event) => {
-          event.setOrigin(sourceOrigin);
+    this.env.realm.queueGlobalTask(domManipulationTaskSource, {
+      run: () => {
+        if (this.#closed) return;
+        let data;
+        try {
+          data = this.env.deserialize(serialized);
+        } catch {
+          this.fireEvent('messageerror', MessageEventImpl, (event) => {
+            event.setOrigin(sourceOrigin);
+          });
+          return;
+        }
+        this.fireEvent('message', MessageEventImpl, (message) => {
+          message.data = data;
+          message.setOrigin(sourceOrigin);
         });
-        return;
-      }
-      this.fireEvent('message', MessageEventImpl, (message) => {
-        message.data = data;
-        message.setOrigin(sourceOrigin);
-      });
+      },
     });
   }
 

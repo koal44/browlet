@@ -19,9 +19,19 @@ export function createEnvironment(realm = new TestRealm(), binding?: BindingCont
     InternalPromise: binding.InternalPromise,
     get DOMException() { return binding.DOMException; },
     runInParallel: (steps) => { setImmediate(steps); },
-    queueTask(_source, steps) {
-      const task = setImmediate(steps);
-      return { remove: () => { clearImmediate(task); } };
+    // This standalone test host has no Window or worker destruction lifecycle.
+    addDestructionSteps: () => () => {},
+    queueTask(_source, task) {
+      let pending = true;
+      const timer = setImmediate(() => { pending = false; task.run(); });
+      return {
+        remove() {
+          if (!pending) return;
+          pending = false;
+          clearImmediate(timer);
+          task.discard?.();
+        },
+      };
     },
     createAbortController,
     createDependentAbortSignal() {

@@ -35,7 +35,7 @@ describe('run a classic script', () => {
     });
     const checkpoint = vi.spyOn(loop, 'performMicrotaskCheckpoint');
     let result: ScriptCompletion | undefined;
-    loop.queueTask(createTaskSource('classic-script-test'), env.window.document, () => { result = script.run(); });
+    loop.queueTask(createTaskSource('classic-script-test'), env.window.document, { run: () => { result = script.run(); } });
     expect(loop.runTaskTurn()).toBe(true);
     expect(result).toBe(completion);
     expect(result!.value).not.toBe(emptyCompletionValue);
@@ -165,15 +165,17 @@ describe('run a classic script', () => {
     Reflect.set(env.global, 'record', (value: string) => { trace.push(value); });
     const script = new ClassicScript('Promise.resolve().then(() => record("reaction")); record("script");',
       env, env.apiBaseURL, new ScriptFetchOptions());
-    loop.queueTask(createTaskSource('retained-script-test'), env.window.document, () => {
-      const cleanup = loop.cleanUpAfterRunningScript.bind(loop);
-      vi.spyOn(loop, 'cleanUpAfterRunningScript').mockImplementationOnce((settings) => {
-        expect(trace).toEqual(['script']);
-        expect(loop.runningExecutionContext).toBe(env.realmExecutionContext);
-        cleanup(settings);
-      });
-      script.run();
-      expect(trace).toEqual(['script', 'reaction']);
+    loop.queueTask(createTaskSource('retained-script-test'), env.window.document, {
+      run: () => {
+        const cleanup = loop.cleanUpAfterRunningScript.bind(loop);
+        vi.spyOn(loop, 'cleanUpAfterRunningScript').mockImplementationOnce((settings) => {
+          expect(trace).toEqual(['script']);
+          expect(loop.runningExecutionContext).toBe(env.realmExecutionContext);
+          cleanup(settings);
+        });
+        script.run();
+        expect(trace).toEqual(['script', 'reaction']);
+      },
     });
     expect(loop.runTaskTurn()).toBe(true);
     expect(loop.executionContextStack).toHaveLength(0);

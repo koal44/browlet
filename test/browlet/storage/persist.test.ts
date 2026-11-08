@@ -21,7 +21,7 @@ describe('Storage §8: persist()', () => {
       descriptor: { name: 'persistent-storage' }, origin: 'https://example.test', topLevelOrigin: 'https://example.test',
     });
     const env = getRelevantRealm(browser.window).env;
-    await new Promise<void>((resolve) => { env.queueTask('permissions', resolve); });
+    await new Promise<void>((resolve) => { env.queueTask('permissions', { run: resolve }); });
     expect(await browser.evaluate(async () => (await navigator.permissions.query({ name: 'persistent-storage' })).state)).toBe('granted');
     expect(await browser.evaluate(() => navigator.storage.persist())).toBe(true);
     expect(permissionPrompt).toHaveBeenCalledOnce();
@@ -32,7 +32,7 @@ describe('Storage §8: persist()', () => {
     const browser = await createBrowser(kind === 'default' ? {} : { permissionPrompt });
     expect(await browser.evaluate(async () => [await navigator.storage.persist(), await navigator.storage.persisted()])).toEqual([false, false]);
     const env = getRelevantRealm(browser.window).env;
-    await new Promise<void>((resolve) => { env.queueTask('permissions', resolve); });
+    await new Promise<void>((resolve) => { env.queueTask('permissions', { run: resolve }); });
     expect(await browser.evaluate(() => navigator.storage.persist())).toBe(false);
     expect(permissionPrompt).toHaveBeenCalledTimes(kind === 'default' ? 0 : 1);
   });
@@ -65,10 +65,10 @@ describe('Storage §8: persist()', () => {
     const delivery: { global: GlobalObject; steps: () => void; }[] = [];
     const queued = Promise.withResolvers<void>();
     vi.spyOn(env, 'runInParallel').mockImplementation((steps) => { background.push(steps); });
-    vi.spyOn(env, 'queueTask').mockImplementation((source, steps) => {
+    vi.spyOn(env, 'queueTask').mockImplementation((source, task) => {
       expect(source).toBe('permissions');
-      permissions.push(steps);
-      return { remove() { permissions.splice(permissions.indexOf(steps), 1); } };
+      permissions.push(task.run);
+      return { remove() { permissions.splice(permissions.indexOf(task.run), 1); } };
     });
     vi.spyOn(env, 'queueStorageTask').mockImplementation((global, steps) => {
       delivery.push({ global, steps });

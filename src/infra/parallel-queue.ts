@@ -1,15 +1,17 @@
 import { InternalError } from './internal-error';
+import type { TaskRecord, TaskHandle } from './tasks';
 
 /*
- * HTML section 2.1.1 defines a parallel queue as a queue of algorithm steps
- * which run in series while other work proceeds in parallel. The host chooses
+ * A parallel queue runs tasks in series while other work proceeds in parallel.
+ * HTML section 2.1.1 defines its ordering contract. The host chooses
  * how to schedule a drain; the queue owns only serialization and ordering.
  *
  * https://html.spec.whatwg.org/multipage/infrastructure.html#parallel-queue
  */
 export class ParallelQueue {
-  #algorithmQueue: (() => void)[] = [];
-  #algorithmIndex = 0;
+  /** Each enqueue owns its task identity, including repeated callbacks and later drains. */
+  #taskQueue: TaskRecord[] = [];
+  #taskIndex = 0;
   #draining = false;
   #drainScheduled = false;
   #scheduleDrain: ScheduleParallelQueueDrain;
@@ -18,14 +20,24 @@ export class ParallelQueue {
     this.#scheduleDrain = scheduleDrain;
   }
 
-  enqueue(steps: () => void): void {
-    this.#algorithmQueue.push(steps);
+  /** Append a task, retaining its internal notification if removed before execution. */
+  enqueue(task: TaskRecord): TaskHandle {
+    const queuedTask: TaskRecord = { run: task.run, discard: task.discard };
+    this.#taskQueue.push(queuedTask);
     this.#requestDrain();
+    return {
+      remove: () => {
+        const index = this.#taskQueue.indexOf(queuedTask, this.#taskIndex);
+        if (index === -1) return;
+        this.#taskQueue.splice(index, 1);
+        queuedTask.discard?.();
+      },
+    };
   }
 
   #requestDrain(): void {
     if (
-      this.#algorithmIndex >= this.#algorithmQueue.length ||
+      this.#taskIndex >= this.#taskQueue.length ||
       this.#draining ||
       this.#drainScheduled
     ) return;
@@ -47,12 +59,12 @@ export class ParallelQueue {
     this.#drainScheduled = false;
     this.#draining = true;
     try {
-      while (this.#algorithmIndex < this.#algorithmQueue.length) {
-        const steps = this.#algorithmQueue[this.#algorithmIndex++]!;
-        steps();
+      while (this.#taskIndex < this.#taskQueue.length) {
+        const { run } = this.#taskQueue[this.#taskIndex++]!;
+        run();
       }
-      this.#algorithmQueue.length = 0;
-      this.#algorithmIndex = 0;
+      this.#taskQueue.length = 0;
+      this.#taskIndex = 0;
     } finally {
       this.#draining = false;
       this.#requestDrain();

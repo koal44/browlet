@@ -40,7 +40,7 @@ export class PermissionStatusImpl extends EventTargetImpl implements PermissionS
         const previous = this.state;
         this.env.permissions.runPermissionQuery(this.query, this);
         if (this.state === previous) return;
-        this.env.queueTask('permissions', () => { this.fireEvent('change'); });
+        this.env.queueTask('permissions', { run: () => { this.fireEvent('change'); } });
       } catch (error) {
         this.env.realm.reportException(error);
       }

@@ -156,23 +156,38 @@ requests another turn just because the loop remains idle. The owning
 [roadmap](ROADMAP.md#html-8173-idle-period-processing) identifies each dependency
 and the timer-clock specification conflict.
 
-`env.queueTask(source, steps, options?)` queues work for the execution owner
+`env.queueTask(source, task)` queues work for the execution owner
 using the shared source keys in Infra. `scripting/tasks.ts` maps those keys to
 source identities. `BrowletRealm.queueGlobalTask()` captures the global's associated
-Document and routes through its Agent. Options carry timer nesting metadata,
-additional readiness, and optional internal `discardSteps`. Removing pending work
+Document and routes through its Agent. Infra's `TaskRecord` groups `run`, optional
+internal `discard`, additional `isRunnable` readiness, and timer nesting metadata.
+The existing HTML Task owns these fields alongside source, Document, and execution
+bookkeeping; its `isRunnable` getter combines readiness with Document activity.
+Global queueing binds the execution context only for `run`, preserving the
+existing treatment of readiness and internal discard notifications. Removing pending work
 notifies its owner after detaching the task; Document-wide removal detaches the
 whole batch before notifying each owner. These callbacks settle internal waits
 without executing the removed task or entering author script. Inactivity alone
 retains queued work and does not invoke them.
+If a global's Document is already destroyed, the handoff queues only its internal
+discard notification on that same loop and task source, without a Document activity
+gate. Late backing I/O therefore releases its waiter without restarting page work.
+This extends Fetch's existing cleanup route to other global-task producers.
+Pending work without a queued task registers through `env.addDestructionSteps()`.
+Document destruction marks the Document destroyed, then runs that global's remaining
+internal cleanup before removing its task batch. Completion removes a registration;
+late registration runs cleanup immediately. These callbacks cannot invoke author
+script. The global retains no completed Fetch or Blob operation solely for cleanup.
+Worker shutdown still needs to connect this hook alongside Pip's lifetime handoff.
 Low-level queueing can instead select an explicit loop and Document.
 Element tasks route through the element's relevant global, not its current node
 document after adoption. Avoid implied-loop/Document calls.
 
 Fetch has an explicit callback destination, which can differ from the body
-stream's owner. Fetch's `queueFetchTask()` selects a parallel queue or calls
+stream's owner. Fetch's `queueFetchTask()` forwards the run/discard task to a parallel queue or calls
 `env.queueGlobalFetchTask()`, implemented on BrowletEnvironment to route through
-the destination global's BrowletRealm.
+the destination global's BrowletRealm. Parallel queues retain per-enqueue task
+identity without acquiring HTML readiness, timer, or Document machinery.
 Work performed in parallel re-enters the intended owner's task before touching
 realm-bound state.
 

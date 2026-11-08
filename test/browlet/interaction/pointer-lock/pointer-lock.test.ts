@@ -277,13 +277,17 @@ describe('Pointer Lock §§2–5: lock state and public API', () => {
     expect(second.platformDocument.pointerLockElement).toBe(second.b);
   });
 
-  it('leaves focus and transient activation as explicit HTML dependencies', async () => {
+  it('leaves focus as an explicit HTML dependency', async () => {
     const focus = createFixture();
     focus.focused.mockRestore();
     await expect(finish(focus, focus.a.requestPointerLock())).rejects.toThrow(/Document focus state/);
-    const activation = createFixture();
-    activation.activation.mockRestore();
-    await expect(finish(activation, activation.a.requestPointerLock())).rejects.toThrow(/transient activation/);
+  });
+
+  it('rejects acquisition without real transient activation', async () => {
+    const f = createFixture();
+    f.activation.mockRestore();
+    await expect(finish(f, f.a.requestPointerLock())).rejects.toMatchObject({ name: 'NotAllowedError' });
+    expect(f.acquire).not.toHaveBeenCalled();
   });
 
   it('leaves raw-motion support, acquisition, and cursor restoration as explicit native dependencies', async () => {

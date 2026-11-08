@@ -1,6 +1,6 @@
 import {
   InternalError, type InternalPromise, type JSONValue, type InfraValue,
-  type TaskCreationOptions, type TaskHandle, type TaskSourceKey, type AbortSignal, type TimerHost,
+  type TaskRecord, type TaskHandle, type TaskSourceKey, type AbortSignal, type TimerHost,
 } from '../../infra/index';
 import {
   getPromiseResult, isPromiseHandled, randomUUID,
@@ -414,9 +414,14 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     return this.realm.agent.eventLoop;
   }
 
-  /** Queue work on this environment's HTML task source, retaining optional readiness, timer, and discard steps. */
-  queueTask(source: TaskSourceKey, steps: () => void, options?: TaskCreationOptions): TaskHandle {
-    return this.realm.queueGlobalTask(taskSources[source], steps, options);
+  /** Queue a task on this environment's HTML task source. */
+  queueTask(source: TaskSourceKey, task: TaskRecord): TaskHandle {
+    return this.realm.queueGlobalTask(taskSources[source], task);
+  }
+
+  /** Retain cleanup with this execution global, independently of any Fetch client. */
+  addDestructionSteps(steps: () => void): () => void {
+    return this.getWindowOrWorkerGlobalScopeMixin().addDestructionSteps(steps);
   }
 
   /**
@@ -436,10 +441,10 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   }
 
   /** Deliver Fetch work to its destination global, which can differ from the body owner's. */
-  queueGlobalFetchTask(global: GlobalObject, steps: () => void): void {
+  queueGlobalFetchTask(global: GlobalObject, task: TaskRecord): TaskHandle {
     const targetRealm = BrowletRealm.getAssociatedRealm(global);
     if (!targetRealm) throw new InternalError('A Fetch task destination must have an HTML realm');
-    targetRealm.queueGlobalTask(taskSources.network, steps);
+    return targetRealm.queueGlobalTask(taskSources.network, task);
   }
 
   /** Deliver storage work to the specified global, which can differ from this environment's. */
@@ -447,7 +452,7 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   queueStorageTask(global: GlobalObject, steps: () => void): void {
     const targetRealm = BrowletRealm.getAssociatedRealm(global);
     if (!targetRealm) throw new InternalError('A storage task destination must have an HTML realm');
-    targetRealm.queueGlobalTask(taskSources.storage, steps);
+    targetRealm.queueGlobalTask(taskSources.storage, { run: steps });
   }
 
   /** Report a request's policy violation for this client. */
@@ -583,13 +588,15 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
       return;
     }
     if (!global.outstandingRejectedPromises.delete(promise)) return;
-    env.realm.queueGlobalTask(domManipulationTaskSource, () => {
-      if (!EventTargetImpl.is(global)) {
-        throw new InternalError('Promise rejection events require an EventTarget global');
-      }
-      global.fireEvent('rejectionhandled', PromiseRejectionEventImpl, (event) => {
-        event.initialize({ promise, reason: getPromiseResult(promise) });
-      });
+    env.realm.queueGlobalTask(domManipulationTaskSource, {
+      run: () => {
+        if (!EventTargetImpl.is(global)) {
+          throw new InternalError('Promise rejection events require an EventTarget global');
+        }
+        global.fireEvent('rejectionhandled', PromiseRejectionEventImpl, (event) => {
+          event.initialize({ promise, reason: getPromiseResult(promise) });
+        });
+      },
     });
   }
 
@@ -600,20 +607,22 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     const list = [...global.aboutToBeNotifiedRejectedPromises];
     if (list.length === 0) return;
     global.aboutToBeNotifiedRejectedPromises.length = 0;
-    this.realm.queueGlobalTask(domManipulationTaskSource, () => {
-      for (const promise of list) {
-        if (isPromiseHandled(promise)) continue;
-        if (!EventTargetImpl.is(global)) {
-          throw new InternalError('Promise rejection events require an EventTarget global');
+    this.realm.queueGlobalTask(domManipulationTaskSource, {
+      run: () => {
+        for (const promise of list) {
+          if (isPromiseHandled(promise)) continue;
+          if (!EventTargetImpl.is(global)) {
+            throw new InternalError('Promise rejection events require an EventTarget global');
+          }
+          const reason = getPromiseResult(promise);
+          const notCanceled = global.fireEvent('unhandledrejection', PromiseRejectionEventImpl, (event) => {
+            event.initialize({ promise, reason, cancelable: true });
+          });
+          if (notCanceled) console.error(reason);
+          // A listener can attach a handler while the event is being dispatched.
+          if (!isPromiseHandled(promise)) global.outstandingRejectedPromises.add(promise);
         }
-        const reason = getPromiseResult(promise);
-        const notCanceled = global.fireEvent('unhandledrejection', PromiseRejectionEventImpl, (event) => {
-          event.initialize({ promise, reason, cancelable: true });
-        });
-        if (notCanceled) console.error(reason);
-        // A listener can attach a handler while the event is being dispatched.
-        if (!isPromiseHandled(promise)) global.outstandingRejectedPromises.add(promise);
-      }
+      },
     });
   }
 
@@ -1034,6 +1043,11 @@ export class SandboxEnvironment extends BrowletEnvironment {
 
   getWindowOrWorkerGlobalScopeMixin(): WindowOrWorkerGlobalScopeMixin {
     throw new InternalError('Sandbox has no Window or Worker global scope');
+  }
+
+  /** Browser-owned work has no Document or worker destruction lifetime. */
+  override addDestructionSteps(_steps: () => void): () => void {
+    return () => {};
   }
 }
 

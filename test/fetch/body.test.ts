@@ -2,6 +2,8 @@ import { observe } from '../browlet/streams/implementation-fixture';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { assert, describe, expect, it, vi } from 'vitest';
 import { FetchBody } from '../../src/fetch/body';
+import { FetchController } from '../../src/fetch/controller';
+import { queueFetchTask } from '../../src/fetch/environment';
 import {
   getBufferSourceCopy, getBufferSourceUnderlyingBuffer,
 } from '../../src/js-engine/index';
@@ -93,6 +95,123 @@ describe('Fetch byte sequences as bodies', () => {
     body.stream.error(failure);
     fixture.runTask();
     await expect(readBodyBytes(body)).rejects.toBe(failure);
+  });
+});
+
+describe('Fetch body delivery cancellation', () => {
+  it.each(['global', 'parallel'] as const)('removes queued bytes from the %s destination and preserves unrelated work', async (kind) => {
+    const fixture = createBodyFixture();
+    const body = fixture.createBody([Uint8Array.of(1, 2)]);
+    body.stream.close();
+    const controller = new FetchController();
+    const destination = kind === 'global' ? fixture.global : fixture.createParallelQueue();
+    const process = vi.fn();
+    const error = vi.fn();
+    const unrelated = vi.fn();
+    body.readAll(process, error, destination, controller);
+    await nextTurn();
+    const pending = fixture.tasks[0];
+    queueFetchTask({ run: unrelated }, destination, fixture.env);
+    expect(controller.hasPendingDelivery).toBe(true);
+    controller.cancelResponseDelivery();
+    controller.cancelResponseDelivery();
+    expect(controller.hasPendingDelivery).toBe(false);
+    expect(process).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    if (kind === 'global') {
+      expect(fixture.tasks).not.toContain(pending);
+      while (fixture.tasks.length) fixture.runTask();
+    } else { fixture.runParallel(); }
+    expect(process).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledExactlyOnceWith(expect.any(TypeError));
+    expect(unrelated).toHaveBeenCalledOnce();
+  });
+
+  it.each(['pending', 'queued'] as const)('rejects a %s chunk once and ignores later source delivery', (stage) => {
+    const fixture = createBodyFixture();
+    const body = fixture.createBody(stage === 'queued' ? [Uint8Array.of(1)] : []);
+    const controller = new FetchController();
+    const process = vi.fn();
+    const end = vi.fn();
+    const error = vi.fn();
+    body.incrementallyRead(process, end, error, fixture.global, controller);
+    controller.cancelResponseDelivery();
+    body.stream.enqueueChunk(Uint8Array.of(2));
+    body.stream.close();
+    while (fixture.tasks.length) fixture.runTask();
+    expect(process).not.toHaveBeenCalled();
+    expect(end).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledExactlyOnceWith(expect.any(TypeError));
+    expect(controller.hasPendingDelivery).toBe(false);
+  });
+
+  it('cancels explicitly owned reads through both cloned body consumers', async () => {
+    const fixture = createBodyFixture();
+    const body = fixture.createBody([Uint8Array.of(1)]);
+    const controller = new FetchController();
+    const clone = body.clone();
+    body.stream.close();
+    const process = vi.fn();
+    const firstError = vi.fn();
+    const secondError = vi.fn();
+    body.readAll(process, firstError, fixture.global, controller);
+    clone.readAll(process, secondError, fixture.global, controller);
+    await nextTurn();
+    controller.cancelResponseDelivery();
+    while (fixture.tasks.length) fixture.runTask();
+    expect(process).not.toHaveBeenCalled();
+    expect(firstError).toHaveBeenCalledOnce();
+    expect(secondError).toHaveBeenCalledOnce();
+    expect(controller.hasPendingDelivery).toBe(false);
+  });
+
+  it('releases pending-delivery ownership when starting a read throws', () => {
+    const fixture = createBodyFixture();
+    const body = fixture.createBody();
+    const controller = new FetchController();
+    const reader = body.stream.getDefaultReader();
+    reader.release(fixture.env);
+    expect(() => body.readChunk(reader, fixture.global, vi.fn(), vi.fn(), vi.fn(), controller)).toThrow();
+    expect(controller.hasPendingDelivery).toBe(false);
+  });
+
+  it('leaves independent consumption of a clone outside the fetch delivery owner', async () => {
+    const fixture = createBodyFixture();
+    const body = fixture.createBody([Uint8Array.of(1)]);
+    body.stream.close();
+    const clone = body.clone();
+    const controller = new FetchController();
+    const owned = vi.fn();
+    const ownedError = vi.fn();
+    const independent = vi.fn();
+    const independentError = vi.fn();
+    body.readAll(owned, ownedError, fixture.global, controller);
+    clone.readAll(independent, independentError, fixture.global);
+    await nextTurn();
+    controller.cancelResponseDelivery();
+    while (fixture.tasks.length) fixture.runTask();
+    expect(owned).not.toHaveBeenCalled();
+    expect(ownedError).toHaveBeenCalledOnce();
+    expect(independent).toHaveBeenCalledExactlyOnceWith(Uint8Array.of(1));
+    expect(independentError).not.toHaveBeenCalled();
+  });
+
+  it('queues failure without starting a read whose fetch delivery was already canceled', () => {
+    const fixture = createBodyFixture();
+    const body = fixture.createBody([Uint8Array.of(1)]);
+    body.stream.close();
+    const controller = new FetchController();
+    controller.cancelResponseDelivery();
+    const process = vi.fn();
+    const error = vi.fn();
+    body.readAll(process, error, fixture.global, controller);
+    expect(body.stream.disturbed).toBe(false);
+    expect(body.stream.locked).toBe(false);
+    expect(error).not.toHaveBeenCalled();
+    fixture.runTask();
+    expect(error).toHaveBeenCalledExactlyOnceWith(expect.any(TypeError));
+    expect(process).not.toHaveBeenCalled();
+    expect(controller.hasPendingDelivery).toBe(false);
   });
 });
 

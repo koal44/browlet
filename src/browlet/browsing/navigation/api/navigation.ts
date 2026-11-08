@@ -310,8 +310,10 @@ export class NavigationImpl extends EventTargetImpl {
     this.entryList = newNHEs;
     this.currentEntryIndex = this.getEntryIndex(reactivatedSHE);
     // The §7.4.6.2 reactivation caller must update the list before firing pageshow.
-    this.env.queueTask('navigation-and-traversal', () => {
-      for (const entry of oldNHEs) entry.fireEvent('dispose');
+    this.env.queueTask('navigation-and-traversal', {
+      run: () => {
+        for (const entry of oldNHEs) entry.fireEvent('dispose');
+      },
     });
   }
 
@@ -578,12 +580,14 @@ export class NavigationImpl extends EventTargetImpl {
 
   /** Deliver parallel traversal failures through the Navigation owner's task queue. */
   #queueTraversalFailure(tracker: NavigationAPIMethodTracker, name: 'InvalidStateError' | 'AbortError' | 'SecurityError'): void {
-    this.env.queueTask('navigation-and-traversal', () => {
-      // SPEC_CLASH(navigation-delayed-traversal-rejection): HTML can clean up a settled tracker twice; follow Gecko's guard for obsolete work.
-      // https://github.com/whatwg/html/issues/12176
-      if (this.ongoingAPIMethodTracker !== tracker &&
-        (tracker.key === null || this.upcomingTraverseAPIMethodTrackers.get(tracker.key) !== tracker)) return;
-      tracker.rejectFinished(new DOMExceptionImpl('Navigation traversal failed', name));
+    this.env.queueTask('navigation-and-traversal', {
+      run: () => {
+        // SPEC_CLASH(navigation-delayed-traversal-rejection): HTML can clean up a settled tracker twice; follow Gecko's guard for obsolete work.
+        // https://github.com/whatwg/html/issues/12176
+        if (this.ongoingAPIMethodTracker !== tracker &&
+          (tracker.key === null || this.upcomingTraverseAPIMethodTrackers.get(tracker.key) !== tracker)) return;
+        tracker.rejectFinished(new DOMExceptionImpl('Navigation traversal failed', name));
+      },
     });
   }
 }

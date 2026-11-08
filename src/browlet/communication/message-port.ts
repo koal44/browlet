@@ -308,25 +308,28 @@ export class MessagePortImpl extends EventTargetImpl {
   /** Retain one HTML delivery task, gated by this port's start state and receiving environment. */
   #enqueue(message: PortMessage): void {
     const source = this.#endpoint.hasBeenShipped ? this.#taskSource : unshippedPortMessageTaskSource;
-    const task = this.env.realm.queueGlobalTask(source, () => {
-      this.#endpoint.messages.delete(message);
-      if (message.serialized === null) {
-        this.messageEventTarget.fireEvent('messageerror', MessageEventImpl);
-        return;
-      }
-      let received;
-      try {
-        received = this.env.deserializeWithTransfer(message.serialized);
-      } catch {
-        MessagePortImpl.#discardMessage(message);
-        this.messageEventTarget.fireEvent('messageerror', MessageEventImpl);
-        return;
-      }
-      this.messageEventTarget.fireEvent('message', MessageEventImpl, (message) => {
-        message.data = received.deserialized;
-        message.ports = received.transferredValues.filter((value): value is MessagePortImpl => value instanceof MessagePortImpl);
-      });
-    }, { isRunnable: () => this.#enabled });
+    const task = this.env.realm.queueGlobalTask(source, {
+      run: () => {
+        this.#endpoint.messages.delete(message);
+        if (message.serialized === null) {
+          this.messageEventTarget.fireEvent('messageerror', MessageEventImpl);
+          return;
+        }
+        let received;
+        try {
+          received = this.env.deserializeWithTransfer(message.serialized);
+        } catch {
+          MessagePortImpl.#discardMessage(message);
+          this.messageEventTarget.fireEvent('messageerror', MessageEventImpl);
+          return;
+        }
+        this.messageEventTarget.fireEvent('message', MessageEventImpl, (message) => {
+          message.data = received.deserialized;
+          message.ports = received.transferredValues.filter((value): value is MessagePortImpl => value instanceof MessagePortImpl);
+        });
+      },
+      isRunnable: () => this.#enabled,
+    });
     this.#endpoint.messages.set(message, task);
   }
 

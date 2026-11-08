@@ -21,7 +21,6 @@ import { PerformanceImpl } from '../performance/index';
 import type { BroadcastChannelImpl, EventSourceImpl, MessagePortImpl } from '../communication/index';
 import type { StructuredSerializeOptions } from '../scripting/structured-data/index';
 import type { PermissionStatusImpl } from '../integration/permissions/index';
-import type { FileReaderImpl } from '../integration/file/index';
 
 import type { BrowletEnvironment } from './environment';
 
@@ -48,9 +47,6 @@ export class WindowOrWorkerGlobalScopeMixin {
   webTransports: { cleanup(): void; }[] = [];
   /** Active EventSources, retained until close or permanent Document/worker cleanup. */
   eventSources = new Set<EventSourceImpl>();
-  /** Active FileReader reads, released on completion, abort, or global teardown. */
-  // TODO: Should the environment own this collection directly?
-  fileReaders = new Set<FileReaderImpl>();
   /** Named Reporting destinations configured by this global's resource response. */
   reportingEndpoints: ReportingEndpoint[] = [];
   /** Reports awaiting delivery for this global, independent of other globals. */
@@ -65,6 +61,8 @@ export class WindowOrWorkerGlobalScopeMixin {
   performance: PerformanceImpl;
   /** Policy state and empty trusted values belonging exclusively to this global. */
   trustedTypes: TrustedTypePolicyFactoryImpl;
+  /** Pending operations owned by this global; null once destruction has begun. */
+  #destructionSteps: Set<() => void> | null = new Set();
 
   constructor(env: BrowletEnvironment) {
     this.env = env;
@@ -73,7 +71,7 @@ export class WindowOrWorkerGlobalScopeMixin {
     this.timers = new GlobalTimers({
       eventLoop: env.responsibleEventLoop,
       host: env.timerHost,
-      queueTask: (steps, options) => env.queueTask('timer', steps, options),
+      queueTask: (task) => env.queueTask('timer', task),
       time: env,
     });
   }
@@ -169,7 +167,7 @@ export class WindowOrWorkerGlobalScopeMixin {
       // Preparation validates crop/resize dimensions before accessing the source's live pixels.
       const bitmap = ImageBitmapImpl.create(BitmapData.create(image, options, crop, env), env);
       // SPEC_CLASH(imagebitmap-task-delivery): Follow HTML/Chromium/Firefox's queued fulfillment; WebKit fulfills in-memory reads immediately.
-      env.queueTask('bitmap', () => { result.resolve(bitmap); });
+      env.queueTask('bitmap', { run: () => { result.resolve(bitmap); } });
     } catch (error) {
       // HTML returns an already rejected Promise for invalid in-memory sources or dimensions.
       result.reject(error);
@@ -187,6 +185,33 @@ export class WindowOrWorkerGlobalScopeMixin {
   /** Fetch's addition to the WindowOrWorkerGlobalScope mixin. */
   fetch(input: FetchRequestInfo, init: FetchRequestInit): InternalPromise<ResponseImpl> {
     return fetchForGlobal(input, init, this.env);
+  }
+
+  /** Register internal cleanup until completion, or run it immediately after destruction. */
+  addDestructionSteps(steps: () => void): () => void {
+    const pending = this.#destructionSteps;
+    if (pending === null) {
+      steps();
+      return () => {};
+    }
+    pending.add(steps);
+    return () => { pending.delete(steps); };
+  }
+
+  /** Stop outstanding operations without waiting for their next task or backing result. */
+  runDestructionSteps(): void {
+    const pending = this.#destructionSteps;
+    if (pending === null) return;
+    this.#destructionSteps = null;
+    const steps = [...pending];
+    pending.clear();
+    // Detach all registrations first. One failed cleanup must not strand the rest.
+    let failure: { error: unknown; } | undefined;
+    for (const step of steps) {
+      try { step(); }
+      catch (error) { failure ??= { error }; }
+    }
+    if (failure !== undefined) throw failure.error;
   }
 
   /** Replace this global's Reporting endpoint list using its resource response. */
@@ -274,7 +299,7 @@ export class WindowOrWorkerGlobalScopeMixin {
     const suppliedType = parseMIMEType(image.type) ?? undefined;
     const capturedOptions = { ...options };
     const capturedCrop = crop === undefined ? undefined : { ...crop };
-    const reject = (error: unknown): void => { env.queueTask('bitmap', () => { result.reject(error); }); };
+    const reject = (error: unknown): void => { env.queueTask('bitmap', { run: () => { result.reject(error); } }); };
     const readFailed = (): void => {
       reject(new DOMExceptionImpl('The Blob could not be read as an image', DOMExceptionNames.invalidState));
     };
@@ -287,7 +312,7 @@ export class WindowOrWorkerGlobalScopeMixin {
             const mimeType = sniffMIMETypeInImageContext(suppliedType, bytes.subarray(0, maximumResourceHeaderLength));
             const pixels = BitmapData.decode(bytes, mimeType, capturedOptions, capturedCrop, env);
             const bitmap = ImageBitmapImpl.create(pixels, env);
-            env.queueTask('bitmap', () => { result.resolve(bitmap); });
+            env.queueTask('bitmap', { run: () => { result.resolve(bitmap); } });
           } catch (error) { reject(error); }
         }, readFailed);
       } catch { readFailed(); }

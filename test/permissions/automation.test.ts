@@ -158,10 +158,10 @@ function createEnvironment(userAgent: PermissionUserAgent, top = 'https://top.te
 } {
   const tasks: (() => void)[] = [];
   const env = createPermissionEnvironment(userAgent, top, embedded);
-  env.queueTask = (source, steps) => {
+  env.queueTask = (source, task) => {
     expect(source).toBe('permissions');
-    tasks.push(steps);
-    return { remove() { const i = tasks.indexOf(steps); if (i !== -1) tasks.splice(i, 1); } };
+    tasks.push(task.run);
+    return { remove() { const i = tasks.indexOf(task.run); if (i !== -1) tasks.splice(i, 1); } };
   };
   return { env, tasks };
 }

@@ -141,12 +141,12 @@ export class WorkerUserAgent implements UserAgent {
   get browsingContextGroupSet(): never { return unconnected('browsingContextGroupSet'); }
   /** Top-level windows or tabs owned by this browser. Not connected in workers. */
   get topLevelTraversableSet(): never { return unconnected('topLevelTraversableSet'); }
+  /** Window activation remains browser-owned. */
+  get transientActivationDuration(): never { return unconnected('Window activation'); }
   /** Reject new-window requests without transient activation, independently of sandbox restrictions. Not connected in workers. */
   get popupBlockerEnabled(): never { return unconnected('popupBlockerEnabled'); }
   /** Destination policy after popup and sandbox checks; existing named targets are unaffected. Not connected in workers. */
   get newNavigablePolicy(): never { return unconnected('newNavigablePolicy'); }
-  /** Window activation remains browser-owned. */
-  get transientActivationDuration(): never { return unconnected('Window activation'); }
   /** Inline Document rendering remains browser-owned. */
   get renderInlineDocument(): never { return unconnected('inline Document rendering'); }
   /** Document history retention remains browser-owned. */

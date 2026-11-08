@@ -12,11 +12,13 @@ export function scheduleSelectionChange(target: SelectionChangeTarget): void {
   // SPEC_GAP(selection-change-task-owner): The draft omits task ownership. Use the current node Document's loop.
   // Document notifications retain their activity gate. Control tasks retain the target across adoption/removal.
   // SPEC_CLASH(selection-control-inactive): Follow Firefox's delivery for controls in removed frames; Chromium/WebKit suppress it.
-  document.env.responsibleEventLoop.queueTask(userInteractionTaskSource, bubbles ? null : document, () => {
-    // https://w3c.github.io/selection-api/#firing-selectionchange-event
-    target.selectionChangeScheduled = false;
-    // SPEC_CLASH(selection-control-shadow): Follow the draft/Firefox/WebKit's control target; Chromium redirects to Document.
-    target.fireEvent('selectionchange', undefined, (event) => { event.bubbles = bubbles; });
+  document.env.responsibleEventLoop.queueTask(userInteractionTaskSource, bubbles ? null : document, {
+    run: () => {
+      // https://w3c.github.io/selection-api/#firing-selectionchange-event
+      target.selectionChangeScheduled = false;
+      // SPEC_CLASH(selection-control-shadow): Follow the draft/Firefox/WebKit's control target; Chromium redirects to Document.
+      target.fireEvent('selectionchange', undefined, (event) => { event.bubbles = bubbles; });
+    },
   });
 }
 

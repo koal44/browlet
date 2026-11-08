@@ -29,7 +29,7 @@ describe('Permissions §5.2: browser host consent and task ownership', () => {
     expect(tasks).toHaveLength(1);
     expect(tasks[0]!.document).toBe(env.getAssociatedDocument());
 
-    await new Promise<void>((resolve) => { env.queueTask('permissions', resolve); });
+    await new Promise<void>((resolve) => { env.queueTask('permissions', { run: resolve }); });
     expect(env.permissions.getCurrentPermissionState('persistent-storage')).toBe('granted');
     expect(env.userAgent.storagePersistence.getPermission(env.origin)).toBe('granted');
     // Permission alone does not perform Storage.persist() or change a bucket's mode.
@@ -43,7 +43,7 @@ describe('Permissions §5.2: browser host consent and task ownership', () => {
     await browser.navigate('https://example.test/');
     const env = getRelevantRealm(browser.window).env;
     expect(await env.permissions.requestPermissionToUse('persistent-storage')).toBe('denied');
-    await new Promise<void>((resolve) => { env.queueTask('permissions', resolve); });
+    await new Promise<void>((resolve) => { env.queueTask('permissions', { run: resolve }); });
     expect(env.userAgent.storagePersistence.getPermission(env.origin)).toBe('denied');
   });
 
@@ -71,7 +71,7 @@ describe('Permissions §5.2: browser host consent and task ownership', () => {
     await browser.navigate('https://example.test/');
     const env = getRelevantRealm(browser.window).env;
     const destroyed = new Promise<void>((resolve) => {
-      env.queueTask('permissions', () => { env.getAssociatedDocument()!.destroy(); resolve(); });
+      env.queueTask('permissions', { run: () => { env.getAssociatedDocument()!.destroy(); resolve(); } });
     });
     expect(await env.permissions.requestPermissionToUse('persistent-storage')).toBe('granted');
     await destroyed;

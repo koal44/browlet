@@ -282,7 +282,7 @@ describe('simple dialog host pause', () => {
       expect(received).toBe(window);
       expect(message).toBe('line\nbreak');
       order.push('display');
-      loop.queueTask(domManipulationTaskSource, null, () => { order.push('task'); });
+      loop.queueTask(domManipulationTaskSource, null, { run: () => { order.push('task'); } });
       loop.queueMicrotask(() => { order.push('microtask'); });
       expect(loop.runTaskTurn()).toBe(false);
       loop.performMicrotaskCheckpoint();
@@ -309,7 +309,7 @@ describe('simple dialog host pause', () => {
     });
     expect(closed).not.toHaveBeenCalled();
     let ran = false;
-    loop.queueTask(domManipulationTaskSource, null, () => { ran = true; });
+    loop.queueTask(domManipulationTaskSource, null, { run: () => { ran = true; } });
     expect(loop.runTaskTurn()).toBe(true);
     expect(ran).toBe(true);
   }));
@@ -330,7 +330,7 @@ describe('simple dialog host pause', () => {
       expect(received).toBe(window);
       expect(message).toBe('line\nbreak');
       order.push('display');
-      loop.queueTask(domManipulationTaskSource, null, () => { order.push('task'); });
+      loop.queueTask(domManipulationTaskSource, null, { run: () => { order.push('task'); } });
       loop.queueMicrotask(() => { order.push('microtask'); });
       expect(loop.runTaskTurn()).toBe(false);
       loop.performMicrotaskCheckpoint();
@@ -384,7 +384,7 @@ describe('simple dialog host pause', () => {
     });
     expect(closed).not.toHaveBeenCalled();
     let ran = false;
-    loop.queueTask(domManipulationTaskSource, null, () => { ran = true; });
+    loop.queueTask(domManipulationTaskSource, null, { run: () => { ran = true; } });
     expect(loop.runTaskTurn()).toBe(true);
     expect(ran).toBe(true);
   }));

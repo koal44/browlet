@@ -221,9 +221,9 @@ describe('Clipboard §7.3.1: asynchronous read admission and delivery', () => {
     f.read.mockImplementation(() => { started.resolve(); return native.promise; });
     const delivery: { source: TaskSourceKey; steps: () => void; }[] = [];
     const queue = f.env.queueTask.bind(f.env);
-    vi.spyOn(f.env, 'queueTask').mockImplementation((source, steps) => {
-      if (source !== 'clipboard') return queue(source, steps);
-      delivery.push({ source, steps }); queued.resolve(); return { remove() {} };
+    vi.spyOn(f.env, 'queueTask').mockImplementation((source, task) => {
+      if (source !== 'clipboard') return queue(source, task);
+      delivery.push({ source, steps: task.run }); queued.resolve(); return { remove() {} };
     });
     let completed = false;
     const result = readOutcome(f.browser).then((value) => { completed = true; return value; });
@@ -232,7 +232,7 @@ describe('Clipboard §7.3.1: asynchronous read admission and delivery', () => {
     native.resolve([]); await queued.promise;
     expect(delivery.map(({ source }) => source)).toEqual(['clipboard']); expect(completed).toBe(false);
     const task = delivery[0]!;
-    f.env.realm.queueGlobalTask(taskSources[task.source], task.steps);
+    f.env.realm.queueGlobalTask(taskSources[task.source], { run: task.steps });
     expect(await result).toEqual({ count: 0 });
   });
 
@@ -294,10 +294,20 @@ describe('Clipboard §7.3.1: asynchronous read admission and delivery', () => {
     expect(delivery.mock.calls.map(([source]) => source)).toEqual(['automation', 'clipboard']);
   });
 
-  it.each(['focus', 'activation', 'provenance', 'reader'] as const)('keeps the missing %s dependency observable as a rejected promise', async (dependency) => {
+  it('rejects a read without real transient activation before consulting the native reader', async () => {
+    const f = await createFixture();
+    f.activation.mockRestore();
+    expect(await f.browser.evaluate(async () => {
+      const result = navigator.clipboard.read();
+      try { await result; return []; }
+      catch (error) { return [result instanceof Promise, error instanceof DOMException, (error as DOMException).name]; }
+    })).toEqual([true, true, 'NotAllowedError']);
+    expect(f.read).not.toHaveBeenCalled();
+  });
+
+  it.each(['focus', 'provenance', 'reader'] as const)('keeps the missing %s dependency observable as a rejected promise', async (dependency) => {
     const f = await createFixture();
     if (dependency === 'focus') f.focus.mockRestore();
-    if (dependency === 'activation') f.activation.mockRestore();
     if (dependency === 'provenance') f.paste.mockRestore();
     if (dependency === 'reader') f.read.mockRestore();
     const message = await f.browser.evaluate(async () => {
@@ -316,8 +326,8 @@ describe('Clipboard §7.3: task source ownership', () => {
     const document = traversable.activeDocument!;
     const loop = env.responsibleEventLoop;
     const steps = vi.fn();
-    env.queueTask('clipboard', () => { document.destroy(); });
-    env.queueTask('clipboard', steps);
+    env.queueTask('clipboard', { run: () => { document.destroy(); } });
+    env.queueTask('clipboard', { run: steps });
     expect([...loop.getTaskQueue(clipboardTaskSource)].map((task) => task.document)).toEqual([document, document]);
     expect(loop.getTaskQueue(permissionsTaskSource).size).toBe(0);
     loop.runTaskTurn();

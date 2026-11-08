@@ -71,9 +71,11 @@ describe('Browser-owned sandbox execution', () => {
       trace.push('continuation');
       done.resolve(value);
     }, done.reject);
-    realm.queueGlobalTask(networkingTaskSource, () => {
-      trace.push('task');
-      pending.resolve(7);
+    realm.queueGlobalTask(networkingTaskSource, {
+      run: () => {
+        trace.push('task');
+        pending.resolve(7);
+      },
     });
     expect(trace).toEqual([]);
     expect(await done.promise).toBe(7);

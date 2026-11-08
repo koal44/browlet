@@ -28,26 +28,28 @@ export function windowPostMessage(
     targetOrigin = obtainURLOrigin(url);
   }
   const serialized = methodEnv.serializeWithTransfer(message, options.transfer);
-  targetRealm.queueGlobalTask(postedMessageTaskSource, () => {
-    if (targetOrigin !== '*' && !areSameOrigin(targetWindow.document.origin, targetOrigin)) return;
-    const origin = sourceEnv.origin;
-    const source = sourceEnv.window.getWindowProxy();
-    let received;
-    try {
-      received = targetWindow.env.deserializeWithTransfer(serialized);
-    } catch {
-      targetWindow.fireEvent('messageerror', MessageEventImpl, (message) => {
+  targetRealm.queueGlobalTask(postedMessageTaskSource, {
+    run: () => {
+      if (targetOrigin !== '*' && !areSameOrigin(targetWindow.document.origin, targetOrigin)) return;
+      const origin = sourceEnv.origin;
+      const source = sourceEnv.window.getWindowProxy();
+      let received;
+      try {
+        received = targetWindow.env.deserializeWithTransfer(serialized);
+      } catch {
+        targetWindow.fireEvent('messageerror', MessageEventImpl, (message) => {
+          message.setOrigin(origin);
+          message.source = source;
+        });
+        return;
+      }
+      targetWindow.fireEvent('message', MessageEventImpl, (message) => {
         message.setOrigin(origin);
         message.source = source;
+        message.data = received.deserialized;
+        message.ports = received.transferredValues.filter((value): value is MessagePortImpl => value instanceof MessagePortImpl);
       });
-      return;
-    }
-    targetWindow.fireEvent('message', MessageEventImpl, (message) => {
-      message.setOrigin(origin);
-      message.source = source;
-      message.data = received.deserialized;
-      message.ports = received.transferredValues.filter((value): value is MessagePortImpl => value instanceof MessagePortImpl);
-    });
+    },
   });
 }
 

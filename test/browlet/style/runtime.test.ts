@@ -94,11 +94,13 @@ describe('Stylelet execution integration', () => {
     const started = Promise.withResolvers<void>();
     let completed = false;
     let failure: unknown;
-    realm.queueGlobalTask(domManipulationTaskSource, () => {
-      sheet.replace('main { color: red }').observe(
-        () => { completed = true; }, (error) => { failure = error; },
-      );
-      started.resolve();
+    realm.queueGlobalTask(domManipulationTaskSource, {
+      run: () => {
+        sheet.replace('main { color: red }').observe(
+          () => { completed = true; }, (error) => { failure = error; },
+        );
+        started.resolve();
+      },
     });
 
     // Start inside a real HTML task, then allow background work and delivery.

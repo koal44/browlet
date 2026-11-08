@@ -787,10 +787,9 @@ report transport, and the ServiceWorkerContainer message queue
 remain with their owners. Stock startup still rejects missing native suspension;
 shared/nested execution still requires its ownership/connection managers.
 
-The recursive-destruction regression remains an expected failure, authorized for
-the explicit HTML §7.5.10 `destroyAndDescendants()` dependency. It retains the
-required worker-exit assertion and detects an unexpected pass when that owner
-algorithm is supplied; direct `Document.destroy()` is tested normally.
+The integrated HTML §7.5.10 `destroyAndDescendants()` implementation now closes
+owned isolates through the same lifetime connection. Its former expected failure
+is an ordinary passing regression alongside direct `Document.destroy()` coverage.
 
 ### Public dedicated Worker construction
 
@@ -1067,9 +1066,18 @@ realm implementation.
 
 BroadcastChannel now uses worker closing/suspendability checks, and cooperative
 dedicated/shared worker shutdown closes locally owned EventSources after the final
-checkpoint. Focused tests cover both worker kinds. Dedicated Document-owned
-isolates now share browser channel discovery; shared/nested ownership and remote
-Fetch cancellation remain integration dependencies.
+checkpoint. Focused tests cover both worker kinds. Their final cleanup now runs
+the shared global destruction hook for local Fetch, Blob production, and FileReader
+operations. Closing discards queued tasks with notification, and late admission
+invokes only internal discard steps. Pending headers/body, upload-reader release,
+delayed Blob reads, completed FileReaders, and failure isolation have local tests.
+Dedicated Document-owned isolates also share browser channel discovery.
+Shared/nested ownership and remote Fetch cancellation remain shared-service
+transport dependencies; this does not supply forced/native termination cleanup.
+
+The integrated worker runtime retains its `onWorkerFinish` notification and
+`remoteOwner` release. The global destruction hook replaces the separate
+FileReader registry with the same eventless stop behavior.
 
 The current §9.4 transfer slice promotes a local endpoint pair to native transport
 only when a message crosses isolates. Its interface-owned transfer record carries
@@ -2100,8 +2108,9 @@ and wake-up suites also pass on each (60 native checks).
 - WorkerThreadRuntime handles failed-load discard and successful completion;
   WorkerThread supplies outside error delivery and WorkerGlobalImpl supplies
   execution/readiness/port activation.
-- `WorkerGlobalImpl.finishRunning()` releases timers, external ports, local EventSources, and owners
-  after the closing worker's event loop has emptied and finished its checkpoint.
+- `WorkerGlobalImpl.finishRunning()` runs shared destruction steps for local Fetch,
+  Blob production, and FileReader operations, then releases timers, external ports,
+  EventSources, and owners after the loop empties and finishes its checkpoint.
   The runtime then releases its native connections. Forced termination uses the
   outside execution owner. Dedicated Document-derived closing/suspension is
   connected; shared/nested ownership remains unfinished.

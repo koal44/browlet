@@ -143,9 +143,11 @@ export class WheelInputProcessor {
   #queueTask(deliver: () => void): void {
     if (!this.#isLive()) throw new InternalError('Wheel input requires a live, fully active Document');
     const generation = this.#generation;
-    this.#document.env.realm.queueGlobalTask(userInteractionTaskSource, () => {
-      if (generation !== this.#generation || !this.#isLive()) return;
-      deliver();
+    this.#document.env.realm.queueGlobalTask(userInteractionTaskSource, {
+      run: () => {
+        if (generation !== this.#generation || !this.#isLive()) return;
+        deliver();
+      },
     });
   }
 

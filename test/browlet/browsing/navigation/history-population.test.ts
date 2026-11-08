@@ -68,7 +68,7 @@ describe('history-entry population selection and delivery', () => {
     const load = vi.spyOn(navigable, 'loadDocument');
     const complete = vi.fn();
     navigable.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', { navigationParams: params, completionSteps: complete });
-    expect(queue).toHaveBeenCalledExactlyOnceWith('navigation-and-traversal', expect.any(Function), { discardSteps: undefined });
+    expect(queue).toHaveBeenCalledExactlyOnceWith('navigation-and-traversal', { run: expect.any(Function) as unknown, discard: undefined });
     expect(srcdoc).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
     expect(complete).not.toHaveBeenCalled();
@@ -140,7 +140,7 @@ describe('history-entry population selection and delivery', () => {
     navigable.populateHistoryEntryDocument(entry, 'back_forward', source, target, 'none', { allowPOST: true, completionSteps: complete });
     expect(handoff).not.toHaveBeenCalled();
     expect(complete).not.toHaveBeenCalled();
-    expect(queue).toHaveBeenCalledExactlyOnceWith('navigation-and-traversal', expect.any(Function), { discardSteps: undefined });
+    expect(queue).toHaveBeenCalledExactlyOnceWith('navigation-and-traversal', { run: expect.any(Function) as unknown, discard: undefined });
     await expect.poll(() => complete.mock.calls.length).toBe(1);
     expect(handoff).toHaveBeenCalledExactlyOnceWith({
       id: null, url: entry.url, targetSnapshotSandboxingFlags: target.sandboxingFlags,
@@ -195,7 +195,7 @@ describe('history-entry population selection and delivery', () => {
     expect(document.isFullyActive()).toBe(false);
     pending.resolve(null);
     await expect.poll(() => complete.mock.calls.length).toBe(1);
-    expect(replacementQueue).toHaveBeenCalledExactlyOnceWith('navigation-and-traversal', expect.any(Function), { discardSteps: undefined });
+    expect(replacementQueue).toHaveBeenCalledExactlyOnceWith('navigation-and-traversal', { run: expect.any(Function) as unknown, discard: undefined });
     expect(queue).not.toHaveBeenCalled();
     expect(navigable.activeSessionHistoryEntry).toBe(replacementEntry);
     expect(entry.document).toBeNull();
@@ -780,7 +780,7 @@ describe('srcdoc navigation parameters', () => {
     child.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', { completionSteps: complete });
     expect(srcdoc).toHaveBeenCalledExactlyOnceWith(entry, child, target, 'none', null, 'navigate', env);
     expect(srcdoc.mock.results[0]).toMatchObject({ type: 'return', value: { url: { scheme: 'about', path: 'srcdoc' } } });
-    expect(queue).toHaveBeenCalledExactlyOnceWith('navigation-and-traversal', expect.any(Function), { discardSteps: undefined });
+    expect(queue).toHaveBeenCalledExactlyOnceWith('navigation-and-traversal', { run: expect.any(Function) as unknown, discard: undefined });
     await expect.poll(() => failures.length).toBe(1);
     expect(failures[0]).toEqual(expect.objectContaining({ message: loaderFailure.message }));
     expect(entry.document).toBeNull();
@@ -1029,9 +1029,12 @@ function captureTaskFailures(env: BrowletEnvironment, failures: unknown[]) {
   // eslint-disable-next-line @typescript-eslint/unbound-method -- Inspect the function without invoking it.
   if (vi.isMockFunction(loop.queueTask)) return;
   const queueTask = loop.queueTask.bind(loop);
-  vi.spyOn(loop, 'queueTask').mockImplementation((source, document, steps, options) => queueTask(source, document, () => {
-    try { steps(); } catch (error) { failures.push(error); }
-  }, options));
+  vi.spyOn(loop, 'queueTask').mockImplementation((source, document, task) => queueTask(source, document, {
+    ...task,
+    run: () => {
+      try { task.run(); } catch (error) { failures.push(error); }
+    },
+  }));
 }
 
 function provideInlineDocument(navigable: Navigable, creator: DocumentImpl) {

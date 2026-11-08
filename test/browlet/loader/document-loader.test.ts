@@ -185,8 +185,10 @@ describe('Navigable HTML response loading', () => {
         expect(document.history.stateValue).toEqual({ committed: true });
         expect(document.getRelevantGlobalObject()!.navigation.currentEntry!.sessionHistoryEntry).toBe(target);
       });
-      document.env.queueTask('navigation-and-traversal', () => {
-        document.updateForHistoryStepApplication(target, false, 2, 1, 'push', [previous, target], previous);
+      document.env.queueTask('navigation-and-traversal', {
+        run: () => {
+          document.updateForHistoryStepApplication(target, false, 2, 1, 'push', [previous, target], previous);
+        },
       });
       await waitForLoad(document);
       expect(script).toHaveBeenCalledOnce();

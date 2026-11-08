@@ -29,7 +29,7 @@ export class DataTransferItemImpl {
     const data = this.#data.data;
     // SPEC_GAP(data-transfer-callback-task-source): HTML does not name a task source; use user interaction, matching Blink.
     // Capture data now: later removal or detachment must not revoke already-queued delivery.
-    this.#transfer!.env.realm.queueGlobalTask(userInteractionTaskSource, () => callback(data));
+    this.#transfer!.env.realm.queueGlobalTask(userInteractionTaskSource, { run: () => callback(data) });
   }
 
   // https://html.spec.whatwg.org/multipage/dnd.html#dom-datatransferitem-getasfile

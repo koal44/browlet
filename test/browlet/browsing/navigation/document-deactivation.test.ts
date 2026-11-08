@@ -239,11 +239,13 @@ function fixture() {
   const unload = vi.spyOn(document, 'unloadAndDescendants').mockImplementation((_newDocument, afterAllUnloads, firePageSwap) => {
     const completion = userAgent.HostPromise.withResolvers(internalType<void>());
     order.push('unload-start');
-    document.env.queueTask('navigation-and-traversal', () => {
-      firePageSwap?.();
-      order.push('unload');
-      afterAllUnloads?.();
-      completion.resolve();
+    document.env.queueTask('navigation-and-traversal', {
+      run: () => {
+        firePageSwap?.();
+        order.push('unload');
+        afterAllUnloads?.();
+        completion.resolve();
+      },
     });
     return completion.promise;
   });

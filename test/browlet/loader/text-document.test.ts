@@ -151,7 +151,7 @@ describe('text Document loading', () => {
     navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
     stream.enqueueChunk(utf8Encode('partial'));
     await expect.poll(() => document.querySelector('pre')?.textContent).toBe('partial');
-    if (cause === 'abort') document.env.queueTask('network', () => { document.abort(); });
+    if (cause === 'abort') document.env.queueTask('network', { run: () => { document.abort(); } });
     else stream.error(new Error('response body failed'));
     await expect.poll(() => document.activeParserWasAborted).toBe(true);
     expect(document.parser).toBeNull();

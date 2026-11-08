@@ -103,14 +103,16 @@ export class StorageImpl {
         const remoteDocument = remoteStorage.env.window.getAssociatedDocument();
         if (traversable === undefined || remoteDocument.getNodeNavigable()?.traversable !== traversable) continue;
       }
-      remoteStorage.env.realm.queueGlobalTask(domManipulationTaskSource, () => {
-        remoteStorage.env.window.fireEvent('storage', StorageEventImpl, (storageEvent) => {
-          storageEvent.key = key;
-          storageEvent.oldValue = oldValue;
-          storageEvent.newValue = newValue;
-          storageEvent.url = url;
-          storageEvent.storageArea = remoteStorage;
-        });
+      remoteStorage.env.realm.queueGlobalTask(domManipulationTaskSource, {
+        run: () => {
+          remoteStorage.env.window.fireEvent('storage', StorageEventImpl, (storageEvent) => {
+            storageEvent.key = key;
+            storageEvent.oldValue = oldValue;
+            storageEvent.newValue = newValue;
+            storageEvent.url = url;
+            storageEvent.storageArea = remoteStorage;
+          });
+        },
       });
     }
   }

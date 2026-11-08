@@ -80,7 +80,11 @@ Dependencies and remaining limits:
 - The global's existing cleanup collection holds active EventSources.
   Permanent Document destruction and cooperative dedicated/shared worker shutdown
   close connections and cancel pending retries.
-  Navigation's invocation of destruction remains a browsing-lifecycle dependency.
+  Document abortion now fails an in-flight connection once, suppresses queued
+  open/messages, and preserves Fetch's termination state. A retry already waiting
+  after EOF survives Window.stop() because no request remains to cancel, matching
+  Chromium, Firefox, and WebKit. See the
+  [loader shutdown evidence](../loader/ROADMAP.md#combined-loader-shutdown).
 - Window and Worker exposure work. Shared-service Fetch routing and remote
   cancellation after forced termination remain worker integration dependencies.
 - Active sources are conservatively retained until close or permanent cleanup.

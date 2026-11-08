@@ -154,7 +154,7 @@ function createFixture() {
     inputStream.dispatchToTarget(event, target, () => hit, 1);
   };
   const destroy = (document: DocumentImpl, queueAfter?: () => void) => {
-    document.env.realm.queueGlobalTask(userInteractionTaskSource, () => { document.destroy(); });
+    document.env.realm.queueGlobalTask(userInteractionTaskSource, { run: () => { document.destroy(); } });
     queueAfter?.();
     expect(document.env.responsibleEventLoop.runTaskTurn()).toBe(true);
     expect(document.browsingContext === null).toBe(true);

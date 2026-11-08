@@ -18,10 +18,27 @@ export class FetchGroup {
     return this.fetchRecords.some(({ request }) => !request.done);
   }
 
-  /** Placeholder for document cancellation; currently discards no work. */
-  // PROVISIONAL: complete HTML's task/data cleanup and keepalive/deferred-fetch rules.
+  /** Stop unfinished requests and their pending delivery; report whether any work was canceled. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#abort-a-document
   cancel(): boolean {
-    return false;
+    const controllers = new Set<FetchController>();
+    for (const { request, controller } of this.fetchRecords) {
+      if (controller === null) continue;
+      if ((request.done || controller.state !== 'ongoing') && !controller.hasPendingDelivery) continue;
+      // TODO(HTML §7.5.11 / #4483): Keepalive transport can outlive its Document's
+      // delivery. Its detached lifetime must be handled before canceling this group.
+      if (request.keepalive) throw new InternalError('Document cancellation of keepalive fetches is not implemented');
+      controllers.add(controller);
+    }
+    // SPEC_GAP(document-fetch-cancellation): HTML does not select Fetch's controller state.
+    // SPEC_CLASH(document-fetch-cancellation-error): Termination gives TypeError like Chromium/WebKit;
+    // Firefox uses AbortError for an already-delivered body. Do not invent an author abort reason.
+    for (const controller of controllers) {
+      controller.cancelResponseDelivery();
+      if (controller.state === 'ongoing') controller.terminate();
+    }
+    // Upload/response callback tasks are removed; internal completion still runs.
+    return controllers.size !== 0;
   }
 
   /** Terminate unfinished non-keepalive requests, then process deferred invocations. */

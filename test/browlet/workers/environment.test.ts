@@ -143,7 +143,7 @@ describe('Worker realm and settings setup (HTML §10.2.4 and §10.2.6.2)', () =>
       reportError('reported explicitly');
       trace.push('synchronous');
     `, env, env.apiBaseURL, new ScriptFetchOptions());
-    env.realm.queueGlobalTask(createTaskSource('common worker API test'), () => { script.run(); });
+    env.realm.queueGlobalTask(createTaskSource('common worker API test'), { run: () => { script.run(); } });
     expect(trace).toEqual([]);
     env.responsibleEventLoop.runTaskTurn();
     expect(trace).toEqual(['reported explicitly', 'synchronous', [undefined, []], exception, 'last microtask']);
@@ -353,8 +353,10 @@ describe('Worker realm and settings setup (HTML §10.2.4 and §10.2.6.2)', () =>
     scope.addEventListener('probe', () => {
       called.push(env.responsibleEventLoop.getIncumbentEnvironment() === env);
     });
-    env.realm.queueGlobalTask(createTaskSource('worker setup probe'), () => {
-      env.globalImplementation.fireEvent('probe');
+    env.realm.queueGlobalTask(createTaskSource('worker setup probe'), {
+      run: () => {
+        env.globalImplementation.fireEvent('probe');
+      },
     });
     expect(called).toEqual([]);
     expect(outsideEnv.responsibleEventLoop.hasRunnableTasks()).toBe(false);

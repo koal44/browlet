@@ -530,18 +530,31 @@ depend on JS Engine. Web IDL's realm and callback environment contracts remain
 in its full entry point.
 
 `FetchEnvironment` combines File/Streams facilities, Web IDL exception
-construction, and `queueGlobalFetchTask(global, steps)` on the same owner.
-Fetch's `queueFetchTask(steps, destination, env)` selects parallel-queue or global
-delivery; HTML supplies the global route. Fetch receives the existing environment
+construction, and `queueGlobalFetchTask(global, task)` on the same owner.
+Fetch's `queueFetchTask(task, destination, env)` selects parallel-queue
+or global delivery and returns the existing TaskHandle; HTML supplies the global
+route. The task carries `run` and optional `discard` together. Both destinations
+remove pending work before invoking `discard`. Fetch receives the existing environment
 as its execution owner; the request's optional client remains a separate selection.
 The same `FetchEnvironment` contract supplies base URL, origin, policies, and
-UserAgent when used as client settings. BrowletEnvironment implements it directly.
+UserAgent when used as the request's client. BrowletEnvironment implements it directly.
 Request CSP violations use the client's `env.reportCSPViolation(policy, request)`.
 Fetch treats the policy as opaque; Browlet's environment validates it and supplies
 the concrete environment to CSP's violation construction and reporting.
 Request-specific feature checks use `client.isPolicyFeatureEnabled(name, origin)`;
 Browlet resolves the shared Permissions Policy definition and delegates to the
 client's Document, including reporting, without exposing HTML types to Fetch.
+
+Fetch-owned body reads receive their existing FetchController at the call site;
+bodies and clones do not retain it. A registered read remains cancellable until its
+destination consumes or discards the result, independently of the request's done
+flag. Document cancellation removes queued byte delivery and schedules failure on
+that destination; Document destruction also releases the internal wait if it removes
+that failure task. These notifications do not run author callbacks inline. Ordinary
+author consumption uses the body's owning environment without registering with a
+completed fetch. Reading and queued delivery have separate internal responsibilities;
+all reads participate in destination-task disposal. Remaining Fetch progress/completion
+tasks and retrying consumer policy retain their explicit integration work.
 
 Implementations use `env.realm` for realm operations and `env` directly for
 environment facilities. Implementations receive no Binding Context, callback
@@ -606,11 +619,38 @@ Infra has no Encoding dependency. Each `core` entry point retains its own
 reviewed dependency level.
 `JSEnvironment`, inherited through `FetchEnvironment` by `StyleletEnvironment`,
 requires internal Promise creation, background work, and
-`queueTask(source, steps, options?)` delivery. The source keyword selects
+`queueTask(source, task)` delivery. The source keyword selects
 a shared task source; `env` selects the owning destination. Browlet's
 [`scripting/tasks.ts`](browlet/scripting/tasks.ts) maps these keys to shared source
-identities; HTML retains task queues and scheduling policy. Optional task metadata
-carries timer nesting levels without moving timer initialization into Infra.
+identities; HTML retains task queues and scheduling policy. Infra's `TaskRecord` contract
+groups `run`, optional `discard`, optional readiness, and timer nesting metadata.
+The existing HTML `Task` owns its source, Document association, combined
+`isRunnable` check, and execution bookkeeping.
+Its queue contains those Task instances; parallel queues use the same contract
+but consume only `run` and `discard`. Each enqueue captures its own task identity
+so reusing an input object cannot make one removal handle discard another occurrence.
+Fetch callbacks retain their controller until delivery or removal. Cancellation
+removes success/progress tasks and queues required failure completion at the same
+destination. If a separate execution owner finishes after the destination Document
+was destroyed, Browlet queues only `discard` cleanup on that destination's loop,
+without the Document activity gate. Retained inactive Documents still hold ordinary
+callbacks until reactivation. This does not bypass the gate for author task bodies.
+`JSEnvironment.addDestructionSteps()` connects outstanding operations to that same
+execution owner even when no task exists. Browlet forwards registration to the
+existing WindowOrWorkerGlobalScopeMixin; destruction of its associated Document closes
+registration and runs the remaining internal cleanup before removing tasks. An initial
+Document whose Window has been reused removes only its own parser, tasks, history,
+and other Document state; it leaves the new Document's global resources intact. Completed operations
+unregister, and registration after destruction runs cleanup immediately. These
+steps cannot invoke author code. Subresource Fetch retains its client for policy
+and accounting while tracking destruction through `params.env`; Blob production
+uses its stream owner. Browser-owned sandbox work has no page lifetime. Cooperative
+dedicated/shared worker shutdown runs the same registrations after the final checkpoint,
+alongside its existing timers, ports, and EventSource cleanup. Closing removes queued
+tasks with discard notification; refused late tasks notify immediately without restarting
+the worker loop. Fetch therefore must not register cancellation after immediate discard
+has already completed its callback. Cross-isolate service cancellation, forced termination,
+and detached keepalive transport retain their separate owners.
 Stylelet uses Fetch's complete environment contract. CSSOM implementations
 report Core `DOMExceptionImpl` failures; the active host binding realizes those
 failures as Platform exceptions in the appropriate realm. MediaList needs no
@@ -1032,10 +1072,10 @@ sandbox. Registrations retain the existing worker reservation, now also holding
 its root response policies, for origin, inheritance and lifetime. Native exit
 removes that environment's registrations without invalidating entries captured
 earlier. No second Blob store or artificial creator environment is introduced.
-Active FileReaders share the global resource owner. Completion/abort releases
-each read before author callbacks; cooperative worker shutdown stops remaining
-reads after its final checkpoint without firing events. Window destruction and
-cancellation of already-issued host byte-source I/O remain separate integrations.
+Active FileReaders register with the shared global destruction hook. Completion
+and abort release each registration before author callbacks; permanent Document
+destruction and cooperative worker shutdown stop pending reads without firing
+events. Cancellation of already-issued host byte-source I/O remains unfinished.
 FileReaderSync lives in the portable File subsystem and is exposed through normal
 Web IDL only in dedicated/shared workers. It reads immutable Blob segments through
 an optional synchronous byte-source operation and reuses result packaging. Memory
@@ -1433,8 +1473,13 @@ incremental RFC 2046 framing: ordered fields, borrowed body bytes, and part
 boundaries. Its `appendData()` input uses Infra's `ByteCursor` for chunk storage
 and position; bulk scans and borrowed views remain in the framer. The cursor
 has no environment, scheduling, grammar, or HTML insertion-point dependency.
-Fetch response construction, stream backpressure/cancellation, and
-replacement navigation belong to the consuming loader; that integration is pending.
+`MultipartResourceReader` supplies independently readable Fetch responses with
+body-demand backpressure. Navigable retains the outer reader across replacements;
+each Document's parser consumes only its part. Retiring a part discards its
+remaining bytes when the next part is requested. Stop, superseding navigation,
+and navigable teardown cancel the whole load. Document abortion needs no reader
+argument or outer-load reference. Navigation disposes declined response bodies
+and reports failures independently of transport completion.
 ResourceReader owns the deadline and stores
 the returned MIME type as a concrete value; body reads throw until that value
 exists. They drain the retained chunks and continue from the same Fetch reader.
@@ -1511,7 +1556,7 @@ operation. Those steps take responsibility for asynchronous errors; without them
 the existing task/parallel owner reports the exception. Synchronous setup errors
 still propagate to the direct caller. Late response-cancellation cleanup stays
 with its task owner after population has completed. Queued tasks can supply internal
-`discardSteps` through their environment; removal detaches the work before notifying
+`discard` through their environment; removal detaches the work before notifying
 its owner, without entering the removed task or author script. Document-wide removal
 detaches all matching tasks before notification and releases every waiter even if
 one notification throws. Preparation/population reuse their failure callback for

@@ -63,44 +63,46 @@ export class PointerLock {
     }
 
     const requestedOptions = { ...options };
-    this.#requests.enqueue(() => {
-      // SPEC_GAP(pointer-lock-pending-lifetime): The draft does not recheck queued targets; validate original-Document membership, activity and focus before acquisition.
-      // SPEC_CLASH(pointer-lock-pending-result): Recheck like Firefox, retaining our WrongDocumentError policy; Chromium can fulfill a removed request without a lock.
-      // Reinsertion into the original Document before processing remains valid.
-      if (element.getShadowIncludingRoot() !== document || !document.isFullyActive() ||
-        !document.hasFocus()) {
-        this.#reject(element, result, DOMExceptionNames.wrongDocument, document);
-        return;
-      }
-      const current = this.#lock;
-      // SPEC_CLASH(pointer-lock-conflicting-document): Keep the draft's InvalidStateError for another Document; Blink instead uses WrongDocumentError.
-      if (current !== null && current.target.getShadowIncludingRoot() !== element.getShadowIncludingRoot()) {
-        this.#reject(element, result, DOMExceptionNames.invalidState);
-        return;
-      }
-      const sameInput = current !== null && current.target === element &&
-        current.options.unadjustedMovement === requestedOptions.unadjustedMovement;
-      if (current !== null && current.options.unadjustedMovement === requestedOptions.unadjustedMovement) {
-        current.target = element;
-      } else {
-        const position = this.acquire(element, requestedOptions);
-        if (position === null) {
-          this.#reject(element, result, DOMExceptionNames.notSupported);
+    this.#requests.enqueue({
+      run: () => {
+        // SPEC_GAP(pointer-lock-pending-lifetime): The draft does not recheck queued targets; validate original-Document membership, activity and focus before acquisition.
+        // SPEC_CLASH(pointer-lock-pending-result): Recheck like Firefox, retaining our WrongDocumentError policy; Chromium can fulfill a removed request without a lock.
+        // Reinsertion into the original Document before processing remains valid.
+        if (element.getShadowIncludingRoot() !== document || !document.isFullyActive() ||
+          !document.hasFocus()) {
+          this.#reject(element, result, DOMExceptionNames.wrongDocument, document);
           return;
         }
-        this.#lock = { target: element, options: requestedOptions, position: { ...position } };
-      }
-      if (!sameInput) this.#generation++;
-      // https://w3c.github.io/pointerevents/#implicit-release-of-pointer-capture
-      // Applying pointer lock releases pending capture; existing capture processing
-      // delivers effective loss on the next pointer event, without author code here.
-      for (const top of this.#userAgent.topLevelTraversableSet) {
-        for (const stream of top.pointerEventStreams.values()) {
-          const pending = stream.capture.pendingTargetOverride;
-          if (pending !== null) stream.releasePointerCapture(pending);
+        const current = this.#lock;
+        // SPEC_CLASH(pointer-lock-conflicting-document): Keep the draft's InvalidStateError for another Document; Blink instead uses WrongDocumentError.
+        if (current !== null && current.target.getShadowIncludingRoot() !== element.getShadowIncludingRoot()) {
+          this.#reject(element, result, DOMExceptionNames.invalidState);
+          return;
         }
-      }
-      this.#notify(element, 'pointerlockchange', () => { result.resolve(undefined); }, document);
+        const sameInput = current !== null && current.target === element &&
+          current.options.unadjustedMovement === requestedOptions.unadjustedMovement;
+        if (current !== null && current.options.unadjustedMovement === requestedOptions.unadjustedMovement) {
+          current.target = element;
+        } else {
+          const position = this.acquire(element, requestedOptions);
+          if (position === null) {
+            this.#reject(element, result, DOMExceptionNames.notSupported);
+            return;
+          }
+          this.#lock = { target: element, options: requestedOptions, position: { ...position } };
+        }
+        if (!sameInput) this.#generation++;
+        // https://w3c.github.io/pointerevents/#implicit-release-of-pointer-capture
+        // Applying pointer lock releases pending capture; existing capture processing
+        // delivers effective loss on the next pointer event, without author code here.
+        for (const top of this.#userAgent.topLevelTraversableSet) {
+          for (const stream of top.pointerEventStreams.values()) {
+            const pending = stream.capture.pendingTargetOverride;
+            if (pending !== null) stream.releasePointerCapture(pending);
+          }
+        }
+        this.#notify(element, 'pointerlockchange', () => { result.resolve(undefined); }, document);
+      },
     });
     return result.promise;
   }
@@ -176,12 +178,14 @@ export class PointerLock {
     element: ElementImpl, type: 'pointerlockchange' | 'pointerlockerror', settle?: () => void,
     document: DocumentImpl = element.nodeDocument,
   ): void {
-    element.queueTask(userInteractionTaskSource, () => {
-      // SPEC_CLASH(pointer-lock-event-flags): Use DOM's default false flags and Chromium; Firefox/WebKit bubble these notifications.
-      // SPEC_CLASH(pointer-lock-notification-document): Retain the affected Document like Chromium/Firefox; a late node-document lookup would redirect notifications after adoption.
-      document.fireEvent(type);
-      // SPEC_CLASH(pointer-lock-promise-order): The draft fires the event before settling; all three browser probes settle before the notification.
-      settle?.();
+    element.queueTask(userInteractionTaskSource, {
+      run: () => {
+        // SPEC_CLASH(pointer-lock-event-flags): Use DOM's default false flags and Chromium; Firefox/WebKit bubble these notifications.
+        // SPEC_CLASH(pointer-lock-notification-document): Retain the affected Document like Chromium/Firefox; a late node-document lookup would redirect notifications after adoption.
+        document.fireEvent(type);
+        // SPEC_CLASH(pointer-lock-promise-order): The draft fires the event before settling; all three browser probes settle before the notification.
+        settle?.();
+      },
     });
   }
 }

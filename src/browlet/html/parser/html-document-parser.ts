@@ -3,7 +3,7 @@ import { types } from 'node:util';
 import { html, Token, Tokenizer } from 'parse5';
 import { ParserStream } from 'parse5-parser-stream';
 
-import type { InternalPromise } from '../../../infra/index';
+import type { InternalPromise, TaskRecord } from '../../../infra/index';
 import { bindAsyncContext } from '../../../js-engine/index';
 import { DOMExceptionImpl, DOMExceptionNames, idlType } from '../../../web-idl/core/index';
 import { bomSniff, endOfQueue, getDecoder, getEncoding, IOQueue, type Decoder } from '../../../encoding/index';
@@ -153,17 +153,20 @@ export class HTMLDocumentParser extends DocumentParser {
     // Node owns stream completion; DOM finalization re-enters an HTML task.
     const cleanup = finished(this.#parse5Stream, (error) => {
       cleanup();
-      this.#queueTask(() => {
-        try {
-          if (error) { this.#stopInput(); throw error; }
-          // Abortion can run after Node reports EOF but before this task starts.
-          if (this.stopped) throw new DOMExceptionImpl('', DOMExceptionNames.abort);
-          // Construction supplies our adapter; parse5 exposes its base interface.
-          (this.#parse5Stream.parser.treeAdapter as HTMLTreeAdapter).finishParsing();
-          this.stopped = true;
-          this.document.updateCurrentDocumentReadiness('interactive');
-          complete.resolve(undefined);
-        } catch (failure) { complete.reject(failure); }
+      this.#queueTask({
+        run: () => {
+          try {
+            if (error) { this.#stopInput(); throw error; }
+            // Abortion can run after Node reports EOF but before this task starts.
+            if (this.stopped) throw new DOMExceptionImpl('', DOMExceptionNames.abort);
+            // Construction supplies our adapter; parse5 exposes its base interface.
+            (this.#parse5Stream.parser.treeAdapter as HTMLTreeAdapter).finishParsing();
+            this.stopped = true;
+            this.document.updateCurrentDocumentReadiness('interactive');
+            complete.resolve(undefined);
+          } catch (failure) { complete.reject(failure); }
+        },
+        discard: () => complete.reject(new DOMExceptionImpl('', DOMExceptionNames.abort)),
       });
     });
     this.#queueInput(start);
@@ -176,10 +179,12 @@ export class HTMLDocumentParser extends DocumentParser {
   }
 
   #queueInput(steps: () => void): void {
-    this.#queueTask(() => {
-      if (this.#parse5Stream.destroyed) return;
-      try { steps(); }
-      catch (error) { this.#parse5Stream.destroy(toError(error)); }
+    this.#queueTask({
+      run: () => {
+        if (this.#parse5Stream.destroyed) return;
+        try { steps(); }
+        catch (error) { this.#parse5Stream.destroy(toError(error)); }
+      },
     });
   }
 
@@ -201,7 +206,7 @@ export class HTMLDocumentParser extends DocumentParser {
       // Recheck here: another stylesheet can block before that task runs.
       if (this.document.hasScriptBlockingStyleSheets()) {
         this.document.waitForScriptBlockingStyleSheets().observe(
-          () => { this.#queueTask(() => { this.#runScript(element, write, resume); }); },
+          () => { this.#queueTask({ run: () => this.#runScript(element, write, resume) }); },
           (error) => { this.#parse5Stream.destroy(toError(error)); },
         );
         return;
@@ -212,7 +217,7 @@ export class HTMLDocumentParser extends DocumentParser {
         this.#resume(resume);
       } else {
         complete.observe(
-          () => { this.#queueTask(() => { this.#resume(resume); }); },
+          () => { this.#queueTask({ run: () => this.#resume(resume) }); },
           (error) => { this.#parse5Stream.destroy(toError(error)); },
         );
       }
@@ -227,8 +232,19 @@ export class HTMLDocumentParser extends DocumentParser {
     catch (error) { this.#parse5Stream.destroy(toError(error)); }
   }
 
-  #queueTask(steps: () => void): void {
-    this.document.env.responsibleEventLoop.queueTask(networkingTaskSource, this.document, bindAsyncContext(steps));
+  #queueTask(task: TaskRecord): void {
+    const document = this.document;
+    const discard = () => {
+      this.#stopInput();
+      this.#parse5Stream.destroy();
+      task.discard?.();
+    };
+    // Retain this parser's Document across Window reuse. After destruction, only
+    // internal discard cleanup runs on the owning loop, without a page-activity gate.
+    document.env.responsibleEventLoop.queueTask(networkingTaskSource, document.isDestroyed ? null : document, {
+      run: document.isDestroyed ? discard : bindAsyncContext(task.run),
+      discard,
+    });
   }
 }
 

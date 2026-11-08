@@ -66,7 +66,7 @@ describe('HTML printing', () => {
       expect(received).toBe(document);
       expect(document.body!.getAttribute('data-print')).toBe('prepared');
       order.push('host');
-      loop.queueTask(domManipulationTaskSource, null, () => { order.push('task'); });
+      loop.queueTask(domManipulationTaskSource, null, { run: () => { order.push('task'); } });
       loop.queueMicrotask(() => { order.push('microtask'); });
       expect(loop.runTaskTurn()).toBe(false);
       loop.performMicrotaskCheckpoint();
@@ -269,7 +269,7 @@ describe('HTML printing', () => {
     loop.runScriptEvaluation(env, () => { window.print(); });
     expect(events).toEqual(['root:beforeprint', 'root:beforeprint', 'root:afterprint']);
     let ran = false;
-    loop.queueTask(domManipulationTaskSource, null, () => { ran = true; });
+    loop.queueTask(domManipulationTaskSource, null, { run: () => { ran = true; } });
     expect(loop.runTaskTurn()).toBe(true);
     expect(ran).toBe(true);
   }));

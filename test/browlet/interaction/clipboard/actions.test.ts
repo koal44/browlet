@@ -65,17 +65,19 @@ describe('Clipboard §§5.3, 6 and 8: command admission and action flow', () => 
   it('allows a shortcut action in the keydown task to precede an already queued keyup task', () => {
     const { clipboard, document, loop, trace, target } = createFixture();
     target.addEventListener('copy', () => trace.push('copy'));
-    document.env.realm.queueGlobalTask(userInteractionTaskSource, () => {
-      trace.push('keydown'); clipboard.runAction('copy', document, 'user');
+    document.env.realm.queueGlobalTask(userInteractionTaskSource, {
+      run: () => {
+        trace.push('keydown'); clipboard.runAction('copy', document, 'user');
+      },
     });
-    document.env.realm.queueGlobalTask(userInteractionTaskSource, () => { trace.push('keyup'); });
+    document.env.realm.queueGlobalTask(userInteractionTaskSource, { run: () => { trace.push('keyup'); } });
     loop.runTaskTurn(); loop.runTaskTurn();
     expect(trace).toEqual(['keydown', 'copy', 'extract', 'replace', 'keyup']);
   });
 
   it('drops a queued menu action when Document destruction removes its tasks', () => {
     const { clipboard, document, loop, choose, replace } = createFixture();
-    document.env.realm.queueGlobalTask(userInteractionTaskSource, () => { document.destroy(); });
+    document.env.realm.queueGlobalTask(userInteractionTaskSource, { run: () => { document.destroy(); } });
     clipboard.queueAction('copy', document); loop.runTaskTurn();
     expect(loop.runTaskTurn()).toBe(false); expect(choose).not.toHaveBeenCalled(); expect(replace).not.toHaveBeenCalled();
   });
@@ -119,7 +121,7 @@ describe('Clipboard §§5.3, 6 and 8: command admission and action flow', () => 
     const { clipboard, document, target, trace, loop, remove } = createFixture();
     target.addEventListener('cut', () => trace.push('cut'));
     remove.mockImplementation(() => {
-      trace.push('delete'); document.env.realm.queueGlobalTask(userInteractionTaskSource, () => { trace.push('input'); });
+      trace.push('delete'); document.env.realm.queueGlobalTask(userInteractionTaskSource, { run: () => { trace.push('input'); } });
     });
     expect(clipboard.runAction('cut', document, 'user')).toBe(true);
     expect(trace).toEqual(['cut', 'editable:cut', 'extract', 'replace', 'delete']);

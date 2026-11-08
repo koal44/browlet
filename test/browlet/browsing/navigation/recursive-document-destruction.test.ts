@@ -72,7 +72,7 @@ describe('recursive Document destruction', () => {
     const currentNavigable = currentChild.getNodeNavigable()!;
     const pageTask = vi.fn();
     const discarded = vi.fn();
-    retired.env.queueTask('network', pageTask, { discardSteps: discarded });
+    retired.env.queueTask('network', { run: pageTask, discard: discarded });
     expect(retired.isFullyActive()).toBe(false);
     state.evictDocument();
     const completion = retired.destroyAndDescendants();
@@ -104,7 +104,7 @@ describe('recursive Document destruction', () => {
 
   it('completes for a Document already destroyed by unloading', async () => {
     const f = fixture();
-    f.document.env.queueTask('navigation-and-traversal', () => { f.document.destroy(); });
+    f.document.env.queueTask('navigation-and-traversal', { run: () => { f.document.destroy(); } });
     f.document.env.responsibleEventLoop.runTaskTurn();
     const after = vi.fn();
     await Promise.all([observe(f.document.destroyAndDescendants(after)), drain(f, [f.document])]);

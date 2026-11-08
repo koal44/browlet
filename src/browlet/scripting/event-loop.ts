@@ -1,4 +1,4 @@
-import { InternalError, type TaskCreationOptions } from '../../infra/index';
+import { InternalError, type TaskRecord } from '../../infra/index';
 import { bindAsyncContext, createMicrotaskQueue, type JSMicrotaskQueue } from '../../js-engine/index';
 import { Duration, monotonicClock, unsafeSharedCurrentTime, UnsafeMoment } from '../../timing/index';
 
@@ -63,6 +63,13 @@ export class EventLoop {
   /** Task executing on this loop, or null outside task execution. */
   get currentlyRunningTask(): Task | null {
     return this.#currentlyRunningTask;
+  }
+
+  /** Whether this loop is executing a task or its microtask checkpoint. */
+  get isRunningTaskOrCheckpoint(): boolean {
+    // Backends without Promise-job hooks cannot install a Task for each native job.
+    // The owning checkpoint still establishes which loop is executing the work.
+    return this.#currentlyRunningTask !== null || this.#performingMicrotaskCheckpoint;
   }
 
   /** The currently running context, or null outside modeled JavaScript execution. */
@@ -169,7 +176,7 @@ export class EventLoop {
     this.#runningTaskTurn = true;
     this.#currentlyRunningTask = oldestTask;
     try {
-      oldestTask.steps();
+      oldestTask.run();
     } catch (error) {
       taskError = { value: error };
     } finally {
@@ -302,7 +309,7 @@ export class EventLoop {
     steps: () => Result,
   ): Result {
     const hostEntryTask = this.#currentlyRunningTask === null
-      ? new Task(hostEntryTaskSource, null, () => {})
+      ? new Task(hostEntryTaskSource, null, { run: () => {} })
       : null;
     if (hostEntryTask !== null) this.#currentlyRunningTask = hostEntryTask;
 
@@ -363,7 +370,7 @@ export class EventLoop {
       waitForGoal(() => {
         if (queued) return;
         queued = true;
-        task.steps = () => {
+        task.run = () => {
           const stack = this.executionContextStack;
           const scriptEntryTasks = this.#scriptEntryTasks;
           const callbackStack = this.backupIncumbentEnvironmentStack;
@@ -470,7 +477,7 @@ export class EventLoop {
     const microtask = new Task(
       microtaskTaskSource,
       document,
-      steps,
+      { run: steps },
     );
 
     this.microtaskQueue.enqueueMicrotask(() => {
@@ -481,7 +488,7 @@ export class EventLoop {
       this.#performingMicrotaskCheckpoint = true;
       this.#currentlyRunningTask = microtask;
       try {
-        microtask.steps();
+        microtask.run();
       } finally {
         this.#currentlyRunningTask = null;
         this.#performingMicrotaskCheckpoint =
@@ -510,41 +517,29 @@ export class EventLoop {
   queueTask(
     source: TaskSource,
     document: DocumentImpl | null,
-    steps: () => void,
-    options: TaskCreationOptions = {},
+    task: TaskRecord,
   ): Task {
     // Keep HTML's otherwise implied destination and Document explicit.
-    const task = new Task(source, document, steps, options);
-    this.#enqueueTask(task);
-    return task;
+    const queuedTask = new Task(source, document, task);
+    this.#enqueueTask(queuedTask);
+    return queuedTask;
   }
 
   removeTask(task: Task): boolean {
     if (!this.#getTaskQueue(task.source).delete(task)) return false;
-    task.discardSteps?.();
+    task.discard?.();
     return true;
   }
 
   /** Discard queued tasks associated with a document, across all task sources. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#destroy-a-document
   removeTasksForDocument(document: DocumentImpl): void {
-    const discarded: Task[] = [];
-    for (const queue of this.#taskQueues) {
-      for (const task of queue) {
-        if (task.document === document) {
-          queue.delete(task);
-          discarded.push(task);
-        }
-      }
-    }
-    // Detach the whole batch before notifying waiting owners, including reentrant removal.
-    // A failed notification must not leave another removed task's owner waiting forever.
-    let failure: { error: unknown; } | undefined;
-    for (const task of discarded) {
-      try { task.discardSteps?.(); }
-      catch (error) { failure ??= { error }; }
-    }
-    if (failure !== undefined) throw failure.error;
+    this.#removeTasks((task) => task.document === document);
+  }
+
+  /** Remove every queued task, notifying its internal owner without running task steps. */
+  removeAllTasks(): void {
+    this.#removeTasks(() => true);
   }
 
   notifyTaskRunnabilityChanged(): void {
@@ -568,14 +563,34 @@ export class EventLoop {
     return this.#taskQueues;
   }
 
+  #removeTasks(matches: (task: Task) => boolean): void {
+    const discarded: Task[] = [];
+    for (const queue of this.#taskQueues) {
+      for (const task of queue) {
+        if (matches(task)) {
+          queue.delete(task);
+          discarded.push(task);
+        }
+      }
+    }
+    // Detach the whole batch before notifying waiting owners, including reentrant removal.
+    // A failed notification must not leave another removed task's owner waiting forever.
+    let failure: { error: unknown; } | undefined;
+    for (const task of discarded) {
+      try { task.discard?.(); }
+      catch (error) { failure ??= { error }; }
+    }
+    if (failure !== undefined) throw failure.error;
+  }
+
   /** Admit new and resumed tasks through the same worker-closing rule. */
   #enqueueTask(task: Task): void {
-    if (this.#destroyed) return;
+    if (this.#destroyed) { task.discard?.(); return; }
     // HTML §10.2.2: closing workers discard new tasks from every source.
     // Unqueued cancellation handles still report removal as false.
     const agent = this.agent;
     if ((agent instanceof DedicatedWorkerAgent || agent instanceof SharedWorkerAgent || agent instanceof ServiceWorkerAgent) &&
-      agent.globalScope?.closing === true) return;
+      agent.globalScope?.closing === true) { task.discard?.(); return; }
     this.#getTaskQueue(task.source).add(task);
     this.#requestTurnIfNeeded();
   }
@@ -767,9 +782,9 @@ export class Task {
   /** Fixed source identity used to select the task's queue. */
   source: TaskSource;
   /** Algorithm steps executed when this task is selected. */
-  steps: () => void;
+  run: () => void;
   /** Implementation-only completion for an owner whose queued task is removed. */
-  discardSteps?: () => void;
+  discard?: () => void;
   /** Nesting level inherited by timer initialization inside this task. */
   timerNestingLevel?: number;
   /** Additional readiness condition supplied by the task's owner. */
@@ -778,15 +793,14 @@ export class Task {
   constructor(
     source: TaskSource,
     document: DocumentImpl | null,
-    steps: () => void,
-    options: TaskCreationOptions = {},
+    task: TaskRecord,
   ) {
     this.document = document;
     this.source = source;
-    this.steps = steps;
-    this.discardSteps = options.discardSteps;
-    this.timerNestingLevel = options.timerNestingLevel;
-    this.#isRunnable = options.isRunnable;
+    this.run = task.run;
+    this.discard = task.discard;
+    this.timerNestingLevel = task.timerNestingLevel;
+    this.#isRunnable = task.isRunnable;
   }
 
   get isRunnable(): boolean {

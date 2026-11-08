@@ -220,13 +220,13 @@ describe('Clipboard §7.3.3: write', () => {
     await started.promise; expect(settled).toBe(false); expect(f.change).not.toHaveBeenCalled();
     const delivered = Promise.withResolvers<() => void>();
     const queue = f.env.queueTask.bind(f.env);
-    vi.spyOn(f.env, 'queueTask').mockImplementation((source, steps) => {
-      if (source !== 'clipboard') return queue(source, steps);
-      delivered.resolve(steps); return { remove() {} };
+    vi.spyOn(f.env, 'queueTask').mockImplementation((source, task) => {
+      if (source !== 'clipboard') return queue(source, task);
+      delivered.resolve(task.run); return { remove() {} };
     });
     pending.resolve(true); const delivery = await delivered.promise;
     expect(settled).toBe(false); expect(f.change).not.toHaveBeenCalled();
-    f.env.realm.queueGlobalTask(clipboardTaskSource, delivery);
+    f.env.realm.queueGlobalTask(clipboardTaskSource, { run: delivery });
     expect(await result).toEqual({ undefined: true, promise: true });
     expect(f.change).toHaveBeenCalledTimes(1);
   });

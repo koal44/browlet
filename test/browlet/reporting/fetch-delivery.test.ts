@@ -82,8 +82,10 @@ describe('Reporting through Fetch', () => {
     );
     const delivery = observe(env.userAgent.attemptReportDelivery(endpoint, env.origin, [report]));
     const response = await received.promise;
-    await new Promise<void>((resolve) => realm.queueGlobalTask(navigationAndTraversalTaskSource, () => {
-      realm.getAssociatedDocument().destroy(); resolve();
+    await new Promise<void>((resolve) => realm.queueGlobalTask(navigationAndTraversalTaskSource, {
+      run: () => {
+        realm.getAssociatedDocument().destroy(); resolve();
+      },
     }));
     response.writeHead(204); response.end();
     expect(await delivery).toBe('success');
@@ -151,9 +153,11 @@ describe('Reporting through Fetch', () => {
         return result;
       });
       const destroyed = Promise.withResolvers<void>();
-      const destroy = () => realm.queueGlobalTask(navigationAndTraversalTaskSource, () => {
-        document.destroy();
-        destroyed.resolve();
+      const destroy = () => realm.queueGlobalTask(navigationAndTraversalTaskSource, {
+        run: () => {
+          document.destroy();
+          destroyed.resolve();
+        },
       });
 
       if (destruction === 'before dispatch') {

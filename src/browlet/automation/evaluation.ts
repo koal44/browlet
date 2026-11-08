@@ -198,9 +198,11 @@ class LocalEvaluation {
     // eslint-disable-next-line no-restricted-globals -- Automation command failures belong to the Node caller, not a page realm.
     if (this.#disposed) throw new Error('Evaluation context was destroyed');
     const realm = this.#realm;
-    const task = realm.env.queueTask('automation', () => {
-      this.#tasks.delete(task);
-      realm.agent.eventLoop.runScriptEvaluation(realm.env, steps);
+    const task = realm.env.queueTask('automation', {
+      run: () => {
+        this.#tasks.delete(task);
+        realm.agent.eventLoop.runScriptEvaluation(realm.env, steps);
+      },
     });
     this.#tasks.add(task);
   }

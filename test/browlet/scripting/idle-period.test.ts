@@ -112,10 +112,12 @@ describe('Window idle periods', () => {
     const fixture = createFixture();
     const order: string[] = [];
     fixture.hooks.startIdlePeriod.mockImplementation(() => { order.push('idle'); });
-    fixture.loop.queueTask(domManipulationTaskSource, null, () => { order.push('first'); });
-    fixture.loop.queueTask(domManipulationTaskSource, null, () => {
-      order.push('last');
-      fixture.loop.queueMicrotask(() => { order.push('checkpoint'); });
+    fixture.loop.queueTask(domManipulationTaskSource, null, { run: () => { order.push('first'); } });
+    fixture.loop.queueTask(domManipulationTaskSource, null, {
+      run: () => {
+        order.push('last');
+        fixture.loop.queueMicrotask(() => { order.push('checkpoint'); });
+      },
     });
 
     expect(fixture.loop.runTaskTurn()).toBe(true);
@@ -127,10 +129,12 @@ describe('Window idle periods', () => {
 
   it('does not start while a checkpoint has queued another runnable task', () => runInHostTask(() => {
     const fixture = createFixture();
-    fixture.loop.queueTask(domManipulationTaskSource, null, () => {
-      fixture.loop.queueMicrotask(() => {
-        fixture.loop.queueTask(domManipulationTaskSource, null, () => {});
-      });
+    fixture.loop.queueTask(domManipulationTaskSource, null, {
+      run: () => {
+        fixture.loop.queueMicrotask(() => {
+          fixture.loop.queueTask(domManipulationTaskSource, null, { run: () => {} });
+        });
+      },
     });
     fixture.loop.runTaskTurn();
     expect(fixture.hooks.startIdlePeriod).not.toHaveBeenCalled();
@@ -141,7 +145,7 @@ describe('Window idle periods', () => {
   it('allows idle work when the remaining task is blocked by document activity', () => {
     const fixture = createFixture();
     const steps = vi.fn();
-    fixture.loop.queueTask(domManipulationTaskSource, fixture.window.document, steps);
+    fixture.loop.queueTask(domManipulationTaskSource, fixture.window.document, { run: steps });
     const entry = fixture.traversable.activeSessionHistoryEntry;
     fixture.traversable.activeSessionHistoryEntry = fixture.window.env.createSessionHistoryEntry(entry.url, new DocumentState());
 
@@ -168,9 +172,9 @@ describe('Window idle periods', () => {
     const fixture = createFixture();
     const idleSteps = vi.fn();
     fixture.hooks.startIdlePeriod.mockImplementationOnce(() => {
-      fixture.window.env.realm.queueGlobalTask(domManipulationTaskSource, idleSteps);
+      fixture.window.env.realm.queueGlobalTask(domManipulationTaskSource, { run: idleSteps });
     });
-    fixture.loop.queueTask(domManipulationTaskSource, null, () => {});
+    fixture.loop.queueTask(domManipulationTaskSource, null, { run: () => {} });
     fixture.turns.shift()!();
     expect(idleSteps).not.toHaveBeenCalled();
     expect(fixture.turns).toHaveLength(1);

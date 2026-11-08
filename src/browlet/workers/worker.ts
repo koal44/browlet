@@ -81,11 +81,13 @@ export class WorkerImpl extends EventTargetImpl {
   // https://html.spec.whatwg.org/multipage/webappapis.html#report-an-exception
   reportError(errorInfo: ErrorInformation): void {
     const diagnostics = { ...errorInfo, error: null };
-    this.env.queueTask('dom-manipulation', () => {
-      const notHandled = this.fireEvent('error', ErrorEventImpl, (event) => {
-        event.initialize({ ...diagnostics, cancelable: true });
-      });
-      if (notHandled) this.env.reportErrorInformation(diagnostics);
+    this.env.queueTask('dom-manipulation', {
+      run: () => {
+        const notHandled = this.fireEvent('error', ErrorEventImpl, (event) => {
+          event.initialize({ ...diagnostics, cancelable: true });
+        });
+        if (notHandled) this.env.reportErrorInformation(diagnostics);
+      },
     });
     // TODO(HTML §8.1.4.6): A terminated parent cannot run this task. Keep a route
     // to surviving owners outside that parent's isolate, suppressing dead-parent

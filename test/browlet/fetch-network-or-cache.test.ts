@@ -41,7 +41,8 @@ describe('HTTP network-or-cache request preparation', () => {
       referer: f.origin + '/referrer', origin: f.origin, 'sec-purpose': 'prefetch',
       'sec-fetch-site': 'same-origin', 'sec-fetch-mode': 'no-cors', 'accept-encoding': 'gzip, deflate, br',
     });
-    expect(f.request.headerList.list.map(([name]) => name)).toEqual(['Accept']);
+    expect(f.request.headerList.list.map(([name]) => name)).toEqual(['Accept', 'Accept-Language']);
+    expect(seen.headers['accept-language']).toBe(f.env.userAgent.defaultAcceptLanguage);
     expect(f.request.body.stream.disturbed).toBe(true);
     expect(progress.reduce((sum, value) => sum + value, 0)).toBe(3);
     expect(response.requestIncludesCredentials).toBe(true);

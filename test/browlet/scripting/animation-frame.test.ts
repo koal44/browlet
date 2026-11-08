@@ -285,13 +285,15 @@ function createWindowFixture() {
 /** Callback cleanup checkpoints run at an HTML task boundary, not a bare host call. */
 function deliverFrame(document: DocumentImpl, timestamp: number): Promise<void> {
   return new Promise((resolve, reject) => {
-    document.env.realm.queueGlobalTask(renderingTaskSource, () => {
-      try { document.animationFrameController.runCallbacks(timestamp); resolve(); }
-      catch (error) {
+    document.env.realm.queueGlobalTask(renderingTaskSource, {
+      run: () => {
+        try { document.animationFrameController.runCallbacks(timestamp); resolve(); }
+        catch (error) {
         // Preserve the original failure, including exceptions from another realm.
         // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
-        reject(error);
-      }
+          reject(error);
+        }
+      },
     });
   });
 }

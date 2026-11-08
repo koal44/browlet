@@ -169,7 +169,7 @@ describe('recursive Document unloading', () => {
 
   it('rejects when the initial task is discarded instead of leaving the queue occupied', async () => {
     const f = fixture();
-    f.document.env.queueTask('network', () => { f.document.destroy(); });
+    f.document.env.queueTask('network', { run: () => { f.document.destroy(); } });
     const after = vi.fn();
     const result = enqueue(f, () => f.document.unloadAndDescendants(null, after));
     await Promise.all([expect(result).rejects.toThrow('Document unload task was discarded'), drain(f, [f.document])]);
@@ -189,7 +189,7 @@ describe('recursive Document unloading', () => {
       f.turns.shift()!();
       await runInHostTask(() => { f.document.env.responsibleEventLoop.runTaskTurn(); });
       await expect.poll(() => child.env.responsibleEventLoop.getTaskQueue(taskSources['navigation-and-traversal']).size).toBe(1);
-      f.document.env.queueTask('network', () => { f.document.destroy(); });
+      f.document.env.queueTask('network', { run: () => { f.document.destroy(); } });
       await drain(f, [f.document, child]);
     })()]);
     expect(childEvent).not.toHaveBeenCalled();

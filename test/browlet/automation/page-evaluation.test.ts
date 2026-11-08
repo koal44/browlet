@@ -89,9 +89,11 @@ describe('local page evaluation', () => {
     await page.evaluate(() => 0);
 
     await new Promise<void>((resolve) => {
-      document.env.queueTask('automation', () => {
-        document.destroy();
-        resolve();
+      document.env.queueTask('automation', {
+        run: () => {
+          document.destroy();
+          resolve();
+        },
       });
     });
     expect(rejection).toBeInstanceOf(Error);

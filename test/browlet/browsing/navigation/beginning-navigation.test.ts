@@ -111,7 +111,9 @@ describe('beginning navigation', () => {
     const base = vi.spyOn(document, 'getBaseURL');
     navigable.navigate(url, document, {}, env);
     expect(base).toHaveBeenCalledOnce();
-    expect(queue).toHaveBeenCalledExactlyOnceWith('navigation-and-traversal', expect.any(Function));
+    expect(queue).toHaveBeenCalledExactlyOnceWith('navigation-and-traversal', {
+      run: expect.any(Function) as unknown, discard: expect.any(Function) as unknown,
+    });
     expect(failed).not.toHaveBeenCalled();
     expect(fragment).not.toHaveBeenCalled();
 

@@ -77,7 +77,7 @@ describe('Navigation Timing delivery', () => {
       window.queueMicrotask(() => { order.push('microtask'); });
     });
     // HTML runs load completion in a DOM-manipulation task; its ending checkpoint precedes observer delivery.
-    env.queueTask('dom-manipulation', () => { document.finishLoading(); });
+    env.queueTask('dom-manipulation', { run: () => { document.finishLoading(); } });
     runTask();
     expect(order).not.toContain('observer');
     runTask();

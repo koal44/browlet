@@ -174,8 +174,10 @@ async function fire(window: WindowImpl, target: SessionHistoryEntry, type: Navig
 /** Run the producer on the real task owner while retaining thrown failures for the test. */
 async function inTask(window: WindowImpl, steps: () => void): Promise<void> {
   const failures: unknown[] = [];
-  window.env.queueTask('navigation-and-traversal', () => {
-    try { steps(); } catch (error) { failures.push(error); }
+  window.env.queueTask('navigation-and-traversal', {
+    run: () => {
+      try { steps(); } catch (error) { failures.push(error); }
+    },
   });
   await runInHostTask(() => { expect(window.env.responsibleEventLoop.runTaskTurn()).toBe(true); });
   if (failures.length !== 0) throw failures[0];

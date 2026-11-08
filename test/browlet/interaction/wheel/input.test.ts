@@ -287,7 +287,7 @@ describe('Pointer Events §12: wheel input', () => {
     input.queue(wheelInput());
     loop.runTaskTurn();
     const clear = vi.spyOn(input, 'clear');
-    document.env.realm.queueGlobalTask(userInteractionTaskSource, () => { document.destroy(); });
+    document.env.realm.queueGlobalTask(userInteractionTaskSource, { run: () => { document.destroy(); } });
     input.queue(wheelInput(false));
     loop.runTaskTurn();
     expect(clear).toHaveBeenCalled();

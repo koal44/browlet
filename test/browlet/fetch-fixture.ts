@@ -12,7 +12,6 @@ import type { FetchController } from '../../src/fetch/controller';
 import type { FetchEnvironment } from '../../src/fetch/environment';
 import type { FetchRequest } from '../../src/fetch/request';
 import type { FetchResponse } from '../../src/fetch/response';
-import type { TaskCreationOptions } from '../../src/infra/tasks';
 import type { JSEnvironment } from '../../src/js-engine/environment';
 import { BindingWorld, type BindingContext } from '../../src/web-idl/index';
 import { createControllerFixture } from '../fetch/controller-fixture';
@@ -42,12 +41,14 @@ export function createFetchOperation(request: FetchRequest, env: FetchEnvironmen
 export function nextFetchTaskError(env: JSEnvironment) {
   const failure = Promise.withResolvers<unknown>();
   const queue = env.queueTask.bind(env);
-  const spy = vi.spyOn(env, 'queueTask').mockImplementation((source, steps, options?: TaskCreationOptions) => {
-    if (source === 'timer' && options !== undefined) return queue(source, steps, options);
-    if (source !== 'network') return queue(source, steps);
-    return queue(source, () => {
-      try { steps(); }
-      catch (error) { spy.mockRestore(); failure.resolve(error); }
+  const spy = vi.spyOn(env, 'queueTask').mockImplementation((source, task) => {
+    if (source !== 'network') return queue(source, task);
+    return queue(source, {
+      ...task,
+      run: () => {
+        try { task.run(); }
+        catch (error) { spy.mockRestore(); failure.resolve(error); }
+      },
     });
   });
   return failure.promise;
@@ -64,7 +65,7 @@ export function createFetchWindow(userAgent = createManualUserAgent()) {
     realm,
     document: traversable.activeDocument,
     queueTask(steps: () => void) {
-      context.getEnvironment().queueTask('network', steps);
+      context.getEnvironment().queueTask('network', { run: steps });
     },
     networkingTasks() {
       return [...eventLoop.getTaskQueue(networkingTaskSource)];

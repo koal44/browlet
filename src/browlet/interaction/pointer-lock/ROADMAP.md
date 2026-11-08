@@ -101,8 +101,10 @@ lock acquisition cannot make that state available by itself.
   HTML's has-focus steps: top-level system focus and the focused-area chain through
   child navigables. The query belongs to Document, not the PointerLock controller.
   Visibility/full activity cannot replace it; public hasFocus exposure is deferred.
-- **HTML §6.4 activation:** the existing `Window.hasTransientActivation()`
-  throws pending duration/expiry and input notification.
+- **HTML §6.4 activation:** `Window.hasTransientActivation()` now checks the
+  retained timestamp and expiry. The input/automation notification producer
+  remains unfinished. A Window without activation rejects acquisition with
+  NotAllowedError; the regression exercises that predicate without a mock.
 - **Native input:** `acquire()`, `supportsUnadjustedMovement()`, and
   `restoreCursor()` throw. The adapter owns cursor visibility/restoration,
   raw motion, acquisition refusal, OS routing and §2.3 assistive-technology

@@ -21,19 +21,21 @@ describe('continuation-based event-loop spinning', () => {
     const context = new AsyncLocalStorage<string>();
     const ready: (() => void)[] = [];
     const order: string[] = [];
-    const task = loop.queueTask(networkingTaskSource, null, () => {
-      context.run('original', () => {
-        loop.spinUntil((resume) => {
-          expect(loop.currentlyRunningTask).toBeNull();
-          ready.push(resume);
-        }, () => {
-          expect(loop.currentlyRunningTask).toBe(task);
-          expect(context.getStore()).toBe('original');
-          order.push('resumed');
+    const task = loop.queueTask(networkingTaskSource, null, {
+      run: () => {
+        context.run('original', () => {
+          loop.spinUntil((resume) => {
+            expect(loop.currentlyRunningTask).toBeNull();
+            ready.push(resume);
+          }, () => {
+            expect(loop.currentlyRunningTask).toBe(task);
+            expect(context.getStore()).toBe('original');
+            order.push('resumed');
+          });
         });
-      });
+      },
     });
-    loop.queueTask(networkingTaskSource, null, () => { order.push('other task'); });
+    loop.queueTask(networkingTaskSource, null, { run: () => { order.push('other task'); } });
 
     while (turns.length > 0) turns.shift()!();
     expect(order).toEqual(['other task']);
@@ -53,27 +55,29 @@ describe('continuation-based event-loop spinning', () => {
     const context = new JSExecutionContext({ realm: env.realm, scriptOrModule: new JSScriptOrModule(env.realm, null) });
     const failure = new Error('continuation failed');
     const cleanup = vi.fn();
-    const task = loop.queueTask(networkingTaskSource, document, () => {
-      loop.prepareToRunScript(env);
-      loop.executionContextStack.push(context);
-      loop.prepareToRunCallback(env);
-      loop.queueMicrotask(() => { checkpointContexts.push(loop.runningExecutionContext); });
-      loop.spinUntil((resume) => { ready.push(resume); }, () => {
-        try {
-          expect(loop.currentlyRunningTask).toBe(task);
-          expect(loop.entryExecutionContext).toBe(env.realmExecutionContext);
-          expect(loop.runningExecutionContext).toBe(context);
-          expect(context.skipWhenDeterminingIncumbent).toBe(1);
-          expect(loop.getIncumbentEnvironment()).toBe(env);
-          expect(task.scriptEvaluationEnvironments.has(env)).toBe(true);
-          if (throws) throw failure;
-        } finally {
-          loop.cleanUpAfterRunningCallback(env);
-          loop.executionContextStack.pop();
-          loop.cleanUpAfterRunningScript(env);
-          cleanup();
-        }
-      });
+    const task = loop.queueTask(networkingTaskSource, document, {
+      run: () => {
+        loop.prepareToRunScript(env);
+        loop.executionContextStack.push(context);
+        loop.prepareToRunCallback(env);
+        loop.queueMicrotask(() => { checkpointContexts.push(loop.runningExecutionContext); });
+        loop.spinUntil((resume) => { ready.push(resume); }, () => {
+          try {
+            expect(loop.currentlyRunningTask).toBe(task);
+            expect(loop.entryExecutionContext).toBe(env.realmExecutionContext);
+            expect(loop.runningExecutionContext).toBe(context);
+            expect(context.skipWhenDeterminingIncumbent).toBe(1);
+            expect(loop.getIncumbentEnvironment()).toBe(env);
+            expect(task.scriptEvaluationEnvironments.has(env)).toBe(true);
+            if (throws) throw failure;
+          } finally {
+            loop.cleanUpAfterRunningCallback(env);
+            loop.executionContextStack.pop();
+            loop.cleanUpAfterRunningScript(env);
+            cleanup();
+          }
+        });
+      },
     });
 
     while (turns.length > 0) turns.shift()!();
@@ -155,9 +159,11 @@ describe('continuation-based event-loop spinning', () => {
         }
       });
     };
-    loop.queueTask(networkingTaskSource, document, () => {
-      loop.queueMicrotask(() => { start('microtask'); });
-      start('task');
+    loop.queueTask(networkingTaskSource, document, {
+      run: () => {
+        loop.queueMicrotask(() => { start('microtask'); });
+        start('task');
+      },
     });
     while (turns.length > 0) turns.shift()!();
 
@@ -177,8 +183,10 @@ describe('continuation-based event-loop spinning', () => {
     const entry = traversable.activeSessionHistoryEntry;
     const ready: (() => void)[] = [];
     const continuation = vi.fn();
-    const task = loop.queueTask(networkingTaskSource, document, () => {
-      loop.spinUntil((resume) => { ready.push(resume); }, continuation);
+    const task = loop.queueTask(networkingTaskSource, document, {
+      run: () => {
+        loop.spinUntil((resume) => { ready.push(resume); }, continuation);
+      },
     });
     while (turns.length > 0) turns.shift()!();
     traversable.activeSessionHistoryEntry = document.env.createSessionHistoryEntry(entry.url, new DocumentState());
@@ -197,19 +205,21 @@ describe('continuation-based event-loop spinning', () => {
     const loop = createManualEventLoop({ requestTurn: (steps) => { turns.push(steps); } });
     const order: string[] = [];
     const tasks: (Task | null)[] = [];
-    const task = loop.queueTask(networkingTaskSource, null, () => {
-      loop.spinUntil((ready) => { ready(); }, () => {
-        tasks.push(loop.currentlyRunningTask);
-        order.push('first');
-        loop.spinUntil((ready) => {
-          expect(order).toEqual(['first']);
-          ready();
-          expect(order).toEqual(['first']);
-        }, () => {
+    const task = loop.queueTask(networkingTaskSource, null, {
+      run: () => {
+        loop.spinUntil((ready) => { ready(); }, () => {
           tasks.push(loop.currentlyRunningTask);
-          order.push('second');
+          order.push('first');
+          loop.spinUntil((ready) => {
+            expect(order).toEqual(['first']);
+            ready();
+            expect(order).toEqual(['first']);
+          }, () => {
+            tasks.push(loop.currentlyRunningTask);
+            order.push('second');
+          });
         });
-      });
+      },
     });
     while (turns.length > 0) turns.shift()!();
     expect(order).toEqual(['first', 'second']);
@@ -224,11 +234,13 @@ describe('continuation-based event-loop spinning', () => {
     const loop = env.responsibleEventLoop;
     const finished = Promise.withResolvers<void>();
     const order: string[] = [];
-    env.queueTask('network', () => {
-      order.push('initial task');
-      loop.spinUntil((ready) => {
-        env.runInParallel(() => { order.push('goal'); ready(); });
-      }, () => { order.push('continuation'); finished.resolve(); });
+    env.queueTask('network', {
+      run: () => {
+        order.push('initial task');
+        loop.spinUntil((ready) => {
+          env.runInParallel(() => { order.push('goal'); ready(); });
+        }, () => { order.push('continuation'); finished.resolve(); });
+      },
     });
     await finished.promise;
     expect(order).toEqual(['initial task', 'goal', 'continuation']);

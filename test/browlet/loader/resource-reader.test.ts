@@ -6,6 +6,7 @@ import { FetchResponse } from '../../../src/fetch/response';
 import { ReadableStreamImpl } from '../../../src/streams/readable-stream';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { ResourceReader } from '../../../src/browlet/loader/resource-reader';
+import { createFetchWindow } from '../fetch-fixture';
 
 describe('ResourceReader', () => {
   it('returns a supplied HTML or XML type without waiting for body bytes', async () => {
@@ -146,8 +147,16 @@ describe('ResourceReader', () => {
     response.headerList.append('Content-Type', 'text/html');
     await observe(reader.determineMIMEType());
     const tasks: (() => void)[] = [];
-    vi.spyOn(userAgent.sandbox, 'queueGlobalFetchTask').mockImplementation((_global, steps) => {
-      tasks.push(steps);
+    vi.spyOn(userAgent.sandbox, 'queueGlobalFetchTask').mockImplementation((_global, { run, discard }) => {
+      tasks.push(run);
+      return {
+        remove() {
+          const index = tasks.indexOf(run);
+          if (index === -1) return;
+          tasks.splice(index, 1);
+          discard?.();
+        },
+      };
     });
     stream.enqueueChunk(Uint8Array.of(1));
     const result = observe(reader.read());
@@ -190,8 +199,16 @@ describe('ResourceReader', () => {
     const clock = controlSniffingClock(userAgent);
     const reads = vi.spyOn(response.body!, 'readChunk');
     const tasks: (() => void)[] = [];
-    vi.spyOn(userAgent.sandbox, 'queueGlobalFetchTask').mockImplementation((_global, steps) => {
-      tasks.push(steps);
+    vi.spyOn(userAgent.sandbox, 'queueGlobalFetchTask').mockImplementation((_global, { run, discard }) => {
+      tasks.push(run);
+      return {
+        remove() {
+          const index = tasks.indexOf(run);
+          if (index === -1) return;
+          tasks.splice(index, 1);
+          discard?.();
+        },
+      };
     });
     const mimeType = observe(reader.determineMIMEType());
     await expect.poll(() => reads.mock.calls.length).toBe(1);
@@ -353,6 +370,90 @@ describe('ResourceReader', () => {
     expect(stream.locked).toBe(false);
     await expect(observe(reader.determineMIMEType())).rejects.toBe(reason);
     expect(() => reader.read()).toThrow('Determine the MIME type before consuming the resource body');
+  });
+
+  it.each([
+    ['sniffing', 'pending'], ['sniffing', 'errored'], ['body', 'pending'], ['body', 'errored'],
+  ] as const)('rejects %s when destruction discards the queued read from a %s source', async (phase, source) => {
+    const owner = createFetchWindow();
+    const env = owner.context.getEnvironment();
+    const clock = controlSniffingClock(env.userAgent);
+    owner.queueTask(() => owner.document!.destroy());
+    const response = new FetchResponse();
+    response.body = source === 'pending'
+      ? new FetchBody(ReadableStreamImpl.createDefault(undefined, undefined, 0, () => 1, env), env)
+      : FetchBody.fromBytes(Uint8Array.of(1), env);
+    const reader = new ResourceReader(response, env.userAgent);
+    const getReader = vi.spyOn(response.body.stream, 'getDefaultReader');
+    if (phase === 'body') {
+      response.headerList.append('Content-Type', 'text/html');
+      await observe(reader.determineMIMEType());
+    }
+    const failed = vi.fn();
+    const completed = vi.fn();
+    if (phase === 'sniffing') reader.determineMIMEType().observe(completed, failed);
+    else reader.read().observe(completed, failed);
+    expect(owner.runTask()).toBe(true);
+    expect(owner.document!.isDestroyed).toBe(true);
+    await expect.poll(() => failed.mock.calls.length).toBe(1);
+    expect(failed).toHaveBeenCalledWith(expect.objectContaining({ name: source === 'errored' ? 'TypeError' : 'InternalError' }));
+    if (source === 'errored') expect(failed.mock.calls[0]![0]).toBe(response.body.stream.state.storedError);
+    expect(completed).not.toHaveBeenCalled();
+    expect(getReader).not.toHaveBeenCalled();
+    expect(response.body.stream.locked).toBe(false);
+    if (phase === 'sniffing') expect(clock.timers[0]!.remove).toHaveBeenCalledOnce();
+    while (owner.runTask()) { /* Drain internal discard cleanup, never the removed page task. */ }
+    expect(failed).toHaveBeenCalledOnce();
+  });
+
+  it.each([false, true])('rejects discarded cancellation and releases the source lock (already destroyed: %s)', async (alreadyDestroyed) => {
+    const owner = createFetchWindow();
+    const env = owner.context.getEnvironment();
+    const cancelSource = vi.fn();
+    const stream = ReadableStreamImpl.createDefault(undefined, cancelSource, 0, () => 1, env);
+    const response = new FetchResponse();
+    response.headerList.append('Content-Type', 'text/html');
+    response.body = new FetchBody(stream, env);
+    const reader = new ResourceReader(response, env.userAgent);
+    await observe(reader.determineMIMEType());
+    const readFailed = vi.fn();
+    reader.read().observe(vi.fn(), readFailed);
+    expect(owner.runTask()).toBe(true);
+    expect(stream.locked).toBe(true);
+    owner.queueTask(() => owner.document!.destroy());
+    if (alreadyDestroyed) expect(owner.runTask()).toBe(true);
+    const reason = new Error('navigation canceled');
+    const finished = vi.fn();
+    const failed = vi.fn();
+    const cancellation = reader.cancel(reason);
+    cancellation.observe(finished, failed);
+    expect(reader.cancel(new Error('later cancellation'))).toBe(cancellation);
+    expect(owner.runTask()).toBe(true);
+    expect(owner.document!.isDestroyed).toBe(true);
+    await expect.poll(() => failed.mock.calls.length).toBe(1);
+    expect(failed).toHaveBeenCalledWith(expect.objectContaining({ name: 'InternalError' }));
+    expect(finished).not.toHaveBeenCalled();
+    expect(readFailed).toHaveBeenCalledExactlyOnceWith(reason);
+    expect(stream.locked).toBe(false);
+    expect(cancelSource).not.toHaveBeenCalled();
+    while (owner.runTask()) { /* Late read failure cannot replace the retained cancellation reason. */ }
+    expect(readFailed).toHaveBeenCalledOnce();
+    await expect(observe(reader.read())).rejects.toBe(reason);
+  });
+
+  it('releases the source lock when its cancellation algorithm throws', async () => {
+    const { reader, stream, cancelled, response } = createResource();
+    response.headerList.append('Content-Type', 'text/html');
+    await observe(reader.determineMIMEType());
+    const readFailed = vi.fn();
+    reader.read().observe(vi.fn(), readFailed);
+    await expect.poll(() => stream.locked).toBe(true);
+    const reason = new Error('navigation canceled');
+    const failure = new Error('source cancellation failed');
+    cancelled.mockImplementation(() => { throw failure; });
+    await expect(observe(reader.cancel(reason))).rejects.toBe(failure);
+    expect(readFailed).toHaveBeenCalledExactlyOnceWith(reason);
+    expect(stream.locked).toBe(false);
   });
 
   it.each([new Error('connection lost during inspection'), undefined])(

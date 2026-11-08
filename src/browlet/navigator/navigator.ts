@@ -17,7 +17,7 @@ import { NavigatorPluginsMixin, type PluginArrayImpl, type MimeTypeArrayImpl } f
 // https://html.spec.whatwg.org/multipage/system-state.html#the-navigator-object
 // TODO(HTML §8.10): Protocol handler registration retains explicit owner dependencies.
 export class NavigatorImpl {
-  /** Environment shared with this Navigator's owning Window. */
+  /** Relevant settings, shared with this Navigator's owning Window. */
   env: WindowEnvironment;
   /** Identification behavior composed with this Navigator's relevant settings. */
   #navigatorIDMixin: NavigatorIDMixin;
@@ -91,6 +91,12 @@ export class NavigatorImpl {
     return userAgent.webDriverBiDiEmulatedMaxTouchPoints(this.env) ?? userAgent.getMaxTouchPoints();
   }
 
+  /** Return the live activation view associated with this Navigator's Window. */
+  // https://html.spec.whatwg.org/multipage/interaction.html#dom-navigator-useractivation
+  get userActivation(): UserActivationImpl {
+    return this.env.window.userActivation;
+  }
+
   /** Queue selected language tags before their preference/emulation source changes. */
   queueLanguageChange(tags: readonly [string, ...string[]], emulationUpdated = false): void {
     this.#navigatorLanguageMixin.queueLanguageChange(tags, emulationUpdated);
@@ -110,11 +116,6 @@ export class NavigatorImpl {
   }
 
   javaEnabled(): boolean { return this.#navigatorPluginsMixin.javaEnabled(); }
-  /** Return the live activation view associated with this Navigator's Window. */
-  // https://html.spec.whatwg.org/multipage/interaction.html#dom-navigator-useractivation
-  get userActivation(): UserActivationImpl {
-    return this.env.window.userActivation;
-  }
 }
 
 /*

@@ -59,8 +59,8 @@ original fetch and uses a parallel response queue. It still belongs to the
 initiating client's FetchGroup for policy and termination. The regression in
 `test/browlet/fetch-http-cache.test.ts` verifies refresh and body completion while
 the client Document is inactive; previously even HTTP dispatch stalled. This
-follows Fetch §4.6's parallel revalidation step. Separating the client type from
-the complete execution-environment contract remains an architecture follow-up.
+follows Fetch §4.6's parallel revalidation step. The initiating client and
+complete execution environment have separate types.
 
 - **Early Hints consumption:** The response URL handoff above is implemented.
   HTML's reserved-environment callback prepares headers and retains its Document
@@ -79,12 +79,14 @@ the complete execution-environment contract remains an architecture follow-up.
   Client Hints and other request-feature owners still need their definitions and
   callers; this is not a general network-request blocking check. See the
   [policy roadmap](../browlet/browsing/policy/permissions-policy/ROADMAP.md#915-request-feature-checks).
-- **Group cancellation:** `FetchGroup.cancel()` is a provisional no-op. Complete
-  HTML's task/data disposal and keepalive/deferred rules; controller cancellation
-  and non-keepalive group termination already work.
-  The real Speculation-Rules body test reproduces missing failure delivery after
-  `Document.abort()`; Eric approved its expected-failure classification on 2026-11-06.
-  See the [header loader audit](../browlet/loader/ROADMAP.md#speculation-rules-header-loading).
+- **Group cancellation:** `FetchGroup.cancel()` now snapshots unfinished ordinary
+  requests and their pending body delivery, including after request completion. It reports
+  canceled transport or delivery, letting Document retain the `fetch` blocking reason. The Speculation-Rules
+  body-cancellation regression is now an ordinary passing test. Pending keepalive
+  requests throw before partial group cancellation; upload/response bookkeeping
+  disposal, retrying consumers, and deferred processing remain explicit. See the
+  [cancellation audit](#document-fetch-cancellation) and
+  [header loader audit](../browlet/loader/ROADMAP.md#speculation-rules-header-loading).
 - **Speculation-rules destination:** HTML's header loader now uses the internal
   `speculationrules` destination and subresource classification. Fetch still lacks
   that destination (`SPEC_GAP(speculation-fetch-destination)`,
@@ -129,6 +131,146 @@ Undici's cache stores hide candidate selection and cannot simply replace ours:
 older-Date selection for overlapping variants in both backends at 8.10.0.
 It remains an ordinary failing external probe, outside the unit suite. Revisit
 reuse only with correct selection, partitioning, and header/body preservation.
+
+## Document Fetch cancellation
+
+HTML §7.5.11 now calls the existing controller machinery through FetchGroup.
+Cancellation snapshots unfinished, ongoing requests and controllers with pending
+body delivery, including after the request is done. Its boolean reports canceled
+transport or delivery. Existing aborted/terminated states and serialized reasons
+are retained; an ongoing controller is terminated. Completed requests without
+pending delivery and absent controllers are left alone. Newly registered
+requests are outside the snapshot, and unsent deferred requests stay with their
+invocation owner. Pending keepalive requests hit an explicit throwing boundary
+before partially canceling the group, as Eric approved.
+
+`SPEC_GAP(document-fetch-cancellation)`: HTML says to cancel fetch algorithms but
+does not specify which Fetch controller transition implements that instruction.
+`SPEC_CLASH(document-fetch-cancellation-error)`: Browlet uses termination, yielding
+TypeError for ordinary requests before headers and during body consumption, like
+Chromium/WebKit. Firefox also uses TypeError before headers, but AbortError for an
+already-delivered body. No serialized author abort reason is invented. A controller
+flag distinguishes Document-invalidated response delivery from transport errors:
+cancellation can replace a queued successful response with a network error, while
+ordinary decoding failures retain the Response and fail its body.
+
+The live probe also shows why keepalive remains separate. Before headers, all
+three browsers left the keepalive transport connected when stop ran. Chromium
+rejected its author promise; Firefox completed it after the server replied;
+WebKit had not delivered a result 200 ms after that reply. After headers, Chromium
+failed the body and closed the connection, Firefox continued to its complete body,
+and WebKit closed the connection but fulfilled the body with the partial prefix.
+These observations do not supply one interoperable detached-fetch lifecycle.
+FetchGroup.terminate retains its specified keepalive exemption.
+
+Sources: [HTML abortion](https://html.spec.whatwg.org/multipage/document-lifecycle.html#abort-a-document),
+[Fetch group termination](https://fetch.spec.whatwg.org/#concept-fetch-group-terminate),
+and the still-open [HTML #4483](https://github.com/whatwg/html/issues/4483), which
+identifies cancellation and inactive-Document task-delivery problems without
+resolving them. Specifications and issue read 2026-11-07. Experimental's
+`fetch-document-cancel.mjs` and `FETCH-DOCUMENT-CANCEL.md` retain the probe with
+Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2.
+
+Transport cancellation discards its buffered/future bytes. Fetch-owned body reads
+receive the controller explicitly and stay registered until their callback runs
+or is discarded. The regression reproduced successful Fetch callback delivery
+after the request was done and its Document had aborted. Group cancellation now
+finds that outstanding delivery, removes its task, and reports failure instead.
+The body's read methods handle the stream; a private delivery helper owns queueing,
+cancellation, and cleanup. Bodies and clones retain no controller. Chromium,
+Firefox, and WebKit all preserve later author consumption of a completed response
+after stop(), and the HTTP/data URL regressions now verify that boundary in Browlet.
+The browser-only probe and source comparison are retained in Experimental's
+`FETCH-COMPLETED-BODY-STOP.md` and matching script.
+Global tasks and parallel-queue steps both return a TaskHandle and notify internal
+discard steps after removal. A failure task removed by Document destruction also
+releases its waiter. Eric accepted these callable shapes: queueFetchTask returns
+a handle and receives a task carrying run/discard behavior; the body-read methods
+accept an optional implementation-only controller last. The queueing operation's
+environment argument remains last.
+
+Queued upload progress, Early Hints, response, null-body consumption, and
+end-of-body callbacks now retain cancellation registration until delivery or removal.
+The focused regressions first found the obsolete tasks still queued after cancellation
+and `request.done` left false after end-of-body task destruction. Cancellation now
+removes those tasks. Upload/progress notifications need no replacement; response
+waiters receive failure once at the original destination. End-of-body completion
+still records `done` and timing. Body-consumption failure retains its selected
+response, consistently for empty and nonempty bodies. A callback already executing
+is no longer registered, so reentrant cancellation affects only pending work.
+
+`SPEC_GAP(document-fetch-cancellation)` also covers a response arriving after its
+client Document was destroyed while a separate execution owner remains alive.
+That regression initially left the request unfinished behind the destroyed
+Document's activity gate. Browlet's Fetch handoff now queues only internal `discard`
+cleanup on the destination's owning loop, without a Document gate. Ordinary delivery
+to retained inactive Documents still waits for reactivation. This uses the existing
+task contract; no Fetch callback is converted to a Promise or new task type.
+
+Pip's `09599c1c` background-revalidation ownership correction is incorporated here:
+retain the supplied execution environment, drain on a parallel queue, and retain
+the initiating client's fetch group. The merged body drain additionally receives
+its FetchController. Regressions cover an inactive client, separate sandbox execution,
+and both client `cancel()` and `terminate()` during revalidation body consumption.
+Pip's worker-environment implementation remains in his branch.
+
+Queued HTTP upload reads/cancellation and network-body mutation now finish through
+the existing owner-global Fetch task handoff. Upload read tasks retain removal
+handles; cancellation settles a pending transport read, and discarded cleanup
+releases an acquired reader without calling a potentially scripted source.
+Discarded network-body work terminates an ongoing controller, clears retained
+bytes, errors its stream, and releases read/end-of-body waits. Existing aborted
+states and reasons remain unchanged. Document marks destruction before discard
+notifications so reentrant completion uses the existing cleanup route. Regressions
+first left the response readable and its upload reader locked, then exposed the
+stranded end-of-body task; all are now covered, including a separate active client.
+
+Queued request preparation, cache selection/revalidation materialization, and
+network dispatch now settle their waiters when discarded, including work queued
+after execution-Document destruction. They terminate an ongoing controller and
+invalidate pending delivery while preserving an existing abort reason. Generic
+body operations unwind through a private discard signal; only that signal becomes
+a failed response at main fetch/manual-redirect processing. Unrelated thrown
+implementation errors retain the existing error path.
+
+Both main fetch and manual redirects use the same response handoff. Discarding
+it releases the selected response's network body and runs failure completion on
+the original destination. Normal delivery keeps an already selected response
+even if a later body-framing error terminated the controller; the HTTP/2 framing
+regression caught an overly broad cancellation guard and remains enabled.
+Inactive execution Documents retain their preparation tasks for reactivation.
+This continues the approved `SPEC_GAP(document-fetch-cancellation)` arrangement.
+Pip's `5721dcc1` splits Fetch client state from execution facilities on his branch;
+these paths continue to use `params.env`. Consolidation must retain both that
+client split and this branch's TaskRecord/TaskHandle disposal contract.
+
+Byte/cache stream producers (`FetchBody.fromBytes()` and retained Blob data) now
+fail unfinished reads when their queued production is discarded. Late Blob
+completion runs only internal cleanup on the owning loop. Cancellation suppresses
+later backing-read results; completed bodies and shared cache storage survive.
+See the [body-production audit](../browlet/loader/ROADMAP.md#byte-and-cache-body-production)
+for the approved `SPEC_GAP`/`SPEC_CLASH` decision and browser evidence.
+Subresource Fetch now registers with its execution owner's destruction hook and
+unregisters at completion. It preserves the separate client's policy/accounting
+ownership and cancels pending transport even with no task to discard. Pending
+preload selection also resolves cancellation without waiting for its producer;
+late selected responses release their bodies. See the
+[owner-lifetime slice](../browlet/loader/ROADMAP.md#execution-owner-destruction-without-queued-work).
+Cooperative dedicated/shared worker shutdown now runs that hook after the final
+checkpoint. Queued and late worker tasks deliver internal discard notifications;
+Fetch skips cancellation registration when immediate discard has already finished
+delivery. Real local Fetch tests cover pending headers/body and acquired upload
+readers without restarting the worker loop. Cross-isolate service cancellation and
+forced termination remain with Pip's worker ownership work.
+EventSource now treats Document cancellation as permanent failure, and multipart's
+outer navigation reader retains its own navigable/Document lifetime connection.
+Keepalive detachment and deferred invocation remain explicit §7.5.11 dependencies.
+Eric approved retaining the keepalive throwing boundary during the shared ownership
+batch: its upload, redirect, and response work needs a browser-owned execution lifetime;
+skipping controller termination alone strands work on the destroyed page, and changing
+`params.env` to a sandbox would lose stream/realm ownership. The existing browser-only
+probe was rerun on Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2: all preserve
+transport before headers after stop(), but promise/body outcomes still differ as recorded above.
 
 ## Owner integration gates
 

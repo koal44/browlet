@@ -188,10 +188,12 @@ describe('Worker outside interface (HTML §10.2.6.3) connected messages', () => 
     const messages: unknown[] = [];
     worker.onmessage = (event) => { messages.push((event as MessageEvent).data); };
     const script = new ClassicScript("postMessage('initial script');", insideEnv, insideEnv.apiBaseURL, new ScriptFetchOptions());
-    insideEnv.queueTask('network', () => {
-      const global = insideEnv.globalImplementation;
-      const insidePort = global.connectPort(implementation.outsidePort);
-      global.runScript(script, insidePort, () => { implementation.outsidePort.start(); });
+    insideEnv.queueTask('network', {
+      run: () => {
+        const global = insideEnv.globalImplementation;
+        const insidePort = global.connectPort(implementation.outsidePort);
+        global.runScript(script, insidePort, () => { implementation.outsidePort.start(); });
+      },
     });
     expect(insideLoop.runTaskTurn()).toBe(true);
     expect(insideEnv.executionReady).toBe(true);

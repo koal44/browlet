@@ -1,5 +1,5 @@
 import type { InternalPromise } from '../infra/promises';
-import type { TaskCreationOptions, TaskHandle, TaskSourceKey } from '../infra/tasks';
+import type { TaskRecord, TaskHandle, TaskSourceKey } from '../infra/tasks';
 
 import type { JSRealm } from './realm';
 
@@ -11,8 +11,11 @@ export interface JSEnvironment {
   InternalPromise: typeof InternalPromise;
   /** Schedule background steps without invoking them inline or entering an owner task. */
   runInParallel: (steps: () => void) => void;
-  /** Queue timer work with the nesting level inherited by timers created inside it. */
-  queueTask(source: 'timer', steps: () => void, options: TaskCreationOptions): TaskHandle;
   /** Queue a later task for this owner on the selected source. */
-  queueTask(source: TaskSourceKey, steps: () => void): TaskHandle;
+  queueTask(source: TaskSourceKey, task: TaskRecord): TaskHandle;
+  /**
+   * Register internal cleanup for destruction of this owner; return removal steps.
+   * Runs immediately if already destroyed. Steps must not invoke author code.
+   */
+  addDestructionSteps(steps: () => void): () => void;
 }

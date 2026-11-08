@@ -69,7 +69,7 @@ export class PermissionsImpl {
         const decision = allowed ? 'granted' : 'denied';
         if (env.topLevelOrigin === null) throw new InternalError('Permission request requires a top-level origin');
         const key = feature.key.generate(env.topLevelOrigin, env.origin);
-        env.queueTask('permissions', () => { store.setEntry(descriptor, key, decision); });
+        env.queueTask('permissions', { run: () => { store.setEntry(descriptor, key, decision); } });
         return decision;
       }, undefined, internalType<PermissionDecision>());
     }, internalType<PermissionDecision>());
@@ -143,14 +143,16 @@ export class PermissionsImpl {
     // Binding eagerly creates the Platform object; our installed query only reads
     // local state. Keep creation, the synchronous query hook, and settlement in
     // one permissions task rather than a separate background turn. See ROADMAP.md, §6.2.
-    this.env.queueTask('permissions', () => {
-      try {
-        const status = currentEnv.createPermissionStatus(descriptor);
-        currentEnv.permissions.runPermissionQuery(descriptor, status);
-        result.resolve(status);
-      } catch (error) {
-        result.reject(error);
-      }
+    this.env.queueTask('permissions', {
+      run: () => {
+        try {
+          const status = currentEnv.createPermissionStatus(descriptor);
+          currentEnv.permissions.runPermissionQuery(descriptor, status);
+          result.resolve(status);
+        } catch (error) {
+          result.reject(error);
+        }
+      },
     });
     return result.promise;
   }

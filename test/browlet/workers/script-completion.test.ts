@@ -27,9 +27,11 @@ describe('Worker initial script port activation (HTML §10.2.4)', () => {
         onmessage = event => postMessage(event.data);
         postMessage('initial');
       `, env, env.apiBaseURL, new ScriptFetchOptions());
-      env.queueTask('network', () => {
-        const insidePort = global.connectPort(outsidePort);
-        global.runScript(script, insidePort, () => { outsidePort.start(); });
+      env.queueTask('network', {
+        run: () => {
+          const insidePort = global.connectPort(outsidePort);
+          global.runScript(script, insidePort, () => { outsidePort.start(); });
+        },
       });
       env.responsibleEventLoop.runTaskTurn();
       expect(global.insidePort).toBe(originalInsidePort);
@@ -58,10 +60,12 @@ describe('Worker initial script port activation (HTML §10.2.4)', () => {
           port.postMessage('connected');
         };
       `, env, env.apiBaseURL, new ScriptFetchOptions());
-      env.queueTask('network', () => {
-        const global = env.globalImplementation;
-        const insidePort = global.connectPort(outsidePort);
-        global.runScript(script, insidePort, () => { outsidePort.start(); });
+      env.queueTask('network', {
+        run: () => {
+          const global = env.globalImplementation;
+          const insidePort = global.connectPort(outsidePort);
+          global.runScript(script, insidePort, () => { outsidePort.start(); });
+        },
       });
       env.responsibleEventLoop.runTaskTurn();
       expect(env.globalImplementation.ports).toHaveLength(1);

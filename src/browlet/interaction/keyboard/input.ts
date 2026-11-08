@@ -44,9 +44,11 @@ export class KeyboardInputProcessor {
     const action = { ...input };
     this.#modifiers = action.modifiers;
     const time = unsafeSharedCurrentTime();
-    document.env.realm.queueGlobalTask(userInteractionTaskSource, () => {
-      if (!this.#userAgent.topLevelTraversableSet.has(traversable)) return;
-      this.#deliver(action, document, time);
+    document.env.realm.queueGlobalTask(userInteractionTaskSource, {
+      run: () => {
+        if (!this.#userAgent.topLevelTraversableSet.has(traversable)) return;
+        this.#deliver(action, document, time);
+      },
     });
   }
 

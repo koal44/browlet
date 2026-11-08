@@ -105,19 +105,21 @@ export class WindowIdleCallbacks {
   // https://w3c.github.io/requestidlecallback/#invoke-idle-callbacks-algorithm
   #queueIdleCallback(getDeadline: () => Moment): void {
     this.#idleTaskQueued = true;
-    this.#env.realm.queueGlobalTask(idleTaskSource, () => {
-      this.#idleTaskQueued = false;
-      // End this period early when ordinary work has become runnable.
-      if (this.#env.responsibleEventLoop.hasRunnableTasks(idleTaskSource)) return;
-      if (unsafeSharedCurrentTime().milliseconds >= getDeadline().milliseconds) return;
-      const entry = this.#runnableIdleCallbacks.entries().next().value;
-      if (entry === undefined) return;
-      const [handle, request] = entry;
-      this.#runnableIdleCallbacks.delete(handle);
-      request.timer?.remove();
-      const callback = request.callback;
-      callback(new IdleDeadlineImpl(getDeadline, false, this.#env));
-      if (this.#runnableIdleCallbacks.size !== 0) this.#queueIdleCallback(getDeadline);
+    this.#env.realm.queueGlobalTask(idleTaskSource, {
+      run: () => {
+        this.#idleTaskQueued = false;
+        // End this period early when ordinary work has become runnable.
+        if (this.#env.responsibleEventLoop.hasRunnableTasks(idleTaskSource)) return;
+        if (unsafeSharedCurrentTime().milliseconds >= getDeadline().milliseconds) return;
+        const entry = this.#runnableIdleCallbacks.entries().next().value;
+        if (entry === undefined) return;
+        const [handle, request] = entry;
+        this.#runnableIdleCallbacks.delete(handle);
+        request.timer?.remove();
+        const callback = request.callback;
+        callback(new IdleDeadlineImpl(getDeadline, false, this.#env));
+        if (this.#runnableIdleCallbacks.size !== 0) this.#queueIdleCallback(getDeadline);
+      },
     });
   }
 
@@ -140,7 +142,7 @@ export class WindowIdleCallbacks {
       entry.timer?.remove();
       entry.timer = null;
       entry.timeoutAt = null;
-      this.#env.realm.queueGlobalTask(idleTaskSource, () => { this.#invokeIdleCallbackTimeout(id); });
+      this.#env.realm.queueGlobalTask(idleTaskSource, { run: () => { this.#invokeIdleCallbackTimeout(id); } });
     }
   }
 

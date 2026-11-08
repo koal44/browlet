@@ -277,7 +277,7 @@ describe('Pointer Events §10.1: one effective legacy mouse position', () => {
     const { browser, update, a, mouse } = createFixture();
     const document = unwrap<DocumentImpl>(browser.document);
     update(a);
-    document.env.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { document.destroy(); });
+    document.env.realm.queueGlobalTask(navigationAndTraversalTaskSource, { run: () => { document.destroy(); } });
     document.env.responsibleEventLoop.runTaskTurn();
     expect(document.browsingContext).toBeNull();
     expect(mouse.target).toBeNull();

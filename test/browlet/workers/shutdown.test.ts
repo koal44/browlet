@@ -1,13 +1,15 @@
+import { setImmediate as nextTurn } from 'node:timers/promises';
 import { assert, describe, expect, it, vi } from 'vitest';
 
 import { parseURL, serializeURL } from '../../../src/url/index';
 import { utf8Encode } from '../../../src/encoding/index';
-import { FetchHeaders, type HTTPTransportListener } from '../../../src/fetch/index';
+import { fetch as fetchResource, FetchBody, FetchHeaders, FetchRequest, type HTTPTransportListener } from '../../../src/fetch/index';
 import { BlobData, BlobImpl, BlobReadFailure } from '../../../src/file/index';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
 import { EventSourceImpl, MessagePortImpl } from '../../../src/browlet/communication/index';
 import { createWorkerEnvironment } from '../../../src/browlet/integration/web-idl/index';
 import { FileReaderImpl } from '../../../src/browlet/integration/file/index';
+import { ReadableStreamImpl } from '../../../src/streams/index';
 import {
   AgentCluster, ClassicScript, DedicatedWorkerAgent, ScriptFetchOptions, SharedWorkerAgent,
 } from '../../../src/browlet/scripting/index';
@@ -34,7 +36,7 @@ describe('Worker event-loop shutdown (HTML §§8.1.7.3, 10.2.4)', () => {
       observe();
       Promise.resolve().then(() => { send('microtask'); observe(); });
     `, env, env.apiBaseURL, new ScriptFetchOptions());
-    env.queueTask('network', () => { env.globalImplementation.runScript(script, insidePort, () => { outsidePort.start(); }); });
+    env.queueTask('network', { run: () => { env.globalImplementation.runScript(script, insidePort, () => { outsidePort.start(); }); } });
     expect(loop.runTaskTurn()).toBe(true);
     expect(states).toEqual([[true, true, true], [true, true, true]]);
     expect(global.ownerSet.size).toBe(0);
@@ -50,10 +52,10 @@ describe('Worker event-loop shutdown (HTML §§8.1.7.3, 10.2.4)', () => {
     const finish = vi.fn();
     const { env, loop, global } = createWorker(false, finish);
     const trace: string[] = [];
-    env.queueTask('network', () => { trace.push('first'); });
-    env.queueTask('timer', () => { trace.push('second'); });
+    env.queueTask('network', { run: () => { trace.push('first'); } });
+    env.queueTask('timer', { run: () => { trace.push('second'); } });
     global.closing = true;
-    env.queueTask('network', () => { trace.push('discarded'); });
+    env.queueTask('network', { run: () => { trace.push('discarded'); } });
     expect(loop.runTaskTurn()).toBe(true);
     expect(global.ownerSet.size).toBe(1);
     expect(finish).not.toHaveBeenCalled();
@@ -77,17 +79,184 @@ describe('Worker event-loop shutdown (HTML §§8.1.7.3, 10.2.4)', () => {
     expect(finish).toHaveBeenCalledOnce();
   }));
 
+  it.each([false, true])('runs outstanding destruction hooks once after the final checkpoint (shared: %s)', (shared) => runInHostTask(() => {
+    const { env, loop, scope, outsideEnv } = createWorker(shared);
+    const trace: string[] = [];
+    const parentCleanup = vi.fn();
+    outsideEnv.addDestructionSteps(parentCleanup);
+    const completed = vi.fn();
+    env.addDestructionSteps(completed)();
+    env.addDestructionSteps(() => { trace.push('cleanup'); });
+    env.queueTask('network', {
+      run: () => {
+        scope.close();
+        trace.push('script');
+        loop.queueMicrotask(() => { trace.push('checkpoint'); });
+      },
+    });
+    loop.runTaskTurn();
+    expect(trace).toEqual(['script', 'checkpoint', 'cleanup']);
+    expect(completed).not.toHaveBeenCalled();
+    expect(parentCleanup).not.toHaveBeenCalled();
+    const late = vi.fn();
+    env.addDestructionSteps(late);
+    expect(late).toHaveBeenCalledOnce();
+    expect(loop.runTaskTurn()).toBe(false);
+    expect(trace).toHaveLength(3);
+  }));
+
+  it('releases the remaining resources when a destruction hook reports an unfinished dependency', () => runInHostTask(() => {
+    const { env, loop, scope, global, outsidePort } = createWorker();
+    const failure = new Error('unfinished owner');
+    const cleanup = vi.fn();
+    env.addDestructionSteps(() => { throw failure; });
+    env.addDestructionSteps(cleanup);
+    const timers = env.getWindowOrWorkerGlobalScopeMixin().timers;
+    timers.setTimeout(() => {}, 100, []);
+    env.queueTask('network', { run: () => { scope.close(); } });
+    expect(() => loop.runTaskTurn()).toThrow(failure);
+    expect(cleanup).toHaveBeenCalledOnce();
+    expect(global.ownerSet.size).toBe(0);
+    expect(outsidePort.isEntangledOutsideGlobal()).toBe(false);
+    expect(timers.hasOutstandingTimers()).toBe(false);
+  }));
+
+  it.each([
+    [false, 'headers'], [false, 'body'], [true, 'headers'], [true, 'body'],
+  ] as const)('finishes local Fetch cancellation without reviving the worker loop (shared: %s, pending: %s)', async (shared, phase) => {
+    const { env, loop, scope } = createWorker(shared);
+    env.markExecutionReady();
+    let listener: HTTPTransportListener | undefined;
+    const abort = vi.fn();
+    const dispatch = vi.spyOn(env.userAgent.httpTransport, 'dispatch').mockImplementation((_request, steps) => {
+      listener = steps;
+      return { pause() {}, resume() {}, abort };
+    });
+    const request = new FetchRequest(parseURL('https://worker.test/pending').url!, env);
+    request.client = env;
+    const delivered = vi.fn();
+    const consumed = vi.fn();
+    const controller = fetchResource(request, {
+      processResponse: delivered,
+      processResponseConsumeBody: (_response, bytes) => { consumed(bytes); },
+    }, env);
+    try {
+      await vi.waitFor(() => {
+        while (loop.runTaskTurn()) { /* Prepare the pending wire request. */ }
+        expect(listener).toBeDefined();
+      });
+      if (phase === 'body') {
+        const headers = new FetchHeaders();
+        headers.append('Access-Control-Allow-Origin', '*');
+        listener!.onHeaders(200, 'OK', headers, true);
+        await vi.waitFor(() => {
+          while (loop.runTaskTurn()) { /* Begin the body read before closing. */ }
+          expect(delivered).toHaveBeenCalledOnce();
+        });
+      }
+      await runInHostTask(() => {
+        env.queueTask('network', { run: () => { scope.close(); } });
+        loop.runTaskTurn();
+      });
+      expect(controller.state).toBe('terminated');
+      expect(abort).toHaveBeenCalledOnce();
+      await vi.waitFor(() => expect(request.done).toBe(true));
+      expect(consumed).toHaveBeenCalledExactlyOnceWith('failure');
+      expect(controller.hasPendingDelivery).toBe(false);
+      listener!.onData(Uint8Array.of(1));
+      listener!.onEnd();
+      await nextTurn();
+      expect(consumed).toHaveBeenCalledOnce();
+      expect(loop.runTaskTurn()).toBe(false);
+    } finally { dispatch.mockRestore(); }
+  });
+
+  it.each([false, true])('stops pending Blob and FileReader work, preserving completed reads (shared: %s)', async (shared) => {
+    const { env, loop, scope, outsideEnv } = createWorker(shared);
+    const pending = Promise.withResolvers<Uint8Array>();
+    const read = vi.fn(() => pending.promise);
+    const data = BlobData.fromSource({ size: 1, snapshotState: null, read });
+    const stream = data.stream(env);
+    const streamFailed = vi.fn();
+    stream.onCompletion(() => {}, streamFailed);
+    const reader = new FileReaderImpl(env);
+    const events = vi.fn();
+    for (const type of ['loadstart', 'progress', 'load', 'error', 'abort', 'loadend']) {
+      reader.addEventListener(type, events);
+    }
+    reader.readAsArrayBuffer(BlobImpl.create(data, '', null, outsideEnv));
+    const completed = new FileReaderImpl(env);
+    completed.readAsText(new BlobImpl(['retained'], {}, env));
+    await vi.waitFor(() => {
+      while (loop.runTaskTurn()) { /* Finish the independent completed read. */ }
+      expect(completed.readyState).toBe(2);
+      expect(read).toHaveBeenCalledTimes(2);
+    });
+    await runInHostTask(() => {
+      env.queueTask('network', { run: () => { scope.close(); } });
+      loop.runTaskTurn();
+    });
+    expect(stream.isErrored).toBe(true);
+    expect(streamFailed).toHaveBeenCalledOnce();
+    expect(reader.readyState).toBe(2);
+    expect(reader.result).toBeNull();
+    expect(reader.error).toBeNull();
+    expect(events).not.toHaveBeenCalled();
+    expect(completed.result).toBe('retained');
+    pending.resolve(Uint8Array.of(9));
+    await nextTurn();
+    expect(loop.runTaskTurn()).toBe(false);
+    expect(streamFailed).toHaveBeenCalledOnce();
+    expect(events).not.toHaveBeenCalled();
+  });
+
+  it('releases an acquired upload reader without calling its author source after worker shutdown', async () => {
+    const { env, loop, scope } = createWorker();
+    env.markExecutionReady();
+    const cancelSource = vi.fn();
+    const stream = ReadableStreamImpl.createWithByteReadingSupport(undefined, cancelSource, 0, env);
+    const request = new FetchRequest(parseURL('https://worker.test/upload').url!, env);
+    request.client = env;
+    request.method = 'POST';
+    request.body = new FetchBody(stream, env);
+    const dispatch = vi.spyOn(env.userAgent.httpTransport, 'dispatch').mockReturnValue({
+      pause() {}, resume() {}, abort() {},
+    });
+    fetchResource(request, {}, env);
+    try {
+      await vi.waitFor(() => {
+        while (loop.runTaskTurn()) { /* Reach the transport before requesting its upload bytes. */ }
+        expect(dispatch).toHaveBeenCalledOnce();
+      });
+      const upload = dispatch.mock.calls[0]![0].body!;
+      assert(!(upload instanceof Uint8Array));
+      const received = vi.fn();
+      upload.read().observe(received, received);
+      loop.runTaskTurn();
+      expect(stream.locked).toBe(true);
+      expect(received).not.toHaveBeenCalled();
+      await runInHostTask(() => {
+        env.queueTask('network', { run: () => { scope.close(); } });
+        loop.runTaskTurn();
+      });
+      expect(stream.locked).toBe(false);
+      expect(cancelSource).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(received).toHaveBeenCalledExactlyOnceWith(null));
+      await vi.waitFor(() => expect(request.done).toBe(true));
+    } finally { dispatch.mockRestore(); }
+  });
+
   it('can clear a dedicated worker’s pending outside deliveries before shutdown disentangles it', () => runInHostTask(() => {
     const { env, loop, scope, outsideEnv, insidePort, outsidePort, outside } = createWorker();
     const messages: unknown[] = [];
     outside.onmessage = (event) => { messages.push((event as MessageEvent).data); };
     const script = new ClassicScript(`postMessage('queued');`, env, env.apiBaseURL, new ScriptFetchOptions());
-    env.queueTask('network', () => { env.globalImplementation.runScript(script, insidePort, () => { outsidePort.start(); }); });
+    env.queueTask('network', { run: () => { env.globalImplementation.runScript(script, insidePort, () => { outsidePort.start(); }); } });
     loop.runTaskTurn();
     // The messaging step only: native script abortion and the outside Worker
     // association are still dependencies of the full termination algorithm.
     insidePort.clearOutgoingMessages();
-    env.queueTask('network', () => { scope.close(); });
+    env.queueTask('network', { run: () => { scope.close(); } });
     loop.runTaskTurn();
     while (outsideEnv.responsibleEventLoop.runTaskTurn()) { /* Drain the outside queue. */ }
     expect(messages).toEqual([]);
@@ -131,10 +300,10 @@ describe('Worker event-loop shutdown (HTML §§8.1.7.3, 10.2.4)', () => {
 
   it('does not run later tasks or microtasks after the loop is destroyed', () => runInHostTask(() => {
     const { env, loop, scope, runHostTurns } = createWorker();
-    env.queueTask('network', () => { scope.close(); });
+    env.queueTask('network', { run: () => { scope.close(); } });
     loop.runTaskTurn();
     const late = vi.fn();
-    env.queueTask('network', late);
+    env.queueTask('network', { run: late });
     loop.queueMicrotask(late);
     loop.performMicrotaskCheckpoint();
     runHostTurns();
@@ -142,15 +311,52 @@ describe('Worker event-loop shutdown (HTML §§8.1.7.3, 10.2.4)', () => {
     expect(late).not.toHaveBeenCalled();
   }));
 
+  it('discards queued and late worker tasks exactly once without running them', () => runInHostTask(() => {
+    const { env, loop, scope } = createWorker();
+    const run = vi.fn();
+    const queued = vi.fn();
+    const closing = vi.fn();
+    const destroyed = vi.fn();
+    env.queueTask('network', {
+      run: () => {
+        scope.close();
+        env.queueTask('network', { run, discard: closing });
+      },
+    });
+    env.queueTask('network', { run, discard: queued });
+    loop.runTaskTurn();
+    env.queueTask('network', { run, discard: destroyed });
+    expect(run).not.toHaveBeenCalled();
+    expect(queued).toHaveBeenCalledOnce();
+    expect(closing).toHaveBeenCalledOnce();
+    expect(destroyed).toHaveBeenCalledOnce();
+    expect(loop.runTaskTurn()).toBe(false);
+  }));
+
+  it('still wakes final cleanup when discarding blocked work throws', () => runInHostTask(() => {
+    const { env, scope, global, runHostTurns } = createWorker();
+    const cleanup = vi.fn();
+    env.addDestructionSteps(cleanup);
+    env.queueTask('network', {
+      run: () => {}, isRunnable: () => false,
+      discard: () => { throw new Error('discard failed'); },
+    });
+    runHostTurns();
+    expect(() => scope.close()).toThrow('discard failed');
+    runHostTurns();
+    expect(cleanup).toHaveBeenCalledOnce();
+    expect(global.ownerSet.size).toBe(0);
+  }));
+
   it('does not revive a destroyed loop when a spun task becomes ready', () => runInHostTask(() => {
     const { env, loop, scope, runHostTurns } = createWorker();
     let resume: (() => void) | undefined;
     const continuation = vi.fn();
-    env.queueTask('network', () => { loop.spinUntil((ready) => { resume = ready; }, continuation); });
+    env.queueTask('network', { run: () => { loop.spinUntil((ready) => { resume = ready; }, continuation); } });
     loop.runTaskTurn();
     runHostTurns();
     assert(resume !== undefined);
-    env.queueTask('network', () => { scope.close(); });
+    env.queueTask('network', { run: () => { scope.close(); } });
     loop.runTaskTurn();
     resume();
     runHostTurns();
@@ -164,7 +370,7 @@ describe('Worker event-loop shutdown (HTML §§8.1.7.3, 10.2.4)', () => {
     localFirst.entangle(localSecond);
     const transferred = outsideEnv.serializeWithTransfer(outside, [outside]);
     expect(insidePort.isEntangledOutsideGlobal()).toBe(true);
-    env.queueTask('network', () => { scope.close(); });
+    env.queueTask('network', { run: () => { scope.close(); } });
     loop.runTaskTurn();
     const received = outsideEnv.deserializeWithTransfer(transferred).deserialized as MessagePort;
     expect(global.ports).toEqual([]);
@@ -200,10 +406,12 @@ describe('Worker event-loop shutdown (HTML §§8.1.7.3, 10.2.4)', () => {
 
     const states: number[] = [];
     await runInHostTask(() => {
-      env.queueTask('dom-manipulation', () => {
-        scope.close();
-        states.push(reader.readyState);
-        loop.queueMicrotask(() => { states.push(reader.readyState); });
+      env.queueTask('dom-manipulation', {
+        run: () => {
+          scope.close();
+          states.push(reader.readyState);
+          loop.queueMicrotask(() => { states.push(reader.readyState); });
+        },
       });
       loop.runTaskTurn();
       expect(states).toEqual([1, 1]);
@@ -229,6 +437,7 @@ describe('Worker event-loop shutdown (HTML §§8.1.7.3, 10.2.4)', () => {
   it.each(['load', 'error', 'abort'] as const)('cleans up a FileReader restarted from %s before closing', async (type) => {
     const { env, loop, scope } = createWorker();
     const reader = new FileReaderImpl(env);
+    const stop = vi.spyOn(reader, 'stop');
     const waiting = BlobImpl.create(BlobData.fromSource({
       size: 1,
       snapshotState: undefined,
@@ -256,7 +465,7 @@ describe('Worker event-loop shutdown (HTML §§8.1.7.3, 10.2.4)', () => {
     expect(reader.readyState).toBe(2);
     expect(reader.result).toBeNull();
     expect(reader.error).toBeNull();
-    expect(env.getWindowOrWorkerGlobalScopeMixin().fileReaders.size).toBe(0);
+    expect(stop).toHaveBeenCalledTimes(type === 'abort' ? 2 : 1);
   });
 
   it.each([false, true])('closes worker-owned EventSources after the final checkpoint (shared: %s)', async (shared) => {
@@ -305,10 +514,12 @@ describe('Worker event-loop shutdown (HTML §§8.1.7.3, 10.2.4)', () => {
       // Stock Node cannot drain its shared microtask queue recursively from
       // this async test's Promise job. Use the same host boundary as the other shutdown tests.
       await runInHostTask(() => {
-        env.queueTask('dom-manipulation', () => {
-          scope.close();
-          states.push([active.readyState, retrying.readyState, connecting.readyState]);
-          loop.queueMicrotask(() => { states.push([active.readyState, retrying.readyState, connecting.readyState]); });
+        env.queueTask('dom-manipulation', {
+          run: () => {
+            scope.close();
+            states.push([active.readyState, retrying.readyState, connecting.readyState]);
+            loop.queueMicrotask(() => { states.push([active.readyState, retrying.readyState, connecting.readyState]); });
+          },
         });
         loop.runTaskTurn();
         expect(states).toEqual([[1, 0, 0], [1, 0, 0]]);

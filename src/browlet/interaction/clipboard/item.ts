@@ -179,13 +179,15 @@ export class ClipboardItemImpl {
         return prepare ? system.prepareReadData(bytes, type, read.document) : bytes;
       }, undefined, internalType<Uint8Array>()).observe((bytes) => {
         const data = BlobData.fromBytes(bytes);
-        env.queueTask('clipboard', () => {
-          try {
-            system.validateRead(read.entry, read.document);
-            result.resolve(BlobImpl.create(data, type, data.captureSnapshotState(), env));
-          } catch (error) { result.reject(error); }
+        env.queueTask('clipboard', {
+          run: () => {
+            try {
+              system.validateRead(read.entry, read.document);
+              result.resolve(BlobImpl.create(data, type, data.captureSnapshotState(), env));
+            } catch (error) { result.reject(error); }
+          },
         });
-      }, (error) => { env.queueTask('clipboard', () => { result.reject(error); }); });
+      }, (error) => { env.queueTask('clipboard', { run: () => { result.reject(error); } }); });
     });
     return result.promise;
   }

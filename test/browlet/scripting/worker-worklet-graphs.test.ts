@@ -167,9 +167,9 @@ describe('worklet module response sharing', () => {
     const dispatched = Promise.withResolvers<HTTPTransportListener>();
     const transport = mockHTTPTransport(fetchClient.userAgent, (_request, listener) => dispatched.resolve(listener));
     const queued: (() => void)[] = [];
-    const delivery = vi.spyOn(second.env, 'queueTask').mockImplementation((source, steps) => {
+    const delivery = vi.spyOn(second.env, 'queueTask').mockImplementation((source, task) => {
       expect(source).toBe('network');
-      queued.push(steps);
+      queued.push(task.run);
       return { remove() {} };
     });
     scope.onCleanup(() => {
@@ -189,7 +189,7 @@ describe('worklet module response sharing', () => {
 
     expect(transport).toHaveBeenCalledOnce();
     expect(construct).toHaveBeenCalledOnce();
-    expect(delivery).toHaveBeenCalledExactlyOnceWith('network', expect.any(Function));
+    expect(delivery).toHaveBeenCalledExactlyOnceWith('network', { run: expect.any(Function) as unknown });
     expect(second.load).not.toHaveBeenCalled();
     expect(completeSecond).not.toHaveBeenCalled();
     expect(responses.get(url)).not.toBe('fetching');

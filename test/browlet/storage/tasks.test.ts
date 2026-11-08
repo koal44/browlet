@@ -39,9 +39,11 @@ describe('Storage §4.8: queue a storage task', () => {
       env.realm.queueMicrotask(() => { trace.push('microtask'); });
     });
     const finished = new Promise<void>((resolve) => {
-      env.queueTask('storage', () => {
-        trace.push('second');
-        resolve();
+      env.queueTask('storage', {
+        run: () => {
+          trace.push('second');
+          resolve();
+        },
       });
     });
 

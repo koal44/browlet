@@ -1,6 +1,6 @@
 import { expect, vi } from 'vitest';
 import { FetchBody } from '../../src/fetch/body';
-import type { TaskSourceKey } from '../../src/infra/tasks';
+import type { TaskRecord, TaskSourceKey } from '../../src/infra/tasks';
 import { ParallelQueue } from '../../src/infra/parallel-queue';
 import { createTestContext } from '../browlet/streams/environment';
 import { ReadableStreamImpl } from '../../src/streams/index';
@@ -8,21 +8,34 @@ import { createClientEnvironment } from './client-fixture';
 
 export function createBodyFixture() {
   const context = createTestContext();
-  const tasks: { global: object; steps: () => void; }[] = [];
+  const tasks: (TaskRecord & { global: object; })[] = [];
   const parallelSteps: (() => void)[] = [];
-  const queueGlobalFetchTask = vi.fn((global: object, steps: () => void) => { tasks.push({ global, steps }); });
+  const queueGlobalFetchTask = vi.fn((global: object, task: TaskRecord) => {
+    const queuedTask = { global, ...task };
+    tasks.push(queuedTask);
+    return {
+      remove() {
+        const index = tasks.indexOf(queuedTask);
+        if (index === -1) return;
+        tasks.splice(index, 1);
+        queuedTask.discard?.();
+      },
+    };
+  });
   const client = createClientEnvironment(undefined, context.getEnvironment());
   const env = {
     ...client,
     runInParallel: vi.fn((steps: () => void) => { parallelSteps.push(steps); }),
-    queueTask(source: TaskSourceKey, steps: () => void) {
+    queueTask(source: TaskSourceKey, task: TaskRecord) {
       expect(source).toBe('network');
-      const task = { global: context.realm.globalObject, steps };
-      tasks.push(task);
+      const queuedTask = { global: context.realm.globalObject, ...task };
+      tasks.push(queuedTask);
       return {
         remove() {
-          const index = tasks.indexOf(task);
-          if (index !== -1) tasks.splice(index, 1);
+          const index = tasks.indexOf(queuedTask);
+          if (index === -1) return;
+          tasks.splice(index, 1);
+          queuedTask.discard?.();
         },
       };
     },
@@ -41,7 +54,7 @@ export function createBodyFixture() {
       return new FetchBody(stream, env);
     },
     createParallelQueue: () => new ParallelQueue(env.runInParallel),
-    runTask: () => tasks.shift()!.steps(),
+    runTask: () => tasks.shift()!.run(),
     runParallel: () => parallelSteps.shift()!(),
   };
 }

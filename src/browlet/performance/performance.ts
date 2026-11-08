@@ -174,8 +174,9 @@ export class PerformanceImpl extends EventTargetImpl {
     buffer.droppedEntriesCount++;
     if (!this.#resourceTimingBufferFullEventPending) {
       this.#resourceTimingBufferFullEventPending = true;
-      this.env.queueTask('performance-timeline', () => { this.fireResourceTimingBufferFull(); }, {
-        discardSteps: () => {
+      this.env.queueTask('performance-timeline', {
+        run: () => { this.fireResourceTimingBufferFull(); },
+        discard: () => {
           this.#resourceTimingSecondaryBuffer.length = 0;
           this.#resourceTimingBufferFullEventPending = false;
         },
@@ -227,36 +228,39 @@ export class PerformanceImpl extends EventTargetImpl {
   queueObserverTask(): void {
     if (this.#observerTaskQueued) return;
     this.#observerTaskQueued = true;
-    this.env.queueTask('performance-timeline', () => {
-      this.#observerTaskQueued = false;
-      const observers = [...this.registeredObservers];
-      for (const observer of observers) {
-        const entries = observer.takeRecords();
-        // The inner empty-batch return applies to this observer; all three browsers continue notifying others.
-        if (entries.length === 0) continue;
-        // SPEC_GAP(performance-observer-list-realm): The allocation has no explicit realm. Keep the observer's owner, as Firefox/WebKit do; Chromium allocates in the callback's realm.
-        const entryList = new PerformanceObserverEntryListImpl(entries, observer.env);
-        // SPEC_CLASH(performance-observer-callback-options): Supply the specified third argument, as Chromium does. Firefox/WebKit omit it.
-        const callbackOptions: PerformanceObserverCallbackOptions = {};
-        if (observer.requiresDroppedEntries) {
-          const types = new Set<string>();
-          for (const options of observer.optionsList) {
-            if (options.type !== undefined) types.add(options.type);
-            if (options.entryTypes !== undefined) {
-              for (const type of options.entryTypes) types.add(type);
+    this.env.queueTask('performance-timeline', {
+      run: () => {
+        this.#observerTaskQueued = false;
+        const observers = [...this.registeredObservers];
+        for (const observer of observers) {
+          const entries = observer.takeRecords();
+          // The inner empty-batch return applies to this observer; all three browsers continue notifying others.
+          if (entries.length === 0) continue;
+          // SPEC_GAP(performance-observer-list-realm): The allocation has no explicit realm. Keep the observer's owner, as Firefox/WebKit do; Chromium allocates in the callback's realm.
+          const entryList = new PerformanceObserverEntryListImpl(entries, observer.env);
+          // SPEC_CLASH(performance-observer-callback-options): Supply the specified third argument, as Chromium does. Firefox/WebKit omit it.
+          const callbackOptions: PerformanceObserverCallbackOptions = {};
+          if (observer.requiresDroppedEntries) {
+            const types = new Set<string>();
+            for (const options of observer.optionsList) {
+              if (options.type !== undefined) types.add(options.type);
+              if (options.entryTypes !== undefined) {
+                for (const type of options.entryTypes) types.add(type);
+              }
             }
+            callbackOptions.droppedEntriesCount = 0;
+            // SPEC_GAP(performance-observer-duplicate-counts): Count each observed type once, as Chromium does; the prose does not say whether repeated names duplicate the count.
+            for (const type of types) {
+              // A lazily unallocated buffer has never dropped an entry.
+              callbackOptions.droppedEntriesCount += this.#entryBufferMap.get(type)?.droppedEntriesCount ?? 0;
+            }
+            observer.requiresDroppedEntries = false;
           }
-          callbackOptions.droppedEntriesCount = 0;
-          // SPEC_GAP(performance-observer-duplicate-counts): Count each observed type once, as Chromium does; the prose does not say whether repeated names duplicate the count.
-          for (const type of types) {
-            // A lazily unallocated buffer has never dropped an entry.
-            callbackOptions.droppedEntriesCount += this.#entryBufferMap.get(type)?.droppedEntriesCount ?? 0;
-          }
-          observer.requiresDroppedEntries = false;
+          observer.callback.call(observer, entryList, observer, callbackOptions);
         }
-        observer.callback.call(observer, entryList, observer, callbackOptions);
-      }
-    }, { discardSteps: () => { this.#observerTaskQueued = false; } });
+      },
+      discard: () => { this.#observerTaskQueued = false; },
+    });
   }
 
   /** Let handlers make room, preserving pending entry order and discarding excess on no progress. */

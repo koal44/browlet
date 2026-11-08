@@ -217,7 +217,7 @@ queued/delayed timer cancellation, and isolation of report state between globals
 
 | Provisional dependency | Required owner and behavior |
 | --- | --- |
-| `env.fetchGroup.cancel()` | Still returns false. Complete group task/data disposal and keepalive/deferred rules. Controller cancellation and non-keepalive group termination now stop network operations; deferred processing remains unfinished. No DOM types should enter Fetch. |
+| `env.fetchGroup.cancel()` | Terminates unfinished ordinary requests and removes pending body delivery, even after request completion; reports actual canceled work. Queued response delivery becomes a network error; transport buffers and further bytes are discarded. Pending keepalive requests explicitly throw before partial cancellation. Upload/response bookkeeping disposal, retrying consumers, and deferred processing remain unfinished. No DOM types enter Fetch. |
 | `parser.abort()` | Active registration and input cancellation exist. Complete §13.2's readiness events, open-element cleanup, speculative-parser cancellation, and full parser lifecycle. |
 | `userAgent.webDriverBiDiNavigationAborted()` | A no-op until BiDi sessions exist. The lifecycle call supplies the navigation ID, canceled status, URL, and navigable. UserAgent also owns the environment-scoped BiDi queries. |
 | Global `messagePorts` | Messaging must maintain relevant-global membership and disentangle those ports. MessagePort itself is not implemented. |

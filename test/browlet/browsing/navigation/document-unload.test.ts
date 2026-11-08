@@ -223,7 +223,7 @@ describe('single-Document unloading', () => {
   it('runs through the automatic loop without a manually driven turn', async () => {
     const { document, incoming } = fixture(new UserAgent());
     document.salvageable = false;
-    document.env.queueTask('navigation-and-traversal', () => { document.unload(incoming); });
+    document.env.queueTask('navigation-and-traversal', { run: () => { document.unload(incoming); } });
     await expect.poll(() => document.browsingContext).toBeNull();
     expect(incoming.navigationTimingEntry!.unloadEventEnd).toBeGreaterThanOrEqual(incoming.navigationTimingEntry!.unloadEventStart);
   });
@@ -246,7 +246,7 @@ function fixture(userAgent = createManualUserAgent()) {
   const incoming = create('https://example.test/new');
   const loop = document.env.responsibleEventLoop;
   const run = (steps: () => void): void => {
-    document.env.queueTask('navigation-and-traversal', steps);
+    document.env.queueTask('navigation-and-traversal', { run: steps });
     expect(loop.runTaskTurn()).toBe(true);
   };
   return { userAgent, top, document, incoming, loop, run, window: document.env.realm.globalObject as Window };

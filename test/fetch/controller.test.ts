@@ -12,6 +12,7 @@ describe('Fetch controller lifecycle', () => {
   it('starts ongoing with no timing, redirect steps, or serialized abort reason', () => {
     expect(new FetchController()).toEqual({
       state: 'ongoing',
+      responseDeliveryCanceled: false,
       fullTimingInfo: null,
       reportTimingSteps: null,
       serializedAbortReason: null,
@@ -181,9 +182,9 @@ describe('Fetch networking task destinations', () => {
     const env = createClientEnvironment();
     env.queueGlobalFetchTask = queueGlobalFetchTask;
 
-    queueFetchTask(algorithm, global, env);
+    queueFetchTask({ run: algorithm }, global, env);
 
-    expect(queueGlobalFetchTask).toHaveBeenCalledExactlyOnceWith(global, algorithm);
+    expect(queueGlobalFetchTask).toHaveBeenCalledExactlyOnceWith(global, { run: algorithm });
     expect(algorithm).not.toHaveBeenCalled();
   });
 
@@ -195,11 +196,13 @@ describe('Fetch networking task destinations', () => {
     env.queueGlobalFetchTask = queueGlobalFetchTask;
     const order: number[] = [];
 
-    queueFetchTask(() => {
-      order.push(1);
-      queueFetchTask(() => order.push(3), queue, env);
+    queueFetchTask({
+      run: () => {
+        order.push(1);
+        queueFetchTask({ run: () => order.push(3) }, queue, env);
+      },
     }, queue, env);
-    queueFetchTask(() => order.push(2), queue, env);
+    queueFetchTask({ run: () => order.push(2) }, queue, env);
     expect(order).toEqual([]);
     expect(drains).toHaveLength(1);
     drains.shift()!();

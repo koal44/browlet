@@ -167,10 +167,12 @@ describe('SharedWorker outside interface (HTML §10.2.6.4)', () => {
         port.postMessage('connected');
       };
     `, insideEnv, insideEnv.apiBaseURL, new ScriptFetchOptions());
-    insideEnv.queueTask('network', () => {
-      const global = insideEnv.globalImplementation;
-      const insidePort = global.connectPort(implementation.port);
-      global.runScript(script, insidePort, () => { implementation.port.start(); });
+    insideEnv.queueTask('network', {
+      run: () => {
+        const global = insideEnv.globalImplementation;
+        const insidePort = global.connectPort(implementation.port);
+        global.runScript(script, insidePort, () => { implementation.port.start(); });
+      },
     });
     expect(insideEnv.responsibleEventLoop.runTaskTurn()).toBe(true);
     expect(messages).toEqual([]);

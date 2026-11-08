@@ -273,7 +273,7 @@ describe('history preparation failure delivery', () => {
   it('notifies its waiting operation when Document destruction discards preparation', async () => {
     const { top, document, source, ready } = fixture();
     const failed = vi.fn();
-    document.env.queueTask('navigation-and-traversal', () => { document.destroy(); });
+    document.env.queueTask('navigation-and-traversal', { run: () => { document.destroy(); } });
     top.prepareHistoryStep(top, source, 'none', 'traverse', ready, failed);
     await runTask(document);
     expect(document.browsingContext).toBeNull();
@@ -289,7 +289,7 @@ describe('history preparation failure delivery', () => {
     const failed = vi.fn();
     top.prepareHistoryStep(top, source, 'none', 'traverse', ready, failed);
     await runTask(document);
-    document.env.queueTask('navigation-and-traversal', () => { document.destroy(); });
+    document.env.queueTask('navigation-and-traversal', { run: () => { document.destroy(); } });
     turns.shift()!();
     await runTask(document);
     expect(failed).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ message: 'History preparation task was discarded' }));
@@ -305,7 +305,7 @@ describe('history preparation failure delivery', () => {
     top.prepareHistoryStep(top, source, 'none', 'traverse', ready, failed);
     await runTask(document);
     turns.shift()!();
-    document.env.queueTask('navigation-and-traversal', () => { document.destroy(); });
+    document.env.queueTask('navigation-and-traversal', { run: () => { document.destroy(); } });
     pending.resolve(undefined);
     await expect.poll(() => queued.mock.calls.length).toBe(3);
     await runTask(document);
@@ -332,7 +332,7 @@ describe('history preparation failure delivery', () => {
     const { top, document, source, turns, userAgent } = fixture();
     const pending = userAgent.HostPromise.withResolvers(internalType<ChangingNavigableContinuationState>());
     const result = Promise.withResolvers<ChangingNavigableContinuationState>();
-    document.env.queueTask('navigation-and-traversal', () => { document.destroy(); });
+    document.env.queueTask('navigation-and-traversal', { run: () => { document.destroy(); } });
     top.appendSessionHistoryTraversalSteps(() => {
       top.prepareHistoryStep(top, source, 'none', 'traverse', pending.resolve, pending.reject);
       return pending.promise.then(result.resolve, result.reject, internalType<void>());

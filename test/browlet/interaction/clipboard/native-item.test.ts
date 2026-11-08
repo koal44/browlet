@@ -120,9 +120,9 @@ describe('Clipboard §§7.2.3/7.3.1: lazy system clipboard items', () => {
     const f = await createFixture(); await retainItem(f.browser);
     const queued = Promise.withResolvers<void>(); const delivery: (() => void)[] = [];
     const queue = f.env.queueTask.bind(f.env);
-    vi.spyOn(f.env, 'queueTask').mockImplementation((source, steps) => {
-      if (source !== 'clipboard') return queue(source, steps);
-      delivery.push(steps); queued.resolve(); return { remove() {} };
+    vi.spyOn(f.env, 'queueTask').mockImplementation((source, task) => {
+      if (source !== 'clipboard') return queue(source, task);
+      delivery.push(task.run); queued.resolve(); return { remove() {} };
     });
     let settled = false;
     const result = readOutcome(f.browser).then((value) => { settled = true; return value; });
@@ -130,9 +130,11 @@ describe('Clipboard §§7.2.3/7.3.1: lazy system clipboard items', () => {
     if (change === 'focus') f.focus.mockReturnValue(false);
     if (change === 'generation') f.state.token = new Uint8Array([2]);
     // Let the task enter normally, then exercise the operation's own activity check.
-    f.env.realm.queueGlobalTask(clipboardTaskSource, () => {
-      const active = change === 'activity' ? vi.spyOn(f.document, 'isFullyActive').mockReturnValue(false) : null;
-      try { delivery[0]!(); } finally { active?.mockRestore(); }
+    f.env.realm.queueGlobalTask(clipboardTaskSource, {
+      run: () => {
+        const active = change === 'activity' ? vi.spyOn(f.document, 'isFullyActive').mockReturnValue(false) : null;
+        try { delivery[0]!(); } finally { active?.mockRestore(); }
+      },
     });
     expect(await result).toMatchObject({ name: change === 'generation' ? 'InvalidStateError' : 'NotAllowedError' });
   });

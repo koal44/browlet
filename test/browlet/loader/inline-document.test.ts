@@ -169,7 +169,7 @@ describe('inline user-agent Document creation', () => {
     vi.spyOn(userAgent, 'renderInlineDocument').mockImplementation(() => {});
     const document = navigable.createDocumentForInlineContent(null, 'navigate', 'none', url);
     const env = document.env;
-    env.queueTask('network', () => { document.destroy(); });
+    env.queueTask('network', { run: () => { document.destroy(); } });
     const queue = vi.spyOn(env, 'queueTask');
     const finish = vi.spyOn(document, 'finishLoading');
     navigable.finalizeCrossDocumentNavigation('replace', 'none', historyEntry(document));

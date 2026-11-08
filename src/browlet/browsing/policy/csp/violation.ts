@@ -151,7 +151,7 @@ export class CSPViolation {
     };
     // SPEC_CLASH(csp-violation-task-source): CSP leaves the source unnamed;
     // WebKit uses DOM manipulation, Blink networking. Follow WebKit for globals.
-    if (env !== null) env.queueTask('dom-manipulation', steps);
+    if (env !== null) env.queueTask('dom-manipulation', { run: steps });
     else this.#userAgent.queueReportingTask(steps);
   }
 

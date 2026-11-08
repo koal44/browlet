@@ -98,8 +98,10 @@ describe('Worker importScripts (HTML §10.3.1)', () => {
       ['child.js', "trace.push('child'); queueMicrotask(() => trace.push('microtask'));"],
       ['second.js', "trace.push('second');"],
     ]), trace);
-    fixture.env.realm.queueGlobalTask(createTaskSource('worker imports test'), () => {
-      run("importScripts('nested/first.js', 'second.js'); trace.push('returned');", fixture);
+    fixture.env.realm.queueGlobalTask(createTaskSource('worker imports test'), {
+      run: () => {
+        run("importScripts('nested/first.js', 'second.js'); trace.push('returned');", fixture);
+      },
     });
     expect(fixture.env.responsibleEventLoop.runTaskTurn()).toBe(true);
     expect(trace).toEqual([

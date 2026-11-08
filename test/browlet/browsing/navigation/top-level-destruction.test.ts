@@ -220,7 +220,7 @@ describe('top-level traversable closing', () => {
     await runInHostTask(() => {});
     queued!();
     // Supply unloading's destruction step on the real owning loop, then deliver its completion below.
-    document.env.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { document.destroy(); });
+    document.env.realm.queueGlobalTask(navigationAndTraversalTaskSource, { run: () => { document.destroy(); } });
     document.env.responsibleEventLoop.runTaskTurn();
 
     expect(document.browsingContext).toBeNull();

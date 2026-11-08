@@ -38,10 +38,12 @@ describe('HTML Promise jobs', () => {
     await browlet.exposeFunction('host', () => ({
       then(resolve: (value: string) => void, reject: (reason: string) => void) {
         observations.push('thenable');
-        realm.queueGlobalTask(networkingTaskSource, () => {
-          observations.push('task');
-          if (settlement === 'fulfill') resolve('fulfilled');
-          else reject('rejected');
+        realm.queueGlobalTask(networkingTaskSource, {
+          run: () => {
+            observations.push('task');
+            if (settlement === 'fulfill') resolve('fulfilled');
+            else reject('rejected');
+          },
         });
         observations.push('thenable finished');
       },

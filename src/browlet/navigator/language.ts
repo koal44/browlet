@@ -41,12 +41,14 @@ export class NavigatorLanguageMixin {
     const languages = [...tags];
     const global = this.env.globalImplementation;
     if (!EventTargetImpl.is(global)) throw new InternalError('Navigator language changes require a Window or worker event target');
-    this.env.queueTask('dom-manipulation', () => {
-      const previous = this.languages;
-      if (!emulationUpdated && previous.length === languages.length &&
-        previous.every((language, index) => language === languages[index])) return;
-      this.#languages = languages;
-      global.fireEvent('languagechange');
+    this.env.queueTask('dom-manipulation', {
+      run: () => {
+        const previous = this.languages;
+        if (!emulationUpdated && previous.length === languages.length &&
+          previous.every((language, index) => language === languages[index])) return;
+        this.#languages = languages;
+        global.fireEvent('languagechange');
+      },
     });
   }
 }

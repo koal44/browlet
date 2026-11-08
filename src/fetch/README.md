@@ -89,10 +89,36 @@ FetchClient and File/Streams requirements with exception allocation and Fetch
 task delivery. Streams declares the abort and structured-data operations;
 Browlet supplies their DOM/HTML implementations. Fetch's
 `queueFetchTask()` selects a parallel queue or delegates global delivery to
-`env.queueGlobalFetchTask()`. Pass the existing environment; do not manufacture
-a substitute browser settings object. Bodies, requests, and responses retain
+`env.queueGlobalFetchTask()`. Both take a task containing `run` and optional
+`discard`, and return a removable TaskHandle. Pass the existing environment last; do not manufacture a substitute
+environment. Bodies, requests, and responses retain
 the same `FetchEnvironment`, including Web IDL Core's `DOMException` constructor type.
 Abort fallback exceptions retain their destination realm.
+
+Fetch-owned body reads receive their controller explicitly. The read stays
+registered through callback delivery, even when its request is already done.
+Cancellation removes stale byte tasks and delivers failure once; task destruction
+also releases the internal wait. Reading the stream and preparing queued delivery
+remain separate inside `FetchBody`: `#prepareDelivery()` registers cancellation
+before reading and prepares each queued task. Its `finish()` only releases that
+registration; a task's `discard()` also reports failure to the waiting consumer.
+Bodies and clones do not retain a controller:
+later author consumption of a completed response survives `window.stop()`.
+Cancellation also covers upload progress, response, null-body consumption, and end-of-body
+callback tasks: cancellation removes obsolete tasks, and required failure cleanup
+finishes once at the original destination. Destroyed Document destinations run
+only their discard cleanup on the owning loop. Queued HTTP upload reads and body
+mutation follow the same handoff: teardown settles transport reads, releases
+readers, and errors response streams without invoking scripted upload sources.
+Queued request preparation, cache lookup, network dispatch, and response handoff
+also finish cancellation when discarded, retaining an existing abort reason and
+the original callback destination. Ordinary body failures after headers preserve
+the selected response. Byte/cache stream producers, keepalive detachment, and
+retrying-consumer policy remain separate dependencies.
+
+Background cache revalidation preserves the supplied execution owner and drains
+on a parallel queue. Its request and body-delivery controller remain registered
+with the initiating client's fetch group, even when that client's Document is inactive.
 
 `FetchEnvironment` also requires `parseJSONBytes()` and
 `serializeJavaScriptValueToJSONBytes()` for Body.json() and Response.json().

@@ -27,9 +27,9 @@ describe('File reading implementation', () => {
     const env = createEnvironment();
     const tasks: (() => void)[] = [];
     env.runInParallel = (steps) => { steps(); };
-    env.queueTask = (source, steps) => {
+    env.queueTask = (source, task) => {
       expect(source).toBe('file');
-      tasks.push(steps);
+      tasks.push(task.run);
       return { remove() {} };
     };
     const blob = new BlobImpl([], {}, env);

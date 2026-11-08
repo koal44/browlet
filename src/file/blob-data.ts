@@ -1,4 +1,5 @@
 import { InternalError } from '../infra/internal-error';
+import { TypeError } from '../infra/exceptions';
 import { markAsUncloneable } from '../js-engine/index';
 import { DOMExceptionImpl, DOMExceptionNames } from '../web-idl/core/index';
 import { ReadableStreamImpl, type StreamsEnvironment } from '../streams/index';
@@ -101,9 +102,21 @@ export class BlobData {
     const stream = ReadableStreamImpl.createWithByteReadingSupport(
       undefined, () => { canceled = true; }, 0, env,
     );
+    // SPEC_GAP(body-production-discard): File API omits stream completion when its global is destroyed.
+    // SPEC_CLASH(body-production-destruction): Firefox completes retained Blob streams;
+    // Chromium/WebKit stop production differently. Fail once and ignore late backing results.
+    const discard = (): void => {
+      if (canceled) return;
+      canceled = true;
+      stream.error(new TypeError('Blob data production was discarded'));
+    };
+    const removeDestructionSteps = env.addDestructionSteps(discard);
+    stream.onCompletion(removeDestructionSteps, removeDestructionSteps);
 
     // Backend awaits resume on Node's microtask queue. File-reading tasks deliver
     // bytes, completion, and failure to the stream's owning HTML event loop.
+    // TODO(File backing I/O): Interrupting an in-flight read also needs its host source's cancellation.
+    // Destruction settles the stream now; the eventual backing result is ignored.
     // eslint-disable-next-line no-restricted-syntax -- Node schedules backing reads; queueTask controls delivery to the stream.
     const readChunks = async (): Promise<void> => {
       let offset = 0;
@@ -112,28 +125,43 @@ export class BlobData {
           const byteLength = Math.min(this.size - offset, blobReadChunkSize);
           // eslint-disable-next-line no-restricted-syntax -- Resume on Node's queue before queuing the file-reading task below.
           const bytes = await this.read(offset, byteLength);
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Cancellation or discard can run during the backing read.
+          if (canceled) return;
           offset += bytes.length;
-          env.queueTask('file', () => {
-            if (canceled) return;
-            try {
-              // Byte-stream enqueue transfers this read's storage into the stream runtime.
-              stream.enqueueChunk(bytes);
-            } catch (error) {
-              canceled = true;
-              stream.error(error);
-            }
+          env.queueTask('file', {
+            run: () => {
+              if (canceled) return;
+              try {
+                // Byte-stream enqueue transfers this read's storage into the stream runtime.
+                stream.enqueueChunk(bytes);
+              } catch (error) {
+                canceled = true;
+                stream.error(error);
+              }
+            },
+            discard,
           });
         }
         if (!canceled) {
-          env.queueTask('file', () => {
-            if (!canceled) stream.close();
+          env.queueTask('file', {
+            run: () => {
+              if (canceled) return;
+              // Production is finished even when the consumer has not drained buffered bytes.
+              removeDestructionSteps();
+              stream.close();
+            },
+            discard,
           });
         }
       } catch (error) {
-        env.queueTask('file', () => {
-          if (canceled) return;
-          canceled = true;
-          stream.error(error instanceof BlobReadFailure ? error.toDOMException() : error);
+        if (canceled) return;
+        env.queueTask('file', {
+          run: () => {
+            if (canceled) return;
+            canceled = true;
+            stream.error(error instanceof BlobReadFailure ? error.toDOMException() : error);
+          },
+          discard,
         });
       }
     };

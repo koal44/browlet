@@ -5,7 +5,7 @@ import { UserAgent } from '../../../../src/browlet/user-agent';
 import { getBindingContext, getRelevantRealm } from '../../../support/browlet-binding';
 import { createManualUserAgent } from '../../../support/browlet-agent';
 import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
-import { networkingTaskSource } from '../../../../src/browlet/scripting/tasks';
+import { domManipulationTaskSource, networkingTaskSource } from '../../../../src/browlet/scripting/tasks';
 import { FetchBody } from '../../../../src/fetch/body';
 import { FetchHeaders } from '../../../../src/fetch/headers';
 import { FetchResponse } from '../../../../src/fetch/response';
@@ -19,6 +19,7 @@ import {
 import { HTMLLinkElementImpl } from '../../../../src/browlet/dom/nodes/html/metadata/link';
 import { HTMLStyleElementImpl } from '../../../../src/browlet/dom/nodes/html/metadata/style';
 import type { ElementImpl } from '../../../../src/browlet/dom/nodes/element';
+import { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 
 describe('HTMLDocumentParser', () => {
   it.each(['enabled', 'preference', 'sandbox'] as const)('parses noscript using the Document scripting mode (%s)', async (policy) => {
@@ -54,8 +55,10 @@ describe('HTMLDocumentParser', () => {
     expect(scripts).toBe(0);
     expect(document.getElementById('after')).toBeNull();
 
-    realm.queueGlobalTask(networkingTaskSource, () => {
-      document.removeScriptBlockingStyleSheet(blocker);
+    realm.queueGlobalTask(networkingTaskSource, {
+      run: () => {
+        document.removeScriptBlockingStyleSheet(blocker);
+      },
     });
     try {
       await inNodeTask(() => {
@@ -102,16 +105,20 @@ describe('HTMLDocumentParser', () => {
 
       expect(scripts).toHaveLength(0);
 
-      realm.queueGlobalTask(networkingTaskSource, () => {
-        document.removeScriptBlockingStyleSheet(first);
+      realm.queueGlobalTask(networkingTaskSource, {
+        run: () => {
+          document.removeScriptBlockingStyleSheet(first);
+        },
       });
       await inNodeTask(drain);
 
       expect(scripts).toHaveLength(0);
     } finally {
-      realm.queueGlobalTask(networkingTaskSource, () => {
-        document.removeScriptBlockingStyleSheet(first);
-        document.removeScriptBlockingStyleSheet(second);
+      realm.queueGlobalTask(networkingTaskSource, {
+        run: () => {
+          document.removeScriptBlockingStyleSheet(first);
+          document.removeScriptBlockingStyleSheet(second);
+        },
       });
       await inNodeTask(drain);
       await inNodeTask(drain);
@@ -132,20 +139,26 @@ describe('HTMLDocumentParser', () => {
       .parse('<script></script>').observe(() => {}, (error) => { errors.push(error); });
     await inNodeTask(drain);
 
-    realm.queueGlobalTask(networkingTaskSource, () => {
-      document.removeScriptBlockingStyleSheet(first);
-      if (!laterTask) document.addScriptBlockingStyleSheet(second);
+    realm.queueGlobalTask(networkingTaskSource, {
+      run: () => {
+        document.removeScriptBlockingStyleSheet(first);
+        if (!laterTask) document.addScriptBlockingStyleSheet(second);
+      },
     });
     if (laterTask) {
-      realm.queueGlobalTask(networkingTaskSource, () => {
-        document.addScriptBlockingStyleSheet(second);
+      realm.queueGlobalTask(networkingTaskSource, {
+        run: () => {
+          document.addScriptBlockingStyleSheet(second);
+        },
       });
     }
     await inNodeTask(drain);
     expect(scripts).toBe(0);
 
-    realm.queueGlobalTask(networkingTaskSource, () => {
-      document.removeScriptBlockingStyleSheet(second);
+    realm.queueGlobalTask(networkingTaskSource, {
+      run: () => {
+        document.removeScriptBlockingStyleSheet(second);
+      },
     });
     await inNodeTask(drain);
     await inNodeTask(drain);
@@ -181,9 +194,11 @@ describe('HTMLDocumentParser', () => {
     await inNodeTask(drain);
     expect(document.getElementById('after')).toBeNull();
 
-    realm.queueGlobalTask(networkingTaskSource, () => {
-      if (reject) ready.reject(failure);
-      else ready.resolve(undefined);
+    realm.queueGlobalTask(networkingTaskSource, {
+      run: () => {
+        if (reject) ready.reject(failure);
+        else ready.resolve(undefined);
+      },
     });
     await inNodeTask(drain);
     await inNodeTask(drain);
@@ -218,6 +233,57 @@ describe('HTMLDocumentParser', () => {
   });
 });
 
+describe('HTMLDocumentParser destruction', () => {
+  it('retains the parser Document as its task owner after Window reuse', async () => {
+    const { document, env, drain } = createParserDocument(createManualUserAgent());
+    drain();
+    const window = document.getRelevantGlobalObject()!;
+    window.setAssociatedDocument(new DocumentImpl(env));
+    let completed = false;
+    const errors: unknown[] = [];
+    new HTMLDocumentParser(document, () => {}).parse('<p>original</p>')
+      .observe(() => { completed = true; }, (error) => { errors.push(error); });
+    try {
+      expect([...env.responsibleEventLoop.getTaskQueue(networkingTaskSource)].map((task) => task.document)).toEqual([document]);
+    } finally {
+      window.setAssociatedDocument(document);
+      await expect.poll(async () => { await inNodeTask(drain); return completed || errors.length !== 0; }).toBe(true);
+    }
+    expect(errors).toEqual([]);
+  });
+
+  it.each(['input', 'completion', 'script'] as const)('settles parsing when destruction removes %s work', async (phase) => {
+    const userAgent = createManualUserAgent({
+      selectTaskQueue: (queues) => queues.find((queue) => [...queue].some((task) => task.source === domManipulationTaskSource)) ?? queues[0]!,
+    });
+    const { document, env, drain } = createParserDocument(userAgent);
+    drain();
+    const ready = env.InternalPromise.withResolvers(idlType.undefined);
+    const parser = new HTMLDocumentParser(document, () => ready.promise);
+    const errors: unknown[] = [];
+    let completed = false;
+    parser.parse(phase === 'script' ? '<script></script><p id="late">late</p>' : '<p id="parsed">done</p>')
+      .observe(() => { completed = true; }, (error) => { errors.push(error); });
+    if (phase !== 'input') {
+      await inNodeTask(() => { env.responsibleEventLoop.runTaskTurn(); });
+      if (phase === 'completion') await expect.poll(() => env.responsibleEventLoop.hasRunnableTasks()).toBe(true);
+    }
+    env.queueTask('dom-manipulation', { run: () => document.destroy() });
+    await inNodeTask(() => { env.responsibleEventLoop.runTaskTurn(); });
+    expect(document.isDestroyed).toBe(true);
+    await expect.poll(async () => { await inNodeTask(drain); return errors.length; }).toBe(1);
+    expect(completed).toBe(false);
+    expect(errors).toMatchObject([{ name: 'AbortError' }]);
+    expect(parser.stopped).toBe(true);
+    expect(document.activeParser).toBeNull();
+    ready.resolve(undefined);
+    await inNodeTask(drain);
+    expect(document.getElementById('late')).toBeNull();
+    expect(errors).toHaveLength(1);
+    expect([...env.responsibleEventLoop.getTaskQueues()].every((queue) => queue.size === 0)).toBe(true);
+  });
+});
+
 describe('HTMLDocumentParser response bytes', () => {
   it('parses before EOF and retains split BOM and character bytes across input chunks', async () => {
     const { document, realm, env, drain } = createParserDocument();
@@ -245,9 +311,11 @@ describe('HTMLDocumentParser response bytes', () => {
     expect(complete).toBe(false);
     expect(document.encoding).toBe('UTF-8');
 
-    realm.queueGlobalTask(networkingTaskSource, () => {
-      stream.enqueueChunk(Uint8Array.from([0xa9, ...utf8Encode('</p>')]));
-      stream.close();
+    realm.queueGlobalTask(networkingTaskSource, {
+      run: () => {
+        stream.enqueueChunk(Uint8Array.from([0xa9, ...utf8Encode('</p>')]));
+        stream.close();
+      },
     });
     await expect.poll(async () => { await inNodeTask(drain); return complete; }).toBe(true);
     const text = document.getElementById('last')?.firstChild;
@@ -300,9 +368,11 @@ describe('HTMLDocumentParser response bytes', () => {
       .observe(() => { complete = true; }, (error) => { errors.push(error); });
     await expect.poll(async () => { await inNodeTask(drain); return firstInput; }).toBe(true);
 
-    realm.queueGlobalTask(networkingTaskSource, () => {
-      document.abort();
-      ready.resolve(undefined);
+    realm.queueGlobalTask(networkingTaskSource, {
+      run: () => {
+        document.abort();
+        ready.resolve(undefined);
+      },
     });
     await expect.poll(async () => { await inNodeTask(drain); return errors.length; }).toBe(1);
     expect(canceled).toBe(1);

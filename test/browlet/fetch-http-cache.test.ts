@@ -456,6 +456,33 @@ describe('stale-while-revalidate', () => {
     await closed.promise;
     expect(record.controller!.state).toBe('terminated');
   });
+
+  it.each(['cancel', 'terminate'] as const)('keeps a sandbox-executed background body under client %s', async (operation) => {
+    const refresh = Promise.withResolvers<ServerResponse>();
+    const closed = Promise.withResolvers<void>();
+    const f = await fixture(createServer((request, response) => {
+      response.writeHead(200, { 'Cache-Control': 'max-age=0, stale-while-revalidate=300', ETag: '"old"' });
+      if (request.headers['if-none-match']) {
+        response.on('close', () => closed.resolve());
+        response.write('pending');
+        refresh.resolve(response);
+      } else {
+        response.end('old');
+      }
+    }));
+    await f.text(await f.get());
+    const foreground = createFetchOperation(f.request().request, f.env.userAgent.sandbox);
+    expect(await f.text(await foreground.start())).toBe('old');
+    await refresh.promise;
+    const record = f.env.fetchGroup.fetchRecords.find(({ request }) => request.cacheMode === 'no-cache')!;
+    await vi.waitFor(() => expect(record.controller!.hasPendingDelivery).toBe(true));
+    expect(f.env.userAgent.sandbox.fetchGroup.fetchRecords).not.toContain(record);
+    f.env.fetchGroup[operation]();
+    await closed.promise;
+    await vi.waitFor(() => expect(record.request.done).toBe(true));
+    await vi.waitFor(() => expect(record.controller!.hasPendingDelivery).toBe(false));
+    expect(record.controller!.state).toBe('terminated');
+  });
 });
 
 async function fixture(server: Server) {

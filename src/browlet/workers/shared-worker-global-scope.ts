@@ -44,16 +44,17 @@ export class SharedWorkerGlobalImpl extends WorkerGlobalImpl {
   // events until then. A failed/closing startup must still release their ports.
   queueConnectEvent(insidePort: MessagePortImpl): void {
     if (this.closing || this.env.discarded) { insidePort.close(); return; }
-    this.env.queueTask('dom-manipulation', () => {
-      if (!this.env.executionReady) { insidePort.close(); return; }
-      this.fireEvent('connect', MessageEventImpl, (event) => {
-        event.data = '';
-        event.ports = [insidePort];
-        event.source = insidePort;
-      });
-    }, {
+    this.env.queueTask('dom-manipulation', {
+      run: () => {
+        if (!this.env.executionReady) { insidePort.close(); return; }
+        this.fireEvent('connect', MessageEventImpl, (event) => {
+          event.data = '';
+          event.ports = [insidePort];
+          event.source = insidePort;
+        });
+      },
       isRunnable: () => this.env.executionReady || this.env.discarded || this.closing,
-      discardSteps: () => insidePort.close(),
+      discard: () => insidePort.close(),
     });
   }
 

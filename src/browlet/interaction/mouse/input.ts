@@ -289,16 +289,18 @@ export class MouseInputProcessor {
   // https://html.spec.whatwg.org/multipage/webappapis.html#user-interaction-task-source
   // Lifetime checks and lazy registration are Browlet's composition with HTML scheduling.
   #queueTask(document: DocumentImpl, traversable: TopLevelTraversable, deliver: (stream: PointerEventStream) => void): void {
-    document.env.realm.queueGlobalTask(userInteractionTaskSource, () => {
-      if (!this.#userAgent.topLevelTraversableSet.has(traversable)) return;
-      // §3.1 expressly permits reserving 1 for the primary mouse. Other device
-      // producers must allocate different IDs in this existing context-local map.
-      let stream = traversable.pointerEventStreams.get(1);
-      if (stream === undefined) {
-        stream = new PointerEventStream(1, false, true, (targetDocument) => this.hasLockedElement(targetDocument));
-        traversable.pointerEventStreams.set(1, stream);
-      }
-      deliver(stream);
+    document.env.realm.queueGlobalTask(userInteractionTaskSource, {
+      run: () => {
+        if (!this.#userAgent.topLevelTraversableSet.has(traversable)) return;
+        // §3.1 expressly permits reserving 1 for the primary mouse. Other device
+        // producers must allocate different IDs in this existing context-local map.
+        let stream = traversable.pointerEventStreams.get(1);
+        if (stream === undefined) {
+          stream = new PointerEventStream(1, false, true, (targetDocument) => this.hasLockedElement(targetDocument));
+          traversable.pointerEventStreams.set(1, stream);
+        }
+        deliver(stream);
+      },
     });
   }
 }

@@ -170,7 +170,7 @@ describe('Clipboard §5.2.1: native change notification algorithms', () => {
   it('drops queued notifications and pending state during real Document destruction', () => {
     const { clipboard, document, loop, read, received } = createFixture();
     document.clipboardChangePending = true;
-    document.env.realm.queueGlobalTask(userInteractionTaskSource, () => { document.destroy(); });
+    document.env.realm.queueGlobalTask(userInteractionTaskSource, { run: () => { document.destroy(); } });
     clipboard.queueChange(document); document.notifySystemFocusGained();
     loop.runTaskTurn();
     expect(document.clipboardChangePending).toBe(false);

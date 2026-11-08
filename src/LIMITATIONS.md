@@ -1474,9 +1474,11 @@ Top-level Document creation does fetch resources selected by `Speculation-Rules`
 headers, using Document-owned CORS requests with same-origin credentials and
 HTML's CSP exemption. Status, MIME, decoding, and rule registration are connected;
 successful response bodies still reach the explicit parser dependency. Inactive
-Documents defer their tasks and destruction removes queued requests, but
-`FetchGroup.cancel()` does not yet stop an in-flight rule body on Document abortion.
-The strict cancellation regression remains an approved expected failure. See the
+Documents defer their tasks and destruction removes queued requests. Document
+abortion now terminates an in-flight rule request and delivers body failure;
+the strict cancellation regression passes. Already-queued body delivery is also
+removed, including after request completion, with failure releasing its consumer.
+See the
 [header-loading audit](browlet/loader/ROADMAP.md#speculation-rules-header-loading).
 `HTMLScriptElement` has a dedicated implementation/platform identity and result
 state, plus `crossOrigin` and `referrerPolicy` reflection, without its preparation
@@ -1897,21 +1899,46 @@ context. Recursive destruction now shares completion across repeated requests,
 collects inactive-page diagnostics, destroys children before the parent, and releases
 completed child associations. Browser-owned cleanup and child-destruction abortion
 notifications bypass the Document activity gate on the owning loop; ordinary page
-tasks retain that gate. Destruction after Window reuse remains an explicit throwing boundary;
-Fetch cancellation and the remaining resource-owner cleanup are unfinished. See the
+tasks retain that gate. Retired initial-Document destruction now preserves the reused
+Window's resources while removing the old Document's state and tasks. Keepalive and
+the remaining resource-owner cleanup are unfinished. See the
 [destruction audit](browlet/loader/ROADMAP.md#html-7510-recursive-document-destruction).
 Window.stop() now clears an ordinary navigation ID, preserves traversal ownership,
 and invokes recursive abortion; calls during unloading are ignored. Descendant
 abortion retains the ordinary global-task activity gate and does not delay the
-caller's return. FetchGroup.cancel() is still a no-op: stopping transport, discarding
-queued Fetch delivery, and canceling the multipart outer reader after part EOF
-remain explicit dependencies, with the approved in-flight rule-body expected
-failure retained. See the [abortion audit](browlet/loader/ROADMAP.md#html-7511-recursive-abortion-and-stopping-navigation).
+caller's return. FetchGroup.cancel() now stops ordinary pending requests, discards
+their transport's buffered/future bytes, and invalidates queued successful Fetch
+callback delivery. Pending keepalive requests explicitly throw before partial group cancellation.
+Queued Fetch-owned body tasks are removed and their internal waits fail once, including
+after request completion or destruction of the failure-delivery task. Later author
+consumption of a completed response remains independent of that cancellation.
+Stopping from the owning loop's Promise checkpoint is also supported. Queued upload
+progress and response/completion callbacks are now removed on cancellation; required
+failure completion runs once, including after destination Document destruction.
+Queued HTTP stream teardown now errors pending response reads and releases upload
+readers, including cleanup queued during destruction. Discarded preparation,
+cache/dispatch work, and response handoff also settle failure completion.
+Byte/cache production now fails unfinished reads when its tasks are discarded,
+and ignores backing-read results after cancellation. Completed streams and shared
+cache data survive. Destruction now also cancels subresource Fetch execution and
+unfinished Blob production with no queued task, including pending preload selection
+and work whose separate Fetch client remains active. FileReader now stops unfinished
+reads without events during Document destruction, retains completed results, and
+rejects later readAs* calls with AbortError. Destruction inside a FileReader callback
+also suppresses remaining notifications. In-flight EventSources now fail permanently
+on Document cancellation; an already-scheduled retry with no pending request survives
+stop(), while destruction closes all sources. Cooperative dedicated/shared worker
+shutdown now runs the same local destruction hooks after the final checkpoint, and
+discards queued/late work without restarting the loop. Cross-isolate service shutdown,
+forced termination, keepalive detachment, and interruption of the backing host read
+itself remain unfinished. See the
+[abortion audit](browlet/loader/ROADMAP.md#html-7511-recursive-abortion-and-stopping-navigation).
 Multipart framing now feeds independently readable part responses into the
 Document loaders. First-part admission and per-part EOF/load delivery work while
 the outer HTTP response stays open; later parts enter replacement navigation.
-That route still requires Fetch cancellation, unloading's visibility/cache owners,
-and activation. HTTP parts
+The full synthetic replacement route still needs §7.4.5's history-referrer capture;
+its strict integration test is expected-failing. The shutdown handoff passes with
+that metadata supplied and controlled visibility/cache inputs. HTTP parts
 retain the outer and every earlier part's CSP as independent restrictions,
 including report-only policies. First-part sandbox/origin preparation and
 frame-ancestors checks precede Window creation; later supplied responses carry
@@ -1919,14 +1946,23 @@ those cumulative policies into the normal admission checks. Added part CSP on
 local URLs still throws pending inherited-policy composition. Blocked embedding
 and sandbox/COOP conflicts retain the explicit error-page/network-error owners.
 Non-identity transfer decoding, nested multipart, malformed-response recovery,
-and full timing attribution remain explicit dependencies. Active-body
-cancellation and navigation supersession cancel the outer reader; Document-wide
-stop/destruction after a part has closed still needs its lifecycle connection.
+and full timing attribution remain explicit dependencies. Canceling a part or
+aborting its Document retires only that part. Navigable owns whole-load
+cancellation for Stop, superseding navigation, and teardown, including child loads
+and a first part awaiting commitment. A destroyed first Document rejects its
+admission wait. Declined replacements discard their bodies and permit later parts;
+implementation failures cancel the load and remain reported after transport EOF.
+Completed streams release navigation ownership.
 Linked reader cancellation now completes across addon queues: native Promise
 observation wakes its destination for both pending and already-settled sources.
 The strict multipart regression requires completion without a manual checkpoint.
 Media decoder support is not claimed, and no PDF viewer exists.
-Document teardown still needs to cancel a reader whose continuation task it discards.
+ResourceReader now rejects its internal wait and releases its source lock when
+destruction discards a read or cancellation task. Removed cancellation tasks do
+not invoke the source algorithm or report successful cancellation. Producer-owned
+I/O cleanup retains its producer owner. Parser task removal now stops input and
+rejects completion; late finalization runs only internal cleanup on its original
+owning loop. See the [remaining teardown connections](browlet/loader/ROADMAP.md#shared-ownership-shutdown).
 Navigation request construction now retains the
 history/source inputs with UserAgent-owned execution. Child requests retain the
 initiating client's origin, following browsers instead of HTML's broken container
@@ -2446,10 +2482,10 @@ response policies, including a data worker's distinct opaque origin.
 Memory-backed Blob/File messages now cross isolates through File API byte-segment
 records. Host-backed files still need portable source descriptors: local cloning
 preserves their lazy reads, but their records explicitly reject native transport.
-Active FileReaders now stop during cooperative worker shutdown without author
-events. Permanent Window destruction still needs the same cleanup connection;
-canceling a Blob stream prevents further reads/delivery but cannot interrupt a
-host byte-source read already in progress.
+Active FileReaders stop during permanent Document destruction and cooperative
+worker shutdown through the shared global destruction hook, without author
+events. Canceling a Blob stream prevents further reads/delivery but cannot
+interrupt a host byte-source read already in progress.
 FileReaderSync now reads memory-backed Blob/File data in dedicated/shared workers,
 including cloned data. Host-selected sources need synchronous backing I/O; an
 async-only source fails explicitly rather than blocking on its own Promise queue.

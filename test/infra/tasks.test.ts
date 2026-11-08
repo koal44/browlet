@@ -7,14 +7,16 @@ describe('host task scheduling', () => {
   it('defers work and cancels queued tasks through native timer handles', async () => {
     const host = createTestScheduling(nativeTimerHost);
     const calls: string[] = [];
-    const cancelled = host.queueTask('dom-manipulation', () => { calls.push('cancelled'); });
+    const cancelled = host.queueTask('dom-manipulation', { run: () => { calls.push('cancelled'); } });
     cancelled.remove();
 
     const completed = new Promise<void>((resolve) => {
       host.runInParallel(() => { calls.push('background'); });
-      host.queueTask('dom-manipulation', () => {
-        calls.push('task');
-        resolve();
+      host.queueTask('dom-manipulation', {
+        run: () => {
+          calls.push('task');
+          resolve();
+        },
       });
     });
 
@@ -34,9 +36,9 @@ describe('host task scheduling', () => {
       },
     });
 
-    const cancelled = host.queueTask('dom-manipulation', () => { calls.push('cancelled'); });
+    const cancelled = host.queueTask('dom-manipulation', { run: () => { calls.push('cancelled'); } });
     host.runInParallel(() => { calls.push('background'); });
-    host.queueTask('dom-manipulation', () => { calls.push('task'); });
+    host.queueTask('dom-manipulation', { run: () => { calls.push('task'); } });
     expect(calls).toEqual([]);
     cancelled.remove();
 

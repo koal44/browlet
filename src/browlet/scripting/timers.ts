@@ -1,4 +1,4 @@
-import type { TaskCreationOptions, TaskHandle, TimerHost } from '../../infra/index';
+import type { TaskRecord, TaskHandle, TimerHost } from '../../infra/index';
 import { Duration } from '../../timing/index';
 
 import type { DocumentImpl } from '../dom/nodes/index';
@@ -189,7 +189,7 @@ export class GlobalTimers {
       'setTimeout/setInterval',
       timeout,
       () => {
-        this.#queueTask(taskSteps, { timerNestingLevel: nestingLevel });
+        this.#queueTask({ run: taskSteps, timerNestingLevel: nestingLevel });
       },
     );
     this.#idMap.set(id, uniqueHandle);
@@ -306,7 +306,7 @@ export type GlobalTimersOptions = {
 export type TimerKey = symbol;
 
 /** Queue a timer task in its owning global with the supplied task metadata. */
-type TimerTaskQueuingSteps = (steps: () => void, options: TaskCreationOptions) => void;
+type TimerTaskQueuingSteps = (task: TaskRecord) => void;
 
 type HighResolutionTimeSource = {
   currentHighResolutionTime(): Duration;

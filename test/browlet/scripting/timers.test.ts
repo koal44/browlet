@@ -239,7 +239,7 @@ function createWorkerTimerFixture() {
   const timers = new GlobalTimers({
     eventLoop, host,
     time: { currentHighResolutionTime: () => new Duration(host.now) },
-    queueTask: (steps, options) => { eventLoop.queueTask(timerTaskSource, null, steps, options); },
+    queueTask: (task) => { eventLoop.queueTask(timerTaskSource, null, task); },
   });
   // A distinct origin also verifies that public deadline estimates stay relative
   // to the global's ordinary clock, not this private counted-time origin.

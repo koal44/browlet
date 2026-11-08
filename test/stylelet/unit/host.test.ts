@@ -354,10 +354,10 @@ describe('Stylelet execution', () => {
     const tasks: (() => void)[] = [];
     const env = createStyleletTestEnvironment();
     env.runInParallel = (steps) => { work.push(steps); };
-    env.queueTask = (source, steps) => {
+    env.queueTask = (source, task) => {
       expect(source).toBe('dom-manipulation');
-      tasks.push(steps);
-      return { remove: () => { tasks.splice(tasks.indexOf(steps), 1); } };
+      tasks.push(task.run);
+      return { remove: () => { tasks.splice(tasks.indexOf(task.run), 1); } };
     };
     const sheet = Stylelet.create(document, { env }).createStyleSheet();
     const completed = observe(sheet.replace('.first {} .second {}'));

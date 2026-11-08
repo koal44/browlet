@@ -485,6 +485,9 @@ export class DocumentImpl extends NodeImpl {
     return this.#nonFullyActiveSince;
   }
 
+  /** Whether destruction has permanently ended this Document's task delivery. */
+  get isDestroyed(): boolean { return this.#destroyed; }
+
   /** Associated WindowProxy handle, or null without a browsing context. */
   // https://html.spec.whatwg.org/#dom-document-defaultview
   get defaultView(): WindowProxyHandle | null {
@@ -1346,11 +1349,13 @@ export class DocumentImpl extends NodeImpl {
         const newURLString = serializeURL(entry.url);
         // SPEC_CLASH(history-hashchange-queue-order): Queue before popstate, as Blink/Gecko do (HTML #12190).
         // Delivery stays asynchronous and follows this task's persisted-state restoration.
-        this.env.queueTask('dom-manipulation', () => {
-          window.fireEvent('hashchange', HashChangeEventImpl, (event) => {
-            event.oldURL = oldURLString;
-            event.newURL = newURLString;
-          });
+        this.env.queueTask('dom-manipulation', {
+          run: () => {
+            window.fireEvent('hashchange', HashChangeEventImpl, (event) => {
+              event.oldURL = oldURLString;
+              event.newURL = newURLString;
+            });
+          },
         });
       }
       window.fireEvent('popstate', PopStateEventImpl, (event) => {
@@ -1435,10 +1440,12 @@ export class DocumentImpl extends NodeImpl {
     env.userAgent.timerHost.scheduleTimeout(50, () => {
       // Destruction removes Document tasks; do not enqueue a new one after its browsing context was cleared.
       if (this.browsingContext === null) return;
-      env.queueTask('navigation-and-traversal', () => {
-        if (this.activeParser === null || !env.userAgent.isUserInterestedInFragmentScrolling(this)) return;
-        this.scrollToFragment();
-        if (this.indicatedPart === null) this.tryToScrollToFragment();
+      env.queueTask('navigation-and-traversal', {
+        run: () => {
+          if (this.activeParser === null || !env.userAgent.isUserInterestedInFragmentScrolling(this)) return;
+          this.scrollToFragment();
+          if (this.indicatedPart === null) this.tryToScrollToFragment();
+        },
       });
     });
   }
@@ -1592,12 +1599,14 @@ export class DocumentImpl extends NodeImpl {
     // PROVISIONAL: the full stop-parsing task ordering remains with the parser lifecycle owner.
     // SPEC_GAP(print-load-task): This loader can finish in a Promise checkpoint; printing must enter a pausable task.
     if (this.printWhenLoaded) {
-      env.queueTask('dom-manipulation', () => {
-        if (!this.printWhenLoaded) return;
-        // SPEC_GAP(print-pending-request-consumption): Consume once, before rechecking admission through Window.print().
-        this.printWhenLoaded = false;
-        window.print();
-      }, { discardSteps: () => { this.printWhenLoaded = false; } });
+      env.queueTask('dom-manipulation', {
+        run: () => {
+          if (!this.printWhenLoaded) return;
+          // SPEC_GAP(print-pending-request-consumption): Consume once, before rechecking admission through Window.print().
+          this.printWhenLoaded = false;
+          window.print();
+        }, discard: () => { this.printWhenLoaded = false; },
+      });
     }
   }
 
@@ -1615,9 +1624,9 @@ export class DocumentImpl extends NodeImpl {
     const container = this.getNodeNavigable()?.container ?? null;
     if (container instanceof HTMLIFrameElementImpl) {
       // The iframe owner handles mute/progress flags, timing, and the post-dispatch policy check.
-      container.queueTask(taskSources['dom-manipulation'], () => container.runLoadEventSteps());
+      container.queueTask(taskSources['dom-manipulation'], { run: () => container.runLoadEventSteps() });
     } else if (container !== null) {
-      container.queueTask(taskSources['dom-manipulation'], () => { container.fireEvent('load'); });
+      container.queueTask(taskSources['dom-manipulation'], { run: () => { container.fireEvent('load'); } });
     }
   }
 
@@ -1714,19 +1723,21 @@ export class DocumentImpl extends NodeImpl {
     if (activeWindow === null) throw new InternalError('Transition setup requires an active Window');
     // TODO(HTML §7.4.6.1 coordinator): Forward setup/capture/unload failures and task discard to the waiting operation.
     // Recursive unloading supplies a completion promise; CSS capture still needs its failure contract.
-    activeWindow.env.queueTask('navigation-and-traversal', () => {
-      const proceedAfterCapture = () => {
-        navigable.traversable.appendSessionHistoryTraversalSteps(() => {
-          navigable.setOngoingNavigation(null);
-          return this.unloadAndDescendants(targetDocument, afterPotentialUnloads);
-        });
-      };
-      // SPEC_CLASH(cross-document-transition-setup-inputs): HTML also passes navigationType; CSS setup does not take it.
-      // Follow CSS's contract; its preceding eligibility check already receives the navigation type.
-      const viewTransition = this.setupCrossDocumentViewTransition(targetDocument, proceedAfterCapture);
-      window.firePageSwapEvent(targetEntry, navigationType, viewTransition);
-      // A non-null transition retains the continuation until capture finishes or the transition is skipped.
-      if (viewTransition === null) proceedAfterCapture();
+    activeWindow.env.queueTask('navigation-and-traversal', {
+      run: () => {
+        const proceedAfterCapture = () => {
+          navigable.traversable.appendSessionHistoryTraversalSteps(() => {
+            navigable.setOngoingNavigation(null);
+            return this.unloadAndDescendants(targetDocument, afterPotentialUnloads);
+          });
+        };
+        // SPEC_CLASH(cross-document-transition-setup-inputs): HTML also passes navigationType; CSS setup does not take it.
+        // Follow CSS's contract; its preceding eligibility check already receives the navigation type.
+        const viewTransition = this.setupCrossDocumentViewTransition(targetDocument, proceedAfterCapture);
+        window.firePageSwapEvent(targetEntry, navigationType, viewTransition);
+        // A non-null transition retains the continuation until capture finishes or the transition is skipped.
+        if (viewTransition === null) proceedAfterCapture();
+      },
     });
   }
 
@@ -1805,10 +1816,13 @@ export class DocumentImpl extends NodeImpl {
       if (completion.isResolved) return P.reject(new InternalError('Document unloading has already ended'), resultType);
       const taskCompletion = P.withResolvers(resultType);
       try {
-        pendingTask = document.env.queueTask('navigation-and-traversal', () => {
-          pendingTask = undefined;
-          try { steps(); taskCompletion.resolve(); } catch (error) { taskCompletion.reject(error); }
-        }, { discardSteps: () => { taskCompletion.reject(new InternalError('Document unload task was discarded')); } });
+        pendingTask = document.env.queueTask('navigation-and-traversal', {
+          run: () => {
+            pendingTask = undefined;
+            try { steps(); taskCompletion.resolve(); } catch (error) { taskCompletion.reject(error); }
+          },
+          discard: () => { taskCompletion.reject(new InternalError('Document unload task was discarded')); },
+        });
       } catch (error) { taskCompletion.reject(error); }
       return taskCompletion.promise;
     };
@@ -1924,16 +1938,14 @@ export class DocumentImpl extends NodeImpl {
     if (navigable === undefined || navigable === null) {
       throw new InternalError('Document destruction requires its retained navigable');
     }
-    if (env.getAssociatedDocument() !== this) {
-      // TODO(HTML §7.5.10): Separate Document-owned teardown from reused-Window resources before
-      // destroying a superseded initial about:blank Document whose environment now belongs to its replacement.
-      throw new InternalError('Destruction after Window reuse is not implemented');
-    }
+    // Initial about:blank replacement can transfer this Window to a new Document.
+    // Its resources then belong to that Document, even while this one awaits teardown.
+    const ownsGlobal = env.getAssociatedDocument() === this;
     const global = env.getWindowOrWorkerGlobalScopeMixin();
 
     this.abort();
     this.salvageable = false;
-    for (const port of global.messagePorts) port.disentangle();
+    if (ownsGlobal) for (const port of global.messagePorts) port.disentangle();
     this.runUnloadingCleanup();
     this.#legacyMouse?.clear();
     this.#wheelInput?.clear();
@@ -1941,9 +1953,17 @@ export class DocumentImpl extends NodeImpl {
     // Browlet input lifetime integration: discard this Document's retained
     // pointer references before detaching it, without firing teardown events.
     navigable.topLevelTraversable.clearPointerStateForDocument(this);
+    // Discard notifications can finish streams and queue more internal cleanup.
+    // Commit destruction first so that work cannot become a new page task.
+    this.#destroyed = true;
+    this.#scriptsMayRunReady?.reject(new DOMExceptionImpl('Document was destroyed', DOMExceptionNames.abort));
+    this.#scriptsMayRunReady = null;
+    if (ownsGlobal) global.runDestructionSteps();
     eventLoop.removeTasksForDocument(this);
-    global.handoffReports();
-    global.clearReportingState();
+    if (ownsGlobal) {
+      global.handoffReports();
+      global.clearReportingState();
+    }
 
     const wasActive = navigable.activeDocument === this;
     this.browsingContext = null;
@@ -1961,13 +1981,12 @@ export class DocumentImpl extends NodeImpl {
 
     for (const worker of this.ownedWorkers) worker.ownerSet.delete(this);
     for (const worklet of this.workletGlobalScopes) worklet.terminate();
-    this.#destroyed = true;
   }
 
-  /** Abort this Document in its owning task and queue abortion of the active descendant Documents. */
+  /** Abort this Document and queue descendant abortion. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#abort-a-document-and-its-descendants
   abortAndDescendants(): void {
-    if (this.env.responsibleEventLoop.currentlyRunningTask === null) {
+    if (!this.env.responsibleEventLoop.isRunningTaskOrCheckpoint) {
       throw new InternalError('Recursive Document abortion requires a task on its owning event loop');
     }
     // SPEC_GAP(abort-descendant-order): HTML leaves ordering open; enqueue in its descendant collection's tree order.
@@ -1977,28 +1996,30 @@ export class DocumentImpl extends NodeImpl {
       if (window === null) throw new InternalError('Descendant abortion requires an active Window');
       // SPEC_CLASH(abort-descendant-task): Follow HTML's queued handoff, including within one Agent.
       // Chromium stops local child parsers synchronously; each Browlet task stays on its owning loop.
-      window.env.queueTask('navigation-and-traversal', () => {
-        const document = descendant.activeDocument;
-        if (document === null) throw new InternalError('Descendant abortion requires an active Document');
-        document.abort();
-        if (!document.salvageable) this.salvageable = false;
+      window.env.queueTask('navigation-and-traversal', {
+        run: () => {
+          const document = descendant.activeDocument;
+          if (document === null) throw new InternalError('Descendant abortion requires an active Document');
+          document.abort();
+          if (!document.salvageable) this.salvageable = false;
+        },
       });
     }
     this.abort();
   }
 
-  /** Stop this document's fetches and active parser from its owning event-loop task. */
+  /** Stop this Document's fetches and active parser on the owning loop. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#abort-a-document
   abort(): void {
     const env = this.env;
-    if (env.responsibleEventLoop.currentlyRunningTask === null) {
+    if (!env.responsibleEventLoop.isRunningTaskOrCheckpoint) {
       throw new InternalError('Document abortion requires a task on its owning event loop');
     }
     // SPEC_CLASH(refresh-abort): Cancel pending Refresh like Chromium/Firefox; WebKit keeps it after stop().
     this.cancelDeclarativeRefresh();
-    // TODO(HTML §7.5.11 / Fetch): Group cancellation must stop transport and selectively discard
-    // queued Fetch delivery and further bytes; cancel() remains explicit provisional behavior.
-    if (env.fetchGroup.cancel()) this.makeUnsalvageable('fetch');
+    // TODO(HTML §7.5.11 / Fetch): Complete keepalive detachment.
+    // Ordinary transport and pending Fetch-owned body/callback delivery are canceled together.
+    if (env.getAssociatedDocument() === this && env.fetchGroup.cancel()) this.makeUnsalvageable('fetch');
 
     const navigationID = this.duringLoadingNavigationID;
     if (navigationID !== null) {
@@ -2020,6 +2041,9 @@ export class DocumentImpl extends NodeImpl {
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#unloading-document-cleanup-steps
   runUnloadingCleanup(): void {
     const env = this.env;
+    if (!this.salvageable) this.cancelDeclarativeRefresh();
+    // A retired initial Document must not tear down its replacement's reused Window.
+    if (env.getAssociatedDocument() !== this) return;
     const global = env.getWindowOrWorkerGlobalScopeMixin();
     for (const socket of global.webSockets) {
       socket.makeDisappear();
@@ -2027,7 +2051,6 @@ export class DocumentImpl extends NodeImpl {
     }
     for (const transport of global.webTransports) transport.cleanup();
     if (!this.salvageable) {
-      this.cancelDeclarativeRefresh();
       for (const source of global.eventSources) source.close();
       global.timers.clear();
       this.getRelevantGlobalObject()?.idleCallbacks.clear();
@@ -2150,6 +2173,7 @@ export class DocumentImpl extends NodeImpl {
   /** Wait until navigation permits scripts in the newly created document. */
   // https://html.spec.whatwg.org/#scripts-may-run-for-the-newly-created-document
   waitForScriptsMayRun(): InternalPromise<void> {
+    if (this.#destroyed) return this.env.InternalPromise.reject(new DOMExceptionImpl('Document was destroyed', DOMExceptionNames.abort), idlType.undefined);
     if (this.#readyToRunScripts) return this.env.InternalPromise.resolve(undefined, idlType.undefined);
     return (this.#scriptsMayRunReady ??= this.env.InternalPromise.withResolvers(idlType.undefined)).promise;
   }
@@ -3050,10 +3074,13 @@ export class DocumentImpl extends NodeImpl {
     try {
       // SPEC_CLASH(document-destruction-task-activity): HTML's global task is gated on full activity,
       // stranding inactive-page teardown. Only browser cleanup bypasses that gate, on the owning loop.
-      this.env.responsibleEventLoop.queueTask(taskSources['navigation-and-traversal'], null, () => {
-        try { steps(); completion.resolve(); }
-        catch (error) { completion.reject(error); }
-      }, { discardSteps: () => { completion.reject(new InternalError('Document destruction task was discarded')); } });
+      this.env.responsibleEventLoop.queueTask(taskSources['navigation-and-traversal'], null, {
+        run: () => {
+          try { steps(); completion.resolve(); }
+          catch (error) { completion.reject(error); }
+        },
+        discard: () => { completion.reject(new InternalError('Document destruction task was discarded')); },
+      });
     } catch (error) { completion.reject(error); }
     return completion.promise;
   }
@@ -3142,23 +3169,24 @@ export class DocumentImpl extends NodeImpl {
       }
       // SPEC_GAP(refresh-task-source): HTML leaves delayed dispatch's task source unspecified.
       // Use navigation-and-traversal, retaining this Document even if its Window is reassociated.
-      const task = eventLoop.queueTask(taskSources['navigation-and-traversal'], this, () => {
-        if (this.#pendingDeclarativeRefresh !== refresh) return;
-        this.#pendingDeclarativeRefresh = null;
-        if (refresh.metaInsertionTime !== undefined && this.activeSandboxingFlagSet.has('sandboxed-automatic-features')) return;
-        const navigable = this.getNodeNavigable();
-        if (navigable === null) return;
-        if (urlsEqual(refresh.url, this.url)) {
-          // SPEC_CLASH(refresh-same-url-reload): All three browsers reload; HTML says navigate with replacement.
-          navigable.reload();
-        } else {
-          // SPEC_CLASH(refresh-history-replacement): Keep HTML's replacement at every delay, including fragments.
-          // Chromium/Firefox use different delay thresholds; Chromium/WebKit report push for fragments.
-          // TODO(HTML §6.4): SourceSnapshotParams still needs Window's transient-activation implementation.
-          navigable.navigate(refresh.url, this, { historyHandling: 'replace' }, env);
-        }
-      }, {
-        discardSteps: () => { if (this.#pendingDeclarativeRefresh === refresh) this.#pendingDeclarativeRefresh = null; },
+      const task = eventLoop.queueTask(taskSources['navigation-and-traversal'], this, {
+        run: () => {
+          if (this.#pendingDeclarativeRefresh !== refresh) return;
+          this.#pendingDeclarativeRefresh = null;
+          if (refresh.metaInsertionTime !== undefined && this.activeSandboxingFlagSet.has('sandboxed-automatic-features')) return;
+          const navigable = this.getNodeNavigable();
+          if (navigable === null) return;
+          if (urlsEqual(refresh.url, this.url)) {
+            // SPEC_CLASH(refresh-same-url-reload): All three browsers reload; HTML says navigate with replacement.
+            navigable.reload();
+          } else {
+            // SPEC_CLASH(refresh-history-replacement): Keep HTML's replacement at every delay, including fragments.
+            // Chromium/Firefox use different delay thresholds; Chromium/WebKit report push for fragments.
+            // TODO(HTML §6.4): SourceSnapshotParams still needs Window's transient-activation implementation.
+            navigable.navigate(refresh.url, this, { historyHandling: 'replace' }, env);
+          }
+        },
+        discard: () => { if (this.#pendingDeclarativeRefresh === refresh) this.#pendingDeclarativeRefresh = null; },
       });
       refresh.handle = { remove: () => { eventLoop.removeTask(task); } };
     };

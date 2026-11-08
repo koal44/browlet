@@ -407,7 +407,7 @@ describe('BroadcastChannel (§9.5)', () => {
     const b = createWindow(userAgent);
     const sender = new a.window.BroadcastChannel('news');
     const events = collect(new b.window.BroadcastChannel('news'));
-    b.env.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { b.document.destroy(); });
+    b.env.realm.queueGlobalTask(navigationAndTraversalTaskSource, { run: () => { b.document.destroy(); } });
     sender.postMessage('pending');
     b.drain();
     sender.postMessage('after destruction');

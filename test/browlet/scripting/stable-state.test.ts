@@ -17,7 +17,7 @@ describe('stable-state scheduling', () => {
     const turns: (() => void)[] = [];
     const loop = createManualEventLoop({ requestTurn: (steps) => { turns.push(steps); } });
     const order: string[] = [];
-    loop.queueTask(networkingTaskSource, null, () => { order.push('task'); });
+    loop.queueTask(networkingTaskSource, null, { run: () => { order.push('task'); } });
     loop.microtaskQueue.enqueueMicrotask(() => { order.push('engine reaction'); });
     loop.requestMicrotaskCheckpoint();
     loop.requestMicrotaskCheckpoint();
@@ -72,7 +72,7 @@ describe('stable-state scheduling', () => {
     const loop = createManualEventLoop({ requestTurn: (steps) => { turns.push(steps); } });
     const section = vi.fn();
 
-    loop.queueTask(networkingTaskSource, null, () => { loop.queueMicrotask(section); });
+    loop.queueTask(networkingTaskSource, null, { run: () => { loop.queueMicrotask(section); } });
     await runInHostTask(() => { turns.shift()!(); });
 
     expect(section).toHaveBeenCalledOnce();
@@ -85,7 +85,7 @@ describe('stable-state scheduling', () => {
     const order: string[] = [];
 
     await runInHostTask(() => {
-      loop.queueTask(networkingTaskSource, null, () => { order.push('task'); });
+      loop.queueTask(networkingTaskSource, null, { run: () => { order.push('task'); } });
       loop.queueMicrotask(() => { order.push('section'); });
       expect(turns).toHaveLength(1);
       turns.shift()!();
@@ -117,7 +117,7 @@ describe('stable-state scheduling', () => {
       env.awaitStableState(section);
       traversable.activeSessionHistoryEntry = env.createSessionHistoryEntry(traversable.activeSessionHistoryEntry.url, new DocumentState());
       expect(document.isFullyActive()).toBe(false);
-      loop.queueTask(networkingTaskSource, document, task);
+      loop.queueTask(networkingTaskSource, document, { run: task });
       expect(loop.runTaskTurn()).toBe(false);
       loop.performMicrotaskCheckpoint();
     });

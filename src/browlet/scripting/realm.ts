@@ -1,4 +1,4 @@
-import { InternalError, type TaskCreationOptions } from '../../infra/index';
+import { InternalError, type TaskRecord } from '../../infra/index';
 import {
   JSRealm, bindAsyncContext, getAssociatedRealm, isObject,
   type CompiledModule, type ModuleRequestPhase,
@@ -319,13 +319,22 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
   // https://html.spec.whatwg.org/multipage/webappapis.html#queue-a-global-task
   queueGlobalTask(
     source: TaskSource,
-    steps: () => void,
-    options: TaskCreationOptions = {},
+    task: TaskRecord,
   ): QueuedTaskHandle {
     const eventLoop = this.agent.eventLoop;
     const document = this.getAssociatedDocument();
-    const task = eventLoop.queueTask(source, document, bindAsyncContext(steps), options);
-    return { remove: () => eventLoop.removeTask(task) };
+    if (document?.isDestroyed) {
+      // SPEC_GAP(document-fetch-cancellation): Parallel production can finish after
+      // Document destruction removed its tasks. Only internal discard cleanup may
+      // run; retain this loop and task source without reviving page work.
+      const discarded = eventLoop.queueTask(source, null, {
+        run: () => task.discard?.(),
+        discard: task.discard,
+      });
+      return { remove: () => eventLoop.removeTask(discarded) };
+    }
+    const queuedTask = eventLoop.queueTask(source, document, { ...task, run: bindAsyncContext(task.run) });
+    return { remove: () => eventLoop.removeTask(queuedTask) };
   }
 
   queueMicrotask(steps: () => void): void {

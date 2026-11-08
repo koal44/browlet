@@ -233,11 +233,13 @@ describe('Navigable abortion notifications', () => {
     active.platform.signal.addEventListener('abort', () => { order.push('signal'); });
     browser.window.navigation.addEventListener('navigateerror', () => { order.push('error'); });
     await runInHostTask(() => {
-      document.env.queueTask('navigation-and-traversal', () => {
-        navigable.informNavigationAPIAboutAbortingNavigation(loop);
-        order.push('returned');
-        expect(navigation.ongoingNavigateEvent).toBeNull();
-        expect(loop.getTaskQueue(navigationAndTraversalTaskSource).size).toBe(0);
+      document.env.queueTask('navigation-and-traversal', {
+        run: () => {
+          navigable.informNavigationAPIAboutAbortingNavigation(loop);
+          order.push('returned');
+          expect(navigation.ongoingNavigateEvent).toBeNull();
+          expect(loop.getTaskQueue(navigationAndTraversalTaskSource).size).toBe(0);
+        },
       });
       loop.runTaskTurn();
     });
@@ -250,13 +252,15 @@ describe('Navigable abortion notifications', () => {
     const active = start();
     const loop = document.env.responsibleEventLoop;
     await runInHostTask(() => {
-      document.env.queueTask('navigation-and-traversal', () => {
-        loop.queueMicrotask(() => {});
-        loop.performMicrotaskCheckpoint();
-        expect(loop.currentlyRunningTask).toBeNull();
-        navigable.informNavigationAPIAboutAbortingNavigation(loop);
-        expect(active.platform.signal.aborted).toBe(true);
-        expect(loop.getTaskQueue(navigationAndTraversalTaskSource).size).toBe(0);
+      document.env.queueTask('navigation-and-traversal', {
+        run: () => {
+          loop.queueMicrotask(() => {});
+          loop.performMicrotaskCheckpoint();
+          expect(loop.currentlyRunningTask).toBeNull();
+          navigable.informNavigationAPIAboutAbortingNavigation(loop);
+          expect(active.platform.signal.aborted).toBe(true);
+          expect(loop.getTaskQueue(navigationAndTraversalTaskSource).size).toBe(0);
+        },
       });
       loop.runTaskTurn();
     });
@@ -294,7 +298,7 @@ describe('Navigable abortion notifications', () => {
     browser.window.navigation.addEventListener('navigateerror', (event) => { errors.push((event as ErrorEvent).error); });
     const loop = document.env.responsibleEventLoop;
     await runInHostTask(() => {
-      document.env.queueTask('navigation-and-traversal', () => { navigable.informNavigationAPIAboutAbortingNavigation(loop); });
+      document.env.queueTask('navigation-and-traversal', { run: () => { navigable.informNavigationAPIAboutAbortingNavigation(loop); } });
       loop.runTaskTurn();
     });
     expect(replacement).toBeDefined();
@@ -319,9 +323,11 @@ describe('Navigable abortion notifications', () => {
     browser.window.navigation.addEventListener('navigateerror', errors);
     const loop = document.env.responsibleEventLoop;
     await runInHostTask(() => {
-      document.env.queueTask('navigation-and-traversal', () => {
-        navigable.informNavigationAPIAboutAbortingNavigation(loop);
-        navigable.informNavigationAPIAboutAbortingNavigation(loop);
+      document.env.queueTask('navigation-and-traversal', {
+        run: () => {
+          navigable.informNavigationAPIAboutAbortingNavigation(loop);
+          navigable.informNavigationAPIAboutAbortingNavigation(loop);
+        },
       });
       loop.runTaskTurn();
     });
@@ -444,7 +450,7 @@ describe('Child-destruction Navigation notifications', () => {
     ]);
     const loop = document.env.responsibleEventLoop;
     await runInHostTask(() => {
-      document.env.queueTask('navigation-and-traversal', () => { navigable.informNavigationAPIAboutChildNavigableDestruction(loop); });
+      document.env.queueTask('navigation-and-traversal', { run: () => { navigable.informNavigationAPIAboutChildNavigableDestruction(loop); } });
       loop.runTaskTurn();
     });
     expect(navigation.upcomingTraverseAPIMethodTrackers.size).toBe(0);
@@ -475,7 +481,7 @@ describe('Child-destruction Navigation notifications', () => {
     }, { once: true });
     const loop = document.env.responsibleEventLoop;
     await runInHostTask(() => {
-      document.env.queueTask('navigation-and-traversal', () => { navigable.informNavigationAPIAboutChildNavigableDestruction(loop); });
+      document.env.queueTask('navigation-and-traversal', { run: () => { navigable.informNavigationAPIAboutChildNavigableDestruction(loop); } });
       loop.runTaskTurn();
     });
     expect(navigation.upcomingTraverseAPIMethodTrackers.size).toBe(0);

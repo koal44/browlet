@@ -94,8 +94,8 @@ export class ClipboardImpl extends EventTargetImpl {
       // preserve each item's grouping, and commit together like WebKit.
       P.all<ClipboardWriteItem>(items.map((item) => item.getWriteData()), internalType<ClipboardWriteItem[]>()).observe(
         (resolved) => {
-          env.queueTask('clipboard', () => { this.#prepareWrite(resolved, document, result); });
-        }, (error) => { env.queueTask('clipboard', () => { result.reject(error); }); },
+          env.queueTask('clipboard', { run: () => { this.#prepareWrite(resolved, document, result); } });
+        }, (error) => { env.queueTask('clipboard', { run: () => { result.reject(error); } }); },
       );
     });
     return result.promise;
@@ -132,18 +132,22 @@ export class ClipboardImpl extends EventTargetImpl {
       // Capture native interaction and activation in this task, before parallel consent.
       env.userAgent.systemClipboard.checkWritePermission(document).observe((allowed) => {
         if (!allowed) {
-          env.queueTask('permissions', () => {
-            result.reject(new DOMExceptionImpl('Clipboard write permission denied', DOMExceptionNames.notAllowed));
+          env.queueTask('permissions', {
+            run: () => {
+              result.reject(new DOMExceptionImpl('Clipboard write permission denied', DOMExceptionNames.notAllowed));
+            },
           });
           return;
         }
-        env.queueTask('clipboard', () => {
-          try {
-            this.#requireFocusedDocument(document);
-            writeData(document);
-          } catch (error) { result.reject(error); }
+        env.queueTask('clipboard', {
+          run: () => {
+            try {
+              this.#requireFocusedDocument(document);
+              writeData(document);
+            } catch (error) { result.reject(error); }
+          },
         });
-      }, (error) => { env.queueTask('permissions', () => { result.reject(error); }); });
+      }, (error) => { env.queueTask('permissions', { run: () => { result.reject(error); } }); });
     } catch (error) { result.reject(error); }
   }
 
@@ -176,8 +180,8 @@ export class ClipboardImpl extends EventTargetImpl {
         );
       });
       P.all<ClipboardWriteItem>(prepared, internalType<ClipboardWriteItem[]>()).observe((ready) => {
-        env.queueTask('clipboard', () => { this.#commitWrite(ready, document, result); });
-      }, (error) => { env.queueTask('clipboard', () => { result.reject(error); }); });
+        env.queueTask('clipboard', { run: () => { this.#commitWrite(ready, document, result); } });
+      }, (error) => { env.queueTask('clipboard', { run: () => { result.reject(error); } }); });
     } catch (error) { result.reject(error); }
   }
 
@@ -187,15 +191,17 @@ export class ClipboardImpl extends EventTargetImpl {
     try {
       this.#requireFocusedDocument(document);
       systemClipboard.writeItems(items, document).observe((changed) => {
-        env.queueTask('clipboard', () => {
-          // A completed native effect remains a change even if focus was lost afterward.
-          if (changed) systemClipboard.queueChange(document);
-          try {
-            this.#requireFocusedDocument(document);
-            result.resolve(undefined);
-          } catch (error) { result.reject(error); }
+        env.queueTask('clipboard', {
+          run: () => {
+            // A completed native effect remains a change even if focus was lost afterward.
+            if (changed) systemClipboard.queueChange(document);
+            try {
+              this.#requireFocusedDocument(document);
+              result.resolve(undefined);
+            } catch (error) { result.reject(error); }
+          },
         });
-      }, (error) => { env.queueTask('clipboard', () => { result.reject(error); }); });
+      }, (error) => { env.queueTask('clipboard', { run: () => { result.reject(error); } }); });
     } catch (error) { result.reject(error); }
   }
 
@@ -219,26 +225,30 @@ export class ClipboardImpl extends EventTargetImpl {
       const allowed = systemClipboard.checkReadPermission(document);
       env.runInParallel(() => {
         if (!allowed) {
-          env.queueTask('permissions', () => {
-            result.reject(new DOMExceptionImpl('Clipboard read permission denied', DOMExceptionNames.notAllowed));
+          env.queueTask('permissions', {
+            run: () => {
+              result.reject(new DOMExceptionImpl('Clipboard read permission denied', DOMExceptionNames.notAllowed));
+            },
           });
           return;
         }
         try {
           this.#requireFocusedDocument(document);
           readData(document).observe((value) => {
-            env.queueTask('clipboard', () => {
-              try {
-                this.#requireFocusedDocument(document);
-                validateResult?.();
-                result.resolve(value);
-              } catch (error) { result.reject(error); }
+            env.queueTask('clipboard', {
+              run: () => {
+                try {
+                  this.#requireFocusedDocument(document);
+                  validateResult?.();
+                  result.resolve(value);
+                } catch (error) { result.reject(error); }
+              },
             });
           }, (error) => {
-            env.queueTask('clipboard', () => { result.reject(error); });
+            env.queueTask('clipboard', { run: () => { result.reject(error); } });
           });
         } catch (error) {
-          env.queueTask('clipboard', () => { result.reject(error); });
+          env.queueTask('clipboard', { run: () => { result.reject(error); } });
         }
       });
     } catch (error) { result.reject(error); }

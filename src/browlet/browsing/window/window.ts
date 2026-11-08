@@ -606,8 +606,10 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   registerSpeculationRules(result: SpeculationRulesParseResult, queueErrors = false): void {
     if (result.errorToRethrow !== null) {
       if (queueErrors) {
-        this.env.realm.queueGlobalTask(domManipulationTaskSource, () => {
-          this.env.reportException(result.errorToRethrow);
+        this.env.realm.queueGlobalTask(domManipulationTaskSource, {
+          run: () => {
+            this.env.reportException(result.errorToRethrow);
+          },
         });
       } else {
         this.env.reportException(result.errorToRethrow);

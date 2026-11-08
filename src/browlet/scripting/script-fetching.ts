@@ -204,7 +204,7 @@ export function fetchWorkletScriptGraph(
     const cached = moduleResponsesMap.get(requestURL);
     if (cached === 'fetching') {
       moduleResponsesMap.whenReady(requestURL, (result) => {
-        env.queueTask('network', () => processCustomFetchResponse(...result));
+        env.queueTask('network', { run: () => processCustomFetchResponse(...result) });
       });
       return;
     }

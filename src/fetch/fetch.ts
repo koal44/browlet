@@ -1,6 +1,7 @@
 import { TypeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
 import { ParallelQueue } from '../infra/parallel-queue';
+import type { TaskRecord, TaskHandle } from '../infra/tasks';
 import { type PromiseResultType, internalType, type InternalPromise, type InternalPromiseWithResolvers } from '../infra/promises';
 import { getBufferSourceCopy, isUint8Array } from '../js-engine/index';
 import { idlType, isDOMException } from '../web-idl/core/index';
@@ -79,12 +80,21 @@ export function fetch(
     const found = client.consumePreloadedResource(
       request.url, request.destination, request.mode, request.credentialsMode, request.integrityMetadata,
       (response: FetchResponse) => {
+        if (params.canceled) {
+          const internalResponse = isFilteredResponse(response) ? response.internalResponse : response;
+          internalResponse.discardBody?.();
+          return;
+        }
         params.preloadedResponseCandidate = response;
         pending.resolve(response);
       },
     );
     if (found && params.preloadedResponseCandidate === null) {
       params.preloadedResponseCandidate = pending.promise;
+      const removeCancellation = params.controller.addCancellationSteps(() => {
+        pending.resolve(FetchResponse.appropriateNetworkError(params));
+      });
+      pending.promise.observe(removeCancellation, removeCancellation);
     }
   }
 
@@ -116,6 +126,8 @@ export function fetch(
   if (request.isSubresource) {
     if (client === null) throw new InternalError('A subresource request requires a client');
     client.fetchGroup.fetchRecords.push({ request, controller: params.controller });
+    // The client owns policy and accounting; the execution owner owns streams and pending I/O.
+    params.controller.observeDestruction(request, env);
   }
   mainFetch(params);
   return params.controller;
@@ -162,9 +174,8 @@ function mainFetch(params: FetchParams, recursive = false): InternalPromise<Fetc
   if (recursive) return userAgent.HostPromise.try(getResponse, responseType);
   userAgent.runInParallel(() => {
     userAgent.HostPromise.try(getResponse, responseType).observe(
-      // Body/Streams operations must enter their owner's task and checkpoint.
-      (result) => params.env.queueTask('network', () => processFetchResponse(params, result)),
-      (error) => params.env.queueTask('network', () => { throw error; }),
+      (result) => queueResponseProcessing(params, result),
+      (error) => handleFetchError(params, error),
     );
   });
 }
@@ -256,9 +267,9 @@ function httpFetch(params: FetchParams, makeCORSPreflight = false): InternalProm
           httpRedirectFetch(params, response).observe(
             // Invalid redirect targets finish here; a valid navigation restarts nonrecursive main fetch.
             (result) => {
-              if (result !== undefined) params.env.queueTask('network', () => processFetchResponse(params, result));
+              if (result !== undefined) queueResponseProcessing(params, result);
             },
-            (error) => params.env.queueTask('network', () => { throw error; }),
+            (error) => handleFetchError(params, error),
           );
         };
         return response;
@@ -534,188 +545,196 @@ function httpNetworkFetch(
   }
 
   // Stream creation and all subsequent stream mutations belong to this execution owner.
-  env.queueTask('network', () => {
-    if (params.canceled) {
-      result.resolve(FetchResponse.appropriateNetworkError(params));
-      return;
-    }
-    const response = new FetchResponse();
-    response.urlList = [...request.urlList];
-    response.requestIncludesCredentials = includeCredentials;
-    let removeCancellation = () => {};
-    let discarded = false;
-    let decoder: HTTPContentDecoder | undefined;
-    let control: HTTPTransportControl | undefined;
-    let decoderBlocked = false;
-    let outputPaused = false;
-    let transmitted = 0;
-    let uploadEnded = false;
-    let cacheEntry: HTTPCacheEntry | undefined;
-    const upload = request.body instanceof FetchBody ? new NetworkUpload(request.body, params) : null;
-    const body = new NetworkBody(params, () => {
-      removeCancellation();
-      response.discardBody = null;
-    });
-    response.body = new FetchBody(body.stream, env);
-    body.setControl({
-      pause() { outputPaused = true; decoder?.pause(); control?.pause(); },
-      resume() {
-        outputPaused = false;
-        decoder?.resume();
-        if (!decoderBlocked) control?.resume();
-      },
-      abort() {
-        if (cacheEntry) cache!.owner.remove(cacheEntry);
-        decoder?.abort(); upload?.cancel(); control?.abort();
-      },
-    });
-    response.discardBody = () => {
-      discarded = true;
-      body.fail(() => new TypeError('Unused HTTP response body was discarded'));
-    };
-    const cancel = () => {
-      response.aborted = params.aborted;
-      body.fail(() => params.aborted
-        ? deserializeAbortReason(controller.serializedAbortReason, env)
-        : new TypeError('Network request was terminated'));
-      if (!result.isResolved) result.resolve(FetchResponse.appropriateNetworkError(params));
-    };
-    removeCancellation = controller.addCancellationSteps(cancel);
-    const requestTime = Date.now();
-    try {
-      control = request.env.userAgent.httpTransport.dispatch({
-        url: request.currentURL,
-        method: request.method,
-        headers: request.headerList,
-        body: upload,
-        partitionKey: request.determineNetworkPartitionKey(),
-        includeCredentials,
-        forceNewConnection,
-      }, {
-        onConnection(connection) {
-          timingInfo.finalConnectionTimingInfo = connection.timingInfo.clampAndCoarsen(
-            timingInfo.postRedirectStartTime, params.crossOriginIsolatedCapability,
-          );
-          if (connection.protocol === 'http/1.1' && request.body instanceof FetchBody && request.body.source === null) {
-            return false;
-          }
-          timingInfo.finalNetworkRequestStartTime = now();
-          return !params.canceled;
+  queueFetchTask({
+    run: () => {
+      if (params.canceled) {
+        result.resolve(FetchResponse.appropriateNetworkError(params));
+        return;
+      }
+      const response = new FetchResponse();
+      response.urlList = [...request.urlList];
+      response.requestIncludesCredentials = includeCredentials;
+      let removeCancellation = () => {};
+      let discarded = false;
+      let decoder: HTTPContentDecoder | undefined;
+      let control: HTTPTransportControl | undefined;
+      let decoderBlocked = false;
+      let outputPaused = false;
+      let transmitted = 0;
+      let uploadEnded = false;
+      let cacheEntry: HTTPCacheEntry | undefined;
+      const upload = request.body instanceof FetchBody ? new NetworkUpload(request.body, params) : null;
+      const body = new NetworkBody(params, () => {
+        removeCancellation();
+        response.discardBody = null;
+      });
+      response.body = new FetchBody(body.stream, env);
+      body.setControl({
+        pause() { outputPaused = true; decoder?.pause(); control?.pause(); },
+        resume() {
+          outputPaused = false;
+          decoder?.resume();
+          if (!decoderBlocked) control?.resume();
         },
-        onRequestBodyChunkLength(length) {
-          transmitted += length;
-          queueCallback(() => params.processRequestBodyChunkLength?.(length));
-          // The peer can finish a known-length response before Undici observes upload EOF.
-          if (request.body instanceof FetchBody && transmitted === request.body.length) endUpload();
-        },
-        onRequestEnd: endUpload,
-        onResponseStarted() { timingInfo.finalNetworkResponseStartTime = now(); },
-        onHeaders(status, statusMessage, headers, hasValidTLS) {
-          if (params.canceled || discarded) return;
-          if (status < 200) {
-            if (timingInfo.firstInterimNetworkResponseStartTime === 0) {
-              timingInfo.firstInterimNetworkResponseStartTime = timingInfo.finalNetworkResponseStartTime;
-            }
-            const interim = new FetchResponse();
-            // SPEC_GAP(early-hints-response-url): Fetch delivers 103 before assigning the final
-            // response URL list, but HTML needs that URL for the early policy container and Link base.
-            // Capture the producing request now, before queued delivery or a later redirect.
-            interim.urlList = request.urlList.map(copyURL);
-            interim.status = status;
-            interim.headerList = headers;
-            request.env.userAgent.webDriverBiDiResponseStarted(request, interim);
-            if (status === 103 && params.processEarlyHintsResponse !== null) {
-              queueCallback(() => params.processEarlyHintsResponse?.(interim));
-            }
-            return;
-          }
-          response.status = status;
-          response.statusMessage = statusMessage;
-          response.headerList = headers;
-          request.env.userAgent.webDriverBiDiResponseStarted(request, response);
-          request.env.userAgent.hstsStore.processResponse(response, hasValidTLS);
-          if (includeCredentials) response.parseAndStoreCookies(request);
-          request.env.userAgent.webDriverBiDiCloneNetworkResponseBody(request, response);
-          if (request.method !== 'HEAD' && !isNullBodyStatus(status)) {
-            // https://fetch.spec.whatwg.org/#handle-content-codings
-            const codings = headers.getDecodeAndSplit('Content-Encoding')?.filter((coding) => coding !== '');
-            if (codings?.length && codings.every(isHTTPToken)) {
-              // RFC 9110 treats x-gzip as gzip. Keep the received name
-              // in response metadata and use the canonical name for decoding.
-              // https://www.rfc-editor.org/rfc/rfc9110.html#section-8.4.1.3
-              const normalized = codings.map((coding) => {
-                const name = coding.toLowerCase();
-                return name === 'x-gzip' ? 'gzip' : name;
-              });
-              const supported = normalized.every((coding) => request.env.userAgent.supportedContentCodings.has(coding));
-              response.bodyInfo.contentEncoding = normalized.length > 1 ? 'multiple' : supported ? codings[0]!.toLowerCase() : '@unknown';
-              if (supported) {
-                decoder = request.env.userAgent.createContentDecoder(normalized, {
-                  onData: receiveDecoded,
-                  onEnd: endResponse,
-                  onError() { if (!discarded && !params.canceled) controller.terminate(); },
-                  onDrain() {
-                    decoderBlocked = false;
-                    if (!outputPaused && !params.canceled && !discarded) control?.resume();
-                  },
-                });
-              }
-            }
-          }
-          if (cache && generation === cache.generation) cacheEntry = cache.begin(request, response, requestTime, Date.now());
-          result.resolve(response);
-        },
-        onData(bytes) {
-          if (params.canceled || discarded) return;
-          response.bodyInfo.encodedSize += bytes.byteLength;
-          if (decoder) {
-            if (!decoder.write(bytes)) { decoderBlocked = true; control?.pause(); }
-          } else {
-            receiveDecoded(bytes);
-          }
-        },
-        onEnd() { upload?.cancel(); if (decoder) decoder.end(); else endResponse(); },
-        onError() {
-          // Native transport errors do not become page-owned exception objects.
-          if (!params.canceled && !discarded) controller.terminate();
+        abort() {
+          if (cacheEntry) cache!.owner.remove(cacheEntry);
+          decoder?.abort(); upload?.cancel(); control?.abort();
         },
       });
-      synchronizeControl();
-    } catch (error) {
-      removeCancellation();
-      body.fail(() => new TypeError('Network request failed'));
-      result.reject(error);
-    }
+      response.discardBody = () => {
+        discarded = true;
+        body.fail(() => new TypeError('Unused HTTP response body was discarded'));
+      };
+      const cancel = () => {
+        response.aborted = params.aborted;
+        body.fail(() => params.aborted
+          ? deserializeAbortReason(controller.serializedAbortReason, env)
+          : new TypeError('Network request was terminated'));
+        if (!result.isResolved) result.resolve(FetchResponse.appropriateNetworkError(params));
+      };
+      removeCancellation = controller.addCancellationSteps(cancel);
+      const requestTime = Date.now();
+      try {
+        control = request.env.userAgent.httpTransport.dispatch({
+          url: request.currentURL,
+          method: request.method,
+          headers: request.headerList,
+          body: upload,
+          partitionKey: request.determineNetworkPartitionKey(),
+          includeCredentials,
+          forceNewConnection,
+        }, {
+          onConnection(connection) {
+            timingInfo.finalConnectionTimingInfo = connection.timingInfo.clampAndCoarsen(
+              timingInfo.postRedirectStartTime, params.crossOriginIsolatedCapability,
+            );
+            if (connection.protocol === 'http/1.1' && request.body instanceof FetchBody && request.body.source === null) {
+              return false;
+            }
+            timingInfo.finalNetworkRequestStartTime = now();
+            return !params.canceled;
+          },
+          onRequestBodyChunkLength(length) {
+            transmitted += length;
+            const process = params.processRequestBodyChunkLength;
+            if (process !== null) queueCallback(() => process(length));
+            // The peer can finish a known-length response before Undici observes upload EOF.
+            if (request.body instanceof FetchBody && transmitted === request.body.length) endUpload();
+          },
+          onRequestEnd: endUpload,
+          onResponseStarted() { timingInfo.finalNetworkResponseStartTime = now(); },
+          onHeaders(status, statusMessage, headers, hasValidTLS) {
+            if (params.canceled || discarded) return;
+            if (status < 200) {
+              if (timingInfo.firstInterimNetworkResponseStartTime === 0) {
+                timingInfo.firstInterimNetworkResponseStartTime = timingInfo.finalNetworkResponseStartTime;
+              }
+              const interim = new FetchResponse();
+              // SPEC_GAP(early-hints-response-url): Fetch delivers 103 before assigning the final
+              // response URL list, but HTML needs that URL for the early policy container and Link base.
+              // Capture the producing request now, before queued delivery or a later redirect.
+              interim.urlList = request.urlList.map(copyURL);
+              interim.status = status;
+              interim.headerList = headers;
+              request.env.userAgent.webDriverBiDiResponseStarted(request, interim);
+              if (status === 103 && params.processEarlyHintsResponse !== null) {
+                queueCallback(() => params.processEarlyHintsResponse?.(interim));
+              }
+              return;
+            }
+            response.status = status;
+            response.statusMessage = statusMessage;
+            response.headerList = headers;
+            request.env.userAgent.webDriverBiDiResponseStarted(request, response);
+            request.env.userAgent.hstsStore.processResponse(response, hasValidTLS);
+            if (includeCredentials) response.parseAndStoreCookies(request);
+            request.env.userAgent.webDriverBiDiCloneNetworkResponseBody(request, response);
+            if (request.method !== 'HEAD' && !isNullBodyStatus(status)) {
+              // https://fetch.spec.whatwg.org/#handle-content-codings
+              const codings = headers.getDecodeAndSplit('Content-Encoding')?.filter((coding) => coding !== '');
+              if (codings?.length && codings.every(isHTTPToken)) {
+                // RFC 9110 treats x-gzip as gzip. Keep the received name
+                // in response metadata and use the canonical name for decoding.
+                // https://www.rfc-editor.org/rfc/rfc9110.html#section-8.4.1.3
+                const normalized = codings.map((coding) => {
+                  const name = coding.toLowerCase();
+                  return name === 'x-gzip' ? 'gzip' : name;
+                });
+                const supported = normalized.every((coding) => request.env.userAgent.supportedContentCodings.has(coding));
+                response.bodyInfo.contentEncoding = normalized.length > 1 ? 'multiple' : supported ? codings[0]!.toLowerCase() : '@unknown';
+                if (supported) {
+                  decoder = request.env.userAgent.createContentDecoder(normalized, {
+                    onData: receiveDecoded,
+                    onEnd: endResponse,
+                    onError() { if (!discarded && !params.canceled) controller.terminate(); },
+                    onDrain() {
+                      decoderBlocked = false;
+                      if (!outputPaused && !params.canceled && !discarded) control?.resume();
+                    },
+                  });
+                }
+              }
+            }
+            if (cache && generation === cache.generation) cacheEntry = cache.begin(request, response, requestTime, Date.now());
+            result.resolve(response);
+          },
+          onData(bytes) {
+            if (params.canceled || discarded) return;
+            response.bodyInfo.encodedSize += bytes.byteLength;
+            if (decoder) {
+              if (!decoder.write(bytes)) { decoderBlocked = true; control?.pause(); }
+            } else {
+              receiveDecoded(bytes);
+            }
+          },
+          onEnd() { upload?.cancel(); if (decoder) decoder.end(); else endResponse(); },
+          onError() {
+            // Native transport errors do not become page-owned exception objects.
+            if (!params.canceled && !discarded) controller.terminate();
+          },
+        });
+        synchronizeControl();
+      } catch (error) {
+        removeCancellation();
+        body.fail(() => new TypeError('Network request failed'));
+        result.reject(error);
+      }
 
-    function receiveDecoded(bytes: Uint8Array): void {
-      if (params.canceled || discarded) return;
-      response.bodyInfo.decodedSize += bytes.byteLength;
-      cacheEntry?.append(bytes);
-      body.receive(bytes);
-    }
-    function endResponse(): void {
-      if (params.canceled || discarded) return;
-      cacheEntry?.finish(response.bodyInfo);
-      cacheEntry = undefined;
-      body.end();
-    }
-    // dispatch() may synchronously deliver callbacks before returning its control.
-    function synchronizeControl(): void {
-      if (params.canceled || discarded) control!.abort();
-      else if (decoderBlocked || outputPaused) control!.pause();
-    }
-    function now(): number {
-      return coarsenTime(request.env.userAgent.unsafeSharedCurrentTime(), params.crossOriginIsolatedCapability);
-    }
-    function queueCallback(steps: () => void): void {
-      queueFetchTask(() => { if (!params.canceled && !discarded) steps(); }, params.taskDestination ?? env.realm.globalObject, env);
-    }
-    function endUpload(): void {
-      if (uploadEnded) return;
-      uploadEnded = true;
-      queueCallback(() => params.processRequestEndOfBody?.());
-    }
-  });
+      function receiveDecoded(bytes: Uint8Array): void {
+        if (params.canceled || discarded) return;
+        response.bodyInfo.decodedSize += bytes.byteLength;
+        cacheEntry?.append(bytes);
+        body.receive(bytes);
+      }
+      function endResponse(): void {
+        if (params.canceled || discarded) return;
+        cacheEntry?.finish(response.bodyInfo);
+        cacheEntry = undefined;
+        body.end();
+      }
+      // dispatch() may synchronously deliver callbacks before returning its control.
+      function synchronizeControl(): void {
+        if (params.canceled || discarded) control!.abort();
+        else if (decoderBlocked || outputPaused) control!.pause();
+      }
+      function now(): number {
+        return coarsenTime(request.env.userAgent.unsafeSharedCurrentTime(), params.crossOriginIsolatedCapability);
+      }
+      function queueCallback(steps: () => void): void {
+        queueTask(params, { run: () => { if (!params.canceled && !discarded) steps(); } });
+      }
+      function endUpload(): void {
+        if (uploadEnded) return;
+        uploadEnded = true;
+        if (params.processRequestEndOfBody !== null) queueCallback(params.processRequestEndOfBody);
+      }
+    },
+    discard: () => {
+      if (!params.canceled) controller.terminate();
+      controller.cancelResponseDelivery();
+      result.resolve(FetchResponse.appropriateNetworkError(params));
+    },
+  }, env.realm.globalObject, env);
   return result.promise;
 }
 
@@ -803,7 +822,10 @@ function fetchFinale(params: FetchParams, response: FetchResponse): void {
   const endOfBody = () => endResponseBody(params, response);
   if (params.processResponse !== null) {
     const processResponse = params.processResponse;
-    queueTask(params, () => processResponse(response));
+    queueTask(params, {
+      run: () => processResponse(response),
+      discard: () => processResponse(discardedResponse(params)),
+    });
   }
   if (response.type === 'error') request.env.userAgent.webDriverBiDiFetchError(request);
   else request.env.userAgent.webDriverBiDiResponseCompleted(request, response);
@@ -821,10 +843,14 @@ function fetchFinale(params: FetchParams, response: FetchResponse): void {
   if (params.processResponseConsumeBody !== null) {
     const consume = params.processResponseConsumeBody;
     if (internalResponse.body === null) {
-      queueTask(params, () => consume(response, null));
+      queueTask(params, {
+        run: () => consume(response, null),
+        discard: () => consume(response, 'failure'),
+      });
     } else {
       internalResponse.body.readAll(
         (bytes) => consume(response, bytes), () => consume(response, 'failure'), params.taskDestination,
+        params.controller,
       );
     }
   }
@@ -1002,6 +1028,32 @@ function dispatchFetch(params: FetchParams): FetchResponse | InternalPromise<Fet
   return overrideFetch(params, 'http-fetch');
 }
 
+/** Hand the selected response to its execution owner, or finish failure if that work is discarded. */
+// Main fetch and manual HTTP-redirect fetch continue into the same response-processing steps.
+function queueResponseProcessing(params: FetchParams, response: FetchResponse): void {
+  const { env, controller } = params;
+  const discard = (): void => {
+    if (!params.canceled) controller.terminate();
+    controller.cancelResponseDelivery();
+    const internalResponse = isFilteredResponse(response) ? response.internalResponse : response;
+    internalResponse.discardBody?.();
+    fetchFinale(params, FetchResponse.appropriateNetworkError(params));
+  };
+  queueFetchTask({
+    run: () => processFetchResponse(params, response),
+    discard,
+  }, env.realm.globalObject, env);
+}
+
+/** Only discarded body work becomes cancellation; retain the existing invariant-failure path. */
+function handleFetchError(params: FetchParams, error: unknown): void {
+  if (error === discardedBodySteps) {
+    queueResponseProcessing(params, FetchResponse.appropriateNetworkError(params));
+  } else {
+    params.env.queueTask('network', { run: () => { throw error; } });
+  }
+}
+
 // Main fetch after the recursive return: filtering, blocking, integrity, handover.
 // https://fetch.spec.whatwg.org/#concept-main-fetch
 function processFetchResponse(params: FetchParams, response: FetchResponse): void {
@@ -1049,7 +1101,7 @@ function processFetchResponse(params: FetchParams, response: FetchResponse): voi
       if (!bytesMatchIntegrityMetadata(bytes, request.integrityMetadata)) { fail(); return; }
       response.body = FetchBody.fromBytes(bytes, params.env);
       fetchFinale(params, response);
-    }, fail, params.env.realm.globalObject);
+    }, fail, params.env.realm.globalObject, params.controller);
   } else {
     fetchFinale(params, response);
   }
@@ -1091,29 +1143,70 @@ function endResponseBody(params: FetchParams, response: FetchResponse): void {
       env.markResourceTiming(timingInfo, request.url, request.initiatorType, cacheUsage, bodyInfo, status, allowTransferSize);
     }
   };
-  queueTask(params, () => {
+  const complete = (deliveredResponse: FetchResponse): void => {
     request.done = true;
-    params.processResponseEndOfBody?.(response);
+    params.controller.stopObservingDestruction();
+    params.processResponseEndOfBody?.(deliveredResponse);
     if (request.initiatorType !== null && request.client !== null &&
       !(params.taskDestination instanceof ParallelQueue) && request.client.global === params.taskDestination) {
       params.controller.reportTiming(request.client);
     }
+  };
+  queueTask(params, {
+    run: () => complete(response),
+    discard: () => complete(discardedResponse(params)),
   });
 }
 
 // Stream operations enter the body's task/checkpoint owner.
 function runBodySteps<T>(params: FetchParams, steps: () => NoInfer<T>, type: PromiseResultType<T>): InternalPromise<T> {
   const result = params.request.env.userAgent.HostPromise.withResolvers(type);
-  params.env.queueTask('network', () => {
-    try { result.resolve(steps()); }
-    catch (error) { result.reject(error); }
-  });
+  const { env, controller } = params;
+  queueFetchTask({
+    run: () => {
+      try { result.resolve(steps()); }
+      catch (error) { result.reject(error); }
+    },
+    discard: () => {
+      if (!params.canceled) controller.terminate();
+      controller.cancelResponseDelivery();
+      result.reject(discardedBodySteps);
+    },
+  }, env.realm.globalObject, env);
   return result.promise;
 }
 
-function queueTask(params: FetchParams, steps: () => void): void {
+function queueTask(params: FetchParams, task: TaskRecord): void {
   if (params.taskDestination === null) throw new InternalError('Fetch callback delivery requires a task destination');
-  queueFetchTask(steps, params.taskDestination, params.env);
+  const { controller, taskDestination, env } = params;
+  let canceled = false;
+  let finished = false;
+  let removeCancellation = (): void => {};
+  const pending = queueFetchTask({
+    ...task,
+    run: () => { finished = true; removeCancellation(); task.run(); },
+    discard: () => {
+      finished = true;
+      removeCancellation();
+      if (!canceled) task.discard?.();
+    },
+  }, taskDestination, env);
+  // A closing worker can discard the task during admission. It has already
+  // notified its waiter; registering cancellation now would notify it twice.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Task admission can synchronously discard.
+  if (finished) return;
+  removeCancellation = controller.addDeliveryCancellationSteps(() => {
+    canceled = true;
+    pending.remove();
+    // Upload notifications need no replacement. Response waiters must finish on
+    // the original destination; teardown can discard that failure task as well.
+    if (task.discard) queueFetchTask({ run: task.discard, discard: task.discard }, taskDestination, env);
+  });
+}
+
+/** Discarding delivery fails that callback without changing the transport's recorded reason. */
+function discardedResponse(params: FetchParams): FetchResponse {
+  return params.aborted ? FetchResponse.abortedNetworkError() : FetchResponse.networkError();
 }
 
 /** Select or validate a private cached response, otherwise perform the wire exchange. */
@@ -1204,10 +1297,17 @@ function fetchWithCache(
   return result.promise;
 
   function queue(steps: () => void): void {
-    env.queueTask('network', () => {
-      try { steps(); }
-      catch (error) { result.reject(error); }
-    });
+    queueFetchTask({
+      run: () => {
+        try { steps(); }
+        catch (error) { result.reject(error); }
+      },
+      discard: () => {
+        if (!params.canceled) params.controller.terminate();
+        params.controller.cancelResponseDelivery();
+        result.resolve(FetchResponse.appropriateNetworkError(params));
+      },
+    }, env.realm.globalObject, env);
   }
 }
 
@@ -1231,7 +1331,7 @@ function revalidateInBackground(sourceRequest: FetchRequest, env: FetchEnvironme
   params.crossOriginIsolatedCapability = client.crossOriginIsolatedCapability;
   params.processResponse = (response) => {
     const internalResponse = isFilteredResponse(response) ? response.internalResponse : response;
-    internalResponse.body?.incrementallyRead(() => {}, () => {}, () => {}, destination);
+    internalResponse.body?.incrementallyRead(() => {}, () => {}, () => {}, destination, params.controller);
   };
   client.fetchGroup.fetchRecords.push({ request, controller: params.controller });
   // Enter main fetch directly: revalidation must not consume a preload candidate.
@@ -1258,6 +1358,8 @@ class NetworkUpload implements HTTPUploadSource {
   #reader: ReadableStreamDefaultReaderImpl | undefined;
   #finished = false;
   #pending: InternalPromiseWithResolvers<Uint8Array | null> | undefined;
+  /** Queued acquisition/read work; a running stream read is owned by #reader. */
+  #readTask: TaskHandle | undefined;
 
   constructor(body: FetchBody, params: FetchParams) {
     this.#body = body;
@@ -1269,46 +1371,63 @@ class NetworkUpload implements HTTPUploadSource {
     const { env, request } = this.#params;
     const result = request.env.userAgent.HostPromise.withResolvers(internalType<Uint8Array | null>());
     this.#pending = result;
-    env.queueTask('network', () => {
-      if (this.#finished || this.#params.canceled) { this.#settle(null); return; }
-      try {
-        if (!this.#reader) {
-          this.#reader = this.#body.stream.getDefaultReader();
-          this.#reader.closed.observe(() => {}, () => {});
-        }
-        this.#reader.readChunk({
-          chunkSteps: (chunk) => {
-            try {
-              if (!isUint8Array(chunk)) {
-                throw new TypeError('Request body stream produced a non-Uint8Array chunk');
-              }
-              this.#settle(getBufferSourceCopy(chunk));
-            } catch (error) { this.#fail(error); }
-          },
-          closeSteps: () => {
-            this.#finished = true;
-            this.#reader!.release(env);
-            this.#reader = undefined;
-            this.#settle(null);
-          },
-          errorSteps: (error) => this.#fail(error),
-        });
-      } catch (error) { this.#fail(error); }
-    });
+    this.#readTask = queueFetchTask({
+      run: () => {
+        this.#readTask = undefined;
+        if (this.#finished || this.#params.canceled) { this.#settle(null); return; }
+        try {
+          if (!this.#reader) {
+            this.#reader = this.#body.stream.getDefaultReader();
+            this.#reader.closed.observe(() => {}, () => {});
+          }
+          this.#reader.readChunk({
+            chunkSteps: (chunk) => {
+              try {
+                if (!isUint8Array(chunk)) {
+                  throw new TypeError('Request body stream produced a non-Uint8Array chunk');
+                }
+                this.#settle(getBufferSourceCopy(chunk));
+              } catch (error) { this.#fail(error); }
+            },
+            closeSteps: () => {
+              this.#finished = true;
+              this.#reader!.release(env);
+              this.#reader = undefined;
+              this.#settle(null);
+            },
+            errorSteps: (error) => this.#fail(error),
+          });
+        } catch (error) { this.#fail(error); }
+      },
+      discard: () => {
+        this.#readTask = undefined;
+        this.#settle(null);
+        if (!this.#finished) this.#fail(new TypeError('Upload read task was discarded'));
+      },
+    }, env.realm.globalObject, env);
     return result.promise;
   }
 
   cancel(): void {
     if (this.#finished) return;
     this.#finished = true;
+    this.#readTask?.remove();
+    this.#readTask = undefined;
     this.#settle(null);
     const { env } = this.#params;
-    env.queueTask('network', () => {
-      const pending = this.#reader ? this.#reader.cancel() : this.#body.stream.cancelInternal(undefined);
-      pending.observe(() => {}, () => {});
+    const release = (): void => {
       this.#reader?.release(env);
       this.#reader = undefined;
-    });
+    };
+    queueFetchTask({
+      run: () => {
+        const pending = this.#reader ? this.#reader.cancel() : this.#body.stream.cancelInternal(undefined);
+        pending.observe(() => {}, () => {});
+        release();
+      },
+      // Teardown releases internal ownership without invoking the upload source.
+      discard: release,
+    }, env.realm.globalObject, env);
   }
 
   #settle(bytes: Uint8Array | null): void {
@@ -1395,10 +1514,20 @@ class NetworkBody {
       !(this.#pull && this.#size > 0)) return;
     this.#taskQueued = true;
     const { env } = this.#params;
-    env.queueTask('network', () => {
-      this.#taskQueued = false;
-      this.#deliver();
-    });
+    queueFetchTask({
+      run: () => {
+        this.#taskQueued = false;
+        this.#deliver();
+      },
+      discard: () => {
+        if (!this.#params.canceled) this.#params.controller.terminate();
+        // Keep the queued flag set while fail() drops buffered bytes, so it
+        // cannot schedule another delivery during this discard notification.
+        this.fail(() => new TypeError('Response body task was discarded'));
+        this.#taskQueued = false;
+        this.#deliver();
+      },
+    }, env.realm.globalObject, env);
   }
 
   #deliver(): void {
@@ -1448,6 +1577,10 @@ class NetworkBody {
 // A received transport chunk can overshoot the upper limit; paused delivery cannot accumulate tasks.
 const upperBufferLimit = 64 * 1024;
 const lowerBufferLimit = 32 * 1024;
+
+// Unwind discarded body work without conflating it with a thrown implementation failure.
+// This private signal is consumed by handleFetchError and never reaches Fetch's callbacks.
+const discardedBodySteps = Symbol('discarded-body-steps');
 
 const responseType = internalType<FetchResponse>();
 const optionalResponseType = internalType<FetchResponse | null>();

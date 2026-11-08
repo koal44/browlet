@@ -9,12 +9,15 @@ import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl } from '../../../src/browlet/dom/nodes/html/embedded/iframe';
 import { MultipartResourceReader } from '../../../src/browlet/loader/multipart-reader';
 import { ResourceReader } from '../../../src/browlet/loader/resource-reader';
+import { taskSources } from '../../../src/browlet/scripting/tasks';
 import type { Window } from '../../../src/browlet/platform';
 import { FetchBody, FetchResponse } from '../../../src/fetch/index';
 import { fetch } from '../../../src/fetch/fetch';
 import { FetchRequest } from '../../../src/fetch/request';
 import { ReadableStreamImpl } from '../../../src/streams/index';
 import { utf8Decode, utf8Encode } from '../../../src/encoding/index';
+import { InternalError, internalType } from '../../../src/infra/index';
+import type { UnloadCancellationResult } from '../../../src/browlet/browsing/navigation/navigable';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { closeServer, listen } from './http-fixture';
 
@@ -120,8 +123,275 @@ describe('multipart Document loading', () => {
     expect(document.querySelector('#first')?.textContent).toBe('first');
   });
 
+  it.each(['stop', 'destroy'] as const)('cancels the outer response after part EOF on navigable %s', async (action) => {
+    const { navigable, params, stream, canceled, load } = await fixture();
+    const navigate = vi.spyOn(navigable, 'navigate').mockImplementation(() => {});
+    const loading = load();
+    stream.enqueueChunk(utf8Encode('--part\r\nContent-Type: text/html;charset=utf-8\r\n\r\n<p>first</p>'));
+    const document = (await loading)!;
+    navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
+    stream.enqueueChunk(utf8Encode('\r\n--part\r\n'));
+    await expect.poll(() => document.readyState).toBe('complete');
+    expect(document.activeParser).toBeNull();
+    await new Promise<void>((resolve) => document.env.queueTask('navigation-and-traversal', {
+      run: () => {
+        if (action === 'stop') navigable.stopLoading();
+        else navigable.topLevelTraversable.destroy();
+        resolve();
+      },
+    }));
+    await expect.poll(() => canceled.mock.calls.length).toBe(1);
+    expect(stream.locked).toBe(false);
+    expect(stream.state.state).toBe('closed');
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('aborts only the current part when its Document stops parsing', async () => {
+    const { navigable, params, stream, canceled, load } = await fixture();
+    const navigate = vi.spyOn(navigable, 'navigate').mockImplementation(() => {});
+    const loading = load();
+    stream.enqueueChunk(utf8Encode('--part\r\nContent-Type: text/html\r\n\r\n<p>first</p>'));
+    const document = (await loading)!;
+    navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
+    await expect.poll(() => document.querySelector('p')?.textContent).toBe('first');
+    await new Promise<void>((resolve) => document.env.queueTask('navigation-and-traversal', {
+      run: () => { document.abort(); resolve(); },
+    }));
+    expect(canceled).not.toHaveBeenCalled();
+    stream.enqueueChunk(utf8Encode('discarded\r\n--part\r\nContent-Type: text/plain\r\n\r\nsecond\r\n--part--\r\n'));
+    stream.close();
+    await expect.poll(() => navigate.mock.calls.length).toBe(1);
+    expect(await readBody(navigate.mock.calls[0]![2]!.response!, document.env.userAgent)).toBe('second');
+    await expect.poll(() => navigable.multipartResource).toBeNull();
+  });
+
+  it.each(['navigate', 'beforeunload', 'empty', 'blocked-download'] as const)('retires a replacement rejected by %s and accepts the next part', async (cause) => {
+    const { navigable, params, stream, canceled, load } = await fixture();
+    cleanup.push(async () => { await navigable.multipartResource?.cancel(new Error('test cleanup')); });
+    const loading = load();
+    stream.enqueueChunk(utf8Encode('--part\r\nContent-Type: text/html\r\n\r\n<p>first</p>'));
+    const document = (await loading)!;
+    navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
+    await expect.poll(() => document.querySelector('p')?.textContent).toBe('first');
+    if (cause === 'navigate') {
+      vi.spyOn(navigable.activeWindow!.navigation, 'firePushReplaceReloadNavigateEvent').mockReturnValue(false);
+    } else if (cause === 'beforeunload') {
+      vi.spyOn(document.env.userAgent, 'checkIfUnloadingIsCanceled').mockReturnValue(
+        document.env.userAgent.HostPromise.resolve('canceled-by-beforeunload', internalType<UnloadCancellationResult>()),
+      );
+    } else if (cause === 'blocked-download') {
+      vi.spyOn(document.env.userAgent, 'isNavigationDownloadAllowed').mockReturnValue(false);
+    }
+    const original = navigable.navigate.bind(navigable);
+    const navigate = vi.spyOn(navigable, 'navigate').mockImplementation((url, source, options, env) => {
+      if (cause === 'empty') options!.response!.status = 204;
+      if (cause === 'blocked-download') options!.response!.headerList.append('Content-Disposition', 'attachment');
+      original(url, source, options, env);
+    });
+    stream.enqueueChunk(utf8Encode('\r\n--part\r\nContent-Type: text/html\r\n\r\n<p>declined'));
+    await expect.poll(() => navigate.mock.calls.length).toBe(1);
+    await expect.poll(() => navigate.mock.calls[0]![2]!.response!.body!.stream.state.state).toBe('closed');
+    expect(canceled).not.toHaveBeenCalled();
+    expect(navigable.activeDocument).toBe(document);
+    stream.enqueueChunk(utf8Encode('</p>\r\n--part\r\nContent-Type: text/plain\r\n\r\nthird\r\n--part--\r\n'));
+    stream.close();
+    await expect.poll(() => navigate.mock.calls.length).toBe(2);
+    await expect.poll(() => navigable.multipartResource).toBeNull();
+  });
+
+  it.each(['population', 'unload-check', 'params'] as const)('releases the whole load after a replacement %s failure', async (stage) => {
+    const { env, navigable, params, stream, canceled, load } = await fixture();
+    cleanup.push(async () => { await navigable.multipartResource?.cancel(new Error('test cleanup')); });
+    const errors: unknown[] = [];
+    const runInParallel = env.userAgent.runInParallel.bind(env.userAgent);
+    vi.spyOn(env.userAgent, 'runInParallel').mockImplementation((steps) => runInParallel(() => {
+      try { steps(); } catch (error) { errors.push(error); }
+    }));
+    const loading = load();
+    stream.enqueueChunk(utf8Encode('--part\r\nContent-Type: text/html\r\n\r\n<p>first</p>'));
+    const document = (await loading)!;
+    navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
+    await expect.poll(() => document.querySelector('p')?.textContent).toBe('first');
+    const failure = new InternalError('replacement failed');
+    if (stage === 'population') {
+      vi.spyOn(navigable, 'populateHistoryEntryDocument').mockImplementation((...args) => args[5]?.failureSteps?.(failure));
+    } else if (stage === 'unload-check') {
+      vi.spyOn(env.userAgent, 'checkIfUnloadingIsCanceled').mockImplementation(() =>
+        env.userAgent.HostPromise.reject(failure, internalType<UnloadCancellationResult>()),
+      );
+    } else {
+      vi.spyOn(NavigationParams, 'fromSuppliedResponse').mockImplementation(() => { throw failure; });
+    }
+    stream.enqueueChunk(utf8Encode('\r\n--part\r\nContent-Type: text/html\r\n\r\n<p>second'));
+    await expect.poll(() => canceled.mock.calls.length).toBe(1);
+    expect(canceled).toHaveBeenCalledExactlyOnceWith(failure);
+    expect(navigable.multipartResource).toBeNull();
+    await expect.poll(() => errors).toEqual([failure]);
+    expect(stream.locked).toBe(false);
+  });
+
+  it('reports a delayed population failure even after the outer response has finished', async () => {
+    const { env, navigable, params, stream, canceled, load } = await fixture();
+    const errors: unknown[] = [];
+    const runInParallel = env.userAgent.runInParallel.bind(env.userAgent);
+    vi.spyOn(env.userAgent, 'runInParallel').mockImplementation((steps) => runInParallel(() => {
+      try { steps(); } catch (error) { errors.push(error); }
+    }));
+    const loading = load();
+    stream.enqueueChunk(utf8Encode('--part\r\nContent-Type: text/html\r\n\r\n<p>first</p>'));
+    const document = (await loading)!;
+    navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
+    await expect.poll(() => document.querySelector('p')?.textContent).toBe('first');
+    let fail: ((error: unknown) => void) | undefined;
+    vi.spyOn(navigable, 'populateHistoryEntryDocument').mockImplementation((...args) => { fail = args[5]?.failureSteps; });
+    stream.enqueueChunk(utf8Encode('\r\n--part\r\nContent-Type: text/html\r\n\r\n<p>second</p>\r\n--part--\r\n'));
+    stream.close();
+    await expect.poll(() => navigable.multipartResource).toBeNull();
+    await expect.poll(() => fail).toBeTypeOf('function');
+    const failure = new InternalError('late population failure');
+    fail!(failure);
+    await expect.poll(() => errors).toEqual([failure]);
+    expect(canceled).not.toHaveBeenCalled();
+  });
+
+  it('leaves an accepted attachment body with the download owner', async () => {
+    const { env, navigable, params, stream, load } = await fixture();
+    cleanup.push(async () => { await navigable.multipartResource?.cancel(new Error('test cleanup')); });
+    const loading = load();
+    stream.enqueueChunk(utf8Encode('--part\r\nContent-Type: text/html\r\n\r\n<p>first</p>'));
+    const document = (await loading)!;
+    navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
+    await expect.poll(() => document.querySelector('p')?.textContent).toBe('first');
+    vi.spyOn(env.userAgent, 'isNavigationDownloadAllowed').mockReturnValue(true);
+    const download = vi.spyOn(env.userAgent, 'handleAsDownload').mockImplementation(() => {});
+    stream.enqueueChunk(utf8Encode('\r\n--part\r\nContent-Type: text/plain\r\nContent-Disposition: attachment\r\n\r\npayload'));
+    await expect.poll(() => download.mock.calls.length).toBe(1);
+    const response = download.mock.calls[0]![0];
+    expect(response.body!.stream.isReadable).toBe(true);
+    stream.enqueueChunk(utf8Encode(' retained\r\n--part--\r\n'));
+    stream.close();
+    expect(await readBody(response, env.userAgent)).toBe('payload retained');
+    await expect.poll(() => navigable.multipartResource).toBeNull();
+  });
+
+  it.each(['stop', 'destroy', 'destroy-child'] as const)('releases a multipart load before history commitment on navigable %s', async (action) => {
+    const { env, navigable, stream, canceled, load } = await fixture([], action === 'destroy-child');
+    if (action === 'destroy-child') {
+      // This fixture supplies a child directly; full nested-history application is separately unfinished.
+      vi.spyOn(navigable.traversable, 'appendSessionHistoryTraversalSteps').mockImplementation(() => {});
+    }
+    const loading = load();
+    stream.enqueueChunk(utf8Encode('--part\r\nContent-Type: text/html;charset=utf-8\r\n\r\n<p>first</p>\r\n--part\r\n'));
+    const document = (await loading)!;
+    expect(navigable.activeDocument).not.toBe(document);
+    await new Promise<void>((resolve) => env.queueTask('navigation-and-traversal', {
+      run: () => {
+        if (action === 'stop') navigable.stopLoading();
+        else if (action === 'destroy-child') Navigable.destroyChild(navigable.container!);
+        else navigable.topLevelTraversable.destroy();
+        resolve();
+      },
+    }));
+    await expect.poll(() => canceled.mock.calls.length).toBe(1);
+    expect(navigable.multipartResource).toBeNull();
+    expect(stream.locked).toBe(false);
+  });
+
+  it('releases a first-part admission when its uncommitted Document is destroyed', async () => {
+    const { navigable, stream, canceled, load } = await fixture();
+    cleanup.push(async () => { await navigable.multipartResource?.cancel(new Error('test cleanup')); });
+    const loading = load();
+    stream.enqueueChunk(utf8Encode('--part\r\nContent-Type: text/html\r\n\r\n<p>first</p>'));
+    const document = (await loading)!;
+    expect(navigable.activeDocument).not.toBe(document);
+    await new Promise<void>((resolve) => document.env.responsibleEventLoop.queueTask(
+      taskSources['navigation-and-traversal'], null, { run: () => { document.destroy(); resolve(); } },
+    ));
+    await expect.poll(() => canceled.mock.calls.length).toBe(1);
+    expect(navigable.multipartResource).toBeNull();
+    expect(stream.locked).toBe(false);
+  });
+
+  it.each(['stop', 'destroy', 'navigate'] as const)('cancels a child multipart load during parent %s', async (action) => {
+    const { env, navigable, stream, canceled, load } = await fixture([], true);
+    cleanup.push(async () => { await navigable.multipartResource?.cancel(new Error('test cleanup')); });
+    const loading = load();
+    stream.enqueueChunk(utf8Encode('--part\r\nContent-Type: text/html\r\n\r\n<p>child</p>'));
+    await loading;
+    const parent = navigable.parent!;
+    await new Promise<void>((resolve, reject) => env.queueTask('navigation-and-traversal', {
+      run: () => {
+        if (action === 'stop') { parent.stopLoading(); resolve(); }
+        else if (action === 'destroy') { parent.activeDocument!.destroyAndDescendants().observe(resolve, reject); }
+        else {
+          const response = new FetchResponse();
+          response.status = 204;
+          response.urlList = [env.parseURL('https://example.test/next')!];
+          parent.navigate(response.url!, parent.activeDocument, { response }, env);
+          resolve();
+        }
+      },
+    }));
+    await expect.poll(() => canceled.mock.calls.length).toBe(1);
+    expect(navigable.multipartResource).toBeNull();
+    expect(stream.locked).toBe(false);
+  });
+
+  for (const suppliedReferrer of [false, true]) {
+    // TODO(HTML §7.4.5): The strict replacement path needs synthetic history-referrer capture.
+    // Eric approved retaining that integration failure while the supplied-input case covers shutdown.
+    (suppliedReferrer ? it : it.fails)(`retains the outer stream through replacement, then stops from the new Document (supplied referrer: ${suppliedReferrer})`, async () => {
+      const { env, navigable, params, stream, canceled, load } = await fixture();
+      const errors: unknown[] = [];
+      const populate = navigable.populateHistoryEntryDocument.bind(navigable);
+      vi.spyOn(navigable, 'populateHistoryEntryDocument').mockImplementation((...args) => {
+        args[5] = { ...args[5], failureSteps: (error) => { errors.push(error); } };
+        populate(...args);
+      });
+      cleanup.push(async () => { await navigable.multipartResource?.cancel(new Error('test cleanup')); });
+      // Cache admission is a separate host policy; this fixture always unloads.
+      vi.spyOn(env.userAgent, 'shouldKeepDocumentInBfcache').mockReturnValue(false);
+      if (suppliedReferrer) {
+      // §7.4.5's null-request history capture is separately unfinished. Supply the
+      // history input explicitly to exercise the rest of the replacement path.
+        const fromResponse = NavigationParams.fromSuppliedResponse.bind(NavigationParams);
+        vi.spyOn(NavigationParams, 'fromSuppliedResponse').mockImplementation((...args) => {
+          args[4].requestReferrer = params.url;
+          return fromResponse(...args);
+        });
+      }
+      const loading = load();
+      stream.enqueueChunk(utf8Encode('--part\r\nContent-Type: text/html;charset=utf-8\r\n\r\n<p>first</p>'));
+      const first = (await loading)!;
+      navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(first, params));
+      await expect.poll(() => navigable.activeDocument).toBe(first);
+      first.setInitialVisibilityState('hidden');
+      stream.enqueueChunk(utf8Encode('\r\n--part\r\nContent-Type: text/html;charset=utf-8\r\n\r\n<p>second</p>'));
+      await expect.poll(() => errors.length !== 0 || navigable.activeDocument?.querySelector('p')?.textContent === 'second').toBe(true);
+      expect(errors).toEqual([]);
+      expect(navigable.activeDocument?.querySelector('p')?.textContent).toBe('second');
+      const second = navigable.activeDocument!;
+      expect(second).not.toBe(first);
+      expect(navigable.multipartResource).not.toBeNull();
+      const parts = navigable.multipartResource;
+      await new Promise<void>((resolve) => first.env.responsibleEventLoop.queueTask(
+        taskSources['navigation-and-traversal'], null, { run: () => { first.abort(); resolve(); } },
+      ));
+      expect(navigable.multipartResource).toBe(parts);
+      expect(canceled).not.toHaveBeenCalled();
+      stream.enqueueChunk(utf8Encode('\r\n--part\r\n'));
+      await expect.poll(() => second.readyState).toBe('complete');
+      await new Promise<void>((resolve) => second.env.queueTask('navigation-and-traversal', {
+        run: () => { navigable.stopLoading(); resolve(); },
+      }));
+      await expect.poll(() => canceled.mock.calls.length).toBe(1);
+      expect(navigable.multipartResource).toBeNull();
+      expect(stream.locked).toBe(false);
+    });
+  }
+
   it('uses the RFC text/plain default and preserves a first part split across transport chunks', async () => {
-    const { navigable, params, stream, load } = await fixture();
+    const { navigable, params, stream, canceled, load } = await fixture();
     const loading = load();
     for (const byte of utf8Encode('--part\r\n\r\n<b>literal</b>')) stream.enqueueChunk(Uint8Array.of(byte));
     const document = (await loading)!;
@@ -132,6 +402,12 @@ describe('multipart Document loading', () => {
     stream.enqueueChunk(utf8Encode('\r\n--part--\r\n'));
     stream.close();
     await expect.poll(() => document.readyState).toBe('complete');
+    await expect.poll(() => navigable.multipartResource).toBeNull();
+    await new Promise<void>((resolve) => document.env.queueTask('navigation-and-traversal', {
+      run: () => { navigable.stopLoading(); resolve(); },
+    }));
+    expect(canceled).not.toHaveBeenCalled();
+    expect(document.querySelector('pre')?.textContent).toBe('<b>literal</b>');
   });
 
   it('cancels a superseded first-part admission instead of constructing its Document', async () => {
@@ -340,7 +616,7 @@ describe('multipart response bodies', () => {
     next.observe(() => { receivedNext = true; }, () => {});
     stream.enqueueChunk(utf8Encode('body</p>\r\n--part--\r\n'));
     stream.close();
-    await new Promise<void>((resolve) => env.userAgent.sandbox.queueTask('network', resolve));
+    await new Promise<void>((resolve) => env.userAgent.sandbox.queueTask('network', { run: resolve }));
     expect(read).toHaveBeenCalledTimes(calls);
     expect(receivedNext).toBe(false);
     expect(await readBody(response, env.userAgent)).toBe('<p>body</p>');
@@ -384,17 +660,40 @@ describe('multipart response bodies', () => {
     await rejected;
   });
 
-  it('propagates active-body cancellation to the outer response', async () => {
+  it.each([false, true])('discards a canceled part and reads the next part (waiting: %s)', async (waiting) => {
     const { parts, stream, canceled, env } = await fixture();
     const first = parts.readPart();
     stream.enqueueChunk(utf8Encode('--part\r\nContent-Type: text/html\r\n\r\n<p>'));
     const body = new ResourceReader((await first)!, env.userAgent);
+    const next = waiting ? parts.readPart() : null;
+    next?.observe(() => {}, () => {});
+    await body.cancel(new Error('retire this part'));
+    expect(canceled).not.toHaveBeenCalled();
+    const following = next ?? parts.readPart();
+    stream.enqueueChunk(utf8Encode('discarded</p>\r\n--pa'));
+    stream.enqueueChunk(utf8Encode('rt\r\nContent-Type: text/plain\r\n\r\nnext\r\n--part--\r\n'));
+    stream.close();
+    expect(await readBody((await following)!, env.userAgent)).toBe('next');
+    await expect(parts.readPart()).resolves.toBeNull();
+    expect(canceled).not.toHaveBeenCalled();
+    expect(stream.locked).toBe(false);
+  });
+
+  it('cancels the outer response and its active body explicitly', async () => {
+    const { parts, stream, canceled, env } = await fixture();
+    const first = parts.readPart();
+    stream.enqueueChunk(utf8Encode('--part\r\nContent-Type: text/html\r\n\r\n<p>'));
+    const body = new ResourceReader((await first)!, env.userAgent);
+    await body.determineMIMEType();
+    await expect(body.read()).resolves.toEqual(utf8Encode('<p>'));
     const reason = new Error('stop loading');
-    const cancellation = body.cancel(reason);
+    const rejected = expect(body.read()).rejects.toBe(reason);
+    const cancellation = parts.cancel(reason);
     await expect.poll(() => canceled.mock.calls.length).toBe(1);
     // Require automatic completion across the nested readers' Promise queues.
     await cancellation;
     expect(canceled).toHaveBeenCalledExactlyOnceWith(reason);
+    await rejected;
     await expect(parts.readPart()).rejects.toBe(reason);
   });
 });

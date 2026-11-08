@@ -183,7 +183,7 @@ function runInitialScript(
   env: WorkerEnvironment, script: ClassicScript | ModuleScript,
   outsidePort: MessagePortImpl, insidePort: MessagePortImpl,
 ): void {
-  env.queueTask('network', () => { env.globalImplementation.runScript(script, insidePort, () => { outsidePort.start(); }); });
+  env.queueTask('network', { run: () => { env.globalImplementation.runScript(script, insidePort, () => { outsidePort.start(); }); } });
   expect(env.responsibleEventLoop.runTaskTurn()).toBe(true);
 }
 
