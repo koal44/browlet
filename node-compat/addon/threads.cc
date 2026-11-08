@@ -71,8 +71,9 @@ void Stop(ThreadRegistry& registry, ThreadControl& control) {
     for (const auto& [token, child] : registry.controls) {
       if (child->owner == control.isolate) Stop(registry, *child);
     }
-    // Set termination before waking the stack: no author code may run in the
-    // interval before the outside owner calls Node's Worker.terminate().
+    // Set termination before waking the stack: no author code may resume.
+    // Explicit shutdown first calls Node's Worker.terminate(), which marks its
+    // environment as stopping before any native callback starts unwinding.
     control.isolate->TerminateExecution();
   }
   Resume(control);
@@ -111,8 +112,8 @@ void Interrupt(Isolate*, void* data) {
   control->suspended = true;
   // V8 forbids JavaScript reentry here. This blocks Node's host queue as well:
   // resume and termination MUST use the outside native control, not a message.
-  // Raw Node termination cannot wake this wait. The JSThread owner coordinates
-  // Stop before Worker.terminate(); unrelated native owners must do likewise.
+  // Raw Node termination cannot wake this wait. The JSThread owner requests
+  // Worker.terminate() first, then Stop wakes the wait without resuming script.
   control->wake.wait(lock, [&] { return !control->requested || control->stopping; });
   control->suspended = false;
 }

@@ -1134,6 +1134,202 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
     }
   });
 
+  if (JSThread.supportsSuspension) {
+    describe('BroadcastChannel across isolates', () => {
+      it('routes worker-to-worker graphs through browser discovery without crossing names or storage keys', async () => {
+        const owner = createWorkerCreator();
+        const foreign = createWorkerCreator(createCreatorEnvironment('https://other.test/', owner.creatorEnv.userAgent));
+        const otherOrigin = new (foreign.creatorEnv.global as Window).BroadcastChannel('relay');
+        const otherName = new (owner.creatorEnv.global as Window).BroadcastChannel('different');
+        const unexpected: unknown[] = [];
+        for (const channel of [otherOrigin, otherName]) channel.onmessage = (event) => { unexpected.push(event); };
+        const receiver = startBroadcastWorker(`
+          const channel = new BroadcastChannel('relay');
+          channel.onmessage = event => {
+            const value = event.data;
+            postMessage([value.map instanceof Map, value.map.get('self') === value,
+              value.bytes instanceof Uint8Array, [...value.bytes], event.origin]);
+            channel.close(); close();
+          };
+          postMessage('ready');
+        `, owner);
+        await vi.waitFor(() => { owner.drain(); expect(receiver.messages).toEqual(['ready']); }, { timeout: 5000 });
+        const sender = startBroadcastWorker(`
+          const channel = new BroadcastChannel('relay');
+          const value = { map: new Map(), bytes: new Uint8Array([4, 2]) };
+          value.map.set('self', value);
+          channel.postMessage(value);
+          value.bytes[0] = 0;
+          channel.close(); close();
+        `, owner);
+        await vi.waitFor(() => {
+          owner.drain(); foreign.drain();
+          expect(receiver.messages).toEqual(['ready', [true, true, true, [4, 2], 'https://creator.test']]);
+        }, { timeout: 5000 });
+        expect(await sender.thread.closed).toMatchObject({ error: undefined, terminated: false });
+        expect(await receiver.thread.closed).toMatchObject({ error: undefined, terminated: false });
+        owner.drain(); foreign.drain();
+        expect(unexpected).toEqual([]);
+        otherOrigin.close(); otherName.close();
+      });
+
+      it('selects eligibility at send time across Document inactivity and resumption', async () => {
+        const owner = createWorkerCreator();
+        const sender = createWorkerCreator(createCreatorEnvironment('https://creator.test/other', owner.creatorEnv.userAgent));
+        const { worker, thread, messages } = startBroadcastWorker(`
+          const channel = new BroadcastChannel('lifetime');
+          const seen = [];
+          channel.onmessage = event => {
+            seen.push(event.data);
+            if (event.data === 'after') { postMessage(seen); channel.close(); close(); }
+          };
+          postMessage('ready');
+        `, owner);
+        await vi.waitFor(() => { owner.drain(); expect(messages).toEqual(['ready']); }, { timeout: 5000 });
+        const channel = new (sender.creatorEnv.global as Window).BroadcastChannel('lifetime');
+        const document = owner.creatorEnv.window.document;
+        const browsingContext = document.browsingContext;
+        channel.postMessage('before');
+        document.browsingContext = null;
+        document.notifyFullyActiveStateChanged();
+        try { channel.postMessage('while inactive'); }
+        finally {
+          document.browsingContext = browsingContext;
+          document.notifyFullyActiveStateChanged();
+        }
+        channel.postMessage('after');
+        await vi.waitFor(() => { owner.drain(); expect(messages).toHaveLength(2); }, { timeout: 5000 });
+        expect(messages[1]).toEqual(['before', 'after']);
+        channel.close();
+        expect(await thread.closed).toMatchObject({ error: undefined, terminated: false });
+        expect(unwrap<WorkerImpl>(worker).thread).toBeNull();
+      });
+
+      it('publishes after a serialization getter closes the source and registers a new destination', async () => {
+        const owner = createWorkerCreator();
+        const channel = new (owner.creatorEnv.global as Window).BroadcastChannel('reentrant');
+        const received: unknown[] = [];
+        channel.onmessage = (event) => { received.push((event as MessageEvent).data); };
+        const { thread, messages } = startBroadcastWorker(`
+          const source = new BroadcastChannel('reentrant');
+          let calls = 0;
+          source.onmessage = () => { postMessage('unexpected echo'); };
+          source.postMessage({ get value() {
+            calls++;
+            source.close();
+            const during = new BroadcastChannel('reentrant');
+            during.onmessage = event => { postMessage([event.data, calls]); during.close(); close(); };
+            return 42;
+          }});
+        `, owner);
+        await vi.waitFor(() => { owner.drain(); expect(messages).toHaveLength(1); expect(received).toHaveLength(1); }, { timeout: 5000 });
+        expect(messages).toEqual([[{ value: 42 }, 1]]);
+        expect(received).toEqual([{ value: 42 }]);
+        channel.close();
+        expect(await thread.closed).toMatchObject({ error: undefined, terminated: false });
+      });
+
+      it('drops queued delivery after channel close and releases channels on forced termination', async () => {
+        const owner = createWorkerCreator();
+        const channel = new (owner.creatorEnv.global as Window).BroadcastChannel('cleanup');
+        const received: unknown[] = [];
+        channel.onmessage = (event) => { received.push((event as MessageEvent).data); };
+        const { worker, thread, messages } = startBroadcastWorker(`
+          const source = new BroadcastChannel('cleanup');
+          const closed = new BroadcastChannel('cleanup');
+          closed.onmessage = () => { postMessage('unexpected closed delivery'); };
+          source.postMessage('sent before close');
+          closed.close();
+          source.onmessage = event => { postMessage(event.data); };
+          postMessage('ready');
+        `, owner);
+        await vi.waitFor(() => { owner.drain(); expect(messages).toEqual(['ready']); expect(received).toHaveLength(1); }, { timeout: 5000 });
+        channel.postMessage('round trip');
+        await vi.waitFor(() => { owner.drain(); expect(messages).toEqual(['ready', 'round trip']); }, { timeout: 5000 });
+        worker.terminate();
+        expect(await thread.closed).toMatchObject({ error: undefined, terminated: true });
+        expect(() => channel.postMessage('after termination')).not.toThrow();
+        channel.close();
+        expect(received).toEqual(['sent before close']);
+      });
+
+      it('preserves creation and send order for multiple channels in one worker', async () => {
+        const { creatorEnv, drain } = createWorkerCreator();
+        mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
+          listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+          listener.onData(utf8Encode(`
+            const first = new BroadcastChannel('ordered');
+            const second = new BroadcastChannel('ordered');
+            const seen = [];
+            for (const [label, channel] of [['first', first], ['second', second]]) {
+              channel.onmessage = event => {
+                seen.push([label, event.data]);
+                if (seen.length === 4) { postMessage(seen); first.close(); second.close(); close(); }
+              };
+            }
+            postMessage('ready');
+          `));
+          listener.onEnd();
+        });
+        const window = creatorEnv.global as Window;
+        const channel = new window.BroadcastChannel('ordered');
+        const worker = new window.Worker('./worker.js');
+        const thread = unwrap<WorkerImpl>(worker).thread!;
+        threads.add(thread);
+        const messages: unknown[] = [];
+        worker.onmessage = (event) => { messages.push((event as MessageEvent).data); };
+        await vi.waitFor(() => { drain(); expect(messages).toEqual(['ready']); }, { timeout: 5000 });
+        channel.postMessage(1);
+        channel.postMessage(2);
+        await vi.waitFor(() => { drain(); expect(messages).toHaveLength(2); }, { timeout: 5000 });
+        expect(messages[1]).toEqual([['first', 1], ['second', 1], ['first', 2], ['second', 2]]);
+        channel.close();
+        expect(await thread.closed).toMatchObject({ error: undefined });
+      });
+
+      it('connects a public worker and Window through the original browser registry', async () => {
+        const { creatorEnv, drain } = createWorkerCreator();
+        mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
+          listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+          listener.onData(utf8Encode(`
+            try {
+              const channel = new BroadcastChannel('news');
+              channel.onmessage = event => {
+                channel.postMessage([event.data, event.origin, event.isTrusted,
+                  event instanceof MessageEvent, Object.getPrototypeOf(event.data) === Object.prototype]);
+                channel.close();
+                close();
+              };
+              postMessage('ready');
+            } catch (error) { postMessage({ error: error.message }); close(); }
+          `));
+          listener.onEnd();
+        });
+        const window = creatorEnv.global as Window;
+        const channel = new window.BroadcastChannel('news');
+        const messages: MessageEvent[] = [];
+        channel.onmessage = (event) => { messages.push(event as MessageEvent); };
+        const worker = new window.Worker('./worker.js');
+        const thread = unwrap<WorkerImpl>(worker).thread!;
+        threads.add(thread);
+        const ready: unknown[] = [];
+        worker.onmessage = (event) => { ready.push((event as MessageEvent).data); };
+        await vi.waitFor(() => { drain(); expect(ready).toHaveLength(1); }, { timeout: 5000 });
+        expect(ready).toEqual(['ready']);
+        const data = { value: 42 };
+        channel.postMessage(data);
+        data.value = 0;
+        expect(messages).toEqual([]);
+        await vi.waitFor(() => { drain(); expect(messages).toHaveLength(1); }, { timeout: 5000 });
+        expect(messages[0]!.data).toEqual([{ value: 42 }, 'https://creator.test', true, true, true]);
+        expect(messages[0]).toMatchObject({ origin: 'https://creator.test', source: null, isTrusted: true });
+        expect(Object.getPrototypeOf(messages[0]!.data)).toBe(creatorEnv.realm.Array.prototype);
+        channel.close();
+        expect(await thread.closed).toMatchObject({ error: undefined, terminated: false });
+      });
+    });
+  }
+
   describe('production startup', () => {
     it.each([
       ['network', 'classic'], ['network', 'module'],
@@ -1710,7 +1906,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
     await thread.ready;
     expect(await request({ type: 'inspect-worker-service-failures' })).toEqual([
       { name: 'createObjectURL', error: 'Worker Blob registration requires cross-isolate Blob backing transport' },
-      { name: 'BroadcastChannel', error: 'Worker UserAgent BroadcastChannel transport is not connected' },
+      { name: 'BroadcastChannel', error: null },
     ]);
     expect(await request({ type: 'resolve-module-specifiers', specifiers: ['./still-usable.js'] }))
       .toEqual([{ url: 'https://creator.test/still-usable.js' }]);
@@ -3179,8 +3375,7 @@ function createSuspensionWorker(active = true) {
 }
 
 /** Active Document and manually driven HTML deliveries, shared by public and implementation startup tests. */
-function createWorkerCreator() {
-  const creatorEnv = createCreatorEnvironment();
+function createWorkerCreator(creatorEnv = createCreatorEnvironment()) {
   const document = creatorEnv.window.document;
   document.browsingContext = new BrowsingContext(creatorEnv.realm.windowProxy);
   document.makeActive();
@@ -3189,6 +3384,22 @@ function createWorkerCreator() {
     traversable, creatorEnv,
     drain: () => { while (creatorEnv.responsibleEventLoop.runTaskTurn()) { /* Drain runnable outside work. */ } },
   };
+}
+
+/** Public construction and real script execution; only HTTP response bytes are controlled. */
+function startBroadcastWorker(source: string, owner = createWorkerCreator()) {
+  const { creatorEnv } = owner;
+  mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
+    listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+    listener.onData(utf8Encode(source));
+    listener.onEnd();
+  });
+  const worker = new (creatorEnv.global as Window).Worker('./worker.js');
+  const thread = unwrap<WorkerImpl>(worker).thread!;
+  threads.add(thread);
+  const messages: unknown[] = [];
+  worker.onmessage = (event) => { messages.push((event as MessageEvent).data); };
+  return { worker, thread, messages };
 }
 
 /** Real outside Worker and controlled HTML deliveries; native execution still uses the isolate fixture. */

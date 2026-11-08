@@ -1369,9 +1369,10 @@ alpha. Other source extraction, decoding, canvas readback, and rendering remain 
   Window message handlers and MessagePort transfer are implemented. See the
   [§9.3 dependencies](browlet/communication/ROADMAP.md#93-cross-document-messaging).
 
-- **BroadcastChannel supports local Window/worker realms in one UserAgent.** Worker
-  eligibility uses closing/suspendability checks; cross-isolate discovery and
-  delivery still need shared-service transport. Routing uses the existing
+- **BroadcastChannel connects Windows and dedicated Document-owned worker isolates
+  in one UserAgent.** Eligibility uses closing/suspendability checks at send time;
+  shared/nested worker ownership remains a prerequisite for their connection.
+  Routing uses the existing
   origin-based StorageKey; it does not add browser-specific privacy partitioning. See the
   [§9.5 dependencies](browlet/communication/ROADMAP.md#95-broadcastchannel).
 
@@ -2295,7 +2296,7 @@ identity are connected locally. Obtaining the Blob, checking another caller's
 partition, or reading the creator's URL, UserAgent or policies throws an explicit
 dependency error; the owner-side entry still provides these operations normally.
 Direct worker API probes reach the explicit missing transport errors for
-`URL.createObjectURL()` and `BroadcastChannel`, and the isolate remains usable
+`URL.createObjectURL()`, and the isolate remains usable
 afterward. The worker global exposes `fetch` through WindowOrWorkerGlobalScope;
 its general worker network/service transport remains unfinished.
 Private initial-graph fetch transport now supports concurrent requests through

@@ -186,7 +186,7 @@ function startFixture() {
         const global = runtime.environment.global;
         const operations = [
           ['createObjectURL', () => global.URL.createObjectURL(new global.Blob(['worker data']))],
-          ['BroadcastChannel', () => new global.BroadcastChannel('worker-service-probe')],
+          ['BroadcastChannel', () => { new global.BroadcastChannel('worker-service-probe').close(); }],
         ];
         void Promise.all(operations.map(async ([name, run]) => {
           try { await run(); return { name, error: null }; }

@@ -37,7 +37,7 @@ import type { IntersectionObserverMargin } from './dom/intersection-observer/ind
 import type { DocumentImpl, ElementImpl } from './dom/nodes/index';
 import type { PerformanceNavigationTimingImpl, PerformanceTimingConfidenceValue } from './performance/index';
 import { ProtocolHandlerRegistry, type NavigatorImpl, type WorkerNavigatorImpl } from './navigator/index';
-import type { BroadcastChannelImpl } from './communication/index';
+import { BroadcastChannelRegistry } from './communication/index';
 import type { StorageImpl } from './storage/index';
 import type { SourceSnapshotParams } from './browsing/navigation/state/index';
 import type { WindowImpl } from './browsing/window/index';
@@ -86,7 +86,7 @@ class BrowletUserAgent implements
   // TODO: A PDF host must supply inline viewing; live support changes also need an explicit Window-list refresh policy.
   pdfViewerSupported = false;
   /** Discover live broadcast channels in creation order without retaining their globals. */
-  broadcastChannels = new WeakOrderedSet<BroadcastChannelImpl>();
+  broadcastChannels: Public<BroadcastChannelRegistry> = new BroadcastChannelRegistry();
   /** Browser binding factory used by browsing algorithms to create Window environments. */
   createWindowEnvironment = createWindowEnvironment;
   /** Start dedicated execution through the browser's configured isolate backend. */

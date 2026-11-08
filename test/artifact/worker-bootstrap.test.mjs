@@ -35,13 +35,13 @@ for (const extension of ['mjs', 'cjs']) {
   });
 
   if (process.env.BROWLET_NODE_ADDON) {
-    for (const type of ['classic', 'module']) {
-      test(`${extension} public ${type} Worker reloads the relocated package`, { timeout: 30_000 }, async (t) => {
+    for (const [type, broadcast] of [['classic', false], ['module', false], ['classic', true]]) {
+      test(`${extension} public ${type} Worker reloads the relocated package${broadcast ? ' with BroadcastChannel' : ''}`, { timeout: 30_000 }, async (t) => {
         // Each independently bundled package installs its own host hooks. Run
         // each format in a separate host isolate, as for the bootstrap probes.
         const { thread, exited, errors } = start(t,
           fileURLToPath(new URL('./fixtures/public-worker.mjs', import.meta.url)),
-          { entryURL, extension, type },
+          { entryURL, extension, type, broadcast },
         );
         assert.deepEqual(await once(thread, 'message'), [{ result: ['packaged worker', { value: 42 }] }]);
         assert.equal(await exited, 0);

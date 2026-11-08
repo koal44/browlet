@@ -1,5 +1,5 @@
 import { InternalError, assertNever, type Public } from '../../../infra/index';
-import { hasErrorData, JSMessageChannel, JSMessagePort, NodePromise, randomUUID, type JSMessagePortHandle } from '../../../js-engine/index';
+import { hasErrorData, JSMessageChannel, JSMessagePort, NodePromise, randomUUID, type JSMessagePortHandle, type JSTransferable } from '../../../js-engine/index';
 import { unsafeSharedCurrentTime } from '../../../timing/index';
 import { copyOrigin, copyURL, parseURL, serializeURL, type BlobURLEntry as URLBlobURLEntry, type Origin, type URLRecord } from '../../../url/index';
 import type { StorageEnvironmentBase } from '../../../storage/index';
@@ -9,6 +9,8 @@ import { PolicyContainer } from '../../browsing/policy/index';
 import { nodeTimerHost, queueNodeTask } from '../host/index';
 import type { BlobURLEntry, BlobURLStore } from '../file/index';
 import type { UserAgent } from '../../user-agent';
+
+import { WorkerBroadcastChannels, WorkerBroadcastChannelConnection, type WorkerBroadcastRequest } from './broadcast-channel';
 
 /**
  * Worker-local access to the existing browser owner, without duplicating its stores.
@@ -21,6 +23,13 @@ export class WorkerUserAgent implements UserAgent {
   timerHost = nodeTimerHost;
   /** The browser's shared preference remains readable even while its host thread is busy. */
   scriptingPolicy: ScriptingPolicy;
+  /** Discovery delegates to the browser; local native receivers only queue HTML delivery. */
+  broadcastChannels = new WorkerBroadcastChannels(
+    (request, transferList) => { this.#request(request, transferList); },
+    (id) => {
+      if (Atomics.load(this.#state, 0) !== closed) this.#port.send({ type: 'broadcast-release', id });
+    },
+  );
   /** All public Blob store operations, forwarded or explicitly unavailable in this isolate. */
   blobURLStore: Public<BlobURLStore> = {
     resolve: (url: URLRecord) => this.#resolve(url),
@@ -95,8 +104,6 @@ export class WorkerUserAgent implements UserAgent {
   /** Shared storage must retain the original browser's partition and lifetime. */
   get storageShed(): never { return unconnected('storage'); }
   get storageObjects(): never { return unconnected('storage'); }
-  /** Channel discovery cannot use an independent per-isolate channel set. */
-  get broadcastChannels(): never { return unconnected('BroadcastChannel'); }
   /** Report delivery and clientless Fetch require a browser-side execution owner. */
   get sandbox(): never { return unconnected('clientless Fetch'); }
   get sendReports(): never { return unconnected('reporting'); }
@@ -328,18 +335,19 @@ export class WorkerUserAgent implements UserAgent {
 
   /** Release this connection and all registrations retained on its behalf. */
   close(): void {
+    this.broadcastChannels.disconnect();
     Atomics.store(this.#state, 0, closed);
     Atomics.notify(this.#state, 0);
     this.#port.close();
   }
 
   /** Perform one non-reentrant host call without pumping author callbacks or Promise reactions. */
-  #request(request: WorkerUserAgentRequest): WorkerUserAgentResult {
+  #request(request: WorkerUserAgentRequest, transferList: JSTransferable[] = []): WorkerUserAgentResult {
     if (Atomics.compareExchange(this.#state, 0, idle, pending) !== idle) {
       throw new InternalError('Worker UserAgent connection is closed or already in use');
     }
     try {
-      this.#port.send(request);
+      this.#port.send(request, transferList);
       while (Atomics.load(this.#state, 0) === pending) Atomics.wait(this.#state, 0, pending);
       const response = this.#port.receive()?.message;
       if (response?.type !== 'response') throw new InternalError('Worker UserAgent connection closed before replying');
@@ -387,10 +395,12 @@ export class WorkerUserAgent implements UserAgent {
   }
 }
 
-/** Browser-side ownership of one worker's private URL/Blob service connection. */
+/** Browser-side ownership of one worker's private shared-service connection. */
 export class WorkerUserAgentConnection {
   /** Transfer port in the thread's transfer list; the shared state is cloned, not transferred. */
   init: WorkerUserAgentInit;
+  /** Remote channel registrations are owned and released with this worker's service connection. */
+  #broadcastChannels: WorkerBroadcastChannelConnection;
   /** The real browser owner; its stores are never copied into the worker. */
   #userAgent: UserAgent;
   /** Actual caller identity used by File API's storage-partition check. */
@@ -409,9 +419,10 @@ export class WorkerUserAgentConnection {
   #stop: () => void;
 
   /** Bind a fresh endpoint to the browser and the caller's already-established environment. */
-  constructor(userAgent: UserAgent, env: StorageEnvironmentBase) {
+  constructor(userAgent: UserAgent, isEligibleForMessaging: (() => boolean) | undefined, env: StorageEnvironmentBase) {
     this.#userAgent = userAgent;
     this.#env = env;
+    this.#broadcastChannels = new WorkerBroadcastChannelConnection(userAgent, isEligibleForMessaging, env);
     const channel = new JSMessageChannel<WorkerUserAgentMessage>();
     this.#port = channel.port1;
     this.#workerPort = channel.port2;
@@ -439,11 +450,16 @@ export class WorkerUserAgentConnection {
     this.#port.close();
     this.#workerPort.close();
     this.#entries.clear();
+    this.#broadcastChannels.close();
   }
 
   /** Handle only explicit operations; arbitrary property reads and function calls are not forwarded. */
   #respond(message: WorkerUserAgentMessage): void {
     if (Atomics.load(this.init.state, 0) === closed) return;
+    if (message.type === 'broadcast-release') {
+      this.#broadcastChannels.handle({ type: 'broadcast-close', id: message.id });
+      return;
+    }
     if (message.type === 'release') {
       const retained = this.#entries.get(message.id);
       if (retained !== undefined && --retained.captures === 0) this.#entries.delete(message.id);
@@ -453,6 +469,11 @@ export class WorkerUserAgentConnection {
     let error: string | null = null;
     try {
       switch (message.type) {
+        case 'broadcast-register':
+        case 'broadcast-send':
+        case 'broadcast-close':
+          this.#broadcastChannels.handle(message);
+          break;
         case 'resolve': {
           const url = parseURL(message.url).url;
           if (url?.scheme !== 'blob') throw new InternalError('Blob lookup requires a Blob URL');
@@ -540,8 +561,8 @@ export interface WorkerBlobURLEntry {
   env: { origin: Origin; };
 }
 
-/** Explicit URL operations serviced by the browser, without transported functions or environments. */
-type WorkerUserAgentRequest =
+/** Explicit browser-service operations, without transported functions or environments. */
+type WorkerUserAgentRequest = WorkerBroadcastRequest |
   { type: 'resolve'; url: string; } |
   { type: 'revoke'; url: string; } |
   { type: 'settings'; } |
@@ -567,11 +588,13 @@ type WorkerUserAgentResult =
   { type: 'void'; };
 
 /** Shared private host protocol for both endpoint directions. */
-type WorkerUserAgentMessage = WorkerUserAgentRequest | { type: 'release'; id: number; } | {
-  type: 'response';
-  result: WorkerUserAgentResult;
-  error: string | null;
-};
+type WorkerUserAgentMessage = WorkerUserAgentRequest |
+  { type: 'release'; id: number; } |
+  { type: 'broadcast-release'; id: number; } | {
+    type: 'response';
+    result: WorkerUserAgentResult;
+    error: string | null;
+  };
 
 /** Keep unavailable shared owners visible rather than silently creating worker-local substitutes. */
 function unconnected(service: string): never {

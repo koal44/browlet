@@ -23,9 +23,10 @@ The §9 APIs were implemented for local realms. The §10 integration sweep on
   Dedicated Document-owned startup now connects owner monitoring, initial script
   execution, and queue enablement, including public `new Worker()` on add-on
   runtimes. Shared-service APIs retain their own transport dependencies.
-- **BroadcastChannel:** worker eligibility uses the existing closing/suspendable
-  checks. The UserAgent-owned registry is still local; discovery, delivery, and
-  cleanup across isolates require the shared-service transport.
+- **BroadcastChannel:** dedicated Document-owned workers now share the original
+  UserAgent's discovery registry across isolates. Eligibility is selected at send
+  time; one delivery stream per worker preserves channel order. Shared/nested
+  worker ownership and discovery remain prerequisites for their service connection.
 - **EventSource:** cooperative worker shutdown closes owned sources after the
   final checkpoint, aborting local requests and canceling retries. Shared-service
   Fetch routing and remote cancellation after forced termination remain deferred.
@@ -283,8 +284,16 @@ destruction removes those tasks; inactive Documents follow normal task gating.
 Window and composed worker realms in one isolate are supported. Sender eligibility
 is checked before serialization and the closed-channel error. Destination discovery
 also excludes ineligible workers. Closing workers discard queued deliveries through their
-existing task-queue cleanup. Cross-isolate discovery/delivery still needs the
-shared UserAgent service. StorageKey currently compares origins, including opaque
+existing task-queue cleanup. Dedicated Document-owned workers now connect to the
+same UserAgent registry through their private service connection. Registration,
+publication, and explicit close are acknowledged synchronously; delivery sends
+HTML serialization records on one ordered native stream per worker and queues
+the existing DOM manipulation tasks inside. Native per-channel streams were
+rejected after a regression exposed cross-channel reordering. Closing is visible
+through a shared flag; recipient selection reads the original Document's activity
+without entering a suspended worker. Collection and forced termination remove
+remote registrations. Shared/nested worker ownership remains an explicit dependency.
+StorageKey currently compares origins, including opaque
 identity; additional browser privacy partitioning remains Storage policy work.
 No Node/V8 changes or new cloning/binding adapters are needed.
 
@@ -294,6 +303,10 @@ serialization reentrancy, activity, closure, messageerror, and listener retentio
 Dedicated/shared worker cases cover their own task loops, target-realm values,
 suspendability and recovery, closure, and the distinction between suspendability
 and simply lacking an active Document owner.
+Real-isolate tests additionally cover Window/worker and worker/worker exchange,
+cyclic graphs and recipient-realm types, name/storage-key isolation, cross-channel
+ordering, inactivity and resumption, serialization-time close/registration, queued
+delivery suppression, and forced termination.
 
 ## Constraints to preserve early
 

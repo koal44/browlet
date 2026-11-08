@@ -253,7 +253,7 @@ export interface BrowletEnvironmentInit {
   /** Clone into this environment's realm, optionally transferring objects. */
   clone: (value: unknown, transferList?: object[]) => unknown;
   /** Serialize through this environment's binding. */
-  serialize: (value: unknown) => object;
+  serialize: (value: unknown) => SerializedRecord;
   /** Serialize persistent state, rejecting shared memory and other cluster-bound values. */
   serializeForStorage: (value: unknown) => SerializedRecord;
   /** Reconstruct a serialized record in this environment's realm. */

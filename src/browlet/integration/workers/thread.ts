@@ -86,7 +86,11 @@ export class WorkerThread {
       origin: this.reservedEnv.origin,
       extendedLifetime: init.kind === 'shared' && (input.extendedLifetime ?? false),
     };
-    this.#userAgentConnection = new WorkerUserAgentConnection(env.userAgent, this.reservedEnv);
+    const remoteOwner = this.#remoteOwner;
+    this.#userAgentConnection = new WorkerUserAgentConnection(env.userAgent,
+      remoteOwner === null ? undefined : () => remoteOwner.state !== 'inactive',
+      this.reservedEnv,
+    );
     // The caller can terminate during startup and inspect closed without awaiting
     // ready. Retain ready's rejection without producing an unhandled host Promise.
     this.#ready.promise.observe(() => {}, () => {});

@@ -65,8 +65,10 @@ clock and accumulated suspension under one lock; author performance time is
 unrelated. HTML supplies this clock to its existing timer scheduler.
 
 `stopThread()` sets V8 termination before waking the wait, including controlled
-descendants. JS Engine calls it before Node's `Worker.terminate()` and during an
-owner's JavaScript exit event, since Node joins children before native cleanup
+descendants. JS Engine calls Node's `Worker.terminate()` first so native callback
+cleanup sees a stopping environment, then calls `stopThread()` to wake the wait.
+The control is also stopped during an owner's JavaScript exit event, since Node
+joins children before native cleanup
 hooks. Registry access and isolate teardown share a lock; tokens are not reused.
 The wait runs no JavaScript and also blocks private host messages. Raw Node
 termination cannot release it; a foreign native owner must coordinate shutdown

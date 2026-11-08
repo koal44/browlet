@@ -194,7 +194,7 @@ function createEnvironment(url = 'https://worker.test/', userAgent: UserAgent = 
 
 /** Transfer a connection into a real isolate while keeping the browser owner and its stores here. */
 async function connect(env: BrowletEnvironment) {
-  const connection = new WorkerUserAgentConnection(env.userAgent, env);
+  const connection = new WorkerUserAgentConnection(env.userAgent, undefined, env);
   connections.add(connection);
   const worker = new Worker(resolve(__dirname, 'fixtures/user-agent.cjs'), {
     workerData: connection.init, transferList: [connection.init.port],

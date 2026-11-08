@@ -1016,7 +1016,17 @@ Captured Blob entries have per-record leases released by worker-side collection,
 or collectively at connection close. Initial-graph Fetch retains captures through
 the response and uses their IDs, preserving pre-revocation captures. Nested-worker
 forwarding, worker-created Blob backing transport, general Fetch and shared
-storage/permission/broadcast/report services remain explicit dependencies.
+storage/permission/report services remain explicit dependencies.
+BroadcastChannel uses the original UserAgent's weak ordered discovery registry.
+Dedicated Document-owned workers register private remote destinations through
+the existing acknowledged service calls. A single delivery endpoint per worker
+preserves ordering across channels; it carries HTML serialization records and
+queues ordinary DOM manipulation tasks for target-realm reconstruction. Source
+and destination channel objects remain in their own isolates. The browser checks
+Document activity and the worker's shared closing flag when selecting recipients;
+it does not query a suspended isolate. Worker collection, explicit close, and
+native thread exit remove remote registrations. Shared/nested worker eligibility
+needs its corresponding ownership connection before this transport can be used.
 The script loader connects to this transport while retaining URL resolution,
 its inside module map, parsing, and graph linking. Its `ScriptEnvironment` client
 supplies `fetchModuleSource()`: BrowletEnvironment fetches locally, while the

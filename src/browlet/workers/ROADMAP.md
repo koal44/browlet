@@ -19,6 +19,49 @@ Stock Node still lacks native suspension; nested workers and SharedWorker
 discovery retain explicit startup boundaries. Unconnected shared-service APIs
 remain explicit dependencies at their own operations.
 
+### Dedicated-worker BroadcastChannel connection
+
+The original UserAgent now owns discovery for Windows and dedicated Document-owned
+worker isolates. Worker registration, publication, and explicit close use the
+existing acknowledged browser-service connection. Destination selection happens
+before `postMessage()` returns; HTML serialization still runs once in the sender,
+and each recipient reconstructs in its own realm on the DOM manipulation task
+source. One private delivery stream per worker preserves ordering across channels.
+
+The browser selects recipients using the original Document's current activity and
+a shared worker-closing flag, without entering a suspended isolate. Already-selected
+messages survive suspension; ineligible workers are excluded from later sends.
+Close, collection, and native thread exit remove discovery entries. Closing the
+source or creating another channel from a serialization getter retains the normal
+HTML behavior. Listening-channel retention stays with the existing global owner.
+
+Shared/nested workers still need their ownership and direct browser-service
+connections. The existing service-host availability constraint remains: a browser
+host cannot synchronously wait for a worker that is requesting a service from it.
+No Node/V8 patch or add-on change is involved.
+
+The real-isolate regressions cover Window/worker and worker/worker delivery,
+cyclic values and recipient-realm types, exact name/storage-key isolation,
+cross-channel ordering, inactivity/resumption, serialization reentrancy, queued
+close, and forced termination. The ordering case first failed with one native
+endpoint per channel and now passes with the shared worker delivery stream.
+The relocated-package test also exposed an existing shutdown race: calling the
+add-on's stop before Node's `Worker.terminate()` could unwind a native callback
+before Node marked its environment as stopping, corrupting its async-hook stack.
+JS Engine now requests Node termination first, then wakes the add-on suspension
+wait. The same package regression passes without a native implementation change.
+
+Validation: 51 focused channel/service cases pass on each add-on runtime, and 45
+applicable cases pass on each stock runtime (Node 24.19.0, 26.8.1, and custom Node
+27). The nine suspension/termination regressions also pass on all three add-on
+runtimes. Relocated ESM/CJS package checks pass on all six configurations: eight
+per add-on configuration, including the new broadcast round trip, and four per
+stock configuration retaining the explicit suspension dependency. Typecheck,
+changed-file ESLint, import boundaries, and the Browlet build pass; the build's
+existing circular-dependency warnings remain.
+
+### Common global and startup integration
+
 WorkerGlobalScope now includes `WindowOrWorkerGlobalScope` through ordinary
 Web IDL. The dedicated/shared globals forward to their environment's existing
 common-global owner: origin and security getters, Base64 methods, error reporting,
@@ -215,7 +258,7 @@ existing storage, scripting, and browsing-context circular-dependency warnings;
 this slice adds no import edges or native code.
 
 General Fetch and dynamic-import service routing, Blob creation, shared storage/permissions,
-BroadcastChannel/report transport, and the ServiceWorkerContainer message queue
+report transport, and the ServiceWorkerContainer message queue
 remain with their owners. Stock startup still rejects missing native suspension;
 shared/nested execution still requires its ownership/connection managers.
 
@@ -246,7 +289,7 @@ This slice admits Document-owned dedicated workers on add-on runtimes. The
 worker-local UserAgent rejects nested creation until ownership and a surviving
 direct browser-service connection are available. Stock Node rejects missing
 suspension before allocating a thread. General worker Fetch/dynamic imports,
-Blob creation, storage/permissions, and BroadcastChannel/report transport retain
+Blob creation, storage/permissions, and report transport retain
 their existing operation-level dependency errors; public construction does not
 pretend those services are complete. No Node, V8, or add-on change is needed.
 
@@ -412,15 +455,15 @@ The browser host queue must remain able to answer. A long synchronous host scrip
 can delay it; a host that synchronously waits for its requesting worker can
 deadlock. Do not solve that by pumping author callbacks in the worker. Dedicated
 service execution, direct nested-worker connection forwarding, worker-created
-Blob backing transport, general Fetch, cookies/storage/permissions, broadcasts,
+Blob backing transport, general Fetch, cookies/storage/permissions,
 and report delivery remain explicit dependencies. Initial module-graph Fetch
 still uses the creator client as HTML requires; later dynamic imports need the
 worker's own client and a separate service route.
 
-Runtime probes find two explicit service dependencies: worker-created Blob
-registration needs backing transport, and BroadcastChannel needs the browser's
-shared registry. Both throw through the public worker API without killing the
-worker or breaking subsequent URL resolution. The common-global inclusion now
+Runtime probes retain the explicit worker-created Blob registration dependency,
+which needs backing transport. It throws through the public worker API without
+killing the worker or breaking subsequent URL resolution. BroadcastChannel now
+connects the browser registry for dedicated Document-owned isolates. The common-global inclusion now
 supplies `fetch`; its formerly failing exposure regression remains an ordinary
 assertion. General Fetch service transport is still an explicit dependency of
 the worker UserAgent connection.
@@ -499,8 +542,9 @@ realm implementation.
 
 BroadcastChannel now uses worker closing/suspendability checks, and cooperative
 dedicated/shared worker shutdown closes locally owned EventSources after the final
-checkpoint. Focused tests cover both worker kinds. Cross-isolate channel discovery
-and remote Fetch cancellation remain shared-service transport dependencies.
+checkpoint. Focused tests cover both worker kinds. Dedicated Document-owned
+isolates now share browser channel discovery; shared/nested ownership and remote
+Fetch cancellation remain integration dependencies.
 
 The current §9.4 transfer slice promotes a local endpoint pair to native transport
 only when a message crosses isolates. Its interface-owned transfer record carries

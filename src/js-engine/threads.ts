@@ -122,10 +122,12 @@ export class JSThread<Protocol extends JSThreadProtocol> {
   terminate(): InternalPromise<JSThreadExit> {
     if (!this.#stopping && !this.#exited) {
       this.#stopping = true;
-      if (this.#control !== null) addon.stopThread!(this.#control);
       // Node's native Promise stays at the backend boundary. Exit settles the
       // shared completion; a failed termination request rejects it instead.
       void this.#worker.terminate().catch(this.#closed.reject);
+      // Node must mark its environment as stopping before the addon unwinds or
+      // wakes a suspended stack, so Node's async-hook cleanup observes shutdown.
+      if (this.#control !== null) addon.stopThread!(this.#control);
     }
     return this.closed;
   }

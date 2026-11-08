@@ -399,7 +399,6 @@ describe('BroadcastChannel (§9.5)', () => {
     channel.close();
     channel.addEventListener('messageerror', listener);
     expect(retained.has(implementation)).toBe(false);
-    expect([...page.env.userAgent.broadcastChannels.values()]).not.toContain(implementation);
   });
 
   it('removes queued delivery when the receiving Document is destroyed', () => {

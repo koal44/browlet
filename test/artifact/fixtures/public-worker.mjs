@@ -4,12 +4,19 @@ import { parentPort, workerData } from 'node:worker_threads';
 
 // This is the browser host, not its worker bootstrap. The public constructor
 // must select and reload the relocated package without any fixture wiring.
-const { entryURL, extension, type } = workerData;
+const { entryURL, extension, type, broadcast = false } = workerData;
 const { Browlet } = extension === 'mjs' ? await import(entryURL) : createRequire(entryURL)(fileURLToPath(entryURL));
 const browser = new Browlet({ route: () => '' });
 try {
-  const result = await browser.evaluate((workerType) => new Promise((resolveResult, reject) => {
-    const source = 'onmessage = event => { postMessage([name, event.data]); close(); };';
+  const result = await browser.evaluate(({ workerType, broadcast }) => new Promise((resolveResult, reject) => {
+    const source = broadcast ? `onmessage = event => {
+      const sender = new BroadcastChannel('packaged');
+      const receiver = new BroadcastChannel('packaged');
+      receiver.onmessage = event => {
+        postMessage([name, event.data]); sender.close(); receiver.close(); close();
+      };
+      sender.postMessage(event.data);
+    };` : 'onmessage = event => { postMessage([name, event.data]); close(); };';
     const worker = new globalThis.Worker(`data:text/javascript,${encodeURIComponent(source)}`, {
       type: workerType, name: 'packaged worker',
     });
@@ -21,7 +28,7 @@ try {
       reject(new Error(event.message ?? 'Worker load failed'));
     };
     worker.postMessage({ value: 42 });
-  }), type);
+  }), { workerType: type, broadcast });
   parentPort.postMessage({ result });
 } catch (error) {
   parentPort.postMessage({ error: error.message });

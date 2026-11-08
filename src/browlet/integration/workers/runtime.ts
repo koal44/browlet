@@ -82,7 +82,10 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
     this.environment.getWindowOrWorkerGlobalScopeMixin().timers.setWorkerClock(() => this.#endpoint.elapsedTime);
     const global = this.environment.globalImplementation;
     global.remoteOwner = init.ownerState === null ? null : new RemoteWorkerOwner(init.ownerState);
-    global.onClosing = () => { this.#endpoint.preventSuspension(); };
+    global.onClosing = () => {
+      this.#userAgent.broadcastChannels.beginClosing();
+      this.#endpoint.preventSuspension();
+    };
     if (this.agent instanceof DedicatedWorkerAgent) {
       this.agent.globalScope!.reportErrorToOwner = (errorInfo) => this.reportError(errorInfo);
     }
