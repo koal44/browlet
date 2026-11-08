@@ -6,6 +6,8 @@ import { DocumentState, SourceSnapshotParams } from '../../../../src/browlet/bro
 import { SandboxingFlagSet } from '../../../../src/browlet/browsing/policy/index';
 import { ResourceReader } from '../../../../src/browlet/loader/resource-reader';
 import { FetchBody, FetchResponse } from '../../../../src/fetch/index';
+import { internalType } from '../../../../src/infra/index';
+import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { getMIMETypeEssence } from '../../../../src/mime/index';
 import { ReadableStreamImpl } from '../../../../src/streams/index';
 import { createOpaqueOrigin, parseURL } from '../../../../src/url/index';
@@ -24,9 +26,10 @@ describe('navigation Document dispatch', () => {
   ] as const)('dispatches %s through %s with the prepared reader', async (contentType, method) => {
     const { navigable, params, source, origin, resource, dispatch } = fixture(contentType);
     const document = navigable.activeDocument!;
-    const load = vi.spyOn(navigable, method).mockReturnValue(document);
+    const load = vi.spyOn(navigable, method).mockReturnValue(method === 'loadMultipartDocument'
+      ? document.env.userAgent.HostPromise.resolve(document, internalType<DocumentImpl | null>()) : document);
     await resource.determineMIMEType();
-    expect(dispatch()).toBe(document);
+    expect(await dispatch()).toBe(document);
     const args = method === 'loadHTMLDocument' ? [params, undefined, resource]
       : method === 'loadMultipartDocument' ? [params, source, origin, resource] : [params, resource.mimeType, resource];
     expect(load).toHaveBeenCalledExactlyOnceWith(...args);
@@ -68,10 +71,10 @@ describe('navigation Document dispatch', () => {
     const xml = vi.spyOn(navigable, 'loadXMLDocument');
     const text = vi.spyOn(navigable, 'loadTextDocument');
     const inline = vi.spyOn(navigable, 'createDocumentForInlineContent').mockReturnValue(navigable.activeDocument!);
-    expect(dispatch()).toBe(navigable.activeDocument);
+    expect(await dispatch()).toBe(navigable.activeDocument);
     expect(xml).not.toHaveBeenCalled();
     expect(text).not.toHaveBeenCalled();
-    expect(inline).toHaveBeenCalledExactlyOnceWith(params.id, params.navigationTimingType, params.userInvolvement, resource);
+    expect(inline).toHaveBeenCalledExactlyOnceWith(params.id, params.navigationTimingType, params.userInvolvement, params.url, resource);
   });
 
   it.each(['image/png', 'audio/ogg', 'video/mp4', 'application/ogg', 'image/svg+xml'])('checks actual media support for %s', async (contentType) => {
@@ -80,7 +83,7 @@ describe('navigation Document dispatch', () => {
     if (contentType === 'image/svg+xml') userAgent.documentTypeHandlers.set(contentType, 'inline');
     const supports = vi.spyOn(userAgent, 'supportsMIMEType').mockReturnValue(true);
     const media = vi.spyOn(navigable, 'loadMediaDocument').mockReturnValue(navigable.activeDocument!);
-    expect(dispatch()).toBe(navigable.activeDocument);
+    expect(await dispatch()).toBe(navigable.activeDocument);
     expect(supports).toHaveBeenCalledWith(resource.mimeType);
     expect(media).toHaveBeenCalledExactlyOnceWith(params, resource.mimeType, resource);
   });
@@ -90,7 +93,7 @@ describe('navigation Document dispatch', () => {
     await resource.determineMIMEType();
     const media = vi.spyOn(navigable, 'loadMediaDocument');
     const fallback = vi.spyOn(userAgent, 'shouldDisplayUnsupportedResourceInline');
-    expect(dispatch).toThrow('Unsupported navigation resource handling is not implemented');
+    await expect(dispatch()).rejects.toThrow('Unsupported navigation resource handling is not implemented');
     expect(media).not.toHaveBeenCalled();
     expect(fallback).toHaveBeenCalledExactlyOnceWith(resource.mimeType);
   });
@@ -100,11 +103,11 @@ describe('navigation Document dispatch', () => {
     await resource.determineMIMEType();
     const inline = vi.spyOn(navigable, 'createDocumentForInlineContent').mockReturnValue(navigable.activeDocument!);
     expect(userAgent.pdfViewerSupported).toBe(false);
-    expect(dispatch).toThrow('Unsupported navigation resource handling is not implemented');
+    await expect(dispatch()).rejects.toThrow('Unsupported navigation resource handling is not implemented');
     expect(inline).not.toHaveBeenCalled();
     userAgent.pdfViewerSupported = true;
-    expect(dispatch()).toBe(navigable.activeDocument);
-    expect(inline).toHaveBeenCalledExactlyOnceWith(params.id, params.navigationTimingType, params.userInvolvement, resource);
+    expect(await dispatch()).toBe(navigable.activeDocument);
+    expect(inline).toHaveBeenCalledExactlyOnceWith(params.id, params.navigationTimingType, params.userInvolvement, params.url, resource);
   });
 
   it.each(['text/html', 'application/example+json'])('lets an external configuration override built-in handling of %s', async (contentType) => {
@@ -114,7 +117,7 @@ describe('navigation Document dispatch', () => {
     const html = vi.spyOn(navigable, 'loadHTMLDocument');
     const fallback = vi.spyOn(userAgent, 'shouldDisplayUnsupportedResourceInline');
     const handoff = vi.spyOn(userAgent, 'requestExternalSoftwareHandoff').mockImplementation(() => {});
-    expect(dispatch()).toBeNull();
+    expect(await dispatch()).toBeNull();
     expect(html).not.toHaveBeenCalled();
     expect(fallback).not.toHaveBeenCalled();
     expect(handoff).toHaveBeenCalledExactlyOnceWith(params.response, navigable, source.hasTransientActivation, origin, resource);
@@ -126,7 +129,7 @@ describe('navigation Document dispatch', () => {
     vi.spyOn(userAgent, 'shouldDisplayUnsupportedResourceInline').mockReturnValue(inline);
     const render = vi.spyOn(navigable, 'createDocumentForInlineContent').mockReturnValue(navigable.activeDocument!);
     const handoff = vi.spyOn(userAgent, 'requestExternalSoftwareHandoff').mockImplementation(() => {});
-    expect(dispatch()).toBe(inline ? navigable.activeDocument : null);
+    expect(await dispatch()).toBe(inline ? navigable.activeDocument : null);
     expect(render).toHaveBeenCalledTimes(inline ? 1 : 0);
     expect(handoff).toHaveBeenCalledTimes(inline ? 0 : 1);
     if (!inline) expect(handoff.mock.calls[0]![0]).toBe(params.response);
@@ -136,24 +139,23 @@ describe('navigation Document dispatch', () => {
     const { navigable, userAgent, params, source, resource } = fixture('text/html');
     await resource.determineMIMEType();
     const html = vi.spyOn(navigable, 'loadHTMLDocument').mockReturnValue(navigable.activeDocument!);
-    expect(navigable.loadDocument(params, source, null, resource)).toBe(navigable.activeDocument);
+    expect(await navigable.loadDocument(params, source, null, resource)).toBe(navigable.activeDocument);
     expect(html).toHaveBeenCalledOnce();
     userAgent.documentTypeHandlers.set('text/html', 'external');
     const handoff = vi.spyOn(userAgent, 'requestExternalSoftwareHandoff');
-    expect(() => navigable.loadDocument(params, source, null, resource))
-      .toThrow('External resource handoff without an initiator origin is not implemented');
+    await expect(navigable.loadDocument(params, source, null, resource))
+      .rejects.toThrow('External resource handoff without an initiator origin is not implemented');
     expect(handoff).not.toHaveBeenCalled();
   });
 
   it.each([
     ['application/xml', 'XML document loading is not implemented'],
-    ['multipart/x-mixed-replace', 'Multipart document loading is not implemented'],
     ['image/png', 'Image document resource loading is not implemented'],
   ] as const)('keeps the actual loader explicit for %s', async (contentType, message) => {
     const { userAgent, resource, dispatch } = fixture(contentType);
     await resource.determineMIMEType();
     vi.spyOn(userAgent, 'supportsMIMEType').mockReturnValue(true);
-    expect(dispatch).toThrow(message);
+    await expect(dispatch()).rejects.toThrow(message);
   });
 });
 
@@ -169,7 +171,7 @@ describe('population MIME preparation', () => {
     const load = vi.spyOn(navigable, 'loadDocument');
     const complete = vi.fn();
     const failed = vi.fn();
-    const queue = vi.spyOn(env, 'queueTask');
+    const queue = vi.spyOn(env.responsibleEventLoop, 'queueTask');
     navigable.populateHistoryEntryDocument(entry, 'navigate', source, navigable.snapshotTargetParams(), 'none', {
       navigationId: 'dispatch', navigationParams: params, completionSteps: complete, failureSteps: failed,
     });
@@ -195,6 +197,7 @@ describe('population MIME preparation', () => {
     const load = vi.spyOn(navigable, 'loadDocument');
     const complete = vi.fn();
     const failed = vi.fn();
+    const queue = vi.spyOn(env.responsibleEventLoop, 'queueTask');
     navigable.populateHistoryEntryDocument(entry, 'navigate', source, navigable.snapshotTargetParams(), 'none', {
       navigationId: 'dispatch', navigationParams: params, completionSteps: complete, failureSteps: failed,
     });
@@ -225,7 +228,7 @@ describe('population MIME preparation', () => {
     const entry = env.createSessionHistoryEntry(params.url, new DocumentState());
     const complete = vi.fn();
     const failed = vi.fn();
-    const queue = vi.spyOn(env, 'queueTask');
+    const queue = vi.spyOn(env.responsibleEventLoop, 'queueTask');
     navigable.populateHistoryEntryDocument(entry, 'navigate', source, navigable.snapshotTargetParams(), 'none', {
       navigationId: 'dispatch', navigationParams: params, completionSteps: complete, failureSteps: failed,
     });
@@ -264,10 +267,10 @@ describe('population MIME preparation', () => {
     const loaded = env.createDocument();
     const load = vi.spyOn(navigable, 'loadDocument').mockImplementation(() => {
       expect(env.responsibleEventLoop.currentlyRunningTask).not.toBeNull();
-      return loaded;
+      return env.userAgent.HostPromise.resolve(loaded, internalType<DocumentImpl | null>());
     });
     const complete = vi.fn(() => { expect(env.responsibleEventLoop.currentlyRunningTask).not.toBeNull(); });
-    const queue = vi.spyOn(env, 'queueTask');
+    const queue = vi.spyOn(env.responsibleEventLoop, 'queueTask');
     navigable.populateHistoryEntryDocument(entry, 'navigate', source, navigable.snapshotTargetParams(), 'none', {
       navigationParams: params, completionSteps: complete,
     });
@@ -280,6 +283,9 @@ describe('population MIME preparation', () => {
     await expect.poll(() => queue.mock.calls.length).toBe(2);
     navigable.ongoingNavigation = next;
     expect(env.responsibleEventLoop.runTaskTurn()).toBe(true);
+    if (!superseded) {
+      await expect.poll(() => env.responsibleEventLoop.runTaskTurn()).toBe(true);
+    }
     expect(complete).toHaveBeenCalledOnce();
     expect(load).toHaveBeenCalledTimes(superseded ? 0 : 1);
     expect(entry.document).toBe(superseded ? null : loaded);

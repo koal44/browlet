@@ -189,7 +189,7 @@ describe('Permissions Policy §§9.12 and 9.14: potential iframe violations', ()
     iframe.setAttributeValue('src', 'https://child.test/');
     document.appendChild(iframe);
     expect(scope.reportBuffer).toEqual([]);
-    // The unfinished iframe load event steps must call this check after dispatching load.
+    // No child is loaded here; completion tests cover the call after iframe load dispatch.
     check(iframe);
     expect(scope.reportBuffer.map((report) => report.data)).toMatchObject([
       { featureId: feature.name }, { featureId: 'deferred-fetch' },

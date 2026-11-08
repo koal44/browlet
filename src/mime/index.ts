@@ -28,6 +28,8 @@ export {
   type SuppliedMIMETypeDetection,
 } from './resource';
 
+export { MultipartParser, type MultipartHandler, type MultipartHeaders } from './multipart';
+
 export {
   preservedMIMEType,
   sniffMIMEType,

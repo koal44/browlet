@@ -121,7 +121,7 @@ describe('Fetch navigation request CSP', () => {
     navigable.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', { cspNavigationType: 'form-submission' });
     await expect.poll(() => queue.mock.calls.length).toBe(1);
     expect(queue).toHaveBeenCalledWith('navigation-and-traversal', expect.any(Function), { discardSteps: undefined });
-    expect(() => env.responsibleEventLoop.runTaskTurn()).toThrow('Inline user-agent Document creation is not implemented');
+    expect(() => env.responsibleEventLoop.runTaskTurn()).toThrow('Inline user-agent Document rendering is not implemented');
     expect(entry.document).toBeNull();
   });
 });

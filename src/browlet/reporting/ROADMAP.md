@@ -34,8 +34,10 @@ metadata and legacy transport decisions are in the
 COEP, Integrity Policy, CSP, and test reports reach the shared observer/outbound
 paths. Permissions Policy's actual and potential violation producers use these
 paths, including local-only reports without an endpoint. The potential checker
-still needs its call from the unfinished
-[iframe load event steps](../browsing/policy/permissions-policy/ROADMAP.md#912-and-914-potential-iframe-violations).
+runs after handlers in the
+[iframe load event steps](../browsing/policy/permissions-policy/ROADMAP.md#101-html-integration);
+automatic iframe insertion/loading and pending fallback timing remain separate
+dependencies.
 Window reporting uses the associated Document's current URL, independently
 of its base or referrer URL. Workers must supply their own source URL. Fetch's
 narrow environment contract does not need to know about the global-scope mixin.

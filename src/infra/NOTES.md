@@ -1,5 +1,19 @@
 # Infra translation notes
 
+## Incremental byte input
+
+`ByteCursor` is an implementation utility alongside the fixed-input `TextCursor`.
+It owns original `Uint8Array` chunks and their reading position. A drained chunk
+is released immediately; further appends can also queue behind unread input.
+`InputBoundary.Waiting` and `InputBoundary.End` distinguish temporary exhaustion
+from producer completion. Negative enum values cannot collide with input bytes.
+
+Bulk consumers read `chunk` and `position` directly, then call `advance()` within
+that chunk. `peek()` can cross queued chunks without consuming them. `finish()`
+retains unread bytes; `clear()` discards them without reopening finished input.
+The cursor does not decode text, retain grammar state, schedule work, or manage
+HTML insertion points. Encoding's scalar-value I/O queue retains its own contract.
+
 ## Default posture
 
 - Reproduce the required result, not the specification's pseudocode shape.

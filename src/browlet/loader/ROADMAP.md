@@ -16,13 +16,13 @@ have different response processing and cancellation lifetimes. Preloading a
 stylesheet does not apply it; speculative or lazy discovery does not establish
 successful use. Keep each completion contract with its consuming owner.
 
-`HTMLIFrameElementImpl.runLoadEventSteps()` is an explicit throwing dependency,
-now called by initial-insertion javascript: completion. It must call
-`HTMLIFrameElementImpl.checkPotentialPermissionsPolicyViolation()` after the
-element's `load` handlers return, using the then-current raw `allow` and `src`,
-before clearing the child Document's load-in-progress flag. Child Window `load`
-is a separate event. The checker exists; iframe timing/flags, attribute processing,
-and document-completion callers remain unfinished.
+`HTMLIFrameElementImpl.runLoadEventSteps()` is called by initial-insertion
+javascript: completion and queued Document completion. It checks potential
+Permissions Policy violations after the element's `load` handlers return,
+using current raw `allow` and `src`, before clearing the child's load-in-progress
+flag. Child Window `load` is a separate event. Pending fallback resource timing,
+automatic attribute processing, and `document.open()`'s mute producer remain
+explicit dependencies.
 See the [integration review](../browsing/policy/permissions-policy/ROADMAP.md#101-html-integration).
 
 The javascript: string-result path now calls `Navigable.loadHTMLDocument(params)`
@@ -742,6 +742,194 @@ Window expected failures. The new text suite has 19 passing cases. Typecheck and
 generated declarations, declaration contracts, changed-file ESLint, import
 boundaries, and diff whitespace checks pass. No native code or dependencies changed.
 
+## Multipart loading: framing foundation
+
+HTML §7.5.5 now has its realm-neutral RFC 2046 framing prerequisite in
+[`MultipartParser`](../../mime/multipart.ts). It accepts incremental bytes,
+emits headers and available body data without waiting for a whole part, and
+reports part EOF at the following boundary while the outer response can remain
+open. This is MIME framing, separate from the deferred HTML/XML parser work.
+The existing complete-body FormData parser is not a suitable streaming loader
+and retains its own compatibility choices.
+
+The framer now accepts `appendData()` through Infra's byte cursor, preserving
+bulk scanning and original-buffer body views. Cursor storage can retain unread
+chunks, but the framer still drains synchronously: the Document consumer below
+supplies asynchronous part admission and body-demand backpressure without adding
+a second framing state machine.
+
+The first EOF regression observed `complete === false` after the following
+boundary had arrived. It now observes completion before delimiter suffixes,
+the next part's headers, or transport EOF. Other tests cover every two-chunk
+split, one-byte chunks, folded/duplicate fields, binary bodies, exact delimiter
+CRLF ownership, zero-copy body runs, invalid/incomplete framing, and cancellation
+from each callback. The parser reports malformed framing without choosing how
+a browser presents partially received Documents.
+
+The framing checkpoint did not yet have a production consumer. That handoff is
+now implemented as described below; the parser/cursor redesign remains a
+separate review after the Document lifecycle work, and no HTML/XML string-cursor
+design has been adopted.
+
+Sources: [HTML §7.5.5](https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-multipart-x-mixed-replace)
+and [RFC 2046 §5.1.1](https://www.rfc-editor.org/rfc/rfc2046.html#section-5.1.1).
+
+Validation: six MIME/FormData suites pass on Node 26.8.1 with the matching addon
+(299 cases, including 33 new framing cases). Typecheck/generated declarations,
+declaration contracts, changed-file ESLint, import boundaries, and diff whitespace
+checks pass. This slice changes no realm, scheduling, native, or fallback behavior.
+
+## Multipart loading: Document consumer
+
+HTML §7.5.5 now connects `ResourceReader` → `MultipartParser` → individual
+Fetch response bodies → the existing Document loaders. `MultipartResourceReader`
+lives here because it owns the Fetch/Streams handoff; RFC 2046 byte framing
+remains in MIME. The first part is admitted when its headers and computed type
+are available. Each boundary closes that part's stream while the outer transport
+can remain open. Body demand drives further transport reads; one already-read
+transport chunk can contain several queued parts. Body runs remain views of
+that chunk rather than copies or whole-part accumulation.
+
+`loadDocument()` and `loadMultipartDocument()` now return internal promises
+of Document-or-null. Eric accepted this shape on 2026-11-06. The UserAgent's
+HostPromise is an InternalPromise whose completion outlives individual Documents;
+the HTML/text constructors remain synchronous. Population resumes on the target
+loop, retains the still-active task Document across initial Window reuse, and
+rechecks navigation ownership before saving the result. The first Document's
+history-initialization gate precedes later-part navigation. Later parts use
+`navigate(..., { response: part, historyHandling: 'replace' }, sourceEnv)`.
+
+Eric approved these corrections on 2026-11-06:
+
+- `SPEC_CLASH(multipart-replacement-inputs)`: HTML's additional-part loop
+  passes the outer response and first Document again. Use the current part and
+  active Document, preserving replacement routing instead of recursively
+  loading the outer multipart entity.
+- `SPEC_GAP(multipart-null-request)`: supplied-response parameters can have
+  no request. Use their final response URL in that case.
+- `SPEC_CLASH(multipart-default-content-type)`: retain RFC 2046's text/plain
+  default. WebKit sniffed the probe's untyped HTML-shaped part as HTML.
+
+The browser-only probe is
+[`multipart-document-loading.mjs`](../../../node-compat/experimental/multipart-document-loading.mjs).
+Chromium 156.0.8078.4 and Firefox 157.0 produced no rendered-part observations;
+that probe does not establish their replacement behavior. WebKit 27.2 replaced
+first with second, used each part's Content-Type, and enforced both outer and
+part CSP in the separate policy cases. Source checks agree that WebKit's
+DocumentLoader receives new response metadata on each replacement, while
+Gecko's nsMultiMixedConv constructs part channels and combines CSP. See
+[WebKit DocumentLoader](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/loader/DocumentLoader.cpp)
+and [Gecko nsMultiMixedConv](https://searchfox.org/mozilla-central/source/netwerk/streamconv/converters/nsMultiMixedConv.cpp).
+
+This is a real first-part loader and later-navigation handoff, not completed
+multipart lifecycle support. Explicit dependencies remain:
+
+- Ordinary navigation's recursive abortion/unloading and Window transient
+  activation are still required for fully automatic later replacements.
+- Window.stop()/Document-wide abortion and destruction must cancel the outer
+  reader even after the current part has closed. Active-body cancellation and
+  navigation supersession are connected now.
+- Local-URL part CSP composition, non-identity Content-Transfer-Encoding, and
+  nested multipart coordination throw explicitly. HTTP multipart CSP admission
+  is covered by the following slice; inherited local policies are not overwritten.
+- MIME/header recovery and malformed/truncated-response presentation remain
+  unaudited; malformed framing is surfaced, not silently accepted.
+- Full per-part timing/transport attribution, XML/media/inline content handlers,
+  parser scripts, and the broader load/unload lifecycle retain their owners.
+
+Regression coverage includes real HTTP/Fetch/history admission, streaming HTML
+and literal default text, load at a boundary before outer EOF, replacement
+arguments, multiple parts in one chunk, body-demand backpressure, failure,
+supersession, cancellation, and copied navigation inputs. The boundary test
+first failed because pending header discovery did not resume after body EOF;
+the consumer now wakes that read. A transport-failure regression also caught
+duplicate host-error reporting during cancellation cleanup.
+The replacement ownership regression initially kept the stream open when an
+author navigation superseded the next part during `navigate()`. The consumer
+now adopts only the first replacement ID, then treats further changes as
+supersession.
+
+The active-body cancellation regression remains an ordinary failing test on
+addon runtimes: the source cancels, but cancellation's completion promise can
+stall until an explicit checkpoint. The same failure reproduces with two linked
+`ResourceReader`s and no multipart parser. Native settlement notification routes
+through the Promise's creation context, which need not own its observer's queue.
+Eric chose on 2026-11-06 to defer that shared runtime fix, preserving the strict
+production expectation and the standalone
+[`multipart-cancel-promise.mts`](../../../node-compat/experimental/multipart-cancel-promise.mts)
+probe. No checkpoint workaround or native-runtime change is included here.
+
+Validation (2026-11-06): nine affected loader/navigation/framing/cursor suites,
+237 tests, across Node 24.19.0, 26.8.1, and custom 27.0.0-pre. Each stock run
+passes all 237. Each matching-addon run passes 236 and fails only the strict
+active-body cancellation completion regression above. Typecheck/generated
+declarations, declaration contracts, changed-file ESLint, import boundaries,
+and diff whitespace checks pass. The runtime failure is not an expected failure
+or a skip; the loader checkpoint is intentionally not a green addon run.
+
+## Multipart loading: CSP admission
+
+The follow-up applies HTTP multipart policies before Document admission. The
+reader retains outer-response and earlier-part CSP header fields independently,
+including report-only fields. Each part receives a snapshot, so parsing several
+parts in one transport chunk cannot add future restrictions to an earlier part.
+Empty fields cannot clear earlier restrictions. The first part receives a cloned
+policy container with the cumulative CSP list, combined sandbox flags, and an
+opaque origin when required, before Window creation. Non-CSP container state is
+preserved. A part that adds sandboxing cannot bypass an already prepared COOP
+decision; the existing network-error presentation dependency remains explicit.
+Later supplied-response navigations now obtain their response policy container,
+so the normal population checks see each part's cumulative restrictions.
+
+Eric approved these choices on 2026-11-06:
+
+- `SPEC_CLASH(multipart-csp-lifetime)`: retain cumulative independent policies,
+  following WebKit. Gecko's `nsMultiMixedConv` instead combines only the outer
+  policy and current part, joining their directive text with a semicolon. That
+  differs from independent CSP policies, which must all permit an action.
+- `SPEC_CLASH(multipart-part-policy-admission)`: HTML's shallow first-part copy
+  retains the original policy container and origin, and its supplied-response
+  branch provides no response container. Apply the part's CSP and sandbox first,
+  and run frame-ancestors before admission, matching WebKit's live behavior.
+  Report-only violations report without blocking. Forbidden embedding reaches
+  the existing inline error-page dependency instead of creating the part's Window.
+
+The browser-only probe is
+[`multipart-csp.mjs`](../../../node-compat/experimental/multipart-csp.mjs).
+WebKit 27.2 retained an earlier part's connect-src restriction and report-only
+script policy on the next part, preserved outer sandboxing through an empty
+part policy, applied part sandboxing to both Documents' origins, and blocked a
+part with frame-ancestors 'none'. Chromium 156.0.8078.4 and Firefox 157.0 produced
+no baseline part observations, so this probe does not establish their policy
+behavior. Source evidence: WebKit's
+[2024 CSP bypass fix](https://github.com/WebKit/WebKit/commit/93603245b1ebc4cd2c451af93d98c86533c0d6fe)
+explicitly retains restrictions across replacements; Gecko's
+[part-channel processing](https://searchfox.org/mozilla-central/source/netwerk/streamconv/converters/nsMultiMixedConv.cpp)
+uses the outer/current combination. Compare
+[HTML §7.5.5](https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-multipart-x-mixed-replace)
+and [CSP's multiple-policy rule](https://w3c.github.io/webappsec-csp/#multiple-policies).
+
+Local-URL responses retain their existing inherited container. Added part CSP
+remains a throwing dependency there: composition must preserve inherited self
+origins and policy provenance without duplicating earlier restrictions and
+reports. This slice does not complete local-URL policy composition, error-page
+creation, transient activation, recursive abortion/unloading, parser redesign,
+or the separately retained addon cancellation wake-up failure.
+
+The first regression failed at the old part-CSP throwing boundary. A further
+regression demonstrated that prepared COOP parameters could admit a newly
+sandboxed part; it now reaches the existing network-error dependency. Tests
+cover independent restriction intersection, cumulative enforce/report-only
+policies, snapshot isolation, sandbox union, origin ownership, both dispositions
+of frame-ancestors, and the local-URL boundary.
+
+Validation (2026-11-06): the five affected loader, Document creation, population,
+and CSP suites contain 207 tests. Node 24.19.0, 26.8.1, and custom 27.0.0-pre each
+pass 207/207 in stock mode. Each matching-addon run passes 206 and fails only the
+previously retained active-body cancellation completion test. Typecheck and
+generated declarations, declaration contracts, changed-file ESLint, import
+boundaries, and diff whitespace checks pass. No addon or engine code changed.
+
 ## HTML §7.5.6: media Document construction
 
 `Navigable.loadMediaDocument()` now creates and initializes the HTML Document,
@@ -803,7 +991,122 @@ There are no expected failures or skips in that sweep. Typecheck/generated
 declarations, declaration contracts, changed-file ESLint, import boundaries,
 and diff whitespace checks pass. This slice changes no addon or engine code.
 
-The next document-order section is §7.5.7, inline content without a DOM.
+## HTML §7.5.7: inline user-agent Document construction
+
+`Navigable.createDocumentForInlineContent()` now constructs the isolated HTML
+Document for browser pages and PDF viewers. It supplies a fresh opaque origin,
+opener policy and enforcement result, empty policy container/sandbox flags, and
+a new synthetic response. Request, Fetch controller, early hints, and reserved
+environment remain null. The shared initialization selects its browsing context
+and Window; construction does not activate the Document or commit history.
+
+`SPEC_GAP(inline-document-response)`: the
+[HTML algorithm](https://html.spec.whatwg.org/multipage/document-lifecycle.html#navigate-ua-inline)
+reads an undefined response's URL, then creates a response with no URL. The
+approved correction passes the caller's target URL after the specified inputs
+and copies it onto that new response. Failed admission supplies the response's
+final URL, or the history entry's URL when no response exists. Non-fetch pages
+supply their URL; resource viewers supply the final resource URL. The already
+accepted optional ResourceReader remains last, separate from the synthetic
+response. Its headers, policies and body never become the UI Document's response.
+Nullable navigation IDs retain the previously accepted caller contract.
+
+A regression exposed the provisional loader repeating COEP admission even for
+this unreserved synthetic response. Document creation now uses the same
+reserved-environment gate as history population. The blocked response stays
+blocked; its fresh error Document can still be constructed under an isolated
+parent. Ordinary supplied-response preparation continues to create a reservation
+and enforce COEP.
+
+`UserAgent.renderInlineDocument()` is the explicit throwing presentation owner.
+It still needs browser error/handler UI, failure diagnostics, PDF decoding,
+resource consumption/cancellation, and exclusion of content scripts from the
+viewer DOM. No renderer is fabricated and PDF support remains false. Registered
+web handlers navigate their handler URL instead of using this operation.
+Ordinary HTML loading already runs headlessly without this hook. Browser-owned
+content can also have a nonvisual representation; the unfinished presentation
+owner does not imply a display or rasterizer requirement.
+
+If that owner supplies a presentation, completion waits for history activation's
+scripts-may-run gate, then uses the existing networking task and provisional
+`finishLoading()`. Container notification is connected in the following §7.5.8
+slice. Full stop-parsing behavior, iframe fallback timing (including policy and
+network failures), readiness and load-delay coordination remain explicit
+lifecycle dependencies. Tests control only the unfinished renderer;
+uncontrolled calls assert its named failure.
+
+Coverage includes fresh origin/policy identity, URL copying and metadata, null
+IDs, the untouched original reader, network-error and rejected-response
+population, an opaque child under COEP, activation-gated and automatic completion,
+and destruction before delivery.
+
+Validation (2026-11-06): all 338 checks in the nine affected inline/media/multipart,
+dispatch, population, Fetch navigation, non-fetch, creation, and COEP suites pass
+on Node 24.19.0, 26.8.1, and custom 27.0.0-pre, in stock and matching-addon modes.
+There are no expected failures or skips in this sweep. Typecheck/generated
+declarations, declaration contracts, changed-file ESLint, import boundaries,
+and diff whitespace checks pass. No addon or engine code changed.
+
+## HTML §7.5.8: finishing the loading process
+
+`DocumentImpl.completelyFinishLoading()` asserts the browsing context, records
+completion, and queues the container's notification on its node Document's DOM
+manipulation task source. Iframes run their specialized load steps; frame,
+object, and embed containers receive a trusted, non-bubbling, non-cancelable
+load event. This notification is separate from the child Window's load event
+and uses the parent's event loop even when the child belongs to another Agent.
+Destroying the owning Document discards its queued task through existing teardown.
+
+Initial `about:blank` creation has no node navigable/container association yet,
+so it records completion without queueing a notification. The separate
+synchronous initial iframe notification still belongs to §4.8.5 attribute
+processing. The [HTML completion algorithm](https://html.spec.whatwg.org/multipage/document-lifecycle.html#completely-finish-loading)
+explicitly distinguishes these two paths.
+
+`HTMLIFrameElementImpl.runLoadEventSteps()` now honors the child's mute flag,
+sets its load-in-progress flag, fires load, and checks potential Permissions
+Policy violations before clearing the flag. The checker reads current raw
+attributes and the element's current node Document after author handlers.
+The progress flag is also cleared if the reporting owner throws.
+
+The existing iframe operation was a throwing dependency reached by the new
+container task, including the enabled child-refresh regression. Its ordinary
+event path is now implemented. Pending fallback resource timing still throws
+explicitly: iframe navigation must retain its URL and start together and supply
+the timing subsystem's shared-clock inputs before reporting can clear them.
+The `document.open()` mute-flag producer, automatic container insertion/loading,
+and the full stop-parsing/deferred-script/load-delay lifecycle remain unfinished.
+This slice does not claim those Section 4, Section 8, or parser algorithms.
+
+Browser evidence (2026-11-06): Chromium 156.0.8078.4, Firefox 157.0, and WebKit
+27.2 agree on synchronous initial empty-iframe load, normal child Window load
+before the iframe event, a microtask checkpoint between those events, and the
+iframe event's trusted/non-bubbling/non-cancelable flags. The reproducible probe
+and results are in Experimental's `document-load-completion.mjs` and
+`DOCUMENT-LOAD-COMPLETION.md`. Blink's `HTMLFrameOwnerElement::DispatchLoad()`
+also places fallback timing before dispatch and the potential policy check after it.
+
+The [completion tests](../../../test/browlet/browsing/navigation/document-load-completion.test.ts)
+cover timestamp/precondition handling, initial construction, all four container
+types, parent-loop ownership, mute/progress flags, post-handler policy inputs,
+pending timing, teardown, and automatic event-loop delivery without a renderer.
+The caller audit also replaces obsolete JavaScript-URL and population tests
+that expected the former HTML/iframe loader stubs to throw. They now verify
+replacement loading and initial iframe notification. Supplied-response policy
+expectations now retain the selected response header (or its empty policy),
+consistent with the previously implemented response-policy factory.
+
+Validation (2026-11-06): fourteen completion, refresh, policy, lifecycle, timing,
+loader, browsing-context, Browlet, and navigation suites pass on Node 24.19.0,
+26.8.1, and custom 27.0.0-pre in stock and matching-addon modes. Across those
+suites each addon configuration passes 305 tests; each stock configuration passes
+302 with the three existing Window identity/global prototype expected failures.
+The existing external stylesheet test stays skipped.
+All 14 new completion checks pass in every configuration. Typecheck/generated
+declarations, declaration contracts, changed-file ESLint, import boundaries,
+and whitespace checks pass. No addon or engine code changed.
+
+The next document-order section is §7.5.9, unloading documents.
 
 ## Removal condition
 

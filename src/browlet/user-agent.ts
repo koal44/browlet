@@ -581,6 +581,16 @@ class BrowletUserAgent implements
     throw new InternalError('Unsupported navigation resource handling is not implemented');
   }
 
+  /** Associate browser-owned presentation with an isolated Document, optionally consuming a prepared resource. */
+  renderInlineDocument(_document: DocumentImpl, _resource?: ResourceReader): void {
+    // Ordinary HTML loading is headless and does not call this hook. Browser-owned content
+    // may also use a nonvisual representation; this operation does not require a display or rasterizer.
+    // TODO(HTML §7.5.7): Compose error/handler UI and PDF rendering, including diagnostic inputs,
+    // resource consumption/cancellation, and preventing content scripts from accessing the viewer DOM.
+    // A supplied reader retains sniffed bytes and the remaining body; never reread its response stream.
+    throw new InternalError('Inline user-agent Document rendering is not implemented');
+  }
+
   /** Apply the destination sandbox before requesting an external handoff of a URL or response. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#hand-off-to-external-software
   handoffToExternalSoftware(

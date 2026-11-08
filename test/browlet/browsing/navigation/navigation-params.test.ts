@@ -7,6 +7,8 @@ import { DocumentState, SourceSnapshotParams } from '../../../../src/browlet/bro
 import { PolicyContainer } from '../../../../src/browlet/browsing/policy/index';
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
 import { FetchHeaders, type HTTPTransportListener } from '../../../../src/fetch/index';
+import { internalType } from '../../../../src/infra/index';
+import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { obtainURLOrigin, parseURL, serializeURL } from '../../../../src/url/index';
 import { mockHTTPTransport } from '../../../fetch/transport-fixture';
 import { createManualUserAgent } from '../../../support/browlet-agent';
@@ -144,7 +146,7 @@ describe('completed Fetch navigation parameters', () => {
     const loaded = env.createDocument();
     loaded.setURL(entry.url);
     loaded.origin = obtainURLOrigin(entry.url);
-    const load = vi.spyOn(navigable, 'loadDocument').mockReturnValue(loaded);
+    const load = vi.spyOn(navigable, 'loadDocument').mockReturnValue(env.userAgent.HostPromise.resolve(loaded, internalType<DocumentImpl | null>()));
     const queue = vi.spyOn(env, 'queueTask');
     const complete = vi.fn();
     navigable.populateHistoryEntryDocument(entry, 'back_forward', source, target, 'activation', {
@@ -163,6 +165,7 @@ describe('completed Fetch navigation parameters', () => {
     expect(serializeURL(params.url)).toBe('https://incoming.test/page');
     expect(params.fetchController!.state).toBe('ongoing');
     expect(load.mock.calls[0]![1]).toBe(source);
+    await expect.poll(() => env.responsibleEventLoop.runTaskTurn()).toBe(true);
     expect(entry.document).toBe(loaded);
     expect(entry.documentState.everPopulated).toBe(true);
     expect(entry.documentState.origin).toBe(loaded.origin);

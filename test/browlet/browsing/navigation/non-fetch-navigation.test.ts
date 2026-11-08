@@ -109,7 +109,7 @@ describe('non-fetch navigation', () => {
     expect(child.attemptToCreateNonFetchSchemeDocument(params)).toBe(document);
 
     expect(select).toHaveBeenCalledExactlyOnceWith(params.url);
-    expect(inline).toHaveBeenCalledExactlyOnceWith(id, 'back_forward', 'browser UI');
+    expect(inline).toHaveBeenCalledExactlyOnceWith(id, 'back_forward', 'browser UI', params.url);
     expect(handoff).not.toHaveBeenCalled();
     expect(child.activeSessionHistoryEntry).toBe(active);
   });
@@ -132,11 +132,11 @@ describe('non-fetch navigation', () => {
     expect(() => child.attemptToCreateNonFetchSchemeDocument(params)).toThrow('External software confirmation and handoff are not implemented');
   });
 
-  it('stops at the inline Document owner when external handling is not selected', async () => {
+  it('stops at the inline renderer when external handling is not selected', async () => {
     const { child, userAgent, params } = await fixture();
     vi.spyOn(userAgent, 'shouldHandleURLExternally').mockReturnValue(false);
 
-    expect(() => child.attemptToCreateNonFetchSchemeDocument(params)).toThrow('Inline user-agent Document creation is not implemented');
+    expect(() => child.attemptToCreateNonFetchSchemeDocument(params)).toThrow('Inline user-agent Document rendering is not implemented');
   });
 });
 

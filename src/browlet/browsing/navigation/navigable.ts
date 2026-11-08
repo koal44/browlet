@@ -1,5 +1,5 @@
 import { asciiLower, assertNever, HTML_NAMESPACE, InternalError, internalType, type InternalPromise } from '../../../infra/index';
-import { randomUUID } from '../../../js-engine/index';
+import { bindAsyncContext, randomUUID } from '../../../js-engine/index';
 import { DOMExceptionImpl } from '../../../web-idl/core/index';
 import { coarsenedSharedCurrentTime } from '../../../timing/index';
 import { utf8Decode, utf8Encode } from '../../../encoding/index';
@@ -18,6 +18,7 @@ import {
 } from '../../../fetch/index';
 
 import { ClassicScript, ScriptFetchOptions, type EventLoop } from '../../scripting/index';
+import { taskSources } from '../../scripting/tasks';
 import type { PointerId } from '../../interaction/events/index';
 import type { CSPList } from '../policy/csp/index';
 import {
@@ -40,7 +41,7 @@ import type { WindowImpl, WindowProxyHandle } from '../window/index';
 import { BrowletEnvironmentBase, type BrowletEnvironment } from '../../environment/index';
 import { HTMLDocumentParser, type ScriptHandler } from '../../html/parser/index';
 import type { SerializedRecord } from '../../scripting/structured-data/index';
-import { processSpeculationRulesHeader, ResourceReader } from '../../loader/index';
+import { MultipartResourceReader, processSpeculationRulesHeader, ResourceReader } from '../../loader/index';
 import type { PointerEventStream } from '../../interaction/index';
 import type { UserAgent } from '../../user-agent';
 
@@ -929,7 +930,7 @@ export class Navigable {
           !this.checkResponseFrameOptions(params.response, params.policyContainer.cspList)
         ) {
           // TODO(HTML §7.5.7): The inline-content owner must accept the failure description when it implements error pages.
-          const document = this.createDocumentForInlineContent(null, navigationTimingType, userInvolvement);
+          const document = this.createDocumentForInlineContent(null, navigationTimingType, userInvolvement, params?.url ?? entry.url);
           entry.documentState.document = document;
           document.makeUnsalvageable('navigation-failure');
           saveExtraDocumentState = false;
@@ -949,7 +950,13 @@ export class Navigable {
           // Firefox ignores those statuses without downloading. Both branches leave the entry unpopulated.
         } else if (params.response.status !== 204 && params.response.status !== 205) {
           const resource = new ResourceReader(params.response, window.env.userAgent);
-          const fail = (error: unknown) => window.env.queueTask('navigation-and-traversal', () => runSteps(() => { throw error; }), taskOptions);
+          // Creating the incoming Document can reuse this Window and change its associated
+          // Document before history activation. Keep admission tasks on the still-active Document.
+          const taskDocument = this.activeDocument;
+          const queueAdmission = (steps: () => void) => window.env.responsibleEventLoop.queueTask(
+            taskSources['navigation-and-traversal'], taskDocument, bindAsyncContext(() => runSteps(steps)), taskOptions,
+          );
+          const fail = (error: unknown) => queueAdmission(() => { throw error; });
           // Sniffing can wait for bytes. Resume Document creation and retained-state updates on the destination's task.
           // TODO(HTML §7.5): Document teardown must cancel the retained reader if it discards this continuation task.
           resource.determineMIMEType().observe(() => window.env.queueTask('navigation-and-traversal', () => runSteps(() => {
@@ -965,8 +972,18 @@ export class Navigable {
             // Forward its target state's already-masked diagnostics after redirects, before loader callbacks.
             // Child states hold raw collection data and must not be exposed through their own timing entries.
             params.notRestoredReasons = this.isTopLevelTraversable ? entry.documentState.notRestoredReasons : null;
-            entry.documentState.document = this.loadDocument(params, sourceSnapshotParams, entry.documentState.initiatorOrigin, resource);
-            complete();
+            this.loadDocument(params, sourceSnapshotParams, entry.documentState.initiatorOrigin, resource).observe((document) => {
+              queueAdmission(() => {
+                if (this.ongoingNavigation !== expectedNavigation) {
+                  resource.cancel().observe(() => {}, fail);
+                  // TODO(HTML §7.5.10): Dispose an incoming Document whose asynchronous admission was superseded.
+                  completionSteps?.();
+                  return;
+                }
+                entry.documentState.document = document;
+                complete();
+              });
+            }, fail);
           }), taskOptions), fail);
           return;
         }
@@ -1180,20 +1197,45 @@ export class Navigable {
       );
       return null;
     }
-    return this.createDocumentForInlineContent(params.id, params.navigationTimingType, params.userInvolvement);
+    return this.createDocumentForInlineContent(params.id, params.navigationTimingType, params.userInvolvement, params.url);
   }
 
   /** Create a browser-provided page without activating it or committing history. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#navigate-ua-inline
   createDocumentForInlineContent(
-    _navigationId: string | null, _navigationTimingType: NavigationTimingType, _userInvolvement: UserNavigationInvolvement,
-    _resource?: ResourceReader,
+    navigationId: string | null, navigationTimingType: NavigationTimingType, userInvolvement: UserNavigationInvolvement,
+    url: URLRecord, resource?: ResourceReader,
   ): DocumentImpl {
-    // TODO(HTML §7.5.7): Opaque origin/COOP, context selection, Document creation, browser rendering,
-    // and parser completion (including iframe load steps). A chosen registered handler instead navigates to its handler URL.
-    // SPEC_GAP(inline-document-response): HTML reads an undefined response URL and receives no content/resource input.
-    // Its callers can also supply a null navigation ID, retained here until this owner is audited.
-    throw new InternalError('Inline user-agent Document creation is not implemented');
+    const window = this.activeWindow;
+    if (window === null) throw new InternalError('Inline content requires an active Window');
+    const env = window.env;
+    // SPEC_GAP(inline-document-response): HTML reads an undefined response URL, then creates a response
+    // without a URL. Retain the caller's destination on a fresh response; the original resource stays separate.
+    const response = new FetchResponse();
+    response.urlList.push(copyURL(url));
+    const params = new NavigationParams(
+      response, new SandboxingFlagSet(), coarsenedSharedCurrentTime(env.crossOriginIsolatedCapability).milliseconds,
+    );
+    params.id = navigationId;
+    params.origin = createOpaqueOrigin();
+    params.navigationTimingType = navigationTimingType;
+    params.userInvolvement = userInvolvement;
+    params.coopEnforcementResult = {
+      url: params.url, origin: params.origin, openerPolicy: params.openerPolicy,
+      needsBrowsingContextGroupSwitch: false,
+      wouldNeedBrowsingContextGroupSwitchDueToReportOnly: false,
+      currentContextIsNavigationSource: false,
+    };
+    // The remaining NavigationParams defaults supply null request/Fetch/reservation slots and fresh,
+    // empty policies. Do not run the original response's policy preparation for browser-owned content.
+    const document = this.createAndInitializeDocument('html', 'text/html', params);
+    env.userAgent.renderInlineDocument(document, resource);
+    document.waitForScriptsMayRun().observe(() => document.env.queueTask('network', () => {
+      // TODO(HTML stop-parsing/§7.5.8): Replace provisional completion with the full lifecycle,
+      // including iframe load steps for both blocked responses and network errors.
+      document.finishLoading();
+    }), (error) => document.env.queueTask('network', () => { throw error; }));
+    return document;
   }
 
   /** Reload this destination after its cancelable navigate event and through the traversal queue. */
@@ -1363,45 +1405,47 @@ export class Navigable {
 
   /** Select a response's Document loader, or return null after handing the resource off externally. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#loading-a-document
-  // MIME preparation precedes this synchronous dispatch; the same reader retains the sniffed bytes for its consumer.
+  // MIME preparation precedes dispatch; multipart admission additionally waits for its first part.
   loadDocument(
     params: NavigationParams, sourceSnapshotParams: SourceSnapshotParams, initiatorOrigin: Origin | null,
     resource: ResourceReader,
-  ): DocumentImpl | null {
+  ): InternalPromise<DocumentImpl | null> {
     const type = resource.mimeType;
     const essence = getMIMETypeEssence(type);
     const userAgent = this.activeWindow!.env.userAgent;
-    const handler = userAgent.documentTypeHandlers.get(essence);
-    if (handler !== 'external') {
-      if (isHTMLMIMEType(type)) return this.loadHTMLDocument(params, undefined, resource);
-      if (isXMLMIMEType(type) && handler === undefined) return this.loadXMLDocument(params, type, resource);
-      if (isJavaScriptMIMEType(type) || isJSONMIMEType(type) && handler === undefined ||
-        essence === 'text/css' || essence === 'text/plain' || essence === 'text/vtt') {
-        return this.loadTextDocument(params, type, resource);
+    return userAgent.HostPromise.try(() => {
+      const handler = userAgent.documentTypeHandlers.get(essence);
+      if (handler !== 'external') {
+        if (isHTMLMIMEType(type)) return this.loadHTMLDocument(params, undefined, resource);
+        if (isXMLMIMEType(type) && handler === undefined) return this.loadXMLDocument(params, type, resource);
+        if (isJavaScriptMIMEType(type) || isJSONMIMEType(type) && handler === undefined ||
+          essence === 'text/css' || essence === 'text/plain' || essence === 'text/vtt') {
+          return this.loadTextDocument(params, type, resource);
+        }
+        if (essence === 'multipart/x-mixed-replace') {
+          return this.loadMultipartDocument(params, sourceSnapshotParams, initiatorOrigin, resource);
+        }
+        if ((isImageMIMEType(type) || isAudioOrVideoMIMEType(type)) && userAgent.supportsMIMEType(type)) {
+          return this.loadMediaDocument(params, type, resource);
+        }
+        if ((essence === 'application/pdf' || essence === 'text/pdf') && userAgent.pdfViewerSupported) {
+          return this.createDocumentForInlineContent(params.id, params.navigationTimingType, params.userInvolvement, params.url, resource);
+        }
       }
-      if (essence === 'multipart/x-mixed-replace') {
-        return this.loadMultipartDocument(params, sourceSnapshotParams, initiatorOrigin, resource);
+      if (handler === 'inline' || handler === undefined && userAgent.shouldDisplayUnsupportedResourceInline(type)) {
+        return this.createDocumentForInlineContent(params.id, params.navigationTimingType, params.userInvolvement, params.url, resource);
       }
-      if ((isImageMIMEType(type) || isAudioOrVideoMIMEType(type)) && userAgent.supportsMIMEType(type)) {
-        return this.loadMediaDocument(params, type, resource);
+      if (initiatorOrigin === null) {
+        // SPEC_GAP(document-loading-null-initiator): Openerless initial about:blank history can retain null;
+        // our provisional createHistoryEntry() also writes null. Fresh navigate() supplies an origin.
+        // TODO: Resolve absent attribution at external handoff; null alone does not establish browser-UI authority.
+        throw new InternalError('External resource handoff without an initiator origin is not implemented');
       }
-      if ((essence === 'application/pdf' || essence === 'text/pdf') && userAgent.pdfViewerSupported) {
-        return this.createDocumentForInlineContent(params.id, params.navigationTimingType, params.userInvolvement, resource);
-      }
-    }
-    if (handler === 'inline' || handler === undefined && userAgent.shouldDisplayUnsupportedResourceInline(type)) {
-      return this.createDocumentForInlineContent(params.id, params.navigationTimingType, params.userInvolvement, resource);
-    }
-    if (initiatorOrigin === null) {
-      // SPEC_GAP(document-loading-null-initiator): Openerless initial about:blank history can retain null;
-      // our provisional createHistoryEntry() also writes null. Fresh navigate() supplies an origin.
-      // TODO: Resolve absent attribution at external handoff; null alone does not establish browser-UI authority.
-      throw new InternalError('External resource handoff without an initiator origin is not implemented');
-    }
-    userAgent.handoffToExternalSoftware(
-      params.response, this, params.finalSandboxingFlagSet, sourceSnapshotParams.hasTransientActivation, initiatorOrigin, resource,
-    );
-    return null;
+      userAgent.handoffToExternalSoftware(
+        params.response, this, params.finalSandboxingFlagSet, sourceSnapshotParams.hasTransientActivation, initiatorOrigin, resource,
+      );
+      return null;
+    }, internalType<DocumentImpl | null>());
   }
 
   /**
@@ -1498,11 +1542,100 @@ export class Navigable {
   /** Process successive replacement parts through the navigation owner. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-multipart-x-mixed-replace
   loadMultipartDocument(
-    _params: NavigationParams, _sourceSnapshotParams: SourceSnapshotParams, _initiatorOrigin: Origin | null,
-    _resource: ResourceReader,
-  ): DocumentImpl | null {
-    // TODO(HTML §7.5.5): Parse MIME parts, navigate each supplied response, and coordinate replacement/completion.
-    throw new InternalError('Multipart document loading is not implemented');
+    params: NavigationParams, sourceSnapshotParams: SourceSnapshotParams, initiatorOrigin: Origin | null,
+    resource: ResourceReader,
+  ): InternalPromise<DocumentImpl | null> {
+    const env = this.activeWindow!.env;
+    const userAgent = env.userAgent;
+    const parts = new MultipartResourceReader(resource, userAgent);
+    const result = userAgent.HostPromise.withResolvers(internalType<DocumentImpl | null>());
+    let ownedNavigation = this.ongoingNavigation;
+    let replacing = false;
+    let stopped = false;
+    const stop = (reason: unknown) => {
+      if (stopped) return;
+      stopped = true;
+      this.#navigationChangeSteps.delete(changed);
+      parts.cancel(reason).observe(() => {}, (error) => {
+        // Canceling an already-errored stream rejects with that same stored failure.
+        if (error !== reason) userAgent.runInParallel(() => { throw error; });
+      });
+    };
+    const changed = () => {
+      if (replacing && this.ongoingNavigation !== null) {
+        // Adopt only this replacement; a subsequent author navigation supersedes the stream.
+        ownedNavigation = this.ongoingNavigation;
+        replacing = false;
+      }
+      else if (this.ongoingNavigation !== null && this.ongoingNavigation !== ownedNavigation) {
+        const reason = new InternalError('Multipart navigation was superseded');
+        stop(reason);
+        result.reject(reason);
+      }
+    };
+    const fail = (error: unknown) => {
+      if (stopped) return;
+      stop(error);
+      if (!result.isResolved) result.reject(error);
+      else if (error instanceof InternalError) userAgent.runInParallel(() => { throw error; });
+    };
+    const next = () => parts.readPart().observe((response) => {
+      if (stopped) return;
+      if (response === null) { this.#navigationChangeSteps.delete(changed); return; }
+      const window = this.activeWindow;
+      if (window === null) { stop(new InternalError('Multipart navigable was destroyed')); return; }
+      window.env.queueTask('navigation-and-traversal', () => {
+        if (stopped) return;
+        try {
+          const document = this.activeDocument;
+          if (document === null) { stop(new InternalError('Multipart navigable was destroyed')); return; }
+          // SPEC_CLASH(multipart-replacement-inputs): HTML reuses the outer response and first Document;
+          // use the new part and current Document, so replacement consumes new bytes with a live source.
+          // SPEC_GAP(multipart-null-request): Supplied responses have no request; retain their final URL.
+          replacing = true;
+          this.navigate(params.request?.currentURL ?? params.url, document, { response, historyHandling: 'replace' }, document.env);
+          // TODO(HTML §7.5.9/§7.5.11): navigate() still reaches the explicit recursive
+          // abortion/unloading dependencies. Do not bypass them for multipart replacement.
+          next();
+        } catch (error) { fail(error); }
+        finally { replacing = false; }
+      }, { discardSteps: () => stop(new InternalError('Multipart replacement task was discarded')) });
+    }, fail);
+    this.#navigationChangeSteps.add(changed);
+    parts.readPart().observe((response) => {
+      if (stopped) return;
+      if (response === null) { this.#navigationChangeSteps.delete(changed); result.resolve(null); return; }
+      const partResource = new ResourceReader(response, userAgent);
+      partResource.determineMIMEType().observe((type) => env.queueTask('navigation-and-traversal', () => {
+        try {
+          if (result.isResolved) return;
+          if (getMIMETypeEssence(type) === 'multipart/x-mixed-replace') {
+            // TODO(HTML §7.5.5/RFC 2046 §5.1.2): Coordinate nested replacement streams and their cancellation owners.
+            throw new InternalError('Nested multipart Document loading is not implemented');
+          }
+          const partParams = params.withMultipartResponse(response);
+          if (partParams.policyContainer.cspList?.isNavigationResponseBlocked(partParams.request, response, 'other', this, userAgent)) {
+            // TODO(HTML §7.5.7): Supply the blocked-part diagnosis to the unfinished browser renderer.
+            const document = this.createDocumentForInlineContent(null, params.navigationTimingType, params.userInvolvement, partParams.url);
+            document.makeUnsalvageable('navigation-failure');
+            partParams.reservedEnv?.discard();
+            userAgent.webDriverBiDiNavigationFailed(this, { id: params.id, status: 'canceled', url: partParams.url });
+            result.resolve(document);
+            stop(new InternalError('Multipart part was blocked by CSP'));
+            return;
+          }
+          this.loadDocument(partParams, sourceSnapshotParams, initiatorOrigin, partResource).observe((document) => {
+            result.resolve(document);
+            if (document === null) { stop(new InternalError('Multipart first part produced no Document')); return; }
+            // History initialization releases this gate. No replacement may use an uncommitted source Document.
+            document.waitForScriptsMayRun().observe(next, fail);
+          }, fail);
+        } catch (error) { fail(error); }
+      }, { discardSteps: () => fail(new InternalError('Multipart admission task was discarded')) }), fail);
+    }, fail);
+    // TODO(HTML §7.5.11): Window.stop()/Document abortion must cancel the outer reader
+    // after a part has reached EOF; a completed part stream alone cannot carry that signal.
+    return result.promise;
   }
 
   /** Create the supported image/audio/video presentation for this response. */
@@ -1542,7 +1675,9 @@ export class Navigable {
   ): DocumentImpl {
     const { response } = params;
     this.#prepareResponsePolicy(params);
-    if (!this.checkResponseEmbedderPolicy(response, params.policyContainer.embedderPolicy)) {
+    // As in history population, only an incoming Fetch reservation needs this admission check.
+    // In particular, a synthetic error Document must not be rejected by the policy that blocked its response.
+    if (params.reservedEnv !== null && !this.checkResponseEmbedderPolicy(response, params.policyContainer.embedderPolicy)) {
       // TODO: Fetch navigation must replace the blocked response with a network error.
       throw new InternalError('COEP-blocked navigation requires network-error processing');
     }

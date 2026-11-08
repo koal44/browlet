@@ -27,7 +27,7 @@ describe('text Document loading', () => {
   it('presents literal markup in a no-quirks pre and preserves the leading newline', async () => {
     const text = '\n<!doctype html><script>throw new Error("must remain text")</script>&amp;\r\nend\0';
     const { navigable, params, resource, load } = await fixture('text/plain;charset=utf-8', utf8Encode(text));
-    const document = load();
+    const document = (await load())!;
     expect(document.contentType).toBe('text/plain');
     expect(document.mode).toBe(DocumentMode.NoQuirks);
     expect(document.body?.firstElementChild?.localName).toBe('pre');
@@ -48,7 +48,7 @@ describe('text Document loading', () => {
   it.each([false, true])('creates an empty pre and completes an empty text response (null body: %s)', async (nullBody) => {
     const { navigable, params, response, load } = await fixture('text/plain;charset=utf-8', new Uint8Array());
     if (nullBody) response.body = null;
-    const document = load();
+    const document = (await load())!;
     expect(document.querySelector('pre')?.textContent).toBe('');
     navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
     await expect.poll(() => document.readyState).toBe('complete');
@@ -61,7 +61,7 @@ describe('text Document loading', () => {
     'preserves the computed content type while presenting %s as text', async (contentType) => {
       const text = '"<b>&amp;</b>"';
       const { navigable, params, load } = await fixture(`${contentType};charset=utf-8`, utf8Encode(text));
-      const document = load();
+      const document = (await load())!;
       navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
       await expect.poll(() => document.readyState).toBe('complete');
       expect(document.type).toBe('html');
@@ -74,7 +74,7 @@ describe('text Document loading', () => {
   it('uses the transport charset without interpreting literal meta charset markup', async () => {
     const text = '<meta charset="utf-8">café';
     const { navigable, params, load } = await fixture('text/plain;charset=windows-1252', new Uint8Array(Buffer.from(text, 'latin1')));
-    const document = load();
+    const document = (await load())!;
     navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
     await expect.poll(() => document.readyState).toBe('complete');
     expect(document.encoding).toBe('windows-1252');
@@ -84,7 +84,7 @@ describe('text Document loading', () => {
 
   it('decodes split BOM and character bytes, processes media links after input, and finishes on a networking task', async () => {
     const { navigable, params, stream, load } = await fixture('text/plain;charset=windows-1252');
-    const document = load();
+    const document = (await load())!;
     const processLinks = document.processLinkHeaders.bind(document);
     const media = vi.spyOn(document, 'processLinkHeaders');
     const window = document.env.realm.globalObject as Window;
@@ -123,7 +123,7 @@ describe('text Document loading', () => {
   it('retains sniffed text bytes and response source positions without a synthetic prefix', async () => {
     const text = 'first line\nsecond';
     const { navigable, params, load } = await fixture('text/plain', utf8Encode(text));
-    const document = load();
+    const document = (await load())!;
     navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
     await expect.poll(() => document.readyState).toBe('complete');
     const node = document.querySelector('pre')!.firstChild!;
@@ -133,7 +133,7 @@ describe('text Document loading', () => {
 
   it.each(['\n', '\r\n', 'a😀b\r\nc\0d', '\t x\nlast'])('preserves text and source locations with every byte split (%j)', async (text) => {
     const { navigable, params, stream, load } = await fixture('text/plain;charset=utf-8');
-    const document = load();
+    const document = (await load())!;
     navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
     for (const byte of utf8Encode(text)) stream.enqueueChunk(Uint8Array.of(byte));
     stream.close();
@@ -145,7 +145,7 @@ describe('text Document loading', () => {
 
   it.each(['abort', 'body failure'] as const)('stops text input without completing load after %s', async (cause) => {
     const { navigable, params, stream, resource, load } = await fixture('text/plain;charset=utf-8');
-    const document = load();
+    const document = (await load())!;
     const finish = vi.spyOn(document, 'finishLoading');
     const cancel = vi.spyOn(resource, 'cancel');
     navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
@@ -185,8 +185,8 @@ describe('text Document loading', () => {
           params.request = request;
           params.fetchController = controller;
           const resource = new ResourceReader(response, env.userAgent);
-          resource.determineMIMEType().then(() => {
-            const document = navigable.loadDocument(params, new SourceSnapshotParams(null), null, resource)!;
+          resource.determineMIMEType().then(() => navigable.loadDocument(params, new SourceSnapshotParams(null), null, resource), undefined, internalType<DocumentImpl | null>()).then((document) => {
+            if (document === null) throw new Error('Expected a loaded Document');
             navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
             return document;
           }, undefined, internalType<DocumentImpl>()).observe(loading.resolve, loading.reject);
@@ -223,6 +223,6 @@ async function fixture(contentType: string, bytes?: Uint8Array) {
   const params = navigable.createNavigationParams(response);
   return {
     browser, env, navigable, response, params, resource, stream: response.body.stream,
-    load: () => navigable.loadDocument(params, new SourceSnapshotParams(null), null, resource)!,
+    load: () => navigable.loadDocument(params, new SourceSnapshotParams(null), null, resource),
   };
 }

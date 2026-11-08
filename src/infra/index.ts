@@ -1,6 +1,7 @@
 export { asciiLower, asciiUpper, hasWhitespaceToken, isAsciiWhitespace } from './ascii';
 export { forgivingBase64Decode, forgivingBase64Encode } from './base64';
 export { firstStrongDirection, type TextDirection } from './bidi';
+export { ByteCursor, InputBoundary } from './byte-cursor';
 export {
   WeakOrderedSet, appendToMapList, iterableToArray, mergeSortedUniqueLists, mergeSortedUnique, type Precedes,
 } from './collections';

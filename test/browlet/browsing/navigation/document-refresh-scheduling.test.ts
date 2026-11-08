@@ -91,6 +91,8 @@ describe('Document HTTP Refresh scheduling', () => {
     expect(child.isFullyActive()).toBe(true);
     child.completelyFinishLoading();
     child.processDeclarativeRefresh('0;url=https://example.test/next');
+    // Complete-loading now queues the container's separate notification before the refresh task.
+    await runTurn(document);
     await runTurn(child);
     expect(navigate).toHaveBeenCalledExactlyOnceWith(
       parseURL('https://example.test/next').url!, child, { historyHandling: 'replace' }, child.env,

@@ -140,10 +140,10 @@ describe('queued javascript: navigation', () => {
     document.origin = target;
     navigable.setOngoingNavigation('request', env);
 
-    expect(() => navigable.navigateToJavaScriptURL(
+    navigable.navigateToJavaScriptURL(
       Object.assign(new FetchRequest(url, env), { client: env, policyContainer: document.policyContainer.clone() }),
       'replace', initiator, 'none', 'other', false, 'request', navigable.snapshotTargetParams(),
-    )).toThrow('HTML document loading requires response-reader setup and parser script preparation');
+    );
     expect(navigable.ongoingNavigation).toBeNull();
     expect(document.title).toBe('executed');
   });
@@ -157,19 +157,22 @@ describe('queued javascript: navigation', () => {
     expect(navigable.ongoingNavigation).toBeNull();
   });
 
-  it('executes asynchronously and stops before replacing the Document for a string result', async () => {
+  it('executes asynchronously and queues replacement for a string result', async () => {
     const { document, navigable, env, loop, url } = await fixture();
     const entry = navigable.activeSessionHistoryEntry;
     await runInHostTask(() => {
       expect(() => navigable.navigate(url, document, {}, env)).not.toThrow();
       expect(navigable.ongoingNavigation).toEqual(expect.any(String));
       expect(document.title).toBe('');
-      expect(() => loop.runTaskTurn()).toThrow('HTML document loading requires response-reader setup and parser script preparation');
+      expect(loop.runTaskTurn()).toBe(true);
+      expect(navigable.activeSessionHistoryEntry).toBe(entry);
+      expect(navigable.activeDocument).toBe(document);
     });
     expect(navigable.ongoingNavigation).toBeNull();
-    expect(navigable.activeSessionHistoryEntry).toBe(entry);
-    expect(navigable.activeDocument).toBe(document);
     expect(document.title).toBe('executed');
+    await expect.poll(() => navigable.activeDocument !== document && navigable.activeDocument?.readyState === 'complete').toBe(true);
+    expect(navigable.activeDocument!.body!.textContent).toBe('executed');
+    expect(navigable.activeSessionHistoryEntry.navigationAPIKey).toBe(entry.navigationAPIKey);
   });
 
   it('completes a non-string result without Fetch or changing the active history entry', async () => {
@@ -237,7 +240,7 @@ describe('queued javascript: navigation', () => {
     document.policyContainer.cspList.policies.push(ContentSecurityPolicy.parse("script-src 'none'", 'header', 'enforce'));
     await runInHostTask(() => {
       navigable.navigate(url, null, { userInvolvement: 'browser UI' }, env);
-      expect(() => loop.runTaskTurn()).toThrow('HTML document loading requires response-reader setup and parser script preparation');
+      expect(loop.runTaskTurn()).toBe(true);
     });
     expect(navigable.ongoingNavigation).toBeNull();
     expect(document.title).toBe('executed');
@@ -265,7 +268,7 @@ describe('queued javascript: navigation', () => {
     const process = vi.spyOn(navigable, 'navigateToJavaScriptURL');
     await runInHostTask(() => {
       navigable.navigate(url, document, {}, env);
-      expect(() => loop.runTaskTurn()).toThrow('HTML document loading requires response-reader setup and parser script preparation');
+      expect(loop.runTaskTurn()).toBe(true);
     });
     expect(serializeURL(process.mock.calls[0]![0].url)).toBe('javascript:document.title="rewritten"');
     expect(serializeURL(url)).toBe('javascript:document.title="executed"');

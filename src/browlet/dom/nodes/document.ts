@@ -263,6 +263,12 @@ export class DocumentImpl extends NodeImpl {
   legacyNavigationType: NavigationTimingType = 'navigate';
   /** Completion timestamp, or null until the document is completely loaded. */
   completelyLoadedTime: number | null = null;
+  /** Whether this Document's iframe container is currently delivering its load event. */
+  // https://html.spec.whatwg.org/multipage/iframe-embed-object.html#iframe-load-in-progress
+  iframeLoadInProgress = false;
+  /** Suppress the iframe notification after document.open() during its existing load handler. */
+  // TODO(HTML §8.4.1): document.open() must set this when iframeLoadInProgress is true.
+  muteIframeLoad = false;
   /** Whether a valid declarative refresh has already been accepted for this Document. */
   willDeclarativelyRefresh = false;
   /** Whether tasks that depend on loading completion may proceed. */
@@ -1592,7 +1598,7 @@ export class DocumentImpl extends NodeImpl {
     }
   }
 
-  /** Record that this document has completely finished loading. */
+  /** Record complete loading and queue the container's separate load notification. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#completely-finish-loading
   completelyFinishLoading(): void {
     if (this.browsingContext === null) {
@@ -1601,9 +1607,15 @@ export class DocumentImpl extends NodeImpl {
     this.completelyLoadedTime = currentCoarsenedWallTime().milliseconds;
     this.env.userAgent.notifyLoadingNavigableStateChanged();
     this.#startDeclarativeRefresh();
-    // TODO(HTML child loading): Queue the container's iframe load event steps on the DOM
-    // manipulation task source, including the Permissions Policy §10.1 check after dispatch.
-    // Those steps still need iframe timing/mute flags; the Window load event above is separate.
+    // Initial about:blank creation finishes before its navigable/container association exists.
+    // Iframe attribute processing owns that initial insertion's synchronous notification.
+    const container = this.getNodeNavigable()?.container ?? null;
+    if (container instanceof HTMLIFrameElementImpl) {
+      // The iframe owner handles mute/progress flags, timing, and the post-dispatch policy check.
+      container.queueTask(taskSources['dom-manipulation'], () => container.runLoadEventSteps());
+    } else if (container !== null) {
+      container.queueTask(taskSources['dom-manipulation'], () => { container.fireEvent('load'); });
+    }
   }
 
   /** Only HTML content without a body or frameset may acquire new rendering blockers. */

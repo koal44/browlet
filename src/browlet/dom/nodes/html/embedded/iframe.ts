@@ -124,11 +124,25 @@ export class HTMLIFrameElementImpl extends HTMLElementImpl {
   /** Complete this iframe's resource timing and dispatch its guarded load event. */
   // https://html.spec.whatwg.org/multipage/iframe-embed-object.html#iframe-load-event-steps
   runLoadEventSteps(): void {
-    // TODO(HTML §4.8.5; Permissions Policy §10.1): Honor the child Document's mute flag,
-    // finish pending resource timing, set load-in-progress, fire load, check potential
-    // policy violations after handlers, then clear load-in-progress. The flags and timing
-    // state still need their insertion/loading and document.open() lifecycle producers.
-    throw new InternalError('Iframe load event steps are not implemented');
+    const childDocument = this.contentNavigable?.activeDocument ?? null;
+    if (childDocument === null) {
+      throw new InternalError('Iframe load event steps require an active child Document');
+    }
+    if (childDocument.muteIframeLoad) return;
+    if (this.pendingResourceTimingStartTime !== null) {
+      // TODO(HTML §4.8.5): Navigation must retain the timing URL and start together; fallback reporting
+      // must supply the timing subsystem's shared-clock inputs and clear both slots after delivery.
+      throw new InternalError('Iframe fallback resource timing is not implemented');
+    }
+    childDocument.iframeLoadInProgress = true;
+    try {
+      this.fireEvent('load');
+      // https://w3c.github.io/webappsec-permissions-policy/#changes-to-html
+      // Read current attributes after handlers; they may also have adopted the element.
+      this.checkPotentialPermissionsPolicyViolation(this.getAttribute('allow'), this.getAttribute('src'));
+    } finally {
+      childDocument.iframeLoadInProgress = false;
+    }
   }
 
   /** Read a fresh container policy from this iframe's current attributes and node Document. */
@@ -149,8 +163,6 @@ export class HTMLIFrameElementImpl extends HTMLElementImpl {
 
   /** Report potential restrictions from the current embedding policy, retaining the supplied attribute text. */
   // https://w3c.github.io/webappsec-permissions-policy/#check-potential-violation-in-container
-  // TODO(HTML iframe loading): runLoadEventSteps must call this after load handlers,
-  // reading current raw allow/src before clearing the child's load-in-progress flag (§10.1).
   checkPotentialPermissionsPolicyViolation(allowAttribute: string | null, srcAttribute: string | null): void {
     const document = this.nodeDocument;
     const env = document.env;

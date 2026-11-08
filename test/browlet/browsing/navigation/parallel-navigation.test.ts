@@ -281,10 +281,11 @@ describe('pending navigation history', () => {
     expect(finalize).toHaveBeenCalledExactlyOnceWith('replace', 'none', entry);
   });
 
-  it('starts population Fetch while Document loading and recursive abortion remain explicit dependencies', async () => {
+  it('connects population Fetch to HTML loading while recursive abortion remains explicit', async () => {
     const { document, navigable, env, turns, populate, abort } = fixture();
     populate.mockRestore();
     const queue = vi.spyOn(env, 'queueTask');
+    const load = vi.spyOn(navigable, 'loadHTMLDocument');
     mockHTTPTransport(env.userAgent, (_, listener) => {
       listener.onHeaders(200, 'OK', new FetchHeaders([['Content-Type', 'text/html']]), true);
       listener.onEnd();
@@ -301,9 +302,10 @@ describe('pending navigation history', () => {
     });
     await expect.poll(() => queue.mock.calls.length).toBe(3);
     await runInHostTask(() => {
-      expect(() => env.responsibleEventLoop.runTaskTurn())
-        .toThrow('HTML document loading requires response-reader setup and parser script preparation');
+      expect(env.responsibleEventLoop.runTaskTurn()).toBe(true);
     });
+    expect(load).toHaveBeenCalledOnce();
+    expect(load.mock.results[0]!.value).toMatchObject({ URL: 'https://example.test/next', contentType: 'text/html' });
     abort.mockRestore();
     expect(() => document.abortAndDescendants()).toThrow('Document and descendant abortion is not implemented');
   });
@@ -340,7 +342,7 @@ describe('supplied-response navigation preparation', () => {
     expect(params.finalSandboxingFlagSet).toEqual(snapshot.sandboxingFlags);
     expect(params.finalSandboxingFlagSet).not.toBe(snapshot.sandboxingFlags);
     expect(params.openerPolicy.value).toBe('unsafe-none');
-    expect(params.policyContainer.referrerPolicy).toBe('strict-origin-when-cross-origin');
+    expect(params.policyContainer.referrerPolicy).toBe('unsafe-url');
     expect(params.policyContainer).not.toBe(document.policyContainer);
     expect(params.coopEnforcementResult).toEqual({
       url: response.url, origin: params.origin, openerPolicy: params.openerPolicy,
@@ -403,7 +405,8 @@ describe('supplied-response navigation preparation', () => {
     const params = populate.mock.calls[0]![5]!.navigationParams!;
     expect(params.response).toBe(response);
     expect(params.policyContainer).not.toBe(document.policyContainer);
-    expect(params.policyContainer.referrerPolicy).toBe('strict-origin-when-cross-origin');
+    // A response without a Referrer-Policy retains the empty policy value; Fetch resolves its default.
+    expect(params.policyContainer.referrerPolicy).toBe('');
   });
 
   it('requires a response URL before population', async () => {

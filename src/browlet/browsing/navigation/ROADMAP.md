@@ -2806,7 +2806,7 @@ against WHATWG HTML `6d7788b` and the published standard (2026-11-03).
 | External route | Call `UserAgent.handoffToExternalSoftware()` with the captured restrictions, activation, and origin; return null. A sandbox refusal does not fall through to inline creation. No Document, URL, or history mutation occurs here. |
 | Handoff sandbox | Only non-top-level destinations are gated. Block when the custom-protocol flag is present and either the top-navigation-with-activation flag is present or captured source activation is false. Existing sandbox parsing supplies the allow-popups, allow-top-navigation, and allow-top-navigation-to-custom-protocols exceptions. The independent allow-downloads permission does not bypass this gate. |
 | Resource and confirmation | Handoff accepts either the original URL or FetchResponse. Allowed work reaches `requestExternalSoftwareHandoff()`, an explicit throwing host boundary. It retains origin and activation for abuse checks and confirmation; without transient activation, prior user confirmation is required. No process launch or host configuration API is added. |
-| Inline route | Forward navigation ID, timing type, and involvement to `Navigable.createDocumentForInlineContent()` and return its Document. That §7.5.7 owner throws pending opaque-origin/COOP setup, browsing-context selection, content/rendering, and parser-completion/iframe-load work. Choosing a registered web handler must instead navigate its handler URL. |
+| Inline route | Forward navigation ID, timing type, involvement, and target URL to `Navigable.createDocumentForInlineContent()`. §7.5.7 now constructs its isolated Document; UserAgent rendering still throws, and full parser-completion/iframe-load work remains explicit. Choosing a registered web handler must instead navigate its handler URL. |
 
 ### Browser evidence and chosen behavior
 
@@ -2830,14 +2830,15 @@ retain the choice; there is no new site-quirk registry.
 
 `SPEC_GAP(inline-document-response)`: §7.5.7 reads `response.URL` before defining
 any response and receives neither a resource nor content input. Its subsequently
-constructed empty response also has no specified URL. The missing resource/URL
-contract must be resolved when that owner is audited, rather than borrowing the
-active Document's URL or fabricating a successful error page here.
+constructed empty response also has no specified URL. The approved §7.5.7
+correction now passes the caller's destination and copies it onto a fresh
+synthetic response. Any prepared resource reader stays separate. See the
+[inline construction audit](../../loader/ROADMAP.md#html-757-inline-user-agent-document-construction).
 
-The inline stub also accepts a null navigation ID because non-fetch params and
+The inline operation also accepts a null navigation ID because non-fetch params and
 population permit null, although §7.5.7 spells its input as a navigation ID.
-That callable shape was reviewed and accepted. The operation remains throwing;
-no inline-Document behavior is established by this accommodation.
+That callable shape was reviewed and accepted. Rendering remains an explicit
+throwing dependency after Document construction.
 
 The 25 focused cases cover parsed sandbox exceptions, captured versus live
 activation/restrictions, top-level exemption, URL/response identity, initiating
@@ -3282,12 +3283,12 @@ and [create srcdoc params](https://html.spec.whatwg.org/multipage/browsing-the-w
 | Direct external-protocol inputs | Preserve the navigation ID, entry URL, target sandbox/source activation snapshots, stored initiator origin, timing type, and user involvement. Direct entries require their retained initiator origin; navigation entry creation already supplies it, including a fresh opaque origin for browser-UI navigation. |
 | Fetch factory | NavigationParams.fromFetch constructs its request through SessionHistoryEntry.createNavigationRequest, reserves its incoming client through BrowletEnvironmentBase.createForNavigation, checks request CSP, and dispatches Fetch with parallel callbacks. Manual redirects repeat request/response checks, update history state, and replace cross-origin reservations. Admitted final responses assemble complete params and retain their live controller/body. Contained requests retain the initiating Document's origin, following browsers instead of HTML's broken scope-origin override (see below). The result is an InternalPromise of normal params, non-fetch params, null for failure, or undefined for cancellation. UserAgent-owned completion is independent of departing script readiness. ID changes wake the wait and abort Fetch; internal failures report through the host. |
 | Task delivery and stale ID | After obtaining params, select the then-active Window and queue navigation-and-traversal work. Recheck the ongoing ID inside that task; stale work calls completion without processing or changing the entry. Tests replace the active Window while Fetch is pending and retain real HTML task delivery. |
-| Non-fetch response | Call attemptToCreateNonFetchSchemeDocument on that task, save its nullable Document, and set everPopulated only for a returned Document. Preserve stored origin/history policy/referrer, then complete. External handler selection, launch/confirmation, and inline page creation retain their existing throwing owners. A Fetch-produced non-fetch result preserves its own redirect-origin input. |
+| Non-fetch response | Call attemptToCreateNonFetchSchemeDocument on that task, save its nullable Document, and set everPopulated only for a returned Document. Preserve stored origin/history policy/referrer, then complete. External handler selection, launch/confirmation, and inline page rendering retain their existing throwing owners. A Fetch-produced non-fetch result preserves its own redirect-origin input. |
 | Srcdoc response | Build about:srcdoc, Content-Type text/html, and a UTF-8 body. The body uses the UserAgent's sandbox environment, independent of the departing Document's activity. Empty text and malformed-surrogate replacement are covered. |
 | Srcdoc origin and policy | Use the retained origin and captured sandbox flags, creating an opaque origin when sandboxed. Clone the stored history policy when present, otherwise the container Document's policy. Preserve target flags exactly; this operation does not add a second CSP sandbox merge. A real container is required. |
 | Remaining srcdoc slots | Supply a fresh opener policy and enforcement result, ID, iframe referrer policy, timing type, about base URL, and involvement. Request, controller, early hints, and reserved environment remain null. The destination remains the receiving Navigable under the previously accepted ownership arrangement. |
 | Normal/null response processing | Run CSP navigation-response checking, COEP only for a nonnull reserved environment, and then X-Frame-Options. Null params or a failed check select the error branch. The provisional loader's policy preparation does not replace those checks. |
-| Blocked/error response | Call the unfinished inline-content Document owner. Once it supplies a Document, mark navigation-failure unsalvageability, discard any reserved environment, and report BiDi failure for nonnull params. Synthetic params have no reservation to discard. Tests substitute only the unfinished Document creation to cover the remaining steps. |
+| Blocked/error response | Construct an isolated inline Document at the failed destination, then reach the unfinished UserAgent renderer. Once it returns, mark navigation-failure unsalvageability, discard any reserved environment, and report BiDi failure for nonnull params. Synthetic params have no reservation to discard. Tests now also cover real error-Document construction with only the renderer controlled. |
 | Downloads and empty responses | Classify Content-Disposition, check the source permission and final target sandbox flags, then ask the UserAgent's unfinished download-admission owner. Denied downloads and 204/205 complete without a Document; allowed downloads reach the unfinished handle-as-download owner. Attachment handling precedes 204/205. Conflicting disposition fields retain an explicit response-rejection boundary. |
 | Document loading and retained state | Prepare the resource's MIME type, then resume on the destination task, recheck the navigation ID, and call Navigable.loadDocument(params, sourceSnapshotParams, initiatorOrigin, resource). Dispatch is implemented; actual §7.5 loaders remain explicit dependencies. Store its nullable result. For a returned Document, set everPopulated, save its origin, and retain the params' policy container when the Document URL requires history storage. Non-fetch/error pages keep the old origin and policy. Resolve a client referrer from a real request, then complete without activating or committing the entry. Synthetic null requests with unresolved referrers still throw pending their specification-gap audit. |
 
@@ -3428,9 +3429,9 @@ only when the params carry a reserved environment. The CSP navigation type is
 captured at invocation, before Fetch or queued task delivery.
 
 Null or rejected params call `createDocumentForInlineContent()` with a null
-navigation ID, as HTML requires. That §7.5.7 owner still throws: opaque error-page
-creation, content/response inputs, browsing-context selection, and parser completion
-remain dependencies. Once it supplies a Document, population marks it unsalvageable
+navigation ID, as HTML requires, and the failed destination URL. That §7.5.7
+owner now creates the isolated Document; rendering/diagnostics still throw and
+full parser completion remains a dependency. Once it returns, population marks it unsalvageable
 with `navigation-failure`, discards the reservation if present, reports BiDi failure
 for nonnull params, records population/referrer state, and completes without activating
 the entry. Stored origin and history policy remain untouched for error and non-fetch
@@ -3963,20 +3964,22 @@ referenced §7.5 loaders or the remaining dependencies recorded throughout this 
 | HTML | Call loadHTMLDocument with the prepared reader. Script-free response loading works; enabled script encounters throw at §4.12.1 preparation unless the controlled integration supplies a handler. |
 | XML | Non-special XML calls loadXMLDocument with the parsed MIME type and reader. XML parser/DOM integration, original-header encoding, Link processing, scripts-may-run, completion, and diagnostics belong to §7.5.3. |
 | Text | JavaScript, non-special JSON, text/css, text/plain, and text/vtt call loadTextDocument. The §7.5.4 orchestration creates the locked no-quirks pre/PLAINTEXT presentation, uses provisional BOM/transport decoding, processes media Link headers, and finishes on networking tasks. Full MIME-specific encoding and parser completion remain explicit. |
-| Multipart | multipart/x-mixed-replace calls loadMultipartDocument with params, source snapshot, initiator, and reader. MIME-part parsing, first-part dispatch, later replacement navigations and per-part completion remain §7.5.5 work. |
+| Multipart | multipart/x-mixed-replace calls loadMultipartDocument with params, source snapshot, initiator, and reader. MIME framing, first-part dispatch and boundary EOF now work. Later parts enter replacement navigation; recursive abortion/unloading and complete cancellation remain explicit §7.5.5 dependencies. |
 | Media | Image/audio/video types require UserAgent.supportsMIMEType before loadMediaDocument. §7.5.6 now constructs the HTML tree and host element, hands the reader to its element owner, processes media Links, and gates provisional completion. Element resource adoption/decoding, load-event delays, and application/ogg track selection remain explicit; the support predicate still claims no media support. |
 | PDF | Both application/pdf and text/pdf require UserAgent.pdfViewerSupported. It is false because no viewer exists. When enabled, dispatch selects the inline-content owner with the prepared reader. Navigator's §8.10.1.6 compatibility exposure must share this decision. |
 | Other inline content | A configured inline choice selects createDocumentForInlineContent. Otherwise shouldDisplayUnsupportedResourceInline is an explicit throwing UserAgent dependency for native/error presentation versus external delivery; no default download/error policy is invented. |
 | External content | Use the existing sandbox gate with the response, destination, final flags, captured activation, initiator, and prepared reader; return null. The host must consume that reader rather than reopen its locked body. Confirmation/delivery/downloads still throw. A null initiator stops at the retained attribution gap rather than inventing authority. |
 
-The callable-shape change is deliberate: `loadDocument()` remains synchronous and
-receives the prepared ResourceReader last. The §7.5 loader and external-handoff
+The callable-shape change is deliberate: `loadDocument()` receives the prepared
+ResourceReader last and now returns an InternalPromise for multipart admission.
+The §7.5 loader and external-handoff
 owners receive the same implementation input; non-resource inline pages and URL
 handoffs omit it. XML/text/media retain the existing parsed MIMEType instead of
 serializing it into HTML's string input and reparsing it. These callable arrangements
 are reviewed and accepted. `SPEC_GAP(inline-document-response)`
-still records HTML's absent resource/response input; the new optional reader makes
-the response-backed dependency explicit without implementing the inline renderer.
+records HTML's absent URL/resource input. The §7.5.7 audit now forwards the
+destination URL onto a fresh synthetic response, keeping the optional reader
+separate for the still-unfinished inline renderer.
 
 Source inspection found the same separation between content choice and loader
 construction in Blink's
@@ -5898,7 +5901,25 @@ See the [loader audit](../../loader/ROADMAP.md#text-document-loading) for browse
 evidence, the narrow parse5 flushing adapter, regression coverage, and the
 remaining MIME-specific decoding/full-parser lifecycle dependencies.
 
-Next is §7.5.5, loading multipart/x-mixed-replace documents.
+## HTML §7.5.5: multipart Document consumer
+
+The framer now has a production consumer: first-part header/MIME preparation
+feeds the existing Document loaders, and later parts enter replacement
+navigation. The loader returns an internal promise because headers can arrive
+later; population retains the active task Document across initial Window reuse
+and saves the result only while navigation ownership still matches.
+
+See the [loader audit](../../loader/ROADMAP.md#multipart-loading-document-consumer)
+for the approved response/current-Document/null-request corrections, RFC default,
+browser evidence, and tests. This does not finish automatic multi-Document
+replacement: recursive abortion/unloading, local-URL part CSP, nested multipart, transfer
+decoding, and stop/destruction after part EOF are still explicit dependencies.
+HTTP multipart CSP now retains cumulative independent policies and applies each
+part's restrictions before admission. First-part sandboxing refreshes the origin
+before Window selection; later supplied responses select their response policy
+container instead of dropping it. See the
+[policy audit](../../loader/ROADMAP.md#multipart-loading-csp-admission).
+The parser/cursor redesign remains deferred until after Document lifecycle work.
 
 ## Removal condition
 

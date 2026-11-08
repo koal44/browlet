@@ -46,11 +46,24 @@ describe('javascript: classic-script evaluation', () => {
     expect(navigable.activeDocument).toBe(document);
   });
 
-  it.each(['""', '"<p>replacement</p>"'])('retains the explicit replacement dependency for %s', async (source) => {
+  it.each([['""', ''], ['"<p>replacement</p>"', 'replacement']])('loads a fresh replacement Document for %s', async (source, text) => {
     const { document, navigable, targetSnapshotParams } = await fixture();
-    expect(() => navigable.evaluateJavaScriptURL(
+    const replacement = navigable.evaluateJavaScriptURL(
       parseURL(`javascript:${source}`).url!, document.origin, 'none', 'request', targetSnapshotParams,
-    )).toThrow('HTML document loading requires response-reader setup and parser script preparation');
+    );
+    if (replacement === null) throw new Error('A string completion must produce a replacement Document');
+    expect(replacement).not.toBe(document);
+    expect(replacement.URL).toBe(document.URL);
+    expect(replacement.origin).toBe(document.origin);
+    expect(navigable.activeDocument).toBe(document);
+    // Evaluation creates the Document; its caller subsequently commits the replacement.
+    const state = DocumentState.create(replacement);
+    state.origin = replacement.origin;
+    state.everPopulated = true;
+    const entry = replacement.env.createSessionHistoryEntry(replacement.url, state);
+    navigable.finalizeCrossDocumentNavigation('replace', 'none', entry);
+    await expect.poll(() => replacement.readyState).toBe('complete');
+    expect(replacement.body!.textContent).toBe(text);
   });
 
   it('uses the target environment, API base URL, default fetch options, and script execution lifecycle', async () => {
@@ -108,11 +121,17 @@ describe('javascript: classic-script evaluation', () => {
 });
 
 describe('javascript: completion during initial child insertion', () => {
-  it('uses the child Window for execution and calls the explicit iframe load dependency', async () => {
-    const { container, childDocument, child, run } = await childFixture('iframe');
+  it('uses the child Window for execution and synchronously notifies the initial iframe', async () => {
+    const { platformContainer, container, childDocument, child, run } = await childFixture('iframe');
     expect(container).toBeInstanceOf(HTMLIFrameElementImpl);
-    expect(() => run('void(document.title="child")')).toThrow('Iframe load event steps are not implemented');
+    const listener = vi.fn((_event: Event) => [childDocument.title, childDocument.iframeLoadInProgress]);
+    platformContainer.addEventListener('load', listener);
+    run('void(document.title="child")');
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener.mock.calls[0]![0]).toMatchObject({ type: 'load', isTrusted: true, bubbles: false, cancelable: false });
+    expect(listener.mock.results[0]!.value).toEqual(['child', true]);
     expect(childDocument.title).toBe('child');
+    expect(childDocument.iframeLoadInProgress).toBe(false);
     expect(container.nodeDocument.title).toBe('');
     expect(child.ongoingNavigation).toBeNull();
   });

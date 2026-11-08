@@ -88,7 +88,7 @@ describe('Navigable HTML response loading', () => {
     const resource = new ResourceReader(response, env.userAgent);
     await new Promise<void>((resolve, reject) => resource.determineMIMEType().observe(() => { resolve(); }, reject));
     const params = navigable.createNavigationParams(response);
-    const document = navigable.loadDocument(params, new SourceSnapshotParams(null), null, resource)!;
+    const document = (await navigable.loadDocument(params, new SourceSnapshotParams(null), null, resource))!;
     expect(document.allowDeclarativeShadowRoots).toBe(true);
     expect(document.documentElement).toBeNull();
     const finish = vi.spyOn(document, 'finishLoading');
@@ -257,8 +257,8 @@ describe('Navigable HTML response loading', () => {
           params.request = request;
           params.fetchController = controller;
           const resource = new ResourceReader(response, env.userAgent);
-          resource.determineMIMEType().then(() => {
-            const document = navigable.loadDocument(params, new SourceSnapshotParams(null), null, resource)!;
+          resource.determineMIMEType().then(() => navigable.loadDocument(params, new SourceSnapshotParams(null), null, resource), undefined, internalType<DocumentImpl | null>()).then((document) => {
+            if (document === null) throw new Error('Expected a loaded Document');
             navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
             return document;
           }, undefined, internalType<DocumentImpl>()).observe(loading.resolve, loading.reject);
@@ -327,7 +327,9 @@ describe('Navigable HTML response loading', () => {
           const resource = new ResourceReader(response, env.userAgent);
           resource.determineMIMEType().then((type) => {
             expect(type).toMatchObject({ type: 'text', subtype: 'html' });
-            const document = navigable.loadDocument(params, new SourceSnapshotParams(null), null, resource)!;
+            return navigable.loadDocument(params, new SourceSnapshotParams(null), null, resource);
+          }, undefined, internalType<DocumentImpl | null>()).then((document) => {
+            if (document === null) throw new Error('Expected a loaded Document');
             navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
             return document;
           }, undefined, internalType<DocumentImpl>()).observe(loading.resolve, loading.reject);

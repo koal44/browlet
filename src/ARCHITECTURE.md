@@ -1428,7 +1428,14 @@ a reference stored in those params. Resource consumption stays in `loader/`,
 below navigation. Its ResourceReader collects a bounded prefix and retains the
 complete chunks for the consumer. MIME owns supplied-type detection, the
 metadata-only preservation rule, and classification through `sniffMIMEType()`;
-it holds no per-resource state. ResourceReader owns the deadline and stores
+these algorithms hold no per-resource state. Its `MultipartParser` owns only
+incremental RFC 2046 framing: ordered fields, borrowed body bytes, and part
+boundaries. Its `appendData()` input uses Infra's `ByteCursor` for chunk storage
+and position; bulk scans and borrowed views remain in the framer. The cursor
+has no environment, scheduling, grammar, or HTML insertion-point dependency.
+Fetch response construction, stream backpressure/cancellation, and
+replacement navigation belong to the consuming loader; that integration is pending.
+ResourceReader owns the deadline and stores
 the returned MIME type as a concrete value; body reads throw until that value
 exists. They drain the retained chunks and continue from the same Fetch reader.
 A read pending at the deadline remains available to the body consumer. Fetch

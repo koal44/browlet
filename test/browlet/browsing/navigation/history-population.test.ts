@@ -20,7 +20,8 @@ import { getRelevantRealm, unwrap } from '../../../support/browlet-binding';
 
 afterEach(() => { vi.restoreAllMocks(); });
 
-const htmlLoaderDependency = 'HTML document loading requires response-reader setup and parser script preparation';
+// Selection/admission tests stop at an injected loader failure; real loaders have their own integration suites.
+const loaderFailure = new Error('Test loader rejected the response');
 
 describe('history-entry population selection and delivery', () => {
   it('delivers a traversal-owned response with a null navigation ID to its Document loader', async () => {
@@ -35,7 +36,7 @@ describe('history-entry population selection and delivery', () => {
     });
     await expect.poll(() => complete.mock.calls.length + failed.mock.calls.length + failures.length).toBe(1);
     expect(load).toHaveBeenCalledOnce();
-    expect(failed).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ message: htmlLoaderDependency }));
+    expect(failed).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ message: loaderFailure.message }));
     expect(failures).toEqual([]);
     expect(complete).not.toHaveBeenCalled();
     expect(params.id).toBeNull();
@@ -74,7 +75,7 @@ describe('history-entry population selection and delivery', () => {
     expect(env.responsibleEventLoop.currentlyRunningTask).toBeNull();
     await expect.poll(() => failures.length).toBe(1);
     expect(load).toHaveBeenCalledExactlyOnceWith(params, source, entry.documentState.initiatorOrigin, expect.any(ResourceReader));
-    expect(failures[0]).toEqual(expect.objectContaining({ message: htmlLoaderDependency }));
+    expect(failures[0]).toEqual(expect.objectContaining({ message: loaderFailure.message }));
     expect(entry.document).toBeNull();
     expect(complete).not.toHaveBeenCalled();
   });
@@ -94,7 +95,7 @@ describe('history-entry population selection and delivery', () => {
     expect(fetch).not.toHaveBeenCalled();
     expect(external).not.toHaveBeenCalled();
     await expect.poll(() => failures.length).toBe(1);
-    expect(failures[0]).toEqual(expect.objectContaining({ message: htmlLoaderDependency }));
+    expect(failures[0]).toEqual(expect.objectContaining({ message: loaderFailure.message }));
   });
 
   it.each([
@@ -121,7 +122,7 @@ describe('history-entry population selection and delivery', () => {
       expect(fetch).not.toHaveBeenCalled();
     }
     await expect.poll(() => failures.length).toBe(1);
-    expect(failures[0]).toEqual(expect.objectContaining({ message: 'Inline user-agent Document creation is not implemented' }));
+    expect(failures[0]).toEqual(expect.objectContaining({ message: 'Inline user-agent Document rendering is not implemented' }));
     expect(entry.documentState.resource).toBe(resource);
     expect(resource?.requestBody).toEqual(body === 'failure' ? 'failure' : body === null ? undefined : Uint8Array.of(10, 20));
     expect(complete).not.toHaveBeenCalled();
@@ -262,7 +263,7 @@ describe('history-entry population selection and delivery', () => {
     expect(failures).toEqual([]);
   });
 
-  it('dispatches Fetch while Document loading and external handler selection remain explicit boundaries', async () => {
+  it('propagates a loader rejection after Fetch and preserves the external handler dependency', async () => {
     const { navigable, entry, source, target, env, failures } = await fixture();
     mockHTTPTransport(env.userAgent, (_, listener) => {
       listener.onHeaders(200, 'OK', new FetchHeaders([['Content-Type', 'text/html']]), true);
@@ -274,7 +275,7 @@ describe('history-entry population selection and delivery', () => {
     }));
     navigable.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none');
     await expect.poll(() => failures.length).toBe(1);
-    expect(failures[0]).toEqual(expect.objectContaining({ message: htmlLoaderDependency }));
+    expect(failures[0]).toEqual(expect.objectContaining({ message: loaderFailure.message }));
     entry.url = parseURL('custom:destination').url!;
     navigable.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none');
     await expect.poll(() => failures.length).toBe(2);
@@ -283,6 +284,36 @@ describe('history-entry population selection and delivery', () => {
 });
 
 describe('history-entry response admission', () => {
+  it.each(['network-error', 'blocked-response'] as const)('constructs a real isolated error Document for %s at the failed destination', async (failure) => {
+    const { child, entry, source, target, env, failures, params } = await responseFixture();
+    const initial = child.activeDocument;
+    const render = vi.spyOn(env.userAgent, 'renderInlineDocument').mockImplementation(() => {});
+    entry.documentState.requestReferrer = null;
+    params.response.headerList.append('X-Frame-Options', 'DENY');
+    if (failure === 'network-error') {
+      vi.spyOn(NavigationParams, 'fromFetch').mockReturnValue(
+        env.userAgent.HostPromise.resolve(null, internalType<NavigationParams | NonFetchSchemeNavigationParams | null>()),
+      );
+    }
+    const complete = vi.fn();
+    child.populateHistoryEntryDocument(entry, 'reload', source, target, 'none', {
+      navigationParams: failure === 'network-error' ? null : params, completionSteps: complete,
+    });
+    await expect.poll(() => complete.mock.calls.length + failures.length).toBe(1);
+    expect(failures).toEqual([]);
+    expect(complete).toHaveBeenCalledOnce();
+    const document = entry.document!;
+    expect(render).toHaveBeenCalledExactlyOnceWith(document, undefined);
+    expect(document.url).toEqual(failure === 'network-error' ? entry.url : params.url);
+    expect(document.URL).not.toBe(initial!.URL);
+    expect(document.origin).not.toBe(initial!.origin);
+    expect(document.salvageable).toBe(false);
+    expect(document.bfcacheBlockingDetails).toContainEqual({ reason: 'navigation-failure' });
+    expect(document.readyState).toBe('loading');
+    expect(child.activeDocument).toBe(initial);
+    if (failure === 'blocked-response') expect(params.reservedEnv!.discarded).toBe(true);
+  });
+
   it('runs incoming CSP before COEP and X-Frame-Options on the target task', async () => {
     const { child, entry, source, target, env, failures, params } = await responseFixture();
     const list = params.policyContainer.cspList!;
@@ -303,8 +334,8 @@ describe('history-entry response admission', () => {
     expect(report).toHaveBeenCalledOnce();
     expect(coep).not.toHaveBeenCalled();
     expect(xfo).not.toHaveBeenCalled();
-    expect(inline).toHaveBeenCalledExactlyOnceWith(null, 'reload', 'activation');
-    expect(failures[0]).toEqual(expect.objectContaining({ message: 'Inline user-agent Document creation is not implemented' }));
+    expect(inline).toHaveBeenCalledExactlyOnceWith(null, 'reload', 'activation', params.url);
+    expect(failures[0]).toEqual(expect.objectContaining({ message: 'Inline user-agent Document rendering is not implemented' }));
     expect(complete).not.toHaveBeenCalled();
     expect(entry.document).toBeNull();
     expect(params.reservedEnv!.discarded).toBe(false);
@@ -328,7 +359,7 @@ describe('history-entry response admission', () => {
     expect(check.mock.invocationCallOrder[0]).toBeLessThan(coep.mock.invocationCallOrder[0]!);
     expect(coep.mock.invocationCallOrder[0]).toBeLessThan(xfo.mock.invocationCallOrder[0]!);
     expect(inline).not.toHaveBeenCalled();
-    expect(failures[0]).toEqual(expect.objectContaining({ message: htmlLoaderDependency }));
+    expect(failures[0]).toEqual(expect.objectContaining({ message: loaderFailure.message }));
     expect(params.reservedEnv!.discarded).toBe(false);
   });
 
@@ -341,8 +372,8 @@ describe('history-entry response admission', () => {
     await expect.poll(() => failures.length).toBe(1);
     expect(inline).toHaveBeenCalledTimes(disposition === 'enforce' ? 0 : 1);
     expect(failures[0]).toEqual(expect.objectContaining({
-      message: disposition === 'enforce' ? htmlLoaderDependency
-        : 'Inline user-agent Document creation is not implemented',
+      message: disposition === 'enforce' ? loaderFailure.message
+        : 'Inline user-agent Document rendering is not implemented',
     }));
   });
 
@@ -359,8 +390,8 @@ describe('history-entry response admission', () => {
     expect(xfo).toHaveBeenCalledTimes(reserved ? 0 : 1);
     expect(inline).toHaveBeenCalledTimes(reserved ? 1 : 0);
     expect(failures[0]).toEqual(expect.objectContaining({
-      message: reserved ? 'Inline user-agent Document creation is not implemented'
-        : htmlLoaderDependency,
+      message: reserved ? 'Inline user-agent Document rendering is not implemented'
+        : loaderFailure.message,
     }));
   });
 
@@ -394,7 +425,7 @@ describe('history-entry response admission', () => {
         navigationId: 'failed', navigationParams: params, completionSteps: complete,
       });
       await expect.poll(() => complete.mock.calls.length).toBe(1);
-      expect(inline).toHaveBeenCalledExactlyOnceWith(null, 'reload', 'activation');
+      expect(inline).toHaveBeenCalledExactlyOnceWith(null, 'reload', 'activation', params.url);
       expect(discard).toHaveBeenCalledOnce();
       expect(failed).toHaveBeenCalledOnce();
       expect(errorDocument.bfcacheBlockingDetails).toContainEqual({ reason: 'navigation-failure' });
@@ -590,7 +621,7 @@ describe('history-entry responses without a Document', () => {
     child.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', { navigationParams: params, completionSteps: complete });
     await expect.poll(() => failures.length).toBe(1);
     expect(disposition).not.toHaveBeenCalled();
-    expect(failures[0]).toEqual(expect.objectContaining({ message: 'Inline user-agent Document creation is not implemented' }));
+    expect(failures[0]).toEqual(expect.objectContaining({ message: 'Inline user-agent Document rendering is not implemented' }));
     expect(complete).not.toHaveBeenCalled();
   });
 
@@ -617,7 +648,7 @@ describe('history-entry loaded Document state', () => {
       listener.onEnd();
     });
     const active = navigable.activeSessionHistoryEntry;
-    const load = vi.spyOn(navigable, 'loadDocument').mockReturnValue(loaded);
+    const load = vi.spyOn(navigable, 'loadDocument').mockReturnValue(loaded.env.userAgent.HostPromise.resolve(loaded, internalType<DocumentImpl | null>()));
     const complete = vi.fn();
     navigable.ongoingNavigation = 'traversal';
     navigable.populateHistoryEntryDocument(entry, 'back_forward', source, target, 'none', { completionSteps: complete });
@@ -653,7 +684,7 @@ describe('history-entry loaded Document state', () => {
     const load = vi.spyOn(navigable, 'loadDocument').mockImplementation(() => {
       expect(env.responsibleEventLoop.currentlyRunningTask).not.toBeNull();
       expect(entry.document).toBeNull();
-      return loaded;
+      return loaded.env.userAgent.HostPromise.resolve(loaded, internalType<DocumentImpl | null>());
     });
     const complete = vi.fn(() => {
       expect(env.responsibleEventLoop.currentlyRunningTask).not.toBeNull();
@@ -688,7 +719,7 @@ describe('history-entry loaded Document state', () => {
     entry.documentState.everPopulated = everPopulated;
     entry.documentState.historyPolicyContainer = new PolicyContainer();
     const previousState = { ...entry.documentState };
-    const load = vi.spyOn(child, 'loadDocument').mockReturnValue(null);
+    const load = vi.spyOn(child, 'loadDocument').mockReturnValue(env.userAgent.HostPromise.resolve(null, internalType<DocumentImpl | null>()));
     const discard = vi.spyOn(params.reservedEnv!, 'discard');
     const failed = vi.spyOn(env.userAgent, 'webDriverBiDiNavigationFailed');
     const complete = vi.fn();
@@ -708,7 +739,7 @@ describe('history-entry loaded Document state', () => {
     const [, loaded] = BrowsingContext.create(document, null, document.browsingContext!.group!);
     entry.documentState.requestReferrer = referrer === null ? null : parseURL(referrer).url!;
     const retainedReferrer = entry.documentState.requestReferrer;
-    vi.spyOn(navigable, 'loadDocument').mockReturnValue(loaded);
+    vi.spyOn(navigable, 'loadDocument').mockReturnValue(loaded.env.userAgent.HostPromise.resolve(loaded, internalType<DocumentImpl | null>()));
     const complete = vi.fn();
     navigable.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', { navigationParams: params, completionSteps: complete });
     await expect.poll(() => complete.mock.calls.length + failures.length).toBe(1);
@@ -725,7 +756,7 @@ describe('history-entry loaded Document state', () => {
     const params = suppliedParams(navigable);
     const [, loaded] = BrowsingContext.create(document, null, document.browsingContext!.group!);
     loaded.origin = createOpaqueOrigin();
-    vi.spyOn(navigable, 'loadDocument').mockReturnValue(loaded);
+    vi.spyOn(navigable, 'loadDocument').mockReturnValue(loaded.env.userAgent.HostPromise.resolve(loaded, internalType<DocumentImpl | null>()));
     const complete = vi.fn();
     navigable.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', { navigationParams: params, completionSteps: complete });
     await expect.poll(() => failures.length).toBe(1);
@@ -740,20 +771,18 @@ describe('history-entry loaded Document state', () => {
 });
 
 describe('srcdoc navigation parameters', () => {
-  it('assembles the retained resource and hands it to the child Window task before the unfinished loader', async () => {
+  it('assembles the retained resource and propagates the child Document loader failure', async () => {
     const { child, entry, source, target, env, failures } = await childFixture();
     const srcdoc = vi.spyOn(NavigationParams, 'fromSrcdoc');
-    const queueTask = env.queueTask.bind(env);
-    const queue = vi.spyOn(env, 'queueTask').mockImplementation((source, steps) => queueTask(source, () => {
-      try { steps(); } catch (error) { failures.push(error); }
-    }));
+    captureTaskFailures(env, failures);
+    const queue = vi.spyOn(env, 'queueTask');
     const complete = vi.fn();
     child.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', { completionSteps: complete });
     expect(srcdoc).toHaveBeenCalledExactlyOnceWith(entry, child, target, 'none', null, 'navigate', env);
     expect(srcdoc.mock.results[0]).toMatchObject({ type: 'return', value: { url: { scheme: 'about', path: 'srcdoc' } } });
     expect(queue).toHaveBeenCalledExactlyOnceWith('navigation-and-traversal', expect.any(Function), { discardSteps: undefined });
     await expect.poll(() => failures.length).toBe(1);
-    expect(failures[0]).toEqual(expect.objectContaining({ message: htmlLoaderDependency }));
+    expect(failures[0]).toEqual(expect.objectContaining({ message: loaderFailure.message }));
     expect(entry.document).toBeNull();
     expect(complete).not.toHaveBeenCalled();
   });
@@ -844,6 +873,7 @@ describe('history population Navigation Timing diagnostics', () => {
       : await fixture();
     const { navigable, entry, source, failures } = state;
     const departingDocument = navigable.activeDocument!;
+    if (kind === 'child') captureTaskFailures(departingDocument.env, failures);
     navigable.activeSessionHistoryEntry.documentState.notRestoredReasons = {
       src: null, id: null, name: null, url: departingDocument.url,
       reasons: [{ reason: 'departing-only' }], children: [],
@@ -869,7 +899,7 @@ describe('history population Navigation Timing diagnostics', () => {
     // The actual loader still needs parser-script preparation. Exercise its real
     // shared Document factory, including Timing creation and Early Hints callbacks.
     vi.spyOn(navigable, 'loadDocument').mockImplementation((params) =>
-      navigable.createAndInitializeDocument('html', 'text/html', params));
+      navigable.activeWindow!.env.userAgent.HostPromise.resolve(navigable.createAndInitializeDocument('html', 'text/html', params), internalType<DocumentImpl | null>()));
     const complete = vi.fn();
     const failed = vi.fn();
     navigable.ongoingNavigation = 'traversal';
@@ -915,7 +945,7 @@ describe('history population Navigation Timing diagnostics', () => {
       listener.onEnd();
     });
     vi.spyOn(navigable, 'loadDocument').mockImplementation((params) =>
-      navigable.createAndInitializeDocument('html', 'text/html', params));
+      navigable.activeWindow!.env.userAgent.HostPromise.resolve(navigable.createAndInitializeDocument('html', 'text/html', params), internalType<DocumentImpl | null>()));
     const complete = vi.fn();
     const failed = vi.fn();
     navigable.ongoingNavigation = 'traversal';
@@ -945,6 +975,8 @@ async function fixture() {
   const document = unwrap<DocumentImpl>(browser.document);
   const navigable = document.getNodeNavigable()!;
   const env = document.env;
+  vi.spyOn(navigable, 'loadDocument').mockImplementation(() =>
+    env.userAgent.HostPromise.reject(loaderFailure, internalType<DocumentImpl | null>()));
   const state = new DocumentState();
   state.initiatorOrigin = obtainURLOrigin(parseURL('https://source.test/').url!);
   state.origin = document.origin;
@@ -952,10 +984,8 @@ async function fixture() {
   const source = new SourceSnapshotParams(null);
   const target = navigable.snapshotTargetParams();
   const failures: unknown[] = [];
-  const queueTask = env.queueTask.bind(env);
-  const queue = vi.spyOn(env, 'queueTask').mockImplementation((source, steps) => queueTask(source, () => {
-    try { steps(); } catch (error) { failures.push(error); }
-  }));
+  captureTaskFailures(env, failures);
+  const queue = vi.spyOn(env, 'queueTask');
   return { browser, document, navigable, env, entry, source, target, failures, queue };
 }
 
@@ -965,6 +995,8 @@ async function childFixture() {
   const iframe = document.createElement('iframe') as HTMLIFrameElementImpl;
   const [, childDocument] = BrowsingContext.create(document, iframe, navigable.activeBrowsingContext!.group!);
   const child = new Navigable(DocumentState.create(childDocument), navigable);
+  vi.spyOn(child, 'loadDocument').mockImplementation(() =>
+    childDocument.env.userAgent.HostPromise.reject(loaderFailure, internalType<DocumentImpl | null>()));
   iframe.contentNavigable = child;
   document.body!.appendChild(iframe);
   entry.documentState.resource = '<p>srcdoc</p>';
@@ -993,10 +1025,13 @@ async function responseFixture() {
 }
 
 function captureTaskFailures(env: BrowletEnvironment, failures: unknown[]) {
-  const queueTask = env.queueTask.bind(env);
-  return vi.spyOn(env, 'queueTask').mockImplementation((source, steps) => queueTask(source, () => {
+  const loop = env.responsibleEventLoop;
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- Inspect the function without invoking it.
+  if (vi.isMockFunction(loop.queueTask)) return;
+  const queueTask = loop.queueTask.bind(loop);
+  vi.spyOn(loop, 'queueTask').mockImplementation((source, document, steps, options) => queueTask(source, document, () => {
     try { steps(); } catch (error) { failures.push(error); }
-  }));
+  }, options));
 }
 
 function provideInlineDocument(navigable: Navigable, creator: DocumentImpl) {

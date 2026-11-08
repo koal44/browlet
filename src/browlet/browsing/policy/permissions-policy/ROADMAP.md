@@ -470,9 +470,10 @@ on 31 October 2026:
   branch reads the enforced policy's endpoint. Follow §9.12, which selects the
   report-only endpoint; tests use distinct names to preserve that distinction.
 
-**Integration boundary:** [§10.1](#101-html-integration) needs the unfinished
-iframe load event steps. The checker is implemented and tested directly;
-attribute changes, insertion, and arbitrary author-dispatched events do not invoke it.
+**Integration boundary:** [§10.1](#101-html-integration) now connects the checker
+after iframe load handlers through HTML's completion operation. Attribute changes
+and arbitrary author-dispatched events do not invoke it. Automatic iframe
+insertion/loading and pending fallback resource timing remain separate dependencies.
 
 [Potential-report tests](../../../../../test/browlet/browsing/policy/permissions-potential.test.ts)
 cover both dispositions, defaults, parent restrictions, endpoint selection,
@@ -513,27 +514,30 @@ have two integration points:
 | Amendment | Current implementation |
 | --- | --- |
 | Initialize each Document's report-only policy, then install the response-derived policy during creation | `DocumentImpl` owns an independent empty policy. `Navigable.createAndInitializeDocument()` derives the response policy from the actual container and origin and installs it before exposing the new Document. Covered by the policy initialization and response-creation tests. |
-| Check potential violations after the iframe element's `load` event | The checker exists. `HTMLIFrameElementImpl.runLoadEventSteps()` explicitly throws and has its initial-insertion javascript: caller; flags/timing and ordinary loading callers remain unfinished. `DocumentImpl.finishLoading()` fires the child Window's event, which is a different completion point. |
+| Check potential violations after the iframe element's `load` event | `HTMLIFrameElementImpl.runLoadEventSteps()` checks the mute flag, sets load-in-progress, dispatches, checks current potential violations, then clears load-in-progress. `DocumentImpl.completelyFinishLoading()` queues it separately from the child Window's event. Pending fallback timing remains a throwing dependency. |
 
-The remaining [iframe load event steps](https://html.spec.whatwg.org/multipage/iframe-embed-object.html#iframe-load-event-steps)
-must honor the child Document's mute flag, finish pending iframe resource timing,
-and set its load-in-progress flag before dispatch. Insert the policy check after
-dispatch returns and before clearing that flag. Read the element's raw `allow`
-and `src` at that point, so synchronous load handlers' mutations are reflected.
-The existing checker uses the element's then-current node Document after adoption.
+The [iframe load event steps](https://html.spec.whatwg.org/multipage/iframe-embed-object.html#iframe-load-event-steps)
+read raw `allow` and `src` after dispatch, so synchronous load handlers' mutations
+are reflected. The checker uses the element's then-current node Document after
+adoption. A muted load skips dispatch and reporting; a pending fallback timing
+measurement still stops at its explicit dependency before either operation.
 
 HTML's [complete-loading algorithm](https://html.spec.whatwg.org/multipage/document-lifecycle.html#completely-finish-loading)
-must queue those steps for an iframe container on the DOM manipulation task
-source. Initial `about:blank` insertion has a separate synchronous caller in
-iframe attribute processing. Child creation/destruction, attribute processing,
-load flags, and pending resource timing remain HTML loading dependencies; no
-load-event listener or direct checker call substitutes for those algorithms.
+queues those steps for an iframe container on the parent Document's DOM
+manipulation task source. Initial `about:blank` insertion has a separate
+synchronous caller in iframe attribute processing. Automatic child insertion,
+attribute processing, `document.open()`'s mute producer, and fallback resource
+timing remain HTML loading dependencies; no load-event listener or direct
+checker call substitutes for those algorithms.
 
 The existing [response-creation tests](../../../../../test/browlet/browsing/policy/permissions-creation.test.ts)
 cover supplied child containers, both response dispositions, replacement on
 navigation, and report-only isolation from enforcement. The
 [potential-report tests](../../../../../test/browlet/browsing/policy/permissions-potential.test.ts)
-cover reporting and adoption directly, not automatic child completion.
+cover reporting and adoption directly. The
+[completion tests](../../../../../test/browlet/browsing/navigation/document-load-completion.test.ts)
+exercise the queued iframe operation, flags, current attributes after handlers,
+and automatic task delivery with an explicitly supplied child association.
 
 ## §§11–13: registration, privacy/security, and change history
 

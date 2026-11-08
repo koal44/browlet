@@ -1,11 +1,12 @@
 import { InternalError, internalType, type InternalPromise, type InternalPromiseWithResolvers } from '../../../infra/index';
 import { coarsenedSharedCurrentTime, type DOMHighResTimeStamp } from '../../../timing/index';
 import { utf8Encode } from '../../../encoding/index';
-import { aboutBlankURL, areSameOrigin, copyURL, type Origin, obtainURLOrigin, type URLRecord } from '../../../url/index';
+import { aboutBlankURL, areSameOrigin, copyURL, createOpaqueOrigin, type Origin, obtainURLOrigin, type URLRecord } from '../../../url/index';
 import {
-  fetch, FetchBody, FetchResponse, isFetchScheme, isHTTPScheme, type FetchRequest, type FetchController, type ReferrerPolicy,
+  fetch, FetchBody, FetchResponse, isFetchScheme, isHTTPScheme, isLocalURL, type FetchRequest, type FetchController, type ReferrerPolicy,
 } from '../../../fetch/index';
 
+import { CSPList } from '../policy/csp/index';
 import { PolicyContainer, OpenerPolicy, SandboxingFlagSet } from '../policy/index';
 import type { NotRestoredReasons } from './diagnostics/index';
 import type { DocumentImpl } from '../../dom/nodes/index';
@@ -88,10 +89,13 @@ export class NavigationParams {
     const responseURL = response.url;
     if (responseURL === null) throw new InternalError('Navigation requires a response URL');
     const sourcePolicyContainer = sourceDocument?.policyContainer.clone() ?? null;
+    // SPEC_CLASH(multipart-part-policy-admission): HTML supplies no response policy on this
+    // path. Parse it before admission so supplied multipart parts retain their CSP and sandbox.
+    const responsePolicyContainer = isLocalURL(responseURL) ? null : env.userAgent.createPolicyContainerFromResponse(response, null);
     // SPEC_GAP(supplied-response-parent-policy): HTML dereferences a container even for top-level multipart responses;
     // pass null for their absent parent policy, as the policy-selection operation permits.
     const policyContainer = PolicyContainer.determineForNavigation(
-      responseURL, null, sourcePolicyContainer, navigable.containerDocument?.policyContainer ?? null, null,
+      responseURL, null, sourcePolicyContainer, navigable.containerDocument?.policyContainer ?? null, responsePolicyContainer,
     );
     const finalSandboxFlags = new SandboxingFlagSet(targetSnapshotParams.sandboxingFlags);
     for (const flag of policyContainer.cspList?.getSandboxingFlags() ?? []) finalSandboxFlags.add(flag);
@@ -327,6 +331,37 @@ export class NavigationParams {
     // SPEC_CLASH(html-navigation-response-timing): HTML still reads response.timingInfo;
     // Fetch retains full timing on its controller. Use that existing owner.
     return this.fetchController?.extractFullTimingInfo().startTime ?? this.#startTime;
+  }
+
+  /** Copy HTML's navigation params record while replacing only its response. */
+  withResponse(response: FetchResponse): NavigationParams {
+    return Object.assign(new NavigationParams(response, this.finalSandboxingFlagSet, this.#startTime), this, { response });
+  }
+
+  /** Copy navigation params for the first part, applying its cumulative policy before Window selection. */
+  withMultipartResponse(response: FetchResponse): NavigationParams {
+    const params = this.withResponse(response);
+    // Local URLs retain their inherited container. The multipart reader leaves new
+    // local-URL part CSP explicit until inherited-policy composition is supported.
+    if (isLocalURL(this.url)) return params;
+    params.policyContainer = this.policyContainer.clone();
+    params.policyContainer.cspList = CSPList.parse(response);
+    params.finalSandboxingFlagSet = new SandboxingFlagSet(this.finalSandboxingFlagSet);
+    for (const flag of params.policyContainer.cspList.getSandboxingFlags()) params.finalSandboxingFlagSet.add(flag);
+    if (params.finalSandboxingFlagSet.size > 0 && params.openerPolicy.value !== 'unsafe-none') {
+      // TODO(HTML navigation): Present the network error for a part that adds sandbox
+      // restrictions after the outer response's COOP decision; do not admit that part.
+      throw new InternalError('Sandboxed COOP navigation requires network-error processing');
+    }
+    // SPEC_CLASH(multipart-part-policy-admission): HTML's shallow copy retains the old
+    // policy and origin; WebKit applies the part's restrictions before creating the Window.
+    if (params.finalSandboxingFlagSet.has('sandboxed-origin') && !this.finalSandboxingFlagSet.has('sandboxed-origin')) {
+      params.origin = createOpaqueOrigin();
+      if (params.coopEnforcementResult !== null) {
+        params.coopEnforcementResult = { ...params.coopEnforcementResult, origin: params.origin };
+      }
+    }
+    return params;
   }
 
   /** Whether the response requests origin keying; navigation applies the secure-context gate. */

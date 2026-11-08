@@ -1702,7 +1702,7 @@ does not yet deliver history events or complete ordinary fragment loads. See the
 and [same-document finalization audit](browlet/browsing/navigation/ROADMAP.md#html-74233-same-document-finalization).
 Non-fetch navigation now has an internal external/inline routing operation and
 the specified child-sandbox handoff gate. Handler selection, external confirmation
-and launch, and inline browser-page creation each throw at explicit owners.
+and launch, and inline browser-page rendering each throw at explicit owners.
 §7.4.5 population now constructs direct non-fetch params and calls that routing
 operation on the target Window's task after its stale-ID check. It also accepts
 non-fetch Fetch results; the actual Fetch/redirect factory and redirect-origin
@@ -1835,8 +1835,8 @@ pending history-entry and supplied-response preparation, and a population comple
 callback that queues finalization. Recursive abortion still throws. Population
 now selects its source, assembles srcdoc params, queues target work, and completes
 stale/non-fetch results. Response admission runs CSP, COEP when a reservation
-exists, and X-Frame-Options in order. Failed responses call the unfinished inline
-Document owner; cleanup after that owner returns is implemented, including
+exists, and X-Frame-Options in order. Failed responses construct an isolated inline
+Document and reach its unfinished renderer; cleanup after that owner returns is implemented, including
 unsalvageability, reservation discard, BiDi notification, and retained history
 metadata. Sandbox-blocked downloads and ordinary 204/205 responses now complete
 without creating a Document. Permitted attachments reach explicit UserAgent
@@ -1859,9 +1859,39 @@ img/audio/video host with src, pass the prepared reader to its element owner,
 process media Link headers, and gate provisional completion on script readiness.
 Image and audio/video resource adoption still throw until decoding, element events,
 load-event delays, and cancellation are implemented. application/ogg also needs
-track classification; UserAgent still claims no decoder support. XML/multipart/inline
-loaders, actual error-page creation, unsupported-resource host policy, and
-external handoff remain throwing boundaries.
+track classification; UserAgent still claims no decoder support. Inline browser
+pages and PDF viewers now construct a fresh opaque-origin Document with empty
+response policies and the caller's destination URL, without consuming the
+original resource. The UserAgent rendering hook still throws: browser UI,
+diagnostic inputs, PDF decoding, resource lifetime, and viewer script exclusion
+are unfinished. Ordinary HTML loading already runs headlessly without this
+hook; browser-owned content can also use a nonvisual representation. Once that
+presentation exists, completion uses the current activation gate and provisional
+finish path. Complete loading now queues the container's load notification on
+its owning Document's loop; iframe delivery includes mute/progress flags and
+the post-handler Permissions Policy check. Pending iframe fallback timing still
+throws, while its navigation inputs, `document.open()`'s mute producer, automatic
+container insertion/loading, and the full stop-parsing lifecycle remain explicit
+dependencies. XML loading, unsupported-resource host policy, and external
+handoff also remain throwing boundaries.
+Multipart framing now feeds independently readable part responses into the
+Document loaders. First-part admission and per-part EOF/load delivery work while
+the outer HTTP response stays open; later parts enter replacement navigation.
+That route still requires recursive abortion/unloading and activation. HTTP parts
+retain the outer and every earlier part's CSP as independent restrictions,
+including report-only policies. First-part sandbox/origin preparation and
+frame-ancestors checks precede Window creation; later supplied responses carry
+those cumulative policies into the normal admission checks. Added part CSP on
+local URLs still throws pending inherited-policy composition. Blocked embedding
+and sandbox/COOP conflicts retain the explicit error-page/network-error owners.
+Non-identity transfer decoding, nested multipart, malformed-response recovery,
+and full timing attribution remain explicit dependencies. Active-body
+cancellation and navigation supersession cancel the outer reader; Document-wide
+stop/destruction after a part has closed still needs its lifecycle connection.
+Linked reader cancellation reaches the source but can leave its completion
+promise pending on addon runtimes until another checkpoint. The strict multipart
+regression and a multipart-free Experimental probe retain this shared runtime
+failure; its wake-up fix is deferred, not classified as an expected failure.
 Media decoder support is not claimed, and no PDF viewer exists.
 Document teardown still needs to cancel a reader whose continuation task it discards.
 Navigation request construction now retains the

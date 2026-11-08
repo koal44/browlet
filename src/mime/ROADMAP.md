@@ -1,8 +1,8 @@
 # MIME follow-up
 
-The reached MIME Sniffing algorithms are implemented. This is a temporary
-design note for the loader integration, not a plan to expand the standalone
-MIME project. Burn it after the loader settles these choices.
+The reached MIME Sniffing algorithms and incremental multipart framing are
+implemented. This note tracks their loader integration and remaining ownership
+choices. Burn it after the loader settles these choices.
 
 ## Current boundary
 
@@ -80,6 +80,53 @@ partially initialized resource merely to hold those fields.
 
 The pure functions return results instead of mutating an abstract resource.
 Keep that reviewed callable shape instead of adding a second resource owner.
+
+## Multipart framing
+
+`MultipartParser` implements the streaming framing needed by HTML §7.5.5 using
+[RFC 2046 §5.1.1](https://www.rfc-editor.org/rfc/rfc2046.html#section-5.1.1).
+It emits ordered, unfolded header fields, body byte views, and a part-end
+notification as soon as the following boundary is recognized. It handles
+preamble/epilogue, transport padding, empty bodies, split delimiters/headers,
+and binary data. Body buffering is limited to a possible delimiter prefix;
+header lines are retained until complete. Ordinary body runs are passed through
+without copying. No environment or Fetch owner belongs in this parser.
+
+`appendData()` now feeds Infra's `ByteCursor`; the cursor owns input storage and
+position, while delimiter matching and header accumulation stay in MultipartParser.
+The parser drains each append synchronously. Bulk body/header searches still use
+`Uint8Array.indexOf()`, and body delivery still uses original-buffer subarray views.
+Cancellation, malformed input, and ignored epilogues release unread cursor storage.
+
+The handler must treat byte views as immutable and must not recursively append
+or finish. Cancellation from any callback suppresses all later callbacks.
+Invalid boundary parameters throw; malformed framing or a missing closing
+delimiter returns false. A completed part and successful completion of the
+whole multipart entity are distinct. Those results do not yet establish browser
+recovery behavior for malformed navigation responses. The existing FormData
+parser and its separately approved compatibility choices are unchanged.
+
+Headers retain their names, duplicate fields, and uninterpreted value bytes.
+Header values currently accept bytes above ASCII; RFC 2046's header restriction
+and browser recovery need an explicit audit before loader integration. This
+framing slice does not establish a compatibility choice for those values.
+The consumer must apply MIME defaults, field-specific processing, nested MIME
+dispatch, and any Content-Transfer-Encoding decoding before using a part.
+The [loader roadmap](../browlet/loader/ROADMAP.md#multipart-loading-framing-foundation)
+tracks response construction, first-part asynchronous admission, backpressure,
+cancellation, and later-part navigation. The consumer now loads first parts and
+forwards later ones to navigation; full replacement lifecycle, part CSP, nested
+multipart, and transfer decoding remain explicit loader dependencies.
+
+The cursor follow-up retains all 33 framing regressions and adds an offset-view
+regression across multiple parts and later input. Six cursor tests cover queued
+input, cross-chunk lookahead, waiting versus EOF, validated movement, original
+buffer identity, and releasing unread chunks. The visible
+[multipart benchmark](../../node-compat/experimental/parser-comparison/multipart-benchmark.mjs) compares the committed
+framer at `5a37ebaf` with the working tree, validating complete body/header digests
+before timing. [Results and methodology](../../node-compat/experimental/parser-comparison/README.md#byte-cursor-adoption)
+record the remaining per-chunk overhead; this is an ownership improvement, not a
+claim of faster framing.
 
 ## Removal condition
 
