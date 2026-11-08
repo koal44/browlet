@@ -399,6 +399,8 @@ export class AssembledInterfaces {
   /** The same interfaces indexed by the implementation classes declared for them. */
   byImplClass = new Map<ImplementationClass, AssembledInterface>();
 
+  #globalPrototypeInterfaces: Set<AssembledInterface> | undefined;
+
   constructor(definitions: Definition[], finish: AssemblySteps[]) {
     const mixinsByName = new Map<string, InterfaceMixinDefinition>();
     const interfacePartialsByName = new Map<string, PartialInterfaceDefinition[]>();
@@ -518,15 +520,21 @@ export class AssembledInterfaces {
 
   /** Whether this interface belongs to a declared global interface's prototype chain. */
   isOnGlobalPrototypeChain(assembled: AssembledInterface): boolean {
-    for (const candidateAssembled of this.values()) {
-      if (!candidateAssembled.isGlobal()) continue;
-      let currentAssembled: AssembledInterface | undefined = candidateAssembled;
-      while (currentAssembled) {
-        if (currentAssembled === assembled) return true;
-        currentAssembled = currentAssembled.parentAssembled;
+    let interfaces = this.#globalPrototypeInterfaces;
+    if (!interfaces) {
+      // Declaration ancestry is fixed after assembly and shared by every realm.
+      interfaces = new Set();
+      for (const candidateAssembled of this.values()) {
+        if (!candidateAssembled.isGlobal()) continue;
+        let currentAssembled: AssembledInterface | undefined = candidateAssembled;
+        while (currentAssembled) {
+          interfaces.add(currentAssembled);
+          currentAssembled = currentAssembled.parentAssembled;
+        }
       }
+      this.#globalPrototypeInterfaces = interfaces;
     }
-    return false;
+    return interfaces.has(assembled);
   }
 
   /** Order the selected interfaces so each included parent precedes its descendants. */

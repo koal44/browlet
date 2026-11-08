@@ -65,6 +65,29 @@ describe('Web IDL definition assembly', () => {
     }]);
   });
 
+  it('recognizes global prototype ancestry across declarations without mixing assemblies', () => {
+    const definitions = [
+      defineInterface({ name: 'First', inherits: 'Parent', members: [], ...xattr(['Global', 'First']) }),
+      definePartialInterface({ name: 'Second', members: [], ...xattr(['Global', 'Second']) }),
+      defineInterface({ name: 'Second', inherits: 'Parent', members: [] }),
+      defineInterface({ name: 'Parent', inherits: 'Base', members: [] }),
+      defineInterface({ name: 'Base', members: [] }),
+      defineInterface({ name: 'Sibling', inherits: 'Parent', members: [] }),
+      defineInterface({ name: 'Unrelated', members: [] }),
+    ];
+    const { interfaces } = new DefinitionAssembly(definitions);
+    const other = new DefinitionAssembly(definitions);
+
+    // Begin with a non-global query; membership includes all global chains.
+    expect(interfaces.isOnGlobalPrototypeChain(interfaces.get('Sibling')!)).toBe(false);
+    for (const name of ['Base', 'Parent', 'First', 'Second']) {
+      expect(interfaces.isOnGlobalPrototypeChain(interfaces.get(name)!)).toBe(true);
+      expect(interfaces.isOnGlobalPrototypeChain(other.interfaces.get(name)!)).toBe(false);
+      expect(other.interfaces.isOnGlobalPrototypeChain(other.interfaces.get(name)!)).toBe(true);
+    }
+    expect(interfaces.isOnGlobalPrototypeChain(interfaces.get('Unrelated')!)).toBe(false);
+  });
+
   it('assembles partial mixins in includes-statement order', () => {
     const host = defineInterface({ name: 'Host', members: [] });
     const first = defineInterfaceMixin({
