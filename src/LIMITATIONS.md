@@ -140,10 +140,19 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
 
 - **`window-idle-rendering`:** `requestIdleCallback`, cancellation, deadlines,
   and timeout delivery are implemented for the headless Window runtime.
-  AnimationFrameProvider and a production rendering host must still supply
-  pending-frame predictions and refresh rate through `EventLoopInit.idleRendering`.
+  AnimationFrameProvider supplies callback state, but a production rendering host
+  must still connect pending-frame predictions and refresh rate through
+  `EventLoopInit.idleRendering`.
   The implementation does not invent a display rate or simulate rendering. See the
   [idle-period dependencies](browlet/scripting/ROADMAP.md#html-8173-idle-period-processing).
+
+- **`animation-frame-production`:** Window and dedicated-worker request/cancel
+  APIs and per-target callback controllers are implemented. Window delivery is
+  connected to the existing rendering phase, but its refresh/display host is not
+  installed by the headless runtime. Dedicated-worker rendering-opportunity and
+  delivery production remain unfinished. Registration alone therefore does not
+  cause an automatic frame; tests explicitly supply opportunities or delivery.
+  See the [§8.12 boundary](browlet/scripting/ROADMAP.md#html-812-animation-frames).
 
 - **Forcibly aborting scripts on the shared Node thread remains deferred.** Browlet,
   page JavaScript, and the Node caller share a JavaScript execution thread. An

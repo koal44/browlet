@@ -4,6 +4,10 @@ export {
   type CrossOriginIsolationMode,
 } from './agents';
 export {
+  AnimationFrameController, type FrameRequestCallback, frameRequestCallbackIDL, animationFrameProviderIDL,
+  windowIncludesAnimationFrameProviderIDL, dedicatedWorkerIncludesAnimationFrameProviderIDL,
+} from './animation-frame';
+export {
   eventHandlerAttr, eventHandlerMapAttr, EventHandlerMap, eventHandlerNonNullIDL, eventHandlerIDL,
   onErrorEventHandlerNonNullIDL, onErrorEventHandlerIDL, type EventHandlerCallback,
   onBeforeUnloadEventHandlerNonNullIDL, onBeforeUnloadEventHandlerIDL,
@@ -41,7 +45,7 @@ export {
   type BrowletRealmCustomizations, type BrowletRealmCreationOptions, type BrowletRealmOptions, type WindowRealmOptions,
 } from './realm';
 export {
-  WindowRenderingProducer, type RenderingOpportunityHost, type RenderingUpdateHooks,
+  WindowRenderingController, type RenderingOpportunityHost, type RenderingUpdateHooks,
   type RenderingUpdateContext, type RenderingDocumentFilters, type RenderingUpdatePhase,
   renderingUpdatePhases,
 } from './rendering-opportunity';

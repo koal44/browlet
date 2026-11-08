@@ -408,7 +408,7 @@ These are source observations, not interchangeable ownership models.
 WebKit is closest structurally: queueing coalesces a wake-up and the loop runs
 bounded work with a checkpoint after each task. Its single task vector, origin
 lookup, and task-group lifecycle are substitutions, not required Browlet designs.
-Browlet adopts a coalesced rendering producer but retains HTML's rendering-task route.
+Browlet's WindowRenderingController coalesces rendering opportunities and retains HTML's rendering-task route.
 
 Blink explicitly documents its split between frame-level ordinary queues and
 the HTML model. Copying GetTaskRunner without its agent-group/checkpoint machinery

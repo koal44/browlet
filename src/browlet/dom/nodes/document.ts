@@ -34,7 +34,7 @@ import { ElementTag } from './element-definitions/index';
 import type { DOMStringListImpl } from '../lists/index';
 import { EventImpl, CustomEventImpl, type EventTargetImpl } from '../events/index';
 import {
-  EventHandlerMap, eventHandlerMapAttr, globalEventHandlers, ModuleMap, SpeculationRulesParseResult,
+  AnimationFrameController, EventHandlerMap, eventHandlerMapAttr, globalEventHandlers, ModuleMap, SpeculationRulesParseResult,
   type EventHandlerCallback, type SpeculationRuleSet,
 } from '../../scripting/index';
 import { StorageEventImpl } from '../../storage/events/index';
@@ -184,6 +184,8 @@ export class DocumentImpl extends NodeImpl {
   customElementRegistry: CustomElementRegistryImpl | null = null;
   /** Module scripts known to this document. */
   moduleMap = new ModuleMap();
+  /** Animation-frame requests belong to this Document even when its Window is reused. */
+  animationFrameController = new AnimationFrameController();
   /** Rule sets registered for this document's speculative loading. */
   // https://html.spec.whatwg.org/multipage/speculative-loading.html#document-sr-sets
   speculationRuleSets: SpeculationRuleSet[] = [];
@@ -1828,6 +1830,7 @@ export class DocumentImpl extends NodeImpl {
       for (const source of global.eventSources) source.close();
       global.timers.clear();
       this.getRelevantGlobalObject()?.idleCallbacks.clear();
+      this.animationFrameController.clear();
     }
     env.userAgent.blobURLStore.removeForEnvironment(env);
     // TODO: connect fullscreen, media, service-worker, and lock cleanup as implemented.

@@ -9,7 +9,7 @@ import { getRelevantRealm } from '../../support/browlet-binding';
 import { useFixture } from '../../support/fixture';
 import { runInHostTask } from '../../support/tasks';
 
-describe('HTML §8.7: queueMicrotask()', () => {
+describe('HTML §8.8: queueMicrotask()', () => {
   const prepared = useFixture(() => new Browlet({ route: () => '' }));
 
   it('invokes with no arguments or receiver and ignores the callback result', async () => {

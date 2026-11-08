@@ -61,7 +61,7 @@ This operation does not depend on CSS cascade or layout's resolution of `auto`.
 Implement the [Intersection Observer algorithms](https://w3c.github.io/IntersectionObserver/#algorithms)
 with real [rendering geometry](../../rendering/ROADMAP.md), including viewport
 and scroll-container clipping. Use the existing
-`updateIntersectionObservations` phase in `WindowRenderingProducer` and HTML task
+`updateIntersectionObservations` phase in `WindowRenderingController` and HTML task
 delivery; do not add a separate rendering loop. Initial entries, threshold
 transitions, root/scroll margins, visibility and delay processing (including
 registration `lastUpdateTime`), Document task coalescing and observer selection,

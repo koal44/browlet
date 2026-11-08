@@ -1,10 +1,11 @@
 import {
-  arg, defineIncludes, defineInterface, emptyDictionary, idlType, impl, op, reference, roAttr, sequence, xattr,
+  arg, defineIncludes, defineInterface, DOMExceptionImpl, DOMExceptionNames,
+  emptyDictionary, idlType, impl, op, reference, roAttr, sequence, xattr,
 } from '../../web-idl/core/index';
 import type { FetchResponse } from '../../fetch/index';
 
 import type { ErrorInformation } from '../dom/events/index';
-import { EventHandlerMap, type EventHandlerCallback } from '../scripting/index';
+import { AnimationFrameController, EventHandlerMap, type EventHandlerCallback, type FrameRequestCallback } from '../scripting/index';
 import { EmbedderPolicy, queueCOEPInheritanceViolation } from '../browsing/policy/index';
 import { MessageEventTargetMixin, MessagePortImpl } from '../communication/index';
 import type { BrowletEnvironment } from '../environment/index';
@@ -30,6 +31,8 @@ export class DedicatedWorkerGlobalImpl extends WorkerGlobalImpl {
   override eventHandlers: EventHandlerMap = new EventHandlerMap(this, DedicatedWorkerGlobalImpl.#handlerDefinitions);
   /** Implements the messaging handler attributes without starting the inside port. */
   messageEventTargetMixin = new MessageEventTargetMixin(this.eventHandlers);
+  /** Frame requests retained by this worker rather than by its creating Document. */
+  animationFrameController = new AnimationFrameController();
 
   constructor(type: WorkerType, name: string, env: BrowletEnvironment) {
     super(type, name, env);
@@ -57,6 +60,41 @@ export class DedicatedWorkerGlobalImpl extends WorkerGlobalImpl {
     this.insidePort.postMessage(message, options);
   }
 
+  /** A supported worker has a Document owner, directly or through dedicated-worker owners. */
+  // https://html.spec.whatwg.org/multipage/imagebitmap-and-animations.html#concept-animationframeprovider-supported
+  isAnimationFrameProviderSupported(): boolean {
+    const pending: DedicatedWorkerGlobalImpl[] = [this];
+    const visited = new Set<DedicatedWorkerGlobalImpl>();
+    while (pending.length !== 0) {
+      const worker = pending.pop()!;
+      if (visited.has(worker)) continue;
+      visited.add(worker);
+      for (const owner of worker.ownerSet) {
+        if (!(owner instanceof WorkerGlobalImpl)) return true;
+        if (owner instanceof DedicatedWorkerGlobalImpl) pending.push(owner);
+      }
+    }
+    return false;
+  }
+
+  // https://html.spec.whatwg.org/multipage/imagebitmap-and-animations.html#dom-animationframeprovider-requestanimationframe
+  requestAnimationFrame(callback: FrameRequestCallback): number {
+    this.#requireAnimationFrameSupport();
+    return this.animationFrameController.request(callback);
+  }
+
+  // https://html.spec.whatwg.org/multipage/imagebitmap-and-animations.html#animationframeprovider-cancelanimationframe
+  cancelAnimationFrame(handle: number): void {
+    // SPEC_CLASH(animation-frame-worker-cancel): Follow HTML/Firefox's support check; Chromium cancellation does not check support.
+    this.#requireAnimationFrameSupport();
+    this.animationFrameController.cancel(handle);
+  }
+
+  override finishRunning(): void {
+    this.animationFrameController.clear();
+    super.finishRunning();
+  }
+
   // https://html.spec.whatwg.org/multipage/browsers.html#check-a-global-object's-embedder-policy
   override checkEmbedderPolicy(ownerEnv: BrowletEnvironment, response: FetchResponse): boolean {
     const ownerPolicy = ownerEnv.policyContainer.embedderPolicy;
@@ -67,6 +105,12 @@ export class DedicatedWorkerGlobalImpl extends WorkerGlobalImpl {
     if (!EmbedderPolicy.isCompatibleWithCrossOriginIsolation(ownerPolicy.value) || compatible) return true;
     queueCOEPInheritanceViolation(response, 'worker initialization', ownerPolicy.reportingEndpoint, 'enforce', ownerEnv);
     return false;
+  }
+
+  #requireAnimationFrameSupport(): void {
+    if (!this.isAnimationFrameProviderSupported()) {
+      throw new DOMExceptionImpl('This worker has no Document or supported dedicated-worker owner', DOMExceptionNames.notSupported);
+    }
   }
 }
 

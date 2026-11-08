@@ -11,7 +11,7 @@ import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import type { HTMLIFrameElementImpl } from '../../../src/browlet/dom/nodes/html/embedded/iframe';
 import {
   type RenderingOpportunityHost, type RenderingUpdateHooks,
-  type RenderingUpdatePhase, renderingUpdatePhases, WindowRenderingProducer,
+  type RenderingUpdateContext, type RenderingUpdatePhase, renderingUpdatePhases, WindowRenderingController,
 } from '../../../src/browlet/scripting/rendering-opportunity';
 import {
   renderingTaskSource,
@@ -23,7 +23,7 @@ import {
 
 afterEach(() => vi.restoreAllMocks());
 
-describe('Window rendering producer', () => {
+describe('Window rendering controller', () => {
   it('queues an ordered rendering update on its event loop', () => {
     const { agent, document, navigable } = createWindowFixture();
     const frameTimestamp = new UnsafeMoment(monotonicClock, 10);
@@ -33,23 +33,23 @@ describe('Window rendering producer', () => {
       styleAndLayoutStartTime,
     ]);
     const phases: RenderingUpdatePhase[] = [];
-    const contexts: Parameters<NonNullable<
-      RenderingUpdateHooks[RenderingUpdatePhase]
-    >>[0][] = [];
-    const hooks = Object.fromEntries(renderingUpdatePhases.map((phase) => [
-      phase,
-      (context: typeof contexts[number]) => {
+    const contexts: RenderingUpdateContext[] = [];
+    const hookPhases = renderingUpdatePhases.filter((phase) => phase !== 'runAnimationFrameCallbacks');
+    const hooks: RenderingUpdateHooks = {};
+    for (const phase of hookPhases) {
+      hooks[phase] = (context) => {
         phases.push(phase);
         contexts.push(context);
-      },
-    ])) as RenderingUpdateHooks;
-    const producer = new WindowRenderingProducer(
+      };
+    }
+    document.animationFrameController.request(() => { phases.push('runAnimationFrameCallbacks'); });
+    const controller = new WindowRenderingController(
       agent,
       manualHost.host,
       hooks,
     );
 
-    producer.start();
+    controller.start();
     manualHost.signal([navigable]);
 
     expect(phases).toEqual([]);
@@ -65,7 +65,7 @@ describe('Window rendering producer', () => {
       context.document === document &&
       context.frameTimestamp === frameTimestamp,
     )).toBe(true);
-    const styleAndLayoutIndex = renderingUpdatePhases.indexOf(
+    const styleAndLayoutIndex = hookPhases.indexOf(
       'recalculateStylesUpdateLayoutAndResizeObservations',
     );
     expect(contexts.slice(0, styleAndLayoutIndex).every((context) =>
@@ -83,11 +83,11 @@ describe('Window rendering producer', () => {
       new UnsafeMoment(monotonicClock, 20),
     ]);
     const updateRenderingAndUserInterface = vi.fn();
-    const producer = new WindowRenderingProducer(agent, manualHost.host, {
+    const controller = new WindowRenderingController(agent, manualHost.host, {
       updateRenderingAndUserInterface,
     });
 
-    producer.start();
+    controller.start();
     manualHost.signal([navigable]);
     manualHost.setOpportunities([]);
     agent.eventLoop.runTaskTurn();
@@ -105,17 +105,17 @@ describe('Window rendering producer', () => {
     const manualHost = createManualRenderingHost([
       new UnsafeMoment(monotonicClock, 10), new UnsafeMoment(monotonicClock, 20),
     ]);
-    const producer = new WindowRenderingProducer(agent, manualHost.host, {
+    const controller = new WindowRenderingController(agent, manualHost.host, {
       runResizeSteps: ({ document }) => { visited.push(document); },
     });
-    producer.start();
+    controller.start();
     manualHost.signal([navigable, childNavigable, parentNavigable]);
 
     agent.eventLoop.runTaskTurn();
 
     const expectedOrder = [document, parent, child];
     expect(visited.map((current) => expectedOrder.indexOf(current))).toEqual([0, 1, 2]);
-    producer.stop();
+    controller.stop();
   });
 
   it('orders sibling frames through shadow trees before the host\'s light children', () => {
@@ -134,17 +134,17 @@ describe('Window rendering producer', () => {
     const manualHost = createManualRenderingHost([
       new UnsafeMoment(monotonicClock, 10), new UnsafeMoment(monotonicClock, 20),
     ]);
-    const producer = new WindowRenderingProducer(agent, manualHost.host, {
+    const controller = new WindowRenderingController(agent, manualHost.host, {
       runResizeSteps: ({ document }) => { visited.push(document); },
     });
-    producer.start();
+    controller.start();
     manualHost.signal([navigable, lightNavigable, shadowNavigable]);
 
     agent.eventLoop.runTaskTurn();
 
     const expectedOrder = [document, shadowChild, lightChild];
     expect(visited.map((current) => expectedOrder.indexOf(current))).toEqual([0, 1, 2]);
-    producer.stop();
+    controller.stop();
   });
 
   it('keeps one document order through an update and observes moved containers in the next task', () => {
@@ -160,13 +160,13 @@ describe('Window rendering producer', () => {
       new UnsafeMoment(monotonicClock, 10), new UnsafeMoment(monotonicClock, 20),
       new UnsafeMoment(monotonicClock, 30),
     ]);
-    const producer = new WindowRenderingProducer(agent, manualHost.host, {
+    const controller = new WindowRenderingController(agent, manualHost.host, {
       runResizeSteps: ({ document: current }) => {
         if (current === document) document.body!.insertBefore(secondFrame, firstFrame);
       },
       runScrollSteps: ({ document }) => { visited.push(document); },
     });
-    producer.start();
+    controller.start();
     manualHost.signal([navigable, firstNavigable, secondNavigable]);
 
     agent.eventLoop.runTaskTurn();
@@ -175,7 +175,7 @@ describe('Window rendering producer', () => {
     visited.length = 0;
     agent.eventLoop.runTaskTurn();
     expect(visited.map((current) => originalOrder.indexOf(current))).toEqual([0, 2, 1]);
-    producer.stop();
+    controller.stop();
   });
 
   it('flushes autofocus candidates only for top-level traversables', () => {
@@ -186,17 +186,17 @@ describe('Window rendering producer', () => {
     const manualHost = createManualRenderingHost([
       new UnsafeMoment(monotonicClock, 10), new UnsafeMoment(monotonicClock, 20),
     ]);
-    const producer = new WindowRenderingProducer(agent, manualHost.host, {
+    const controller = new WindowRenderingController(agent, manualHost.host, {
       flushAutofocusCandidates: ({ document }) => { visited.push(document); },
     });
-    producer.start();
+    controller.start();
     manualHost.signal([navigable, childNavigable]);
 
     agent.eventLoop.runTaskTurn();
 
     expect(visited).toHaveLength(1);
     expect(visited[0]).toBe(document);
-    producer.stop();
+    controller.stop();
   });
 
   it.each(['filtered', 'other-agent'] as const)('orders siblings when their parent is %s', (parentState) => {
@@ -213,11 +213,11 @@ describe('Window rendering producer', () => {
     const manualHost = createManualRenderingHost([
       new UnsafeMoment(monotonicClock, 10), new UnsafeMoment(monotonicClock, 20),
     ]);
-    const producer = new WindowRenderingProducer(agent, manualHost.host, {
+    const controller = new WindowRenderingController(agent, manualHost.host, {
       filters: { hasHiddenVisibilityState: (candidate) => candidate === parent },
       runResizeSteps: ({ document }) => { visited.push(document); },
     });
-    producer.start();
+    controller.start();
     manualHost.signal([parentNavigable, firstNavigable, secondNavigable]);
 
     agent.eventLoop.runTaskTurn();
@@ -225,25 +225,24 @@ describe('Window rendering producer', () => {
     const expectedOrder = [first, second];
     expect(visited.map((current) => expectedOrder.indexOf(current))).toEqual([0, 1]);
     if (parentState === 'other-agent') expect(parent.env.responsibleEventLoop).not.toBe(agent.eventLoop);
-    producer.stop();
+    controller.stop();
   });
 
-  it('applies the unnecessary-rendering filter only when both inputs exist', () => {
+  it('skips rendering when no visual effect or animation-frame callback is pending', () => {
     const { agent, navigable } = createWindowFixture();
     const manualHost = createManualRenderingHost([
       new UnsafeMoment(monotonicClock, 10),
       new UnsafeMoment(monotonicClock, 20),
     ]);
     const updateRenderingAndUserInterface = vi.fn();
-    const producer = new WindowRenderingProducer(agent, manualHost.host, {
+    const controller = new WindowRenderingController(agent, manualHost.host, {
       filters: {
-        hasAnimationFrameCallbacks: () => false,
         wouldRenderingHaveVisibleEffect: () => false,
       },
       updateRenderingAndUserInterface,
     });
 
-    producer.start();
+    controller.start();
     manualHost.signal([navigable]);
     agent.eventLoop.runTaskTurn();
 
@@ -257,8 +256,8 @@ describe('Window rendering producer', () => {
     const manualHost = createManualRenderingHost(Array.from({ length: 6 }, (_, i) =>
       new UnsafeMoment(monotonicClock, i + 1)));
     const updateRenderingAndUserInterface = vi.fn();
-    const producer = new WindowRenderingProducer(agent, manualHost.host, { updateRenderingAndUserInterface });
-    producer.start();
+    const controller = new WindowRenderingController(agent, manualHost.host, { updateRenderingAndUserInterface });
+    controller.start();
 
     manualHost.signal([navigable]);
     agent.eventLoop.runTaskTurn();
@@ -275,7 +274,7 @@ describe('Window rendering producer', () => {
     manualHost.signal([navigable]);
     agent.eventLoop.runTaskTurn();
     expect(updateRenderingAndUserInterface).toHaveBeenCalledOnce();
-    producer.stop();
+    controller.stop();
   });
 
   it('resumes rendering after the cutoff even while a resource remains pending', () => {
@@ -288,8 +287,8 @@ describe('Window rendering producer', () => {
     const manualHost = createManualRenderingHost(Array.from({ length: 4 }, (_, i) =>
       new UnsafeMoment(monotonicClock, i + 1)));
     const updateRenderingAndUserInterface = vi.fn();
-    const producer = new WindowRenderingProducer(agent, manualHost.host, { updateRenderingAndUserInterface });
-    producer.start();
+    const controller = new WindowRenderingController(agent, manualHost.host, { updateRenderingAndUserInterface });
+    controller.start();
 
     manualHost.signal([navigable]);
     agent.eventLoop.runTaskTurn();
@@ -300,7 +299,7 @@ describe('Window rendering producer', () => {
     agent.eventLoop.runTaskTurn();
     expect(updateRenderingAndUserInterface).toHaveBeenCalledOnce();
     expect(document.renderBlockingElements.has(script)).toBe(true);
-    producer.stop();
+    controller.stop();
   });
 
   it('stops observing without queueing another rendering task', () => {
@@ -308,10 +307,10 @@ describe('Window rendering producer', () => {
     const manualHost = createManualRenderingHost([
       new UnsafeMoment(monotonicClock, 10),
     ]);
-    const producer = new WindowRenderingProducer(agent, manualHost.host);
+    const controller = new WindowRenderingController(agent, manualHost.host);
 
-    producer.start();
-    producer.stop();
+    controller.start();
+    controller.stop();
     manualHost.signal([navigable]);
 
     expect(agent.eventLoop.getTaskQueue(

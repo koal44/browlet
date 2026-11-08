@@ -18,6 +18,8 @@ import {
   eventHandlerIDL, eventHandlerNonNullIDL, onErrorEventHandlerIDL, onErrorEventHandlerNonNullIDL,
   onBeforeUnloadEventHandlerIDL, onBeforeUnloadEventHandlerNonNullIDL,
   globalEventHandlersIDL, windowEventHandlersIDL,
+  frameRequestCallbackIDL, animationFrameProviderIDL,
+  windowIncludesAnimationFrameProviderIDL, dedicatedWorkerIncludesAnimationFrameProviderIDL,
 } from '../../scripting/index';
 import {
   reportIDL, reportBodyIDL, testReportBodyIDL, reportingObserverIDL, reportingObserverCallbackIDL,
@@ -77,6 +79,8 @@ import { fileReaderIDL, objectURLIDL } from '../file/index';
 
 /** Declarations combined by Browlet's binding world, also available for development validation. */
 export const browletDefinitions = [
+  frameRequestCallbackIDL, animationFrameProviderIDL,
+  windowIncludesAnimationFrameProviderIDL, dedicatedWorkerIncludesAnimationFrameProviderIDL,
   ...graphicsIDLDefinitions,
   documentReadyStateIDL,
   documentVisibilityStateIDL,

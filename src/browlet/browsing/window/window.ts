@@ -13,7 +13,7 @@ import {
   ImportMap, mergeExistingAndNewImportMaps, domManipulationTaskSource,
   EventHandlerMap, globalEventHandlers, windowEventHandlers,
   type ImportMapParseResult, type BrowletGlobalObject, type SpecifierResolutionRecord,
-  type SpeculationRulesParseResult, type TimerAction,
+  type SpeculationRulesParseResult, type TimerAction, type FrameRequestCallback,
 } from '../../scripting/index';
 import { PageSwapEventImpl, PageTransitionEventImpl } from '../navigation/events/index';
 import { pointerGlobalEventHandlers, type MouseEventImpl, type ScreenPosition } from '../../interaction/events/index';
@@ -427,6 +427,17 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   /** Cancel an active interval or timeout using its converted timer ID. */
   clearInterval(id: number): void {
     this.getWindowOrWorkerGlobalScopeMixin().clearTimer(id);
+  }
+
+  /** Window providers always support requests; their current Document owns the state. */
+  // https://html.spec.whatwg.org/multipage/imagebitmap-and-animations.html#dom-animationframeprovider-requestanimationframe
+  requestAnimationFrame(callback: FrameRequestCallback): number {
+    return this.getAssociatedDocument().animationFrameController.request(callback);
+  }
+
+  // https://html.spec.whatwg.org/multipage/imagebitmap-and-animations.html#animationframeprovider-cancelanimationframe
+  cancelAnimationFrame(handle: number): void {
+    this.getAssociatedDocument().animationFrameController.cancel(handle);
   }
 
   /** Register a converted callback with this Window's idle scheduler. */

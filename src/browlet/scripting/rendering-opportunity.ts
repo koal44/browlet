@@ -11,7 +11,7 @@ import { renderingTaskSource } from './tasks';
 // The host reports refresh opportunities; rendering steps run later as HTML tasks.
 /** Turns host rendering opportunities into tasks for a Window agent. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#event-loop-processing-model
-export class WindowRenderingProducer {
+export class WindowRenderingController {
   #agent: WindowAgent;
   #host: RenderingOpportunityHost;
   #update: RenderingUpdateHooks;
@@ -30,11 +30,11 @@ export class WindowRenderingProducer {
 
   start(): void {
     if (this.#stopObserving !== null) {
-      throw new InternalError('A rendering producer is already running');
+      throw new InternalError('A rendering controller is already running');
     }
 
     this.#stopObserving = this.#host.observeRenderingOpportunities(
-      (navigables) => { this.#produceRenderingTasks(navigables); },
+      (navigables) => { this.#queueRenderingTasks(navigables); },
     );
   }
 
@@ -43,7 +43,7 @@ export class WindowRenderingProducer {
     this.#stopObserving = null;
   }
 
-  #produceRenderingTasks(navigables: Navigable[]): void {
+  #queueRenderingTasks(navigables: Navigable[]): void {
     const realms = new Set<BrowletRealm>();
     for (const navigable of navigables) {
       if (!this.#host.hasRenderingOpportunity(navigable)) continue;
@@ -69,6 +69,13 @@ export class WindowRenderingProducer {
     const documents = this.#collectRenderableDocuments();
     let unsafeStyleAndLayoutStartTime: UnsafeMoment | null = null;
     for (const phase of renderingUpdatePhases) {
+      if (phase === 'runAnimationFrameCallbacks') {
+        for (const document of documents) {
+          document.animationFrameController.runCallbacks(document.env.relativeHighResolutionTime(frameTimestamp).toTimestamp());
+        }
+        continue;
+      }
+
       if (phase === 'recalculateStylesUpdateLayoutAndResizeObservations') {
         unsafeStyleAndLayoutStartTime = this.#host.unsafeSharedCurrentTime();
       }
@@ -98,7 +105,7 @@ export class WindowRenderingProducer {
 
       if (
         filters?.wouldRenderingHaveVisibleEffect?.(document) === false &&
-        filters.hasAnimationFrameCallbacks?.(document) === false
+        !document.animationFrameController.hasPending
       ) return false;
 
       return true;
@@ -162,43 +169,10 @@ export type RenderingOpportunityHost = {
   unsafeSharedCurrentTime(this: void): UnsafeMoment;
 };
 
-// https://html.spec.whatwg.org/multipage/dom.html#semantics
-// TODO(rendering): connect DOM, element-state, and style changes to the production
-// style/layout and presentation owners. Presentation must follow current document
-// state after the initial render too; cached derived state must be invalidated or
-// recomputed. The mutation/invalidation contract remains with those future owners.
-export type RenderingUpdateHooks = Partial<Record<
-  RenderingUpdatePhase,
-  (context: RenderingUpdateContext) => void
->> & {
-  filters?: RenderingDocumentFilters;
-};
-
-export type RenderingUpdateContext = {
-  document: DocumentImpl;
-  frameTimestamp: UnsafeMoment;
-  unsafeStyleAndLayoutStartTime: UnsafeMoment | null;
-};
-
-// Provisional queries for missing rendering owners. Replace document-state
-// callbacks with direct queries as visibility, view transitions, and animation
-// frames are implemented. Visual-effect and skip decisions belong to rendering
-// and scheduling policy; display opportunities still require host input.
-export type RenderingDocumentFilters = {
-  hasAnimationFrameCallbacks?: DocumentPredicate;
-  hasHiddenVisibilityState?: DocumentPredicate;
-  isRenderingSuppressedForViewTransitions?: DocumentPredicate;
-  shouldSkipRendering?: DocumentPredicate;
-  wouldRenderingHaveVisibleEffect?: DocumentPredicate;
-};
-
-export type RenderingUpdatePhase =
-  typeof renderingUpdatePhases[number];
-
 // Keep this order aligned with HTML's "update the rendering" algorithm.
 // Every currently missing owner is an absent hook rather than a fake
-// implementation: CSSOM View, Web Animations, Fullscreen, Canvas, animation
-// frames, ResizeObserver/layout, focus, View Transitions,
+// implementation: CSSOM View, Web Animations, Fullscreen, Canvas,
+// ResizeObserver/layout, focus, View Transitions,
 // IntersectionObserver, rendering/paint timing, display, and the top layer.
 export const renderingUpdatePhases = [
   'reveal',
@@ -219,6 +193,52 @@ export const renderingUpdatePhases = [
   'updateRenderingAndUserInterface',
   'processTopLayerRemovals',
 ] as const;
+
+export type RenderingUpdatePhase = typeof renderingUpdatePhases[number];
+
+// https://html.spec.whatwg.org/multipage/dom.html#semantics
+// TODO(rendering): connect DOM, element-state, and style changes to the production
+// style/layout and presentation owners. Presentation must follow current document
+// state after the initial render too; cached derived state must be invalidated or
+// recomputed. The mutation/invalidation contract remains with those future owners.
+export interface RenderingUpdateHooks {
+  reveal?: RenderingUpdateStep;
+  flushAutofocusCandidates?: RenderingUpdateStep;
+  runResizeSteps?: RenderingUpdateStep;
+  runScrollSteps?: RenderingUpdateStep;
+  evaluateMediaQueriesAndReportChanges?: RenderingUpdateStep;
+  updateAnimationsAndSendEvents?: RenderingUpdateStep;
+  runFullscreenSteps?: RenderingUpdateStep;
+  runCanvasContextLostSteps?: RenderingUpdateStep;
+  recalculateStylesUpdateLayoutAndResizeObservations?: RenderingUpdateStep;
+  runFocusFixup?: RenderingUpdateStep;
+  performPendingTransitionOperations?: RenderingUpdateStep;
+  updateIntersectionObservations?: RenderingUpdateStep;
+  recordRenderingTime?: RenderingUpdateStep;
+  markPaintTiming?: RenderingUpdateStep;
+  updateRenderingAndUserInterface?: RenderingUpdateStep;
+  processTopLayerRemovals?: RenderingUpdateStep;
+  filters?: RenderingDocumentFilters;
+}
+
+type RenderingUpdateStep = (context: RenderingUpdateContext) => void;
+
+export type RenderingUpdateContext = {
+  document: DocumentImpl;
+  frameTimestamp: UnsafeMoment;
+  unsafeStyleAndLayoutStartTime: UnsafeMoment | null;
+};
+
+// Provisional queries for missing rendering owners. Replace document-state
+// callbacks with direct queries as visibility and view transitions are
+// implemented. Visual-effect and skip decisions belong to rendering
+// and scheduling policy; display opportunities still require host input.
+export type RenderingDocumentFilters = {
+  hasHiddenVisibilityState?: DocumentPredicate;
+  isRenderingSuppressedForViewTransitions?: DocumentPredicate;
+  shouldSkipRendering?: DocumentPredicate;
+  wouldRenderingHaveVisibleEffect?: DocumentPredicate;
+};
 
 type DocumentPredicate = (
   this: void,

@@ -1076,6 +1076,15 @@ predictions remain an explicit input from the unfinished rendering owner.
 [The event-loop architecture](browlet/scripting/EVENT-LOOP-ARCHITECTURE.md) owns
 the detailed contract and backend accommodations.
 
+Each Document and dedicated-worker global owns an `AnimationFrameController`
+for its callback map and handle counter. Window forwards to its current Document;
+worker support follows the existing owner set. Binding owns callback conversion,
+invocation, reporting, and cleanup. The existing Window rendering phase supplies
+the Document-relative timestamp and calls the controller directly. Permanent
+target cleanup clears retained callbacks. Refresh opportunities and automatic
+worker frame production remain separate, explicit rendering dependencies; the
+controller does not create a timer or retain an additional environment.
+
 The addon exposes native facilities; custom Node/V8 patches additionally enable
 callback and job hooks consumed by HTML. The addon bridges the engine APIs;
 HTML supplies the scheduling policy. Availability is checked per capability,

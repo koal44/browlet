@@ -1770,7 +1770,7 @@ Typechecking, declaration contracts, touched-file lint, and diff checks pass.
 
 The next bounded pass uses the same HTML revision for
 [update the rendering](https://html.spec.whatwg.org/multipage/webappapis.html#update-the-rendering).
-`WindowRenderingProducer` now orders fully active Documents before applying its
+`WindowRenderingController` now orders fully active Documents before applying its
 renderability filters. Parents precede children; sibling containers follow
 shadow-including tree order. It computes sibling-position paths through container
 and shadow-host ancestry once per task, without scanning document subtrees or
@@ -1784,9 +1784,11 @@ sibling order, stale order after a move, and autofocus dispatch to a child.
 
 This completes document ordering within the existing producer, not production
 rendering. The refresh host is not installed by UserAgent, and real phase owners
-(resize/scroll, animation frames, layout, painting, and the other hooks) remain
+(resize/scroll, layout, painting, and the other hooks) remain
 dependencies. Tests compose real Window/Document bindings with a controlled
 opportunity host and observation hooks; automatic child creation is still absent.
+The subsequent [animation-frame slice](#html-812-animation-frames) connects the
+Document's callback controller directly to its rendering phase.
 
 Validation: all 40 focused rendering and task tests pass on each of the six
 runtime configurations, including six new rendering cases. Typechecking,
@@ -1822,7 +1824,9 @@ to each Window's pending/runnable lists and delivery. `EventLoopInit.idleRenderi
 now contains only the remaining rendering prediction: the Window's
 [animation-frame callback map](https://html.spec.whatwg.org/multipage/imagebitmap-and-animations.html#list-of-animation-frame-callbacks)
 or the rendering host's predicted updates, plus its refresh rate. AnimationFrameProvider
-and the production rendering host remain unfinished. The headless runtime supplies
+now supplies the callback map through the Document's AnimationFrameController;
+the production rendering host and its idle-prediction connection remain unfinished.
+The headless runtime supplies
 no fake rendering state or display rate; its 50ms and timer bounds still apply.
 The [idle-period tests](../../../test/browlet/scripting/idle-period.test.ts) cover
 live timer/render changes, per-Window precision, task/checkpoint ordering,
@@ -2693,10 +2697,12 @@ were introduced. Platform type contracts cover both signatures.
 
 This slice needs no OS, editing, or layout dependency. Worker-global inclusion
 and forwarding remain the worker composition owner's explicit dependency, as
-recorded in §8.2. Eric subsequently deferred §§8.4–8.6 to Ged and moved Vin's
-audit to §8.7 below.
+recorded in §8.2. Eric subsequently deferred dynamic markup insertion, DOM
+parsing/serialization, and the timer audit to Ged, then moved Vin's audit to
+microtask queuing. Current numbering is §§8.4, 8.5, and 8.7 for those deferred
+sections, with microtask queuing in §8.8. HTML sanitization is separately §8.6.
 
-## HTML §8.7: microtask queuing
+## HTML §8.8: microtask queuing
 
 The [section's normative operation](https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html#microtask-queuing)
 queues the supplied callback, invokes it with no arguments, and reports any
@@ -2739,8 +2745,9 @@ The [checkpoint audit](#html-8173-microtask-checkpoint-audit) retains the missin
 IndexedDB transaction cleanup and Long Animation Frames timing consumers, and
 the native checkpoint limitations remain in
 [LIMITATIONS](../../LIMITATIONS.md#scheduling-and-callback-context).
-Those are existing owner dependencies, not prerequisites from §§8.4–8.6.
-Eric has left those three sections with Ged; Vin's user-prompts audit continues below.
+Those are existing owner dependencies, not prerequisites from dynamic markup,
+DOM parsing/serialization, or timers. Eric has left those three audits with Ged;
+Vin's user-prompts audit continues below.
 
 ## HTML user prompts: simple dialogs
 
@@ -2901,6 +2908,91 @@ failures. The adjacent 31 dialog and nine navigation-timing cases passed on Node
 27.0.0-pre in stock and compat modes. Typechecking, focused lint, and the import
 boundary check pass.
 
+## HTML §8.12: animation frames
+
+The [animation-frame algorithms](https://html.spec.whatwg.org/multipage/imagebitmap-and-animations.html#animation-frames)
+now use an AnimationFrameController owned by each Document and dedicated-worker
+global. Window forwards to its current Document; replacing that Document selects
+a new controller and identifier sequence. Worker eligibility follows the existing
+owner set through dedicated-worker ancestors to a Document, without equating
+membership with Document activity. Shared and service workers do not expose the API.
+
+The controller retains the ordered callback map and identifier counter. Delivery
+snapshots handles, skips canceled entries, removes each entry before calling it,
+and leaves newly registered callbacks for a later batch. Binding supplies callback
+conversion, the callback realm, exception reporting, and script cleanup/checkpoints.
+Consequently a callback's microtask can cancel a later callback in the same batch,
+and an author exception does not interrupt the remaining callbacks. Permanent
+Document cleanup and worker completion release retained callbacks; salvageable
+Document cleanup preserves them.
+
+WindowRenderingController now calls the controller directly in the existing
+[animation-frame phase](https://html.spec.whatwg.org/multipage/webappapis.html#update-the-rendering),
+using the Document-relative high-resolution frame timestamp. Its unnecessary-render
+filter consults the actual pending map. Tests supply the existing
+RenderingOpportunityHost explicitly; this does not install a display timer.
+
+The local HTML reference was checked on 2026-11-07 at `5fcc23183958` (2026-11-06).
+The Experimental probe `browser-probes/html/animation-frames.mjs` and its
+`ANIMATION-FRAMES-RESULTS.json` record Chromium 156.0.8078.4, Firefox 157.0, and
+WebKit 27.2 agreeing on Window ordering, microtask cancellation, next-frame
+registration, exception continuation, callback receiver/arguments, and conversion.
+
+- `SPEC_CLASH(animation-frame-worker-exposure)`: HTML, Chromium, and Firefox
+  expose both dedicated-worker methods. The tested WebKit build omits them;
+  WebKit's source gates them on `OFFSCREEN_CANVAS_IN_WORKERS`. Browlet follows HTML.
+- `SPEC_CLASH(animation-frame-worker-cancel)`: HTML requires both worker methods
+  to reject unsupported owners with NotSupportedError. Gecko's WorkerScope checks
+  support in both; Blink's DedicatedWorkerGlobalScope checks it only on request.
+  Browlet follows HTML/Gecko. This difference was source-inspected, not established
+  by the ordinary supported-worker probe.
+
+Remaining dependencies are explicit:
+
+- RenderingOpportunityHost still needs an installed refresh/display producer,
+  and idle prediction needs that host's pending-render/refresh-rate inputs.
+- The worker event-loop rendering branch still needs a rendering-opportunity
+  producer, current worker timestamp, and OffscreenCanvas/rendering integration.
+  Its call-site TODO names the support check and controller delivery. Worker
+  registration is available, but automatic worker frame delivery is not connected.
+- Layout, painting, display presentation, and the other rendering phase owners
+  retain their existing separate hooks. No graphics backend is selected here.
+
+Focused regressions cover API conversion, receiver/callback realms, map behavior,
+task-boundary microtasks, frame phase/timestamp/filtering, inactivity and restoration,
+Window reuse, teardown, and worker ownership/support. Rendering-order and
+Document-reveal tests now exercise the controller instead of a placeholder phase hook.
+
+Validation: all 34 cases in those three focused suites pass on Node 24.19.0,
+26.8.1, and custom 27, each with stock and compatibility-addon runtimes.
+
+## Chapter 8 status
+
+Checked against the [current contents](https://html.spec.whatwg.org/multipage/)
+on 2026-11-07, with the local HTML reference at `5fcc23183958` and the published
+standard dated 2026-11-06. Animation frames (§8.12) ends Chapter 8; Communication
+starts Chapter 9. This closes Vin's current pass through the chapter, with the
+following implementation boundaries still explicit.
+
+| Current section | State and remaining boundary |
+| --- | --- |
+| §8.1 Scripting | The scripting, host-hook, event-loop, and event-handler passes are recorded above. Script-element/parser consumers, complete source provenance, termination, and missing cross-specification timing/checkpoint/rendering owners remain separate work. |
+| §8.2 Global mixin; §8.3 Base64 | Origin and Base64 are reviewed, alongside the existing global utilities. Full createImageBitmap exposure and worker-global composition remain with their owning slices. |
+| §8.4 Dynamic markup insertion | Deliberately left with Ged's parser/lifecycle work: document.open/close/write/writeln need their specified consumers and state transitions. |
+| §8.5 DOM parsing and serialization | Deliberately left with Ged. The [DOM parsing roadmap](../dom/parsing/ROADMAP.md) covers the HTML/XML adapters, fragment methods, serializers, and safe/unsafe markup boundaries. |
+| §8.6 HTML sanitization | Not completed by this pass. [Configuration, presets, filtering, element inventories, and safe setters](../html/sanitization/ROADMAP.md) retain their own dependency boundary; existing per-element metadata is not a Sanitizer implementation. |
+| §8.7 Timers | The complete section audit was left with Ged. Existing function timers, active-time waits, nesting/cancellation, and cleanup are present; worker suspension, string-handler/CSP/Trusted Types processing, and complete script integration remain explicit. |
+| §8.8 Microtask queuing | Reviewed and connected to the existing realm/checkpoint machinery, including retained Document association. |
+| §8.9 User prompts | Dialog algorithms, automation routing, printing flags, and event delivery are implemented. Actual dialog UI, physical-form capture, layout, preview/PDF, and printer UI remain host dependencies. |
+| §8.10 System state and capabilities | The local Navigator families are reviewed. OS state/transport, custom-handler consent/persistence/invocation, automation sessions, and actual PDF viewing remain explicit dependencies. |
+| §8.11 Images | ImageData and ImageBitmap lifetime, pixel processing, and internal async creation are implemented. The [creation boundary](../graphics/ROADMAP.md#imagebitmap-creation-dependencies) retains the decoder, image/canvas/media extraction, color conversion, and complete public source union. |
+| §8.12 Animation frames | Per-target controllers, request/cancel, support checks, cleanup, and Window rendering-phase delivery are implemented. Real refresh/display production, idle prediction, and automatic worker frame delivery remain explicit. |
+
+Older notes called timers §8.6 and microtask queuing §8.7; use the current numbers
+above when selecting the next slice. The next work is a deliberate return to one
+of these owner boundaries, rather than an unreviewed graphics backend or a second
+implementation of another chat's parser/worker work.
+
 ## Present
 
 | Source | Current responsibility |
@@ -2916,7 +3008,7 @@ boundary check pass.
 | `event-loop.ts`, `tasks.ts` | Task records, source/queue associations, fully-active gating, deterministic turns, checkpoints, incumbent stack, timing hooks, and coalesced wake-ups |
 | `host-hooks.ts` | Native callback installation for TrustedScript extraction, rejection and exception reporting; custom-engine make/call hooks plus Promise, generic, and timeout job delivery |
 | [`../environment/global-scope.ts`](../environment/global-scope.ts), `timers.ts` | Higher-level global API composition; lower-level active-time waits and Window function timers |
-| `rendering-opportunity.ts` | Independent opportunity producer, Document render-blocking filter, and ordered rendering pipeline seams |
+| `rendering-opportunity.ts` | WindowRenderingController, Document render-blocking filter, and ordered rendering pipeline seams |
 | `speculation-rules.ts` | Parse-result creation and an empty-only rule-set record with an explicit parser boundary; Document owns registered sets and Window owns registration/removal/replacement |
 | [Structured data](structured-data/ROADMAP.md) | Graph serialization/deserialization, ArrayBuffer transfer, and the Window structuredClone API |
 
@@ -2958,7 +3050,7 @@ evaluation and automation do not acquire this gate automatically.
 | DOM checkpoint consumers | Custom-element reactions; MutationObserver and signal-slot delivery already use the existing checkpoint |
 | Task routing/lifecycle | Worker restrictions and complete loop teardown; element-task routing through the retained relevant global is implemented |
 | Global utilities/timers | Image APIs; worker-global inclusion/forwarding and suspension; handler timing; TrustedScript/CSP/classic-script string timers |
-| Rendering/idle | Idle API, callback delivery, timeouts, and cleanup are connected; AnimationFrameProvider and the production rendering/refresh host remain |
+| Rendering/idle | Idle and animation-frame APIs, callback state/delivery, and cleanup are connected; the production rendering/refresh host and automatic worker frames remain |
 | Workers/worklets | Real globals/settings, production callers of Agent allocation, execution readiness, termination, and engine enforcement |
 
 Secure-context/isolation exposure, origin, Base64, structured cloning, Fetch,
@@ -3019,7 +3111,7 @@ media, or parser caller is not by itself a reason to omit the scheduling operati
 | [Await a stable state](https://html.spec.whatwg.org/multipage/webappapis.html#await-a-stable-state) | Implemented on `env.awaitStableState()`, with shared-queue idle wake-ups and optional parallel continuation. | Image/media algorithms still need to supply their own synchronous sections and continuations; the scheduling operation itself is implemented. |
 | [Spin the event loop](https://html.spec.whatwg.org/multipage/webappapis.html#spin-the-event-loop) | Implemented on `EventLoop.spinUntil()`: suspend modeled state, checkpoint, register the wait, and resume on the original task source with saved state and metadata. | Callers must lower their remaining steps and cleanup into the continuation. The parser already has stylesheet/script continuations to migrate; complete preparation, readiness, nesting, and abort handling belong to its [script runner](../html/parser/ROADMAP.md). Arbitrary synchronous author calls are not resumable through this helper. |
 | [Pause](https://html.spec.whatwg.org/multipage/webappapis.html#pause) | `EventLoop.pauseUntil()` retains the task/stack, samples the current global's clock, and suppresses tasks/checkpoints throughout a caller-supplied synchronous wait. | Dialog and synchronous Fetch callers need real blocking host effects whose goals can progress without this thread's callbacks. A UI host must reflect pending state where necessary. [Record pause duration](https://w3c.github.io/long-animation-frames/#record-pause-duration) separately needs Document frame timing and a pending script entry; its call site is present. |
-| [Window idle periods](https://html.spec.whatwg.org/multipage/webappapis.html#idle-deadline-computation) | Implemented timestamps, idle branch, live 50ms/timer/render deadline, and per-Window coarsening. Window's idle API, callback lists, task delivery, timeout races, and cleanup are connected. | `WindowIdleRendering` still needs AnimationFrameProvider state and the production rendering/refresh host. Headless delivery uses the 50ms and timer bounds without a fake display rate; see the [idle-period slice](#html-8173-idle-period-processing) and [Request Idle Callback](#request-idle-callback-47). |
+| [Window idle periods](https://html.spec.whatwg.org/multipage/webappapis.html#idle-deadline-computation) | Implemented timestamps, idle branch, live 50ms/timer/render deadline, and per-Window coarsening. Window's idle API, callback lists, task delivery, timeout races, and cleanup are connected. | `WindowIdleRendering` still needs the production rendering/refresh host to connect Document callback state and pending-render predictions. Headless delivery uses the 50ms and timer bounds without a fake display rate; see the [idle-period slice](#html-8173-idle-period-processing) and [Request Idle Callback](#request-idle-callback-47). |
 | [Rendering](https://html.spec.whatwg.org/multipage/webappapis.html#update-the-rendering) | Document ordering and the ordered update pipeline are present. | The production refresh host and the owners of individual resize, scroll, animation, layout, paint, and observation steps remain absent; an ordered hook is not an implementation of its operation. |
 | Performance reporting | Task timing and long-task call sites are present. | [Long Tasks reporting](https://w3c.github.io/longtasks/#report-long-tasks) and Long Animation Frames task/script/frame records and algorithms are missing. |
 | Worker rendering/shutdown | Dedicated/shared globals and settings can be composed. `close()` discards queued tasks, loops reject new tasks, and the empty-loop tail destroys the loop after its final checkpoint, then runs the global's timer/port/owner cleanup. The outside `WorkerThread` can forcibly stop native execution and clear/disconnect a supplied dedicated outside port. | [Worker event-loop processing](https://html.spec.whatwg.org/multipage/webappapis.html#event-loop-processing-model) still needs automatic lifetime/suspension monitoring, supported dedicated-worker animation callbacks, and natural native teardown. Outside Worker association and the separate-isolate startup caller remain unfinished; see the [worker processing-model review](../workers/ROADMAP.md#document-order-review). |

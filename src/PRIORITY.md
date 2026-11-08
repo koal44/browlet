@@ -32,8 +32,9 @@ The DOM mutation, range, traversal, collection, shadow/slot and Trusted Types
 passes are recorded in their [owning roadmaps](browlet/dom/ROADMAP.md). The
 [HTML audit](browlet/html/ROADMAP.md) has reached §3.2.6.5, the style attribute,
 with referenced missing dependencies explicit. The next global attribute is
-§3.2.6.6, data-*. Style/loading work is paused while the
-[HTML §8 audit](browlet/scripting/ROADMAP.md#html-811812-audit) proceeds in order.
+§3.2.6.6, data-*. Style/loading work was paused for Vin's
+[HTML §8 audit](browlet/scripting/ROADMAP.md#chapter-8-status), which has now
+reached §8.12 with the recorded skips and owner dependencies still explicit.
 §§8.1.1–8.1.3.3 are reviewed. The
 [§8.1.3.3 experiment](browlet/scripting/ROADMAP.md#html-8133-explicit-context-experiment)
 now models execution contexts and global state in JavaScript. The next slice
@@ -231,12 +232,16 @@ UserAgent keyboard modifiers and DOM dispatch. HTMLElement.click() and keyboard
 activation still need HTML §6.5's caller policies; input producers retain their
 HTML, editing, and layout owners. Input Events Level 2 and trusted composition
 preparation are complete within their recorded scope; editing and IME sessions
-remain explicit dependencies. Vin's audit has returned to HTML §§8.2–8.3 with the
+remain explicit dependencies. Vin's Chapter 8 pass has reached its final section,
+§8.12; the [status map](browlet/scripting/ROADMAP.md#chapter-8-status) separates
+reviewed algorithms from deliberately deferred sections and host dependencies.
+HTML §§8.2–8.3 include the
 [global origin getter](browlet/scripting/ROADMAP.md#html-82-global-settings-origin)
 and [Base64 utility methods](browlet/scripting/ROADMAP.md#html-83-base64-utility-methods).
-Eric deferred §§8.4–8.6 (dynamic markup insertion, DOM parsing/serialization,
-and the timer audit) to Ged. §8.7's
-[microtask-queuing audit](browlet/scripting/ROADMAP.md#html-87-microtask-queuing)
+Eric deferred dynamic markup insertion, DOM parsing/serialization, and the timer
+audit to Ged: these are currently §§8.4, 8.5, and 8.7. §8.6 HTML sanitization
+remains separate unfinished work in its [roadmap](browlet/html/sanitization/ROADMAP.md).
+§8.8's [microtask-queuing audit](browlet/scripting/ROADMAP.md#html-88-microtask-queuing)
 uses the existing callback/checkpoint machinery and preserves the Window Document
 on queued microtasks. It needs no unfinished work from those deferred sections.
 The [user-prompts slice](browlet/scripting/ROADMAP.md#html-user-prompts-simple-dialogs)
@@ -264,9 +269,13 @@ bindings. §8.11.2's [ImageBitmap lifetime](graphics/ROADMAP.md#imagebitmap-life
 now supplies owned pixels, dimensions, close, origin-clean checks, cloning, and
 transfer. Internal ImageData/ImageBitmap preparation now supplies validation,
 independent crops, transparent padding, all four resize qualities, vertical flip,
-and unorm8/float16 alpha conversion. Next review the full source union for the
-author factory; source extraction, decoding, color conversion, and canvas
-consumers remain explicit dependencies.
+and unorm8/float16 alpha conversion. The internal async factory snapshots those
+sources or reads Blob bytes before bitmap-task delivery; source extraction,
+decoding, color conversion, and the full author-facing union remain explicitly
+deferred. §8.12's [animation-frame controllers](browlet/scripting/ROADMAP.md#html-812-animation-frames)
+now supply Window/dedicated-worker registration and cancellation, callback lifetime,
+and the existing Window rendering-phase connection. Refresh/display production
+and automatic worker frame delivery remain explicit dependencies.
 Source/deferred imports and the HTML Wasm parser remain explicit boundaries.
 Later host-hook algorithms must be connected before judging
 the complete model; the uncertain cross-realm observer test is skipped.

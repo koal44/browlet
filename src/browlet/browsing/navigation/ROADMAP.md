@@ -5107,7 +5107,7 @@ Explicit remaining dependencies:
   rendering suppression, geometry/capture, pseudo-elements/styles, animation,
   and ready settlement. Event listeners may skip or modify the transition;
   that state belongs to the future CSS implementation, not to HTML's caller.
-- WindowRenderingProducer already has the ordered `reveal` phase, but production
+- WindowRenderingController already has the ordered `reveal` phase, but production
   composition must connect it after the CSS prerequisite. Real rendering
   opportunities, visibility/suppression filters, layout/display, and cached-frame
   presentation remain with rendering. The provisional loader does not fire this

@@ -859,6 +859,8 @@ export type Function = (...arguments_: Array<any>) => any;
 
 export type VoidFunction = () => void;
 
+export type FrameRequestCallback = (time: number) => void;
+
 export type NavigationInterceptHandler = () => void | PromiseLike<void>;
 
 export type NavigationPrecommitHandler = (controller: NavigationPrecommitController) => void | PromiseLike<void>;
@@ -3276,6 +3278,8 @@ export interface DedicatedWorkerGlobalScope extends WorkerGlobalScope {
   postMessage(message: any, transfer: Iterable<object>): void;
   postMessage(message: any, options?: StructuredSerializeOptions): void;
   close(): void;
+  requestAnimationFrame(callback: FrameRequestCallback): number;
+  cancelAnimationFrame(handle: number): void;
   onmessage: EventHandlerNonNull | null;
   onmessageerror: EventHandlerNonNull | null;
   DOMException: DOMExceptionConstructor;
@@ -3548,6 +3552,8 @@ export interface Window extends EventTarget {
   requestIdleCallback(callback: IdleRequestCallback, options?: IdleRequestOptions): number;
   cancelIdleCallback(handle: number): void;
   getComputedStyle(elt: Element, pseudoElt?: string | null): CSSStyleProperties;
+  requestAnimationFrame(callback: FrameRequestCallback): number;
+  cancelAnimationFrame(handle: number): void;
   get origin(): string;
   set origin(value: unknown);
   readonly isSecureContext: boolean;

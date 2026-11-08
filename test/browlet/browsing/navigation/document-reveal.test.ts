@@ -6,7 +6,7 @@ import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import type { HTMLBodyElement, PageRevealEvent, Window } from '../../../../src/browlet/platform';
 import { ViewTransitionImpl } from '../../../../src/browlet/rendering/index';
 import { WindowAgent } from '../../../../src/browlet/scripting/agents';
-import { WindowRenderingProducer, type RenderingOpportunityHost } from '../../../../src/browlet/scripting/rendering-opportunity';
+import { WindowRenderingController, type RenderingOpportunityHost } from '../../../../src/browlet/scripting/rendering-opportunity';
 import { renderingTaskSource } from '../../../../src/browlet/scripting/tasks';
 import { monotonicClock, UnsafeMoment } from '../../../../src/timing/clock';
 import { createManualUserAgent } from '../../../support/browlet-agent';
@@ -112,25 +112,26 @@ describe('Document revelation', () => {
     });
     platform.onpagereveal = () => { order.push('event'); };
     const observe = vi.fn<RenderingOpportunityHost['observeRenderingOpportunities']>(() => () => {});
-    const producer = new WindowRenderingProducer(agent, {
+    const controller = new WindowRenderingController(agent, {
       hasRenderingOpportunity: (navigable) => navigable === top,
       observeRenderingOpportunities: observe,
       unsafeSharedCurrentTime: () => new UnsafeMoment(monotonicClock, 10),
     }, {
       // The production caller remains unconnected while CSS resolution is unfinished.
       reveal: ({ document }) => { document.reveal(); },
-      runAnimationFrameCallbacks: () => { order.push('raf'); },
     });
-    producer.start();
+    document.animationFrameController.request(() => { order.push('raf'); });
+    controller.start();
     try {
       observe.mock.calls[0]![0]([top]);
       await runInHostTask(() => { expect(loop.runTaskTurn()).toBe(true); });
       expect(order).toEqual(['event', 'activate', 'ready', 'raf']);
+      document.animationFrameController.request(() => { order.push('raf'); });
       observe.mock.calls[0]![0]([top]);
       await runInHostTask(() => { expect(loop.runTaskTurn()).toBe(true); });
       expect(order).toEqual(['event', 'activate', 'ready', 'raf', 'raf']);
     } finally {
-      producer.stop();
+      controller.stop();
     }
   });
 

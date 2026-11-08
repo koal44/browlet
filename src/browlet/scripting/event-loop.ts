@@ -596,6 +596,10 @@ export class EventLoop {
   // https://html.spec.whatwg.org/multipage/webappapis.html#event-loop-processing-model
   #finishWorkerTurn(): void {
     if (this.#destroyed || this.#microtaskCheckpointRequested) return;
+    // TODO(HTML §8.1.7.3): A worker rendering-opportunity producer must check the
+    // dedicated global's isAnimationFrameProviderSupported(), pass its current
+    // high-resolution time to animationFrameController.runCallbacks(), then update
+    // worker rendering. Display/OffscreenCanvas production is not connected here.
     const global = this.#getWorkerReadyToFinish();
     if (global === null) return;
     this.#destroyed = true;
