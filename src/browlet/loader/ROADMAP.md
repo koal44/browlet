@@ -27,10 +27,12 @@ See the [integration review](../browsing/policy/permissions-policy/ROADMAP.md#10
 
 The javascript: string-result path now calls `Navigable.loadHTMLDocument(params)`
 with a synthetic UTF-8 response, inherited policy, null request/controller/reserved
-environment, and the original target snapshot's iframe policy. That call explicitly
-throws until the loader supplies response-reader setup and parser-script preparation;
-the existing path with a supplied reader and callback still works. Audit
-scripts-may-run gating before connecting it. Document creation now preserves final
+environment, and the original target snapshot's iframe policy. The loader now
+creates its reader when no prepared reader was supplied; script-free replacements
+load and activate through the existing history machinery. Script encounters still
+throw at the explicit §4.12.1 preparation dependency after scripts-may-run permission.
+The existing supplied callback remains available for controlled integration.
+Document creation preserves final
 synthetic params' null reservation and inherited policy; an Origin-Agent-Cluster
 request with no reservation uses the shared incoming-Window security calculation.
 The [OAC audit](../browsing/navigation/ROADMAP.md#oac-without-a-reservation) records
@@ -51,18 +53,20 @@ Actual preload, preconnect, and modulepreload header operations still throw at
 their named owners in `links/`. See [Link preparation](#link-header-preparation).
 
 History population now calls `Navigable.loadDocument(params, sourceSnapshotParams,
-initiatorOrigin)` for an admitted ordinary response and saves its nullable result,
-origin, and history-required policy. This general entry point explicitly throws
-until §7.4.5's MIME/handler dispatch is implemented. It must reuse ResourceReader's
-computed type and retained bytes, select the §7.5 loader or external handler, and
-preserve synthetic reservations/policy. Null initiators from openerless initial
+initiatorOrigin, resource)` for an admitted ordinary response and saves its nullable
+result, origin, and history-required policy. MIME/handler dispatch reuses
+ResourceReader's computed type and retained bytes, selects the §7.5 loader or
+external handler, and preserves synthetic reservations/policy. HTML is connected;
+the other loaders and external handoff retain their explicit dependencies.
+Null initiators from openerless initial
 about:blank history or the provisional local loader, and synthetic
 history-referrer persistence remain separate specification gaps; see the
 [population handoff audit](../browsing/navigation/ROADMAP.md#document-loading-handoff-and-retained-history-state).
 
-`SPEC_CLASH(javascript-about-blank-body)` also remains unresolved at that boundary:
+`SPEC_CLASH(javascript-about-blank-body)` is resolved in favor of browsers:
 HTML's blanket about:blank loader branch skips response parsing, while all three
-browsers parse a javascript: replacement body at that URL. The
+browsers parse a javascript: replacement body at that URL. A null request with
+a supplied body takes the parser path, including an empty string result. The
 [navigation audit](../browsing/navigation/ROADMAP.md#string-result-response-and-replacement-history)
 records the probe, approved UTF-8/referrer choices, and remaining history finalization.
 
@@ -195,9 +199,10 @@ below is unchanged.
 **Implemented bounded consumer:**
 [`Navigable.loadHTMLDocument()`](../browsing/navigation/navigable.ts) creates the
 Document synchronously, including `about:blank`, and coordinates streamed
-parsing through ResourceReader and HTMLDocumentParser. Callers supply the reader
-already used for MIME determination and handler selection; the HTML handler
-does not construct a fresh reader. The about:blank path consumes no bytes.
+parsing through ResourceReader and HTMLDocumentParser. Ordinary navigation supplies
+the reader already used for MIME determination and handler selection; direct
+supplied-response loading creates one. The parser reuses an existing MIME result
+and retained prefix. Only the ordinary empty about:blank path consumes no bytes.
 `HTMLDocumentParser.parseBytes()` implements BOM/transport decoding with a UTF-8
 fallback; `abort()` cancels input and pending continuations. Encoding sniffing,
 byte retention for restart, and parser lifecycle remain in the
@@ -220,8 +225,8 @@ CSSOM stylesheet Link relations have a separate
 header order, and feed the parsed document's cascade. Script/load blockers remain
 with the [resource-lifecycle review](../style/ROADMAP.md#external-stylesheet-loading),
 including FetchGroup.cancel's unfinished document-abort behavior. Navigation timing retains live Fetch/body/Document
-records, pending public Performance entries. The extra ScriptHandler parameter
-is still a callable-shape review point until script preparation has an owner.
+records and publishes public Performance entries. The reviewed optional
+ScriptHandler remains provisional until script preparation has an owner.
 
 The real network regressions use Windows-1252 with a supplied type and UTF-8
 with no supplied type. They determine the MIME type before passing the same
@@ -359,11 +364,13 @@ not Browlet's chosen byte limit or deadline.
 
 UserAgent's support predicate still returns false provisionally; installed
 decoder/viewer capabilities must determine the support Browlet claims. History
-population now determines MIME after response admission, then queues synchronous
+population now determines MIME after response admission, then queues
 `Navigable.loadDocument()` dispatch with the same ResourceReader. Its `mimeType`
 getter requires completed determination. Loader and external-handoff inputs retain
 that reader, including the sniffed prefix and any pending read. HTML's production
-script setup and the XML, text, multipart, media, and inline handlers remain §7.5 work.
+script setup and the XML/inline handlers remain unfinished. The HTML, text,
+multipart, and media orchestration passes are recorded below, including their
+parser, lifecycle, and element-loading dependencies.
 Configured type choices and unsupported-resource host policy belong to UserAgent.
 Context-specific sniffers remain in MIME for their eventual element consumers. Reading a header
 does not implement HTML encoding restart or retain the entire response for replay.
@@ -590,8 +597,7 @@ activation through the existing event loop.
 The §7.5.1 pass is now through its return: step 21 already invokes the deferred
 Fetch quota owner, and its existing dedicated tests remain part of validation.
 This completes the algorithm audit, not all of its referenced subsystems.
-Next document-order work is the full §7.5.2 HTML-loading algorithm and its
-parser/encoding handoffs; take connected behavior as one reviewable slice.
+The following §7.5.2 audit covers the connected loader/parser handoffs.
 
 Validation: 23 header-loader cases cover selection, URL snapshots, MIME/status,
 body failure, UTF-8, redirects, parse errors, real CORS/cookies/CSP, incoming
@@ -603,6 +609,201 @@ pass on Node 24.19.0, 26.8.1, and custom 27.0.0-pre with stock/matching addons:
 and the same three existing Window identity/prototype expected failures on stock.
 Typecheck/generated declarations, declaration contracts, changed-file ESLint,
 import boundaries, and diff whitespace checks pass. No native code changed.
+
+## HTML document loading
+
+The §7.5.2 flow now handles ordinary and directly supplied responses without a
+mandatory script callback. It creates the Document synchronously, reuses the
+MIME dispatch reader or creates one for a supplied response, and associates an
+HTML parser. Input, first-input media Link processing, EOF, and completion retain
+their Document-owned networking tasks. Encoding still uses the real Content-Type
+metadata plus BOM, never the sniffed MIME type's charset. The existing
+`allowDeclarativeShadowRoots` flag is retained, but templates/shadow attachment
+still reach the parser adapter's explicit missing implementation.
+
+The parser selects `noscript` handling from the Document's scripting policy and
+does not invoke script handlers when that policy disables scripting. Enabled
+scripts wait for the existing history-initialization gate. Without a supplied
+handler, their §4.12.1/§13.2 preparation boundary throws; it does not silently use
+the source-route evaluator. Internal implementation failures are rethrown on the
+Document's task after abortion; ordinary body failures abort without a load event.
+
+Empty ordinary about:blank Documents get html/head/body synchronously and queue
+the existing completion handoff after activation. There is no parser EOF on that
+branch. This uses the provisional `Document.finishLoading()` lifecycle and does
+not complete §13.2's stop-parsing/deferred-script/load-delay work.
+
+Browser probe `node-compat/experimental/html-document-loading.mjs` verifies
+Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2. Eric approved both choices:
+
+- `SPEC_CLASH(javascript-about-blank-body)`: parse supplied HTML at about:blank,
+  matching all three engines rather than HTML's unconditional empty branch.
+  Existing null-request provenance distinguishes supplied bodies from ordinary
+  Fetch (whose about:blank response also has a body). An empty supplied string
+  still takes the parser path; a nonempty standards-mode result keeps its doctype.
+- `SPEC_CLASH(loaded-about-blank-quirks)`: all three engines put an ordinary
+  non-initial empty about:blank in quirks mode; HTML's population branch omits
+  that assignment. Browlet now sets it, as its initial Document already does.
+
+Sources: [HTML loading](https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-html),
+[Blink DocumentLoader](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/loader/document_loader.cc)
+(`loading_url_as_empty_document_` excludes static data), and
+[WebKit DocumentWriter](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/loader/DocumentWriter.cpp)
+(`replaceDocumentWithResultOfExecutingJavascriptURL` feeds the supplied source).
+
+Remaining dependencies: §4.12.1 script preparation/type/fetch/execution; §13.2
+encoding prescan, confidence and restart; template/foster-parenting tree adapter
+hooks and declarative shadow-root attachment; full stop-parsing and abort
+coordination; iframe completion; and Document-wide FetchGroup cancellation.
+These owners remain explicit. The subsequent XML and text boundaries are recorded below.
+
+Validation: seven focused suites pass on Node 24.19.0, 26.8.1, and custom
+27.0.0-pre with stock and matching addons. Each addon run has 153 passing cases
+and the existing script data-block expected failure; stock has 150 passing cases
+and that failure plus the same three Window expected failures. New coverage
+observed the blanket-loader and disabled-noscript failures before the fix.
+Typecheck/generated declarations, declaration contracts, changed-file ESLint,
+import boundaries, and diff whitespace checks pass. No native code changed.
+
+## XML loading: deferred parser dependency
+
+HTML §7.5.3 remains an explicit throwing `Navigable.loadXMLDocument()` boundary.
+Eric deferred XML parsing until the planned XML/Namespaces specification work;
+this pass adds neither saxes nor another XML parser dependency. The future loader
+must create the XML Document, apply RFC 7303 encoding, build namespace-aware DOM,
+process media Link headers after first input, respect the scripts-may-run gate,
+clear the during-loading navigation ID at EOF, and connect completion, abortion,
+and XML error reporting. These are required integration work, not a claim that
+creating an empty XML Document implements the loader.
+
+## Text document loading
+
+The HTML §7.5.4 orchestration now creates an HTML Document with the computed MIME
+essence and a locked no-quirks mode. The existing HTML parser receives synthetic
+pre/newline tokens before switching to PLAINTEXT. Synthetic tokens preserve
+response source locations; the consumed newline preserves any real leading LF.
+Markup, doctypes, character references, and script-looking text stay literal.
+HTML input preprocessing still normalizes CR/CRLF and replaces null characters.
+
+The same prepared ResourceReader retains sniffed bytes. Decoding, media Link
+processing after first input, EOF, and the existing `Document.finishLoading()`
+handoff use the incoming Document's networking tasks. Abortion cancels this reader
+and suppresses completion; body failures also abort. This loader supplies no
+optional user-agent head content or scripts, so no script can arise from its
+plaintext input. RFC 3676 Format=Flowed styling is optional and is not implemented.
+
+The first streaming regressions found that parse5 batches the final character
+run across writes, leaving partial text invisible until another token or EOF.
+`TextDocumentTokenizer` overrides its protected hibernation hook solely to flush
+that run before waiting for input. It retains parse5's tokenizer/preprocessor and
+does not supply a replacement parser. Recheck that hook when upgrading parse5.
+The delay also reproduces in unmodified ParserStream without Browlet. Upstream
+[issue #130](https://github.com/inikulin/parse5/issues/130) discusses flushing at
+hibernation and the performance tradeoff; its closing change reclaimed consumed
+input rather than promising a DOM flush after every write. The SAX EOF fix in
+[issue #271](https://github.com/inikulin/parse5/issues/271) is separate. This adapter
+addresses live text-document visibility; broader HTML streaming behavior remains
+part of the parser audit, and the flush overhead has not been benchmarked.
+The strict tests now cover input split at every byte, BOM/transport selection,
+newline/null handling, source positions, partial visibility, cancellation, load
+events, and a real Fetch response with Navigation Timing completion.
+
+`SPEC_CLASH(empty-text-document-pre)`: HTML and Firefox create an empty pre even
+for an empty response. Chromium/WebKit defer creation until data arrives and
+omit it when the response stays empty. Eric approved HTML/Firefox's immediate
+structure. The browser-only probe `node-compat/experimental/text-document-loading.mjs`
+checked Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2. All agree on literal
+text, leading LF, null replacement, transport charset, BOM precedence, and text
+visibility before EOF. No optional browser viewer styling is copied.
+
+Sources: [HTML text loading](https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-text),
+[Blink TextDocumentParser](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/html/parser/text_document_parser.cc),
+and [WebKit TextDocumentParser](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/html/parser/TextDocumentParser.cpp).
+Both browser parsers synthesize tokens and disable the pre newline skip; their
+lazy creation accounts for the empty-input difference.
+
+Remaining dependencies: full byte-encoding selection is still provisional
+(BOM, transport label, otherwise UTF-8), as in the HTML adapter. The probe's
+unlabeled empty text response reports windows-1252 in all three browsers; this
+slice does not establish that as a universal fallback. §7.5.4's final paragraph
+also delegates decoding/presentation to each computed MIME type's specification:
+text/plain defaults, CSS encoding rules, JavaScript source decoding, JSON's UTF-8
+requirements, and WebVTT decoding still need their explicit policy integration.
+The loader TODO retains that dependency rather than treating generic HTML
+fallback as the finished answer. Full stop-parsing/load-delay/deferred-script
+coordination, iframe completion, and Document-wide FetchGroup cancellation also
+remain with their existing owners. XML parsing stays deferred as above.
+The next document-order section is §7.5.5, multipart/x-mixed-replace.
+
+Validation: eight focused loader/parser/navigation suites pass across Node
+24.19.0, 26.8.1, and custom 27.0.0-pre with stock and matching addons. Each addon
+run has 178 passing cases; stock has 175 passing cases and the same three existing
+Window expected failures. The new text suite has 19 passing cases. Typecheck and
+generated declarations, declaration contracts, changed-file ESLint, import
+boundaries, and diff whitespace checks pass. No native code or dependencies changed.
+
+## HTML §7.5.6: media Document construction
+
+`Navigable.loadMediaDocument()` now creates and initializes the HTML Document,
+sets no-quirks mode, populates html/head/body, and appends the specified img,
+audio, or video element with its Document URL in src. It adds no optional
+user-agent script, style, title, or autoplay policy. The existing callable shape
+continues to take the parsed MIME type and prepared ResourceReader; sniffed bytes
+are handed to the element rather than lost or fetched again.
+
+`HTMLImageElementImpl.loadDocumentResource()` and
+`HTMLMediaElementImpl.loadDocumentResource()` are explicit throwing dependencies.
+Their eventual implementations must adopt that response, establish load-event
+delays, and connect decoding, element state/events, output, and cancellation.
+HTML §§4.8.4 and 4.8.11 own that work. The generic application/ogg type does not
+identify the appropriate element; it stops before Document construction until
+track inspection exists. `UserAgent.supportsMIMEType()` still returns false;
+this slice does not claim image or audio/video support.
+
+After the element accepts the response, the loader processes media Link headers
+and waits for `scripts may run` before queueing provisional `finishLoading()` on
+the Document's networking task source. This prevents completion callbacks before
+history activation and lets destruction discard the queued task. The full
+stop-parsing algorithm remains unfinished: readiness milestones, deferred scripts,
+media load-event delays, separate DOM tasks, and initial pageshow/BiDi delivery
+must replace that provisional finish path. Decoder completion is not represented
+by the resource-adoption method returning.
+
+Eric approved `SPEC_CLASH(media-document-host-element)`: retain HTML's element
+table and direct src attribute. Chromium, Firefox, and WebKit use video even for
+audio Documents. Chromium places the URL on a source child; Firefox hands the
+retained channel to video without a src attribute; WebKit sets video.src.
+The local HTTP probe used redirected PNG, WAV, and Ogg resources. All three
+engines produced no-quirks image Documents with the final URL in img.src.
+Chromium rendered both audio resources, Firefox rendered Ogg and downloaded WAV,
+and WebKit rendered WAV and downloaded Ogg. WebKit omitted head for its WAV
+Document; Browlet retains the head required by HTML's population step.
+
+Evidence: [`media-document.mjs`](../../../node-compat/experimental/media-document.mjs)
+and [`MEDIA-DOCUMENT.md`](../../../node-compat/experimental/MEDIA-DOCUMENT.md),
+Chromium 156.0.8078.4, Firefox 157.0, WebKit 27.2 (2026-11-06).
+Source references: [HTML §7.5.6](https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-media),
+[Blink MediaDocument](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/html/media/media_document.cc),
+[Gecko VideoDocument](https://searchfox.org/mozilla-central/source/dom/html/VideoDocument.cpp),
+[WebKit MediaDocument](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/html/MediaDocument.cpp).
+
+The focused tests use real Document/element construction, bindings, sniffing,
+reader state, history activation, and task delivery. They control only the
+unfinished element resource-adoption operation and the support predicate; the
+uncontrolled paths assert the named dependency. Coverage includes all three host
+types, final URLs, reader identity and retained bytes, Link phase ordering,
+activation gating, and destruction before completion. The manual-loop tests
+advance their own microtask queues; a separate automatic-loop regression requires
+completion without an explicit checkpoint on every runtime.
+
+Validation (2026-11-06): all 236 tests in the seven affected media/text/HTML/
+multipart, dispatch, creation, and history-population suites pass on Node
+24.19.0, 26.8.1, and custom 27.0.0-pre, in stock and matching-addon modes.
+There are no expected failures or skips in that sweep. Typecheck/generated
+declarations, declaration contracts, changed-file ESLint, import boundaries,
+and diff whitespace checks pass. This slice changes no addon or engine code.
+
+The next document-order section is §7.5.7, inline content without a DOM.
 
 ## Removal condition
 

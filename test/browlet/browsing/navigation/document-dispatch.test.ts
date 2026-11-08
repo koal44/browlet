@@ -146,11 +146,9 @@ describe('navigation Document dispatch', () => {
   });
 
   it.each([
-    ['text/html', 'HTML document loading requires response-reader setup and parser script preparation'],
     ['application/xml', 'XML document loading is not implemented'],
-    ['text/plain', 'Text document loading is not implemented'],
     ['multipart/x-mixed-replace', 'Multipart document loading is not implemented'],
-    ['image/png', 'Media document loading is not implemented'],
+    ['image/png', 'Image document resource loading is not implemented'],
   ] as const)('keeps the actual loader explicit for %s', async (contentType, message) => {
     const { userAgent, resource, dispatch } = fixture(contentType);
     await resource.determineMIMEType();

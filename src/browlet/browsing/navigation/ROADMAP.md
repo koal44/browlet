@@ -52,8 +52,9 @@ outside consumers use its index, while its modules import each other directly.
   Window/realm, and creates the destination document and history entry.
   Population prepares MIME and dispatches its admitted response through
   `loadDocument()`, retaining one reader across sniffing and consumption.
-  `loadHTMLDocument()` starts HTML parsing with a supplied reader/script callback
-  and coordinates completion or abortion; production setup remains explicit.
+  `loadHTMLDocument()` reuses the supplied reader or creates one for synthetic
+  responses, and coordinates parsing/completion/abortion. Script preparation
+  remains explicit at actual script encounters; script-free responses load.
   Its bounded cross-document commit activates the entry; `Traversable` applies
   the history step and clears forward entries.
 - `state/session-history.ts` models entries and nested histories for the active
@@ -2279,7 +2280,7 @@ string-result replacement or the earlier unfinished navigation callers:
 | [CSP navigation request check](https://w3c.github.io/webappsec-csp/#should-block-navigation-request) | Implemented and connected through the captured policy container and source client. Pre-navigation directives run before inline checks, both dispositions report, and the default Trusted Types policy may rewrite the request URL. Fetch request checks remain a different algorithm. Ordinary Fetch navigation invokes the navigation check before dispatch and before each HTTP(S) redirect, using the pending target rather than the previous request URL. |
 | Evaluate a javascript: URL | `Navigable.evaluateJavaScriptURL()` serializes, strips the scheme, percent-decodes, UTF-8-decodes, creates/runs ClassicScript with default fetch options, and returns null for abrupt or non-string completions. It selects the live target Document's environment/API base URL after CSP callbacks and retains the runner's reporting/cleanup and scripting policy. Primitive strings now assemble replacement inputs and reach the explicit HTML-loading dependency. |
 | Initial insertion without a replacement Document | Implemented selection after author callbacks: re-read the container and active Document, then fire load for an initial about:blank non-iframe child. Iframes call `HTMLIFrameElementImpl.runLoadEventSteps()`, an explicit throwing dependency for mute/load-in-progress flags, resource timing, and post-handler Permissions Policy reporting. Actual element insertion/loading and document.open() must supply that lifecycle state. A removed container receives no event. |
-| String-result response and HTML loading | Implemented response/parameter assembly: UTF-8 bytes, text/html, live active Document URL/policy/COOP/about-base/cookie URL, CSP-derived sandbox flags, supplied origin/ID/involvement, and captured iframe policy. The one-argument loader call explicitly throws until response-reader setup, parser-script preparation, and creation/activation integration are supplied. Its existing supplied-reader/script-callback path remains usable. |
+| String-result response and HTML loading | Implemented response/parameter assembly: UTF-8 bytes, text/html, live active Document URL/policy/COOP/about-base/cookie URL, CSP-derived sandbox flags, supplied origin/ID/involvement, and captured iframe policy. The §7.5.2 loader now consumes supplied responses, including about:blank bodies. Script-free replacement loads and activates; enabled script encounters retain the explicit preparation dependency. |
 | Replacement history | Implemented after the loader returns: retain the live old entry URL and policy/referrer/name/about-base state, clone the history policy container when present, set origin/initiator origin and ever-populated, and append traversal work to finalize replacement. Fresh state clears the old resource/child histories and initializes fresh API state. Full finalization/history application still has its documented dependencies; tests supply the missing loader result and observe queued finalizer arguments. |
 
 `SPEC_GAP(javascript-navigation-target-snapshot)`: the evaluation algorithm's
@@ -2374,14 +2375,12 @@ destination's retained history, including child lists. Its history application
 still needs unloading, other affected Documents' updates, cached-Document
 reactivation, and lifecycle/event delivery.
 
-The real loader call still throws before Document creation. Its earlier
-`ScriptHandler`/`ResourceReader` parameters are now optional so the specified call
-can reach that explicit boundary; supplying both retains the reviewed byte-loader arrangement. Completion
-requires selecting/reusing the response reader, parser-script preparation and
-scripts-may-run gating, and auditing creation with a null reserved environment.
-The current provisional response preparer would otherwise manufacture one and
-reprocess inherited policy. These are loader/document-creation dependencies, not
-successful replacement behavior hidden behind test substitutes.
+The follow-up §7.5.2 loader now accepts this one-argument call and constructs a
+reader for the supplied response. Null reservations and inherited policy survive
+Document creation, and script-free replacement loads and activates without a
+substituted loader. Enabled script encounters still wait for scripts-may-run and
+then reach the explicit preparation dependency. The reviewed optional
+`ScriptHandler`/`ResourceReader` seam remains available for controlled consumers.
 
 Browser-only probe: `node-compat/experimental/javascript-navigation-replacement.mjs`,
 Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2. It retains an iframe from its
@@ -2405,8 +2404,9 @@ and inspects the replaced Document, referrer, ancestry, character set, and body.
   cannot distinguish when HTML's missing target snapshot should be captured.
 - `SPEC_CLASH(javascript-about-blank-body)`: all three parse the replacement body
   when the old URL is about:blank. HTML's general loader instead takes a blanket
-  empty-about:blank branch. The source marks this unresolved choice at the loader
-  boundary; this slice does not enable that incorrect path for synthetic responses.
+  empty-about:blank branch. Eric approved following the browsers in §7.5.2:
+  supplied bodies with a null request use the parser, including empty strings.
+  Ordinary empty about:blank population remains synchronous.
 
 Browser source also checks lifetime changes during script/unload in ways this
 algorithm does not fully describe: Blink checks frame survival and a newly started
@@ -2511,8 +2511,9 @@ this selection. Typechecking, touched-file ESLint, import hierarchy, and
 whitespace checks pass. No engine changes or addon rebuilds were needed.
 
 The §7.4.2.3.1 finalization audit follows below.
-The explicit §7.5.2 loader and §7.4.6 history-application dependencies above
-remain necessary before javascript: replacement can complete end to end.
+The later §7.5.2 slice now verifies script-free javascript: replacement through
+the real loader and activation. Script, parser lifecycle, and remaining history
+application dependencies retain their named owners.
 
 ## Navigation ownership and local response preparation
 
@@ -3959,11 +3960,11 @@ referenced §7.5 loaders or the remaining dependencies recorded throughout this 
 | --- | --- |
 | Computed type | After response admission, ResourceReader determines MIME using the existing bounded sniffing algorithm. Population resumes on the captured Window's navigation-and-traversal task and rechecks its navigation ID. Supersession cancels the reader and completes without a Document. A read failure returns to the same task as a failure, not a fabricated successful load. |
 | Configured handling | UserAgent.documentTypeHandlers maps MIME essences to inline/external choices, initially empty. External configuration bypasses built-in dispatch. An entry also marks an XML/JSON type explicitly supported, exempting it from generic XML/text loading. No plugin or external application is implicitly registered. |
-| HTML | Call the existing loadHTMLDocument with the prepared reader. Production parser-script setup still throws; the earlier supplied-script byte-loader tests continue to run. |
+| HTML | Call loadHTMLDocument with the prepared reader. Script-free response loading works; enabled script encounters throw at §4.12.1 preparation unless the controlled integration supplies a handler. |
 | XML | Non-special XML calls loadXMLDocument with the parsed MIME type and reader. XML parser/DOM integration, original-header encoding, Link processing, scripts-may-run, completion, and diagnostics belong to §7.5.3. |
-| Text | JavaScript, non-special JSON, text/css, text/plain, and text/vtt call loadTextDocument. The §7.5.4 owner must create the no-quirks pre/PLAINTEXT presentation, decode, process Link headers, gate scripts, and finish on networking tasks. |
+| Text | JavaScript, non-special JSON, text/css, text/plain, and text/vtt call loadTextDocument. The §7.5.4 orchestration creates the locked no-quirks pre/PLAINTEXT presentation, uses provisional BOM/transport decoding, processes media Link headers, and finishes on networking tasks. Full MIME-specific encoding and parser completion remain explicit. |
 | Multipart | multipart/x-mixed-replace calls loadMultipartDocument with params, source snapshot, initiator, and reader. MIME-part parsing, first-part dispatch, later replacement navigations and per-part completion remain §7.5.5 work. |
-| Media | Image/audio/video types require UserAgent.supportsMIMEType before loadMediaDocument. The existing predicate claims no media support until installed decoder capabilities are composed. Element/presentation creation, resource consumption, Link processing, and completion remain §7.5.6 work. |
+| Media | Image/audio/video types require UserAgent.supportsMIMEType before loadMediaDocument. §7.5.6 now constructs the HTML tree and host element, hands the reader to its element owner, processes media Links, and gates provisional completion. Element resource adoption/decoding, load-event delays, and application/ogg track selection remain explicit; the support predicate still claims no media support. |
 | PDF | Both application/pdf and text/pdf require UserAgent.pdfViewerSupported. It is false because no viewer exists. When enabled, dispatch selects the inline-content owner with the prepared reader. Navigator's §8.10.1.6 compatibility exposure must share this decision. |
 | Other inline content | A configured inline choice selects createDocumentForInlineContent. Otherwise shouldDisplayUnsupportedResourceInline is an explicit throwing UserAgent dependency for native/error presentation versus external delivery; no default download/error policy is invented. |
 | External content | Use the existing sandbox gate with the response, destination, final flags, captured activation, initiator, and prepared reader; return null. The host must consume that reader rather than reopen its locked body. Confirmation/delivery/downloads still throw. A null initiator stops at the retained attribution gap rather than inventing authority. |
@@ -5855,10 +5856,49 @@ an approved expected failure; it is not replaced by a speculation-only abort
 mechanism. Scheduling, activation, queued-task destruction, actual Fetch/CORS,
 and response handoff are covered independently of that limitation.
 
-The next document-order boundary is §7.5.2, loading HTML documents. Audit its
-complete loader/parser flow as a coherent slice, rather than one numbered step
-per check-in. Existing source-route and parser/encoding dependencies remain
-visible until their actual owners are implemented.
+The subsequent §7.5.2 pass covers the complete loader/parser flow as a coherent
+slice, with the referenced subsystems still explicit below.
+
+## HTML §7.5.2: loading HTML documents
+
+Ordinary MIME dispatch now reaches the HTML parser without an injected script
+handler. Directly supplied responses create a ResourceReader; prepared readers
+retain their sniffed prefix. Empty ordinary about:blank population is synchronous,
+with quirks mode and a queued completion handoff. Supplied about:blank HTML is
+parsed, matching the approved browser behavior. The parser uses the Document's
+scripting policy for noscript and handler execution; history still gates enabled
+scripts. Input, media Link processing, and EOF retain networking-task ownership.
+
+The [loader audit](../../loader/ROADMAP.md#html-document-loading) records the two
+approved clashes and browser evidence. Real HTTP regressions now use MIME dispatch,
+and script-free javascript: replacement is tested through actual loading and
+activation, both from an existing page and from initial about:blank. Missing
+script/template implementations surface after aborting instead of disappearing
+into an ordinary network failure.
+
+This completes the §7.5.2 orchestration pass, not §4.12.1 scripts or §13.2 parsing:
+encoding prescan/restart, templates/declarative shadow attachment/foster parenting,
+parser stop/deferred-script/load coordination, iframe completion, and shared Fetch
+cancellation remain explicit. The XML/text follow-up is recorded below.
+
+## HTML §§7.5.3–7.5.4: deferred XML and text loading
+
+Eric explicitly deferred XML parser construction to the later parsing-spec work.
+`loadXMLDocument()` continues to throw and now inventories its XML/Namespaces/
+RFC 7303 decoding, first-input Link, script gate, EOF, error, and lifecycle owners.
+No XML parser package was added.
+
+`loadTextDocument()` now creates the HTML Document with its computed MIME type,
+sets the parser-cannot-change-mode flag and no-quirks mode, and uses the existing
+HTML parser's plaintext path. It preserves leading newlines and literal markup,
+flushes partial text before EOF, reuses the sniffed reader, and coordinates Link
+processing and completion on Document networking tasks. Empty responses retain
+their pre under the approved `SPEC_CLASH(empty-text-document-pre)` choice.
+See the [loader audit](../../loader/ROADMAP.md#text-document-loading) for browser
+evidence, the narrow parse5 flushing adapter, regression coverage, and the
+remaining MIME-specific decoding/full-parser lifecycle dependencies.
+
+Next is §7.5.5, loading multipart/x-mixed-replace documents.
 
 ## Removal condition
 

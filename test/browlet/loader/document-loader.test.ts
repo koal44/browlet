@@ -4,8 +4,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { internalType } from '../../../src/infra/promises';
 import { Browlet } from '../../../src/browlet/browlet';
 import { getRelevantRealm } from '../../support/browlet-binding';
+import { createManualUserAgent } from '../../support/browlet-agent';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import { ResourceReader } from '../../../src/browlet/loader/resource-reader';
 import { LinkProcessingOptions } from '../../../src/browlet/loader/links/options';
+import { SourceSnapshotParams } from '../../../src/browlet/browsing/navigation/state/index';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import type { PerformanceEntry, PerformanceNavigationTiming, Window } from '../../../src/browlet/platform';
 import { fetch } from '../../../src/fetch/fetch';
@@ -26,12 +29,122 @@ describe('Navigable HTML response loading', () => {
     const env = getRelevantRealm(browlet.window).env;
     const navigable = env.realm.getAssociatedDocument().getNodeNavigable()!;
     const params = navigable.createNavigationParamsFromSource(env.parseURL('about:blank')!);
-    const resource = new ResourceReader(params.response, env.userAgent);
     // about:blank is populated directly and never consumes response bytes.
-    const document = navigable.loadHTMLDocument(params, () => {}, resource);
+    const document = navigable.loadHTMLDocument(params);
     expect(document.documentElement?.localName).toBe('html');
     expect(document.head?.localName).toBe('head');
     expect(document.body?.localName).toBe('body');
+    expect(document.compatMode).toBe('BackCompat');
+    expect(document.parser).toBeNull();
+  });
+
+  it('finishes an ordinary about:blank load after activation without reading its empty Fetch body', async () => {
+    const browser = new Browlet({ route: () => '' });
+    const env = getRelevantRealm(browser.window).env;
+    const navigable = env.realm.getAssociatedDocument().getNodeNavigable()!;
+    const params = navigable.createNavigationParamsFromSource(env.parseURL('about:blank')!);
+    params.request = new FetchRequest(params.url, env);
+    params.request.referrer = null;
+    params.response.body = FetchBody.fromBytes(new Uint8Array(), env.userAgent.sandbox);
+    const resource = new ResourceReader(params.response, env.userAgent);
+    const read = vi.spyOn(resource, 'read');
+    const document = navigable.loadHTMLDocument(params, undefined, resource);
+    expect(document.body).not.toBeNull();
+    expect(document.readyState).toBe('loading');
+    expect(document.compatMode).toBe('BackCompat');
+    navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
+    await expect.poll(() => document.readyState).toBe('complete');
+    expect(read).not.toHaveBeenCalled();
+    expect(document.parser).toBeNull();
+  });
+
+  it.each(['', '<!doctype html><p>replacement</p>'])('parses supplied about:blank HTML, including an empty body (%j)', async (markup) => {
+    const browser = new Browlet({ route: () => '' });
+    const env = getRelevantRealm(browser.window).env;
+    const navigable = env.realm.getAssociatedDocument().getNodeNavigable()!;
+    const params = navigable.createNavigationParamsFromSource(env.parseURL('about:blank')!);
+    params.response.body = FetchBody.fromBytes(utf8Encode(markup), env.userAgent.sandbox);
+    const document = navigable.loadHTMLDocument(params);
+    expect(document.body).toBeNull();
+    expect(document.activeParser?.kind).toBe('html');
+    navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
+    await expect.poll(() => document.readyState).toBe('complete');
+    expect(document.body?.textContent).toBe(markup === '' ? '' : 'replacement');
+    expect(document.compatMode).toBe(markup === '' ? 'BackCompat' : 'CSS1Compat');
+    expect(document.URL).toBe('about:blank');
+    expect(document.referrer).toBe('');
+    expect(document.encoding).toBe('UTF-8');
+    expect(document.parser).toBeNull();
+  });
+
+  it('loads script-free HTML through MIME dispatch without a supplied script handler', async () => {
+    const browser = new Browlet({ route: () => '' });
+    const env = getRelevantRealm(browser.window).env;
+    const navigable = env.realm.getAssociatedDocument().getNodeNavigable()!;
+    const response = new FetchResponse();
+    response.urlList = [env.parseURL('https://example.test/loaded')!];
+    response.headerList.append('Content-Type', 'text/html;charset=windows-1252');
+    response.body = FetchBody.fromBytes(new Uint8Array(Buffer.from('<!doctype html><p>caf\u00e9</p>', 'latin1')), env.userAgent.sandbox);
+    const resource = new ResourceReader(response, env.userAgent);
+    await new Promise<void>((resolve, reject) => resource.determineMIMEType().observe(() => { resolve(); }, reject));
+    const params = navigable.createNavigationParams(response);
+    const document = navigable.loadDocument(params, new SourceSnapshotParams(null), null, resource)!;
+    expect(document.allowDeclarativeShadowRoots).toBe(true);
+    expect(document.documentElement).toBeNull();
+    const finish = vi.spyOn(document, 'finishLoading');
+    navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
+    await expect.poll(() => document.readyState).toBe('complete');
+    expect(document.querySelector('p')?.textContent).toBe('caf\u00e9');
+    expect(document.encoding).toBe('windows-1252');
+    expect(finish).toHaveBeenCalledOnce();
+    expect(document.parser).toBeNull();
+  });
+
+  it('loads a scripting-disabled response without waiting for script permission or a script handler', async () => {
+    const browser = new Browlet({ route: () => '' });
+    const env = getRelevantRealm(browser.window).env;
+    const navigable = env.realm.getAssociatedDocument().getNodeNavigable()!;
+    const params = navigable.createNavigationParamsFromSource(env.parseURL('https://example.test/disabled')!);
+    params.finalSandboxingFlagSet.add('sandboxed-scripts');
+    params.response.body = FetchBody.fromBytes(utf8Encode('<!doctype html><body><script>throw 1</script><noscript><p>fallback</p></noscript>'), env.userAgent.sandbox);
+    const document = navigable.loadHTMLDocument(params);
+    const wait = vi.spyOn(document, 'waitForScriptsMayRun');
+    navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
+    await expect.poll(() => document.readyState).toBe('complete');
+    expect(document.querySelector('p')?.textContent).toBe('fallback');
+    expect(wait).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['script', '<script></script>', 'Parser script preparation is not implemented'],
+    ['template', '<template></template>', 'Parser tree adapter setTemplateContent is not implemented'],
+    ['body', '', null],
+  ] as const)('aborts failed loading and surfaces unfinished implementations (%s)', async (kind, markup, message) => {
+    const userAgent = createManualUserAgent();
+    const navigable = TopLevelTraversable.create(userAgent, null, '');
+    const env = navigable.activeDocument!.env;
+    const params = navigable.createNavigationParamsFromSource(env.parseURL('https://example.test/script')!);
+    params.response.body = FetchBody.fromBytes(utf8Encode(`<!doctype html>${markup}<p>after</p>`), userAgent.sandbox);
+    if (kind === 'body') params.response.body.stream.error(new Error('body failed'));
+    const document = navigable.loadHTMLDocument(params);
+    const finish = vi.spyOn(document, 'finishLoading');
+    navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
+    const failures: unknown[] = [];
+    await expect.poll(() => {
+      try { while (document.env.responsibleEventLoop.runTaskTurn()) { /* Drain the owning loop. */ } }
+      catch (error) { failures.push(error); }
+      return document.activeParserWasAborted;
+    }).toBe(true);
+    if (message === null) {
+      expect(failures).toEqual([]);
+    } else {
+      expect(failures).toHaveLength(1);
+      expect(failures[0]).toMatchObject({ name: 'InternalError', message });
+    }
+    expect(document.activeParserWasAborted).toBe(true);
+    expect(document.parser).toBeNull();
+    expect(document.querySelector('p')).toBeNull();
+    expect(finish).not.toHaveBeenCalled();
   });
 
   it.each([false, true])('waits for history initialization before parser scripts (abort: %s)', async (abort) => {
@@ -145,7 +258,7 @@ describe('Navigable HTML response loading', () => {
           params.fetchController = controller;
           const resource = new ResourceReader(response, env.userAgent);
           resource.determineMIMEType().then(() => {
-            const document = navigable.loadHTMLDocument(params, () => {}, resource);
+            const document = navigable.loadDocument(params, new SourceSnapshotParams(null), null, resource)!;
             navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
             return document;
           }, undefined, internalType<DocumentImpl>()).observe(loading.resolve, loading.reject);
@@ -213,10 +326,8 @@ describe('Navigable HTML response loading', () => {
           };
           const resource = new ResourceReader(response, env.userAgent);
           resource.determineMIMEType().then((type) => {
-            // Handler dispatch is still navigation work. This bounded consumer
-            // selects HTML only after sniffing has identified it as HTML.
             expect(type).toMatchObject({ type: 'text', subtype: 'html' });
-            const document = navigable.loadHTMLDocument(params, () => {}, resource);
+            const document = navigable.loadDocument(params, new SourceSnapshotParams(null), null, resource)!;
             navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
             return document;
           }, undefined, internalType<DocumentImpl>()).observe(loading.resolve, loading.reject);

@@ -98,16 +98,23 @@ describe('javascript: replacement response', () => {
     expect(load.mock.calls[0]![0].finalSandboxingFlagSet.size).toBe(0);
   });
 
-  it('stops at the real loader dependency before changing the active Document or queuing history', async () => {
-    const { document, navigable, run } = await fixture();
+  it.each([false, true])('loads and activates a script-free replacement (initial about:blank: %s)', async (initialBlank) => {
+    const { document, navigable, run } = await fixture(initialBlank);
     const create = vi.spyOn(navigable, 'createAndInitializeDocument');
     const append = vi.spyOn(navigable.traversable, 'appendSessionHistoryTraversalSteps');
     const entry = navigable.activeSessionHistoryEntry;
-    expect(() => run()).toThrow('HTML document loading requires response-reader setup and parser script preparation');
-    expect(create).not.toHaveBeenCalled();
-    expect(append).not.toHaveBeenCalled();
+    run();
+    expect(create).toHaveBeenCalledOnce();
+    expect(append).toHaveBeenCalledOnce();
     expect(navigable.activeDocument).toBe(document);
     expect(navigable.activeSessionHistoryEntry).toBe(entry);
+    await expect.poll(() => navigable.activeDocument !== document && navigable.activeDocument?.readyState === 'complete').toBe(true);
+    const replacement = navigable.activeDocument!;
+    expect(replacement.body?.textContent).toBe('replacement');
+    expect(replacement.URL).toBe(document.URL);
+    expect(replacement.origin).toBe(document.origin);
+    expect(replacement.referrer).toBe('');
+    expect(navigable.activeSessionHistoryEntry.navigationAPIKey).toBe(entry.navigationAPIKey);
   });
 });
 
@@ -201,9 +208,9 @@ describe('javascript: replacement history preparation', () => {
   });
 });
 
-async function fixture() {
+async function fixture(initialBlank = false) {
   const browser = new Browlet({ route: () => '' });
-  await browser.navigate('https://example.test/page');
+  if (!initialBlank) await browser.navigate('https://example.test/page');
   const document = unwrap<DocumentImpl>(browser.document);
   const env = document.env;
   const navigable = document.getNodeNavigable()!;

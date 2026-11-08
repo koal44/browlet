@@ -43,6 +43,25 @@ general HTML parser integration. In particular, the tree adapter's
 are unimplemented. Misnested table text and every `template` element can
 therefore reach an intentional exception.
 
+## Text Documents and deferred parser replacement
+
+HTML §7.5.4 reuses `HTMLDocumentParser` in PLAINTEXT mode after emitting the
+synthetic pre/newline tokens. The tree adapter respects Document's
+parser-cannot-change-mode flag. `TextDocumentTokenizer` is a narrow parse5
+subclass: it flushes pending character tokens at input hibernation, making
+partial responses visible without waiting for EOF. Encoding, CRLF processing,
+tokenization, and tree construction still use the existing parser integration.
+Byte-split, source-location, lifecycle, and cancellation regressions guard that
+protected-hook dependency. The [loader audit](../../loader/ROADMAP.md#text-document-loading)
+records the empty-input browser choice and the pending MIME-specific decoding.
+
+Eric plans to build the HTML and XML parsers when we reach those specifications.
+Retain parse5 for current HTML loading and as a comparison while that work is
+developed. XML loading remains explicitly unimplemented; do not add saxes or
+another substitute parser as part of the current lifecycle pass. A future
+replacement must retain the shared Document, DOM insertion, encoding, task,
+script pause/reentrancy, and abort contracts described here.
+
 ## First closure slice
 
 Add public parse-behavior tests before changing the adapter. At minimum they
@@ -65,8 +84,10 @@ Then complete these seams in order:
    but HTML's "create an element for the token" algorithm needs it for the
    node document, scoped custom-element registry, form association, and
    parser-inserted state.
-4. Derive parse5's `scriptingEnabled` option from the Document/parser scripting
-   mode instead of accepting its default unconditionally. Parse errors may be
+4. The navigation/streaming parser now derives parse5's `scriptingEnabled` option
+   from its Document's scripting policy and rechecks policy before invoking a
+   script handler. Apply the appropriate modes to the separate tree-only and
+   fragment conveniences when auditing those consumers. Parse errors may be
    retained as optional diagnostics; their specified recovery is not an
    author-facing exception.
 
@@ -76,7 +97,9 @@ Fetch 9E supplies a concrete consumer in
 [`Navigable.loadHTMLDocument()`](../../browsing/navigation/navigable.ts). The provisional
 `parseBytes(resource, onFirstInput)` returns `InternalPromise<void>` and
 has real network coverage. Loader's `ResourceReader` owns stream reads,
-cancellation, and replay of the MIME-sniffed prefix; the parser still schedules
+cancellation, and replay of the MIME-sniffed prefix. A directly supplied response
+gets its own reader; parsing prepares its MIME state and reuses any prior result.
+The parser still schedules
 input and completion in its Document's environment. Complete HTML encoding selection needs the
 byte prescan, meta processing, encoding confidence, and retained bytes for restart without
 refetching. The current decoder does not retain a whole-body copy for that
@@ -110,6 +133,11 @@ its delayed navigation task can attempt scrolling while parsing continues. The
 user-interest, target-selection, and actual scrolling owners remain explicit
 dependencies. None of these contracts
 completes script preparation or replaces the existing source-string route.
+The normal navigation loader now reaches the preparation dependency only when
+an enabled script is encountered. It rethrows internal implementation failures
+after aborting, including the adapter's template/foster-parenting boundaries;
+ordinary response-body failures only abort. Script-free loading and JavaScript
+URL string-result replacement work without an injected handler.
 
 The source-route callback in `Browlet` currently evaluates every encountered
 script as JavaScript, ignoring its `type`. A JSON data block therefore throws

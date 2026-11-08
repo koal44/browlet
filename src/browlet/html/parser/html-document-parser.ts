@@ -1,5 +1,6 @@
 import { finished } from 'node:stream';
 import { types } from 'node:util';
+import { html, Token, Tokenizer } from 'parse5';
 import { ParserStream } from 'parse5-parser-stream';
 
 import type { InternalPromise } from '../../../infra/index';
@@ -33,6 +34,7 @@ export class HTMLDocumentParser extends DocumentParser {
     this.#scriptHandler = scriptHandler;
     this.#parse5Stream = new ParserStream<HTMLTreeAdapterMap>({
       sourceCodeLocationInfo: true,
+      scriptingEnabled: document.env.isScriptingEnabledFor(document),
       treeAdapter: new HTMLTreeAdapter(document),
     });
     this.#parse5Stream.on('script', (element, write, resume) => {
@@ -47,12 +49,27 @@ export class HTMLDocumentParser extends DocumentParser {
     });
   }
 
+  /** Create the text-document presentation before consuming its response bytes. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-text
+  initializeForText(): void {
+    const { parser } = this.#parse5Stream;
+    parser.tokenizer = new TextDocumentTokenizer(parser.options, parser);
+    // Emit tokens directly: synthetic bytes would shift response source locations.
+    parser.onStartTag({
+      type: Token.TokenType.START_TAG, tagName: 'pre', tagID: html.TAG_ID.PRE,
+      selfClosing: false, ackSelfClosing: false, attrs: [], location: null,
+    });
+    // Consume pre's ignored first newline so a real leading newline survives.
+    parser.onWhitespaceCharacter({ type: Token.TokenType.WHITESPACE_CHARACTER, chars: '\n', location: null });
+    parser.switchToPlaintextParsing();
+  }
+
   /** Feed already-decoded characters to the parser. */
   parse(source: string): InternalPromise<void> {
     return this.#startParsing(() => { this.#parse5Stream.end(source); });
   }
 
-  /** Decode an already-sniffed resource and feed the parser on the document's networking tasks. */
+  /** Decode a resource, reusing any sniffed prefix, on the document's networking tasks. */
   // Input and EOF steps of "load an HTML document".
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-html
   // PROVISIONAL(HTML bytes): BOM and transport charset, otherwise UTF-8.
@@ -65,13 +82,16 @@ export class HTMLDocumentParser extends DocumentParser {
     let decoder: Decoder | undefined;
     let firstInput = true;
     this.#resource = resource;
+    const fail = (error: unknown) => {
+      this.#queueInput(() => { this.#parse5Stream.destroy(toError(error)); });
+    };
 
     const read = () => {
       if (this.#parse5Stream.destroyed) return;
       resource.read().observe((bytes) => {
         if (bytes === null) this.#resource = undefined;
         this.#queueInput(() => decode(bytes));
-      }, (error) => { this.#queueInput(() => { this.#parse5Stream.destroy(toError(error)); }); });
+      }, fail);
     };
 
     // Encoding's decode algorithm, continued across chunks.
@@ -108,7 +128,11 @@ export class HTMLDocumentParser extends DocumentParser {
       }
     };
 
-    return this.#startParsing(read);
+    return this.#startParsing(() => {
+      // MIME dispatch already prepared ordinary responses; supplied HTML responses
+      // arrive directly. ResourceReader retains its result and any inspected bytes.
+      resource.determineMIMEType().observe(read, fail);
+    });
   }
 
   /** Discard further input and stop pending parser continuations. */
@@ -167,6 +191,12 @@ export class HTMLDocumentParser extends DocumentParser {
   ): void {
     if (this.#parse5Stream.destroyed) return;
     try {
+      // parse5 still reports script elements when its scripting flag is disabled.
+      // Honor the Document's live execution policy before waiting for or invoking a handler.
+      if (!this.document.env.isScriptingEnabledFor(element)) {
+        this.#resume(resume);
+        return;
+      }
       // HTML's blocking wait resumes on the original (networking) task source.
       // Recheck here: another stylesheet can block before that task runs.
       if (this.document.hasScriptBlockingStyleSheets()) {
@@ -199,6 +229,21 @@ export class HTMLDocumentParser extends DocumentParser {
 
   #queueTask(steps: () => void): void {
     this.document.env.responsibleEventLoop.queueTask(networkingTaskSource, this.document, bindAsyncContext(steps));
+  }
+}
+
+/** Flush plain text to the DOM when parse5 pauses for the next input chunk. */
+// parse5 batches character tokens across writes, which otherwise leaves a text
+// response's last character run invisible until EOF. Its protected hibernation
+// hook lets this adapter finish the run without changing tokenization or adding bytes.
+class TextDocumentTokenizer extends Tokenizer {
+  protected override _ensureHibernation(): boolean {
+    if (this.preprocessor.endOfChunkHit) {
+      // Capture the next position before parse5 rewinds to await more input.
+      this.currentLocation = this.getCurrentLocation(0);
+      this._emitCurrentCharacterToken(this.currentLocation);
+    }
+    return super._ensureHibernation();
   }
 }
 

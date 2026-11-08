@@ -1,6 +1,8 @@
+import { InternalError } from '../../../../../infra/index';
 import { attr, defineInterface, idlType, impl, reflectEnumerated, xattr } from '../../../../../web-idl/core/index';
 
 import { loadingAttribute } from '../attributes/index';
+import type { ResourceReader } from '../../../../loader/index';
 
 import { HTMLElementImpl } from '../html-element';
 
@@ -14,6 +16,13 @@ export class HTMLMediaElementImpl extends HTMLElementImpl {
 
   static is(value: unknown): value is HTMLMediaElementImpl {
     return value instanceof HTMLMediaElementImpl;
+  }
+
+  /** Start resource selection from an already-fetched Document response, retaining its load-event delay. */
+  loadDocumentResource(_resource: ResourceReader): void {
+    // TODO(HTML §4.8.11): Adopt the prepared reader without refetching src; select tracks and a decoder,
+    // and connect playback, element events, load-event delays, and cancellation.
+    throw new InternalError('Audio/video document resource loading is not implemented');
   }
 
   /** Lazy loading is disabled without scripting, even for an explicit lazy attribute. */

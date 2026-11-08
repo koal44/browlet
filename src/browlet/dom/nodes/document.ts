@@ -140,6 +140,9 @@ export class DocumentImpl extends NodeImpl {
   /** Automation choice for protocol-handler consent; the browser must still verify its context. */
   // https://html.spec.whatwg.org/multipage/system-state.html#rph-user-agent-automation
   protocolHandlerAutomationMode: ProtocolHandlerAutomationMode = 'none';
+  /** Prevent parser tokens from changing this Document's compatibility mode. */
+  // https://html.spec.whatwg.org/multipage/parsing.html#parser-cannot-change-the-mode-flag
+  parserCannotChangeMode = false;
   /** Invalidates live collections after any tree or attribute mutation in this document. */
   collectionVersion = 0;
   /** Cached session Storage object for this Document, acquired on first successful access. */
@@ -1207,7 +1210,7 @@ export class DocumentImpl extends NodeImpl {
     this.ancestorOriginsList = this.env.createDOMStringList(this.internalAncestorOriginObjectsList.map(serializeOrigin));
   }
 
-  /** Populate the synchronously available element tree of an about:blank document. */
+  /** Populate the HTML element tree used by empty and media Documents. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#populate-with-html/head/body
   populateWithHTMLHeadBody(): void {
     const html = this.createElementNode('html', HTML_NAMESPACE);

@@ -21,6 +21,23 @@ import { HTMLStyleElementImpl } from '../../../../src/browlet/dom/nodes/html/met
 import type { ElementImpl } from '../../../../src/browlet/dom/nodes/element';
 
 describe('HTMLDocumentParser', () => {
+  it.each(['enabled', 'preference', 'sandbox'] as const)('parses noscript using the Document scripting mode (%s)', async (policy) => {
+    const { document, env, drain } = createParserDocument();
+    if (policy === 'preference') env.userAgent.scriptingEnabled = false;
+    if (policy === 'sandbox') document.activeSandboxingFlagSet.add('sandboxed-scripts');
+    let scripts = 0;
+    let complete = false;
+    const errors: unknown[] = [];
+    new HTMLDocumentParser(document, () => { scripts++; })
+      .parse('<!doctype html><body><noscript><p id="fallback">fallback</p></noscript><script></script><p id="after">after</p>')
+      .observe(() => { complete = true; }, (error) => { errors.push(error); });
+    await expect.poll(async () => { await inNodeTask(drain); return complete; }).toBe(true);
+    expect(errors).toEqual([]);
+    expect(document.getElementById('fallback') !== null).toBe(policy !== 'enabled');
+    expect(document.getElementById('after')?.textContent).toBe('after');
+    expect(scripts).toBe(policy === 'enabled' ? 1 : 0);
+  });
+
   it('resumes through HTML tasks when a stylesheet blocker is released', async () => {
     const { document, realm, drain } = createParserDocument();
     const blocker = document.createElement('style');

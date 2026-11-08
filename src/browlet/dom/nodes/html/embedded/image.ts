@@ -1,8 +1,9 @@
-import { HTML_NAMESPACE } from '../../../../../infra/index';
+import { HTML_NAMESPACE, InternalError } from '../../../../../infra/index';
 import { attr, ctor, defineInterface, idlType, impl, reflectEnumerated, xattr } from '../../../../../web-idl/core/index';
 
 import { ElementTag, ContentCategory } from '../../element-definitions/index';
 import { loadingAttribute, fetchPriorityAttribute } from '../attributes/index';
+import type { ResourceReader } from '../../../../loader/index';
 
 import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
 
@@ -31,6 +32,13 @@ export class HTMLImageElementImpl extends HTMLElementImpl {
 
   override getDocumentNamedItemType(): DocumentNamedItemType {
     return 'name-or-id-with-name';
+  }
+
+  /** Start the image request from an already-fetched Document response, retaining its load-event delay. */
+  loadDocumentResource(_resource: ResourceReader): void {
+    // TODO(HTML §4.8.4): Adopt the prepared reader without refetching src; decode and render its bytes,
+    // update image request state, and connect element events, load-event delays, and cancellation.
+    throw new InternalError('Image document resource loading is not implemented');
   }
 
   /** Lazy loading is disabled without scripting, even for an explicit lazy attribute. */

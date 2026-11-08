@@ -12,6 +12,14 @@ and reflect `loading`; they do not yet select, fetch, decode, or play media.
 Video also retains its independent poster continuation. Resource selection
 must install those steps and start the Document's observer when implemented.
 
+HTML §7.5.6 now constructs media Documents and calls the element-owned
+`loadDocumentResource()` boundary with the already-fetched ResourceReader.
+Both the image and audio/video operations throw until their loading algorithms
+can adopt the response without refetching src, retain load-event delays, and
+connect decoding, events, and cancellation. application/ogg also requires track
+inspection to choose the Document's host element. See the
+[loader slice](../loader/ROADMAP.md#html-756-media-document-construction).
+
 ## Sources and scope
 
 Reviewed the [MSE editor's draft](https://w3c.github.io/media-source/), dated

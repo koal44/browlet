@@ -1,4 +1,4 @@
-import { asciiLower, assertNever, InternalError, internalType, type InternalPromise } from '../../../infra/index';
+import { asciiLower, assertNever, HTML_NAMESPACE, InternalError, internalType, type InternalPromise } from '../../../infra/index';
 import { randomUUID } from '../../../js-engine/index';
 import { DOMExceptionImpl } from '../../../web-idl/core/index';
 import { coarsenedSharedCurrentTime } from '../../../timing/index';
@@ -23,9 +23,10 @@ import type { CSPList } from '../policy/csp/index';
 import {
   EmbedderPolicy, OpenerPolicy, PermissionsPolicy, PolicyContainer, queueCOEPInheritanceViolation, SandboxingFlagSet,
 } from '../policy/index';
-import type { DocumentImpl, DocumentVisibilityState, ElementImpl } from '../../dom/nodes/index';
+import { DocumentMode, type DocumentImpl, type DocumentVisibilityState, type ElementImpl } from '../../dom/nodes/index';
 import {
   HTMLIFrameElementImpl, type HTMLEmbedElementImpl, type HTMLObjectElementImpl,
+  type HTMLImageElementImpl, type HTMLMediaElementImpl,
 } from '../../dom/nodes/html/embedded/index';
 import type { HTMLFrameElementImpl } from '../../dom/nodes/html/legacy/index';
 import { CustomElementRegistryImpl } from '../../dom/nodes/html/custom-elements/index';
@@ -1405,47 +1406,53 @@ export class Navigable {
 
   /**
    * Create an HTML document after handler selection and start consuming its response.
-   * Navigation supplies the reader whose MIME type selected this handler; parser script
-   * preparation remains unfinished. Byte-loader callers currently supply that callback.
+   * Reuse navigation's prepared reader, or read a directly supplied HTML response.
+   * The optional script handler remains a provisional integration seam until §4.12.1 preparation exists.
    */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-html
   loadHTMLDocument(
     params: NavigationParams, handleScript?: ScriptHandler, resource?: ResourceReader,
   ): DocumentImpl {
-    if (handleScript === undefined || resource === undefined) {
-      // TODO(HTML §7.5.2/§4.12.1): Supply parser script preparation alongside the prepared reader,
-      // and honor scripts-may-run while history activation is pending. Document creation preserves
-      // synthetic params' null reservation; the about:blank body and cookie-URL rules remain below/at their owners.
-      throw new InternalError('HTML document loading requires response-reader setup and parser script preparation');
-    }
     const document = this.createAndInitializeDocument('html', 'text/html', params);
+    const { env } = document;
     // SPEC_CLASH(javascript-about-blank-body): All three browsers parse string-result bodies at
-    // about:blank; HTML's blanket branch discards them. Resolve before enabling the synthetic-response caller.
-    if (document.URL === 'about:blank') {
+    // about:blank; follow them instead of HTML's unconditional empty-document branch.
+    // A null request with a body identifies supplied HTML, including an empty string result.
+    if (document.URL === 'about:blank' && (params.request !== null || params.response.body === null)) {
+      // SPEC_CLASH(loaded-about-blank-quirks): HTML omits the mode change; all three browsers
+      // use quirks for a non-initial empty about:blank, as they do for the initial Document.
+      document.mode = DocumentMode.Quirks;
       document.populateWithHTMLHeadBody();
+      // There is no parser EOF on this branch. Finish through the same queued lifecycle
+      // handoff after history activation, retaining finishLoading's explicit dependencies.
+      env.queueTask('network', () => { document.finishLoading(); });
       return document;
     }
 
-    const { env } = document;
     const parser = new HTMLDocumentParser(
       document,
       (element, write) => document.waitForScriptsMayRun().then(() => {
         if (parser.stopped) return;
+        // TODO(HTML §4.12.1/§13.2): Prepare parser-inserted scripts, including their type,
+        // fetch, pending parsing-blocking state, execution, and document.write insertion point.
+        if (handleScript === undefined) throw new InternalError('Parser script preparation is not implemented');
         return handleScript(element, write);
       }),
     );
     // PROVISIONAL(HTML bytes): BOM/transport decoding works; full encoding
     // selection and replay for restart remain with the parser integration.
     const parsing = parser.parseBytes(
-      resource,
+      resource ?? new ResourceReader(params.response, env.userAgent),
       () => document.processLinkHeaders(params.response, 'media'),
     );
     parsing.observe(
       () => env.queueTask('network', () => {
         document.finishLoading();
       }),
-      () => env.queueTask('network', () => {
+      (error) => env.queueTask('network', () => {
         document.abort();
+        // An unfinished implementation must remain visible; ordinary body failures abort loading.
+        if (error instanceof InternalError) throw error;
       }),
     );
     return document;
@@ -1455,15 +1462,37 @@ export class Navigable {
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-xml
   // Keep the parsed MIME type and prepared reader at the loader boundary instead of serializing and parsing them again.
   loadXMLDocument(_params: NavigationParams, _type: MIMEType, _resource: ResourceReader): DocumentImpl {
-    // TODO(HTML §7.5.3): Create the XML Document, connect its parser and scripts-may-run gate, then finish/abort loading.
+    // TODO(HTML §7.5.3/XML/Namespaces/RFC 7303): Deferred until Browlet's XML parser work.
+    // Create the XML Document, decode its bytes, build the namespace-aware tree, process media Link headers,
+    // gate scripts, clear during-loading navigation ID at EOF, and integrate errors/completion/abortion.
     throw new InternalError('XML document loading is not implemented');
   }
 
   /** Create a text presentation without interpreting the response as HTML. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-text
-  loadTextDocument(_params: NavigationParams, _type: MIMEType, _resource: ResourceReader): DocumentImpl {
-    // TODO(HTML §7.5.4): Select encoding, create the HTML/pre presentation, disable HTML tokenization, and finish loading.
-    throw new InternalError('Text document loading is not implemented');
+  loadTextDocument(params: NavigationParams, type: MIMEType, resource: ResourceReader): DocumentImpl {
+    const document = this.createAndInitializeDocument('html', getMIMETypeEssence(type), params);
+    const { env } = document;
+    document.parserCannotChangeMode = true;
+    document.mode = DocumentMode.NoQuirks;
+    const parser = new HTMLDocumentParser(document, () => {
+      // Text cannot create scripts, and this loader adds no optional user-agent head content.
+      throw new InternalError('A text document parser cannot execute scripts');
+    });
+    // SPEC_CLASH(empty-text-document-pre): HTML/Firefox create pre even for empty input;
+    // Chromium/WebKit wait for input. Keep HTML's immediate presentation.
+    parser.initializeForText();
+    // TODO(HTML §7.5.4/MIME encoding): Apply the computed type's decoding rules and full fallback selection.
+    // For now reuse BOM/transport decoding; the remaining policies are inventoried in loader/ROADMAP.md.
+    const parsing = parser.parseBytes(resource, () => document.processLinkHeaders(params.response, 'media'));
+    parsing.observe(
+      () => env.queueTask('network', () => { document.finishLoading(); }),
+      (error) => env.queueTask('network', () => {
+        document.abort();
+        if (error instanceof InternalError) throw error;
+      }),
+    );
+    return document;
   }
 
   /** Process successive replacement parts through the navigation owner. */
@@ -1478,9 +1507,32 @@ export class Navigable {
 
   /** Create the supported image/audio/video presentation for this response. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-media
-  loadMediaDocument(_params: NavigationParams, _type: MIMEType, _resource: ResourceReader): DocumentImpl {
-    // TODO(HTML §7.5.6): Create the media element/presentation, feed its decoder, and coordinate loading and rendering.
-    throw new InternalError('Media document loading is not implemented');
+  loadMediaDocument(params: NavigationParams, type: MIMEType, resource: ResourceReader): DocumentImpl {
+    const localName = type.type === 'image' ? 'img' : type.type === 'audio' ? 'audio' : type.type === 'video' ? 'video' : null;
+    if (localName === null) {
+      // TODO(HTML §4.8.11): application/ogg requires track inspection to choose audio or video.
+      throw new InternalError('Media document element selection requires decoded track information');
+    }
+    const document = this.createAndInitializeDocument('html', getMIMETypeEssence(type), params);
+    document.mode = DocumentMode.NoQuirks;
+    document.populateWithHTMLHeadBody();
+    // SPEC_CLASH(media-document-host-element): Follow HTML's img/audio/video table and src attribute.
+    // All three engines use video for audio; Blink uses a source child and Gecko a retained channel without src.
+    const host = document.createElementNode(localName, HTML_NAMESPACE) as HTMLImageElementImpl | HTMLMediaElementImpl;
+    document.body!.appendChild(host);
+    host.setAttributeNS(null, 'src', document.URL);
+    // Hand the prepared response to the element owner, including any bytes retained by sniffing.
+    // Its unfinished loading algorithm must establish load-event delays and avoid a second fetch.
+    host.loadDocumentResource(resource);
+    document.processLinkHeaders(params.response, 'media');
+    // No optional user-agent scripts are added. Completion events can execute author callbacks,
+    // so they must wait for history initialization to release the new Document's script gate.
+    document.waitForScriptsMayRun().observe(() => document.env.queueTask('network', () => {
+      // TODO(HTML stop-parsing): Replace the provisional finishLoading path with the full lifecycle,
+      // including media load-event delays, readiness milestones, and separate DOM tasks.
+      document.finishLoading();
+    }), (error) => document.env.queueTask('network', () => { throw error; }));
+    return document;
   }
 
   /** Select the Window and realm, then create the document for a navigation response. */

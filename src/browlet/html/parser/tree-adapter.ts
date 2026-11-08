@@ -210,6 +210,7 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
   }
 
   setDocumentMode(document: DocumentImpl, mode: html.DOCUMENT_MODE): void {
+    if (document.parserCannotChangeMode) return;
     switch (mode) {
       case html.DOCUMENT_MODE.NO_QUIRKS:
         document.mode = DocumentMode.NoQuirks;

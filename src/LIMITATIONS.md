@@ -1729,10 +1729,14 @@ Captured source policies now apply form-action, Trusted Types URL rewriting,
 and inline CSP checks with both dispositions' reports. Allowed requests execute
 through ClassicScript in the live target environment. Abrupt/non-string results
 leave the Document and history intact. Primitive strings assemble a UTF-8 HTML
-response and inherited navigation params, but still throw at the explicit loader
-boundary for response-reader setup and parser-script preparation. Replacement
-history preparation and traversal queuing exist after that boundary; full
-Document creation/activation and finalization remain unfinished. Initial about:blank completion
+response and inherited navigation params. Script-free replacements now load and
+activate, including supplied bodies at about:blank. Enabled script encounters
+still throw at §4.12.1 parser-script preparation; template and foster-parenting
+adapter hooks also remain unfinished. These internal failures surface after
+aborting the load. The normal empty about:blank path stays synchronous and uses
+quirks mode. Complete encoding selection/restart, parser stop/deferred-script/load
+coordination, and shared Fetch cancellation remain explicit dependencies; the
+source-route script evaluator remains provisional. Initial about:blank completion
 fires load at non-iframe containers; iframes reach a throwing runLoadEventSteps()
 dependency for load flags, resource timing, and Permissions Policy reporting.
 These internal algorithms do not connect unfinished iframe insertion/loading.
@@ -1844,9 +1848,21 @@ general Document loader after MIME preparation, preserving the sniffed bytes and
 resuming on the destination task with a navigation-ID recheck. Population accepts
 its nullable result and saves a loaded Document's origin and history-required
 policy before completion. Dispatch selects HTML/XML/text/multipart, supported media,
-PDF, configured inline content, or external handling. The §7.5 loaders, actual
-error-page creation, unsupported-resource host policy, and external handoff remain
-throwing boundaries. Media decoder support is not claimed, and no PDF viewer exists.
+PDF, configured inline content, or external handling. HTML and text now load through
+the existing parser/lifecycle integration. Text uses a locked no-quirks pre and
+PLAINTEXT mode, preserving literal markup and flushing streamed characters before
+EOF. BOM/transport decoding works; full fallback selection and MIME-specific text
+decoding remain explicit dependencies, as does the full parser completion lifecycle.
+XML is deliberately deferred until the parser-spec work, with no added XML parser
+dependency. Media Documents now create the specified no-quirks HTML tree and
+img/audio/video host with src, pass the prepared reader to its element owner,
+process media Link headers, and gate provisional completion on script readiness.
+Image and audio/video resource adoption still throw until decoding, element events,
+load-event delays, and cancellation are implemented. application/ogg also needs
+track classification; UserAgent still claims no decoder support. XML/multipart/inline
+loaders, actual error-page creation, unsupported-resource host policy, and
+external handoff remain throwing boundaries.
+Media decoder support is not claimed, and no PDF viewer exists.
 Document teardown still needs to cancel a reader whose continuation task it discards.
 Navigation request construction now retains the
 history/source inputs with UserAgent-owned execution. Child requests retain the
