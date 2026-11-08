@@ -13,6 +13,7 @@ if (args.includes('--fix')) await ESLint.outputFixes(results);
 
 const groups = new Map();
 let runtime = 0;
+let cycles = 0;
 let layout = 0;
 let boundary = 0;
 let other = 0;
@@ -21,6 +22,8 @@ for (const result of results) {
     if (message.ruleId === 'browlet/dependency-direction') {
       if (message.message.startsWith('Runtime')) runtime++;
       else other++;
+    } else if (message.ruleId === 'browlet/no-import-cycles') {
+      cycles++;
     } else if (message.ruleId === 'browlet/import-order') {
       layout++;
     } else if (message.ruleId === 'browlet/subsystem-imports' || message.ruleId === 'browlet/no-ancestor-barrel-imports') {
@@ -40,5 +43,5 @@ for (const [message, entries] of [...groups].sort(([a], [b]) => priority(a) - pr
   console.log(`\n${message}`);
   for (const entry of entries) console.log(`  ${entry}`);
 }
-console.log(`\nImports: ${runtime} runtime, ${layout} ordering, ${boundary} boundary, ${other} unclassified findings.`);
-process.exitCode = runtime + layout + boundary + other > 0 ? 1 : 0;
+console.log(`\nImports: ${runtime} runtime, ${cycles} cyclic imports, ${layout} ordering, ${boundary} boundary, ${other} unclassified findings.`);
+process.exitCode = runtime + cycles + layout + boundary + other > 0 ? 1 : 0;

@@ -1716,6 +1716,14 @@ findings and fails while they remain; `npm run lint:imports -- --fix` fixes layo
 only. Do not erase concrete types or merge components merely to silence those
 findings.
 
+`browlet/no-import-cycles` also reports each import participating in a runtime
+cycle, including chains within one component. Its diagnostic shows a path back
+to the importing file, with no depth limit. It uses the TypeScript project snapshot
+for editor diagnostics; the normal unit suite independently scans every source
+module with the same analyzer. Both reject existing and newly introduced cycles.
+Explicit type-only dependencies are excluded. Literal dynamic imports and
+`require()` calls are included; computed module names cannot be checked statically.
+
 Stylelet has its own [component barrels and dependency order](stylelet/README.md#entry-points-and-existing-layers).
 The entry-point rule also checks those internal boundaries, including type-only
 references. Changes to Stylelet's layer order require the same ownership review

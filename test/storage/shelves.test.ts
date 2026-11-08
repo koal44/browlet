@@ -11,7 +11,7 @@ describe('Storage §4.4: obtaining storage shelves', () => {
   it.each(['local', 'session'] as const)('creates and reuses a %s shelf in the supplied shed', (type) => {
     const shed = new StorageShed();
     const env = createEnvironment('https://example.test/first');
-    const shelf = StorageShelf.obtain(shed, env, type)!;
+    const shelf = shed.obtainShelf(env, type)!;
     expect(shed.get(StorageKey.obtain(env)!)).toBe(shelf);
     expect([...shelf.bucketMap.keys()]).toEqual(['default']);
     const bucket = shelf.bucketMap.get('default')!;
@@ -19,7 +19,7 @@ describe('Storage §4.4: obtaining storage shelves', () => {
     bottle.map.set('saved', 'value');
 
     const sameOrigin = createEnvironment('https://example.test:443/second', env.userAgent);
-    const reused = StorageShelf.obtain(shed, sameOrigin, type)!;
+    const reused = shed.obtainShelf(sameOrigin, type)!;
     expect(reused).toBe(shelf);
     expect(reused.bucketMap.get('default')).toBe(bucket);
     expect(bottle.map.get('saved')).toBe('value');
@@ -32,9 +32,9 @@ describe('Storage §4.4: obtaining storage shelves', () => {
     const otherShed = new StorageShed();
     const env = createEnvironment('https://example.test/');
     const otherOrigin = createEnvironment('https://other.test/', env.userAgent);
-    const first = StorageShelf.obtain(shed, env, 'session')!;
-    const second = StorageShelf.obtain(shed, otherOrigin, 'session')!;
-    const separate = StorageShelf.obtain(otherShed, env, 'session')!;
+    const first = shed.obtainShelf(env, 'session')!;
+    const second = shed.obtainShelf(otherOrigin, 'session')!;
+    const separate = otherShed.obtainShelf(env, 'session')!;
 
     expect(shed.size).toBe(2);
     expect(otherShed.size).toBe(1);

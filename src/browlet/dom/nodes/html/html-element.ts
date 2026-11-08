@@ -97,6 +97,10 @@ export class HTMLElementImpl extends ElementImpl {
     return this.#inlineStyleMixin.style;
   }
 
+  override isHTMLElement(): this is HTMLElementImpl {
+    return true;
+  }
+
   /** Resolve forwarding from the current node Document, independently of DOM attachment. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#determining-the-target-of-an-event-handler
   override getEventHandlerTarget(name: string): EventTargetImpl | null {

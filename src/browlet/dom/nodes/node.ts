@@ -29,7 +29,7 @@ import type { ShadowRootImpl } from './shadow-root';
 import type { MutationObserverImpl, RegisteredObserver } from './mutation-observer';
 import { MutationRecordImpl, type MutationType } from './mutation-record';
 import type { CustomElementRegistryImpl } from './html/custom-elements/index';
-import type { HTMLSlotElementImpl } from './html/index';
+import type { HTMLElementImpl, HTMLSlotElementImpl } from './html/index';
 
 /** DOM node ownership, tree links, traversal, mutation, and event ancestry. */
 // https://dom.spec.whatwg.org/#interface-node
@@ -1040,9 +1040,13 @@ export abstract class NodeImpl extends EventTargetImpl {
     this.parentNode?.childrenChanged();
   }
 
-  // Tag checks keep the base node module independent of its subclasses.
+  // Type guards keep the base node module independent of its subclasses.
   isElement(): this is ElementImpl {
     return this.nodeType === NodeType.Element;
+  }
+
+  isHTMLElement(): this is HTMLElementImpl {
+    return false;
   }
 
   /** Whether this node can contain a child navigable, including before one is created. */

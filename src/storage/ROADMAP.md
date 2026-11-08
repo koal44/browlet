@@ -125,7 +125,7 @@ replacement rules, browser ownership, navigation lifetime, and nested openers.
 
 ## Storage shelves
 
-`StorageShelf.obtain(shed, env, type)` implements §4.4 by obtaining a storage
+`StorageShed.obtainShelf(env, type)` implements §4.4 by obtaining a storage
 key before looking up or creating its shelf. Failure returns null without
 changing the shed. Repeated acquisition reuses the shelf and its existing data;
 disabling storage blocks acquisition without clearing previously stored data.

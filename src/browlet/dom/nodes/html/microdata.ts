@@ -2,7 +2,7 @@ import { splitOnAsciiWhitespace } from '../../infra/index';
 
 import type { ElementImpl } from '../element';
 import { findElementById } from '../lookups';
-import { HTMLElementImpl } from './html-element';
+import type { HTMLElementImpl } from './html-element';
 
 /**
  * Snapshot an item's property elements in tree order. Revisited elements flag an
@@ -37,7 +37,7 @@ export function collectItemProperties(root: HTMLElementImpl): { properties: HTML
     }
     memory.add(current);
 
-    const htmlElement = HTMLElementImpl.is(current);
+    const htmlElement = current.isHTMLElement();
     if (!htmlElement || !current.isMicrodataItem()) {
       for (let child = current.firstElementChild; child; child = child.nextElementSibling) pending.push(child);
     }

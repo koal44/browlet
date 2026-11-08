@@ -8,6 +8,7 @@ import subsystemImports from './scripts/eslint/subsystem-imports.mjs';
 import noAncestorBarrelImports from './scripts/eslint/no-ancestor-barrel-imports.mjs';
 import importOrder from './scripts/eslint/import-order.mjs';
 import dependencyDirection from './scripts/eslint/dependency-direction.mjs';
+import noImportCycles from './scripts/eslint/no-import-cycles.mjs';
 import incumbentLookup from './scripts/eslint/incumbent-lookup.mjs';
 import bindingInputArity from './scripts/eslint/binding-input-arity.mjs';
 
@@ -63,6 +64,7 @@ export default defineConfig(
           'no-ancestor-barrel-imports': noAncestorBarrelImports,
           'import-order': importOrder,
           'dependency-direction': dependencyDirection,
+          'no-import-cycles': noImportCycles,
           'incumbent-lookup': incumbentLookup,
           'binding-input-arity': bindingInputArity,
         },
@@ -311,6 +313,7 @@ export default defineConfig(
       'browlet/import-order': 'error',
       // Deliberately strict while the proposed component layers are under review.
       'browlet/dependency-direction': 'error',
+      'browlet/no-import-cycles': 'error',
     },
   },
 

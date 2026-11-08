@@ -26,6 +26,19 @@ export class StorageShed extends Map<StorageKey, StorageShelf> {
     return super.delete(this.#findKey(key));
   }
 
+  /** Obtain the environment's shelf, or null when storage-key acquisition fails. */
+  // https://storage.spec.whatwg.org/#obtain-a-storage-shelf
+  obtainShelf(env: StorageEnvironmentBase, type: StorageType): StorageShelf | null {
+    const key = StorageKey.obtain(env);
+    if (key === null) return null;
+    let shelf = this.get(key);
+    if (shelf === undefined) {
+      shelf = StorageShelf.create(type);
+      this.set(key, shelf);
+    }
+    return shelf;
+  }
+
   /**
    * Clear and remove a retired bucket, dropping its shelf when no buckets remain.
    * Callers must retire its consumers first.
@@ -69,23 +82,10 @@ export class StorageShelf {
   /** Buckets retained for this storage key, starting with the default bucket. */
   bucketMap = new Map<string, StorageBucket>();
 
-  /** Obtain the environment's shelf, or null when storage-key acquisition fails. */
-  // https://storage.spec.whatwg.org/#obtain-a-storage-shelf
-  static obtain(shed: StorageShed, env: StorageEnvironmentBase, type: StorageType): StorageShelf | null {
-    const key = StorageKey.obtain(env);
-    if (key === null) return null;
-    let shelf = shed.get(key);
-    if (shelf === undefined) {
-      shelf = StorageShelf.create(type);
-      shed.set(key, shelf);
-    }
-    return shelf;
-  }
-
   /** Obtain the environment's shelf from its user agent's local storage shed. */
   // https://storage.spec.whatwg.org/#obtain-a-local-storage-shelf
   static obtainLocal(env: StorageEnvironmentBase): StorageShelf | null {
-    return StorageShelf.obtain(env.userAgent.storageShed, env, 'local');
+    return env.userAgent.storageShed.obtainShelf(env, 'local');
   }
 
   /** Create the shelf's default bucket for the requested storage type. */

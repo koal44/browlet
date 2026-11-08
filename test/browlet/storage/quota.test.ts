@@ -16,7 +16,7 @@ describe('Storage §6: shelf quota policy', () => {
     expect(env.userAgent.storageQuotaBytes).toBe(expected);
     // A zero budget does not disable storage-key acquisition or reads.
     expect(StorageShelf.obtainLocal(env)).not.toBeNull();
-    expect(StorageShelf.obtain(env.getSessionStorageShed(), env, 'session')).not.toBeNull();
+    expect(env.getSessionStorageShed().obtainShelf(env, 'session')).not.toBeNull();
     expect(env.userAgent.storageEnabled).toBe(true);
   });
 

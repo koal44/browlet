@@ -1,6 +1,6 @@
 import type { StorageEndpoint, StorageIdentifier, StorageType } from './endpoints';
 import type { StorageEnvironment } from './environment';
-import { StorageShelf } from './sheds';
+import type { StorageShelf } from './sheds';
 
 /** An endpoint's backing data, proxy references, and quota in bytes. */
 // https://storage.spec.whatwg.org/#storage-bottle
@@ -29,7 +29,7 @@ export class StorageBottle<K = unknown, V = unknown> {
     type: StorageType, env: StorageEnvironment, identifier: StorageIdentifier,
   ): StorageProxyMap | null {
     const shed = type === 'local' ? env.userAgent.storageShed : env.getSessionStorageShed();
-    const shelf = StorageShelf.obtain(shed, env, type);
+    const shelf = shed.obtainShelf(env, type);
     if (shelf === null) return null;
     const bottle = shelf.bucketMap.get('default')!.getBottle(identifier)!;
     const proxyMap = new StorageProxyMap(bottle, shelf);
