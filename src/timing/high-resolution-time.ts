@@ -8,6 +8,9 @@ import type { TimingEnvironment } from './environment';
 // https://w3c.github.io/hr-time/#sec-domhighrestimestamp
 export type DOMHighResTimeStamp = number;
 
+/** Whole milliseconds measured from the Unix epoch. */
+export type EpochTimeStamp = number;
+
 /** Current coarsened monotonic time relative to the environment's origin. */
 // https://w3c.github.io/hr-time/#dfn-current-high-resolution-time
 export function currentHighResolutionTime(env: TimingEnvironment): Duration {

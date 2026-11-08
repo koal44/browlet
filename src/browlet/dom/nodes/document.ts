@@ -56,7 +56,7 @@ import { IntersectionObserverImpl, type IntersectionObserverEntryImpl } from '..
 import { SelectionImpl, scheduleSelectionChange, selectionGlobalEventHandlers } from '../../interaction/selection/index';
 import { HistoryImpl } from '../../browsing/history/index';
 import type { NotRestoredReasonDetails, NotRestoredReasons } from '../../browsing/navigation/diagnostics/index';
-import type { PerformanceNavigationTimingImpl } from '../../performance/index';
+import type { NavigationTimingType, PerformanceNavigationTimingImpl } from '../../performance/index';
 import type { ProtocolHandlerAutomationMode } from '../../navigator/index';
 // eslint-disable-next-line browlet/dependency-direction -- DOM's legacy event factory includes HTML-defined event interfaces.
 import { MessageEventImpl } from '../../communication/index';
@@ -241,6 +241,9 @@ export class DocumentImpl extends NodeImpl {
     loadEventStartTime: 0,
     loadEventEndTime: 0,
   };
+  /** First loading readiness observation, relative to this Document; used only by legacy PerformanceTiming. */
+  // https://w3c.github.io/navigation-timing/#dom-performancetiming-domloading
+  domLoadingTime: DOMHighResTimeStamp = 0;
   /** Unload timestamps inherited from the document replaced by this navigation. */
   // https://html.spec.whatwg.org/multipage/dom.html#previous-document-unload-timing
   // TODO(HTML navigation): capture and pass the departing document's unload timing.
@@ -250,6 +253,8 @@ export class DocumentImpl extends NodeImpl {
   };
   /** Retained navigation entry, absent until a supported navigation producer supplies measurements. */
   navigationTimingEntry?: PerformanceNavigationTimingImpl;
+  /** Legacy classification can change on ordinary fragment navigation without changing the original timing entry. */
+  legacyNavigationType: NavigationTimingType = 'navigate';
   /** Completion timestamp, or null until the document is completely loaded. */
   completelyLoadedTime: number | null = null;
   /** Whether tasks that depend on loading completion may proceed. */
@@ -1459,6 +1464,8 @@ export class DocumentImpl extends NodeImpl {
     reactivatedEntry: SessionHistoryEntry, entriesForNavigationAPI: SessionHistoryEntry[],
     navigationType: NavigationType | null = null, previousEntryForActivation?: SessionHistoryEntry,
   ): void {
+    // SPEC_CLASH(legacy-navigation-restored-type): Retain this Document's legacy type, as Chromium does
+    // on verified bfcache restoration. Gecko's NotifyRestoreStart changes it to back_forward.
     this.resetAutocompleteOffControls();
 
     // GlobalTimers already adjusts deadlines when full activity is restored, before this operation runs.
@@ -1515,6 +1522,10 @@ export class DocumentImpl extends NodeImpl {
   updateCurrentDocumentReadiness(readinessValue: DocumentReadyState): void {
     if (this.currentDocumentReadiness === readinessValue) return;
     this.currentDocumentReadiness = readinessValue;
+
+    if (readinessValue === 'loading' && this.domLoadingTime === 0) {
+      this.domLoadingTime = this.env.currentHighResolutionTime().toTimestamp();
+    }
 
     if (this.parser?.kind === 'html') {
       const now = this.env.currentHighResolutionTime().toTimestamp();
@@ -1880,6 +1891,7 @@ export class DocumentImpl extends NodeImpl {
 
   /** Reset document-loading milestones around the selected navigation start. */
   initializeLoadTimingInfo(navigationStartTime: DOMHighResTimeStamp): void {
+    this.domLoadingTime = 0;
     this.loadTimingInfo = {
       navigationStartTime, domInteractiveTime: 0, domContentLoadedEventStartTime: 0,
       domContentLoadedEventEndTime: 0, domCompleteTime: 0, loadEventStartTime: 0, loadEventEndTime: 0,
@@ -1890,6 +1902,7 @@ export class DocumentImpl extends NodeImpl {
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#create-and-initialize-a-document-object
   // https://w3c.github.io/navigation-timing/#dfn-create-the-navigation-timing-entry
   createNavigationTimingEntry(navigationParams: NavigationParams): void {
+    this.legacyNavigationType = navigationParams.navigationTimingType;
     const controller = navigationParams.fetchController;
     const response = navigationParams.response;
     let fetchTimingInfo: FetchTimingInfo;

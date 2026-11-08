@@ -5563,8 +5563,17 @@ and shared-factory navigation creation/delivery now exist. See the
 [delivery audit](../../performance/ROADMAP.md#navigation-timing-load-event-delivery)
 for single insertion, buffered replay, and the still-provisional loader's missing
 initial pageshow, BiDi load-complete notification, and parser task sequencing.
+Navigation Timing §8.1's legacy `performance.timing` now reads the retained
+measurements, with its additional `domLoading` observation during Document
+initialization. §8.2's [legacy navigation view](../../performance/ROADMAP.md#navigation-timing-legacy-performancenavigation)
+now exposes the Document's type and strict same-origin redirect count. Ordinary
+fragment commits reset only the legacy type; retained-Document restoration,
+History state updates, and intercepted commits preserve it. A newly created
+Document receives its navigate/reload/back-forward classification during §7.5.1.
+The bounded timing detour is ready to return to HTML; its unfinished producers
+remain with their named lifecycle, loader, worker, and host owners.
 Resume HTML at §7.5.1 steps 17–20, the remaining response-header
-and callback ordering audit, beginning with Refresh, after that detour.
+and callback ordering audit, beginning with Refresh.
 
 ## Removal condition
 

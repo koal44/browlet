@@ -1749,6 +1749,19 @@ following HTML/WebKit; Chromium/Firefox expose one. Explicit later about:blank
 navigations receive entries. Original fetch timing for supplied network responses and synthetic
 loader-completion measurements remain explicit. Target-history diagnostics before activation,
 previous-Document unload, and Critical-CH measurements remain explicit.
+The legacy `performance.timing` view exposes whole epoch milliseconds from these
+same measurements; unavailable observations remain zero. It retains recorded values
+after frame removal (Firefox/WebKit; Chromium zeros them), and hides legacy redirect
+and unload timestamps across foreign redirects even with TAO. WebKit exposes the
+TAO-authorized redirects; Firefox can expose preceding same-origin unload timestamps.
+The legacy `performance.navigation` view retains the Document's classification
+and hides foreign redirect counts even with TAO. It retains values after removal
+(Firefox; Chromium/WebKit reset) and preserves the classification on retained
+Document restoration (Chromium; Gecko's restoration code changes it). Ordinary
+fragments reset the legacy type to navigate as Chromium/WebKit do; Firefox keeps
+the load type. History state updates, intercepted commits, and the modern entry
+retain their existing type. See the [legacy timing audit](browlet/performance/ROADMAP.md#navigation-timing-legacy-performancetiming)
+and [legacy navigation audit](browlet/performance/ROADMAP.md#navigation-timing-legacy-performancenavigation).
 Available diagnostics are captured in the entry's realm. The confidence API retains one randomized
 result with a fixed 50% noise trigger, but the explicit UserAgent measurement
 hook has no host instrumentation yet: confidence remains null until a real

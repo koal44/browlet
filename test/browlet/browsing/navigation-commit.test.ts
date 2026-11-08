@@ -18,6 +18,22 @@ import { runInHostTask } from '../../support/tasks';
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('Navigate-event commit coordination', () => {
+  it.each(['push', 'replace', 'reload'] as const)('keeps the legacy load type when interception commits %s', async (type) => {
+    const { browser, document, event, tracker } = await fixture(type);
+    document.legacyNavigationType = 'reload';
+    document.navigationTimingEntry!.type = 'reload';
+    // Hold unfinished history application and focus/scroll finishing at their existing boundaries.
+    vi.spyOn(document.env.userAgent, 'runInParallel').mockImplementation(() => {});
+    const pending = document.env.InternalPromise.withResolvers(idlType.undefined);
+    event.navigationHandlerList.push(() => pending.promise);
+    event.commit(tracker);
+    expect(event.interceptionState).toBe('committed');
+    expect(await browser.evaluate(() => ({
+      legacy: performance.navigation.type,
+      modern: (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming).type,
+    }))).toEqual({ legacy: 1, modern: 'reload' });
+  });
+
   it.each(['push', 'replace'] as const)('passes the current %s destination and classic state to history before settling committed', async (type) => {
     const { browser, document, navigation, event, tracker, loop } = await fixture(type);
     const destination = document.env.parseHTMLURL('/redirected')!;

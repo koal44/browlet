@@ -13,6 +13,7 @@ afterEach(() => { vi.restoreAllMocks(); });
 describe('fragment navigation', () => {
   it('lets a projected Location hash change be canceled before changing its Document or history', async () => {
     const { browser, document, navigable, update, scroll, turns } = await fixture();
+    document.legacyNavigationType = 'reload';
     const original = navigable.activeSessionHistoryEntry;
     expect(await browser.evaluate(() => {
       let flags;
@@ -34,6 +35,23 @@ describe('fragment navigation', () => {
     expect(update).not.toHaveBeenCalled();
     expect(scroll).not.toHaveBeenCalled();
     expect(turns).toHaveLength(0);
+    expect(await browser.evaluate(() => performance.navigation.type)).toBe(1);
+  });
+
+  it('resets the legacy reload type before fragment callbacks without changing the modern entry', async () => {
+    const { browser, document, navigable, update, url } = await fixture();
+    document.legacyNavigationType = 'reload';
+    document.navigationTimingEntry!.type = 'reload';
+    update.mockImplementation(() => {
+      expect(document.env.getWindowOrWorkerGlobalScopeMixin().performance.navigation.type).toBe(0);
+    });
+    expect(await browser.evaluate(() => performance.navigation.type)).toBe(1);
+    navigable.navigateToFragment(url, 'push', 'none', null, null, 'fragment');
+    expect(update).toHaveBeenCalledOnce();
+    expect(await browser.evaluate(() => ({
+      legacy: performance.navigation.type,
+      modern: (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming).type,
+    }))).toEqual({ legacy: 0, modern: 'reload' });
   });
 
   it('forwards Navigation.navigate info, state, and tracker promises through the fragment branch', async () => {
@@ -72,7 +90,8 @@ describe('fragment navigation', () => {
   });
 
   it('preserves an intercepted fragment and its tracked results until a later navigation aborts it', async () => {
-    const { browser, navigation: navigationImpl, navigable, update, scroll, turns } = await fixture();
+    const { browser, document, navigation: navigationImpl, navigable, update, scroll, turns } = await fixture();
+    document.legacyNavigationType = 'reload';
     expect(await browser.evaluate(() => {
       const info = { source: 'interception' };
       let retained!: NavigateEvent;
@@ -90,6 +109,7 @@ describe('fragment navigation', () => {
     expect(update).not.toHaveBeenCalled();
     expect(scroll).not.toHaveBeenCalled();
     expect(turns).toHaveLength(0);
+    expect(await browser.evaluate(() => performance.navigation.type)).toBe(1);
 
     expect(await browser.evaluate(async () => {
       const retained = Reflect.get(globalThis, 'fragmentRequest') as { event: NavigateEvent; result: NavigationResult; };

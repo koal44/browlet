@@ -2940,6 +2940,8 @@ export interface Performance extends EventTarget {
   clearResourceTimings(): void;
   setResourceTimingBufferSize(maxSize: number): void;
   onresourcetimingbufferfull: EventHandlerNonNull | null;
+  readonly timing: PerformanceTiming;
+  readonly navigation: PerformanceNavigation;
 }
 
 export interface PerformanceConstructor extends Ctor<EventTargetConstructor> {
@@ -3066,6 +3068,55 @@ export interface PerformanceTimingConfidence {
 export interface PerformanceTimingConfidenceConstructor {
   readonly prototype: PerformanceTimingConfidence;
   [Symbol.hasInstance](value: unknown): value is PerformanceTimingConfidence;
+}
+
+export interface PerformanceTiming {
+  readonly navigationStart: number;
+  readonly unloadEventStart: number;
+  readonly unloadEventEnd: number;
+  readonly redirectStart: number;
+  readonly redirectEnd: number;
+  readonly fetchStart: number;
+  readonly domainLookupStart: number;
+  readonly domainLookupEnd: number;
+  readonly connectStart: number;
+  readonly connectEnd: number;
+  readonly secureConnectionStart: number;
+  readonly requestStart: number;
+  readonly responseStart: number;
+  readonly responseEnd: number;
+  readonly domLoading: number;
+  readonly domInteractive: number;
+  readonly domContentLoadedEventStart: number;
+  readonly domContentLoadedEventEnd: number;
+  readonly domComplete: number;
+  readonly loadEventStart: number;
+  readonly loadEventEnd: number;
+  toJSON(): object;
+}
+
+export interface PerformanceTimingConstructor {
+  readonly prototype: PerformanceTiming;
+  [Symbol.hasInstance](value: unknown): value is PerformanceTiming;
+}
+
+export interface PerformanceNavigation {
+  readonly TYPE_NAVIGATE: 0;
+  readonly TYPE_RELOAD: 1;
+  readonly TYPE_BACK_FORWARD: 2;
+  readonly TYPE_RESERVED: 255;
+  readonly type: number;
+  readonly redirectCount: number;
+  toJSON(): object;
+}
+
+export interface PerformanceNavigationConstructor {
+  readonly prototype: PerformanceNavigation;
+  [Symbol.hasInstance](value: unknown): value is PerformanceNavigation;
+  readonly TYPE_NAVIGATE: 0;
+  readonly TYPE_RELOAD: 1;
+  readonly TYPE_BACK_FORWARD: 2;
+  readonly TYPE_RESERVED: 255;
 }
 
 export interface Navigator {
@@ -3861,6 +3912,8 @@ export interface Window extends EventTarget {
   PerformanceServerTiming: PerformanceServerTimingConstructor;
   PerformanceNavigationTiming: PerformanceNavigationTimingConstructor;
   PerformanceTimingConfidence: PerformanceTimingConfidenceConstructor;
+  PerformanceTiming: PerformanceTimingConstructor;
+  PerformanceNavigation: PerformanceNavigationConstructor;
   Navigator: NavigatorConstructor;
   PluginArray: PluginArrayConstructor;
   MimeTypeArray: MimeTypeArrayConstructor;

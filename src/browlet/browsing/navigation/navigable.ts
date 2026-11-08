@@ -1149,6 +1149,9 @@ export class Navigable {
       scriptHistoryIndex++;
       scriptHistoryLength = scriptHistoryIndex + 1;
     }
+    // SPEC_CLASH(legacy-navigation-fragment-type): Follow Chromium/WebKit's last non-redirect navigation
+    // classification; Firefox retains the original load type. Canceled/intercepted paths returned above.
+    document.legacyNavigationType = 'navigate';
     document.url = url;
     this.activeSessionHistoryEntry = historyEntry;
     // SPEC_CLASH(fragment-history-length-index): HTML's fragment call swaps these arguments; use the callee's
@@ -1561,6 +1564,9 @@ export class Navigable {
 
     // Step 10 associates the Window without performing the later history activation of this Document.
     window.setAssociatedDocument(document);
+    // Navigation Timing §8.1 permits implementation-specific Document creation points for domLoading.
+    // The Window association selects this Document's time origin before any initialization callbacks.
+    document.domLoadingTime = window.env.currentHighResolutionTime().toTimestamp();
     document.initializeAncestry(params.iframeReferrerPolicy, this.containerDocument);
     document.initializeInsecureRequestsPolicy();
     document.initializeCSP();

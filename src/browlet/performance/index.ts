@@ -9,4 +9,5 @@ export { PerformanceObserverEntryListImpl } from './observer-entry-list';
 export { PerformanceResourceTimingImpl, type RenderBlockingStatusType } from './resource';
 export { PerformanceServerTimingImpl } from './server';
 export { PerformanceTimingConfidenceImpl, type PerformanceTimingConfidenceValue } from './confidence';
+export { PerformanceTimingImpl, PerformanceNavigationImpl, PerformanceNavigationType } from './legacy-navigation';
 export { performanceIDLDefinitions } from './web-idl';

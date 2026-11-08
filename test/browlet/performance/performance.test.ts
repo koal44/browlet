@@ -106,6 +106,8 @@ describe('Performance', () => {
 
     expect(performance.toJSON()).toEqual({
       timeOrigin: performance.timeOrigin,
+      timing: performance.timing,
+      navigation: performance.navigation,
     });
   });
 

@@ -14,6 +14,21 @@ import { runInHostTask } from '../../../support/tasks';
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('retained-Document reactivation', () => {
+  it('retains its legacy navigation type before pageshow instead of reclassifying a restored load', async () => {
+    let observedType: number | undefined;
+    const { document, target, previous } = fixture(undefined, (platform) => {
+      platform.onpageshow = () => { observedType = platform.performance.navigation.type; };
+    });
+    document.legacyNavigationType = 'reload';
+    const performance = document.env.getWindowOrWorkerGlobalScopeMixin().performance;
+    const retained = performance.navigation;
+    vi.spyOn(document, 'resetAutocompleteOffControls').mockImplementation(() => {});
+    await inTask(document, () => document.reactivate(target, [target, previous], 'traverse', previous));
+    expect(observedType).toBe(1);
+    expect(performance.navigation).toBe(retained);
+    expect(retained.type).toBe(1);
+  });
+
   it('restores the Window Document exposed by the native global after reactivation', () => {
     const { document, window } = fixture();
     const platform = project(window) as Window;

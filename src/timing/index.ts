@@ -3,5 +3,5 @@ export type { TimingEnvironment } from './environment';
 export {
   currentCoarsenedWallTime, initializeEstimatedMonotonicTimeOfUnixEpoch, coarsenedSharedCurrentTime,
   unsafeSharedCurrentTime, currentHighResolutionTime, relativeHighResolutionTime, relativeHighResolutionCoarseTime,
-  getTimeOriginTimestamp, currentWallTime, type DOMHighResTimeStamp, domHighResTimeStampIDL, epochTimeStampIDL,
+  getTimeOriginTimestamp, currentWallTime, type DOMHighResTimeStamp, type EpochTimeStamp, domHighResTimeStampIDL, epochTimeStampIDL,
 } from './high-resolution-time';

@@ -13,6 +13,17 @@ import { getRelevantRealm, unwrap } from '../../../support/browlet-binding';
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('non-fragment synchronous navigation', () => {
+  it('preserves the legacy load type across pushState and replaceState', async () => {
+    const { browser, document } = await fixture();
+    document.legacyNavigationType = 'reload';
+    expect(await browser.evaluate(() => {
+      history.pushState(null, '', '/pushed');
+      const pushed = performance.navigation.type;
+      history.replaceState(null, '', '/replaced');
+      return [pushed, performance.navigation.type];
+    })).toEqual([1, 1]);
+  });
+
   it('commits projected pushes and replacements synchronously without history events or fetching', async () => {
     const { browser, document, navigable, route, turns } = await fixture();
     const initial = navigable.activeSessionHistoryEntry;

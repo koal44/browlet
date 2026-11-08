@@ -18,6 +18,7 @@ import type { PerformanceObserverImpl, PerformanceObserverCallbackOptions } from
 import { PerformanceObserverEntryListImpl } from './observer-entry-list';
 import { PerformanceResourceTimingImpl } from './resource';
 import { PerformanceNavigationTimingImpl, type NavigationTimingInit } from './navigation';
+import { PerformanceTimingImpl, PerformanceNavigationImpl } from './legacy-navigation';
 
 /** Exposes this global's coarsened timestamps and retained performance entries. */
 // https://w3c.github.io/hr-time/#the-performance-interface
@@ -46,6 +47,10 @@ export class PerformanceImpl extends EventTargetImpl {
   #resourceTimingSecondaryBuffer: PerformanceResourceTimingImpl[] = [];
   /** Whether overflow processing is queued or running for this global. */
   #resourceTimingBufferFullEventPending = false;
+  /** Window-only legacy view; it follows the associated Document when an initial Window is reused. */
+  #timing?: PerformanceTimingImpl;
+  /** Window-only legacy classification/count view, with the same lifetime as Performance. */
+  #navigation?: PerformanceNavigationImpl;
 
   constructor(env: BrowletEnvironment) {
     super(env);
@@ -58,6 +63,18 @@ export class PerformanceImpl extends EventTargetImpl {
   // https://w3c.github.io/hr-time/#dom-performance-timeorigin
   get timeOrigin(): DOMHighResTimeStamp {
     return this.env.getTimeOriginTimestamp().toTimestamp();
+  }
+
+  get timing(): PerformanceTimingImpl {
+    const realm = this.env.realm;
+    if (!realm.isWindow()) throw new InternalError('Legacy navigation timing requires a Window');
+    return this.#timing ??= new PerformanceTimingImpl(realm.windowImplementation.env);
+  }
+
+  get navigation(): PerformanceNavigationImpl {
+    const realm = this.env.realm;
+    if (!realm.isWindow()) throw new InternalError('Legacy navigation information requires a Window');
+    return this.#navigation ??= new PerformanceNavigationImpl(realm.windowImplementation.env);
   }
 
   get onresourcetimingbufferfull(): EventHandlerCallback | null {

@@ -8,6 +8,7 @@ import { resourceTimingPerformanceIDL, performanceResourceTimingIDL, renderBlock
 import { performanceServerTimingIDL, serverTimingResourceIDL } from './server';
 import { performanceNavigationTimingIDL, navigationTimingTypeIDL } from './navigation';
 import { performanceTimingConfidenceIDL, performanceTimingConfidenceValueIDL } from './confidence';
+import { performanceTimingIDL, performanceNavigationIDL, legacyNavigationPerformanceIDL } from './legacy-navigation';
 
 /** High Resolution Time, Performance Timeline, its timing families, and the Soft Navigations amendment. */
 export const performanceIDLDefinitions = [
@@ -18,4 +19,5 @@ export const performanceIDLDefinitions = [
   performanceServerTimingIDL, serverTimingResourceIDL,
   performanceNavigationTimingIDL, navigationTimingTypeIDL,
   performanceTimingConfidenceIDL, performanceTimingConfidenceValueIDL,
+  performanceTimingIDL, performanceNavigationIDL, legacyNavigationPerformanceIDL,
 ];

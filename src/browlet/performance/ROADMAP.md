@@ -27,6 +27,11 @@ that timing alongside browser events and lifecycle observations.
   Resource Timing contributes its buffer-control partial from `resource.ts`;
   the methods, secondary buffer, overflow task, and event-handler state remain
   on PerformanceImpl. Resource storage runs once, independently of observer delivery.
+- `legacy-navigation.ts` supplies Navigation Timing §8's `PerformanceTiming`,
+  `PerformanceNavigation`, and their Window-only Performance attributes. The
+  timestamp view reads existing Document/Fetch measurements as whole epoch
+  milliseconds. The type/count view uses the Document's legacy classification
+  and existing redirect data; neither introduces another timeline.
 - `timeline.ts` supplies the PerformanceEntry implementation/declaration and
   per-type buffer tuples. Performance owns its global's buffer map and implements
   the three synchronous queries and shared observer-delivery task. `observer.ts`
@@ -385,8 +390,7 @@ Remaining dependencies are deliberate:
   handoff. Critical-CH restart measurement still has no producer. Do not synthesize
   these observations in getters.
 - **Other contributions:** Server Timing now uses the final navigation response.
-  Legacy `performance.timing` / `performance.navigation`
-  remain unaudited in this specification's obsolete §8. Prerender's
+  Legacy `performance.timing` and `performance.navigation` are implemented below. Prerender's
   `activationStart` is a separate contribution and requires its own lifecycle.
 
 Validation covers 17 new Navigation Timing cases and 53 existing Resource/Server
@@ -399,6 +403,130 @@ previously approved MIME-support expected failure. No new failures are classifie
 or skipped. Generated declarations, TypeScript, type contracts, changed-file ESLint,
 and the import audit pass. The Browlet package builds with its seven existing
 circular-dependency warnings; ESM, CJS, and declaration artifact checks pass.
+
+## Navigation Timing: legacy PerformanceTiming
+
+Navigation Timing [§8.1](https://w3c.github.io/navigation-timing/#sec-performance-timing)
+and §8.3's `performance.timing` attribute are implemented. Performance retains one
+Window-owned object. Its getters follow that Window's associated Document, including
+initial-Window reuse, without copying Fetch or load records. Shared-clock Fetch
+observations and Document-relative milestones convert to epoch milliseconds once;
+the combined value is truncated, preserving zero for absent observations.
+Connection phases use the legacy fallback chain, and DNS is excluded from the
+connection interval. An absent TLS handshake remains zero.
+
+`domLoading` is the only new measurement: §7.5.1 records it after establishing
+the new Document's Window association and before initialization callbacks;
+later readiness changes retain the first loading observation. The specification
+explicitly permits implementation-specific Document creation points here.
+The existing HTML load record continues to own the other milestones.
+`performance.toJSON()` now includes the retained `timing` object through ordinary
+Web IDL default JSON, as all three browser probes do. Borrowed getters use the
+receiver; JSON allocates in the called method's realm.
+
+The 2026-11-06 probe used Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2.
+Eric approved these choices:
+
+- `SPEC_GAP(legacy-timing-detached)` / `SPEC_CLASH(legacy-timing-detached)`:
+  no removal lifetime rule is written. Retain the Document's recorded timestamps,
+  like Firefox/WebKit; Chromium's getters return zero after iframe removal.
+- `SPEC_CLASH(legacy-timing-unavailable-fetch)`: initial about:blank still has
+  no modern navigation entry. Expose its time origin and any recorded Document
+  milestones, leaving unavailable Fetch phases zero. Chromium uses zero for
+  absent network phases; Firefox/WebKit substitute epoch values, even for TLS
+  without a connection. Missing loader measurements remain absent, not estimates.
+- `SPEC_CLASH(legacy-timing-redirect-privacy)`: follow §8.1 and Chromium's strict
+  same-origin rule for both redirect and unload timestamps. Timing-Allow-Origin
+  does not relax this legacy gate. In a page-initiated foreign redirect returning
+  to the original origin with TAO on every response, WebKit exposes redirect
+  times and Firefox exposes preceding same-origin unload times. The modern
+  navigation entry's separately approved exposure rules are unchanged.
+
+Evidence is reproducible in Experimental's `legacy-performance-timing.mjs`.
+Source counterparts are Blink `core/timing/performance_timing.cc`, Gecko
+`dom/performance/PerformanceTiming.cpp`, and WebKit `page/PerformanceTiming.cpp`.
+The current upstream Navigation Timing source is `48c0048` (2026-11-02);
+HTML is `5955a33` (2026-11-05), both refreshed before implementation.
+
+**Remaining owners:** HTML's initial about:blank loading milestones, full parser
+scheduling, previous-Document unload capture/privacy, and synthetic/supplied-response
+measurements still belong to their existing lifecycle/loader dependencies. The
+legacy getters do not fill them in. WorkerGlobalScope's common global-API forwarding
+remains a §10.3 dependency; the legacy interface and partial member are Window-only.
+The following legacy type/count slice completes §8's public surface.
+
+Validation: all 14 new cases pass in each of the six Node 24.19.0, 26.8.1,
+and custom 27.0.0-pre stock/addon configurations. The affected 22-file run has
+354 cases: 353 passes plus the existing MIME-support expected failure on stock
+and custom/addon; official-addon runs also retain the existing `import.meta`
+expected failure (352 passes, two expected failures). Matching addons were rebuilt
+for all three bases, and all three complete native suites pass. TypeScript,
+generated declarations, type contracts, changed-file ESLint, import audit, and
+whitespace checks pass. The Browlet build retains its seven existing circular
+dependency warnings; ESM, CJS, and platform-declaration artifact checks pass.
+No new expected failures or skips were introduced.
+
+## Navigation Timing: legacy PerformanceNavigation
+
+Navigation Timing [§8.2](https://w3c.github.io/navigation-timing/#sec-performance-navigation)
+and §8.3's `performance.navigation` attribute are implemented. Performance retains
+one Window-owned view of its associated Document. It exposes the four constants,
+read-only type/count, and default JSON through the existing bindings. Borrowed
+getters use the receiver; JSON allocates in the method's realm. The interface and
+partial member are absent from Worker globals.
+
+§7.5.1 initializes `Document.legacyNavigationType` from the supplied navigation
+timing type. The legacy field is separate because a fragment can change it while
+the modern entry still describes the original load. Redirect counts reuse the
+existing navigation entry, gated by the Document's foreign-redirect flag. Initial
+about:blank exposes type 0/count 0 without requiring a modern entry; supplied
+responses still cannot invent missing redirect history. Initial-Window reuse
+retains the legacy object's identity while changing its associated Document.
+
+The 2026-11-06 probe used Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2.
+Eric approved these choices:
+
+- `SPEC_CLASH(legacy-navigation-fragment-type)`: ordinary fragment commits reset
+  the legacy type to navigate, like Chromium/WebKit; Firefox retains the load
+  type. Canceled and intercepted fragments do not reset it. All three browsers
+  retain the load type across History state updates, same-document History
+  traversal, and intercepted push/reload commits.
+- `SPEC_GAP(legacy-navigation-detached)` / `SPEC_CLASH(legacy-navigation-detached)`:
+  the specification supplies no removal rule. Retain the Document's values, like
+  Firefox and Browlet's legacy timestamp view. Chromium/WebKit reset type/count
+  after losing the frame.
+- `SPEC_CLASH(legacy-navigation-redirect-count)`: follow the specified strict
+  same-origin gate and Chromium/Firefox. Foreign redirect counts remain zero
+  despite Timing-Allow-Origin; WebKit exposes TAO-authorized counts. Same-origin
+  counts survive `no-referrer` in all three browsers.
+- `SPEC_CLASH(legacy-navigation-restored-type)`: a retained Document keeps its
+  legacy classification, matching Chromium's verified persisted-pageshow runs.
+  Gecko's `nsDOMNavigationTiming::NotifyRestoreStart()` instead changes it to
+  back-forward. Firefox/WebKit fetched a new Document in our probe, so those runs
+  establish fresh-history-load type 2, not their retained-Document behavior.
+  Newly created history Documents receive type 2 in Browlet as well.
+
+Reproduce with Experimental's `legacy-performance-navigation.mjs`; its
+`LEGACY-PERFORMANCE-NAVIGATION.md` records the results and bfcache verification.
+Source counterparts are [Blink](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/timing/performance_navigation.cc),
+[Gecko](https://github.com/mozilla/gecko-dev/blob/master/dom/performance/PerformanceNavigation.cpp),
+and [WebKit](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/page/PerformanceNavigation.cpp).
+Navigation Timing source `48c0048` was refreshed before this slice.
+
+**Remaining owners:** the earlier timestamp/loader dependencies remain explicit;
+this view adds no measurements. The timing detour can now return to HTML §7.5.1
+steps 17–20, beginning with Refresh. Full parser/lifecycle measurements, original
+transport data for supplied responses, Critical-CH, prerender, soft-navigation
+detection, and the confidence host assessment remain with their named owners.
+
+Validation: 18 new cases plus the extended cancellation, interception, and worker
+checks pass. The affected 25-file run has 425 cases in each of the six Node
+24.19.0, 26.8.1, and custom 27.0.0-pre stock/addon configurations: 424 passes and
+the existing MIME-support expected failure. No new failures were classified or
+skipped. The matching addons rebuilt for check-in A were reused. TypeScript,
+generated declarations, type contracts, changed-file ESLint, import hierarchy,
+and whitespace checks pass. The package build retains its seven existing circular
+dependency warnings; ESM, CJS, and platform-declaration artifact checks pass.
 
 ## Navigation Timing: confidence
 
@@ -1399,8 +1527,9 @@ The buffer-management API, secondary-buffer insertion, and automatic buffer-full
 task/event, Fetch production/exposure handoff, and Server Timing header metrics
 are present. Navigation Timing's entry/getter foundation and confidence calculation
 are present, as are controller-backed/fallback creation, buffering, and load-event
-observer delivery. The legacy API audit and remaining lifecycle inputs are tracked
-above; initial about:blank intentionally has no entry. The confidence host
+observer delivery. Legacy `performance.timing` and `performance.navigation` are
+present; the remaining lifecycle inputs are tracked above. Initial about:blank
+intentionally has no modern entry. The confidence host
 measurement policy remains an explicit dependency, returning null until available.
 
 Shared Timing extraction and environment-ownership validation: 157 timing,
