@@ -1,12 +1,16 @@
 import { InternalError, type InternalPromise } from '../../infra/index';
-import { arg, defineIncludes, defineInterface, idlType, impl, op, reference, roAttr, union, type VoidFunction } from '../../web-idl/core/index';
+import {
+  arg, atArg, defineIncludes, defineInterface, DOMExceptionImpl, idlType, impl, invokeWith,
+  op, reference, roAttr, union, type VoidFunction,
+} from '../../web-idl/core/index';
 import type { URLRecord } from '../../url/index';
+import type { HTTPStatus } from '../../http/index';
 import { isLocalURL, type FetchResponse, type FetchRequestInfo, type FetchRequestInit, type ResponseImpl } from '../../fetch/index';
 
 import { EventTargetImpl } from '../dom/events/index';
 import {
   EventHandlerMap, eventHandlerMapAttr, ImportMap, ModuleMap, mergeExistingAndNewImportMaps,
-  type BrowletGlobalObject, type SpecifierResolutionRecord, type TimerAction,
+  type BrowletGlobalObject, type PerformScriptFetch, type SpecifierResolutionRecord, type TimerAction,
 } from '../scripting/index';
 import { EmbedderPolicy, PolicyContainer } from '../browsing/policy/index';
 import type { TrustedScriptURLImpl, TrustedTypePolicyFactoryImpl } from '../browsing/policy/trusted-types/index';
@@ -37,6 +41,8 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
   name: string;
   /** Final script response URL; startup assigns it before executing author code. */
   url: URLRecord | null = null;
+  /** Root response status retained for CSP violation metadata, zero before response initialization. */
+  httpStatus: HTTPStatus = 0;
   /** Documents and worker globals retaining this worker, including ownerless-period timing. */
   ownerSet: WorkerOwnerSet;
   /** Presence/activity of an owner retained in another isolate; never a cloned Document or worker global. */
@@ -261,12 +267,31 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
     return !this.isActivelyNeeded() && this.isPermissible();
   }
 
-  /** Worker-only synchronous script loading, supplied by the later loading integration. */
+  /** Apply Trusted Types before importing scripts using the invoked method's current environment. */
   // https://html.spec.whatwg.org/multipage/workers.html#importing-scripts-and-libraries
-  importScripts(..._urls: (TrustedScriptURLImpl | string)[]): void {
-    // TODO(HTML §10.3.1): Trusted Types checks, synchronous worker-imported script fetching,
-    // and ordered classic-script execution require worker settings and the pause backend.
-    throw new InternalError('Worker importScripts() is not implemented');
+  // The injected environment precedes the variadic IDL arguments, which must remain last.
+  importScripts(env: BrowletEnvironment, ...urls: (TrustedScriptURLImpl | string)[]): void {
+    const trustedTypes = this.env.getWindowOrWorkerGlobalScopeMixin().trustedTypes;
+    const urlStrings = urls.map((url) => trustedTypes.getCompliantString(
+      'TrustedScriptURL', url, 'WorkerGlobalScope importScripts', 'script',
+    ));
+    this.importScriptsIntoWorker(urlStrings, undefined, env);
+  }
+
+  /** Validate all URLs, then fetch and execute each script; Service Workers may supply their fetch hook. */
+  // https://html.spec.whatwg.org/multipage/workers.html#import-scripts-into-worker-global-scope
+  importScriptsIntoWorker(urls: string[], performFetch?: PerformScriptFetch, env = this.env): void {
+    if (this.type === 'module') throw new env.realm.TypeError('Module workers cannot use importScripts()');
+    const urlRecords = urls.map((url) => {
+      const record = env.encodingParseURL(url);
+      if (record === null) throw new DOMExceptionImpl('Invalid worker import URL', 'SyntaxError');
+      return record;
+    });
+    for (const url of urlRecords) {
+      const script = env.fetchClassicWorkerImportedScript(url, performFetch);
+      const completion = script.run(true);
+      if (completion.type === 'throw') throw completion.value;
+    }
   }
 
   /** Discard queued tasks and prevent further tasks; the running script can finish. */
@@ -366,6 +391,7 @@ export const workerGlobalScopeIDL = defineInterface<BrowletEnvironment>({
     roAttr('navigator', reference('WorkerNavigator')),
     op('importScripts', idlType.undefined,
       [arg('urls', union(reference('TrustedScriptURL'), idlType.USVString), { variadic: true })],
+      invokeWith(atArg(0, (_env, methodEnv) => methodEnv)),
     ),
     eventHandlerMapAttr('onerror', 'OnErrorEventHandler'),
     eventHandlerMapAttr('onlanguagechange'),

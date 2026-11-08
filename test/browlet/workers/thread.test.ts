@@ -1223,6 +1223,188 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
       channel?.close();
     });
 
+    it('fetches importScripts on the browser while the worker blocks without running jobs', async () => {
+      const owner = createWorkerCreator();
+      const { worker, thread, messages } = startBroadcastWorker(`
+        onmessage = () => {
+          globalThis.trace = [];
+          queueMicrotask(() => trace.push('microtask'));
+          Promise.resolve().then(() => trace.push('reaction'));
+          setTimeout(() => trace.push('timer'), 0);
+          try { importScripts('first.js', 'second.js'); postMessage(trace); }
+          catch (error) { postMessage(['failure', error.name, error.message]); }
+          close();
+        };
+        postMessage('ready');
+      `, owner);
+      await vi.waitFor(() => { owner.drain(); expect(messages).toEqual(['ready']); }, { timeout: 5000 });
+      const requested: string[] = [];
+      mockHTTPTransport(owner.creatorEnv.userAgent, (request, listener) => {
+        requested.push(serializeURL(request.url));
+        setTimeout(() => {
+          listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+          listener.onData(utf8Encode(requested.length === 1
+            ? "trace.push('first'); importScripts('nested.js');"
+            : requested.length === 2 ? "trace.push('nested');" : "trace.push('second');"));
+          listener.onEnd();
+        }, 20);
+      });
+      worker.postMessage('import');
+      await vi.waitFor(() => { owner.drain(); expect(messages).toHaveLength(2); }, { timeout: 5000 });
+      expect(messages[1]).toEqual(['first', 'nested', 'second']);
+      expect(requested).toEqual(['https://creator.test/first.js', 'https://creator.test/nested.js', 'https://creator.test/second.js']);
+      expect(await thread.closed).toMatchObject({ error: undefined, terminated: false });
+    });
+
+    it.each([false, true])('uses worker CSP for importScripts and reports on its global, blocked: %s', async (blocked) => {
+      const owner = createWorkerCreator();
+      owner.creatorEnv.policyContainer.cspList = new CSPList(owner.creatorEnv.origin);
+      owner.creatorEnv.policyContainer.cspList.policies.push(
+        ContentSecurityPolicy.parse("worker-src 'self'; script-src 'none'", 'header', 'enforce'),
+      );
+      owner.creatorEnv.userAgent.cookieStore.parseAndStoreCookie(
+        'session=browser; Secure; SameSite=None', true, { kind: 'domain', value: 'creator.test' }, [''], true, false, true,
+      );
+      const { worker, thread, messages } = startBroadcastWorker(`
+        addEventListener('securitypolicyviolation', event => {
+          postMessage([event.target === globalThis, event.documentURI, event.effectiveDirective, event.blockedURI]);
+          close();
+        });
+        onmessage = () => {
+          try { importScripts('import.js'); postMessage('imported'); close(); }
+          catch (error) { postMessage([error.name, error instanceof DOMException]); }
+        };
+        postMessage('ready');
+      `, owner, [['Content-Security-Policy', blocked ? "script-src 'none'" : "script-src 'self'"]]);
+      await vi.waitFor(() => { owner.drain(); expect(messages).toEqual(['ready']); }, { timeout: 5000 });
+      const transport = mockHTTPTransport(owner.creatorEnv.userAgent, (request, listener) => {
+        expect(request.headers.get('Referer')).toBe('https://creator.test/worker.js');
+        expect(request.headers.get('Cookie')).toBe('session=browser');
+        expect(request.headers.get('Sec-Fetch-Dest')).toBe('script');
+        listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+        listener.onData(utf8Encode('42;'));
+        listener.onEnd();
+      });
+      transport.mockClear();
+      worker.postMessage('import');
+      await vi.waitFor(() => { owner.drain(); expect(messages).toHaveLength(blocked ? 3 : 2); }, { timeout: 5000 });
+      expect(messages.slice(1)).toEqual(blocked ? [
+        ['NetworkError', true], [true, 'https://creator.test/worker.js', 'script-src-elem', 'https://creator.test/import.js'],
+      ] : ['imported']);
+      expect(transport).toHaveBeenCalledTimes(blocked ? 0 : 1);
+      expect(await thread.closed).toMatchObject({ error: undefined, terminated: false });
+    });
+
+    it.each(['status', 'MIME', 'body', 'syntax', 'throw'] as const)('stops importScripts after %s failure and keeps the connection usable', async (failure) => {
+      const owner = createWorkerCreator();
+      const { worker, thread, messages } = startBroadcastWorker(`
+        onmessage = () => {
+          try { importScripts('bad.js', 'never.js'); postMessage('unexpected success'); }
+          catch (error) { postMessage([error.name, error.name === 'SyntaxError' ? error instanceof SyntaxError : error instanceof DOMException]); }
+          importScripts('data:text/javascript,postMessage("recovered")');
+          close();
+        };
+        postMessage('ready');
+      `, owner);
+      await vi.waitFor(() => { owner.drain(); expect(messages).toEqual(['ready']); }, { timeout: 5000 });
+      const transport = mockHTTPTransport(owner.creatorEnv.userAgent, (_request, listener) => {
+        listener.onHeaders(failure === 'status' ? 404 : 200, '',
+          new FetchHeaders([['Content-Type', failure === 'MIME' ? 'text/plain' : 'text/javascript']]), true);
+        listener.onData(utf8Encode(failure === 'syntax' ? 'const = ;' : failure === 'throw' ? 'throw new DOMException("author", "InvalidStateError");' : '42;'));
+        if (failure === 'body') listener.onError(new Error('body failed'));
+        else listener.onEnd();
+      });
+      transport.mockClear();
+      worker.postMessage('import');
+      await vi.waitFor(() => { owner.drain(); expect(messages).toHaveLength(3); }, { timeout: 5000 });
+      expect(messages.slice(1)).toEqual([
+        [failure === 'syntax' ? 'SyntaxError' : failure === 'throw' ? 'InvalidStateError' : 'NetworkError', true], 'recovered',
+      ]);
+      expect(transport).toHaveBeenCalledTimes(1);
+      expect(await thread.closed).toMatchObject({ error: undefined, terminated: false });
+    });
+
+    it('retains a captured Blob URL across revocation within importScripts', async () => {
+      const owner = createWorkerCreator();
+      const { thread, messages } = startBroadcastWorker(`
+        globalThis.trace = [];
+        globalThis.blobURL = URL.createObjectURL(new Blob(["trace.push('blob')"], { type: 'text/javascript' }));
+        importScripts('data:text/javascript,URL.revokeObjectURL(blobURL)', blobURL);
+        try { importScripts(blobURL); } catch (error) { trace.push(error.name); }
+        postMessage(trace);
+        close();
+      `, owner);
+      await vi.waitFor(() => { owner.drain(); expect(messages).toEqual([['blob', 'NetworkError']]); }, { timeout: 5000 });
+      expect(await thread.closed).toMatchObject({ error: undefined, terminated: false });
+    });
+
+    it('loads a cross-origin importScripts response without requiring CORS', async () => {
+      const owner = createWorkerCreator();
+      const { worker, thread, messages } = startBroadcastWorker(`
+        onmessage = () => { importScripts('https://other.test/import.js'); postMessage('returned'); close(); };
+        postMessage('ready');
+      `, owner);
+      await vi.waitFor(() => { owner.drain(); expect(messages).toEqual(['ready']); }, { timeout: 5000 });
+      const transport = mockHTTPTransport(owner.creatorEnv.userAgent, (request, listener) => {
+        expect(serializeURL(request.url)).toBe('https://other.test/import.js');
+        expect(request.headers.get('Sec-Fetch-Mode')).toBe('no-cors');
+        listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+        listener.onData(utf8Encode('postMessage("cross-origin")'));
+        listener.onEnd();
+      });
+      transport.mockClear();
+      worker.postMessage('import');
+      await vi.waitFor(() => { owner.drain(); expect(messages).toEqual(['ready', 'cross-origin', 'returned']); }, { timeout: 5000 });
+      expect(transport).toHaveBeenCalledTimes(1);
+      expect(await thread.closed).toMatchObject({ error: undefined, terminated: false });
+    });
+
+    it('terminates a worker blocked in importScripts and cancels its pending browser Fetch', async () => {
+      const owner = createWorkerCreator();
+      const { worker, thread, messages } = startBroadcastWorker(`
+        onmessage = () => { importScripts('pending.js'); postMessage('unexpected return'); };
+        postMessage('ready');
+      `, owner);
+      await vi.waitFor(() => { owner.drain(); expect(messages).toEqual(['ready']); }, { timeout: 5000 });
+      const abort = vi.fn();
+      let complete: (() => void) | undefined;
+      mockHTTPTransport(owner.creatorEnv.userAgent, () => {}).mockImplementation((_request, listener) => {
+        complete = () => {
+          listener.onHeaders(200, '', new FetchHeaders([['Content-Type', 'text/javascript']]), true);
+          listener.onData(utf8Encode('postMessage("late")'));
+          listener.onEnd();
+        };
+        return { pause() {}, resume() {}, abort };
+      });
+      worker.postMessage('import');
+      await vi.waitFor(() => expect(complete).toBeDefined());
+      expect(await thread.terminate()).toMatchObject({ error: undefined, terminated: true });
+      expect(abort).toHaveBeenCalledExactlyOnceWith();
+      complete!();
+      owner.drain();
+      expect(messages).toEqual(['ready']);
+    });
+
+    it('reports an importScripts Trusted Types violation inside the real worker', async () => {
+      const owner = createWorkerCreator();
+      const { thread, messages } = startBroadcastWorker(`
+        addEventListener('securitypolicyviolation', event => {
+          postMessage([event.target === globalThis, event.isTrusted, event.documentURI,
+            event.referrer, event.statusCode, event.effectiveDirective, event.blockedURI]);
+          close();
+        });
+        postMessage(['empty', importScripts()]);
+        try { importScripts('dependency.js'); }
+        catch (error) { postMessage(['rejected', error.name, error instanceof TypeError]); }
+      `, owner, [['Content-Security-Policy', "require-trusted-types-for 'script'"]]);
+      await vi.waitFor(() => { owner.drain(); expect(messages).toHaveLength(3); }, { timeout: 5000 });
+      expect(messages).toEqual([
+        ['empty', undefined], ['rejected', 'TypeError', true],
+        [true, true, 'https://creator.test/worker.js', '', 200, 'require-trusted-types-for', 'trusted-types-sink'],
+      ]);
+      expect(await thread.closed).toMatchObject({ error: undefined, terminated: false });
+    });
+
     it('uses FileReaderSync on cloned Blob/File data without running pending worker jobs', async () => {
       const owner = createWorkerCreator();
       const window = owner.creatorEnv.global as Window;

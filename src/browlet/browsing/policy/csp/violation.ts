@@ -9,9 +9,9 @@ import { copyURL, createOpaqueOrigin, obtainURLOrigin, stripURLForReporting, typ
 import type { HTTPStatus } from '../../../../http/index';
 import { FetchRequest, fetch, isFilteredResponse, type FetchResponse } from '../../../../fetch/index';
 
-import { EventImpl, type EventInit } from '../../../dom/events/index';
+import { EventImpl, EventTargetImpl, type EventInit } from '../../../dom/events/index';
 import { ReportBodyImpl, ReportImpl, ReportingEndpoint } from '../../../reporting/index';
-import type { ElementImpl, DocumentImpl } from '../../../dom/nodes/index';
+import type { ElementImpl } from '../../../dom/nodes/index';
 import type { DOMEnvironment } from '../../../dom/index';
 import type { BrowletEnvironment } from '../../../environment/index';
 import type { UserAgent } from '../../../user-agent';
@@ -45,8 +45,8 @@ export class CSPViolation {
   element: ElementImpl | null = null;
   /** Authorized excerpt of violating inline code, otherwise empty. */
   sample = '';
-  /** Protected Document retained for event targeting, or null before its creation. */
-  #document: DocumentImpl | null = null;
+  /** Protected Document or worker global retained for event targeting, or null before creation. */
+  #eventTarget: EventTargetImpl | null = null;
   /** Browser owner for reports that have no global. */
   #userAgent: UserAgent;
   /** Incoming response's endpoint configuration, independent of existing globals. */
@@ -64,18 +64,28 @@ export class CSPViolation {
     this.#userAgent = userAgent;
   }
 
-  /** Capture the protected Document and its metadata before asynchronous delivery. */
+  /** Capture the protected Document or worker and its resource metadata before asynchronous delivery. */
   // https://w3c.github.io/webappsec-csp/#create-violation-for-global
   // Require the resource at construction instead of exposing a partially populated violation.
   static fromGlobal(
     policy: ContentSecurityPolicy, effectiveDirective: string, resource: CSPViolationResource, env: BrowletEnvironment,
   ): CSPViolation {
     const document = env.realm.getAssociatedDocument();
-    if (document === null) throw new InternalError('CSP worker violation integration is not implemented');
-    const violation = new CSPViolation(policy, effectiveDirective, resource, document.url, document.httpStatus, env.userAgent);
+    let violation: CSPViolation;
+    if (document !== null) {
+      violation = new CSPViolation(policy, effectiveDirective, resource, document.url, document.httpStatus, env.userAgent);
+      violation.#eventTarget = document;
+      violation.referrer = document.referrer === '' ? null : env.parseURL(document.referrer);
+    } else {
+      const global = env.globalImplementation;
+      if (!(global instanceof EventTargetImpl) || !global.isWorkerGlobal() || global.url === null) {
+        throw new InternalError('CSP violation capture requires a Document or initialized worker global');
+      }
+      violation = new CSPViolation(policy, effectiveDirective, resource, global.url, global.httpStatus, env.userAgent);
+      violation.#eventTarget = global;
+      // CSP populates referrer only for Window globals; retain null for workers.
+    }
     violation.env = env;
-    violation.#document = document;
-    violation.referrer = document.referrer === '' ? null : env.parseURL(document.referrer);
     // CSP permits omitting script locations when the engine cannot supply them.
     // Do not infer author locations from a host Node stack or disclose a redirect target.
     return violation;
@@ -110,10 +120,10 @@ export class CSPViolation {
     const { env } = this;
     let target = this.element;
     const steps = () => {
-      const document = this.#document;
-      if (target !== null && target.getShadowIncludingRoot() !== document) target = null;
+      const eventTarget = this.#eventTarget;
+      if (target !== null && target.getShadowIncludingRoot() !== eventTarget) target = null;
       const body = new CSPViolationReportBodyImpl(this);
-      (target ?? document)?.fireEvent('securitypolicyviolation', SecurityPolicyViolationEventImpl, (event) => {
+      (target ?? eventTarget)?.fireEvent('securitypolicyviolation', SecurityPolicyViolationEventImpl, (event) => {
         event.initialize({
           documentURI: body.documentURL, referrer: body.referrer ?? '', blockedURI: body.blockedURL ?? '',
           effectiveDirective: body.effectiveDirective, violatedDirective: body.effectiveDirective,

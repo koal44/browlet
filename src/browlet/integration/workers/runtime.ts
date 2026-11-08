@@ -79,6 +79,9 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
       ...this.script, agent: this.agent, creatorEnvSnapshot: this.creatorEnvSnapshot, unsafeWorkerCreationTime,
       userAgent: this.#userAgent,
     });
+    this.environment.importedScriptFetch = (request, _isTopLevel, onResponse) => {
+      this.#userAgent.fetchImportedScript(request, onResponse, this.environment);
+    };
     this.environment.getWindowOrWorkerGlobalScopeMixin().timers.setWorkerClock(() => this.#endpoint.elapsedTime);
     const global = this.environment.globalImplementation;
     global.remoteOwner = init.ownerState === null ? null : new RemoteWorkerOwner(init.ownerState);

@@ -274,11 +274,11 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   failures for these facilities. HTML's `import.meta.url` and `resolve` work on
   custom/compat and stock VM modules; official compat bases still receive empty
   metadata. The [integration tests](../test/browlet/scripting/import-meta.test.ts)
-  retain those expected failures. Worker `importScripts()` fetching
-  still lacks a synchronous Fetch host wait: `EventLoop.pauseUntil()` guards task and
-  checkpoint delivery, but cannot make same-thread asynchronous I/O complete
-  while that thread is blocked. Existing direct evaluation remains
-  separate, and HTML script/worker startup does not call these fetchers yet. See the
+  retain those expected failures. Isolated worker `importScripts()` now waits on
+  its browser-side Fetch connection without running author jobs. Same-isolate
+  callers still need a synchronous hook: pausing cannot make asynchronous I/O
+  complete on the blocked thread itself. Ordinary HTML script-element loading
+  remains separate from the connected worker loaders. See the
   [script-creation audit](browlet/scripting/ROADMAP.md#html-8143-creating-scripts).
 
 - **Wasm namespace lookup currently covers the addon bridge.**
@@ -2235,8 +2235,16 @@ The [closing audit](browlet/navigator/ROADMAP.md#closing-custom-handler-audit)
 also assigns cross-site registration-spam policy, safe consent UI, and optional
 administrator restrictions to those unfinished hosts. Remembering a pair and
 preparing its URL do not complete these policies or automatically select a default.
-Workers do not expose these methods. Hardware concurrency remains unfinished. `importScripts()` throws
-at its explicit synchronous-loading boundary. Dedicated/shared realm and settings
+Workers do not expose these methods. Hardware concurrency remains unfinished.
+`importScripts()` now performs Trusted Types and URL validation, rejects module
+workers, and executes imported scripts in order. Isolated workers use browser-side
+Fetch through their private UserAgent channel; only the requesting worker blocks.
+Ordered/nested imports, worker CSP, cross-origin no-cors responses, captured Blob
+URLs, and termination during the wait have focused coverage. Same-isolate callers
+still require a synchronously completed host hook. Resource Timing transport and
+background-revalidation CSP reporting remain explicit dependencies. Worker CSP violations capture root
+URL/status and dispatch on the worker global, while network reporting remains
+a shared-service dependency. Dedicated/shared realm and settings
 composition is available internally, including initial ownership and separate resource
 state. It leaves execution readiness false; the separate-isolate startup path
 now also uses this composition with transported creator values and reserved identity.

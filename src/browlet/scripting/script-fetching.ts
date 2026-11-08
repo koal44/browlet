@@ -1,4 +1,5 @@
 import { InternalError } from '../../infra/index';
+import { DOMExceptionImpl } from '../../web-idl/core/index';
 import { decode, utf8Decode, type Encoding } from '../../encoding/index';
 import type { URLRecord } from '../../url/index';
 import { getMIMETypeEssence, isJavaScriptMIMEType, isJSONMIMEType } from '../../mime/index';
@@ -101,17 +102,51 @@ export function createClassicWorkerScriptFromResponse(
   return new ClassicScript(utf8Decode(bodyBytes), env, responseURL, new ScriptFetchOptions());
 }
 
-/** Synchronously fetch an importScripts() dependency; its blocking host wait is unfinished. */
+/** Fetch an importScripts() dependency; isolated startup supplies its independent synchronous host hook. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-classic-worker-imported-script
 export function fetchClassicWorkerImportedScript(
-  _url: URLRecord, _env: BrowletEnvironment, _performFetch?: PerformScriptFetch,
+  url: URLRecord, env: BrowletEnvironment, performFetch?: PerformScriptFetch,
 ): ClassicScript {
-  // TODO(HTML §8.1.4.2): Fetch, pause until its response/body arrives, enforce JavaScript MIME,
-  // throw NetworkError on failure, then create the script with the response's muted-error state.
-  // EventLoop.pauseUntil supplies the guard, but Fetch still needs a host completion
-  // that can progress while this Node thread is blocked. Do not start an
-  // asynchronous fetch whose response/body delivery requires that same thread.
-  throw new InternalError('Classic worker-imported script fetching requires synchronous pause (HTML §8.1.4.2)');
+  // Isolated startup connects browser-owned Fetch through performFetch. A local
+  // environment still cannot block the same isolate that must finish its Fetch.
+  if (performFetch === undefined) {
+    throw new InternalError('Classic worker-imported script fetching requires synchronous pause (HTML §8.1.4.2)');
+  }
+  const request = new FetchRequest(url, env);
+  request.client = env;
+  request.destination = 'script';
+  request.initiatorType = 'other';
+  request.parserInserted = false;
+  request.useURLCredentials = true;
+  const result: { response: FetchResponse | null; bodyBytes: Uint8Array | null | 'failure'; } = {
+    response: null, bodyBytes: null,
+  };
+  performFetch(request, true, (response, bodyBytes) => {
+    result.bodyBytes = bodyBytes;
+    result.response = response;
+  });
+  // A hook may complete synchronously (for example from a script resource map).
+  // Otherwise the same independent host wait is still required; never pump jobs.
+  if (result.response === null) {
+    throw new InternalError('Classic worker-imported script fetching requires synchronous pause (HTML §8.1.4.2)');
+  }
+  return createClassicWorkerImportedScriptFromResponse(result.response, result.bodyBytes, env);
+}
+
+/** Validate an imported response and create its classic script, retaining cross-origin error muting. */
+// Extracted from fetch a classic worker-imported script, after the synchronous wait.
+export function createClassicWorkerImportedScriptFromResponse(
+  response: FetchResponse, bodyBytes: Uint8Array | null | 'failure', env: BrowletEnvironment,
+): ClassicScript {
+  const mutedErrors = response.type === 'opaque' || response.type === 'opaqueredirect';
+  if (isFilteredResponse(response)) response = response.internalResponse;
+  const mimeType = response.headerList.extractMIMEType();
+  // Imported scripts require JavaScript MIME for every scheme, unlike the root worker script.
+  if (bodyBytes === null || bodyBytes === 'failure' || !isOkStatus(response.status) ||
+    mimeType === null || !isJavaScriptMIMEType(mimeType)) {
+    throw new DOMExceptionImpl('Failed to load a worker-imported script', 'NetworkError');
+  }
+  return new ClassicScript(utf8Decode(bodyBytes), env, response.url!, new ScriptFetchOptions(), mutedErrors);
 }
 
 /** Fetch an external root, then load its descendants and link the complete graph. */

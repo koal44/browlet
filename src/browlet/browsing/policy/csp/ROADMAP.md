@@ -85,9 +85,15 @@ consumer and tests live in [the worker roadmap](../../../workers/ROADMAP.md).
 
 ## Violations and hash reporting
 
-`CSPViolation` captures the protected Document URL/status/referrer and original
-blocked resource. A queued task dispatches a trusted, bubbling, composed
-SecurityPolicyViolationEvent, checking element attachment at delivery time.
+`CSPViolation` captures the protected Document URL/status/referrer or worker root
+URL/status, together with the original blocked resource. Worker referrers remain
+empty as specified; root response initialization retains its HTTP status for this
+consumer. A queued task dispatches a trusted, bubbling, composed
+SecurityPolicyViolationEvent on the worker global or Document, checking Window
+element attachment at delivery time. Trusted Types rejection through worker
+`importScripts()` covers both the author TypeError and subsequent event delivery,
+including across a real isolate. Network reporting still needs worker service
+transport, and worklet violation capture remains explicit.
 Unavailable author source locations stay absent; Node stacks are not a substitute.
 
 `report-to` uses typed bodies and the shared [Reporting](../../../reporting/ROADMAP.md)
@@ -639,9 +645,10 @@ documentation cleanup does not refresh those observations.
   The frame-ancestor matcher, response-policy aggregation, and null-global
   violation/reporting paths are implemented, including synthetic null requests.
   HTML population now performs admission; its error-page and Document loaders remain unfinished.
-- **Globals:** worklet initialization, connecting worker initialization to its
-  separate-isolate startup, worker/worklet violation construction, and global
-  event-handler attributes. Window addEventListener already works.
+- **Globals:** worklet initialization/violation construction, worker network
+  reporting transport, and global event-handler attributes. Worker initialization
+  is connected to separate-isolate startup; worker and Window violation events
+  use addEventListener through their existing task queues.
 - **Console:** `env.reportConsoleWarning()` is provisional. Supply a real
   Console Printer/output sink while retaining attribution; do not call the
   author's overridable console or substitute Node console output.

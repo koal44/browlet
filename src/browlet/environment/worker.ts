@@ -19,6 +19,8 @@ import { WindowOrWorkerGlobalScopeMixin } from './global-scope';
 /** Settings for a dedicated/shared worker; the global supplies its changing URL and policy state. */
 // https://html.spec.whatwg.org/multipage/workers.html#set-up-a-worker-environment-settings-object
 export class WorkerEnvironment extends BrowletEnvironment {
+  /** Independent browser-side fetching supplied by isolated startup; local fixtures may use the explicit hook. */
+  importedScriptFetch: PerformScriptFetch | undefined;
   /** Initial settings captured from the creator before it can navigate or disappear. */
   #settings: WorkerSettings;
   /** Global attached during realm composition, before any author code can run. */
@@ -65,6 +67,11 @@ export class WorkerEnvironment extends BrowletEnvironment {
   get timeOrigin(): Moment {
     return new UnsafeMoment(monotonicClock, this.#settings.unsafeWorkerCreationTime)
       .coarsen(this.crossOriginIsolatedCapability);
+  }
+
+  /** Fetch synchronously without pumping this worker's tasks or Promise reactions. */
+  override fetchClassicWorkerImportedScript(url: URLRecord, performFetch = this.importedScriptFetch): ClassicScript {
+    return super.fetchClassicWorkerImportedScript(url, performFetch);
   }
 
   getWindowOrWorkerGlobalScopeMixin(): WindowOrWorkerGlobalScopeMixin {
@@ -185,6 +192,7 @@ export class WorkerEnvironment extends BrowletEnvironment {
     if (policyContainer === null) throw new InternalError('Worker script response requires resolved policies');
     const global = this.globalImplementation;
     global.url = url;
+    global.httpStatus = response.status;
     this.creationURL = url;
     global.policyContainer = policyContainer;
     global.embedderPolicy = global.policyContainer.embedderPolicy;

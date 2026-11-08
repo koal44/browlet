@@ -49,9 +49,9 @@ and evaluate, with CSS exports projected through Binding. §8.1.6.7.3 now connec
 static and dynamic graph loading to the resolver and fetchers. Wasm ESM parsing
 and source-phase URL imports now use the addon's retained records. Deferred loading,
 object-valued source imports, module-specific context restoration, and creation timing
-retain explicit unfinished boundaries. Worker-imported scripts
-still need a synchronous Fetch host wait; the event loop's pause guard alone
-cannot supply it. §8.1.3.4 now has settings/object scripting predicates;
+retain explicit unfinished boundaries. Isolated worker-imported scripts now wait
+on their independent browser-side Fetch connection; same-isolate callers still
+need a synchronous hook. §8.1.3.4 now has settings/object scripting predicates;
 §8.1.4.4 has classic/module runners and the running-script lookup. Child Document
 activity follows retained container ancestry, and ancestor changes notify child
 Documents and wake their queued tasks. Automatic child lifecycle remains unfinished.

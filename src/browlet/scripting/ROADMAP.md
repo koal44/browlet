@@ -318,6 +318,11 @@ cover CORS credentials/taint, redirects, decoding, body/status failures, integri
 nosniff, worker MIME checks, data URLs, and the custom hook. Successful tests prove
 the fetch-to-creation handoff, not parsing, execution, or worker startup.
 
+The classic-loader promise trial was rolled back after the
+[completion investigation](../../../test/fetch/COMPLETION-PROMISES.md). The callback
+contract remains in production; the runnable experiment retains all compared
+variants and the additional allocation/reaction counts.
+
 ### Single-module fetching slice
 
 `BrowletEnvironment.fetchSingleModuleScript()` and
@@ -428,12 +433,12 @@ replaced; these are fetch orchestration tests, not worker/worklet startup tests.
 
 **Remaining implementation dependencies:**
 
-- `fetchClassicWorkerImportedScript()` is an explicit throwing skeleton. Unlike
-  the two callback-based classic fetchers, this algorithm pauses synchronously
-  until Fetch completes, then returns a script or throws NetworkError. The
-  [synchronous host wait](#html-8173-pausing) is not supplied by today's asynchronous
-  Fetch task delivery. Do not substitute a Promise return or launch
-  a fetch that cannot finish before this method returns.
+- `fetchClassicWorkerImportedScript()` now validates consumed responses and creates
+  scripts through a synchronous hook. Isolated startup supplies the
+  [browser-side Fetch connection](../workers/ROADMAP.md#importscripts-browser-side-fetch).
+  Same-isolate callers still need a hook that finishes synchronously; blocking
+  their own asynchronous Fetch cannot make progress. Keep this script-returning
+  operation synchronous.
 - Descendant loading connects static/dynamic JavaScript/CSS/JSON/text/Wasm graphs
   through HostLoadImportedModule. Source-phase URL imports stop at the compiled
   record; deferred requests, object-valued source lookup, and worker/worklet

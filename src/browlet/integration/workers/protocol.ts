@@ -108,6 +108,22 @@ export interface WorkerModuleScriptFetch extends WorkerModuleScriptRequest {
   blobEntryId: number | null;
 }
 
+/** Fetch-facing values of the inside environment; its established identity remains with the browser reservation. */
+export interface WorkerScriptFetchClient {
+  apiBaseURL: URLRecord;
+  policyContainer: PolicyContainerSnapshot;
+  hasCrossSiteAncestor: boolean;
+  crossOriginIsolatedCapability: boolean;
+  upgradeInsecureRequests: boolean;
+}
+
+/** One synchronous import request, using a registration captured by this worker's service connection. */
+export interface WorkerImportedScriptFetch {
+  url: URLRecord;
+  blobEntryId: number | null;
+  client: WorkerScriptFetchClient;
+}
+
 /** Private creator-to-worker messages, distinguished before choosing the receiving task source. */
 type WorkerThreadInput = { type: 'message'; data: unknown; } |
   { type: 'owner-removed'; } |

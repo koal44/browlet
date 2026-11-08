@@ -3,14 +3,19 @@ import { hasErrorData, JSMessageChannel, JSMessagePort, NodePromise, randomUUID,
 import { unsafeSharedCurrentTime } from '../../../timing/index';
 import { copyOrigin, copyURL, parseURL, serializeURL, type BlobURLEntry as URLBlobURLEntry, type Origin, type URLRecord } from '../../../url/index';
 import { BlobData, BlobImpl, type BlobSnapshotState, type SerializedBlobData } from '../../../file/index';
+import { fetch, FetchGroup, FetchRequest } from '../../../fetch/index';
 
-import { ScriptingPolicy } from '../../scripting/index';
+import { ScriptingPolicy, type ScriptSourceCallback } from '../../scripting/index';
+import { ContentSecurityPolicy, type ContentSecurityPolicySnapshot } from '../../browsing/policy/csp/index';
 import { PolicyContainer } from '../../browsing/policy/index';
+import type { BrowletEnvironment, WorkerEnvironmentBase } from '../../environment/index';
 import { nodeTimerHost, queueNodeTask } from '../host/index';
-import type { BlobURLEntry, BlobURLEnvironment, BlobURLStore } from '../file/index';
+import type { BlobURLEntry, BlobURLStore } from '../file/index';
 import type { UserAgent } from '../../user-agent';
 
 import { WorkerBroadcastChannels, WorkerBroadcastChannelConnection, type WorkerBroadcastRequest } from './broadcast-channel';
+import { WorkerScriptFetchEnvironment, captureScriptResponse, restoreScriptResponse } from './script-fetch';
+import type { WorkerImportedScriptFetch, ScriptResponseSnapshot } from './protocol';
 
 /**
  * Worker-local access to the existing browser owner, without duplicating its stores.
@@ -333,6 +338,34 @@ export class WorkerUserAgent implements UserAgent {
     return entry === null ? null : this.#entryIds.get(entry) ?? null;
   }
 
+  /** Wait for browser Fetch without entering this isolate's event loop, then deliver consumed bytes. */
+  fetchImportedScript(request: FetchRequest, onResponse: ScriptSourceCallback, env: BrowletEnvironment): void {
+    const url = copyURL(request.url);
+    const blobEntryId = this.getBlobEntryId(url.blobURLEntry);
+    url.blobURLEntry = null;
+    const apiBaseURL = copyURL(env.apiBaseURL);
+    apiBaseURL.blobURLEntry = null;
+    const result = this.#request({
+      type: 'fetch-imported-script',
+      request: {
+        url,
+        blobEntryId,
+        client: {
+          apiBaseURL,
+          policyContainer: env.policyContainer.toSnapshot(),
+          hasCrossSiteAncestor: env.hasCrossSiteAncestor,
+          crossOriginIsolatedCapability: env.crossOriginIsolatedCapability,
+          upgradeInsecureRequests: env.insecureRequestsPolicy.upgrade,
+        },
+      },
+    });
+    if (result.type !== 'script') throw new InternalError('Unexpected worker script reply');
+    for (const policy of result.violations) {
+      ContentSecurityPolicy.fromSnapshot(policy).createViolationForRequest(request, env).report();
+    }
+    onResponse(restoreScriptResponse(result.snapshot), result.snapshot.bodyBytes);
+  }
+
   /** Release this connection and all registrations retained on its behalf. */
   close(): void {
     this.broadcastChannels.disconnect();
@@ -423,7 +456,9 @@ export class WorkerUserAgentConnection {
   /** The real browser owner; its stores are never copied into the worker. */
   #userAgent: UserAgent;
   /** Actual worker identity, origin and response policies retained by the browser. */
-  #env: BlobURLEnvironment;
+  #env: WorkerEnvironmentBase;
+  /** Imported requests and any background revalidations share this worker's connection lifetime. */
+  #scriptFetchGroup = new FetchGroup();
   /** Browser endpoint, serviced independently of HTML task and microtask queues. */
   #port: JSMessagePort<WorkerUserAgentMessage>;
   /** Untransferred endpoints also need cleanup if thread creation fails. */
@@ -438,7 +473,7 @@ export class WorkerUserAgentConnection {
   #stop: () => void;
 
   /** Bind a fresh endpoint to the browser and the caller's already-established environment. */
-  constructor(userAgent: UserAgent, isEligibleForMessaging: (() => boolean) | undefined, env: BlobURLEnvironment) {
+  constructor(userAgent: UserAgent, isEligibleForMessaging: (() => boolean) | undefined, env: WorkerEnvironmentBase) {
     this.#userAgent = userAgent;
     this.#env = env;
     this.#broadcastChannels = new WorkerBroadcastChannelConnection(userAgent, isEligibleForMessaging, env);
@@ -476,6 +511,27 @@ export class WorkerUserAgentConnection {
     // close() and terminate(); this native-exit path covers both.
     // https://w3c.github.io/FileAPI/#lifeTime
     this.#userAgent.blobURLStore.removeForEnvironment(this.#env);
+    this.#scriptFetchGroup.terminate();
+  }
+
+  /** Consume the complete script on the browser's host queue while the requesting isolate is blocked. */
+  #fetchImportedScript(input: WorkerImportedScriptFetch): void {
+    const client = new WorkerScriptFetchEnvironment(input.client, this.#scriptFetchGroup, this.#env);
+    const url = copyURL(input.url);
+    if (url.scheme === 'blob') url.blobURLEntry = input.blobEntryId === null ? null : this.getBlobEntry(input.blobEntryId);
+    const owner = this.#userAgent.sandbox;
+    const request = new FetchRequest(url, owner);
+    request.client = client;
+    request.destination = 'script';
+    request.initiatorType = 'other';
+    request.parserInserted = false;
+    request.useURLCredentials = true;
+    fetch(request, {
+      useParallelQueue: true,
+      processResponseConsumeBody: (response, bodyBytes) => {
+        this.#reply({ type: 'script', snapshot: captureScriptResponse(response, bodyBytes), violations: client.violations });
+      },
+    }, owner);
   }
 
   /** Handle only explicit operations; arbitrary property reads and function calls are not forwarded. */
@@ -494,6 +550,9 @@ export class WorkerUserAgentConnection {
     let error: string | null = null;
     try {
       switch (message.type) {
+        case 'fetch-imported-script':
+          this.#fetchImportedScript(message.request);
+          return;
         case 'register-blob': {
           // The browser sandbox owns retained byte reads, independently of either
           // page activity or worker shutdown. The registration keeps the worker
@@ -566,6 +625,12 @@ export class WorkerUserAgentConnection {
     } catch (cause) {
       error = hasErrorData(cause) ? cause.message : 'Worker UserAgent operation failed';
     }
+    this.#reply(result, error);
+  }
+
+  /** Publish the full reply before waking the waiter, ignoring late completion after shutdown. */
+  #reply(result: WorkerUserAgentResult, error: string | null = null): void {
+    if (Atomics.load(this.init.state, 0) === closed) return;
     try {
       this.#port.send({ type: 'response', result, error });
       // Queue the complete response before waking the synchronous receiver.
@@ -597,6 +662,7 @@ export interface WorkerBlobURLEntry {
 
 /** Explicit browser-service operations, without transported functions or environments. */
 type WorkerUserAgentRequest = WorkerBroadcastRequest |
+  { type: 'fetch-imported-script'; request: WorkerImportedScriptFetch; } |
   { type: 'register-blob'; data: SerializedBlobData; contentType: string; snapshotState: BlobSnapshotState; } |
   { type: 'resolve'; url: string; } |
   { type: 'revoke'; url: string; } |
@@ -617,6 +683,7 @@ interface WorkerBrowserSettings extends Pick<UserAgent,
 
 /** Explicit result kinds prevent treating a settings reply as a Blob capture. */
 type WorkerUserAgentResult =
+  { type: 'script'; snapshot: ScriptResponseSnapshot; violations: ContentSecurityPolicySnapshot[]; } |
   { type: 'url'; url: string; } |
   { type: 'entry'; entry: WorkerBlobURLEntry | null; } |
   { type: 'boolean'; value: boolean; } |

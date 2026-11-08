@@ -19,6 +19,82 @@ Stock Node still lacks native suspension; nested workers and SharedWorker
 discovery retain explicit startup boundaries. Unconnected shared-service APIs
 remain explicit dependencies at their own operations.
 
+### importScripts browser-side Fetch
+
+Separate-isolate startup now supplies the synchronous imported-script hook through
+the worker's existing private UserAgent connection. The worker waits on that
+connection without pumping author tasks or Promise reactions. The browser runs
+ordinary Fetch and consumes the body on a parallel queue, then publishes the full
+response before waking the worker. Ordered and nested imports reuse the same
+connection; imported code is still compiled and run only by the inside environment.
+
+The browser-side Fetch environment retains the worker reservation's identity,
+origin, and partition, together with the inside environment's CSP, referrer,
+ancestry, isolation, and upgrade policy. The browser sandbox owns private byte and
+stream allocations. It does not substitute the creating page's policy or author
+realm. CSP violations are returned for reporting by the actual worker global.
+Response transport retains filtered-response taint and underlying metadata, so
+cross-origin no-cors imports keep their error-muting behavior. Captured Blob URL
+registrations survive revocation between URL validation and fetching.
+
+The connection's FetchGroup owns imports and background revalidations. Native
+exit closes the service channel, wakes any waiter, and terminates outstanding
+requests; late response completion cannot resume a terminated worker. No Node,
+V8, or add-on change is required.
+
+Remaining dependencies: public SharedWorker/nested-worker startup, general worker
+Fetch, transport of Resource Timing entries and Reporting deliveries, and CSP
+report delivery for background cache revalidation. This slice returns violations
+of the requested import with its response; it does not introduce a general
+asynchronous reporting channel. Service Worker perform-fetch hooks remain owned
+by that specification. Same-isolate fixtures still need an explicitly synchronous
+hook, because blocking the browser's own execution thread would prevent Fetch
+from progressing.
+
+Validation: 61 focused import validation, UserAgent connection, and classic-loader
+tests pass on Node 24.19.0, 26.8.1, and custom Node 27, stock and with the add-on.
+The 12 real-isolate import cases pass on all three add-on builds, including delayed
+and nested imports without author jobs, worker CSP rather than page CSP, browser
+cookies and worker referrers, failed loads/parsing/execution, recovery, cross-origin
+responses, Blob revocation, and termination with late completion. Relocated ESM
+and CommonJS packages pass the new import smoke cases on Node 26 add-on. Typecheck,
+changed-file ESLint, import boundaries, and the Browlet bundle build pass; the
+build retains its seven existing circular-dependency warnings.
+
+### importScripts validation and execution
+
+HTML §10.3.1 now applies Trusted Types to each converted URL, rejects module
+workers (including an empty call), resolves every URL before any fetch, and then
+fetches/runs scripts sequentially with rethrow enabled. Nested imports resolve
+against the worker's API base URL, and an exception stops later fetches. Binding
+injects the invoked method's environment separately from the receiver's Trusted
+Types owner; the implementation places that dependency before its rest parameter.
+The public variadic signature is unchanged.
+
+The classic imported-script loader constructs the specified request and consumes
+a synchronously completed `performFetch` hook. Response validation requires
+an OK status, consumed bytes, and JavaScript MIME for every scheme, then decodes
+UTF-8 and retains opaque-response error muting. Response-to-script validation is
+separate from the synchronous transport wait. Ordinary same-isolate Fetch and
+hooks which return before completion still throw at the synchronous-wait
+dependency. The original unit tests use controlled responses; the browser-side
+connection above now covers real-isolate imports separately. Service Worker
+support is not claimed.
+
+Trusted Types rejection exposed the old Window-only CSP violation constructor.
+Violation capture now retains a worker's root URL/status and targets its global
+for queued `securitypolicyviolation` events. Referrer stays empty for workers, as
+CSP specifies. Existing Window element/Document targeting is preserved. Worker
+report-to/report-uri transport and worklet violation capture remain dependencies.
+The dedicated/shared rejection tests first failed with the old internal error;
+a real isolate also verifies the TypeError and subsequent worker event.
+
+Validation: 67 focused import/CSP/worker-fetch cases pass in all six runtime
+configurations (Node 24.19.0, 26.8.1, custom Node 27; stock/add-on). The real-isolate
+violation case passes on all three add-on builds. Typecheck, changed-file ESLint,
+import boundaries, and the bundle build pass, with the same seven existing
+circular-dependency warnings. No Node or V8 changes are needed for this slice.
+
 ### Synchronous FileReader
 
 File API §6.5 is connected through the ordinary File declarations. Dedicated and
@@ -639,7 +715,8 @@ Current implementation work follows those §9/§10 dependencies; an ordered audi
 of both chapters will follow once their production connections are in place.
 SharedWorker manager discovery and successful construction (§10.2.6.4),
 concurrent hardware (§10.2.7), and the §10.3 API review still follow. In particular,
-`importScripts()` remains an explicit stub; WorkerLocation was brought forward,
+`importScripts()` validation/execution is connected, with synchronous Fetch
+transport still explicit; WorkerLocation was brought forward,
 while WorkerNavigator still lacks its contributing APIs.
 
 The [communication integration sweep](../communication/ROADMAP.md#worker-integration-checkpoint)
@@ -688,9 +765,9 @@ Dependencies encountered in this first interface:
   NavigatorLanguage, NavigatorOnLine, and NavigatorConcurrentHardware remain
   explicit dependencies of §§8.10 and 10.2.7. Worker Permissions/Storage
   contributions still need navigator integration; settings composition is now available below.
-- **§10.3.1 importScripts():** declared, with an explicit throwing implementation
-  stub. Trusted Types checks, synchronous fetch/pause, and ordered evaluation
-  remain pending. This does not supply even a partial loading algorithm.
+- **§10.3.1 importScripts():** Trusted Types, URL validation, response processing,
+  and ordered evaluation are connected as described above. Synchronous Fetch
+  transport remains the dependency before ordinary network imports can succeed.
 - **§§10.2.4–10.2.6 startup/settings:** realm/global/settings composition now exists
   as described below. The processing-model caller must still populate response
   URL/policies/capability and start execution. WindowOrWorkerGlobalScope API
