@@ -2740,7 +2740,91 @@ IndexedDB transaction cleanup and Long Animation Frames timing consumers, and
 the native checkpoint limitations remain in
 [LIMITATIONS](../../LIMITATIONS.md#scheduling-and-callback-context).
 Those are existing owner dependencies, not prerequisites from §§8.4–8.6.
-Eric has left those three sections with Ged; §8.8 user prompts is next for Vin.
+Eric has left those three sections with Ged; Vin's user-prompts audit continues below.
+
+## HTML user prompts: simple dialogs
+
+The [simple-dialog section](https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html#simple-dialogs)
+was §8.8 at the previous checkpoint and is §8.9 in the current rendered standard.
+The clean local HTML reference was refreshed on 2026-11-06 and remains
+`5fcc2318395821db61e353705e6368ad9a000af5`; the stable algorithm anchors identify
+the work independently of numbering. alert(), confirm(), prompt(), and the
+shared cannot-show-simple-dialogs check are implemented at their local owners.
+Printing follows; actual dialog UI and BiDi sessions remain explicit dependencies.
+
+Window exposes the two specified alert overloads: omission supplies an empty
+message, while explicit undefined converts to "undefined". Binding owns argument
+conversion and receiver checks before dialog admission. Window normalizes newlines,
+keeps the complete message under the permitted optional-truncation choice, calls
+the existing BiDi opened hook, and reports the alert closed with accepted=true
+for either automation decision. The ordinary host path uses EventLoop.pauseUntil()
+around UserAgent.showAlert(), preserving the current task and stalling tasks and
+microtasks until acknowledgement. Internal host failure restores the pause and
+does not report a completed prompt.
+
+The common admission algorithm rejects sandboxed-modals. Browlet also selects
+HTML's permitted suppression while termination nesting is nonzero or the associated
+Document is no longer fully active. No additional opt-out UI or truncation policy
+is installed. Tests include sandbox state changed during message conversion.
+
+`SPEC_CLASH(alert-newlines)`: HTML explicitly normalizes CR and CRLF to LF.
+The [browser probe](../../../node-compat/experimental/browser-probes/html/simple-dialogs.mjs)
+observed normalized dialog messages in Chromium 156.0.8078.4 and Firefox 157.0;
+WebKit 27.2's dialog notification retained the supplied CR/CRLF. Eric approved
+the HTML/Chromium/Firefox rule on 2026-11-06. All three agree on omission versus
+undefined, coercion, ignored extra arguments, method descriptors, invalid receivers,
+Symbol errors, sandbox suppression after conversion, and detached-Window suppression.
+The probe observes notification text, not the platform UI's final rendering.
+
+confirm() and prompt() use Web IDL's optional empty-string defaults, so explicit
+undefined uses the default rather than alert's string conversion. Suppression
+returns false or null, respectively. prompt() keeps its complete default text;
+an ordinary accepted host response is returned exactly, including an empty string.
+The written automation branches return true/false for confirm(), and empty string/null
+for prompt(), independent of the default text. Closed notifications retain those
+results. No host dependency is invoked for either automatic decision.
+
+`SPEC_CLASH(confirm-prompt-newlines)` and `SPEC_CLASH(prompt-default-newlines)`:
+the [confirm/prompt probe](../../../node-compat/experimental/browser-probes/html/confirm-prompt.mjs)
+found the same message-newline split as alert. Firefox additionally stripped line
+breaks from prompt's default text before notification; Chromium/WebKit retained
+them. Eric approved HTML message normalization and unchanged default text on
+2026-11-06. All three agree on optional defaults, conversion order, ignored extra
+arguments, invalid receivers/Symbol errors, sandbox suppression, and inactive
+Window results. Playwright accept-without-text results differ by transport; they
+are not evidence about BiDi's configured automatic handler. Explicit supplied
+responses and dismissal are recorded separately.
+
+`SPEC_CLASH(simple-dialog-automation-display)`: the HTML confirm/prompt algorithms
+list UI display before consulting automation. Browlet instead reuses alert's
+combined display-and-wait boundary, calling the host only for handler=none.
+Eric approved this ordering on 2026-11-06; it avoids requiring UI for automation
+and keeps all blocking host work inside the existing event-loop pause.
+
+`SPEC_GAP(prompt-bidi-default)`: HTML omits the fourth argument when invoking the
+[BiDi opened hook](https://w3c.github.io/webdriver-bidi/#event-browsingContext-userPromptOpened),
+although BiDi accepts optional default text for its notification. Firefox's
+`remote/shared/listeners/PromptListener.sys.mjs` supplies the prompt input text.
+Eric approved passing the untruncated default through the existing hook on
+2026-11-06. This does not add an automation session or a new hook contract.
+
+Missing dependencies remain explicit. UserAgent.showAlert(), showConfirm(), and
+showPrompt() throw until a host can display the dialog and synchronously await
+its response without executing author code or relying on queued callbacks on
+the blocked thread. Script callers
+must enter through the existing HTML task/evaluation machinery for that pause.
+The BiDi hooks still have no active sessions, so ordinary production calls reach
+the host dependency. Pending UI reflection and pause-duration reporting retain
+their existing EventLoop TODOs. This does not implement an OS dialog or automate
+one through the test mocks.
+
+The initial exposure regressions failed because the methods were absent. The
+focused suite covers overloads/defaults, live gates, automation, returned responses,
+pause/resumption, and explicit display failure; generated platform contracts claim
+all three methods but still exclude unimplemented printing. All 31 cases pass on
+Node 24.19.0, 26.8.1, and custom 27.0.0-pre in both stock and compat modes. The
+alert checkpoint also passed 17 adjacent beforeunload cases on Node 26.8.1 compat.
+Typechecking and focused lint pass; no new expected failures or skips were introduced.
 
 ## Present
 

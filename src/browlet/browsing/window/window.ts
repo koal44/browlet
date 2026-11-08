@@ -1,4 +1,4 @@
-import { assertNever, type InternalPromise, InternalError, TypeError } from '../../../infra/index';
+import { assertNever, type InternalPromise, InternalError, normalizeNewlines, TypeError } from '../../../infra/index';
 import {
   arg, atArg, attr, defineIncludes, defineInterface, definePartialInterface, emptyDictionary, emptySequence, idlType,
   impl, invokeWith, nullable, op, roAttr, reference, sequence, union, xattr, type VoidFunction,
@@ -457,6 +457,79 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
       .structuredClone(value, options) as T;
   }
 
+  /** Show a simple alert, or let automation handle its acknowledgement. */
+  // https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html#dom-alert
+  alert(message = ''): void {
+    if (this.cannotShowSimpleDialogs()) return;
+    // SPEC_CLASH(alert-newlines): Follow HTML/Chromium/Firefox; WebKit's dialog notification retains CR/CRLF.
+    message = normalizeNewlines(message);
+    // HTML permits keeping the complete string instead of truncating it.
+    const userAgent = this.env.userAgent;
+    const handler = userAgent.webDriverBiDiUserPromptOpened(this, 'alert', message);
+    if (handler === 'none') {
+      this.env.responsibleEventLoop.pauseUntil(() => {
+        userAgent.showAlert(this, message);
+      }, this.env);
+    }
+    userAgent.webDriverBiDiUserPromptClosed(this, 'alert', true);
+  }
+
+  /** Ask for a positive or negative response, unless dialogs are suppressed. */
+  // https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html#dom-confirm
+  confirm(message: string): boolean {
+    if (this.cannotShowSimpleDialogs()) return false;
+    // SPEC_CLASH(confirm-prompt-newlines): Follow HTML/Chromium/Firefox; WebKit retains CR/CRLF in the message.
+    message = normalizeNewlines(message);
+    // HTML permits keeping the complete message instead of truncating it.
+    const userAgent = this.env.userAgent;
+    // SPEC_CLASH(simple-dialog-automation-display): HTML shows UI first; decide automation before entering the combined host wait.
+    const handler = userAgent.webDriverBiDiUserPromptOpened(this, 'confirm', message);
+    let accepted = false;
+    if (handler === 'none') {
+      this.env.responsibleEventLoop.pauseUntil(() => {
+        accepted = userAgent.showConfirm(this, message);
+      }, this.env);
+    } else if (handler === 'accept') {
+      accepted = true;
+    }
+    userAgent.webDriverBiDiUserPromptClosed(this, 'confirm', accepted);
+    return accepted;
+  }
+
+  /** Ask for text, returning null when the dialog is suppressed or dismissed. */
+  // https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html#dom-prompt
+  prompt(message: string, defaultValue: string): string | null {
+    if (this.cannotShowSimpleDialogs()) return null;
+    // SPEC_CLASH(confirm-prompt-newlines): Normalize the message as HTML requires, despite WebKit's notification text.
+    message = normalizeNewlines(message);
+    // Keep the complete message and default under HTML's optional-truncation choice.
+    // SPEC_CLASH(prompt-default-newlines): Preserve default text like Chromium/WebKit; Firefox strips its line breaks.
+    const userAgent = this.env.userAgent;
+    // SPEC_CLASH(simple-dialog-automation-display): Consult automation before the combined display-and-wait host call.
+    // SPEC_GAP(prompt-bidi-default): HTML omits the default argument; pass it to BiDi's existing notification field.
+    const handler = userAgent.webDriverBiDiUserPromptOpened(this, 'prompt', message, defaultValue);
+    let result: string | null = null;
+    if (handler === 'none') {
+      this.env.responsibleEventLoop.pauseUntil(() => {
+        result = userAgent.showPrompt(this, message, defaultValue);
+      }, this.env);
+    } else if (handler === 'accept') {
+      result = '';
+    }
+    userAgent.webDriverBiDiUserPromptClosed(this, 'prompt', result !== null, result);
+    return result;
+  }
+
+  /** Apply sandbox restrictions and this user agent's optional dialog suppression. */
+  // https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html#cannot-show-simple-dialogs
+  cannotShowSimpleDialogs(): boolean {
+    const document = this.getAssociatedDocument();
+    if (document.activeSandboxingFlagSet.has('sandboxed-modals')) return true;
+    if (this.env.responsibleEventLoop.terminationNestingLevel !== 0) return true;
+    // Use HTML's optional suppression for a Window whose Document is no longer fully active.
+    return !document.isFullyActive();
+  }
+
   /** Send through either converted postMessage overload, retaining the invoking environment. */
   postMessage(
     message: unknown,
@@ -852,6 +925,15 @@ export const windowIDL = defineInterface<BrowletEnvironment>({
     roAttr('navigator', reference('Navigator')),
     roAttr('clientInformation', reference('Navigator'), xattr('Replaceable')),
     roAttr('originAgentCluster', idlType.boolean),
+    op('alert', idlType.undefined),
+    op('alert', idlType.undefined, [arg('message', idlType.DOMString)]),
+    op('confirm', idlType.boolean, [arg('message', idlType.DOMString, { optional: true, default: '' })]),
+    op('prompt', nullable(idlType.DOMString),
+      [
+        arg('message', idlType.DOMString, { optional: true, default: '' }),
+        arg('default', idlType.DOMString, { optional: true, default: '' }),
+      ],
+    ),
     op('postMessage', idlType.undefined,
       [
         arg('message', idlType.any), arg('targetOrigin', idlType.USVString),

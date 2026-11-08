@@ -239,7 +239,11 @@ and the timer audit) to Ged. §8.7's
 [microtask-queuing audit](browlet/scripting/ROADMAP.md#html-87-microtask-queuing)
 uses the existing callback/checkpoint machinery and preserves the Window Document
 on queued microtasks. It needs no unfinished work from those deferred sections.
-§8.8's user prompts are next.
+The [user-prompts slice](browlet/scripting/ROADMAP.md#html-user-prompts-simple-dialogs)
+(§8.8 at that checkpoint, now §8.9) supplies alert(), confirm(), and prompt(),
+including conversion, dialog admission, text preparation, automation routing,
+and the existing host-pause boundary. Actual display and response UI remain
+explicit throwing dependencies. Printing is next.
 Source/deferred imports and the HTML Wasm parser remain explicit boundaries.
 Later host-hook algorithms must be connected before judging
 the complete model; the uncertain cross-realm observer test is skipped.

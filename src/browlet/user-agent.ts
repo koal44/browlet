@@ -507,6 +507,27 @@ export class UserAgent implements
     throw new InternalError('Beforeunload confirmation UI is not implemented');
   }
 
+  /** Display an alert and synchronously wait for acknowledgement inside its event loop's pause. */
+  showAlert(_window: WindowImpl, _message: string): void {
+    // TODO(HTML simple dialogs): Compose a UI host port that treats LF as a line break.
+    // The wait must not run author code or depend on queued callbacks on this thread.
+    throw new InternalError('Alert display and acknowledgement UI are not implemented');
+  }
+
+  /** Display a confirmation and synchronously await its response inside the event loop's pause. */
+  showConfirm(_window: WindowImpl, _message: string): boolean {
+    // TODO(HTML simple dialogs): Compose a UI host port that treats LF as a line break.
+    // The wait must not run author code or depend on queued callbacks on this thread.
+    throw new InternalError('Confirmation display and response UI are not implemented');
+  }
+
+  /** Display a text prompt and synchronously return the response, or null for dismissal. */
+  showPrompt(_window: WindowImpl, _message: string, _defaultValue: string): string | null {
+    // TODO(HTML simple dialogs): Compose a UI host port, using the supplied default text.
+    // Treat message LF as a line break; wait inside the pause without running author code.
+    throw new InternalError('Text prompt display and response UI are not implemented');
+  }
+
   /** Generate a fresh canonical UUID for browser-owned registrations. */
   generateUUID(): string {
     return randomUUID();

@@ -1277,6 +1277,14 @@ and [Clipboard event slice](browlet/interaction/clipboard/ROADMAP.md).
   have no active sessions. Synthetic dispatch alone does not show a prompt.
   See the [handler inventory](browlet/scripting/ROADMAP.md#html-8181-event-handler-idl-invocation).
 
+- **Simple dialogs have no display host yet.** Window.alert(), confirm(), and
+  prompt() supply conversion/defaults, text preparation, sandbox/activity/termination
+  gates, automation routing, and task pause. Ordinary calls reach the throwing
+  UserAgent.showAlert(), showConfirm(), or showPrompt() dependency until a host
+  can display the dialog and synchronously await its response. BiDi sessions
+  remain unfinished. Printing is not yet exposed. See the
+  [user-prompts audit](browlet/scripting/ROADMAP.md#html-user-prompts-simple-dialogs).
+
 - **Temporal's HTML clock requires custom Node with the addon.** Windows in every
   isolation mode install their environment's live, precision-limited wall clock. Stock mode and
   official Node 24/26 retain the engine clock; Node 24 also disables Temporal by
