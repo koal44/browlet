@@ -297,7 +297,7 @@ describe('history-entry response admission', () => {
     }
     const complete = vi.fn();
     child.populateHistoryEntryDocument(entry, 'reload', source, target, 'none', {
-      navigationParams: failure === 'network-error' ? null : params, completionSteps: complete,
+      navigationParams: failure === 'network-error' ? undefined : params, completionSteps: complete,
     });
     await expect.poll(() => complete.mock.calls.length + failures.length).toBe(1);
     expect(failures).toEqual([]);
@@ -481,17 +481,17 @@ describe('history-entry response admission', () => {
     expect(failures).toEqual([]);
   });
 
-  it('keeps unresolved synthetic history-referrer persistence explicit', async () => {
+  it('stores no-referrer for a request-less error Document', async () => {
     const { document, child, entry, source, target, failures, params } = await responseFixture();
     provideInlineDocument(child, document);
     params.reservedEnv = null;
     params.response.headerList.append('X-Frame-Options', 'DENY');
     const complete = vi.fn();
     child.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', { navigationParams: params, completionSteps: complete });
-    await expect.poll(() => failures.length).toBe(1);
-    expect(failures[0]).toEqual(expect.objectContaining({ message: 'Synthetic navigation history referrer capture is not implemented' }));
-    expect(entry.documentState.requestReferrer).toBeUndefined();
-    expect(complete).not.toHaveBeenCalled();
+    await expect.poll(() => complete.mock.calls.length + failures.length).toBe(1);
+    expect(failures).toEqual([]);
+    expect(entry.documentState.requestReferrer).toBeNull();
+    expect(complete).toHaveBeenCalledOnce();
   });
 });
 
@@ -576,7 +576,7 @@ describe('history-entry responses without a Document', () => {
     });
     const complete = vi.fn();
     child.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', {
-      navigationId: id, navigationParams: params, completionSteps: complete,
+      navigationId: id ?? undefined, navigationParams: params, completionSteps: complete,
     });
     await expect.poll(() => complete.mock.calls.length).toBe(1);
     expect(policy).toHaveBeenCalledExactlyOnceWith(params.response, source);
@@ -751,7 +751,7 @@ describe('history-entry loaded Document state', () => {
     expect(params.reservedEnv).toBeNull();
   });
 
-  it('leaves synthetic referrer persistence explicit after saving a loaded Document', async () => {
+  it('stores no-referrer after saving a request-less Document', async () => {
     const { document, navigable, entry, source, target, failures } = await fixture();
     const params = suppliedParams(navigable);
     const [, loaded] = BrowsingContext.create(document, null, document.browsingContext!.group!);
@@ -759,14 +759,14 @@ describe('history-entry loaded Document state', () => {
     vi.spyOn(navigable, 'loadDocument').mockReturnValue(loaded.env.userAgent.HostPromise.resolve(loaded, internalType<DocumentImpl | null>()));
     const complete = vi.fn();
     navigable.populateHistoryEntryDocument(entry, 'navigate', source, target, 'none', { navigationParams: params, completionSteps: complete });
-    await expect.poll(() => failures.length).toBe(1);
-    expect(failures[0]).toEqual(expect.objectContaining({ message: 'Synthetic navigation history referrer capture is not implemented' }));
+    await expect.poll(() => complete.mock.calls.length + failures.length).toBe(1);
+    expect(failures).toEqual([]);
     expect(entry.document).toBe(loaded);
     expect(entry.documentState.everPopulated).toBe(true);
     expect(entry.documentState.origin).toBe(loaded.origin);
     expect(entry.documentState.historyPolicyContainer).toBe(params.policyContainer);
-    expect(entry.documentState.requestReferrer).toBeUndefined();
-    expect(complete).not.toHaveBeenCalled();
+    expect(entry.documentState.requestReferrer).toBeNull();
+    expect(complete).toHaveBeenCalledOnce();
   });
 });
 

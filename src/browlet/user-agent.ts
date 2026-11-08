@@ -460,7 +460,7 @@ class BrowletUserAgent implements
     const document = traversable.activeDocument;
     if (document === null) throw new InternalError('A fresh traversable needs an active Document');
     // TODO(HTML §7.4): navigate() still stops at its explicit navigation-coordination dependency.
-    traversable.navigate(initialNavigationURL, document, { documentResource: initialNavigationPostResource });
+    traversable.navigate(initialNavigationURL, document, { documentResource: initialNavigationPostResource ?? undefined });
     return traversable;
   }
 

@@ -894,6 +894,8 @@ disabled-entry return. The following slice adds shared dispatch and cancellation
   disabled, rechecks Document activity, and prepares the destination with
   separate Navigation and classic History state. Disabled trackers remain
   unsettled as specified; they are not accepted into ongoing navigation.
+  The internal options use omission for absent inputs and apply null defaults
+  inside the algorithm; serialized null remains a distinct supplied state.
 - Downloads prepare a cross-document push destination with serialized null
   and the exact filename, including an empty string. The following slice moves
   abortion before preparation, with an approved browser/spec conflict below.
@@ -1280,7 +1282,7 @@ Navigation IDL are accounted for below.
 | Reactivation | §7.2.6.4 reconciliation and deferred disposal implemented. The §7.4.6 bfcache/history-traversal caller and its `pageshow` ordering remain unconnected. |
 | Same-document entry changes | §7.2.6.4 list mutation, tracker committed notification before callbacks, currententrychange, disposal, captured postcommit handlers, and script preparation/cleanup implemented. Intercepted reload and §7.4.4 synchronous URL/history updates reach this operation; traversal application remains unfinished. |
 | Entries falling off a capped history list | HTML itself leaves disposal unspecified ([#8620](https://github.com/whatwg/html/issues/8620)); Browlet has no history-size cap. Revisit when implementing eviction, rather than silently discarding entries. |
-| Request-policy URL hiding | Getter implemented. `createHistoryEntry()` still needs navigation's source-snapshot request referrer/policy capture; the destination response policy is not a substitute. Tests supply this retained state directly. |
+| Request-policy URL hiding | Getter implemented. `createHistoryEntry()` now retains the selected referrer and original request policy from NavigationParams; the destination's response policy remains separate. |
 | `updateCurrentEntry()` and its required-state dictionary | Implemented §7.2.6.6, with storage serialization and trusted `NavigationCurrentEntryChangeEvent` (§7.2.7.1). |
 | Navigation lifetime during Document destruction | Destruction/global teardown must account for Navigation's EventTarget and queued disposal tasks. Reentrant serialization exposes this missing lifecycle integration; browser evidence is recorded above. |
 | `navigate`, `reload`; options and NavigationResult | §7.2.6.7 preparation and results implemented; valid effects still stop at explicit Navigable dependencies. |

@@ -30,6 +30,10 @@ export class NavigationParams {
   id: string | null = null;
   /** Fetch request that produced the response, or null for a synthetic response or Browlet's local route. */
   request: FetchRequest | null = null;
+  /** Referrer retained for responses without a Fetch request, including multipart replacements. */
+  responseReferrer: URLRecord | null = null;
+  /** Original request policy for that response; response headers govern later requests. */
+  responseReferrerPolicy: ReferrerPolicy = '';
   /** Response selected for document creation. */
   response: FetchResponse;
   /** Fetch controller supplying navigation timing, when available. */
@@ -79,9 +83,9 @@ export class NavigationParams {
     this.#startTime = startTime;
   }
 
-  /** Assemble the supplied-response branch of navigate, retaining null Fetch and reserved-environment slots. */
+  /** Assemble navigation parameters for an existing response, retaining null Fetch and reserved-environment slots. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigate
-  static fromSuppliedResponse(
+  static fromResponse(
     response: FetchResponse, navigable: Navigable, sourceDocument: DocumentImpl | null,
     targetSnapshotParams: TargetSnapshotParams, documentState: DocumentState,
     navigationId: string, userInvolvement: UserNavigationInvolvement, env: BrowletEnvironment,
@@ -105,6 +109,9 @@ export class NavigationParams {
       response, finalSandboxFlags, coarsenedSharedCurrentTime(env.crossOriginIsolatedCapability).milliseconds,
     );
     params.id = navigationId;
+    const referrer = documentState.requestReferrer ?? null;
+    params.responseReferrer = referrer === null ? null : copyURL(referrer);
+    params.responseReferrerPolicy = documentState.requestReferrerPolicy;
     params.origin = origin;
     params.policyContainer = policyContainer;
     params.iframeReferrerPolicy = targetSnapshotParams.iframeReferrerPolicy;
@@ -316,6 +323,18 @@ export class NavigationParams {
         return fetchNextResponse();
       }, undefined, resultType);
     }
+  }
+
+  /** Resolved incoming referrer, with no-referrer as the default for a request-less response. */
+  get referrer(): URLRecord | null {
+    const referrer = this.request === null ? this.responseReferrer : this.request.referrer;
+    if (referrer === undefined) throw new InternalError('Navigation request referrer has not been resolved');
+    return referrer;
+  }
+
+  /** Policy of the request that obtained these bytes, independently of response policy headers. */
+  get referrerPolicy(): ReferrerPolicy {
+    return this.request === null ? this.responseReferrerPolicy : this.request.referrerPolicy;
   }
 
   /** Final response URL, required when a response is selected for navigation. */

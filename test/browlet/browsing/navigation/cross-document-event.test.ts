@@ -158,7 +158,7 @@ describe('ordinary navigation event inputs and cancellation', () => {
       sourceElement: unwrap<ElementImpl>(source), userInvolvement: 'activation', formDataEntryList: entries,
       documentResource: kind === 'post' || kind === 'empty-post'
         ? { requestBody: new Uint8Array(), requestContentType: 'application/x-www-form-urlencoded' }
-        : kind === 'srcdoc' ? '<p>srcdoc</p>' : null,
+        : kind === 'srcdoc' ? '<p>srcdoc</p>' : undefined,
     };
     const observed: unknown[] = [];
     browser.window.navigation.addEventListener('navigate', (baseEvent) => {
@@ -171,11 +171,11 @@ describe('ordinary navigation event inputs and cancellation', () => {
     expect(observed).toEqual([true, true, kind === 'post' ? [['field', 'value']] : kind === 'empty-post' ? [] : null]);
   });
 
-  it.each(['absent', 'null-option', 'serialized-null', 'serialized-state'] as const)('distinguishes absent state from serialized values (%s)', async (kind) => {
+  it.each(['absent', 'undefined-option', 'serialized-null', 'serialized-state'] as const)('distinguishes absent state from serialized values (%s)', async (kind) => {
     const { browser, document, navigable, env } = await fixture();
     const value = { saved: 'state' };
     const options: NavigateOptions = kind === 'absent' ? {}
-      : { navigationAPIState: kind === 'null-option' ? null : env.serializeForStorage(kind === 'serialized-null' ? null : value) };
+      : { navigationAPIState: kind === 'undefined-option' ? undefined : env.serializeForStorage(kind === 'serialized-null' ? null : value) };
     let state: unknown = 'not observed';
     browser.window.navigation.addEventListener('navigate', (baseEvent) => {
       const event = baseEvent as BrowletNavigateEvent;

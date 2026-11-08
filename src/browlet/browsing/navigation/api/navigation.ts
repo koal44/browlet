@@ -613,16 +613,17 @@ export type NavigationResult = {
 };
 
 /**
- * Optional event inputs. Involvement defaults to 'none'; source, form data, and classic state to null;
- * Navigation API state defaults to storage-serialized null. The tracker may be omitted.
+ * Optional event inputs use omission for absence. Involvement defaults to 'none';
+ * source, form data, and classic state to null; Navigation API state to storage-serialized null.
+ * The tracker may be omitted.
  */
 export type PushReplaceReloadNavigateEventOptions = {
   userInvolvement?: UserNavigationInvolvement;
-  sourceElement?: ElementImpl | null;
-  formDataEntryList?: FormDataEntry[] | null;
+  sourceElement?: ElementImpl;
+  formDataEntryList?: FormDataEntry[];
   navigationAPIState?: SerializedRecord;
-  classicHistoryAPIState?: SerializedRecord | null;
-  apiMethodTracker?: NavigationAPIMethodTracker | null;
+  classicHistoryAPIState?: SerializedRecord;
+  apiMethodTracker?: NavigationAPIMethodTracker;
 };
 
 /*

@@ -2430,9 +2430,9 @@ pass. No new expected failures, engine changes, or addon builds were needed.
 `navigate()` owns the full sequence: source admission, target-Agent handoff,
 fragment/javascript: routing, ordinary event dispatch and quota reservation,
 parallel cancellation checks, population, and queued finalization. Its local task
-steps retain the source snapshots and copied options. `DocumentState.createForNavigation()`
+steps retain the source snapshots and captured option values. `DocumentState.createForNavigation()`
 constructs the pending state; the existing environment factory wraps it in a history
-entry. `NavigationParams.fromSuppliedResponse()` constructs the supplied-response
+entry. `NavigationParams.fromResponse()` constructs the supplied-response
 params. Neither factory schedules nor advances navigation.
 `BrowsingContext.obtainForNavigation()` owns context selection during Document
 creation, with the destination Navigable passed explicitly rather than retained
@@ -3450,8 +3450,8 @@ Two nullable inputs remain explicit in source:
   none. Browlet discards an existing reservation and does not invent one.
 - `SPEC_GAP(navigation-history-null-request)`: HTML asserts a request exists when
   resolving a client history referrer, but synthetic params may lack one. A known
-  stored referrer is preserved; an unresolved referrer with a null request throws.
-  Choosing that missing value remains an audit dependency before enabling the loaders.
+  stored referrer is preserved. The consolidation follow-up below now uses explicit
+  supplied-response metadata, defaulting to no-referrer, when no request exists.
 
 Twelve additional population cases cover policy order and short-circuiting,
 report-only continuation, XFO precedence, reservation gating, null Fetch results,
@@ -3586,8 +3586,8 @@ sandbox/activation/confirmation checks, and avoid borrowing the departing
 Document's origin or granting browser privileges merely because the value is null.
 
 The existing `SPEC_GAP(navigation-history-null-request)` remains separate. A
-concrete stored referrer survives synthetic loading; an unresolved client referrer
-with no request still throws after the Document and other metadata are saved.
+concrete stored referrer survives synthetic loading. The consolidation follow-up
+below now completes the previously throwing null-request case.
 
 Tests substitute the unfinished loader to cover successful/local/Blob Documents,
 nullable results, previously populated state, exact origin/policy identity,
@@ -3941,7 +3941,7 @@ The provisional response-policy loader also remains: Browlet's local route still
 needs late preparation; §7.5.1 now preserves intentionally null reservations in
 completed params rather than sending them through that adapter.
 Service Worker association, actual Early Hints processing, URL-scoped COOP reporting,
-local cookie-URL inheritance, synthetic null-request referrer persistence, error
+local cookie-URL inheritance, error
 pages, and actual Document loaders remain at their recorded owner boundaries.
 No dependency is replaced with a default success.
 
@@ -4010,7 +4010,7 @@ were reused; no engine or addon rebuild was needed.
 
 Document teardown must still cancel a retained reader when discarding its queued
 continuation. The existing HTML null-reservation, local policy preparation,
-synthetic referrer/cookie-URL gaps, Early Hints, Service Workers, COOP reporting,
+synthetic cookie-URL inheritance, Early Hints, Service Workers, COOP reporting,
 download admission/handling, and iframe timing producers remain explicit at their
 existing owners. This slice adds no native or Node/V8 work.
 
@@ -5937,6 +5937,96 @@ before Window selection; later supplied responses select their response policy
 container instead of dropping it. See the
 [policy audit](../../loader/ROADMAP.md#multipart-loading-csp-admission).
 The parser/cursor redesign remains deferred until after Document lifecycle work.
+
+## Consolidation follow-up: abandoned Document admission
+
+An incoming Document can finish loading after its navigation has been superseded,
+or after removal of the departing Document's admission task. Both exits now cancel
+the retained ResourceReader and call the incoming Document's existing recursive
+destruction operation. Destruction queues work on that Document's own event loop,
+including when it belongs to another Agent; it does not depend on the departing
+Document remaining active. Cleanup failures are reported independently rather
+than issuing a second completion/failure result to the population owner.
+
+The regression uses the real HTML parser and stream. It first failed with the
+incoming Document still attached. It now verifies parser abortion, stream unlock,
+readiness rejection, discarded incoming tasks, and preservation of the active
+Document and replacement navigation. Both supersession and discarded admission
+are covered. Cancellation before a loader produces a Document remains a separate
+population-owner dependency; this change closes the post-loader admission gap.
+
+Validation: the 44-case Document-dispatch suite passes on Node 24.19.0, 26.8.1,
+and custom 27, with and without the addon. TypeScript, type contracts, touched-file
+lint, and whitespace checks pass. No full-suite rerun was needed for this bounded
+change. The referrer follow-up below completes the strict multipart replacement
+regression, which now remains an ordinary passing test.
+
+## Consolidation follow-up: supplied-response referrers
+
+`SPEC_GAP(navigation-history-null-request)` records HTML's assertion that a Fetch
+request exists while populating an unresolved history referrer, despite supplied
+responses and srcdoc deliberately having no request. Eric approved no-referrer as
+the default for request-less responses and explicit preservation of the original
+resolved referrer and policy for multipart replacement.
+
+`NavigateOptions.responseReferrer` carries that resolved URL when present; omission
+selects no-referrer. The existing `referrerPolicy` carries its original policy.
+Navigation snapshots the referrer URL before asynchronous work. The remaining option values are captured once in
+named constants, with defaults together, instead of replacing the options argument.
+NavigateOptions, PopulateHistoryEntryOptions, ReloadOptions, and the Navigation
+API event-preparation options use omission for absent inputs, with internal null
+defaults applied by the receiving algorithm. Reload preserves the active entry
+state when none is provided. Serialized author null remains an explicit state.
+History request referrers retain their meaningful distinction between an unresolved
+client (undefined), no-referrer (null), and a resolved URL. Fetching navigation
+parameters likewise distinguishes null failure from undefined supersession.
+Web IDL event dictionaries still accept their specified nullable members.
+
+NavigationParams retains `responseReferrer` and `responseReferrerPolicy` for
+request-less responses. Its read-only `referrer` and `referrerPolicy` getters
+select the real request's metadata when a request exists; an unresolved client
+referrer remains an input error. Document initialization consumes the
+selected value, and history retains it without inventing a Fetch request. Existing
+concrete history referrers and real-request identity remain unchanged.
+
+NavigationParams retains only these two response referrer values rather than the
+whole DocumentState. The provisional local loader creates that history state only
+after initializing its Document. DocumentState is mutable history state that can hold a live
+Document and nested histories; retaining it in the multipart loader would retain
+that graph as well. `NavigationParams.fromResponse()` names the already-obtained
+response branch alongside `fromFetch()` and `fromSrcdoc()`.
+
+Multipart loading captures the original metadata once and supplies it to every
+replacement. Neither the previous part's URL nor its response policy is used to
+recompute the incoming referrer. Each part's response policy still governs that
+Document's outgoing requests. The provisional local history-entry factory now also
+retains the selected metadata. Synthetic javascript: and srcdoc Documents keep
+their default empty incoming referrer when none is supplied.
+
+Sources: [history population](https://html.spec.whatwg.org/multipage/browsing-the-web.html#attempt-to-populate-the-history-entry%27s-document)
+and [Document initialization](https://html.spec.whatwg.org/multipage/document-lifecycle.html#create-and-initialize-a-document-object).
+Blink's DocumentLoader saves its retained referrer into HistoryItem, whose
+GenerateResourceRequest reuses it; that source inspection supports retaining
+request metadata rather than deriving it from the preceding Document. It is not
+a browser probe of HTML's abstract null-request case.
+
+The first-part loader had the same abandoned-Document window internally: a
+superseding navigation could cancel the outer load after Document creation but
+before returning that Document. A real-parser regression reproduced the retained
+browsing context. The cancellation branch now destroys that Document through its
+own event loop, without changing the already-settled load's result.
+
+Final validation: all six affected suites pass on Node 24.19.0, 26.8.1, and custom
+27, each with and without the addon. Compat configurations have 282 ordinary
+passes; stock configurations have 279 ordinary passes plus the same three existing
+Window-global identity/immutability expected failures. Every new lifecycle and
+referrer regression passes normally. Typecheck, generated declarations, type
+contracts, changed-file ESLint, import hierarchy, and whitespace checks pass.
+No full-suite run, addon rebuild, or engine patch was needed for these fixes.
+
+The later factory rename and option-capture cleanup retain that behavior. Their
+four affected suites pass on Node 26.8.1/compat (204 tests); the existing mutation
+regressions verify that queued navigation keeps its captured option values.
 
 ## Removal condition
 

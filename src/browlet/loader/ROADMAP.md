@@ -1943,11 +1943,11 @@ caught controller-state overwriting and multipart retention before commitment;
 it also covers child/top-level destruction, Window reuse, late script resumption,
 normal EOF, and the real replacement handoff with supplied history-referrer input.
 
-The strict full replacement test remains an Eric-approved expected failure at
-`Synthetic navigation history referrer capture is not implemented` (§7.4.5).
-It still requires successful replacement. A separate passing case supplies that
-missing metadata explicitly; cache policy is controlled and the old Document is
-hidden so unrelated visibility policy does not obscure this shutdown test.
+The consolidation follow-up now makes full replacement an ordinary passing
+regression. Request-less responses use no-referrer; multipart replacements retain
+the original resolved referrer and policy in both history and the new Document.
+The regression covers URL and no-referrer metadata without injecting history
+state. Visibility/cache inputs remain controlled independently of shutdown.
 The direct child fixture leaves full nested-history application to its existing owner.
 
 Live EventSource probes on Chromium 156.0.8078.4, Firefox 157.0, and WebKit 27.2
@@ -1972,7 +1972,6 @@ Remaining teardown connections before declaring the lifecycle work complete:
 | Worker shutdown | Local cooperative cleanup is connected; retain Pip's worker-finish/remote-owner integration during consolidation. Remote Fetch and forced termination retain their owners |
 | Fetch keepalive/deferred fetch | Window keepalive is connected below; worker handoff to the parent browser and deferred invocation remain explicit |
 | BlobByteSource | Add an actual host-read interruption contract; consumer cancellation currently ignores late results |
-| Synthetic navigation history | Capture referrer metadata for null-request responses; the full multipart replacement test remains expected-failing |
 
 This inventory concerns teardown, not the separately deferred XML/media, parser,
 rendering, or host UI implementations. The shared ownership batch below completes
@@ -2015,7 +2014,8 @@ ownership. The existing live probe was rerun on Chromium 156.0.8078.4, Firefox 1
 and WebKit 27.2. All retain pre-header keepalive transport after stop(); page promise
 settlement and post-header body behavior still differ. The later keepalive slice
 records Eric's choice and the worker handoff boundary. Deferred invocation and host Blob-read interruption
-remain separately named dependencies, as does synthetic history-referrer capture.
+remain separately named dependencies. Synthetic history-referrer capture is now
+connected in the consolidation follow-up.
 
 Validation: all 12 affected suites pass on Node 24.19.0, 26.8.1, and custom
 27.0.0-pre in stock/compat modes: 234 ordinary passes and the existing approved
@@ -2061,8 +2061,8 @@ Coverage also retains pending and already-finished part bodies, Stop before
 commitment, reentrant supersession, real replacement, and automatic Promise
 delivery across the nested readers.
 
-Synthetic history-referrer capture remains the approved expected failure;
-passing replacement coverage supplies that metadata explicitly. Local-URL part
+Synthetic history-referrer capture is now connected in the consolidation
+follow-up; replacement tests run normally with the retained metadata. Local-URL part
 CSP composition, transfer decoding, nested multipart, malformed-response
 presentation, and full per-part timing remain explicit dependencies. Dedicated
 keepalive lifetime work follows this checkpoint; this slice does not close §7.5.
@@ -2087,7 +2087,8 @@ All 16 new regressions pass in the six runtime configurations. The broader
 54-suite run passes with its existing expected failures; see Fetch's validation
 counts. The remaining teardown inventory above is still the consolidation review
 boundary: cross-isolate worker/keepalive ownership, deferred invocation, host Blob
-I/O interruption, and synthetic history-referrer capture. Previously deferred
+I/O interruption. Synthetic history-referrer capture is now connected. Previously
+deferred
 parsing, media/rendering, and multipart dependencies retain their named owners.
 This work remains within §7.5; it does not advance to §7.6.
 

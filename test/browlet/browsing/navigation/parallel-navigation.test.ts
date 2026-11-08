@@ -187,7 +187,7 @@ describe('pending navigation history', () => {
     expect(sourceSnapshot.fetchClient).toBe(env);
     expect(targetSnapshot.iframeReferrerPolicy).toBe('');
     expect(options).toMatchObject({
-      navigationId: navigable.ongoingNavigation, navigationParams: null, cspNavigationType: 'other', allowPOST: true,
+      navigationId: navigable.ongoingNavigation, navigationParams: undefined, cspNavigationType: 'other', allowPOST: true,
     });
     expect(navigable.activeSessionHistoryEntry).toBe(oldEntry);
     expect(navigable.currentSessionHistoryEntry).toBe(oldEntry);
@@ -230,7 +230,7 @@ describe('pending navigation history', () => {
     };
     navigable.navigate(parseURL('https://example.test/submission').url!, document, options, env);
     options.referrerPolicy = 'no-referrer';
-    options.documentResource = null;
+    delete options.documentResource;
     check.mockImplementation(() => {
       navigable.activeSessionHistoryEntry.documentState.navigableTargetName = 'after-prompt';
       return env.userAgent.HostPromise.resolve('continue', internalType<UnloadCancellationResult>());
@@ -313,6 +313,25 @@ describe('pending navigation history', () => {
 });
 
 describe('supplied-response navigation preparation', () => {
+  it('snapshots an explicitly supplied response referrer and policy without making a Fetch request', async () => {
+    const { document, navigable, env, turns, populate } = fixture();
+    const response = suppliedResponse('https://response.test/final');
+    const referrer = parseURL('https://original.test/path?q=1').url!;
+    const options: NavigateOptions = { response, responseReferrer: referrer, referrerPolicy: 'unsafe-url' };
+    navigable.navigate(response.url!, document, options, env);
+    referrer.path = ['changed'];
+    options.referrerPolicy = 'no-referrer';
+    await resumeNavigation(turns);
+    const [entry, , , , , population] = populate.mock.calls[0]!;
+    const params = population!.navigationParams!;
+    expect(serializeURL(entry.documentState.requestReferrer!)).toBe('https://original.test/path?q=1');
+    expect(entry.documentState.requestReferrerPolicy).toBe('unsafe-url');
+    expect(serializeURL(params.referrer!)).toBe('https://original.test/path?q=1');
+    expect(params.referrerPolicy).toBe('unsafe-url');
+    expect(params.request).toBeNull();
+    expect(params.fetchController).toBeNull();
+  });
+
   it('uses response URL/origin and fresh policy/COOP state without running the provisional loader', async () => {
     const { document, turns } = fixture();
     const nested = child(document);

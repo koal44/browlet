@@ -22,7 +22,7 @@ describe('queued javascript: navigation', () => {
     const process = vi.spyOn(navigable, 'navigateToJavaScriptURL').mockImplementation(() => {});
     const options: NavigateOptions = {
       historyHandling: 'push', userInvolvement: 'activation', initialInsertion: true,
-      formDataEntryList: form ? [] : null,
+      formDataEntryList: form ? [] : undefined,
     };
     document.policyContainer.referrerPolicy = 'no-referrer';
     await runInHostTask(() => {

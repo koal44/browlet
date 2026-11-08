@@ -110,7 +110,7 @@ describe('reload coordination', () => {
     expect(turns).toHaveLength(0);
   });
 
-  it.each(['omitted', 'null', 'supplied'] as const)('selects %s serialized state from the active entry', async (kind) => {
+  it.each(['omitted', 'undefined', 'supplied'] as const)('selects %s serialized state from the active entry', async (kind) => {
     const { browser, document, navigable, navigation } = await fixture();
     const active = navigable.activeSessionHistoryEntry;
     active.navigationAPIState = document.env.serializeForStorage({ saved: true });
@@ -123,11 +123,11 @@ describe('reload coordination', () => {
       event.preventDefault();
     });
 
-    navigable.reload(kind === 'omitted' ? {} : { navigationAPIState: kind === 'null' ? null : supplied });
+    navigable.reload(kind === 'omitted' ? {} : { navigationAPIState: kind === 'undefined' ? undefined : supplied });
 
     expect(fire).toHaveBeenCalledExactlyOnceWith('reload', active.url, false, {
       navigationAPIState: kind === 'supplied' ? supplied : active.navigationAPIState,
-      userInvolvement: 'none', apiMethodTracker: null,
+      userInvolvement: 'none', apiMethodTracker: undefined,
     });
     expect(events[0]!.destination.getState()).toEqual(kind === 'supplied' ? null : { saved: true });
     expect(active.documentState.reloadPending).toBe(false);

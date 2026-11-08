@@ -249,6 +249,63 @@ describe('population MIME preparation', () => {
     expect(complete).toHaveBeenCalledOnce();
   });
 
+  it.each([false, true])('destroys an unadmitted Document after supersession (discard: %s)', async (discard) => {
+    const { navigable, params, source, userAgent } = fixture('text/html');
+    navigable.ongoingNavigation = 'dispatch';
+    const active = navigable.activeDocument!;
+    const env = active.env;
+    const ownerLoop = env.responsibleEventLoop;
+    const create = vi.spyOn(navigable, 'createAndInitializeDocument');
+    const canceled = vi.fn();
+    const stream = ReadableStreamImpl.createDefault(undefined, canceled, 0, () => 1, userAgent.sandbox);
+    params.response.body = new FetchBody(stream, userAgent.sandbox);
+    const entry = env.createSessionHistoryEntry(params.url, new DocumentState());
+    const load = vi.spyOn(navigable, 'loadDocument');
+    const complete = vi.fn();
+    const failed = vi.fn();
+    const queue = vi.spyOn(ownerLoop, 'queueTask');
+    navigable.populateHistoryEntryDocument(entry, 'navigate', source, navigable.snapshotTargetParams(), 'none', {
+      navigationId: 'dispatch', navigationParams: params, completionSteps: complete, failureSteps: failed,
+    });
+    expect(ownerLoop.runTaskTurn()).toBe(true);
+    stream.enqueueChunk(new Uint8Array(1450).fill(32));
+    await expect.poll(() => queue.mock.calls.length).toBe(2);
+    expect(ownerLoop.runTaskTurn()).toBe(true);
+    expect(load).toHaveBeenCalledOnce();
+    expect(create).toHaveBeenCalledOnce();
+    const incoming = create.mock.results[0]!.value as DocumentImpl;
+    const parser = incoming.parser!;
+    expect(parser).toBeDefined();
+    const incomingLoop = incoming.env.responsibleEventLoop;
+    expect(incomingLoop).not.toBe(ownerLoop);
+    const scriptFailure = vi.fn();
+    incoming.waitForScriptsMayRun().observe(() => {}, scriptFailure);
+    const queued = vi.fn();
+    const discarded = vi.fn();
+    incoming.env.queueTask('network', { run: queued, discard: discarded });
+    await expect.poll(() => queue.mock.calls.length).toBe(3);
+    navigable.ongoingNavigation = 'replacement';
+    if (discard) ownerLoop.removeTasksForDocument(active);
+    else expect(ownerLoop.runTaskTurn()).toBe(true);
+    await expect.poll(() => {
+      incomingLoop.runTaskTurn();
+      return incoming.browsingContext === null;
+    }).toBe(true);
+    await expect.poll(() => canceled.mock.calls.length).toBe(1);
+    expect(stream.locked).toBe(false);
+    expect(incoming.salvageable).toBe(false);
+    expect(parser.stopped).toBe(true);
+    expect(scriptFailure).toHaveBeenCalledWith(expect.objectContaining({ name: 'AbortError' }));
+    expect(queued).not.toHaveBeenCalled();
+    expect(discarded).toHaveBeenCalledOnce();
+    expect(entry.document).toBeNull();
+    expect(navigable.activeDocument).toBe(active);
+    expect(navigable.activeWindow?.env).toBe(env);
+    expect(navigable.ongoingNavigation).toBe('replacement');
+    expect(complete).toHaveBeenCalledTimes(discard ? 0 : 1);
+    expect(failed).toHaveBeenCalledTimes(discard ? 1 : 0);
+  });
+
   it.each([
     { owner: null, next: null }, { owner: null, next: 'replacement' },
     { owner: 'traversal', next: 'traversal' }, { owner: 'traversal', next: 'replacement' },

@@ -151,7 +151,7 @@ describe('Document creation Window selection', () => {
     const response = new FetchResponse();
     response.urlList.push(parseURL(url).url!);
     response.headerList.append('Origin-Agent-Cluster', '?1');
-    const params = NavigationParams.fromSuppliedResponse(
+    const params = NavigationParams.fromResponse(
       response, top, previous, top.snapshotTargetParams(), new DocumentState(),
       'supplied-oac', 'none', previous.env,
     );
@@ -338,7 +338,7 @@ describe('Document creation ancestry and policy initialization', () => {
     iframe.setAttribute('referrerpolicy', policy);
     const snapshot = child.snapshotTargetParams();
     iframe.setAttribute('referrerpolicy', policy === 'unsafe-url' ? 'no-referrer' : 'unsafe-url');
-    const params = NavigationParams.fromSuppliedResponse(
+    const params = NavigationParams.fromResponse(
       suppliedParams().response, child, parentDocument, snapshot, new DocumentState(),
       'ancestry', 'none', parentDocument.env,
     );
@@ -434,13 +434,15 @@ describe('Document creation ancestry and policy initialization', () => {
 });
 
 describe('Document creation referrer initialization', () => {
-  it.each(['synthetic', 'no-referrer', 'url'] as const)('uses the selected %s referrer before loader callbacks', (kind) => {
+  it.each(['synthetic', 'no-referrer', 'url', 'supplied-url'] as const)('uses the selected %s referrer before loader callbacks', (kind) => {
     const top = fixture();
     const previous = top.activeDocument!;
     previous.referrer = 'https://creator.test/page';
     const params = suppliedParams(kind === 'synthetic' ? 'about:blank?replacement' : 'https://incoming.test/');
     if (kind === 'synthetic') {
       params.origin = previous.origin;
+    } else if (kind === 'supplied-url') {
+      params.responseReferrer = parseURL('https://source.test/path?q=1').url!;
     } else {
       const request = new FetchRequest(params.url, previous.env);
       request.referrerPolicy = 'unsafe-url';
@@ -449,7 +451,7 @@ describe('Document creation referrer initialization', () => {
     }
     // This response policy governs outgoing requests; it must not re-filter the incoming request's referrer.
     params.policyContainer.referrerPolicy = 'no-referrer';
-    const expected = kind === 'url' ? 'https://source.test/path?q=1' : '';
+    const expected = kind === 'url' || kind === 'supplied-url' ? 'https://source.test/path?q=1' : '';
     let committedHints = false;
     params.commitEarlyHints = (document) => {
       committedHints = true;

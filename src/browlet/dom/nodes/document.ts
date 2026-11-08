@@ -2090,14 +2090,12 @@ export class DocumentImpl extends NodeImpl {
     this.policyContainer.cspList.applyDocumentInitializationDirectives(this);
   }
 
-  /** Record the referrer selected by the request that created this document. */
+  /** Record the already-selected incoming referrer, including supplied-response metadata. */
   // Response-referrer steps extracted from document creation.
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#create-and-initialize-a-document-object
-  initializeReferrer(request: FetchRequest | null): void {
-    // Fetch has already resolved this value. The response's Referrer-Policy governs later requests.
-    if (request === null) return;
-    if (request.referrer === undefined) throw new InternalError('Navigation request referrer has not been resolved');
-    this.referrer = request.referrer === null ? '' : serializeURL(request.referrer);
+  initializeReferrer(referrer: URLRecord | null): void {
+    // The response's Referrer-Policy governs later requests, not these already-obtained bytes.
+    this.referrer = referrer === null ? '' : serializeURL(referrer);
   }
 
   /** Reset document-loading milestones around the selected navigation start. */

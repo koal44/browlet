@@ -220,7 +220,7 @@ describe('multipart Document loading', () => {
         env.userAgent.HostPromise.reject(failure, internalType<UnloadCancellationResult>()),
       );
     } else {
-      vi.spyOn(NavigationParams, 'fromSuppliedResponse').mockImplementation(() => { throw failure; });
+      vi.spyOn(NavigationParams, 'fromResponse').mockImplementation(() => { throw failure; });
     }
     stream.enqueueChunk(utf8Encode('\r\n--part\r\nContent-Type: text/html\r\n\r\n<p>second'));
     await expect.poll(() => canceled.mock.calls.length).toBe(1);
@@ -337,10 +337,8 @@ describe('multipart Document loading', () => {
     expect(stream.locked).toBe(false);
   });
 
-  for (const suppliedReferrer of [false, true]) {
-    // TODO(HTML §7.4.5): The strict replacement path needs synthetic history-referrer capture.
-    // Eric approved retaining that integration failure while the supplied-input case covers shutdown.
-    (suppliedReferrer ? it : it.fails)(`retains the outer stream through replacement, then stops from the new Document (supplied referrer: ${suppliedReferrer})`, async () => {
+  it.each(['request-less', 'no-referrer', 'url'] as const)(
+    'retains the outer stream and %s metadata through replacement, then stops from the new Document', async (kind) => {
       const { env, navigable, params, stream, canceled, load } = await fixture();
       const errors: unknown[] = [];
       const populate = navigable.populateHistoryEntryDocument.bind(navigable);
@@ -351,27 +349,29 @@ describe('multipart Document loading', () => {
       cleanup.push(async () => { await navigable.multipartResource?.cancel(new Error('test cleanup')); });
       // Cache admission is a separate host policy; this fixture always unloads.
       vi.spyOn(env.userAgent, 'shouldKeepDocumentInBfcache').mockReturnValue(false);
-      if (suppliedReferrer) {
-      // §7.4.5's null-request history capture is separately unfinished. Supply the
-      // history input explicitly to exercise the rest of the replacement path.
-        const fromResponse = NavigationParams.fromSuppliedResponse.bind(NavigationParams);
-        vi.spyOn(NavigationParams, 'fromSuppliedResponse').mockImplementation((...args) => {
-          args[4].requestReferrer = params.url;
-          return fromResponse(...args);
-        });
+      const referrer = kind === 'url' ? env.parseURL('https://source.test/original?q=1')! : null;
+      if (kind !== 'request-less') {
+        params.request = new FetchRequest(params.url, env);
+        params.request.referrer = referrer;
+        params.request.referrerPolicy = 'unsafe-url';
       }
       const loading = load();
       stream.enqueueChunk(utf8Encode('--part\r\nContent-Type: text/html;charset=utf-8\r\n\r\n<p>first</p>'));
       const first = (await loading)!;
       navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(first, params));
       await expect.poll(() => navigable.activeDocument).toBe(first);
+      expect(first.referrer).toBe(kind === 'url' ? 'https://source.test/original?q=1' : '');
       first.setInitialVisibilityState('hidden');
+      first.policyContainer.referrerPolicy = 'no-referrer';
       stream.enqueueChunk(utf8Encode('\r\n--part\r\nContent-Type: text/html;charset=utf-8\r\n\r\n<p>second</p>'));
       await expect.poll(() => errors.length !== 0 || navigable.activeDocument?.querySelector('p')?.textContent === 'second').toBe(true);
       expect(errors).toEqual([]);
       expect(navigable.activeDocument?.querySelector('p')?.textContent).toBe('second');
       const second = navigable.activeDocument!;
       expect(second).not.toBe(first);
+      expect(second.referrer).toBe(first.referrer);
+      expect(navigable.activeSessionHistoryEntry.documentState.requestReferrer).toEqual(referrer);
+      expect(navigable.activeSessionHistoryEntry.documentState.requestReferrerPolicy).toBe(kind === 'request-less' ? '' : 'unsafe-url');
       expect(navigable.multipartResource).not.toBeNull();
       const parts = navigable.multipartResource;
       await new Promise<void>((resolve) => first.env.responsibleEventLoop.queueTask(
@@ -387,8 +387,8 @@ describe('multipart Document loading', () => {
       await expect.poll(() => canceled.mock.calls.length).toBe(1);
       expect(navigable.multipartResource).toBeNull();
       expect(stream.locked).toBe(false);
-    });
-  }
+    },
+  );
 
   it('uses the RFC text/plain default and preserves a first part split across transport chunks', async () => {
     const { navigable, params, stream, canceled, load } = await fixture();
@@ -419,6 +419,34 @@ describe('multipart Document loading', () => {
     await expect.poll(() => canceled.mock.calls.length).toBe(1);
     expect(navigable.activeDocument?.URL).toBe('about:blank');
     expect(stream.locked).toBe(false);
+  });
+
+  it('destroys a first-part Document created just before its load is superseded', async () => {
+    const { navigable, stream, canceled, load } = await fixture();
+    const active = navigable.activeDocument;
+    navigable.ongoingNavigation = 'multipart';
+    const loadHTML = navigable.loadHTMLDocument.bind(navigable);
+    let incoming: DocumentImpl | undefined;
+    const scriptFailure = vi.fn();
+    vi.spyOn(navigable, 'loadHTMLDocument').mockImplementation((...args) => {
+      incoming = loadHTML(...args);
+      incoming.waitForScriptsMayRun().observe(() => {}, scriptFailure);
+      navigable.ongoingNavigation = 'replacement';
+      return incoming;
+    });
+    const loading = load();
+    const rejected = expect(loading).rejects.toThrow('Multipart navigation was superseded');
+    stream.enqueueChunk(utf8Encode('--part\r\nContent-Type: text/html\r\n\r\n<p>first</p>'));
+    await rejected;
+    expect(incoming).toBeDefined();
+    await expect.poll(() => incoming?.browsingContext === null).toBe(true);
+    expect(scriptFailure).toHaveBeenCalledWith(expect.objectContaining({ name: 'AbortError' }));
+    expect(incoming!.activeParserWasAborted).toBe(true);
+    expect(navigable.activeDocument).toBe(active);
+    expect(navigable.ongoingNavigation).toBe('replacement');
+    await expect.poll(() => canceled.mock.calls.length).toBe(1);
+    expect(stream.locked).toBe(false);
+    expect(navigable.multipartResource).toBeNull();
   });
 
   it('does not adopt a reentrant navigation as the next part replacement', async () => {
@@ -457,13 +485,17 @@ describe('multipart Document loading', () => {
   });
 
   it('copies navigation inputs for a part without replacing the outer response or losing the start time', async () => {
-    const { params, stream } = await fixture();
+    const { params, stream, env } = await fixture();
+    params.responseReferrer = env.parseURL('https://source.test/original')!;
+    params.responseReferrerPolicy = 'unsafe-url';
     const response = params.response.copy(null);
     const copy = params.withResponse(response);
     expect(copy).not.toBe(params);
     expect(copy.response).toBe(response);
     expect(params.response).not.toBe(response);
     expect(copy.startTime).toBe(params.startTime);
+    expect(copy.referrer).toBe(params.referrer);
+    expect(copy.referrerPolicy).toBe(params.referrerPolicy);
     expect(copy.policyContainer).toBe(params.policyContainer);
     expect(copy.origin).toBe(params.origin);
     expect(copy.id).toBe(params.id);
@@ -509,7 +541,7 @@ describe('multipart CSP', () => {
     stream.close();
     const a = (await first)!;
     const b = (await parts.readPart())!;
-    const createParams = (response: FetchResponse) => NavigationParams.fromSuppliedResponse(
+    const createParams = (response: FetchResponse) => NavigationParams.fromResponse(
       response, navigable, navigable.activeDocument, navigable.snapshotTargetParams(), new DocumentState(),
       'multipart-policy', 'none', env,
     );

@@ -620,43 +620,52 @@ export class Navigable {
     url: URLRecord, sourceDocument: DocumentImpl | null = null,
     options: NavigateOptions = {}, env: BrowletEnvironment | null = null,
   ): void {
+    // Capture navigation inputs once for the queued and parallel steps below.
+    const {
+      documentResource = null, response = null, responseReferrer = null,
+      exceptionsEnabled = false, historyHandling: historyBehavior = 'auto',
+      navigationAPIState = null, formDataEntryList = null, referrerPolicy = '',
+      userInvolvement = 'none', sourceElement = null, initialInsertion = false,
+      apiMethodTracker = null, multipartResource,
+    } = options;
+    const referrer = responseReferrer === null ? null : copyURL(responseReferrer);
+
     // Capture the source state and check its permission to navigate this destination.
     const discardResponse = () => {
-      options.response?.body?.stream.cancelInternal(undefined).observe(() => {}, () => {});
+      response?.body?.stream.cancelInternal(undefined).observe(() => {}, () => {});
     };
     const runSteps = (steps: () => void) => {
       try { steps(); }
       catch (error) {
         discardResponse();
         // An implementation failure stops the load; an ordinary navigation veto retires only its part.
-        options.multipartResource?.cancel(error).observe(() => {}, () => {});
+        multipartResource?.cancel(error).observe(() => {}, () => {});
         throw error;
       }
     };
-    const cspNavigationType = (options.formDataEntryList ?? null) === null ? 'other' : 'form-submission';
+    const cspNavigationType = formDataEntryList === null ? 'other' : 'form-submission';
     const sourceSnapshotParams = new SourceSnapshotParams(sourceDocument);
     let initiatorOriginSnapshot: Origin = createOpaqueOrigin();
     let initiatorBaseURLSnapshot = copyURL(aboutBlankURL);
     if (sourceDocument === null) {
-      if (options.userInvolvement !== 'browser UI') throw new InternalError('Sourceless navigation requires browser UI involvement');
+      if (userInvolvement !== 'browser UI') throw new InternalError('Sourceless navigation requires browser UI involvement');
       if (url.scheme === 'javascript') {
         const document = this.activeDocument;
         if (document === null) throw new InternalError('Navigation requires an active Document');
         initiatorOriginSnapshot = document.origin;
       }
     } else {
-      if (options.userInvolvement === 'browser UI') throw new InternalError('Document-initiated navigation cannot have browser UI involvement');
+      if (userInvolvement === 'browser UI') throw new InternalError('Document-initiated navigation cannot have browser UI involvement');
       const sourceNavigable = sourceDocument.getNodeNavigable();
       if (sourceNavigable === null) throw new InternalError('Navigation requires the source Document\'s node navigable');
       if (!sourceNavigable.isAllowedBySandboxingToNavigate(this, sourceSnapshotParams)) {
         discardResponse();
-        if (options.exceptionsEnabled === true) throw new DOMExceptionImpl('Sandboxing prevents navigation', 'SecurityError');
+        if (exceptionsEnabled) throw new DOMExceptionImpl('Sandboxing prevents navigation', 'SecurityError');
         return;
       }
       initiatorOriginSnapshot = sourceDocument.origin;
       initiatorBaseURLSnapshot = sourceDocument.getBaseURL();
     }
-    options = { ...options };
     const navigationId = randomUUID();
     const targetEnv = this.activeDocument?.env;
     if (targetEnv === undefined) throw new InternalError('Navigation requires an active Document');
@@ -682,16 +691,14 @@ export class Navigable {
         return;
       }
       // Select history handling and take the same-document fragment path when applicable.
-      const userInvolvement = options.userInvolvement ?? 'none';
-      const historyHandling = this.resolveHistoryBehavior(url, initiatorOriginSnapshot, options.historyHandling, userInvolvement);
-      const { documentResource = null, response = null } = options;
+      const historyHandling = this.resolveHistoryBehavior(url, initiatorOriginSnapshot, historyBehavior, userInvolvement);
       if (
         documentResource === null && response === null &&
         urlsEqual(url, this.activeSessionHistoryEntry.url, true) && url.fragment !== null
       ) {
         this.navigateToFragment(
-          url, historyHandling, userInvolvement, options.sourceElement ?? null,
-          options.navigationAPIState ?? null, navigationId, options.apiMethodTracker ?? null,
+          url, historyHandling, userInvolvement, sourceElement,
+          navigationAPIState, navigationId, apiMethodTracker,
         );
         return;
       }
@@ -716,7 +723,7 @@ export class Navigable {
         activeEnv.queueTask('navigation-and-traversal', {
           run: () => this.navigateToJavaScriptURL(
             request, historyHandling, initiatorOriginSnapshot, userInvolvement,
-            cspNavigationType, options.initialInsertion ?? false, navigationId, targetSnapshotParams,
+            cspNavigationType, initialInsertion, navigationId, targetSnapshotParams,
           ),
         });
         return;
@@ -733,11 +740,11 @@ export class Navigable {
       ) {
         const navigation = this.activeWindow!.navigation;
         const entryListForFiring = documentResource !== null && typeof documentResource !== 'string'
-          ? options.formDataEntryList ?? null : null;
+          ? formDataEntryList : null;
         const shouldContinue = navigation.firePushReplaceReloadNavigateEvent(historyHandling, url, false, {
-          userInvolvement, sourceElement: options.sourceElement ?? null, formDataEntryList: entryListForFiring,
-          navigationAPIState: options.navigationAPIState ?? navigation.env.serializeForStorage(undefined),
-          apiMethodTracker: options.apiMethodTracker ?? null,
+          userInvolvement, sourceElement: sourceElement ?? undefined, formDataEntryList: entryListForFiring ?? undefined,
+          navigationAPIState: navigationAPIState ?? navigation.env.serializeForStorage(undefined),
+          apiMethodTracker: apiMethodTracker ?? undefined,
         });
         if (!shouldContinue) { discardResponse(); return; }
       }
@@ -773,16 +780,17 @@ export class Navigable {
             });
             const documentState = DocumentState.createForNavigation(
               url, initiatorOriginSnapshot, initiatorBaseURLSnapshot,
-              options.referrerPolicy ?? '', documentResource, this.targetName,
+              referrerPolicy, documentResource, this.targetName,
             );
+            if (response !== null) documentState.requestReferrer = referrer;
             const historyEntry = activeEnv.createSessionHistoryEntry(url, documentState);
-            const navigationParams = response === null ? null : NavigationParams.fromSuppliedResponse(
+            const navigationParams = response === null ? undefined : NavigationParams.fromResponse(
               response, this, sourceDocument, targetSnapshotParams, documentState,
               navigationId, userInvolvement, activeEnv,
             );
             this.populateHistoryEntryDocument(historyEntry, 'navigate', sourceSnapshotParams, targetSnapshotParams, userInvolvement, {
               navigationId, navigationParams, cspNavigationType, allowPOST: true,
-              failureSteps: options.multipartResource === undefined ? undefined : (error) => {
+              failureSteps: multipartResource === undefined ? undefined : (error) => {
                 userAgent.runInParallel(() => runSteps(() => { throw error; }));
               },
               completionSteps: () => {
@@ -977,10 +985,9 @@ export class Navigable {
                 }
               }
               if (entry.documentState.requestReferrer === undefined && params instanceof NavigationParams) {
-                // SPEC_GAP(navigation-history-null-request): HTML asserts a request exists, although synthetic params can omit it.
-                // TODO(HTML §7.4.5): Resolve synthetic referrer persistence before enabling the inline/Document loaders.
-                if (params.request === null) throw new InternalError('Synthetic navigation history referrer capture is not implemented');
-                entry.documentState.requestReferrer = params.request.referrer;
+                // SPEC_GAP(navigation-history-null-request): HTML asserts a request even for request-less responses.
+                // Persist the resolved supplied value (no-referrer by default), without inventing a Fetch request.
+                entry.documentState.requestReferrer = params.referrer;
               }
             }
             completionSteps?.();
@@ -1022,9 +1029,16 @@ export class Navigable {
             // Creating the incoming Document can reuse this Window and change its associated
             // Document before history activation. Keep admission tasks on the still-active Document.
             const taskDocument = this.activeDocument;
-            const queueAdmission = (steps: () => void) => window.env.responsibleEventLoop.queueTask(
-              taskSources['navigation-and-traversal'], taskDocument, { run: bindAsyncContext(() => runSteps(steps)), discard },
+            const queueAdmission = (steps: () => void, discardSteps = discard) => window.env.responsibleEventLoop.queueTask(
+              taskSources['navigation-and-traversal'], taskDocument, { run: bindAsyncContext(() => runSteps(steps)), discard: discardSteps },
             );
+            const reportCleanupFailure = (error: unknown) => window.env.userAgent.runInParallel(() => { throw error; });
+            const disposeIncomingDocument = (document: DocumentImpl | null) => {
+              resource.cancel().observe(() => {}, reportCleanupFailure);
+              // The incoming Window may belong to another Agent. Destruction queues its own
+              // ungated tasks, releases parser readiness, and preserves a replacement Window.
+              document?.destroyAndDescendants().observe(() => {}, reportCleanupFailure);
+            };
             const fail = (error: unknown) => queueAdmission(() => { throw error; });
             // Sniffing can wait for bytes. Resume Document creation and retained-state updates on the destination's task.
             // TODO(HTML §7.5): Document teardown must cancel the retained reader if it discards this continuation task.
@@ -1045,13 +1059,15 @@ export class Navigable {
                 this.loadDocument(params, sourceSnapshotParams, entry.documentState.initiatorOrigin, resource).observe((document) => {
                   queueAdmission(() => {
                     if (this.ongoingNavigation !== expectedNavigation) {
-                      resource.cancel().observe(() => {}, fail);
-                      // TODO(HTML §7.5.10): Dispose an incoming Document whose asynchronous admission was superseded.
+                      disposeIncomingDocument(document);
                       completionSteps?.();
                       return;
                     }
                     entry.documentState.document = document;
                     complete();
+                  }, () => {
+                    disposeIncomingDocument(document);
+                    discard?.();
                   });
                 }, fail);
               }),
@@ -1217,7 +1233,8 @@ export class Navigable {
     const destinationNavigationAPIState = navigationAPIState ?? this.activeSessionHistoryEntry.navigationAPIState;
     // SPEC_GAP(fragment-navigation-method-tracker): HTML drops navigate()'s tracker here; retain event.info and result promises.
     const shouldContinue = navigation.firePushReplaceReloadNavigateEvent(historyHandling, url, true, {
-      userInvolvement, sourceElement, navigationAPIState: destinationNavigationAPIState, apiMethodTracker,
+      userInvolvement, sourceElement: sourceElement ?? undefined, navigationAPIState: destinationNavigationAPIState,
+      apiMethodTracker: apiMethodTracker ?? undefined,
     });
     if (!shouldContinue) {
       // SPEC_CLASH(fragment-interception-abort): All browsers preserve the intercepted event. HTML's aborting setter
@@ -1329,7 +1346,7 @@ export class Navigable {
       // SPEC_CLASH(history-zero-delta-reload): Follow HTML/Chromium/Firefox for every reload caller.
       // WebKit's history.go(0) instead exposes sameDocument true and undefined Navigation state.
       if (!window.navigation.firePushReplaceReloadNavigateEvent('reload', entry.url, false, {
-        navigationAPIState, userInvolvement, apiMethodTracker: options.apiMethodTracker ?? null,
+        navigationAPIState, userInvolvement, apiMethodTracker: options.apiMethodTracker,
       })) return;
     }
 
@@ -1657,6 +1674,9 @@ export class Navigable {
   ): InternalPromise<DocumentImpl | null> {
     const env = this.activeWindow!.env;
     const userAgent = env.userAgent;
+    // Retain the original request metadata across all parts, before callbacks or replacement policy changes.
+    const { referrer, referrerPolicy } = params;
+    const responseReferrer = referrer === null ? undefined : copyURL(referrer);
     const parts = new MultipartResourceReader(resource, userAgent, (reason) => { finish(); result.reject(reason); });
     this.multipartResource = parts;
     const result = userAgent.HostPromise.withResolvers(internalType<DocumentImpl | null>());
@@ -1709,7 +1729,7 @@ export class Navigable {
             // SPEC_GAP(multipart-null-request): Supplied responses have no request; retain their final URL.
             replacing = true;
             this.navigate(params.request?.currentURL ?? params.url, document, {
-              response, historyHandling: 'replace', multipartResource: parts,
+              response, responseReferrer, referrerPolicy, historyHandling: 'replace', multipartResource: parts,
             }, document.env);
             next();
           } catch (error) { fail(error); }
@@ -1747,7 +1767,11 @@ export class Navigable {
               return;
             }
             this.loadDocument(partParams, sourceSnapshotParams, initiatorOrigin, partResource).observe((document) => {
-              if (parts.isCanceled) { fail(new DOMExceptionImpl('', 'AbortError')); return; }
+              if (parts.isCanceled) {
+                // Cancellation already settled the load; retire a Document created before that cancellation arrived.
+                document?.destroyAndDescendants().observe(() => {}, (error) => userAgent.runInParallel(() => { throw error; }));
+                return;
+              }
               result.resolve(document);
               if (document === null) { stop(new InternalError('Multipart first part produced no Document')); return; }
               // History initialization releases this gate. No replacement may use an uncommitted source Document.
@@ -1882,7 +1906,7 @@ export class Navigable {
     document.initializeAncestry(params.iframeReferrerPolicy, this.containerDocument);
     document.initializeInsecureRequestsPolicy();
     document.initializeCSP();
-    document.initializeReferrer(params.request);
+    document.initializeReferrer(params.referrer);
     document.createNavigationTimingEntry(params);
     document.initializeResponseMetadata(response);
     document.processDefaultStyleHeaders(response);
@@ -1907,8 +1931,9 @@ export class Navigable {
     const documentState = DocumentState.create(document);
     documentState.initiatorOrigin = null;
     documentState.origin = params.origin;
-    // TODO(HTML 7.4): Retain the source snapshot's request referrer/policy through Fetch navigation.
-    // NavigationHistoryEntry.url consumes that request policy, not the destination's response policy.
+    const referrer = params.referrer;
+    documentState.requestReferrer = referrer === null ? null : copyURL(referrer);
+    documentState.requestReferrerPolicy = params.referrerPolicy;
     documentState.aboutBaseURL = params.aboutBaseURL;
     documentState.resource = source;
     if (PolicyContainer.requiresStorageInHistory(params.url)) {
@@ -2054,30 +2079,33 @@ export class Navigable {
 export type NavigableContainer = HTMLIFrameElementImpl | HTMLObjectElementImpl | HTMLEmbedElementImpl | HTMLFrameElementImpl;
 
 /**
- * Optional inputs to HTML's navigate algorithm. Nullable inputs default to null and booleans to false;
- * historyHandling defaults to 'auto', referrerPolicy to '', and userInvolvement to 'none'.
+ * Optional inputs to HTML's navigate algorithm; omission is the only absent input value.
+ * navigate() supplies HTML's null defaults once. Booleans default to false,
+ * historyHandling to 'auto', referrerPolicy to '', and userInvolvement to 'none'.
  */
 // https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigate
 export type NavigateOptions = {
-  documentResource?: PostResource | string | null;
-  response?: FetchResponse | null;
+  documentResource?: PostResource | string;
+  response?: FetchResponse;
+  /** Resolved original referrer for a supplied response; absence selects no-referrer. */
+  responseReferrer?: URLRecord;
   exceptionsEnabled?: boolean;
   historyHandling?: NavigationHistoryBehavior;
-  navigationAPIState?: SerializedRecord | null;
-  formDataEntryList?: FormDataEntry[] | null;
+  navigationAPIState?: SerializedRecord;
+  formDataEntryList?: FormDataEntry[];
   referrerPolicy?: ReferrerPolicy;
   userInvolvement?: UserNavigationInvolvement;
-  sourceElement?: ElementImpl | null;
+  sourceElement?: ElementImpl;
   initialInsertion?: boolean;
-  apiMethodTracker?: NavigationAPIMethodTracker | null;
+  apiMethodTracker?: NavigationAPIMethodTracker;
   /** The navigation-owned outer load supplying this replacement part. */
   multipartResource?: MultipartResourceReader;
 };
 
 /** Optional population inputs; IDs/params default to null, CSP type to other, POST to false, and completion to no steps. */
 export type PopulateHistoryEntryOptions = {
-  navigationId?: string | null;
-  navigationParams?: NavigationParams | null;
+  navigationId?: string;
+  navigationParams?: NavigationParams;
   cspNavigationType?: 'form-submission' | 'other';
   allowPOST?: boolean;
   completionSteps?: () => void;
@@ -2093,12 +2121,12 @@ export interface NavigationRequest extends FetchRequest {
   policyContainer: PolicyContainer;
 }
 
-/** Optional reload inputs: state and tracker default to null; user involvement defaults to 'none'. */
+/** Optional reload inputs: omitted state retains the active entry's state; involvement defaults to 'none'. */
 // https://html.spec.whatwg.org/multipage/browsing-the-web.html#reload
 export type ReloadOptions = {
-  navigationAPIState?: SerializedRecord | null;
+  navigationAPIState?: SerializedRecord;
   userInvolvement?: UserNavigationInvolvement;
-  apiMethodTracker?: NavigationAPIMethodTracker | null;
+  apiMethodTracker?: NavigationAPIMethodTracker;
 };
 
 /** Requested history action, before resolving the automatic behavior. */

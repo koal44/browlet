@@ -1939,9 +1939,9 @@ itself remain unfinished. See the
 Multipart framing now feeds independently readable part responses into the
 Document loaders. First-part admission and per-part EOF/load delivery work while
 the outer HTTP response stays open; later parts enter replacement navigation.
-The full synthetic replacement route still needs §7.4.5's history-referrer capture;
-its strict integration test is expected-failing. The shutdown handoff passes with
-that metadata supplied and controlled visibility/cache inputs. HTTP parts
+Full supplied-response replacement now retains the original resolved referrer and
+policy, defaulting to no-referrer when none is supplied. Its strict integration
+tests pass normally with controlled visibility/cache inputs. HTTP parts
 retain the outer and every earlier part's CSP as independent restrictions,
 including report-only policies. First-part sandbox/origin preparation and
 frame-ancestors checks precede Window creation; later supplied responses carry
