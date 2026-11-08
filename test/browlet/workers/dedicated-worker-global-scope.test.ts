@@ -181,11 +181,12 @@ describe('DedicatedWorkerGlobalScope (HTML §10.2.1.2)', () => {
 
 /** Only supplies the resource-lifetime mixin needed by real MessagePorts; this is not worker settings. */
 class TestEnvironment extends SandboxEnvironment {
-  /** Resource ownership used by channel entanglement and delivery. */
-  #mixin: WindowOrWorkerGlobalScopeMixin | undefined;
+  /** Supplied by the worker global, or allocated locally for the outside test endpoint. */
+  globalScopeMixin: WindowOrWorkerGlobalScopeMixin | undefined;
 
+  /** Share the configured resource owner with channel entanglement and delivery. */
   override getWindowOrWorkerGlobalScopeMixin(): WindowOrWorkerGlobalScopeMixin {
-    return this.#mixin ??= new WindowOrWorkerGlobalScopeMixin(this);
+    return this.globalScopeMixin ??= new WindowOrWorkerGlobalScopeMixin(this);
   }
 }
 
@@ -194,11 +195,13 @@ function createWorker() {
   const loop = new EventLoop({ requestTurn() {} });
   const agent = new DedicatedWorkerAgent(loop);
   const realm = new BrowletRealm({ agent, globalNames: ['Worker', 'DedicatedWorker'] });
-  const context = browletBindingWorld.register(realm, (binding) =>
-    new TestEnvironment(realm, createBrowletEnvironmentInit(binding), new UserAgent()),
-  );
-  const env = context.getEnvironment();
+  let env!: TestEnvironment;
+  const context = browletBindingWorld.register(realm, (binding) => {
+    env = new TestEnvironment(realm, createBrowletEnvironmentInit(binding), new UserAgent());
+    return env;
+  });
   const implementation = new DedicatedWorkerGlobalImpl('classic', 'worker name', env);
+  env.globalScopeMixin = implementation.getWindowOrWorkerGlobalScopeMixin();
   implementation.url = parseURL('https://worker.test/main.js').url!;
   agent.globalScope = implementation;
   realm.initialize({ createGlobalObject: () => context.projectGlobalObject(implementation, 'DedicatedWorkerGlobalScope') });

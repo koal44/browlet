@@ -14,6 +14,14 @@ and upstream-test disagreements remain documented under retained decisions.
 
 ## Remaining Fetch work
 
+Background cache revalidation retains the execution environment passed to the
+original fetch and uses a parallel response queue. It still belongs to the
+initiating client's FetchGroup for policy and termination. The regression in
+`test/browlet/fetch-http-cache.test.ts` verifies refresh and body completion while
+the client Document is inactive; previously even HTTP dispatch stalled. This
+follows Fetch §4.6's parallel revalidation step. Separating the client type from
+the complete execution-environment contract remains an architecture follow-up.
+
 - **Early Hints URL metadata:** HTML's new reserved-environment callback explicitly
   stops at Link-header/preload processing. Before implementing that owner, interim
   responses need their URL retained for the hint's base URL and origin; the current

@@ -26,7 +26,7 @@ import {
   isCORSSafelistedMethod, isForbiddenMethod, isValidMethod, normalizeMethod, serializeInteger,
 } from './headers';
 import type {
-  FetchEnvironment, FetchEnvironmentBase,
+  FetchClient, FetchEnvironment, FetchEnvironmentBase,
   FetchPolicyContainer, FetchPromptTarget,
 } from './environment';
 import type { NetworkPartitionKey } from './transport';
@@ -50,7 +50,7 @@ export class FetchRequest {
   /** Extracted body, bytes awaiting extraction, or null when no body is present. */
   body: Uint8Array | FetchBody | null = null;
   /** Initiating environment settings, or null for a request without an environment client. */
-  client: FetchEnvironment | null = null;
+  client: FetchClient | null = null;
   /** Owning environment, retained independently of the request's client. */
   env: FetchEnvironment;
   /** Destination environment reserved for a navigation or worker, before it becomes active. */

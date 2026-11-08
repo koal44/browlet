@@ -13,7 +13,7 @@ export { HTTPCacheStore } from './cache-http';
 export { CORSPreflightCache } from './cache-cors';
 export { isOffline } from './environment';
 export type {
-  FetchEnvironment, FetchEnvironmentBase, FetchUserAgent,
+  FetchClient, FetchEnvironment, FetchEnvironmentBase, FetchUserAgent,
   HTTPAuthentication, AuthenticationCredentials, AuthenticationEntry,
   FetchInsecureRequestsPolicy, FetchEmbedderPolicy,
   FetchPolicyContainer, FetchCSPList, FetchPromptTarget, fetchPromptTargetBrand, FetchEmbedderPolicyValue,

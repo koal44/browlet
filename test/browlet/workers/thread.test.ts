@@ -12,9 +12,9 @@ import { utf8Encode } from '../../../src/encoding/index';
 import { BlobData, BlobImpl } from '../../../src/file/index';
 import { FetchHeaders, type FetchRequest } from '../../../src/fetch/index';
 import { queueNodeTask } from '../../../src/browlet/integration/host/index';
-import { WorkerThread, type WorkerThreadInit, type WorkerModuleScriptRequest } from '../../../src/browlet/integration/workers/index';
 import { createWindowEnvironment, createWorkerEnvironment } from '../../../src/browlet/integration/web-idl/index';
-import type { BrowletEnvironment, CreatorEnvironmentSnapshot } from '../../../src/browlet/environment/index';
+import type { BrowletEnvironment } from '../../../src/browlet/environment/index';
+import type { CreatorEnvironmentSnapshot } from '../../../src/browlet/workers/index';
 import type { StructuredSerializeWithTransferResult } from '../../../src/browlet/scripting/structured-data/index';
 import {
   AgentCluster, DedicatedWorkerAgent, EventLoop, WindowAgent, createTaskSource, domManipulationTaskSource,
@@ -22,7 +22,7 @@ import {
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { BrowsingContext, DocumentState, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
 import { MessageChannelImpl, MessagePortImpl } from '../../../src/browlet/communication/index';
-import { WorkerImpl } from '../../../src/browlet/workers/index';
+import { WorkerImpl, WorkerThread, type WorkerThreadInit, type WorkerModuleScriptRequest } from '../../../src/browlet/workers/index';
 import type { Event, ErrorEvent, MessageChannel, MessageEvent, MessagePort, Window, Worker } from '../../../src/browlet/platform';
 import { PolicyContainer } from '../../../src/browlet/browsing/policy/index';
 import { ContentSecurityPolicy, CSPList } from '../../../src/browlet/browsing/policy/csp/index';
@@ -81,6 +81,20 @@ afterEach(async () => {
 // Each entry loads the compiled production graph in a fresh isolate. Source
 // compilation precedes test workers; native startup and all waits remain bounded.
 describe('Worker isolate startup host', { timeout: 30_000 }, () => {
+  it.each(['dedicated', 'shared'] as const)('reads the browser hardware count from a %s worker navigator', async (kind) => {
+    const creatorEnv = createCreatorEnvironment();
+    const count = vi.spyOn(creatorEnv.userAgent, 'hardwareConcurrency', 'get').mockReturnValue(2);
+    const { thread, request } = createThread({ kind, creatorEnv, data: {} });
+    await thread.ready;
+
+    expect(await request({ type: 'hardware-concurrency' })).toEqual({
+      value: 2, getterOnly: true, enumerable: true, configurable: true,
+      replaced: false, exposesMixin: false, invalidReceiver: true,
+    });
+    count.mockReturnValue(1);
+    expect(await request({ type: 'hardware-concurrency' })).toMatchObject({ value: 1 });
+  });
+
   it.each(['dedicated', 'shared'] as const)('starts a %s agent and its real task loop in another isolate', async (kind) => {
     const { thread, request } = createThread({ kind, data: {} });
     await thread.ready;
@@ -1239,6 +1253,7 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
       `, owner);
       await vi.waitFor(() => { owner.drain(); expect(messages).toEqual(['ready']); }, { timeout: 5000 });
       const requested: string[] = [];
+      const fetches = vi.spyOn(owner.creatorEnv.userAgent, 'handleFetch');
       mockHTTPTransport(owner.creatorEnv.userAgent, (request, listener) => {
         requested.push(serializeURL(request.url));
         setTimeout(() => {
@@ -1253,6 +1268,8 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
       await vi.waitFor(() => { owner.drain(); expect(messages).toHaveLength(2); }, { timeout: 5000 });
       expect(messages[1]).toEqual(['first', 'nested', 'second']);
       expect(requested).toEqual(['https://creator.test/first.js', 'https://creator.test/nested.js', 'https://creator.test/second.js']);
+      expect(fetches.mock.calls.map(([request]) => request.client?.id))
+        .toEqual([thread.reservedEnv.id, thread.reservedEnv.id, thread.reservedEnv.id]);
       expect(await thread.closed).toMatchObject({ error: undefined, terminated: false });
     });
 
@@ -1857,6 +1874,8 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
         baseURL: 'https://creator.test/root.js',
         scriptRan: false,
         executionReady: false,
+        referrerPolicy: '',
+        embedderPolicy: 'unsafe-none',
         modules: [...sources.keys()].map((file) => ({
           url: `https://creator.test/${file}`, type: 'javascript-or-wasm', status: 'linked', sameEnvironment: true,
         })),
@@ -1878,7 +1897,9 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
           listener.onHeaders(302, '', new FetchHeaders([['Location', '/redirected/start.js']]), false);
         } else {
           listener.onHeaders(200, '', new FetchHeaders([
-            ['Content-Type', 'text/javascript'], ['Referrer-Policy', 'no-referrer'],
+            ['Content-Type', 'text/javascript'], ['Referrer-Policy', url.endsWith('/start.js') ? 'no-referrer' : 'unsafe-url'],
+            ['Cross-Origin-Embedder-Policy', url.endsWith('/start.js') ? 'require-corp' : 'unsafe-none'],
+            ['Content-Security-Policy', url.endsWith('/start.js') ? "script-src 'self'" : 'sandbox'],
           ]), true);
           listener.onData(utf8Encode(url.endsWith('/start.js') ? 'import "./dependency.js";' : 'export default 42;'));
         }
@@ -1893,6 +1914,8 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
         status: 'linked',
         url: 'https://creator.test/redirected/start.js',
         baseURL: 'https://creator.test/redirected/start.js',
+        referrerPolicy: 'no-referrer',
+        embedderPolicy: 'require-corp',
         modules: [
           { url: 'https://creator.test/root.js', status: 'linked' },
           { url: 'https://creator.test/redirected/dependency.js', status: 'linked' },
@@ -2291,6 +2314,37 @@ describe('Worker isolate startup host', { timeout: 30_000 }, () => {
   });
 
   describe('response policy handoff', () => {
+    it('applies later enforced policies after an earlier sandbox rejects startup', async () => {
+      const creatorEnv = createCreatorEnvironment();
+      mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
+        listener.onHeaders(200, '', new FetchHeaders([
+          ['Content-Type', 'text/javascript'], ['Content-Security-Policy', 'sandbox, upgrade-insecure-requests'],
+        ]), true);
+        listener.onEnd();
+      });
+      expect(await loadWorkerResponse(creatorEnv)).toMatchObject({
+        initialized: { type: 'error', executionReady: false, upgradesInsecureRequests: true },
+      });
+    });
+
+    it('retains the response URL for creator COEP reports when worker CSP also rejects it', async () => {
+      const creatorEnv = createCreatorEnvironment();
+      creatorEnv.policyContainer.embedderPolicy.value = 'require-corp';
+      const report = vi.spyOn(creatorEnv, 'queueReport');
+      mockHTTPTransport(creatorEnv.userAgent, (_request, listener) => {
+        listener.onHeaders(200, '', new FetchHeaders([
+          ['Content-Type', 'text/javascript'], ['Content-Security-Policy', 'sandbox'],
+        ]), true);
+        listener.onEnd();
+      });
+      expect(await loadWorkerResponse(creatorEnv)).toMatchObject({
+        embedderPolicyAllowed: false, initialized: { type: 'error', url: 'https://creator.test/worker.js' },
+      });
+      expect(report).toHaveBeenCalledExactlyOnceWith('coep', '', {
+        type: 'worker initialization', blockedURL: 'https://creator.test/worker.js', disposition: 'enforce',
+      });
+    });
+
     it.each(['dedicated', 'shared'] as const)('initializes a %s worker from the redirected response policies', async (kind) => {
       const creatorEnv = createCreatorEnvironment();
       mockHTTPTransport(creatorEnv.userAgent, (request, listener) => {

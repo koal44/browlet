@@ -1,13 +1,13 @@
-import type { JSMessagePortHandle, JSThreadProtocol } from '../../../js-engine/index';
-import type { URLRecord, Origin } from '../../../url/index';
-import type { HTTPStatus } from '../../../http/index';
-import type { Destination, ReferrerPolicy, RequestCredentials, ResponseType } from '../../../fetch/index';
+import type { JSMessagePortHandle, JSThreadProtocol } from '../../js-engine/index';
+import type { URLRecord, Origin } from '../../url/index';
+import type { HTTPStatus } from '../../http/index';
+import type { Destination, ReferrerPolicy, RequestCredentials, ResponseType } from '../../fetch/index';
 
-import type { ErrorInformation } from '../../dom/events/index';
-import type { PolicyContainerSnapshot } from '../../browsing/policy/index';
-import type { CreatorEnvironmentSnapshot } from '../../environment/index';
-import type { WorkerOptions } from '../../workers/index';
+import type { ErrorInformation } from '../dom/events/index';
+import type { PolicyContainerSnapshot } from '../browsing/policy/index';
 
+import type { CreatorEnvironmentSnapshot } from './environment';
+import type { WorkerOptions } from './worker';
 import type { WorkerUserAgentInit } from './user-agent';
 
 /** Both endpoints share this trusted host protocol; receivers exhaustively handle its message kinds. */

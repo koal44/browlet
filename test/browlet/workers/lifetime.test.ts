@@ -7,7 +7,7 @@ import { BrowsingContext, Navigable, TopLevelTraversable } from '../../../src/br
 import { DocumentState } from '../../../src/browlet/browsing/navigation/state/index';
 import type { HTMLIFrameElementImpl } from '../../../src/browlet/dom/nodes/html/embedded/iframe';
 import type { PolicyContainer } from '../../../src/browlet/browsing/policy/index';
-import { SandboxEnvironment, WindowOrWorkerGlobalScopeMixin } from '../../../src/browlet/environment/index';
+import { SandboxEnvironment, type WindowOrWorkerGlobalScopeMixin } from '../../../src/browlet/environment/index';
 import {
   browletBindingWorld, createBrowletEnvironmentInit, createWindowEnvironment,
 } from '../../../src/browlet/integration/web-idl/index';
@@ -602,8 +602,6 @@ describe('Worker protection, permission, and suspension (HTML §10.2.3)', () => 
 class TestEnvironment extends SandboxEnvironment {
   /** Set explicitly by the fixture before projection or lifetime queries. */
   workerGlobal!: WorkerGlobalImpl;
-  /** Resource ownership used by the production MessagePort lifecycle. */
-  #mixin: WindowOrWorkerGlobalScopeMixin | undefined;
   /** Stable origin for the fixture's timer and Fetch clocks. */
   #timeOrigin = monotonicClock.unsafeCurrentTime().coarsen();
 
@@ -614,8 +612,9 @@ class TestEnvironment extends SandboxEnvironment {
   override get policyContainer(): PolicyContainer { return this.workerGlobal.policyContainer; }
   override get timeOrigin(): Moment { return this.#timeOrigin; }
 
+  /** Share the worker global's resource ownership with MessagePorts, timers, and Fetch. */
   override getWindowOrWorkerGlobalScopeMixin(): WindowOrWorkerGlobalScopeMixin {
-    return this.#mixin ??= new WindowOrWorkerGlobalScopeMixin(this);
+    return this.workerGlobal.getWindowOrWorkerGlobalScopeMixin();
   }
 }
 

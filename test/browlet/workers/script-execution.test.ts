@@ -4,7 +4,7 @@ import { parseURL } from '../../../src/url/index';
 import type { JSFunction } from '../../../src/js-engine/index';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
 import { MessagePortImpl } from '../../../src/browlet/communication/index';
-import type { WorkerEnvironment } from '../../../src/browlet/environment/index';
+import type { WorkerEnvironment } from '../../../src/browlet/workers/index';
 import { createWorkerEnvironment } from '../../../src/browlet/integration/web-idl/index';
 import {
   AgentCluster, ClassicScript, DedicatedWorkerAgent, JavaScriptModuleScript, ScriptFetchOptions, type ModuleScript,
@@ -183,7 +183,7 @@ function runInitialScript(
   env: WorkerEnvironment, script: ClassicScript | ModuleScript,
   outsidePort: MessagePortImpl, insidePort: MessagePortImpl,
 ): void {
-  env.queueTask('network', () => { env.runScript(script, insidePort, () => { outsidePort.start(); }); });
+  env.queueTask('network', () => { env.globalImplementation.runScript(script, insidePort, () => { outsidePort.start(); }); });
   expect(env.responsibleEventLoop.runTaskTurn()).toBe(true);
 }
 

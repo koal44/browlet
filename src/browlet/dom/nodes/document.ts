@@ -66,13 +66,13 @@ import type { LocationImpl, WindowImpl, WindowProxyHandle } from '../../browsing
 import type { BrowletEnvironment } from '../../environment/index';
 import type { DocumentParser } from '../../html/parser/index';
 import type { SerializedRecord } from '../../scripting/structured-data/index';
-import type { WorkerOwner } from '../../workers/index';
 import type {
   BrowsingContext, Navigable, NavigableContainer, NavigationParams, HistoryHandlingBehavior,
   SessionHistoryEntry, UserNavigationInvolvement,
 } from '../../browsing/navigation/index';
 import type { FocusableArea } from '../../interaction/index';
 import type { ViewTransitionImpl } from '../../rendering/index';
+import type { WorkerOwner } from '../../workers/index';
 
 import { HTMLCollectionImpl, NodeListImpl } from './collections';
 import { HTMLAllCollectionImpl } from './html-all-collection';

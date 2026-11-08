@@ -3,11 +3,12 @@ import { resolve } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { WorkerUserAgentConnection } from '../../../src/browlet/integration/workers/user-agent';
+import { WorkerUserAgentConnection } from '../../../src/browlet/workers/user-agent';
 import { createWindowEnvironment } from '../../../src/browlet/integration/web-idl/index';
 import { AgentCluster, WindowAgent } from '../../../src/browlet/scripting/index';
 import { UserAgent } from '../../../src/browlet/user-agent';
-import { WorkerEnvironmentBase, type BrowletEnvironment } from '../../../src/browlet/environment/index';
+import type { BrowletEnvironment } from '../../../src/browlet/environment/index';
+import { WorkerEnvironmentBase } from '../../../src/browlet/workers/index';
 import { BlobImpl } from '../../../src/file/index';
 import { areSameOrigin, createOpaqueOrigin, obtainURLOrigin, parseURL, type Origin } from '../../../src/url/index';
 import { createManualEventLoop } from '../../support/browlet-agent';

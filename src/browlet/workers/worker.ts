@@ -10,10 +10,10 @@ import type { TrustedScriptURLImpl } from '../browsing/policy/trusted-types/inde
 import { MessageEventTargetMixin, MessagePortImpl } from '../communication/index';
 import type { BrowletEnvironment } from '../environment/index';
 import type { StructuredSerializeOptions } from '../scripting/structured-data/index';
-import type { WorkerThread } from '../integration/workers/index';
 
 import { AbstractWorkerMixin } from './abstract-worker';
 import type { WorkerType } from './worker-global-scope';
+import type { WorkerThread } from './thread';
 
 /** Outside dedicated-worker object; its hidden port owns message delivery to this target. */
 // https://html.spec.whatwg.org/multipage/workers.html#dedicated-workers-and-the-worker-interface

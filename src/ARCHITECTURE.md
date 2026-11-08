@@ -242,16 +242,18 @@ handling can remain at the end of the call.
 | [`StorageEnvironment`](storage/environment.ts) | Full owner with realm, promises, storage maps, permission requests, and task delivery; HTML resolves session ownership and the destination global's event loop |
 | [`PermissionEnvironment`](permissions/environment.ts) | One Permissions owner, policy/activity answers, descriptor conversion, result allocation, and task delivery |
 | [`FetchEnvironmentBase`](fetch/environment.ts) | Extends the Storage view with top-level partition inputs and `determineNetworkPartitionKey()` |
+| [`FetchClient`](fetch/environment.ts) | Initiating environment identity, policies, FetchGroup, reporting, and ordinary callback destination; no execution realm |
 | HTML [`BrowletEnvironmentBase`](browlet/environment/environment.ts) | Shared browser state before and after realm creation: identity, owner, creation/security state, readiness, and partition derivation |
 | [`JSEnvironment`](js-engine/environment.ts) | `realm: JSRealm`, `InternalPromise`, background work, and task delivery for an existing owner |
 | [`TimingEnvironment`](timing/environment.ts) | Time origin, isolation policy, and clock conversions exposed directly by the existing owner |
 | [`StreamsEnvironment`](streams/environment.ts) | Extends JSEnvironment with DOM abort creation and HTML structured-data operations |
 | [`FileEnvironment`](file/environment.ts) | Extends the Streams view with native line endings for Blob text processing |
 | [`DOMEnvironment`](browlet/dom/environment.ts) | `realm: DOMRealm` for event behavior and the associated-document query; its Window specialization exposes the Agent's DOM notification state; `createEvent()` supplies event allocation |
-| [`FetchEnvironment`](fetch/environment.ts) | Extends FetchEnvironmentBase and FileEnvironment with Fetch task delivery, exception allocation, and client settings |
+| [`FetchEnvironment`](fetch/environment.ts) | Extends FetchClient and FileEnvironment with Fetch task delivery, exception allocation, and realm-owned body operations |
 | [`ScriptEnvironment`](browlet/scripting/environment.ts) | Source fetching through the actual client, locally or through the worker runtime's retained creator connection; parsing and module caching stay with the target environment |
 | [`BrowletEnvironment`](browlet/environment/environment.ts) | Full browser environment; extends BrowletEnvironmentBase and satisfies JS Engine, DOM, Fetch, Scripting, Storage, Stylelet, and Selectlet contracts |
 | `WindowEnvironment` | Specializes BrowletEnvironment with its Window and live queries of the associated Document |
+| [`WorkerEnvironment`](browlet/workers/environment.ts) | Specializes BrowletEnvironment with its worker global; composition constructs the environment, realm, and binding |
 | `SandboxEnvironment` | Implements the same binding contract for internal execution; unavailable browser client settings throw explicitly |
 
 UserAgent owns `StoragePersistence` alongside its local storage shed. Persistence
@@ -939,20 +941,23 @@ construction still requires a complete BrowletEnvironmentBase.
 Dedicated/shared worker composition accepts a selected agent and creates a
 `WorkerEnvironment`, realm, and declared global. Creator-derived origin, ancestry,
 security, and time-origin inputs are retained; response-dependent URL, module map,
-policy, and isolation queries use the worker global. The environment owns its
-global resource mixin. Setup attaches the initial owner but leaves execution
-readiness false. This is not a worker launcher: independent execution, transporting
-UserAgent services/owner identities between isolates, script fetching, and lifetime
-monitoring remain the worker processing model's dependencies.
+policy, and isolation queries use the worker global. The global owns its resource
+mixin, and the environment delegates to it. The concrete environment and its
+pre-realm reservation live in `workers/environment.ts`; they extend the shared
+Browlet environment classes without adding another environment contract. Composition
+still wires the realm and binding. Setup attaches the initial owner but leaves
+execution readiness false; the thread/runtime processing model connects fetching,
+lifetime monitoring, execution, and teardown separately.
 
 JS Engine's `JSThread` and `JSThreadEndpoint` own native isolate startup, internal
 cloned-data channels, and native teardown. Node Worker/MessagePort objects and
 startup globals remain private there. The host registers its module URL and
 setup steps once through `JSThread.initialize()`; the engine owns native path
 conversion, startup marking, and scheduling, so thread construction takes only
-data and a receiver. Browlet's [worker integration](browlet/integration/workers/index.ts)
-separates the creator-side thread from the inside runtime and their shared message
-types. The thread owns the setup acknowledgement; its inside runtime creates the
+data and a receiver. Browlet's [worker subsystem](browlet/workers/index.ts) owns
+the creator-side thread, inside runtime, shared message types, and service
+connections alongside its interfaces and lifetime algorithms. The thread owns
+the setup acknowledgement; its inside runtime creates the
 dedicated/shared agent and EventLoop, then turns incoming commands into tasks. It does not create another
 UserAgent or stand-in owner objects. Browlet reloads its existing
 `index.mjs` or `index.cjs` bundle in the isolate, without eval or another built
@@ -1105,11 +1110,10 @@ the prepared script and activates its ports, including public construction on
 add-on runtimes. Nested workers remain processing-model work. The response handoff is not
 general response or MessagePort serialization.
 
-`WorkerEnvironment.completeScriptFetch()` handles failed-load error delivery and
-environment discard, or entangles the startup ports and calls `runScript()`.
-The outside target uses the EventTarget base for both Worker and future SharedWorker;
-its original outside port retains the environment responsible for error delivery.
-`runScript()` reuses the script runners, without awaiting module evaluation, and
+`WorkerThreadRuntime` handles failed-load environment discard and tells the
+outside `WorkerThread` to queue the error and terminate the rejected isolate.
+`WorkerGlobalImpl.initializeScriptResponse()` installs the root response state;
+`WorkerGlobalImpl.runScript()` reuses the script runners, without awaiting module evaluation, and
 activates ports or queues shared-worker connection delivery. Outside-port
 activation is supplied by its execution owner: the separate-isolate runtime
 sends a private instruction to the creator. Dedicated Document-owned execution
@@ -1145,9 +1149,9 @@ blocked in JavaScript remain separate dependencies.
 
 The dedicated outside `WorkerImpl` retains its `WorkerThread` in the creating
 isolate. After constructor conversion and validation, `UserAgent.runWorker`
-selects the integration-owned `WorkerThread.run` factory. This keeps runtime
-composition out of the worker implementation, as with Window environment
-creation. The worker-local UserAgent explicitly rejects nested creation until
+selects the worker subsystem's `WorkerThread.run` factory. The thread owns
+execution startup; Web IDL composition supplies its inside environment factory,
+as with Window environment creation. The worker-local UserAgent explicitly rejects nested creation until
 ownership and direct browser-service forwarding are connected. Host startup
 accepts the outside Worker, derives its creator environment/port,
 and installs the association after native creation succeeds, before readiness.

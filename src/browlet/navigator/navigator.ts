@@ -62,6 +62,8 @@ export class NavigatorImpl {
   get plugins(): PluginArrayImpl { return this.#navigatorPluginsMixin.plugins; }
   get mimeTypes(): MimeTypeArrayImpl { return this.#navigatorPluginsMixin.mimeTypes; }
   get pdfViewerEnabled(): boolean { return this.#navigatorPluginsMixin.pdfViewerEnabled; }
+  /** Processor availability selected by this Navigator's browser owner. */
+  get hardwareConcurrency(): number { return this.env.userAgent.hardwareConcurrency; }
 
   /** Stable Clipboard object belonging to this Navigator's Window environment. */
   // https://w3c.github.io/clipboard-apis/#h-navigator-clipboard

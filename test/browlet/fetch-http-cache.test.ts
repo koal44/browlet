@@ -3,6 +3,8 @@ import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getBindingContext, getRelevantRealm, project } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
+import { utf8Encode } from '../../src/encoding/index';
+import { fetch } from '../../src/fetch/index';
 import { FetchRequest } from '../../src/fetch/request';
 import { FetchResponse, ResponseImpl } from '../../src/fetch/response';
 import { closeServer, listen } from './loader/http-fixture';
@@ -357,6 +359,41 @@ describe('HTTP cache write lifetime', () => {
 });
 
 describe('stale-while-revalidate', () => {
+  it('keeps the supplied execution owner when the client becomes inactive', async () => {
+    let refresh: ServerResponse | undefined;
+    const f = await fixture(createServer((request, response) => {
+      if (request.headers['if-none-match']) { refresh = response; return; }
+      response.writeHead(200, { 'Cache-Control': 'max-age=0, stale-while-revalidate=300', ETag: '"old"' });
+      response.end('old');
+    }));
+    expect(await f.text(await f.get())).toBe('old');
+    const request = f.request().request;
+    const document = f.env.realm.getAssociatedDocument();
+    const browsingContext = document.browsingContext;
+    document.browsingContext = null;
+    document.notifyFullyActiveStateChanged();
+    try {
+      let consumed: Uint8Array | null | 'failure' | undefined;
+      fetch(request, {
+        useParallelQueue: true,
+        processResponseConsumeBody: (_response, bytes) => { consumed = bytes; },
+      }, f.env.userAgent.sandbox);
+      await vi.waitFor(() => { expect(consumed).toEqual(utf8Encode('old')); });
+      await vi.waitFor(() => { expect(refresh).toBeDefined(); });
+      refresh!.writeHead(200, { 'Cache-Control': 'max-age=300', ETag: '"new"' });
+      refresh!.end('new');
+      await vi.waitFor(() => {
+        expect(f.env.userAgent.httpCache.determine(request)!.select(request)?.response.headerList.get('ETag')).toBe('"new"');
+      });
+      const background = f.env.fetchGroup.fetchRecords.find(({ request }) => request.cacheMode === 'no-cache')!;
+      expect(background.request.client).toBe(f.env);
+      await vi.waitFor(() => { expect(background.request.done).toBe(true); });
+    } finally {
+      document.browsingContext = browsingContext;
+      document.notifyFullyActiveStateChanged();
+    }
+  });
+
   it('returns stale bytes immediately and completes a conditional refresh in the background', async () => {
     const refresh = Promise.withResolvers<ServerResponse>();
     let exchanges = 0;

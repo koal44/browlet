@@ -1,21 +1,22 @@
-import { InternalError, assertNever, type Public } from '../../../infra/index';
-import { hasErrorData, JSMessageChannel, JSMessagePort, NodePromise, randomUUID, type JSMessagePortHandle, type JSTransferable } from '../../../js-engine/index';
-import { unsafeSharedCurrentTime } from '../../../timing/index';
-import { copyOrigin, copyURL, parseURL, serializeURL, type BlobURLEntry as URLBlobURLEntry, type Origin, type URLRecord } from '../../../url/index';
-import { BlobData, BlobImpl, type BlobSnapshotState, type SerializedBlobData } from '../../../file/index';
-import { fetch, FetchGroup, FetchRequest } from '../../../fetch/index';
+import { InternalError, assertNever, type Public } from '../../infra/index';
+import { hasErrorData, JSMessageChannel, JSMessagePort, NodePromise, randomUUID, type JSMessagePortHandle, type JSTransferable } from '../../js-engine/index';
+import { unsafeSharedCurrentTime } from '../../timing/index';
+import { copyOrigin, copyURL, parseURL, serializeURL, type BlobURLEntry as URLBlobURLEntry, type Origin, type URLRecord } from '../../url/index';
+import { BlobData, BlobImpl, type BlobSnapshotState, type SerializedBlobData } from '../../file/index';
+import { fetch, FetchGroup, FetchRequest, type FetchClient } from '../../fetch/index';
 
-import { ScriptingPolicy, type ScriptSourceCallback } from '../../scripting/index';
-import { ContentSecurityPolicy, type ContentSecurityPolicySnapshot } from '../../browsing/policy/csp/index';
-import { PolicyContainer } from '../../browsing/policy/index';
-import type { BrowletEnvironment, WorkerEnvironmentBase } from '../../environment/index';
-import { nodeTimerHost, queueNodeTask } from '../host/index';
-import type { BlobURLEntry, BlobURLStore } from '../file/index';
-import type { UserAgent } from '../../user-agent';
+import { ScriptingPolicy, type ScriptSourceCallback } from '../scripting/index';
+import { ContentSecurityPolicy, type ContentSecurityPolicySnapshot } from '../browsing/policy/csp/index';
+import { InsecureRequestsPolicy, PolicyContainer } from '../browsing/policy/index';
+import type { BrowletEnvironment } from '../environment/index';
+import { nodeTimerHost, queueNodeTask } from '../integration/host/index';
+import type { BlobURLEntry, BlobURLStore } from '../integration/file/index';
+import type { UserAgent } from '../user-agent';
 
+import type { WorkerEnvironmentBase } from './environment';
 import { WorkerBroadcastChannels, WorkerBroadcastChannelConnection, type WorkerBroadcastRequest } from './broadcast-channel';
-import { WorkerScriptFetchEnvironment, captureScriptResponse, restoreScriptResponse } from './script-fetch';
-import type { WorkerImportedScriptFetch, ScriptResponseSnapshot } from './protocol';
+import { captureScriptResponse, restoreScriptResponse } from './script-fetch';
+import type { WorkerImportedScriptFetch, WorkerScriptFetchClient, ScriptResponseSnapshot } from './protocol';
 
 /**
  * Worker-local access to the existing browser owner, without duplicating its stores.
@@ -81,6 +82,9 @@ export class WorkerUserAgent implements UserAgent {
   get maxReportingEndpointFailures(): number { return this.#settings().maxReportingEndpointFailures; }
   get betweenLoadsSharedWorkerTimeout(): number { return this.#settings().betweenLoadsSharedWorkerTimeout; }
   get extendedLifetimeSharedWorkerTimeout(): number { return this.#settings().extendedLifetimeSharedWorkerTimeout; }
+
+  /** Share the browser's hardware disclosure instead of independently inspecting this worker's host. */
+  get hardwareConcurrency(): number { return this.#settings().hardwareConcurrency; }
 
   // These owners cannot be replaced with independent worker-local stores.
   // TODO(HTML workers): Route Fetch, permissions, storage and reports
@@ -175,10 +179,10 @@ export class WorkerUserAgent implements UserAgent {
   /** Node host chooser; absent UI denies selection. Pending UI cancellation is the same dependency as prompting. Not connected in workers. */
   get onPermissionChoice(): never { return unconnected('onPermissionChoice'); }
 
-  /** Browser automation must select the actual worker client, not its creator. */
-  get webDriverBiDiNetworkIsOffline(): never { return unconnected('WebDriver network'); }
-  get webDriverBiDiEmulatedUserAgent(): never { return unconnected('WebDriver network'); }
-  get webDriverBiDiEmulatedLanguage(): never { return unconnected('WebDriver network'); }
+  /** Read worker-scoped emulation through this connection's browser-side identity. */
+  webDriverBiDiNetworkIsOffline(): boolean { return this.#emulation().offline; }
+  webDriverBiDiEmulatedUserAgent(): string | null { return this.#emulation().userAgent; }
+  webDriverBiDiEmulatedLanguage(): string | null { return this.#emulation().language; }
 
   /** Window UI and global preference updates are not worker-owned operations. */
   setPreferredLanguages(): never { return unconnected('setPreferredLanguages'); }
@@ -439,6 +443,13 @@ export class WorkerUserAgent implements UserAgent {
     return entry;
   }
 
+  /** Select emulation for this connection's worker identity in the original browser. */
+  #emulation(): WorkerBrowserEmulation {
+    const response = this.#request({ type: 'emulation' });
+    if (response.type !== 'emulation') throw new InternalError('Unexpected browser emulation reply');
+    return response.emulation;
+  }
+
   /** Scalar preferences are small live replies; shared stores are never serialized as settings. */
   #settings(): WorkerBrowserSettings {
     const response = this.#request({ type: 'settings' });
@@ -516,7 +527,8 @@ export class WorkerUserAgentConnection {
 
   /** Consume the complete script on the browser's host queue while the requesting isolate is blocked. */
   #fetchImportedScript(input: WorkerImportedScriptFetch): void {
-    const client = new WorkerScriptFetchEnvironment(input.client, this.#scriptFetchGroup, this.#env);
+    const violations: ContentSecurityPolicySnapshot[] = [];
+    const client = this.#createFetchClient(input.client, violations);
     const url = copyURL(input.url);
     if (url.scheme === 'blob') url.blobURLEntry = input.blobEntryId === null ? null : this.getBlobEntry(input.blobEntryId);
     const owner = this.#userAgent.sandbox;
@@ -529,9 +541,58 @@ export class WorkerUserAgentConnection {
     fetch(request, {
       useParallelQueue: true,
       processResponseConsumeBody: (response, bodyBytes) => {
-        this.#reply({ type: 'script', snapshot: captureScriptResponse(response, bodyBytes), violations: client.violations });
+        this.#reply({ type: 'script', snapshot: captureScriptResponse(response, bodyBytes), violations });
       },
     }, owner);
+  }
+
+  /** Keep one request's worker policy snapshot and reporting reply separate from browser execution facilities. */
+  #createFetchClient(snapshot: WorkerScriptFetchClient, violations: ContentSecurityPolicySnapshot[]): FetchClient {
+    const env = this.#env;
+    const userAgent = this.#userAgent;
+    const creationURL = env.creationURL;
+    const insecureRequestsPolicy = new InsecureRequestsPolicy();
+    if (snapshot.upgradeInsecureRequests) insecureRequestsPolicy.enableFor(snapshot.apiBaseURL);
+    return {
+      id: env.id,
+      userAgent,
+      creationURL,
+      origin: env.origin,
+      topLevelCreationURL: env.topLevelCreationURL,
+      topLevelOrigin: env.topLevelOrigin,
+      determineNetworkPartitionKey: () => env.determineNetworkPartitionKey(),
+      isSecureContext: env.isSecureContext,
+      hasCrossSiteAncestor: snapshot.hasCrossSiteAncestor,
+      crossOriginIsolatedCapability: snapshot.crossOriginIsolatedCapability,
+      policyContainer: PolicyContainer.fromSnapshot(snapshot.policyContainer),
+      insecureRequestsPolicy,
+      fetchGroup: this.#scriptFetchGroup,
+      isWindow: false,
+      isServiceWorker: false,
+      isTopLevelWindow: false,
+      /** The author global belongs to the other isolate; script replies use an independent queue. */
+      get global(): never {
+        throw new InternalError('Remote worker Fetch requires an independent queue');
+      },
+      getReferrerSource: () => creationURL,
+      getReportingSource: () => snapshot.apiBaseURL,
+      prohibitsMixedSecurityContexts: () => userAgent.isOriginPotentiallyTrustworthy(env.origin),
+      isPolicyFeatureEnabled: () => false,
+      consumePreloadedResource: () => false,
+      getTraversableForUserPrompts: () => null,
+      reportCSPViolation(policy) {
+        if (!(policy instanceof ContentSecurityPolicy)) throw new InternalError('Expected a Content Security Policy');
+        violations.push(policy.toSnapshot());
+      },
+      markResourceTiming() {
+        // TODO(HTML workers): Transport entries to the worker's Performance owner.
+        // Independent-queue imports and revalidation do not automatically report timing.
+      },
+      queueReport(): never {
+        // TODO(HTML workers): Connect Reporting independently of this byte reply.
+        throw new InternalError('Worker report transport is not connected');
+      },
+    };
   }
 
   /** Handle only explicit operations; arbitrary property reads and function calls are not forwarded. */
@@ -595,6 +656,15 @@ export class WorkerUserAgentConnection {
         case 'trust-url':
           result = { type: 'boolean', value: this.#userAgent.isURLPotentiallyTrustworthy(message.url) };
           break;
+        case 'emulation':
+          result = {
+            type: 'emulation', emulation: {
+              userAgent: this.#userAgent.webDriverBiDiEmulatedUserAgent(this.#env),
+              language: this.#userAgent.webDriverBiDiEmulatedLanguage(this.#env),
+              offline: this.#userAgent.webDriverBiDiNetworkIsOffline(this.#env),
+            },
+          };
+          break;
         case 'settings': {
           const owner = this.#userAgent;
           result = {
@@ -612,6 +682,7 @@ export class WorkerUserAgentConnection {
               maxReportingEndpointFailures: owner.maxReportingEndpointFailures,
               betweenLoadsSharedWorkerTimeout: owner.betweenLoadsSharedWorkerTimeout,
               extendedLifetimeSharedWorkerTimeout: owner.extendedLifetimeSharedWorkerTimeout,
+              hardwareConcurrency: owner.hardwareConcurrency,
               hasLoadingNavigable: owner.hasLoadingNavigable(),
             },
           };
@@ -667,6 +738,7 @@ type WorkerUserAgentRequest = WorkerBroadcastRequest |
   { type: 'resolve'; url: string; } |
   { type: 'revoke'; url: string; } |
   { type: 'settings'; } |
+  { type: 'emulation'; } |
   { type: 'trust-origin'; origin: Origin; } |
   { type: 'trust-url'; url: URLRecord; };
 
@@ -675,10 +747,17 @@ interface WorkerBrowserSettings extends Pick<UserAgent,
   'defaultUserAgentValue' | 'navigatorPlatform' | 'preferredLanguages' | 'defaultAcceptLanguage' | 'assumeNoInternetConnectivity' |
   'cookiesEnabled' | 'reportDeliveryEnabled' | 'storageEnabled' | 'storageQuotaBytes' |
   'maxReportAge' | 'maxReportingEndpointFailures' | 'betweenLoadsSharedWorkerTimeout' |
-  'extendedLifetimeSharedWorkerTimeout'
+  'extendedLifetimeSharedWorkerTimeout' | 'hardwareConcurrency'
 > {
   /** Live navigable activity observed by the original browser owner. */
   hasLoadingNavigable: boolean;
+}
+
+/** Scoped overrides for the worker's original browser-side environment identity. */
+interface WorkerBrowserEmulation {
+  userAgent: string | null;
+  language: string | null;
+  offline: boolean;
 }
 
 /** Explicit result kinds prevent treating a settings reply as a Blob capture. */
@@ -688,6 +767,7 @@ type WorkerUserAgentResult =
   { type: 'entry'; entry: WorkerBlobURLEntry | null; } |
   { type: 'boolean'; value: boolean; } |
   { type: 'settings'; settings: WorkerBrowserSettings; } |
+  { type: 'emulation'; emulation: WorkerBrowserEmulation; } |
   { type: 'void'; };
 
 /** Shared private host protocol for both endpoint directions. */

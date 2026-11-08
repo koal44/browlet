@@ -56,7 +56,7 @@ export function fetch(
   const params = new FetchParams(request, timing, env);
   params.taskDestination = options.useParallelQueue
     ? new ParallelQueue(userAgent.runInParallel)
-    : client?.realm.globalObject ?? null;
+    : client?.global ?? null;
   params.crossOriginIsolatedCapability = isolated;
   params.processRequestBodyChunkLength = options.processRequestBodyChunkLength ?? null;
   params.processRequestEndOfBody = options.processRequestEndOfBody ?? null;
@@ -1091,7 +1091,7 @@ function endResponseBody(params: FetchParams, response: FetchResponse): void {
     request.done = true;
     params.processResponseEndOfBody?.(response);
     if (request.initiatorType !== null && request.client !== null &&
-      request.client.realm.globalObject === params.taskDestination) {
+      !(params.taskDestination instanceof ParallelQueue) && request.client.global === params.taskDestination) {
       params.controller.reportTiming(request.client);
     }
   });
@@ -1156,7 +1156,7 @@ function fetchWithCache(
         const response = stored.materialize(request, 'local', now, env);
         timing.finalNetworkResponseStartTime = coarsenTime(userAgent.unsafeSharedCurrentTime(), params.crossOriginIsolatedCapability);
         userAgent.webDriverBiDiResponseStarted(request, response);
-        if (background) revalidateInBackground(sourceRequest);
+        if (background) revalidateInBackground(sourceRequest, env);
         result.resolve(response);
         return;
       }
@@ -1209,7 +1209,7 @@ function fetchWithCache(
 
 /** Consume revalidation incrementally and tie its lifetime to the originating client. */
 // The stale-while-revalidate branch of https://fetch.spec.whatwg.org/#http-network-or-cache-fetch
-function revalidateInBackground(sourceRequest: FetchRequest): void {
+function revalidateInBackground(sourceRequest: FetchRequest, env: FetchEnvironment): void {
   const client = sourceRequest.client!;
   const request = sourceRequest.clone(null);
   request.cacheMode = 'no-cache';
@@ -1219,12 +1219,15 @@ function revalidateInBackground(sourceRequest: FetchRequest): void {
   request.keepalive = false;
   const timing = new FetchTimingInfo();
   timing.startTime = timing.postRedirectStartTime = coarsenTime(client.userAgent.unsafeSharedCurrentTime(), client.crossOriginIsolatedCapability);
-  const params = new FetchParams(request, timing, client);
-  params.taskDestination = client.realm.globalObject;
+  // Retain the execution owner supplied to the original fetch. The client
+  // still owns policy and cancellation, but its global can be inactive or remote.
+  const params = new FetchParams(request, timing, env);
+  const destination = new ParallelQueue(env.userAgent.runInParallel);
+  params.taskDestination = destination;
   params.crossOriginIsolatedCapability = client.crossOriginIsolatedCapability;
   params.processResponse = (response) => {
     const internalResponse = isFilteredResponse(response) ? response.internalResponse : response;
-    internalResponse.body?.incrementallyRead(() => {}, () => {}, () => {}, client.realm.globalObject);
+    internalResponse.body?.incrementallyRead(() => {}, () => {}, () => {}, destination);
   };
   client.fetchGroup.fetchRecords.push({ request, controller: params.controller });
   // Enter main fetch directly: revalidation must not consume a preload candidate.

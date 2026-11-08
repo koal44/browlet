@@ -1,11 +1,11 @@
-import { InternalError, type Public } from '../../../infra/index';
-import { JSMessageChannel, JSMessagePort, type JSMessagePortHandle, type JSTransferable } from '../../../js-engine/index';
-import type { Origin } from '../../../url/index';
-import { StorageKey, type StorageEnvironmentBase } from '../../../storage/index';
+import { InternalError, type Public } from '../../infra/index';
+import { JSMessageChannel, JSMessagePort, type JSMessagePortHandle, type JSTransferable } from '../../js-engine/index';
+import type { Origin } from '../../url/index';
+import { StorageKey, type StorageEnvironmentBase } from '../../storage/index';
 
-import type { BroadcastChannelRegistry, BroadcastChannelSource, BroadcastChannelDestination } from '../../communication/index';
-import type { SerializedRecord } from '../../scripting/structured-data/index';
-import type { UserAgent } from '../../user-agent';
+import type { BroadcastChannelRegistry, BroadcastChannelSource, BroadcastChannelDestination } from '../communication/index';
+import type { SerializedRecord } from '../scripting/structured-data/index';
+import type { UserAgent } from '../user-agent';
 
 /** Worker-side discovery calls; all registrations still belong to the original browser. */
 export class WorkerBroadcastChannels implements Public<BroadcastChannelRegistry> {

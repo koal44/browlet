@@ -5,8 +5,8 @@ import type { FetchCSPList, FetchRequest, FetchResponse } from '../../../../fetc
 import { SandboxingFlagSet } from '../sandbox/index';
 import type { DocumentImpl, ElementImpl } from '../../../dom/nodes/index';
 import type { BrowletEnvironment } from '../../../environment/index';
-import type { WorkerGlobalImpl } from '../../../workers/index';
 import type { Navigable } from '../../navigation/index';
+import type { WorkerGlobalImpl } from '../../../workers/index';
 import type { UserAgent } from '../../../user-agent';
 
 import { ContentSecurityPolicy, type ContentSecurityPolicySnapshot, type CSPDisposition } from './policy';

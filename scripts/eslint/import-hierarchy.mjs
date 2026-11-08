@@ -85,7 +85,7 @@ export const layers = [
   // Browser settings compose the lower facilities.
   ['browlet/environment/'],
   ['browlet/html/parser/', 'browlet/scripting/structured-data/'],
-  ['browlet/html/', 'browlet/workers/', 'browlet/automation/'],
+  ['browlet/html/', 'browlet/automation/'],
   // Navigation composes resource consumption with document creation and parsing.
   ['browlet/loader/'],
   ['browlet/browsing/navigation/'],
@@ -97,7 +97,8 @@ export const layers = [
   ['browlet/rendering/'],
   // Host and feature adapters do not discover Web IDL composition.
   ['browlet/integration/host/', 'browlet/integration/xhr/', 'browlet/integration/permissions/'],
-  ['browlet/integration/file/', 'browlet/integration/workers/'],
+  // Workers own isolate execution and consume the host facilities above.
+  ['browlet/integration/file/', 'browlet/workers/'],
   ['browlet/integration/'],
   // HTML binding hooks consume implementations; composition assembles their world and environments.
   ['browlet/integration/web-idl/bindings/'],

@@ -2235,7 +2235,8 @@ The [closing audit](browlet/navigator/ROADMAP.md#closing-custom-handler-audit)
 also assigns cross-site registration-spam policy, safe consent UI, and optional
 administrator restrictions to those unfinished hosts. Remembering a pair and
 preparing its URL do not complete these policies or automatically select a default.
-Workers do not expose these methods. Hardware concurrency remains unfinished.
+Workers do not expose these methods. Navigator and WorkerNavigator also expose
+the UserAgent-selected hardwareConcurrency.
 `importScripts()` now performs Trusted Types and URL validation, rejects module
 workers, and executes imported scripts in order. Isolated workers use browser-side
 Fetch through their private UserAgent channel; only the requesting worker blocks.
@@ -2351,19 +2352,16 @@ fetching. The production script driver prepares complete initial graphs and
 runs them after lifetime monitoring is connected. Nested-worker service routing
 remains unwired. The reserved
 inside-client identity is retained.
-WorkerEnvironment can fetch and parse/link its root script and initialize response
-URL, CSP, COEP, and isolation state using the existing Fetch machinery. This is
-connected to the separate-isolate bootstrap through the creator snapshot,
-reconstructed policies, and initial-script response transport.
-`WorkerEnvironment.completeScriptFetch()` can reject failed scripts, queue the
-outside `error`, and discard the unready environment. On success it entangles the
-startup ports and calls `runScript()` to mark readiness, evaluate the script,
-enable dedicated messaging, and queue shared `connect` delivery. These steps use
-the outside target's EventTarget base. Separate-isolate startup activates the
-creator's port through a private host instruction after initial execution returns;
-top-level await does not delay activation. The startup host terminates rejected
-isolates. Shared/nested ownership and the ServiceWorkerContainer client message
-queue remain processing-model dependencies.
+WorkerThreadRuntime loads the root script or linked module graph, delegates response
+URL/CSP/isolation initialization to WorkerGlobalImpl, and discards the inside
+environment on a failed load. WorkerThread queues the outside error and releases
+the rejected isolate. Successful startup connects lifetime monitoring before
+WorkerGlobalImpl.runScript() marks readiness, evaluates the script, and activates
+messaging. The outside port is activated through a private host instruction;
+top-level await does not delay activation. Shared connect-event behavior is covered
+through local agents, but SharedWorker discovery/outside association, nested
+ownership, and ServiceWorkerContainer's client message queue remain dependencies.
+The older in-process WorkerEnvironment fetch/completion path has been removed.
 The dedicated `Worker` outside interface now has its hidden port, messaging
 overloads, and error/message handlers, with ordinary Web IDL conversion and
 constructor Trusted Types/URL checks. Public construction delegates to the

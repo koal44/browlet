@@ -23,6 +23,31 @@ explicit owner dependencies. NavigatorCookies reports the existing UserAgent coo
 policy on Window. NavigatorPlugins supplies PDF compatibility reporting and the
 legacy plugin/MIME collections, using navigation's existing support decision.
 
+## Concurrent hardware (HTML §10.2.7)
+
+Navigator and WorkerNavigator include the declaration-only
+NavigatorConcurrentHardware mixin. Each implementation reads its relevant
+UserAgent's `hardwareConcurrency`; no separate mixin instance owns state.
+JS Engine's `JSThread.availableParallelism` uses Node's `os.availableParallelism()`.
+The underlying libuv query returns at least one when discovery is unavailable,
+meeting HTML's fallback without an add-on. Browlet currently applies no additional
+worker-count or fingerprinting reduction. WorkerUserAgent reads the original
+browser's value over its existing settings connection, so a worker does not
+independently choose its disclosure.
+
+The tests cover positive integer results, ordinary read-only Web IDL descriptors,
+invalid receivers, cross-Window getter borrowing, and real dedicated/shared
+isolates retaining the browser's selected value. Public SharedWorker discovery
+remains a separate dependency; these isolate tests exercise the existing runtime.
+All four cases pass on Node 24.19.0, 26.8.1, and custom Node 27, stock and add-on.
+Typecheck, type contracts, changed-file lint, and import boundaries pass.
+The bundle build passes with its seven existing cycle warnings unchanged.
+
+Sources: [HTML](https://html.spec.whatwg.org/multipage/workers.html#navigator.hardwareconcurrency)
+and [Node](https://nodejs.org/api/os.html#osavailableparallelism).
+
+## Remaining capabilities
+
 | Source | Contract | Specification |
 | --- | --- | --- |
 | `navigator.ts` | Stable Window `navigator` identity and common Navigator object state | HTML §8.10.1 |
@@ -33,7 +58,7 @@ legacy plugin/MIME collections, using navigation's existing support decision.
 | `protocol-handler-registry.ts` | Implemented exact-pair decisions and invocation URL preparation; consent, persistence, selection, and navigation dependencies remain | HTML §8.10.1.4 |
 | `cookies.ts` | Implemented `NavigatorCookiesMixin.cookieEnabled` over the UserAgent policy shared by Fetch and Document cookies | HTML §8.10.1.5 |
 | `plugins.ts` | Implemented `NavigatorPluginsMixin`, PluginArray, MimeTypeArray, Plugin, and MimeType; actual PDF viewing remains with navigation/rendering | HTML §8.10.1.6 |
-| `hardware.ts` | `NavigatorConcurrentHardware`, host logical-processor capability, implementation limits, and fingerprinting reduction | HTML §10.2.7 |
+| `hardware.ts` | Connected NavigatorConcurrentHardware declaration; UserAgent owns the reported processor count | HTML §10.2.7 |
 | `worker-navigator.ts` | `WorkerNavigator` assembled from the ID, language, online, and concurrent-hardware mixins without Window-only state | HTML §§10.2.1.1 and 10.3.2 |
 | `web-idl.ts` | Navigator, mixins, legacy collections, and Window contributions | HTML §8.10 |
 
@@ -52,7 +77,7 @@ remaining dependencies are covered in the
 WorkerNavigator must expose its environment's object and assemble the exported
 Worker partial when worker settings are implemented. Its current
 implementation supports WorkerGlobalScope's stable `navigator` attribute and
-NavigatorID, NavigatorLanguage, and NavigatorOnLine; the other HTML mixins and Permissions/Storage members are still
+NavigatorID, NavigatorLanguage, NavigatorOnLine, and NavigatorConcurrentHardware; the other HTML mixins and Permissions/Storage members are still
 explicit dependencies.
 Storage's `persist()` uses the same permission owner.
 

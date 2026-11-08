@@ -3072,6 +3072,7 @@ export interface Navigator {
   readonly permissions: Permissions;
   readonly clipboard: Clipboard;
   readonly maxTouchPoints: number;
+  readonly hardwareConcurrency: number;
   readonly appCodeName: string;
   readonly appName: string;
   readonly appVersion: string;
@@ -3100,6 +3101,7 @@ export interface NavigatorConstructor {
 }
 
 export interface WorkerNavigator {
+  readonly hardwareConcurrency: number;
   readonly appCodeName: string;
   readonly appName: string;
   readonly appVersion: string;

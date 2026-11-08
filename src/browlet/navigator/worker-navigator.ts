@@ -8,7 +8,6 @@ import { NavigatorOnLineMixin } from './online';
 
 /** Worker-specific navigator identity; never shares a Window's Navigator object. */
 // https://html.spec.whatwg.org/multipage/workers.html#the-workernavigator-object
-// TODO(HTML §§10.2.7, 10.3.2): NavigatorConcurrentHardware.
 // Permissions and Storage need the worker settings integration.
 export class WorkerNavigatorImpl {
   /** Relevant environment supplied by the owning worker global. */
@@ -48,6 +47,9 @@ export class WorkerNavigatorImpl {
   queueOnlineStateChange(wasOnline: boolean): void {
     this.#navigatorOnLineMixin.queueOnlineStateChange(wasOnline);
   }
+
+  /** Use the owning browser's processor count, including when it lives in another isolate. */
+  get hardwareConcurrency(): number { return this.env.userAgent.hardwareConcurrency; }
 }
 
 /*

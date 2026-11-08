@@ -14,7 +14,7 @@ import {
 } from '../http/index';
 import { getMIMETypeEssence, parseMIMEType, type MIMEType, type MIMETypeEssence } from '../mime/index';
 
-import type { FetchEnvironment } from './environment';
+import type { FetchClient } from './environment';
 
 /** An ordered header list shared by Fetch algorithms and guarded Headers implementations. */
 // https://fetch.spec.whatwg.org/#concept-header-list
@@ -606,7 +606,7 @@ export function isRedirectStatus(status: number): boolean {
 
 /** Select this environment's identification header value, including an explicit empty override. */
 // https://fetch.spec.whatwg.org/#environment-default-user-agent-value
-export function getEnvironmentDefaultUserAgent(env: FetchEnvironment): string {
+export function getEnvironmentDefaultUserAgent(env: FetchClient): string {
   // Header values already use isomorphic strings; no intermediate byte array is needed.
   const { userAgent } = env;
   return userAgent.webDriverBiDiEmulatedUserAgent(env) ?? userAgent.defaultUserAgentValue;

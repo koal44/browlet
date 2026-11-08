@@ -34,7 +34,7 @@ describe('Worker event-loop shutdown (HTML §§8.1.7.3, 10.2.4)', () => {
       observe();
       Promise.resolve().then(() => { send('microtask'); observe(); });
     `, env, env.apiBaseURL, new ScriptFetchOptions());
-    env.queueTask('network', () => { env.runScript(script, insidePort, () => { outsidePort.start(); }); });
+    env.queueTask('network', () => { env.globalImplementation.runScript(script, insidePort, () => { outsidePort.start(); }); });
     expect(loop.runTaskTurn()).toBe(true);
     expect(states).toEqual([[true, true, true], [true, true, true]]);
     expect(global.ownerSet.size).toBe(0);
@@ -82,7 +82,7 @@ describe('Worker event-loop shutdown (HTML §§8.1.7.3, 10.2.4)', () => {
     const messages: unknown[] = [];
     outside.onmessage = (event) => { messages.push((event as MessageEvent).data); };
     const script = new ClassicScript(`postMessage('queued');`, env, env.apiBaseURL, new ScriptFetchOptions());
-    env.queueTask('network', () => { env.runScript(script, insidePort, () => { outsidePort.start(); }); });
+    env.queueTask('network', () => { env.globalImplementation.runScript(script, insidePort, () => { outsidePort.start(); }); });
     loop.runTaskTurn();
     // The messaging step only: native script abortion and the outside Worker
     // association are still dependencies of the full termination algorithm.

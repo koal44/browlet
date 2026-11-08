@@ -2,7 +2,7 @@ import { InternalError } from '../infra/internal-error';
 import { DOMExceptionImpl } from '../web-idl/core/index';
 
 import type { FetchTimingInfo } from './timing';
-import type { FetchEnvironment } from './environment';
+import type { FetchClient, FetchEnvironment } from './environment';
 
 /** Cancellation, timing, and manual-redirect controls for an ongoing fetch. */
 // https://fetch.spec.whatwg.org/#fetch-controller
@@ -12,7 +12,7 @@ export class FetchController {
   /** Full timing data retained for extraction, or null before it is supplied. */
   fullTimingInfo: FetchTimingInfo | null = null;
   /** Reporting callback for a selected environment, or null before reporting is configured. */
-  reportTimingSteps: ((env: FetchEnvironment) => void) | null = null;
+  reportTimingSteps: ((env: FetchClient) => void) | null = null;
   /** Structured-serialized abort reason, or null before an abort reason is recorded. */
   serializedAbortReason: object | null = null;
   /** Continuation for a pending manual redirect, or null when none is installed. */
@@ -29,7 +29,7 @@ export class FetchController {
 
   // The selected global's environment supplies its time origin and Resource Timing owner.
   // https://fetch.spec.whatwg.org/#finalize-and-report-timing
-  reportTiming(env: FetchEnvironment): void {
+  reportTiming(env: FetchClient): void {
     const steps = this.reportTimingSteps;
     if (steps === null) throw new InternalError('Fetch timing steps are not set');
     steps(env);

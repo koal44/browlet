@@ -5,22 +5,23 @@ import {
 } from '../../web-idl/core/index';
 import type { URLRecord } from '../../url/index';
 import type { HTTPStatus } from '../../http/index';
-import { isLocalURL, type FetchResponse, type FetchRequestInfo, type FetchRequestInit, type ResponseImpl } from '../../fetch/index';
+import { isLocalURL, FetchResponse, type FetchRequestInfo, type FetchRequestInit, type ResponseImpl } from '../../fetch/index';
 
 import { EventTargetImpl } from '../dom/events/index';
 import {
-  EventHandlerMap, eventHandlerMapAttr, ImportMap, ModuleMap, mergeExistingAndNewImportMaps,
-  type BrowletGlobalObject, type PerformScriptFetch, type SpecifierResolutionRecord, type TimerAction,
+  SharedWorkerAgent, EventHandlerMap, eventHandlerMapAttr, ImportMap, ModuleMap, mergeExistingAndNewImportMaps,
+  type ClassicScript, type ModuleScript, type BrowletGlobalObject, type PerformScriptFetch, type SpecifierResolutionRecord, type TimerAction,
 } from '../scripting/index';
 import { EmbedderPolicy, PolicyContainer } from '../browsing/policy/index';
 import type { TrustedScriptURLImpl, TrustedTypePolicyFactoryImpl } from '../browsing/policy/trusted-types/index';
 import type { DocumentImpl } from '../dom/nodes/index';
 import type { PerformanceImpl } from '../performance/index';
 import { WorkerNavigatorImpl } from '../navigator/index';
-import { MessagePortImpl } from '../communication/index';
-import type { BrowletEnvironment, BrowletEnvironmentBase, TimerHandler } from '../environment/index';
+import { MessageEventImpl, MessagePortImpl } from '../communication/index';
+import { WindowOrWorkerGlobalScopeMixin, type BrowletEnvironment, type BrowletEnvironmentBase, type TimerHandler } from '../environment/index';
 import type { StructuredSerializeOptions } from '../scripting/structured-data/index';
 
+import type { WorkerScriptResponse } from './environment';
 import { WorkerLocationImpl } from './worker-location';
 import { WorkerOwnerSet } from './owner-set';
 import type { RemoteWorkerOwner, WorkerOwnerState } from './remote-owner';
@@ -76,6 +77,8 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
   /** Startup installs the response's embedder policy before its inheritance check. */
   // https://html.spec.whatwg.org/multipage/workers.html#concept-workerglobalscope-embedder-policy
   embedderPolicy = new EmbedderPolicy();
+  /** Timers, shared global APIs, and cleanup collections owned by this worker global. */
+  #globalScopeMixin: WindowOrWorkerGlobalScopeMixin;
   /** Once set, the worker event loop discards newly queued tasks (HTML §10.2.2). */
   #closing = false;
 
@@ -83,6 +86,10 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
     super(env);
     this.type = type;
     this.name = name;
+    this.#globalScopeMixin = new WindowOrWorkerGlobalScopeMixin(env);
+    // Local workers have no native suspension. Separate-isolate startup replaces
+    // this clock before author code or timeout algorithms can create waits.
+    this.#globalScopeMixin.timers.setWorkerClock(() => env.currentHighResolutionTime().milliseconds);
     this.ownerSet = new WorkerOwnerSet(env);
     this.location = new WorkerLocationImpl(this);
     this.navigator = new WorkerNavigatorImpl(env);
@@ -113,7 +120,7 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
   // https://html.spec.whatwg.org/multipage/workers.html#the-worker's-ports
   get ports(): MessagePortImpl[] {
     const ports: MessagePortImpl[] = [];
-    for (const port of this.env.getWindowOrWorkerGlobalScopeMixin().messagePorts) {
+    for (const port of this.getWindowOrWorkerGlobalScopeMixin().messagePorts) {
       if (port.isEntangledOutsideGlobal()) ports.push(port);
     }
     return ports;
@@ -127,37 +134,37 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
 
   /** Serialized origin of this worker's environment, separate from its script URL. */
   get origin(): string {
-    return this.env.getWindowOrWorkerGlobalScopeMixin().origin;
+    return this.getWindowOrWorkerGlobalScopeMixin().origin;
   }
 
   /** Security classification inherited during worker environment creation. */
   get isSecureContext(): boolean {
-    return this.env.getWindowOrWorkerGlobalScopeMixin().isSecureContext;
+    return this.getWindowOrWorkerGlobalScopeMixin().isSecureContext;
   }
 
   /** Isolation capability derived from this worker's agent and response policies. */
   get crossOriginIsolated(): boolean {
-    return this.env.getWindowOrWorkerGlobalScopeMixin().crossOriginIsolated;
+    return this.getWindowOrWorkerGlobalScopeMixin().crossOriginIsolated;
   }
 
   /** Stable performance timeline owned by this worker's environment. */
   get performance(): PerformanceImpl {
-    return this.env.getWindowOrWorkerGlobalScopeMixin().performance;
+    return this.getWindowOrWorkerGlobalScopeMixin().performance;
   }
 
   /** Policy factory owned by this worker, independent of its creator's factory. */
   get trustedTypes(): TrustedTypePolicyFactoryImpl {
-    return this.env.getWindowOrWorkerGlobalScopeMixin().trustedTypes;
+    return this.getWindowOrWorkerGlobalScopeMixin().trustedTypes;
   }
 
   /** Encode a converted binary string through the common global implementation. */
   btoa(data: string): string {
-    return this.env.getWindowOrWorkerGlobalScopeMixin().btoa(data);
+    return this.getWindowOrWorkerGlobalScopeMixin().btoa(data);
   }
 
   /** Decode a converted Base64 string through the common global implementation. */
   atob(data: string): string {
-    return this.env.getWindowOrWorkerGlobalScopeMixin().atob(data);
+    return this.getWindowOrWorkerGlobalScopeMixin().atob(data);
   }
 
   /** Report a value through this worker's normal runtime-error handling. */
@@ -167,42 +174,111 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
 
   /** Queue a converted callback on this worker's realm and event loop. */
   queueMicrotask(callback: VoidFunction): void {
-    this.env.getWindowOrWorkerGlobalScopeMixin().queueMicrotask(callback);
+    this.getWindowOrWorkerGlobalScopeMixin().queueMicrotask(callback);
   }
 
   /** Clone into this worker's realm, applying the converted transfer list. */
   structuredClone<T>(value: T, options?: StructuredSerializeOptions): T {
-    return this.env.getWindowOrWorkerGlobalScopeMixin().structuredClone(value, options) as T;
+    return this.getWindowOrWorkerGlobalScopeMixin().structuredClone(value, options) as T;
   }
 
   /** Fetch with this worker's environment and its connected browser services. */
   fetch(input: FetchRequestInfo, init: FetchRequestInit): InternalPromise<ResponseImpl> {
-    return this.env.getWindowOrWorkerGlobalScopeMixin().fetch(input, init);
+    return this.getWindowOrWorkerGlobalScopeMixin().fetch(input, init);
   }
 
   /** Allocate a one-shot timer with converted arguments in this worker's timer owner. */
   setTimeout(handler: TimerHandler, timeout: number, ...argumentsList: unknown[]): number {
     // TODO(HTML worker timers): Startup must advance timers only while the worker is not suspended.
-    return this.env.getWindowOrWorkerGlobalScopeMixin().setTimeout(this.#createTimerAction(handler), timeout, argumentsList);
+    return this.getWindowOrWorkerGlobalScopeMixin().setTimeout(this.#createTimerAction(handler), timeout, argumentsList);
   }
 
   /** Allocate a repeating timer in the same timer-ID map as timeouts. */
   setInterval(handler: TimerHandler, timeout: number, ...argumentsList: unknown[]): number {
-    return this.env.getWindowOrWorkerGlobalScopeMixin().setInterval(this.#createTimerAction(handler), timeout, argumentsList);
+    return this.getWindowOrWorkerGlobalScopeMixin().setInterval(this.#createTimerAction(handler), timeout, argumentsList);
   }
 
   /** Cancel an outstanding timeout or interval belonging to this worker. */
   clearTimeout(id: number): void {
-    this.env.getWindowOrWorkerGlobalScopeMixin().clearTimer(id);
+    this.getWindowOrWorkerGlobalScopeMixin().clearTimer(id);
   }
 
   /** Cancel an outstanding interval or timeout belonging to this worker. */
   clearInterval(id: number): void {
-    this.env.getWindowOrWorkerGlobalScopeMixin().clearTimer(id);
+    this.getWindowOrWorkerGlobalScopeMixin().clearTimer(id);
   }
 
   override isWorkerGlobal(): this is WorkerGlobalImpl {
     return true;
+  }
+
+  /** Return this global's shared APIs and resource-lifetime state. */
+  getWindowOrWorkerGlobalScopeMixin(): WindowOrWorkerGlobalScopeMixin {
+    return this.#globalScopeMixin;
+  }
+
+  /** Run a successfully loaded initial script from its completion task, then activate its entangled startup ports. */
+  // https://html.spec.whatwg.org/multipage/workers.html#run-a-worker
+  // The caller connects lifetime monitoring first. The outside queue may live in
+  // another isolate, so its execution owner supplies the activation steps.
+  runScript(script: ClassicScript | ModuleScript, insidePort: MessagePortImpl, startOutsidePort: () => void): void {
+    const env = this.env;
+    env.markExecutionReady();
+    // ModuleScript.run() owns rejection reporting. HTML does not wait for its
+    // evaluation Promise (including top-level await) before enabling the ports.
+    void script.run();
+    startOutsidePort();
+    if (!(env.realm.agent instanceof SharedWorkerAgent)) {
+      insidePort.start();
+    } else {
+      env.queueTask('dom-manipulation', () => {
+        this.fireEvent('connect', MessageEventImpl, (event) => {
+          event.data = '';
+          event.ports = [insidePort];
+          event.source = insidePort;
+        });
+      });
+    }
+    // TODO(Service Workers): Enable this client's ServiceWorkerContainer message
+    // queue. No container/client-message-queue implementation exists yet.
+  }
+
+  /** Install resolved root policies on this worker before parsing; rejected responses remain script-fetch failures. */
+  // Transport supplies resolved policies and the creator-side COEP result.
+  // No live creator or Blob registration is consulted here.
+  // CSP initialization belongs here: warnings and upgrade-insecure-requests
+  // must affect this worker, never its creator's environment.
+  initializeScriptResponse(result: WorkerScriptResponse): FetchResponse {
+    const env = this.env;
+    const { response, policyContainer } = result;
+    // Network errors have no URL or policies to install.
+    if (response.type === 'error') return response;
+    const url = response.url;
+    if (url === null) throw new InternalError('Worker script response requires a URL');
+    if (policyContainer === null) throw new InternalError('Worker script response requires resolved policies');
+    this.url = url;
+    this.httpStatus = response.status;
+    env.creationURL = url;
+    this.policyContainer = policyContainer;
+    this.embedderPolicy = this.policyContainer.embedderPolicy;
+    let blocked = this.policyContainer.cspList?.initializeWorker(this) ?? false;
+    const agent = env.realm.agent;
+    const cluster = agent.agentCluster;
+    if (cluster === null) throw new InternalError('Worker response initialization requires its agent cluster');
+    if (agent instanceof SharedWorkerAgent && EmbedderPolicy.isCompatibleWithCrossOriginIsolation(this.embedderPolicy.value)) {
+      // Use the same logical-isolation policy as Window startup. Physical
+      // isolation and shared-memory exposure still require their own integration.
+      cluster.crossOriginIsolationMode = 'logical';
+    }
+    // SPEC_CLASH(worker-rejected-response-url): HTML replaces response with a
+    // network error, then still uses its URL for reports and the data: check.
+    // Retain the original response for those steps; return the rejection below.
+    if (!result.embedderPolicyAllowed) blocked = true;
+    this.crossOriginIsolatedCapability = cluster.crossOriginIsolationMode === 'concrete';
+    if (!(agent instanceof SharedWorkerAgent) && (!result.outsideCrossOriginIsolatedCapability || url.scheme === 'data')) {
+      this.crossOriginIsolatedCapability = false;
+    }
+    return blocked ? FetchResponse.networkError() : response;
   }
 
   /** Entangle a new inside connection with its outside peer before script execution. */
@@ -245,7 +321,7 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
     if (!this.isActivelyNeeded()) return false;
     if (this.isInExtendedLifetime()) return true;
     if (this.ports.length > 0) return true;
-    const resources = this.env.getWindowOrWorkerGlobalScopeMixin();
+    const resources = this.getWindowOrWorkerGlobalScopeMixin();
     // SPEC_GAP(worker-outstanding-activity): HTML leaves "outstanding" work informal.
     // Count uncanceled timers through callback delivery, unfinished Fetch requests,
     // and EventSources through reconnection. Idle pooled sockets do not count.
@@ -271,7 +347,7 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
   // https://html.spec.whatwg.org/multipage/workers.html#importing-scripts-and-libraries
   // The injected environment precedes the variadic IDL arguments, which must remain last.
   importScripts(env: BrowletEnvironment, ...urls: (TrustedScriptURLImpl | string)[]): void {
-    const trustedTypes = this.env.getWindowOrWorkerGlobalScopeMixin().trustedTypes;
+    const trustedTypes = this.getWindowOrWorkerGlobalScopeMixin().trustedTypes;
     const urlStrings = urls.map((url) => trustedTypes.getCompliantString(
       'TrustedScriptURL', url, 'WorkerGlobalScope importScripts', 'script',
     ));
@@ -309,7 +385,7 @@ export abstract class WorkerGlobalImpl extends EventTargetImpl implements Browle
   finishRunning(): void {
     // TODO(HTML §10.2.4): Connect Fetch cancellation to shared-service owners;
     // local cleanup cannot release requests retained in another isolate.
-    const resources = this.env.getWindowOrWorkerGlobalScopeMixin();
+    const resources = this.getWindowOrWorkerGlobalScopeMixin();
     resources.timers.clear();
     for (const port of this.ports) port.disentangle();
     // SPEC_GAP(worker-eventsource-shutdown): HTML's worker tail omits EventSource disposal.

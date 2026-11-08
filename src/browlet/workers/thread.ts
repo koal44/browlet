@@ -1,15 +1,19 @@
-import { assertNever, InternalError, internalType, type InternalPromise } from '../../../infra/index';
-import { JSMessageChannel, JSThread, NodePromise, type JSThreadExit } from '../../../js-engine/index';
-import { copyOrigin, copyURL, createOpaqueOrigin, type URLRecord } from '../../../url/index';
-import { fetch, isFilteredResponse, isLocalURL, type FetchController, type FetchRequest, type FetchResponse } from '../../../fetch/index';
+import { assertNever, InternalError, internalType, type InternalPromise } from '../../infra/index';
+import { JSMessageChannel, JSThread, NodePromise, type JSThreadExit } from '../../js-engine/index';
+import { copyOrigin, copyURL, createOpaqueOrigin, type URLRecord } from '../../url/index';
+import { fetch, isFilteredResponse, isLocalURL, type FetchController, type FetchRequest, type FetchResponse } from '../../fetch/index';
 
-import { createWorkerScriptRequest, createModuleScriptRequest, ScriptFetchOptions } from '../../scripting/index';
-import type { PolicyContainer } from '../../browsing/policy/index';
-import { DocumentImpl } from '../../dom/nodes/index';
-import type { MessagePortTransportMessage } from '../../communication/index';
-import { WorkerEnvironmentBase, type BrowletEnvironment, type CreatorEnvironmentSnapshot } from '../../environment/index';
-import { RemoteWorkerOwner, WorkerGlobalImpl, WorkerOwnerSet, type WorkerImpl, type WorkerOptions, type WorkerOwner } from '../../workers/index';
+import { createWorkerScriptRequest, createModuleScriptRequest, ScriptFetchOptions } from '../scripting/index';
+import type { PolicyContainer } from '../browsing/policy/index';
+import { DocumentImpl } from '../dom/nodes/index';
+import type { MessagePortTransportMessage } from '../communication/index';
+import type { BrowletEnvironment } from '../environment/index';
 
+import { WorkerEnvironmentBase, type CreatorEnvironmentSnapshot } from './environment';
+import { RemoteWorkerOwner } from './remote-owner';
+import { WorkerGlobalImpl, type WorkerOwner } from './worker-global-scope';
+import { WorkerOwnerSet } from './owner-set';
+import type { WorkerImpl, WorkerOptions } from './worker';
 import type {
   WorkerThreadProtocol, WorkerThreadStartup, WorkerScriptInit, WorkerScriptStartup,
   WorkerModuleScriptFetch, ScriptResponseSnapshot, WorkerScriptResponseSnapshot,

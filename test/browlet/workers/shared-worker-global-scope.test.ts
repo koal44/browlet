@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { SandboxEnvironment, WindowOrWorkerGlobalScopeMixin } from '../../../src/browlet/environment/index';
+import { SandboxEnvironment, type WindowOrWorkerGlobalScopeMixin } from '../../../src/browlet/environment/index';
 import { browletBindingWorld, createBrowletEnvironmentInit } from '../../../src/browlet/integration/web-idl/index';
 import { BrowletRealm, EventLoop, SharedWorkerAgent, createTaskSource } from '../../../src/browlet/scripting/index';
 import { UserAgent } from '../../../src/browlet/user-agent';
@@ -155,11 +155,12 @@ describe('SharedWorkerGlobalScope (HTML §10.2.1.3)', () => {
 
 /** Resource ownership for real MessagePorts only; this does not implement worker settings. */
 class TestEnvironment extends SandboxEnvironment {
-  /** Resource-lifetime mixin used by channel entanglement and delivery. */
-  #mixin: WindowOrWorkerGlobalScopeMixin | undefined;
+  /** Attached before projection or any channel creation. */
+  workerGlobal!: SharedWorkerGlobalImpl;
 
+  /** Use the resource owner supplied by the manually composed worker global. */
   override getWindowOrWorkerGlobalScopeMixin(): WindowOrWorkerGlobalScopeMixin {
-    return this.#mixin ??= new WindowOrWorkerGlobalScopeMixin(this);
+    return this.workerGlobal.getWindowOrWorkerGlobalScopeMixin();
   }
 }
 
@@ -168,13 +169,15 @@ function createWorker() {
   const loop = new EventLoop({ requestTurn() {} });
   const agent = new SharedWorkerAgent(loop);
   const realm = new BrowletRealm({ agent, globalNames: ['Worker', 'SharedWorker'] });
-  const context = browletBindingWorld.register(realm, (binding) =>
-    new TestEnvironment(realm, createBrowletEnvironmentInit(binding), new UserAgent()),
-  );
-  const env = context.getEnvironment();
+  let env!: TestEnvironment;
+  const context = browletBindingWorld.register(realm, (binding) => {
+    env = new TestEnvironment(realm, createBrowletEnvironmentInit(binding), new UserAgent());
+    return env;
+  });
   const storageKey = new StorageKey(obtainURLOrigin(parseURL('https://creator.test/').url!));
   const constructorURL = parseURL('https://worker.test/shared.js').url!;
   const implementation = new SharedWorkerGlobalImpl('module', 'shared name', storageKey, constructorURL, 'include', true, env);
+  env.workerGlobal = implementation;
   implementation.url = constructorURL;
   agent.globalScope = implementation;
   realm.initialize({ createGlobalObject: () => context.projectGlobalObject(implementation, 'SharedWorkerGlobalScope') });

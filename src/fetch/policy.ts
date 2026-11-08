@@ -7,7 +7,7 @@ import { HTTPCookie, type CookieSameSiteMode } from '../http/index';
 import { getMIMETypeEssence, isJavaScriptMIMEType } from '../mime/index';
 
 import { isScriptLikeDestination } from './destination';
-import type { FetchEmbedderPolicy, FetchEmbedderPolicyValue, FetchEnvironment } from './environment';
+import type { FetchClient, FetchEmbedderPolicy, FetchEmbedderPolicyValue, FetchEnvironment } from './environment';
 import { parseIntegrityMetadata } from './integrity';
 import type { FetchRequest } from './request';
 import type { FetchResponse } from './response';
@@ -199,7 +199,7 @@ export function crossOriginEmbedderPolicyAllowsCredentials(request: FetchRequest
 // https://fetch.spec.whatwg.org/#cross-origin-resource-policy-check
 export function isBlockedByCORP(
   response: FetchResponse, origin: Origin, policy: FetchEmbedderPolicy,
-  destination: string, forNavigation: boolean, env: FetchEnvironment | null,
+  destination: string, forNavigation: boolean, env: FetchClient | null,
 ): boolean {
   if (isBlockedByCORPInternal(response, origin, 'unsafe-none', forNavigation)) {
     return true;
@@ -238,7 +238,7 @@ export function isBlockedByCORPInternal(
 /** Queue a COEP violation with its endpoint and sanitized original response URL. */
 // https://fetch.spec.whatwg.org/#queue-a-cross-origin-embedder-policy-corp-violation-report
 function queueCORPViolationReport(
-  response: FetchResponse, policy: FetchEmbedderPolicy, destination: string, reportOnly: boolean, env: FetchEnvironment,
+  response: FetchResponse, policy: FetchEmbedderPolicy, destination: string, reportOnly: boolean, env: FetchClient,
 ): void {
   const endpoint = reportOnly ? policy.reportOnlyReportingEndpoint : policy.reportingEndpoint;
   env.queueReport('coep', endpoint, {

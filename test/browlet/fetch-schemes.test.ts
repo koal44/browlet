@@ -15,12 +15,30 @@ import { InternalError } from '../../src/infra/internal-error';
 import { parseURL } from '../../src/url/url';
 import { copyURL } from '../../src/url/core/index';
 import { readBodyBytes } from '../fetch/body-fixture';
+import { createClientEnvironment } from '../fetch/client-fixture';
 import { createPolicyEnvironment } from './browsing/policy/environment-fixture';
 import { createFetchOperation, nextFetchTaskError } from './fetch-fixture';
 
 afterEach(() => vi.restoreAllMocks());
 
 describe('Fetch §4.3: scheme dispatch', () => {
+  it('delivers an independent-queue response without consulting the client realm', async () => {
+    const owner = new UserAgent().sandbox;
+    const client = createClientEnvironment('https://worker.test/');
+    client.userAgent = owner.userAgent;
+    const realm = client.realm;
+    const readRealm = vi.fn(() => realm);
+    Object.defineProperty(client, 'realm', { get: readRealm });
+    const request = new FetchRequest(parseURL('data:text/plain,worker source').url!, owner);
+    request.client = client;
+    request.initiatorType = 'other';
+
+    const { body } = await consume(request, owner);
+    expect(body).toEqual(new TextEncoder().encode('worker source'));
+    await vi.waitFor(() => { expect(request.done).toBe(true); });
+    expect(readRealm).not.toHaveBeenCalled();
+  });
+
   it.each(['about:blank', 'about:blank?query#fragment'])('returns an empty HTML body for %s', async (url) => {
     const operation = createOperation(url);
     const response = await operation.start();

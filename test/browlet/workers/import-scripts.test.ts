@@ -226,7 +226,7 @@ function createWorker(type: WorkerType = 'classic', shared = false, input = 'htt
   const rootResponse = response(input);
   rootResponse.status = 201;
   env.globalImplementation.initializePolicyContainer(rootResponse, env);
-  env.initializeScriptResponse({
+  env.globalImplementation.initializeScriptResponse({
     response: rootResponse, bodyBytes: new Uint8Array(), policyContainer: env.policyContainer,
     embedderPolicyAllowed: true, outsideCrossOriginIsolatedCapability: false,
   });

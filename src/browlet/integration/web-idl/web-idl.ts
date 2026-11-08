@@ -70,12 +70,12 @@ import {
   trustedTypesWindowOrWorkerGlobalScopeIDL,
 } from '../../environment/index';
 import { structuredSerializeOptionsIDL } from '../../scripting/structured-data/index';
-import { workerIDLDefinitions } from '../../workers/index';
 import { elementPointerCaptureIDL, navigatorPointerEventsIDL, pointerLockIDLDefinitions } from '../../interaction/index';
 import { renderingIDLDefinitions } from '../../rendering/index';
 import { progressEventIDL, progressEventInitIDL } from '../xhr/index';
 import { permissionStatusIDL } from '../permissions/index';
 import { fileReaderIDL, objectURLIDL } from '../file/index';
+import { workerIDLDefinitions } from '../../workers/index';
 
 /** Declarations combined by Browlet's binding world, also available for development validation. */
 export const browletDefinitions = [

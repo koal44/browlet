@@ -4,7 +4,7 @@
 const { parentPort, workerData } = require('node:worker_threads');
 process.env.TSX_DISABLE_CACHE = '1';
 const { requireTypeScript } = require('../../../support/typescript.cjs');
-const { WorkerUserAgent } = requireTypeScript('../../../../src/browlet/integration/workers/user-agent.ts', __filename);
+const { WorkerUserAgent } = requireTypeScript('../../../../src/browlet/workers/user-agent.ts', __filename);
 const { serializeURL } = requireTypeScript('../../../../src/url/index.ts', __filename);
 const userAgent = new WorkerUserAgent(workerData);
 const captures = [];

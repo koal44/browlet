@@ -37,19 +37,33 @@ export function queueFetchTask(
 
 /** Combine browser-wide connectivity state with the client's emulated offline state. */
 // https://fetch.spec.whatwg.org/#is-offline
-export function isOffline(env: FetchEnvironment): boolean {
+export function isOffline(env: FetchClient): boolean {
   return env.userAgent.assumeNoInternetConnectivity ||
     env.userAgent.webDriverBiDiNetworkIsOffline(env);
 }
 
-/** The HTML environment settings object, exposing only what Fetch currently uses. */
-export interface FetchEnvironment extends FetchEnvironmentBase, FileEnvironment {
-  /** Shared user agent owning this environment's networking state. */
-  userAgent: FetchUserAgent;
+/** Execution facilities supplied by the environment running Fetch and owning its body streams. */
+export interface FetchEnvironment extends FetchClient, FileEnvironment {
   /** DOMException constructor owned by this environment's binding. */
   DOMException: DOMExceptionConstructor;
   /** Queue on the destination global's networking task source, which can differ from the body owner's. */
   queueGlobalFetchTask(global: GlobalObject, steps: () => void): void;
+  /** Current base URL used to resolve relative URLs supplied through Fetch APIs. */
+  apiBaseURL: URLRecord;
+  /** Parse through this environment's user agent; omitted base means null and encoding defaults to UTF-8. */
+  parseURL(input: string, base?: URLRecord | null, encoding?: string): URLRecord | null;
+  /** Decode UTF-8 JSON bytes and parse with this environment's captured realm intrinsics. */
+  parseJSONBytes(bytes: Uint8Array): JSONValue;
+  /** Serialize JavaScript with this environment's realm intrinsics and return internal UTF-8 bytes. */
+  serializeJavaScriptValueToJSONBytes(value: unknown): Uint8Array<ArrayBuffer>;
+}
+
+/** Initiating environment's identity, policies, and delivery owner; independent of Fetch execution. */
+export interface FetchClient extends FetchEnvironmentBase {
+  /** Stable environment identity, retained when Fetch uses a client view in another isolate. */
+  id: string;
+  /** Callback destination for ordinary Fetch delivery; remote clients require an independent queue. */
+  global: GlobalObject;
   /** Report for this client; the composed CSP implementation validates the opaque policy. */
   reportCSPViolation(policy: unknown, request: FetchRequest): void;
   /** Whether this environment's global is a Window. */
@@ -75,14 +89,6 @@ export interface FetchEnvironment extends FetchEnvironmentBase, FileEnvironment 
     url: URLRecord, destination: Destination, mode: FetchMode, credentialsMode: RequestCredentials,
     integrityMetadata: string, onResponseAvailable: (response: FetchResponse) => void,
   ): boolean;
-  /** Current base URL used to resolve relative URLs supplied through Fetch APIs. */
-  apiBaseURL: URLRecord;
-  /** Parse through this environment's user agent; omitted base means null and encoding defaults to UTF-8. */
-  parseURL(input: string, base?: URLRecord | null, encoding?: string): URLRecord | null;
-  /** Decode UTF-8 JSON bytes and parse with this environment's captured realm intrinsics. */
-  parseJSONBytes(bytes: Uint8Array): JSONValue;
-  /** Serialize JavaScript with this environment's realm intrinsics and return internal UTF-8 bytes. */
-  serializeJavaScriptValueToJSONBytes(value: unknown): Uint8Array<ArrayBuffer>;
   /** Client origin used by Fetch's origin and policy checks. */
   origin: Origin;
   /** Whether the client has cross-site ancestry or cannot establish a same-site ancestor context. */
@@ -208,11 +214,11 @@ export interface FetchUserAgent extends StorageUserAgent {
   /** Browser-wide assumption of no internet access, separate from per-client emulation. */
   assumeNoInternetConnectivity: boolean;
   /** Whether WebDriver BiDi emulates an offline network for the given environment. */
-  webDriverBiDiNetworkIsOffline(env: FetchEnvironment): boolean;
+  webDriverBiDiNetworkIsOffline(env: FetchClient): boolean;
   /** Identification override for the given environment, or null when BiDi supplies none. */
-  webDriverBiDiEmulatedUserAgent(env: FetchEnvironment): string | null;
+  webDriverBiDiEmulatedUserAgent(env: FetchClient): string | null;
   /** Language override for the given environment, or null when BiDi supplies none. */
-  webDriverBiDiEmulatedLanguage(env: FetchEnvironment): string | null;
+  webDriverBiDiEmulatedLanguage(env: FetchClient): string | null;
   /** Retain the outgoing body for automation when an active session requests it. */
   webDriverBiDiCloneNetworkRequestBody(request: FetchRequest): void;
   /** Notify automation immediately before an HTTP request is sent. */

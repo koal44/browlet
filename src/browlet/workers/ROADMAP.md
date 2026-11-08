@@ -6,6 +6,12 @@ by `scripting/`, `loader/`, and `communication/`. They must reuse those
 boundaries instead of creating a worker-specific scheduler, script loader, or
 structured-clone implementation.
 
+The Worker interfaces and lifetime algorithms live beside the creator-side
+[thread](thread.ts), inside [runtime](runtime.ts), private [protocol](protocol.ts),
+[UserAgent connection](user-agent.ts), [BroadcastChannel transport](broadcast-channel.ts),
+and [script response transport](script-fetch.ts). JS Engine supplies native isolate
+operations; Web IDL composition supplies the inside environment factory.
+
 ## Current stopping point
 
 The document-order review has reached the **outside interface and constructor
@@ -19,6 +25,106 @@ Stock Node still lacks native suspension; nested workers and SharedWorker
 discovery retain explicit startup boundaries. Unconnected shared-service APIs
 remain explicit dependencies at their own operations.
 
+### Concurrent hardware (HTML §10.2.7)
+
+The small concurrent-hardware section is reviewed in full while SharedWorker
+discovery remains the earlier unfinished section. Navigator and WorkerNavigator
+now expose `hardwareConcurrency` through ordinary Web IDL mixin inclusion.
+Their implementations use the relevant UserAgent; JS Engine owns Node's native
+parallelism query, including its minimum-one fallback. Workers read the original
+browser's selected value through the existing UserAgent settings connection.
+No Node, V8, or add-on change is needed. The [Navigator roadmap](../navigator/ROADMAP.md#concurrent-hardware-html-1027)
+records ownership, evidence, and the remaining navigator contributions.
+The four focused tests pass on all six supported runtime configurations, including
+both worker kinds across real isolates. Typecheck, type contracts, changed-file
+lint, and import boundaries pass.
+The bundle build passes with the same seven existing circular-dependency warnings.
+
+The next substantial startup work is SharedWorker discovery, repeated connections,
+and shared-owner lifetime monitoring. Nested workers, general worker Fetch and
+Reporting/ResourceTiming transport, and the remaining WorkerNavigator contributions
+still require their recorded connections. The document-order §§9–10 integration
+audit remains pending; this section does not close those dependencies.
+
+### Worker environment and Fetch client ownership
+
+The concrete WorkerEnvironment and its pre-realm WorkerEnvironmentBase now live
+in [environment.ts](environment.ts). The existing dependency hierarchy permits
+both to extend the shared Browlet environment classes; a second contract and
+implementation pair is unnecessary. Web IDL composition still constructs and
+wires the environment, realm, and global. The workers folder remains flat.
+
+Fetch now distinguishes its initiating FetchClient contract from the full
+FetchEnvironment that executes the request. WorkerUserAgentConnection builds a
+per-request client view retaining the worker reservation's identity, origin,
+partition, and transported policies. The browser sandbox owns body allocation
+and execution. WorkerScriptFetchEnvironment and its borrowed realm, promise,
+stream, and serialization getters are removed. Per-request policy snapshots and
+CSP reporting remain independent even when background revalidation outlives an
+imported-script reply.
+
+A focused regression showed completion handling still consulting the client's
+realm for independent-queue delivery. That path now avoids the client's global;
+ordinary delivery still uses it. Worker ResourceTiming and Reporting transport,
+general worker Fetch delivery, nested-worker routing, and SharedWorker discovery
+remain explicit dependencies. This change adds no native hooks.
+
+Validation: 185 focused Fetch, CSP, and worker-environment checks pass on Node
+24.19.0, 26.8.1, and custom Node 27, stock and add-on. Real-isolate startup passes
+on all six configurations, and all 12 selected importScripts cases pass on each
+add-on base, including retained worker client identity. Six relocated CJS/ESM
+package startup/import checks pass on Node 26 add-on. The wider Node 26 add-on
+Fetch/worker run passed 1,501 checks with one existing expected ResourceTiming
+failure. Typecheck, type contracts, changed-file lint, import boundaries, and
+the bundle build pass; the same seven existing cycle warnings remain.
+
+### Worker global mixin ownership
+
+WorkerGlobalImpl now constructs and owns its WindowOrWorkerGlobalScopeMixin.
+Its shared APIs, lifetime checks, and shutdown use that mixin directly;
+WorkerEnvironment delegates to the global, as WindowEnvironment does. The
+separate-isolate runtime still installs its suspension-aware timer clock on the
+same mixin. Manual global fixtures now share that owner instead of allocating
+a second resource collection in their test environments.
+
+All 156 focused global, environment, lifetime, shutdown, and importScripts tests
+pass on Node 24.19.0, 26.8.1, and custom Node 27, stock and add-on. Selected
+real-isolate startup, timer, and cooperative-close checks also pass on all six
+configurations (4 stock / 6 add-on cases). Typecheck, changed-file lint, import
+boundaries, and the bundle build pass, retaining the seven existing cycle warnings.
+This checkpoint preceded the environment move and Fetch client separation above.
+
+### Startup ownership cleanup
+
+WorkerEnvironment retains its realm/settings view (now in workers/environment.ts).
+WorkerGlobalImpl now owns response initialization and successful initial-script
+execution/port activation. WorkerThreadRuntime remains the single production
+load/completion driver; WorkerThread owns creator-side Fetch and outside errors.
+The earlier WorkerEnvironment.fetchScript()/completeScriptFetch() path had only
+test callers and is removed. No folder or environment-inheritance change is made.
+
+Loading, failed-root/graph cleanup, redirects, policy inheritance, credentials,
+and isolation are tested through the real thread/runtime path. The two remaining
+unique policy assertions (later CSP policies after rejection and simultaneous
+CSP/COEP rejection) have moved there too. Local-agent tests retain direct port,
+shared connect-event, execution, and shutdown coverage. The old local SharedWorker
+load-error simulation is retired; actual outside association remains a dependency,
+with shared failed-root teardown and outside event-handler behavior tested separately.
+Earlier checkpoint descriptions of the removed helpers below are historical.
+
+Fetch background revalidation now retains the original execution environment
+and uses a parallel queue while remaining in the client's FetchGroup. An inactive
+client regression failed before this change: stale bytes arrived, but the refresh
+never reached HTTP. Narrowing Fetch's client type and simplifying the browser-side
+worker client adapter remain the next architecture review; no new environment
+contract is introduced in this slice.
+
+Validation: 118 focused local checks pass on Node 24.19.0, 26.8.1, and custom
+Node 27, stock and add-on. The thread selection passes on all six configurations
+(9 stock / 11 add-on cases); 58 loading, completion, and policy cases also pass
+on Node 26 add-on. Typecheck, changed-file lint, import boundaries, and the bundle
+build pass. The build retains the same seven existing circular-dependency warnings.
+
 ### importScripts browser-side Fetch
 
 Separate-isolate startup now supplies the synchronous imported-script hook through
@@ -28,7 +134,7 @@ ordinary Fetch and consumes the body on a parallel queue, then publishes the ful
 response before waking the worker. Ordered and nested imports reuse the same
 connection; imported code is still compiled and run only by the inside environment.
 
-The browser-side Fetch environment retains the worker reservation's identity,
+The browser-side Fetch client view retains the worker reservation's identity,
 origin, and partition, together with the inside environment's CSP, referrer,
 ancestry, isolation, and upgrade policy. The browser sandbox owns private byte and
 stream allocations. It does not substitute the creating page's policy or author
@@ -418,7 +524,7 @@ build pass. No Node or V8 patch is needed.
 
 The configured dedicated runtime now advances execution readiness, runs the
 prepared classic/module script, and activates both hidden message queues.
-`WorkerEnvironment.runScript()` accepts outside-port activation steps because
+`WorkerGlobalImpl.runScript()` accepts outside-port activation steps because
 that port lives in the creator isolate. A private `enable-outside-port` message
 performs activation there; author delivery still uses the port's HTML task queue.
 An initially inactive Document holds execution until it becomes active. Module
@@ -529,7 +635,7 @@ add-on. Typecheck, changed-file ESLint, import boundaries, and diff checks pass.
 
 The response handoff now resolves the worker's complete policy container and the
 creator-owned COEP inheritance check before transport. The receiving
-`WorkerEnvironment.initializeScriptResponse()` installs those policies, applies
+`WorkerGlobalImpl.initializeScriptResponse()` installs those policies, applies
 CSP initialization to its own global, and derives its isolation capability.
 Real-isolate tests now use the production-composed inside environment for this
 handoff. The production script driver now calls this initializer on the networking
@@ -713,8 +819,8 @@ The hidden dedicated-worker channel and author-created MessagePorts now cross
 real isolates, including pending HTML deliveries and further endpoint transfers.
 Current implementation work follows those §9/§10 dependencies; an ordered audit
 of both chapters will follow once their production connections are in place.
-SharedWorker manager discovery and successful construction (§10.2.6.4),
-concurrent hardware (§10.2.7), and the §10.3 API review still follow. In particular,
+SharedWorker manager discovery and successful construction (§10.2.6.4)
+and the §10.3 API review still follow. Concurrent hardware (§10.2.7) is connected above. In particular,
 `importScripts()` validation/execution is connected, with synchronous Fetch
 transport still explicit; WorkerLocation was brought forward,
 while WorkerNavigator still lacks its contributing APIs.
@@ -760,10 +866,8 @@ Dependencies encountered in this first interface:
   stringifier as a small dependency. It reads the associated worker's script
   URL, never a creator Window's Location. Startup must assign the final response
   URL before author code can observe it.
-- **§10.3.2 WorkerNavigator:** stable identity and shared
-  [NavigatorID](../navigator/ROADMAP.md#client-identification) are implemented.
-  NavigatorLanguage, NavigatorOnLine, and NavigatorConcurrentHardware remain
-  explicit dependencies of §§8.10 and 10.2.7. Worker Permissions/Storage
+- **§10.3.2 WorkerNavigator:** identity, NavigatorID, NavigatorLanguage,
+  NavigatorOnLine, and concurrent hardware are connected. Worker Permissions/Storage
   contributions still need navigator integration; settings composition is now available below.
 - **§10.3.1 importScripts():** Trusted Types, URL validation, response processing,
   and ordered evaluation are connected as described above. Synchronous Fetch
@@ -981,7 +1085,7 @@ the current executable, backend environment, and Node startup options. They repo
 native failure/exit and can terminate blocked execution. They have no HTML Agent
 or readiness policy.
 
-`WorkerThread` in `integration/workers/thread.ts` owns the browser setup
+`WorkerThread` in [thread.ts](thread.ts) owns the browser setup
 acknowledgement and reloads the current Browlet bundle (`index.mjs` or
 `index.cjs`) in the new isolate. Callers supply no executable path. Private
 startup data inside JS Engine identifies the exact bundle that should start its worker runtime;
@@ -989,7 +1093,7 @@ ordinary imports inside other Node workers or another installed copy remain
 ordinary imports. This trusted host entry is separate from the author's
 worker-script URL. It reports readiness only when the inside runtime finishes
 host setup, not at Node's earlier `online` event.
-`WorkerThreadRuntime` in `integration/workers/runtime.ts` creates the dedicated/shared
+`WorkerThreadRuntime` in [runtime.ts](runtime.ts) creates the dedicated/shared
 agent and EventLoop inside the isolate and queues incoming commands as tasks. Native termination does not yet
 implement HTML's termination algorithm or the public Worker interface. The control channel
 uses Node cloning for host data. It does not implement HTML structured cloning,
@@ -1271,7 +1375,7 @@ capability inputs, module credentials, and root-policy retention across descenda
 They exercise this consumer on the current thread, not a completed worker launcher.
 
 **Initial script execution and port activation (HTML §10.2.4):**
-`WorkerEnvironment.runScript(script, outsidePort, insidePort)` extracts the
+`WorkerGlobalImpl.runScript(script, insidePort, startOutsidePort)` extracts the
 successful onComplete steps 9–14 from run-a-worker. From the initial script's
 completion task it marks execution readiness, uses the existing classic/module
 runner, and enables the outside port. Dedicated workers also enable their inside
@@ -1749,18 +1853,16 @@ and wake-up suites also pass on each (60 native checks).
   unfinished; this is separate from the global scope.
 - `BrowletEnvironment.fetchClassicWorkerScript()` supplies request setup, the custom fetch
   hook, response validation, UTF-8 decoding, and classic-script creation.
-  `WorkerEnvironment.fetchScript()` now supplies its startup response hook; the
-  separate-isolate processing-model caller remains pending. See the
+  WorkerThreadRuntime now owns root loading and WorkerGlobalImpl owns response
+  initialization. See the
   [script-fetching audit](../scripting/ROADMAP.md#html-8142-fetching-scripts).
 - `fetchModuleWorkerScriptGraph()` now fetches the root and delegates descendant
   loading/linking, retaining the outside fetch client and target worker settings.
-  `WorkerEnvironment.fetchScript()` supplies the local response hook. Separate-isolate
-  startup now calls the same graph loader through its remote creator fetch client.
-  Classic `importScripts()` fetching remains
-  an explicit stub until synchronous pause can be supplied.
-- `WorkerEnvironment.completeScriptFetch()` handles failed-load notification/discard
-  and successful port setup, then calls `runScript()` for execution and activation;
-  public startup still needs to connect these steps on composed environments.
+  Separate-isolate startup calls the graph loader through its remote creator
+  fetch client. Classic importScripts uses the synchronous UserAgent connection.
+- WorkerThreadRuntime handles failed-load discard and successful completion;
+  WorkerThread supplies outside error delivery and WorkerGlobalImpl supplies
+  execution/readiness/port activation.
 - `WorkerGlobalImpl.finishRunning()` releases timers, external ports, local EventSources, and owners
   after the closing worker's event loop has emptied and finished its checkpoint.
   The runtime then releases its native connections. Forced termination uses the
@@ -1819,8 +1921,8 @@ and wake-up suites also pass on each (60 native checks).
   tasks on the appropriate outside or worker global.
 - If worker startup fails before execution readiness, run the inside
   environment's `discard()` steps. The Service Workers client discarded flag
-  exists on `BrowletEnvironmentBase`; `completeScriptFetch()` invokes it on failure,
-  while the separate-isolate startup caller remains unimplemented.
+  exists on `BrowletEnvironmentBase`; WorkerThreadRuntime invokes it on failure
+  before WorkerThread terminates the rejected isolate.
 - Startup must obtain and install the response's embedder policy, then call
   `workerGlobalScope.checkEmbedderPolicy(response, outsideEnv)` before script
   execution. False requires a network error and failed-startup cleanup. The

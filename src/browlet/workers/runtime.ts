@@ -1,23 +1,21 @@
-import { assertNever, InternalError } from '../../../infra/index';
-import { JSMessagePort, JSThread, JSThreadEndpoint } from '../../../js-engine/index';
-import { unsafeSharedCurrentTime } from '../../../timing/index';
-import { copyURL, type BlobURLEntry, type URLRecord } from '../../../url/index';
-import { FetchResponse, type Destination } from '../../../fetch/index';
+import { assertNever, InternalError } from '../../infra/index';
+import { JSMessagePort, JSThread, JSThreadEndpoint } from '../../js-engine/index';
+import { unsafeSharedCurrentTime } from '../../timing/index';
+import { copyURL, type BlobURLEntry, type URLRecord } from '../../url/index';
+import { FetchResponse, type Destination } from '../../fetch/index';
 
-import type { ErrorInformation } from '../../dom/events/index';
+import type { ErrorInformation } from '../dom/events/index';
 import {
   AgentCluster, DedicatedWorkerAgent, SharedWorkerAgent, EventLoop, createTaskSource, networkingTaskSource,
   createClassicWorkerScriptFromResponse, type Script, type ScriptFetchOptions,
   type ScriptEnvironment, type ScriptSourceCallback, type PerformScriptFetch,
-} from '../../scripting/index';
-import { PolicyContainer } from '../../browsing/policy/index';
-import type { MessagePortTransportMessage } from '../../communication/index';
-import type {
-  WorkerEnvironment, WorkerScriptResponse, WorkerEnvironmentSnapshotInit, CreatorEnvironmentSnapshot,
-} from '../../environment/index';
-import { RemoteWorkerOwner } from '../../workers/index';
-import { queueNodeTask } from '../host/index';
+} from '../scripting/index';
+import { PolicyContainer } from '../browsing/policy/index';
+import type { MessagePortTransportMessage } from '../communication/index';
+import { queueNodeTask } from '../integration/host/index';
 
+import type { WorkerEnvironment, WorkerScriptResponse, WorkerEnvironmentSnapshotInit, CreatorEnvironmentSnapshot } from './environment';
+import { RemoteWorkerOwner } from './remote-owner';
 import type { WorkerThreadProtocol, WorkerScriptStartup, WorkerModuleScriptRequest, ScriptResponseSnapshot } from './protocol';
 import { WorkerUserAgent } from './user-agent';
 
@@ -122,7 +120,7 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
         throw new InternalError('Shared worker execution requires ownership and connection management');
       }
       this.monitorLifetime(() => {
-        this.environment.runScript(script, agent.globalScope!.insidePort, () => {
+        this.environment.globalImplementation.runScript(script, agent.globalScope!.insidePort, () => {
           this.#endpoint.send({ type: 'enable-outside-port' });
         });
       });
@@ -222,7 +220,7 @@ export class WorkerThreadRuntime implements ScriptEnvironment {
   loadScript(result: WorkerScriptResponse, onComplete: (script: Script | null) => void): void {
     const env = this.environment;
     const startup = this.script;
-    const response = env.initializeScriptResponse(result);
+    const response = env.globalImplementation.initializeScriptResponse(result);
     if (response.type === 'error') { onComplete(null); return; }
     if (startup.type === 'classic') {
       onComplete(createClassicWorkerScriptFromResponse(response, result.bodyBytes, env));

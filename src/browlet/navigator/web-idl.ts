@@ -12,6 +12,7 @@ import { navigatorContentUtilsIDL } from './protocol-handler';
 import { navigatorCookiesIDL } from './cookies';
 import { navigatorPluginsIDL, pluginArrayIDL, mimeTypeArrayIDL, pluginIDL, mimeTypeIDL } from './plugins';
 import { workerNavigatorIDL } from './worker-navigator';
+import { navigatorConcurrentHardwareIDL } from './hardware';
 
 // TODO(HTML §10): Worker NavigatorStorage and workerNavigatorPermissionsIDL need worker settings/startup.
 export const navigatorIDLDefinitions: Definition<BrowletEnvironment>[] = [
@@ -23,6 +24,9 @@ export const navigatorIDLDefinitions: Definition<BrowletEnvironment>[] = [
   navigatorContentUtilsIDL,
   navigatorCookiesIDL,
   navigatorPluginsIDL, pluginArrayIDL, mimeTypeArrayIDL, pluginIDL, mimeTypeIDL,
+  navigatorConcurrentHardwareIDL,
+  defineIncludes({ interface: 'Navigator', mixin: 'NavigatorConcurrentHardware' }),
+  defineIncludes({ interface: 'WorkerNavigator', mixin: 'NavigatorConcurrentHardware' }),
   navigatorPermissionsIDL,
   navigatorClipboardIDL,
   defineIncludes({ interface: 'Navigator', mixin: 'NavigatorID' }),

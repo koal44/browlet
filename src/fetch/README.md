@@ -71,13 +71,23 @@ CSP language and browser policy state remain with their browser owners.
 
 ## Execution and ownership
 
+Background cache revalidation retains the original Fetch execution environment
+and drains its response on a parallel queue. The initiating client still owns
+policy and the FetchGroup cancellation record; its global need not run for the
+refresh to complete.
+
 The execution owner (`env: FetchEnvironment`), initiating client
-(`request.client`), and callback destination are distinct. The client may be
-null; it does not supply every execution facility. The supplied environment
-provides `realm` for JavaScript allocation and the live global, plus `InternalPromise`,
-task delivery, and abort handling directly. `FetchEnvironment` extends File/Streams
-requirements with exception allocation and Fetch task delivery. Streams declares
-the abort and structured-data operations; Browlet supplies their DOM/HTML implementations. Fetch's
+(`request.client: FetchClient | null`), and callback destination are distinct.
+`FetchClient` supplies identity, partitioning, policies, reporting, and the
+FetchGroup. Its `global` selects ordinary callback delivery; independent-queue
+delivery does not consult that global or require the client's realm. A remote
+worker client retains the worker's identity and policy snapshot while the browser
+sandbox supplies Fetch execution. It does not borrow the sandbox's realm.
+The supplied `FetchEnvironment` provides `realm` for JavaScript allocation,
+`InternalPromise`, task delivery, and abort handling directly. It extends
+FetchClient and File/Streams requirements with exception allocation and Fetch
+task delivery. Streams declares the abort and structured-data operations;
+Browlet supplies their DOM/HTML implementations. Fetch's
 `queueFetchTask()` selects a parallel queue or delegates global delivery to
 `env.queueGlobalFetchTask()`. Pass the existing environment; do not manufacture
 a substitute browser settings object. Bodies, requests, and responses retain

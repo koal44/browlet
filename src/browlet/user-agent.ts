@@ -1,5 +1,5 @@
 import { InternalError, internalType, WeakOrderedSet, type InternalPromise, type TimerHost, type Public } from '../infra/index';
-import { NodePromise, randomUUID } from '../js-engine/index';
+import { JSThread, NodePromise, randomUUID } from '../js-engine/index';
 import { unsafeSharedCurrentTime } from '../timing/index';
 import type { SelectletUserAgent } from '../selectlet/index';
 import {
@@ -19,7 +19,7 @@ import type { BlobImpl } from '../file/index';
 import {
   ConnectionPool, HTTPCacheStore, CORSPreflightCache, fetch, FetchRequest,
   isFilteredResponse, isOkStatus, parseReferrerPolicyFromHeader,
-  type FetchEnvironment, type FetchController, type FetchResponse, type FetchUserAgent, type HTTPTransport,
+  type FetchEnvironment, type FetchEnvironmentBase, type FetchController, type FetchResponse, type FetchUserAgent, type HTTPTransport,
   type Destination, type RequestInternalPriority, type ServiceWorkerTimingInfo,
 } from '../fetch/index';
 import { PercentageLiteral, createSystemColorPalette, type StyleletUserAgent } from '../stylelet/index';
@@ -53,7 +53,7 @@ import { NodeHTTPTransport, createContentDecoder, supportedContentCodings } from
 import { queueNodeTask, nodeTimerHost } from './integration/host/index';
 import type { PermissionStatusImpl } from './integration/permissions/index';
 import { BlobURLEntry, BlobURLStore } from './integration/file/index';
-import { WorkerThread } from './integration/workers/index';
+import { WorkerThread } from './workers/index';
 import { browletDOM } from './integration/index';
 import { createSandboxEnvironment, createWindowEnvironment } from './integration/web-idl/index';
 
@@ -208,6 +208,10 @@ class BrowletUserAgent implements
   get sandbox(): BrowletEnvironment {
     return this.#sandbox ??= createSandboxEnvironment(this);
   }
+
+  /** Logical processors available to this browser; no worker-count or fingerprinting reduction is configured. */
+  // https://html.spec.whatwg.org/multipage/workers.html#dom-navigator-hardwareconcurrency
+  get hardwareConcurrency(): number { return JSThread.availableParallelism; }
 
   /** User preference for scripting; Browlet itself always has JavaScript support. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#concept-environment-script
@@ -859,7 +863,7 @@ class BrowletUserAgent implements
 
   /** Whether automation emulates an offline network for the given environment. */
   // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-network-is-offline
-  webDriverBiDiNetworkIsOffline(_env: BrowletEnvironment): boolean {
+  webDriverBiDiNetworkIsOffline(_env: FetchEnvironmentBase): boolean {
     // PROVISIONAL: no BiDi sessions; select scoped network conditions when implemented.
     // TODO(BiDi network updates): capture each affected Navigator's onLine value
     // before changing emulation, then call queueOnlineStateChange(previousValue).
@@ -868,14 +872,14 @@ class BrowletUserAgent implements
 
   /** Identification override selected for the given environment, or null when absent. */
   // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-emulated-user-agent
-  webDriverBiDiEmulatedUserAgent(_env: BrowletEnvironment): string | null {
+  webDriverBiDiEmulatedUserAgent(_env: FetchEnvironmentBase): string | null {
     // PROVISIONAL: no BiDi sessions; select scoped emulation when implemented.
     return null;
   }
 
   /** Language override selected for the given environment, or null when absent. */
   // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-emulated-language
-  webDriverBiDiEmulatedLanguage(_env: BrowletEnvironment): string | null {
+  webDriverBiDiEmulatedLanguage(_env: FetchEnvironmentBase): string | null {
     // PROVISIONAL: no BiDi sessions; select scoped language emulation when implemented.
     // TODO(BiDi language updates): call each affected Navigator's queueLanguageChange()
     // with its new effective tags and emulationUpdated=true before changing the

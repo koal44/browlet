@@ -21,16 +21,17 @@ import { WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
 import {
   type WindowEnvironmentInit, BrowletEnvironmentBase, SandboxEnvironment, WindowEnvironment,
   type BrowletEnvironment, type BrowletEnvironmentInit, WindowOrWorkerGlobalScopeMixin,
-  WorkerEnvironment, type WorkerEnvironmentInit, type WorkerEnvironmentSnapshotInit, type WorkerSettings,
 } from '../../environment/index';
 import {
   structuredDeserialize, type SerializedRecord, structuredSerialize, structuredSerializeForStorage, structuredClone,
   structuredSerializeWithTransfer, structuredDeserializeWithTransfer,
 } from '../../scripting/structured-data/index';
-import { DedicatedWorkerGlobalImpl, SharedWorkerGlobalImpl, WorkerGlobalImpl, type WorkerOwner } from '../../workers/index';
 import { queueNodeTask } from '../host/index';
 import { PermissionStatusImpl } from '../permissions/index';
-import { WorkerThreadRuntime } from '../workers/index';
+import {
+  DedicatedWorkerGlobalImpl, SharedWorkerGlobalImpl, WorkerGlobalImpl, WorkerThreadRuntime, WorkerEnvironment,
+  type WorkerOwner, type WorkerEnvironmentInit, type WorkerEnvironmentSnapshotInit, type WorkerSettings,
+} from '../../workers/index';
 import { htmlExtendedAttributeHooks, getWindowProxyAccess, installWasmIntrinsics, installWasmExceptionBinding } from './bindings/index';
 import type { QuotaExceededError } from '../../platform';
 import type { UserAgent } from '../../user-agent';

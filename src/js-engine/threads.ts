@@ -1,6 +1,7 @@
 import { Worker, parentPort, workerData, type MessagePort } from 'node:worker_threads';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
+import { availableParallelism } from 'node:os';
 
 import { InternalError } from '../infra/internal-error';
 import { internalType, type InternalPromise } from '../infra/promises';
@@ -91,6 +92,9 @@ export class JSThread<Protocol extends JSThreadProtocol> {
 
   /** Whether this backend can interrupt a running script without unwinding its stack. */
   static get supportsSuspension(): boolean { return addon.createThreadControl !== undefined; }
+
+  /** Host estimate of available logical processors; libuv returns at least one even when discovery fails. */
+  static get availableParallelism(): number { return availableParallelism(); }
 
   /** Resolves on native exit, or rejects if termination fails; an uncaught entry failure is part of the result. */
   get closed(): InternalPromise<JSThreadExit> { return this.#closed.promise; }

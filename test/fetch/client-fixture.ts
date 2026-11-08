@@ -1,6 +1,6 @@
 import { idlType } from '../../src/web-idl/core/index';
 import { internalType } from '../../src/infra/promises';
-import { NodePromise } from '../../src/js-engine/index';
+import { NodePromise, randomUUID } from '../../src/js-engine/index';
 import { queueNodeTask } from '../../src/browlet/integration/host/node';
 import type {
   FetchEnvironment, FetchPolicyContainer, FetchUserAgent,
@@ -27,6 +27,8 @@ export function createClientEnvironment(
   };
   return {
     ...env,
+    id: randomUUID(),
+    get global() { return this.realm.globalObject; },
     queueGlobalFetchTask,
     reportCSPViolation,
     isWindow: false,

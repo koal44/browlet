@@ -167,7 +167,11 @@ describe('SharedWorker outside interface (HTML §10.2.6.4)', () => {
         port.postMessage('connected');
       };
     `, insideEnv, insideEnv.apiBaseURL, new ScriptFetchOptions());
-    insideEnv.queueTask('network', () => { insideEnv.completeScriptFetch(script, implementation, implementation.port); });
+    insideEnv.queueTask('network', () => {
+      const global = insideEnv.globalImplementation;
+      const insidePort = global.connectPort(implementation.port);
+      global.runScript(script, insidePort, () => { implementation.port.start(); });
+    });
     expect(insideEnv.responsibleEventLoop.runTaskTurn()).toBe(true);
     expect(messages).toEqual([]);
     worker.port.postMessage('waiting for connect');
@@ -177,27 +181,6 @@ describe('SharedWorker outside interface (HTML §10.2.6.4)', () => {
     worker.port.close();
     insideEnv.globalImplementation.close();
     drain(insideEnv.responsibleEventLoop);
-  }));
-
-  it('queues failed-load errors on the outside object rather than its port', () => runInHostTask(() => {
-    const { worker, implementation, env, loop } = createOutsideSharedWorker();
-    const agent = new SharedWorkerAgent(createManualEventLoop());
-    const insideEnv = createWorkerEnvironment({
-      agent, outsideEnv: env, url: parseURL('https://creator.test/shared.js').url!, unsafeWorkerCreationTime: 1234,
-      type: 'classic', name: '', credentials: 'same-origin', extendedLifetime: false,
-    });
-    const errors: Event[] = [];
-    const portErrors: Event[] = [];
-    worker.onerror = (event) => { errors.push(event); };
-    worker.port.addEventListener('error', (event) => { portErrors.push(event); });
-    insideEnv.queueTask('network', () => { insideEnv.completeScriptFetch(null, implementation, implementation.port); });
-    insideEnv.responsibleEventLoop.runTaskTurn();
-    expect(errors).toEqual([]);
-    drain(loop);
-    expect(errors).toHaveLength(1);
-    expect(errors[0]).toMatchObject({ type: 'error', target: worker, isTrusted: true });
-    expect(portErrors).toEqual([]);
-    expect(insideEnv.discarded).toBe(true);
   }));
 });
 

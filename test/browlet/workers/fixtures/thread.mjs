@@ -3,7 +3,7 @@
 import { threadId, isMainThread, workerData } from 'node:worker_threads';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { WorkerThread, WorkerThreadRuntime } from '../../../../src/browlet/integration/workers/index.ts';
+import { WorkerThread, WorkerThreadRuntime } from '../../../../src/browlet/workers/index.ts';
 import {
   AgentCluster, ClassicScript, EventLoop, JavaScriptModuleScript, ScriptFetchOptions,
   SharedWorkerAgent, WindowAgent, createTaskSource, networkingTaskSource,
@@ -53,6 +53,8 @@ function startFixture() {
         baseURL: script?.baseURL === undefined || script.baseURL === null ? null : serializeURL(script.baseURL),
         scriptRan: Reflect.has(env.global, 'moduleRan'),
         executionReady: env.executionReady,
+        referrerPolicy: env.policyContainer.referrerPolicy,
+        embedderPolicy: env.policyContainer.embedderPolicy.value,
         modules: env.moduleMap.entries.map(({ key, value }) => ({
           url: serializeURL(key[0]),
           type: key[1],
@@ -91,6 +93,23 @@ function startFixture() {
       case 'close-configured-worker':
         closeConfiguredWorker(runtime, message.blobURL);
         break;
+      case 'hardware-concurrency': {
+        const global = runtime.environment.global;
+        const navigator = global.navigator;
+        const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(navigator), 'hardwareConcurrency');
+        let invalidReceiver = false;
+        try { descriptor.get.call({}); } catch (error) { invalidReceiver = error instanceof realm.TypeError; }
+        runtime.send({
+          value: navigator.hardwareConcurrency,
+          getterOnly: typeof descriptor.get === 'function' && descriptor.set === undefined,
+          enumerable: descriptor.enumerable,
+          configurable: descriptor.configurable,
+          replaced: Reflect.set(navigator, 'hardwareConcurrency', 0),
+          exposesMixin: Reflect.has(global, 'NavigatorConcurrentHardware'),
+          invalidReceiver,
+        });
+        break;
+      }
       case 'inspect':
         runtime.send({
           threadId, isMainThread, pid: process.pid,
@@ -351,7 +370,7 @@ function startFixture() {
       // The production-composed environment reaches the original UserAgent
       // through its service connection; policies still come from this handoff.
       const env = runtime.environment;
-      const accepted = env.initializeScriptResponse(result);
+      const accepted = env.globalImplementation.initializeScriptResponse(result);
       initialized = {
         type: accepted.type, status: accepted.status, url: serializeURL(env.apiBaseURL),
         creationURL: serializeURL(env.creationURL), policies: env.policyContainer.toSnapshot(),

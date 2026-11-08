@@ -35,6 +35,9 @@ do not run setup. `new JSThread(data, onMessage, transferList)` then needs no pa
 the optional transfer list moves native endpoints or ArrayBuffers in the startup data.
 `JSThreadEndpoint` supplies the inside connection and original host data without
 exposing Node's Worker, parentPort, workerData, MessagePort, or startup envelope.
+`JSThread.availableParallelism` reads Node's host processor-availability estimate,
+which is always at least one. It does not start a thread. Browlet's UserAgent owns
+the Navigator disclosure, including forwarding that answer to worker isolates.
 Native errors and exit are retained in `closed`; `terminate()` interrupts blocked
 execution and returns that same internal completion. `NodePromise` keeps its
 result private and observes completion on the creating isolate's host queue,

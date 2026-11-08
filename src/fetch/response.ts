@@ -17,7 +17,7 @@ import {
   FetchHeaders, HeadersImpl, isCORSSafelistedResponseHeaderName,
   isForbiddenResponseHeaderName, isNullBodyStatus, isRedirectStatus, type HeadersGuard, type HeadersInitValue,
 } from './headers';
-import type { FetchEmbedderPolicy, FetchEnvironment, FetchUserAgent } from './environment';
+import type { FetchClient, FetchEmbedderPolicy, FetchEnvironment, FetchUserAgent } from './environment';
 import type { FetchRequest, RedirectTaint } from './request';
 import type { FetchParams } from './params';
 import {
@@ -226,7 +226,7 @@ export class FetchResponse {
   // https://fetch.spec.whatwg.org/#cross-origin-resource-policy-check
   isBlockedByCORP(
     origin: Origin, policy: FetchEmbedderPolicy, destination: string, forNavigation = false,
-    env: FetchEnvironment | null = null,
+    env: FetchClient | null = null,
   ): boolean {
     return isBlockedByCORP(this, origin, policy, destination, forNavigation, env);
   }
