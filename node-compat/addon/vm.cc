@@ -31,11 +31,22 @@ struct AddonData {
   Global<Private> lifetime_key;
   Global<Private> queue_key;
   Global<Private> context_key;
+  Global<Private> promise_observers_key;
   Global<Private> script_key;
   Global<ObjectTemplate> script_template;
+  Global<Object> settlement_state;
   std::unordered_set<NativeHandle*> handles;
   bool observing_promise_settlements = false;
 };
+
+AddonData* Data(const FunctionCallbackInfo<Value>& args);
+
+// Node's hook registry can outlive environment cleanup. Its callbacks retain
+// this JS holder, whose native pointer is cleared before the handles are freed.
+AddonData* SettlementData(const FunctionCallbackInfo<Value>& args) {
+  auto value = args.Data().As<Object>()->GetInternalField(0).As<Value>();
+  return value->IsExternal() ? static_cast<AddonData*>(value.As<External>()->Value()) : nullptr;
+}
 
 class NativeHandle {
  public:
@@ -98,16 +109,48 @@ class Queue : public NativeHandle {
   }
 };
 
+// The source Promise owns this native record through its existing weak-handle
+// lifetime. Destinations are weak too: a retained settled source must not retain
+// its former observers or their queues. Environment cleanup releases all handles.
+class PromiseObservers : public NativeHandle {
+ public:
+  std::vector<Global<Context>> contexts;
+
+  PromiseObservers(AddonData* owner, Local<Promise> source)
+      : NativeHandle(owner, source, owner->promise_observers_key.Get(Isolate::GetCurrent())) {}
+
+  void Add(Isolate* isolate, Local<Context> context) {
+    for (const auto& existing : contexts) {
+      if (!existing.IsEmpty() && existing.Get(isolate) == context) return;
+    }
+    contexts.emplace_back(isolate, context);
+    contexts.back().SetWeak();
+  }
+};
+
+PromiseObservers* GetPromiseObservers(Isolate* isolate, AddonData* data, Local<Promise> promise) {
+  Local<Value> value;
+  if (!promise->GetPrivate(isolate->GetCurrentContext(), data->promise_observers_key.Get(isolate)).ToLocal(&value) ||
+      !value->IsExternal()) return nullptr;
+  return static_cast<PromiseObservers*>(static_cast<NativeHandle*>(value.As<External>()->Value()));
+}
+
+Queue* GetObservedQueue(Isolate* isolate, Local<Context> context) {
+  auto queues = observed_queues.find(isolate);
+  if (queues == observed_queues.end() || context.IsEmpty()) return nullptr;
+  auto entry = queues->second.find(context->GetMicrotaskQueue());
+  return entry == queues->second.end() ? nullptr : entry->second;
+}
+
+bool NeedsCheckpoint(Queue* queue) {
+  return queue && !queue->checkpoint_requested && !queue->queue->IsRunningMicrotasks() && !queue->notify.IsEmpty();
+}
+
 // Signals request a checkpoint; they must not drain the queue or run author
 // code here. In particular, a settlement hook runs before reactions are queued.
 void NotifyCheckpoint(Isolate* isolate, Local<Context> context) {
-  auto queues = observed_queues.find(isolate);
-  if (queues == observed_queues.end()) return;
-  if (context.IsEmpty()) return;
-  auto entry = queues->second.find(context->GetMicrotaskQueue());
-  if (entry == queues->second.end()) return;
-  auto queue = entry->second;
-  if (queue->checkpoint_requested || queue->queue->IsRunningMicrotasks() || queue->notify.IsEmpty()) return;
+  auto queue = GetObservedQueue(isolate, context);
+  if (!NeedsCheckpoint(queue)) return;
   queue->checkpoint_requested = true;
   auto callback = queue->notify.Get(isolate);
   TryCatch caught(isolate);
@@ -126,11 +169,23 @@ void NotifyCallCompleted(Isolate* isolate) {
 }
 
 // Internal resolutions such as Atomics.waitAsync need not complete a public
-// V8 API call. Use the Promise's owner even when its resolver runs from Node.
+// V8 API call. Wake the creation queue and any explicit native observers, even
+// when the Promise itself belongs to Node's ambient queue.
 void NotifyPromiseSettled(const FunctionCallbackInfo<Value>& args) {
+  auto data = SettlementData(args);
+  if (!data) return;
+  auto isolate = args.GetIsolate();
+  auto promise = args[0].As<Promise>();
   Local<Context> context;
-  if (args[0].As<Promise>()->GetCreationContext().ToLocal(&context)) {
-    NotifyCheckpoint(args.GetIsolate(), context);
+  if (promise->GetCreationContext().ToLocal(&context)) NotifyCheckpoint(isolate, context);
+  auto observers = GetPromiseObservers(isolate, data, promise);
+  if (!observers) return;
+  // Read each entry afresh: a notification callback can attach another observer.
+  // Keep weak registrations through Promise adoption and coalesced checkpoints.
+  for (size_t i = 0; i < observers->contexts.size(); ++i) {
+    if (!observers->contexts[i].IsEmpty()) {
+      NotifyCheckpoint(isolate, observers->contexts[i].Get(isolate));
+    }
   }
 }
 
@@ -138,31 +193,38 @@ void NotifyPromiseSettled(const FunctionCallbackInfo<Value>& args) {
 // Keep this extra query/registration with observeSettlementsWithModuleWorkaround
 // in vm.cjs; remove both together when supported engines contain the correction.
 // https://github.com/v8/v8/commit/1cdea338fd59d4700b1b311feb76e6a57c679844
-bool RegisterModuleSettlementWorkaround(Isolate* isolate, Local<Function> register_observer) {
+bool RegisterModuleSettlementWorkaround(Isolate* isolate, AddonData* data, Local<Function> register_observer) {
   // The JS guard can retry this query, so it must not mutate, call JS, or throw.
   const auto needs_notification = [](const FunctionCallbackInfo<Value>& args) {
-    auto isolate = args.GetIsolate();
-    auto queues = observed_queues.find(isolate);
-    Local<Context> context;
-    if (queues == observed_queues.end() ||
-        !args[0].As<Promise>()->GetCreationContext().ToLocal(&context)) {
+    auto data = SettlementData(args);
+    if (!data) {
       args.GetReturnValue().Set(false);
       return;
     }
-    auto entry = queues->second.find(context->GetMicrotaskQueue());
-    if (entry == queues->second.end()) {
-      args.GetReturnValue().Set(false);
+    auto isolate = args.GetIsolate();
+    auto promise = args[0].As<Promise>();
+    Local<Context> context;
+    if (promise->GetCreationContext().ToLocal(&context) && NeedsCheckpoint(GetObservedQueue(isolate, context))) {
+      args.GetReturnValue().Set(true);
       return;
     }
     // Mirror NotifyCheckpoint's coalescing without invoking its callback.
-    auto queue = entry->second;
-    args.GetReturnValue().Set(!queue->checkpoint_requested &&
-        !queue->queue->IsRunningMicrotasks() && !queue->notify.IsEmpty());
+    auto observers = GetPromiseObservers(isolate, data, promise);
+    if (observers) {
+      for (const auto& observer : observers->contexts) {
+        if (!observer.IsEmpty() && NeedsCheckpoint(GetObservedQueue(isolate, observer.Get(isolate)))) {
+          args.GetReturnValue().Set(true);
+          return;
+        }
+      }
+    }
+    args.GetReturnValue().Set(false);
   };
   auto host = isolate->GetCurrentContext();
+  auto state = data->settlement_state.Get(isolate);
   Local<Value> observers[] = {
-    Function::New(host, NotifyPromiseSettled).ToLocalChecked(),
-    Function::New(host, needs_notification).ToLocalChecked()
+    Function::New(host, NotifyPromiseSettled, state).ToLocalChecked(),
+    Function::New(host, needs_notification, state).ToLocalChecked()
   };
   return !register_observer->Call(host, Undefined(isolate), 2, observers).IsEmpty();
 }
@@ -234,7 +296,7 @@ void CreateQueue(const FunctionCallbackInfo<Value>& args) {
       Fail(isolate, "ERR_INVALID_ARG_TYPE", "Expected the Node Promise hook registrar");
       return;
     }
-    if (!RegisterModuleSettlementWorkaround(isolate, args[1].As<Function>())) return;
+    if (!RegisterModuleSettlementWorkaround(isolate, data, args[1].As<Function>())) return;
     data->observing_promise_settlements = true;
   }
   Local<Object> holder;
@@ -592,6 +654,22 @@ void IsContext(const FunctionCallbackInfo<Value>& args) {
 
 }  // namespace
 
+void ObservePromiseQueue(const v8::FunctionCallbackInfo<v8::Value>& args,
+                         v8::Local<v8::Promise> promise, v8::Local<v8::Context> observer) {
+  using namespace v8;
+  auto isolate = args.GetIsolate();
+  if (!GetObservedQueue(isolate, observer)) return;
+  if (promise->State() != Promise::kPending) {
+    // Then has already queued the reaction; no future settlement hook will wake it.
+    NotifyCheckpoint(isolate, observer);
+    return;
+  }
+  auto data = Data(args);
+  auto observers = GetPromiseObservers(isolate, data, promise);
+  if (!observers) observers = new PromiseObservers(data, promise);
+  observers->Add(isolate, observer);
+}
+
 v8::Local<v8::External> InitializeVm(v8::Local<v8::Object> exports,
                                    v8::Local<v8::Context> context) {
   using namespace v8;
@@ -599,6 +677,9 @@ v8::Local<v8::External> InitializeVm(v8::Local<v8::Object> exports,
   auto data = new AddonData{node::GetCurrentEnvironment(context)};
   node::AddEnvironmentCleanupHook(isolate, [](void* pointer) {
     auto data = static_cast<AddonData*>(pointer);
+    auto isolate = Isolate::GetCurrent();
+    HandleScope scope(isolate);
+    data->settlement_state.Get(isolate)->SetInternalField(0, Null(isolate));
     while (!data->handles.empty()) delete *data->handles.begin();
     delete data;
   }, data);
@@ -620,10 +701,16 @@ v8::Local<v8::External> InitializeVm(v8::Local<v8::Object> exports,
   data->lifetime_key.Reset(isolate, Private::New(isolate));
   data->queue_key.Reset(isolate, Private::New(isolate));
   data->context_key.Reset(isolate, Private::New(isolate));
+  data->promise_observers_key.Reset(isolate, Private::New(isolate));
   data->script_key.Reset(isolate, Private::New(isolate));
   auto script_template = ObjectTemplate::New(isolate);
   script_template->SetInternalFieldCount(1);
   data->script_template.Reset(isolate, script_template);
+  auto settlement_template = ObjectTemplate::New(isolate);
+  settlement_template->SetInternalFieldCount(1);
+  auto settlement_state = settlement_template->NewInstance(context).ToLocalChecked();
+  settlement_state->SetInternalField(0, external);
+  data->settlement_state.Reset(isolate, settlement_state);
 
   const struct { const char* name; FunctionCallback callback; } methods[] = {
     {"initializeVmRegistry", InitializeVmRegistry},

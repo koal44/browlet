@@ -4,6 +4,7 @@ import { setHostHooks, type JSJobCallback, type JSJobRegistration, type JSFuncti
 import type { BrowletEnvironment } from '../environment/index';
 
 import { jsEngineTaskSource, taskSources } from './tasks';
+import { SandboxAgent } from './agents';
 import { JSExecutionContext } from './execution-context';
 import { BrowletRealm } from './realm';
 import { JSScriptOrModule } from './script';
@@ -176,7 +177,11 @@ function enqueuePromiseJob(
 ): false | void {
   // Node and unrelated vm jobs retain the engine-selected queue.
   const destination = queueRealm;
-  if (!(destination instanceof BrowletRealm) || !destination.hasEnvironment) return false;
+  if (!(destination instanceof BrowletRealm)) return false;
+  // A sandbox has an environment for internal facilities, but does not attach
+  // it to the realm. Its Promise jobs still need the owning loop's wake-up,
+  // without the script preparation that requires realm.env.
+  if (!destination.hasEnvironment && !(destination.agent instanceof SandboxAgent)) return false;
   const env = realm instanceof BrowletRealm && realm.hasEnvironment ? realm.env : undefined;
   destination.queueMicrotask(() => {
     try {

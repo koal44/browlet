@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 
 import { Browlet } from '../../../src/browlet/browlet';
+import { internalType } from '../../../src/infra/index';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { createSiblingWindow } from '../../support/windows';
 import { runInHostTask } from '../../support/tasks';
@@ -13,6 +14,23 @@ import { networkingTaskSource } from '../../../src/browlet/scripting/tasks';
 afterEach(() => vi.restoreAllMocks());
 
 describe('HTML Promise jobs', () => {
+  it.each([false, true])('wakes an idle internal sandbox through its owning loop (settled: %s)', async (alreadySettled) => {
+    const browser = new Browlet({ route: () => '', reporting: false });
+    const userAgent = getRelevantRealm(browser.window).env.userAgent;
+    const env = userAgent.sandbox;
+    expect(env.realm.hasEnvironment).toBe(false);
+    const source = userAgent.HostPromise.withResolvers(internalType<string>());
+    const observed: unknown[] = [];
+    if (alreadySettled) source.resolve('done');
+    env.InternalPromise.fromInternal(source.promise).observe(
+      (value) => { observed.push(value); },
+      (error) => { observed.push(error); },
+    );
+    if (!alreadySettled) source.resolve('done');
+    // Read host data without supplying a task or checkpoint to the sandbox.
+    await expect.poll(() => observed).toEqual(['done']);
+  });
+
   it.each(['fulfill', 'reject'] as const)('continues when Node delivers Promise settlement through an HTML task (%s)', async (settlement) => {
     const browlet = new Browlet({ route: () => '' });
     const realm = getRelevantRealm(browlet.window);

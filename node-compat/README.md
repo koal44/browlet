@@ -138,29 +138,36 @@ in `built-in-primitives.ts`. Both paths support the Global Binding adapter.
 `createMicrotaskQueue(requestCheckpoint?)` supplies enqueue/checkpoint operations.
 The optional internal callback requests a deferred checkpoint after an outer
 engine call completes in a context using that queue, including native registry
-cleanup, or when a Promise owned by that context settles. The latter covers
-internal Atomics completions and resolvers called from Node. Notifications
+cleanup, or when a Promise owned by that context settles. Native `observePromise()`
+also registers its destination context: a pending source wakes that destination
+when it settles, and observation of an already-settled source requests a checkpoint
+after attaching the reaction. This covers internal Atomics completions, resolvers
+called from Node, and explicit observation across queues. Notifications
 coalesce until `runMicrotasks()` finishes; the callback must not drain jobs or
 run author code, since settlement notification precedes reaction enqueueing.
 Unregistered and detached contexts do not notify it.
 The registration follows the queue's lifetime, and context/callback cycles remain
-collectable. This is a conservative completion signal, not notification of every
-job arrival: a Node-owned Promise can enqueue a Window callback without settling
-a Window Promise. Such raw handoffs remain outside the supported automation bridge.
+collectable. Source Promises own weak native registration records; observer contexts
+are weak too, so retaining a settled source does not retain its former destinations.
+Environment cleanup invalidates the settlement callbacks before releasing the records.
+This is a conservative completion signal, not notification of every job arrival:
+raw author `.then()` calls across queues do not register explicit destinations.
+Such raw handoffs remain outside the supported automation bridge.
 JS Engine omits it when installed native Promise-job hooks already wake HTML.
 
 The first observed queue installs one observer through Node's public
 [`promiseHooks.onSettled()`](https://nodejs.org/api/v8.html#promisehooksonsettledsettled)
 multiplexer. It coexists with application/Node hooks rather than replacing them.
 Node retains the observer for its environment's lifetime; it owns no queues and
-ignores unregistered Promise owners. Registration uses existing Node APIs, with
-no `.then()` observation, Promise/Atomics replacement, or polling timer. This supplies
-ordinary completion progress on official addon bases; HTML generic/timeout task
+ignores sources without a registered creation or observation queue. Registration
+uses existing Node APIs, without adding another reaction for notification,
+replacing Promise/Atomics, or polling. This supplies ordinary completion progress
+on official addon bases; HTML generic/timeout task
 ownership and active-time waiting still require the custom enqueue hooks.
 
-The observer first makes a non-mutating native metadata query: does this Promise's
-queue need a checkpoint notification? The query must never invoke JavaScript or
-throw. Older V8 can nevertheless surface a pending module exception at that native
+The observer first makes a non-mutating native metadata query: do this Promise's
+creation or observation queues need a checkpoint notification? The query must
+never invoke JavaScript or throw. Older V8 can nevertheless surface a pending module exception at that native
 return, so the adapter catches it and retries the same query once. A second failure
 propagates. The actual notification and its callbacks stay outside that catch.
 Already-requested or running checkpoints need no second native call. This keeps
@@ -182,6 +189,12 @@ bare Node reproduces that limitation. This workaround does not repair other hook
 Maintained addon regressions cover Node/addon module rejection identities, nested
 Promise creation, genuine callback/hook errors, timeout termination, native tracing,
 and synchronous/coalesced queue wakeups on every supported addon base.
+[`promise-observer-wakeup.test.cjs`](test/promise-observer-wakeup.test.cjs)
+covers pending and already-settled observation, fulfillment/rejection, multiple
+destinations, adoption, reentrant registration, detachment, collection, and worker
+teardown. The linked-reader cancellation regression in
+[`multipart-document.test.ts`](../test/browlet/loader/multipart-document.test.ts)
+also requires completion without a manual checkpoint.
 
 `createContextHandle()` creates a native V8 context registered with Node;
 `runInContext()` evaluates there. These are not `node:vm` Contextify objects.

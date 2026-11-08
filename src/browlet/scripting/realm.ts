@@ -124,7 +124,7 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
     return realm instanceof BrowletRealm ? realm : undefined;
   }
 
-  /** Whether this realm has HTML settings; false during construction and for internal sandboxes. */
+  /** Whether an environment is attached to this realm; false during construction and for internal sandboxes. */
   get hasEnvironment(): boolean {
     return this.#env !== undefined;
   }

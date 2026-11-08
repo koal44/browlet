@@ -69,8 +69,6 @@ export class MultipartResourceReader {
     const result = this.#userAgent.HostPromise.withResolvers(internalType<void>());
     this.#userAgent.sandbox.queueTask('network', () => {
       this.#fail(reason);
-      // TODO(node-compat): Linked ResourceReader cancellation can miss the observer's
-      // queue wake-up. Keep completion chained; the strict runtime regression remains enabled.
       this.#resource.cancel(reason).observe(result.resolve, result.reject);
     });
     return result.promise;

@@ -1356,6 +1356,16 @@ null job realm, while unrelated Node/VM jobs stay in their original queues.
 These are native ownership adaptations, not additional HTML algorithm inputs.
 The callable-shape review is marked at `enqueuePromiseJob()`.
 
+The multipart cancellation follow-up found that custom Node routing declined
+internal sandboxes because their environments are not attached to their realms. JS Engine omits
+the addon's fallback notification when native job hooks are installed, so those
+jobs remained on a queue with no wake-up. The hook now accepts a known
+`SandboxAgent` destination and uses its existing event loop without preparing an
+HTML script environment. Unrelated Node/VM jobs still return false. Both pending
+and already-settled host-Promise regressions first observed no sandbox delivery;
+they now require automatic completion without a rescue checkpoint. This is
+separate from global `queueMicrotask()`'s Document association and worker shutdown.
+
 One reporting bug was reproduced and repaired. A Promise registered in Window A
 with a revoked fulfillment Proxy and a rejection function from Window B can
 produce a job realm of A but a queue realm of B. ECMAScript's

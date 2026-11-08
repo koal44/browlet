@@ -172,6 +172,7 @@ void ObservePromise(const FunctionCallbackInfo<Value>& args) {
   auto promise_context = args[0].As<Promise>()->GetCreationContext().ToLocalChecked();
   Context::Scope promise_scope(promise_context);
   if (args[0].As<Promise>()->Then(promise_context, fulfilled, rejected).ToLocal(&result)) {
+    ObservePromiseQueue(args, args[0].As<Promise>(), context);
     args.GetReturnValue().Set(result);
   }
 }
@@ -179,7 +180,8 @@ void ObservePromise(const FunctionCallbackInfo<Value>& args) {
 
 void InitializePromise(v8::Local<v8::Object> exports, v8::Local<v8::Context> context,
                        v8::Local<v8::External> vm_data) {
-  NODE_SET_METHOD(exports, "observePromise", ObservePromise);
+  exports->CreateDataProperty(context, Text(Isolate::GetCurrent(), "observePromise"),
+      Function::New(context, ObservePromise, vm_data).ToLocalChecked()).Check();
   NODE_SET_METHOD(exports, "isPromiseHandled", IsPromiseHandled);
   NODE_SET_METHOD(exports, "getPromiseResult", GetPromiseResult);
   exports->CreateDataProperty(context, Text(Isolate::GetCurrent(), "setPromiseRejectionTracker"),

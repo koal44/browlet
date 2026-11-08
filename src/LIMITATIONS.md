@@ -1888,10 +1888,9 @@ Non-identity transfer decoding, nested multipart, malformed-response recovery,
 and full timing attribution remain explicit dependencies. Active-body
 cancellation and navigation supersession cancel the outer reader; Document-wide
 stop/destruction after a part has closed still needs its lifecycle connection.
-Linked reader cancellation reaches the source but can leave its completion
-promise pending on addon runtimes until another checkpoint. The strict multipart
-regression and a multipart-free Experimental probe retain this shared runtime
-failure; its wake-up fix is deferred, not classified as an expected failure.
+Linked reader cancellation now completes across addon queues: native Promise
+observation wakes its destination for both pending and already-settled sources.
+The strict multipart regression requires completion without a manual checkpoint.
 Media decoder support is not claimed, and no PDF viewer exists.
 Document teardown still needs to cancel a reader whose continuation task it discards.
 Navigation request construction now retains the

@@ -392,8 +392,7 @@ describe('multipart response bodies', () => {
     const reason = new Error('stop loading');
     const cancellation = body.cancel(reason);
     await expect.poll(() => canceled.mock.calls.length).toBe(1);
-    // Ordinary failing regression on addon runtimes; Eric deferred the shared wake-up fix.
-    // A multipart-free reproduction lives in Experimental/multipart-cancel-promise.mts.
+    // Require automatic completion across the nested readers' Promise queues.
     await cancellation;
     expect(canceled).toHaveBeenCalledExactlyOnceWith(reason);
     await expect(parts.readPart()).rejects.toBe(reason);

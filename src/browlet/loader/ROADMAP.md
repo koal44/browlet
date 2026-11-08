@@ -849,23 +849,43 @@ author navigation superseded the next part during `navigate()`. The consumer
 now adopts only the first replacement ID, then treats further changes as
 supersession.
 
-The active-body cancellation regression remains an ordinary failing test on
-addon runtimes: the source cancels, but cancellation's completion promise can
-stall until an explicit checkpoint. The same failure reproduces with two linked
-`ResourceReader`s and no multipart parser. Native settlement notification routes
-through the Promise's creation context, which need not own its observer's queue.
-Eric chose on 2026-11-06 to defer that shared runtime fix, preserving the strict
-production expectation and the standalone
+The active-body cancellation regression initially failed on addon runtimes: the
+source canceled, but the completion promise stalled until an explicit checkpoint.
+The same failure reproduced with two linked `ResourceReader`s and no multipart
+parser. Native settlement notification followed the Promise's creation context,
+which need not own its observer's queue. Eric initially deferred the runtime fix,
+preserving the strict production expectation and the standalone
 [`multipart-cancel-promise.mts`](../../../node-compat/experimental/multipart-cancel-promise.mts)
-probe. No checkpoint workaround or native-runtime change is included here.
+probe. The approved addon follow-up now registers weak observer destinations,
+notifies them on settlement, and requests a checkpoint after observing an
+already-settled source. It preserves coalescing, detachment, and environment
+cleanup; the loader needs no manual checkpoint or cancellation workaround.
+The custom-hook path additionally needed to admit known `SandboxAgent` Promise
+jobs even though the sandbox's environment is not attached to its realm. Its existing event loop owns their
+delivery, with no script preparation. That fix belongs to the
+[Promise-job hook](../scripting/ROADMAP.md#81664-promise-jobs).
 
-Validation (2026-11-06): nine affected loader/navigation/framing/cursor suites,
+Initial validation (2026-11-06): nine affected loader/navigation/framing/cursor suites,
 237 tests, across Node 24.19.0, 26.8.1, and custom 27.0.0-pre. Each stock run
-passes all 237. Each matching-addon run passes 236 and fails only the strict
+passed all 237. Each matching-addon run passed 236 and failed only the strict
 active-body cancellation completion regression above. Typecheck/generated
 declarations, declaration contracts, changed-file ESLint, import boundaries,
-and diff whitespace checks pass. The runtime failure is not an expected failure
-or a skip; the loader checkpoint is intentionally not a green addon run.
+and diff whitespace checks passed. The runtime failure was not an expected failure
+or a skip; the initial loader checkpoint was intentionally not a green addon run.
+
+Runtime follow-up validation (2026-11-06): the strict cancellation regression
+now passes in all six Node 24.19.0/26.8.1/custom stock/compat configurations.
+The 102-file Promise/realm/scripting/Streams/loader sweep passes with the existing
+expected failures and skips; custom/compat finishes with 1229 passes, two expected
+failures, and three skips. The final 43-case cancellation/job/checkpoint/handoff
+sweep also passes across all six configurations. An earlier parallel run timed
+out in an Atomics subprocess; the unchanged case passes with both the old and new
+addons in isolation and in the one-worker matrix. All three rebuilt addons pass
+their native suites and the 14 focused observation regressions, including Vin's
+two coalesced-source cases. The standalone linked-reader probe completes before
+its diagnostic checkpoint on every addon base. Type/declaration checks, focused
+ESLint, import boundaries, and diff checks pass. No unexpected failures remain
+in these runs.
 
 ## Multipart loading: CSP admission
 
@@ -913,8 +933,9 @@ Local-URL responses retain their existing inherited container. Added part CSP
 remains a throwing dependency there: composition must preserve inherited self
 origins and policy provenance without duplicating earlier restrictions and
 reports. This slice does not complete local-URL policy composition, error-page
-creation, transient activation, recursive abortion/unloading, parser redesign,
-or the separately retained addon cancellation wake-up failure.
+creation, transient activation, recursive abortion/unloading, or parser redesign.
+The subsequent addon follow-up resolves the separately retained cancellation
+wake-up failure described above.
 
 The first regression failed at the old part-CSP throwing boundary. A further
 regression demonstrated that prepared COOP parameters could admit a newly
