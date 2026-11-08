@@ -7,7 +7,7 @@ import { jsEngineTaskSource, taskSources } from './tasks';
 import { SandboxAgent } from './agents';
 import { JSExecutionContext } from './execution-context';
 import { BrowletRealm } from './realm';
-import { JSScriptOrModule } from './script';
+import { CompiledScriptOrModule } from './script';
 
 // One HTML host installation serves all Browlet instances in this runtime.
 let installed = false;
@@ -26,7 +26,7 @@ export function installHostHooks(): void {
   // remains unaudited; see the roadmap before adding an engine handoff.
   // HostGetImportMetaProperties is installed per source-text module by parseModule().
   // HostLoadImportedModule lives in module-loading.ts. The graph loader calls it
-  // directly; BrowletRealm's Node-shaped callbacks route dynamic imports to it.
+  // directly; Realm installs Node-shaped callbacks that call the import handler.
   setHostHooks({
     makeJobCallback,
     callJobCallback,
@@ -64,7 +64,7 @@ export function installRealmHostHooks(
   // foreign or non-HTML code must not inherit an unrelated outer script.
   env.realm.setPromiseRejectionTracker((promise, operation, code) => {
     const script = code === undefined ? undefined :
-      code === null ? null : JSScriptOrModule.fromCompiledCode(code)?.script ?? null;
+      code === null ? null : CompiledScriptOrModule.fromEngineCode(code)?.script ?? null;
     env.trackPromiseRejection(promise, operation, script);
   });
   // V8 reports native cleanup errors in the registry's context, which can differ
@@ -123,11 +123,11 @@ function makeJobCallback(
   // the callback's realm. Capture a new context, not the frame's skip counter.
   const code = registration.compiledCode;
   const activeScript = code === undefined ? env.responsibleEventLoop.activeScript :
-    code === null ? null : JSScriptOrModule.fromCompiledCode(code)?.script ?? null;
+    code === null ? null : CompiledScriptOrModule.fromEngineCode(code)?.script ?? null;
   let activeScriptContext: JSExecutionContext | null = null;
   if (activeScript !== null) {
     activeScriptContext = new JSExecutionContext({
-      realm: activeScript.env.realm, scriptOrModule: activeScript.record,
+      realm: activeScript.env.realm, scriptOrModule: activeScript.compiled,
     });
   }
   // The metadata identifies the registering code, not the callback's code or

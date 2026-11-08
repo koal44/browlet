@@ -5,6 +5,9 @@ import { UserAgent } from '../../../src/browlet/user-agent';
 import { getBindingContext } from '../../support/browlet-binding';
 import { SandboxAgent } from '../../../src/browlet/scripting/agents';
 import { BrowletRealm } from '../../../src/browlet/scripting/realm';
+import { ClassicScript, JSModuleScript } from '../../../src/browlet/scripting/script';
+import { ScriptFetchOptions } from '../../../src/browlet/scripting/script-fetch-options';
+import { aboutBlankURL } from '../../../src/url/index';
 import { networkingTaskSource } from '../../../src/browlet/scripting/tasks';
 import { FetchBody } from '../../../src/fetch/body';
 
@@ -43,6 +46,20 @@ describe('Browser-owned sandbox execution', () => {
     expect(() => env.creationURL).toThrow('Environment has no creation URL');
     expect(() => env.getWindowOrWorkerGlobalScopeMixin()).toThrow('Sandbox has no Window or Worker global scope');
   });
+
+  it.each([['classic', ClassicScript], ['module', JSModuleScript]] as const)(
+    'compiles a %s script with its sandbox owner without attaching HTML settings',
+    (_kind, ScriptConstructor) => {
+      const env = new UserAgent().sandbox;
+      const script = new ScriptConstructor('globalThis.compiledOnly = true;', env, aboutBlankURL, new ScriptFetchOptions());
+      expect(script.parseError).toBeNull();
+      expect(script.compiled).not.toBeNull();
+      expect(script.compiled!.script).toBe(script);
+      expect(script.env).toBe(env);
+      expect(env.realm.hasEnvironment).toBe(false);
+      expect(Reflect.has(env.global, 'compiledOnly')).toBe(false);
+    },
+  );
 
   it('reports a missing UserAgent when a standalone sandbox needs browser services', () => {
     const env = createSandboxEnvironment();

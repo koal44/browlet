@@ -81,7 +81,7 @@ explicitly:
 | Exception details | Throw-site stack frames and protocol serialization |
 | User activation | HTML's activation-notification algorithm |
 
-Retained classic execution is connected through `JSScriptRecord.evaluate()`;
+Retained classic execution is connected through `CompiledScript.evaluate()`;
 it installs the modeled script context and restores it before HTML cleanup.
 The algorithm tests substitute the remaining dependencies explicitly, including
 a retained-code execution case with only lookup and serialization replaced. They verify

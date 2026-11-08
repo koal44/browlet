@@ -5,7 +5,7 @@ import { UserAgent } from '../../../src/browlet/index';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
 import { WebDriverSession } from '../../../src/browlet/automation/index';
 import type { CommandError, ExceptionDetails } from '../../../src/browlet/automation/protocol';
-import { JSScriptRecord } from '../../../src/browlet/scripting/script';
+import { CompiledScript } from '../../../src/browlet/scripting/script';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -34,9 +34,9 @@ describe('WebDriver BiDi script command algorithms', () => {
     const sourceEvaluation = vi.spyOn(realm, 'evaluate');
     const prepare = vi.spyOn(env.responsibleEventLoop, 'prepareToRunScript');
     const cleanup = vi.spyOn(env.responsibleEventLoop, 'cleanUpAfterRunningScript');
-    const scriptRecords: JSScriptRecord[] = [];
-    vi.spyOn(JSScriptRecord.prototype, 'evaluate').mockImplementation(function(this: JSScriptRecord) {
-      scriptRecords.push(this);
+    const compiledScripts: CompiledScript[] = [];
+    vi.spyOn(CompiledScript.prototype, 'evaluate').mockImplementation(function(this: CompiledScript) {
+      compiledScripts.push(this);
       expect(env.responsibleEventLoop.runningExecutionContext).toBe(env.realmExecutionContext);
       return { type: 'normal', value: 42 };
     });
@@ -53,9 +53,9 @@ describe('WebDriver BiDi script command algorithms', () => {
 
     expect(result).toEqual({ type: 'success', result: { type: 'number', value: 42 }, realm: driver.getRealmId(realm) });
     expect(parse.mock.calls[0]![0]).toBe('globalThis.mustNotRun = true; 42');
-    expect(scriptRecords[0]!.script.baseURL).toBe(env.apiBaseURL);
-    expect(scriptRecords[0]!.script.mutedErrors).toBe(false);
-    expect(scriptRecords[0]!.script.originalSourceURL).toBeNull();
+    expect(compiledScripts[0]!.script.baseURL).toBe(env.apiBaseURL);
+    expect(compiledScripts[0]!.script.mutedErrors).toBe(false);
+    expect(compiledScripts[0]!.script.originalSourceURL).toBeNull();
     expect(sourceEvaluation).not.toHaveBeenCalled();
     expect(Reflect.has(realm.globalObject, 'mustNotRun')).toBe(false);
     expect(prepare).toHaveBeenCalledExactlyOnceWith(env);
@@ -67,7 +67,7 @@ describe('WebDriver BiDi script command algorithms', () => {
 
   it('executes the retained script with only target lookup and protocol serialization substituted', async () => {
     const { driver, session, realm, env, parameters } = fixture();
-    const evaluate = vi.spyOn(JSScriptRecord.prototype, 'evaluate');
+    const evaluate = vi.spyOn(CompiledScript.prototype, 'evaluate');
     const serialize = vi.spyOn(driver, 'serializeAsRemoteValue').mockImplementation((value) => {
       expect(env.responsibleEventLoop.executionContextStack).toHaveLength(0);
       expect(value).toBe(42);
@@ -84,7 +84,7 @@ describe('WebDriver BiDi script command algorithms', () => {
   it('returns an exception result for a throw completion instead of rejecting the command', async () => {
     const { driver, session, realm, parameters } = fixture();
     const completion = { type: 'throw' as const, value: 17 };
-    vi.spyOn(JSScriptRecord.prototype, 'evaluate').mockReturnValue(completion);
+    vi.spyOn(CompiledScript.prototype, 'evaluate').mockReturnValue(completion);
     const details: ExceptionDetails = {
       text: '17', exception: { type: 'number', value: 17 },
       lineNumber: 0, columnNumber: 0, stackTrace: { callFrames: [] },
@@ -99,7 +99,7 @@ describe('WebDriver BiDi script command algorithms', () => {
   it.each(['evaluate', 'callFunction'] as const)('returns a parse exception for invalid JavaScript in %s', async (command) => {
     const { driver, session, realm, env, parameters } = fixture();
     const parse = vi.spyOn(realm, 'parseScript');
-    const evaluate = vi.spyOn(JSScriptRecord.prototype, 'evaluate');
+    const evaluate = vi.spyOn(CompiledScript.prototype, 'evaluate');
     const sourceEvaluation = vi.spyOn(realm, 'evaluate');
     const awaitPromise = vi.spyOn(driver, 'awaitPromise');
     const serialize = vi.spyOn(driver, 'serializeAsRemoteValue');
@@ -131,7 +131,7 @@ describe('WebDriver BiDi script command algorithms', () => {
     const { driver, session, parameters } = fixture();
     const then = vi.fn(() => { throw new Error('The then getter must not be read'); });
     const value = Object.defineProperty({}, 'then', { get: then });
-    vi.spyOn(JSScriptRecord.prototype, 'evaluate').mockReturnValue({ type: 'normal', value });
+    vi.spyOn(CompiledScript.prototype, 'evaluate').mockReturnValue({ type: 'normal', value });
     const awaitPromise = vi.spyOn(driver, 'awaitPromise');
     const serialize = vi.spyOn(driver, 'serializeAsRemoteValue').mockReturnValue({ type: 'object' });
     const result = await observe(driver.evaluate(session, { ...parameters, awaitPromise: true, expression: '({ then() {} })' }));
@@ -144,7 +144,7 @@ describe('WebDriver BiDi script command algorithms', () => {
   it('retains a Promise result when awaitPromise is false', async () => {
     const { driver, session, realm, parameters } = fixture();
     const promise = new realm.NativePromise(() => {});
-    vi.spyOn(JSScriptRecord.prototype, 'evaluate').mockReturnValue({ type: 'normal', value: promise });
+    vi.spyOn(CompiledScript.prototype, 'evaluate').mockReturnValue({ type: 'normal', value: promise });
     const awaitPromise = vi.spyOn(driver, 'awaitPromise');
     const serialize = vi.spyOn(driver, 'serializeAsRemoteValue').mockReturnValue({ type: 'promise' });
     expect(await observe(driver.evaluate(session, { ...parameters, expression: 'new Promise(() => {})' })))
@@ -164,7 +164,7 @@ describe('WebDriver BiDi script command algorithms', () => {
     const deserialize = vi.spyOn(driver, 'deserializeLocalValue')
       .mockReturnValueOnce({ type: 'success', data: 2 })
       .mockReturnValueOnce({ type: 'success', data: receiver });
-    vi.spyOn(JSScriptRecord.prototype, 'evaluate').mockReturnValue({ type: 'normal', value: function_ });
+    vi.spyOn(CompiledScript.prototype, 'evaluate').mockReturnValue({ type: 'normal', value: function_ });
     const activate = vi.spyOn(driver, 'activationNotification').mockImplementation(() => {});
     const serialize = vi.spyOn(driver, 'serializeAsRemoteValue').mockReturnValue({ type: 'number', value: 42 });
     const command = driver.callFunction(session, {
@@ -186,7 +186,7 @@ describe('WebDriver BiDi script command algorithms', () => {
   it('uses null as the default function receiver', async () => {
     const { driver, session, realm, parameters } = fixture();
     const function_ = realm.evaluate('(function () { "use strict"; return this; })', 'fixture.js');
-    vi.spyOn(JSScriptRecord.prototype, 'evaluate').mockReturnValue({ type: 'normal', value: function_ });
+    vi.spyOn(CompiledScript.prototype, 'evaluate').mockReturnValue({ type: 'normal', value: function_ });
     const serialize = vi.spyOn(driver, 'serializeAsRemoteValue').mockReturnValue({ type: 'null' });
     await observe(driver.callFunction(session, { ...parameters, functionDeclaration: 'function () { "use strict"; return this; }' }));
     expect(serialize.mock.calls[0]![0]).toBeNull();
@@ -194,7 +194,7 @@ describe('WebDriver BiDi script command algorithms', () => {
 
   it('returns invalid argument when the function declaration evaluates to a non-callable', async () => {
     const { driver, session, env, parameters } = fixture();
-    vi.spyOn(JSScriptRecord.prototype, 'evaluate').mockReturnValue({ type: 'normal', value: 42 });
+    vi.spyOn(CompiledScript.prototype, 'evaluate').mockReturnValue({ type: 'normal', value: 42 });
     const activate = vi.spyOn(driver, 'activationNotification');
     expect(await observe(driver.callFunction(session, { ...parameters, functionDeclaration: '42', userActivation: true })))
       .toMatchObject({ type: 'error', error: 'invalid argument' });
@@ -219,7 +219,7 @@ describe('WebDriver BiDi script command algorithms', () => {
   it('cleans up after an internal execution failure without disguising it as an author exception', async () => {
     const { driver, session, realm, env, parameters } = fixture();
     const failure = new InternalError('execution facility unavailable');
-    vi.spyOn(JSScriptRecord.prototype, 'evaluate').mockImplementation(() => { throw failure; });
+    vi.spyOn(CompiledScript.prototype, 'evaluate').mockImplementation(() => { throw failure; });
     const sourceEvaluation = vi.spyOn(realm, 'evaluate');
     const details = vi.spyOn(driver, 'getExceptionDetails');
     const command = driver.evaluate(session, { ...parameters, expression: '42' });
@@ -236,7 +236,7 @@ describe('WebDriver BiDi script command algorithms', () => {
     const promise = new realm.NativePromise(() => {});
     const failure = new InternalError('Await unavailable');
     const value = command === 'evaluate' ? promise : () => promise;
-    vi.spyOn(JSScriptRecord.prototype, 'evaluate').mockReturnValue({ type: 'normal', value });
+    vi.spyOn(CompiledScript.prototype, 'evaluate').mockReturnValue({ type: 'normal', value });
     const awaitPromise = vi.spyOn(driver, 'awaitPromise').mockImplementation(() => {
       expect(env.responsibleEventLoop.runningExecutionContext).toBe(env.realmExecutionContext);
       throw failure;

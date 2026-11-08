@@ -39,7 +39,7 @@ import {
   ClassicScript, DedicatedWorkerAgent, SandboxAgent, BrowletRealm,
   taskSources, domManipulationTaskSource, type Script,
   type ScriptFetchOptions, type ModuleMap, type ModuleType, type ScriptingPolicy,
-  type JSModuleRequest, type ModuleFetchCallback, type PerformScriptFetch, type ScriptEnvironment, type ScriptSourceCallback,
+  type ModuleRequest, type ModuleFetchCallback, type PerformScriptFetch, type ScriptEnvironment, type ScriptSourceCallback,
   type EventLoop, type WindowRealm, type WindowAgent, type JSExecutionContext,
   type BrowletGlobalObject, type EventHandlerCallback,
 } from '../scripting/index';
@@ -824,7 +824,7 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   /** Fetch one module for these settings, sharing in-flight work and retained results. */
   fetchSingleModuleScript(
     url: URLRecord, fetchClient: ScriptEnvironment, destination: Destination, options: ScriptFetchOptions,
-    referrer: URLRecord | 'client' | 'no-referrer', moduleRequest: JSModuleRequest | undefined,
+    referrer: URLRecord | 'client' | 'no-referrer', moduleRequest: ModuleRequest | undefined,
     isTopLevel: boolean, onComplete: ModuleFetchCallback, performFetch?: PerformScriptFetch,
   ): void {
     fetchSingleModuleScript(
@@ -835,7 +835,7 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   /** Validate an imported module's attributes and fetch it as a descendant. */
   fetchSingleImportedModuleScript(
     url: URLRecord, fetchClient: ScriptEnvironment, destination: Destination, options: ScriptFetchOptions,
-    referrer: URLRecord | 'client' | 'no-referrer', moduleRequest: JSModuleRequest,
+    referrer: URLRecord | 'client' | 'no-referrer', moduleRequest: ModuleRequest,
     onComplete: ModuleFetchCallback, performFetch?: PerformScriptFetch,
   ): void {
     fetchSingleImportedModuleScript(url, fetchClient, destination, options, this, referrer, moduleRequest, onComplete, performFetch);

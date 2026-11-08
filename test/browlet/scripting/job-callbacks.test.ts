@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import type { ErrorEvent } from '../../../src/browlet/platform';
 import type { JSExecutionContext } from '../../../src/browlet/scripting/execution-context';
-import { ClassicScript, JavaScriptModuleScript, type Script } from '../../../src/browlet/scripting/script';
+import { ClassicScript, JSModuleScript, type Script } from '../../../src/browlet/scripting/script';
 import { ScriptFetchOptions } from '../../../src/browlet/scripting/script-fetch-options';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { mockEventLoopTurns } from '../../support/browlet-agent';
@@ -75,12 +75,12 @@ describe('HTML HostMakeJobCallback and HostCallJobCallback', () => {
       const gate = f.realm.NativePromise.withResolvers<void>();
       Reflect.set(f.realm.globalObject, 'gate', gate.promise);
       Reflect.set(f.realm.globalObject, 'observe', () => observations.push(f.loop.activeScript));
-      const script = new JavaScriptModuleScript(`
+      const script = new JSModuleScript(`
         Promise.resolve().then(() => observe());
         await gate;
         Promise.resolve().then(() => observe());
       `, f.env, f.env.apiBaseURL, new ScriptFetchOptions());
-      script.record!.link();
+      script.compiled!.link();
       let completed = false;
       const rejected = vi.fn();
       script.run(true).observe(() => { completed = true; }, rejected);
@@ -155,7 +155,7 @@ describe('HTML HostMakeJobCallback and HostCallJobCallback', () => {
       const fulfilled = observations[1]!.context;
       const rejected = observations[2]!.context;
       for (const context of [fulfilled, rejected]) {
-        expect(context?.scriptOrModule === script.record, 'restored script record').toBe(true);
+        expect(context?.scriptOrModule === script.compiled, 'restored script record').toBe(true);
         expect(context?.realm === f.realm, 'script context realm').toBe(true);
         expect(context?.function).toBeNull();
         expect(context?.skipWhenDeterminingIncumbent).toBe(0);

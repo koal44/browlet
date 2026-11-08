@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { HTML_NAMESPACE } from '../../../src/infra/index';
 import { parseURL } from '../../../src/url/index';
-import type { ClassicScript, JavaScriptModuleScript } from '../../../src/browlet/scripting/script';
+import type { ClassicScript, JSModuleScript } from '../../../src/browlet/scripting/script';
 import { SpeculationRulesParseResult, SpeculationRuleSet } from '../../../src/browlet/scripting/speculation-rules';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import type { HTMLBaseElementImpl } from '../../../src/browlet/dom/nodes/html/metadata/base';
@@ -165,7 +165,7 @@ describe('Document base URL changes', () => {
     document.appendChild(script);
     const baseURL = parseURL('https://example.test/original/').url!;
     const parseError = new SyntaxError('Script parse failure');
-    const result: ClassicScript | JavaScriptModuleScript = kind === 'classic'
+    const result: ClassicScript | JSModuleScript = kind === 'classic'
       ? { ...createScriptState(document.env), mutedErrors: false, originalSourceURL: null } : createScriptState(document.env);
     result.parseError = parseError;
     result.errorToRethrow = parseError;

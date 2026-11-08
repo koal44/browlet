@@ -7,9 +7,9 @@ import type { JSWasmInstance, JSWasmModule } from './built-in-primitives';
 import type { VMContext } from './runtime';
 
 /** The shared Node VM surface used by HTML, supplied by Node or the addon. */
-export type CompiledModule = SourceTextModule | SyntheticModule | WebAssemblyModule;
+export type EngineModule = EngineSourceTextModule | EngineSyntheticModule | EngineWasmModule;
 
-interface Module {
+interface EngineModuleBase {
   /** Context selected when the module was constructed. */
   context: VMContext;
   /** Source identifier used in diagnostics. */
@@ -25,26 +25,26 @@ interface Module {
 
 // These declarations describe our supported subset. Node's synchronous linking
 // API is newer than the workspace's @types/node declarations.
-export interface SourceTextModule extends Module {
+export interface EngineSourceTextModule extends EngineModuleBase {
   /** Unresolved imports and re-exports, in engine request order. */
-  moduleRequests: ModuleRequest[];
-  linkRequests(modules: CompiledModule[]): void;
+  moduleRequests: EngineModuleRequest[];
+  linkRequests(modules: EngineModule[]): void;
   instantiate(): void;
 }
 
-export interface SyntheticModule extends Module {
+export interface EngineSyntheticModule extends EngineModuleBase {
   setExport(name: string, value: unknown): void;
 }
 
 /** The addon's retained Wasm record, distinct from its native Module source object. */
-export interface WebAssemblyModule extends Module {
+export interface EngineWasmModule extends EngineModuleBase {
   /** Realm-owned compiled source, available before linking or evaluation. */
   source: JSWasmModule;
   /** The single evaluated Instance, absent until instantiation succeeds. */
   instance: JSWasmInstance | undefined;
   /** External dependencies only, with the bridge's private helper omitted. */
-  moduleRequests: ModuleRequest[];
-  linkRequests(modules: CompiledModule[]): void;
+  moduleRequests: EngineModuleRequest[];
+  linkRequests(modules: EngineModule[]): void;
   instantiate(): void;
 }
 
@@ -59,9 +59,9 @@ export interface SourceTextModuleOptions extends ModuleOptions {
   /** Offset added to reported source line numbers. */
   lineOffset?: number;
   /** Populate the engine-created metadata object lazily, using Node's callback shape. */
-  initializeImportMeta?: (meta: object, module: SourceTextModule) => void;
+  initializeImportMeta?: (meta: object, module: EngineSourceTextModule) => void;
   /** Load, link, and evaluate a dependency using Node's dynamic-import callback contract. */
-  importModuleDynamically?: ImportModuleDynamically<SourceTextModule>;
+  importModuleDynamically?: ImportModuleDynamically<EngineSourceTextModule>;
 }
 
 /** Host instantiation supplies callback lifecycle while the bridge retains the graph and bindings. */
@@ -79,13 +79,29 @@ export type WasmInstanceFactory = (module: JSWasmModule, imports: object) => JSW
 /** Node's import callback; returning a Module leaves namespace conversion to the backend. */
 export type ImportModuleDynamically<Referrer extends object> = (
   specifier: string, referrer: Referrer, attributes: Record<string, string>, phase: ModuleRequestPhase,
-) => CompiledModule | Promise<CompiledModule>;
+) => EngineModule | Promise<EngineModule>;
 
-/** Node module options other than the context and source identifier already supplied by the realm. */
-export type ModuleCompilationOptions = Omit<SourceTextModuleOptions, keyof ModuleOptions>;
+/** Host behavior retained by compiled code for later import() calls. */
+export interface DynamicImportHandler {
+  importModule(specifier: string, attributes: Record<string, string>, phase: ModuleRequestPhase): EngineModule | Promise<EngineModule>;
+}
+
+/** Host compilation inputs, before adaptation to the native module options. */
+export interface ModuleCompilationOptions {
+  lineOffset?: number;
+  initializeImportMeta?: (meta: object, module: EngineSourceTextModule) => void;
+  dynamicImport?: DynamicImportHandler;
+}
+
+/** Adapt a retained handler to the backend callback; the handler already knows its referrer. */
+export function createDynamicImportCallback<Referrer extends object>(
+  handler: DynamicImportHandler,
+): ImportModuleDynamically<Referrer> {
+  return (specifier, _referrer, attributes, phase) => handler.importModule(specifier, attributes, phase);
+}
 
 /** A dependency reported by the engine, before host resolution and loading. */
-export interface ModuleRequest {
+export interface EngineModuleRequest {
   /** Original import or re-export specifier. */
   specifier: string;
   /** Parsed import attributes; the host validates their meaning. */
@@ -99,20 +115,22 @@ export type ModuleRequestPhase = 'source' | 'evaluation' | 'defer';
 
 export function compileModule(
   source: string, context: VMContext, filename: string, options: ModuleCompilationOptions = {},
-): SourceTextModule {
+): EngineSourceTextModule {
+  const { dynamicImport, ...nativeOptions } = options;
+  const importModuleDynamically = dynamicImport && createDynamicImportCallback(dynamicImport);
   if (isAddonContextHandle(context)) {
     if (!addon.SourceTextModule) throw new InternalError('Node backend does not provide SourceTextModule');
-    return new addon.SourceTextModule(source, { ...options, context, identifier: filename });
+    return new addon.SourceTextModule(source, { ...nativeOptions, context, identifier: filename, importModuleDynamically });
   }
   requireVMModules();
   // @types/node predates phases and synchronous linking. Both supported Node
-  // bases implement this Node-shaped subset; no callback argument rewriting is needed.
+  // bases implement this Node-shaped subset.
   const SourceTextModuleConstructor = vm.SourceTextModule as unknown as
-    new (source: string, options: SourceTextModuleOptions) => SourceTextModule;
-  return new SourceTextModuleConstructor(source, { ...options, context, identifier: filename });
+    new (source: string, options: SourceTextModuleOptions) => EngineSourceTextModule;
+  return new SourceTextModuleConstructor(source, { ...nativeOptions, context, identifier: filename, importModuleDynamically });
 }
 
-export function createDefaultExportModule(value: unknown, context: VMContext): CompiledModule {
+export function createDefaultExportModule(value: unknown, context: VMContext): EngineModule {
   if (isAddonContextHandle(context)) {
     if (!addon.SyntheticModule) throw new InternalError('Node backend does not provide SyntheticModule');
     return new addon.SyntheticModule(['default'], function() {
@@ -122,14 +140,14 @@ export function createDefaultExportModule(value: unknown, context: VMContext): C
   requireVMModules();
   return new vm.SyntheticModule(['default'], function() {
     this.setExport('default', value);
-  }, { context }) as unknown as SyntheticModule;
+  }, { context }) as unknown as EngineSyntheticModule;
 }
 
 /** Parse Wasm with the ESM builtin options and reserved-name checks, without instantiating it. */
 export function compileWebAssemblyModule(
   bytes: Uint8Array, context: VMContext, filename: string,
   createInstance?: WasmInstanceFactory, getExports?: () => object, getSource?: () => object,
-): WebAssemblyModule {
+): EngineWasmModule {
   // Stock Node has no corresponding public VM class. Do not silently substitute
   // a standalone Instance or a synthetic namespace for a cyclic Wasm record.
   if (!isAddonContextHandle(context) || !addon.WebAssemblyModule) {
@@ -138,13 +156,13 @@ export function compileWebAssemblyModule(
   return new addon.WebAssemblyModule(bytes, { context, identifier: filename, createInstance, getExports, getSource });
 }
 
-export function moduleRequests(module: CompiledModule): ModuleRequest[] {
+export function moduleRequests(module: EngineModule): EngineModuleRequest[] {
   return 'moduleRequests' in module ? module.moduleRequests : [];
 }
 
 /** Link an already loaded graph. Dependencies follow each referrer's request order. */
 export function linkModule(
-  root: CompiledModule, graph: Map<CompiledModule, CompiledModule[]>,
+  root: EngineModule, graph: Map<EngineModule, EngineModule[]>,
 ): void {
   if (root.status !== 'unlinked') return;
   for (const [referrer, dependencies] of graph) {
@@ -162,15 +180,15 @@ export function linkModule(
 }
 
 /** Evaluation returns the engine Promise and never performs an explicit checkpoint. */
-export function evaluateModule(module: CompiledModule): Promise<unknown> {
+export function evaluateModule(module: EngineModule): Promise<unknown> {
   return module.evaluate();
 }
 
-export function moduleNamespace(module: CompiledModule): object {
+export function moduleNamespace(module: EngineModule): object {
   return module.namespace;
 }
 
-const suppliedRequests = new WeakSet<SourceTextModule | WebAssemblyModule>();
+const suppliedRequests = new WeakSet<EngineSourceTextModule | EngineWasmModule>();
 
 function requireVMModules(): void {
   if (typeof vm.SourceTextModule !== 'function' || typeof vm.SyntheticModule !== 'function') {

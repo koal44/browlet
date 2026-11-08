@@ -10,7 +10,7 @@ import type { WorkerGlobalImpl } from '../workers/index';
 import { DedicatedWorkerAgent, SharedWorkerAgent, ServiceWorkerAgent, WindowAgent, type Agent } from './agents';
 import { JSExecutionContext } from './execution-context';
 import type { BrowletRealm } from './realm';
-import { JSScriptOrModule, type Script } from './script';
+import type { Script } from './script';
 
 // Task-source/queue associations stay private so scheduling can coalesce
 // sources without changing callers.
@@ -101,9 +101,10 @@ export class EventLoop {
   /** The HTML script of the topmost ScriptOrModule, independently of incumbent skipping. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#active-script
   get activeScript(): Script | null {
-    // GetActiveScriptOrModule selects the same topmost non-null record in our modeled stack.
-    const record = this.topmostScriptHavingExecutionContext?.scriptOrModule ?? null;
-    return record === null ? null : record.script;
+    // ACCOMMODATION(node-v8-execution-contexts): A direct embedder entry has no
+    // retained code record. It must not inherit an unrelated caller's script.
+    const context = this.executionContextStack.findLast((entry) => entry.scriptOrModule !== null || entry.isHostEntry);
+    return context?.scriptOrModule?.script ?? null;
   }
 
   /** The HTML script in the running context; do not search through lower frames. */
@@ -300,8 +301,6 @@ export class EventLoop {
   }
 
   // HTML §§8.1.3.2 and 8.1.4.4 — Browlet-controlled ScriptEvaluation entry.
-  // TODO(HTML §8.1.4): Receive the complete Script/Module record from script processing.
-  // The record below has no HTML script until the creating/calling algorithms supply one.
   // ACCOMMODATION(node-v8-execution-contexts): Direct embedder entry receives
   // a temporary task because Node exposes no surrounding execution context.
   runScriptEvaluation<Result>(
@@ -315,9 +314,8 @@ export class EventLoop {
 
     try {
       this.prepareToRunScript(env);
-      const context = new JSExecutionContext({
-        realm: env.realm, scriptOrModule: new JSScriptOrModule(env.realm, null),
-      });
+      const context = new JSExecutionContext({ realm: env.realm, incumbentEnv: env });
+      context.isHostEntry = true;
       this.executionContextStack.push(context);
       try {
         return steps();

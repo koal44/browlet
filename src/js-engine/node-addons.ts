@@ -5,15 +5,15 @@ import { isAbsolute } from 'node:path';
 import { InternalError } from '../infra/internal-error';
 
 import type {
-  CollectionIteratorKind, CompiledCode, CompiledScript, ExoticObjectHandlers, FunctionCompilationOptions,
+  CollectionIteratorKind, EngineCode, EngineScript, ExoticObjectHandlers, FunctionCompilationOptions,
   GlobalAccessHandlers, GlobalIndexedProperties, GlobalObject, GlobalPrototypeKind, GlobalProxy,
   JSFunction, JSFunctionWithPrototype, JSIteratorResult,
 } from './realm';
 import type { JSWasmInstance, JSWasmModule } from './built-in-primitives';
 import type { JSJobCallback, VMContext } from './runtime';
 import type {
-  ImportModuleDynamically, ModuleOptions, SourceTextModule, SourceTextModuleOptions, SyntheticModule,
-  WebAssemblyModule, WasmModuleOptions,
+  ImportModuleDynamically, ModuleOptions, EngineSourceTextModule, SourceTextModuleOptions, EngineSyntheticModule,
+  EngineWasmModule, WasmModuleOptions,
 } from './modules';
 
 /** Typed calls to the selected backend's optional engine extensions. */
@@ -62,19 +62,19 @@ export class NodeAPI {
   createHTMLDDA?: <Result>(context: VMContext, call: JSFunction<Result>) => JSFunction<Result>;
   createMicrotaskQueue?: (requestCheckpoint?: () => void) => AddonMicrotaskQueueHandle;
   /** Node-shaped retained scripts; HTML selects the realm when running them. */
-  Script?: new (source: string, options?: ContextEvaluationOptions) => CompiledScript;
+  Script?: new (source: string, options?: ContextEvaluationOptions) => EngineScript;
   /** Node-shaped FunctionBody compilation, with a retained-source name extension. */
   compileFunction?: (source: string, parameters: string[], options: FunctionCompilationOptions & {
     parsingContext: VMContext;
   }) => JSFunction;
   /** Node-shaped source-text modules bound to an existing context. */
-  SourceTextModule?: new (source: string, options: SourceTextModuleOptions) => SourceTextModule;
+  SourceTextModule?: new (source: string, options: SourceTextModuleOptions) => EngineSourceTextModule;
   /** Node-shaped synthetic modules with named, mutable exports. */
   SyntheticModule?: new (
-    exports: string[], evaluate: (this: SyntheticModule) => void, options: ModuleOptions,
-  ) => SyntheticModule;
+    exports: string[], evaluate: (this: EngineSyntheticModule) => void, options: ModuleOptions,
+  ) => EngineSyntheticModule;
   /** Retained Wasm source and VM graph record; stock Node has no public counterpart. */
-  WebAssemblyModule?: new (bytes: Uint8Array, options: WasmModuleOptions) => WebAssemblyModule;
+  WebAssemblyModule?: new (bytes: Uint8Array, options: WasmModuleOptions) => EngineWasmModule;
   getFunctionRealm?: (value: JSFunction) => object;
   getRealm?: (value: object) => object;
   // Require the V8 iterator-brand predicates.
@@ -113,7 +113,7 @@ export class NodeAPI {
   /** Receive synchronous notifications with retained code; undefined means no metadata, null means foreign code. */
   setPromiseRejectionTracker?: (
     context: VMContext,
-    tracker: ((promise: Promise<unknown>, operation: 'reject' | 'handle', compiledCode: CompiledCode | null | undefined) => void) | undefined,
+    tracker: ((promise: Promise<unknown>, operation: 'reject' | 'handle', compiledCode: EngineCode | null | undefined) => void) | undefined,
   ) => void;
   /** Route uncaught engine errors to the owning context, including native registry cleanup failures. */
   setExceptionReporter?: (context: VMContext, reporter: ((exception: unknown) => void) | undefined) => void;
@@ -274,13 +274,13 @@ export type ContextEvaluationOptions = {
   filename?: string;
   lineOffset?: number;
   /** Callback attached to this compilation, independently of its diagnostic filename. */
-  importModuleDynamically?: ImportModuleDynamically<CompiledScript>;
+  importModuleDynamically?: ImportModuleDynamically<EngineScript>;
 };
 
 type AddonHostHooks<HostDefined> = {
   makeJobCallback?(
     callback: JSFunction,
-    registration: { incumbent: object | null; compiledCode: CompiledCode | null | undefined; },
+    registration: { incumbent: object | null; compiledCode: EngineCode | null | undefined; },
   ): JSJobCallback<HostDefined>;
   callJobCallback?(
     record: JSJobCallback<HostDefined>, receiver: unknown, argumentsList: unknown[],

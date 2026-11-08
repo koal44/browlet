@@ -12,7 +12,7 @@ import { WasmMemoryImpl } from '../../../src/browlet/webassembly/index';
 import { getPlatformRecord, PlatformRecordSource } from '../../../src/web-idl/values/index';
 import { Browlet } from '../../../src/browlet/browlet';
 import {
-  JavaScriptModuleScript, WasmModuleScript, JSScriptOrModule, JSWasmModuleRecord, type ModuleScript,
+  JSModuleScript, WasmModuleScript, CompiledScriptOrModule, CompiledWasmModule, type ModuleScript,
 } from '../../../src/browlet/scripting/script';
 import { ScriptFetchOptions } from '../../../src/browlet/scripting/script-fetch-options';
 import { getRelevantRealm } from '../../support/browlet-binding';
@@ -39,7 +39,7 @@ describe('HTML WebAssembly module records', () => {
     f.env.policyContainer.cspList = policies;
     policies.policies.push(ContentSecurityPolicy.parse("script-src 'none'", 'header', 'enforce'));
     const blocked = f.wasm(constant());
-    expect(blocked.record).toBeNull();
+    expect(blocked.compiled).toBeNull();
     expect(blocked.parseError).toBeInstanceOf(f.env.realm.WebAssemblyCompileError);
     policies.policies[0] = ContentSecurityPolicy.parse("script-src 'wasm-unsafe-eval'", 'header', 'enforce');
     expect(f.wasm(constant()).parseError).toBeNull();
@@ -53,11 +53,11 @@ describe('HTML WebAssembly module records', () => {
     const script = f.wasm(padded.subarray(2, bytes.length + 2));
     padded.fill(0);
     expect(script.parseError).toBeNull();
-    const record = script.record!;
-    expect(record).toBeInstanceOf(JSWasmModuleRecord);
+    const record = script.compiled!;
+    expect(record).toBeInstanceOf(CompiledWasmModule);
     expect(record.script).toBe(script);
     expect(record.realm).toBe(f.env.realm);
-    expect(JSScriptOrModule.fromCompiledCode(record.code)).toBe(record);
+    expect(CompiledScriptOrModule.fromEngineCode(record.code)).toBe(record);
     expect(record.code.identifier).toBe('https://modules.test/root.wasm');
     expect(record.code.status).toBe('unlinked');
     expect(record.code.instance).toBeUndefined();
@@ -77,7 +77,7 @@ describe('HTML WebAssembly module records', () => {
       ],
     }));
     expect(script.parseError).toBeNull();
-    expect(script.record!.requestedModules).toEqual([
+    expect(script.compiled!.requestedModules).toEqual([
       { specifier: './second.js', attributes: [], phase: 'evaluation' },
       { specifier: './first.js', attributes: [], phase: 'evaluation' },
       { specifier: 'browlet:wasm-instantiate', attributes: [], phase: 'evaluation' },
@@ -94,8 +94,8 @@ describe('HTML WebAssembly module records', () => {
         ], exports: [['test', 'function', 0], ['text', 'global', 0]],
       }));
       expect(script.parseError).toBeNull();
-      expect(script.record!.requestedModules).toEqual([]);
-      script.record!.link();
+      expect(script.compiled!.requestedModules).toEqual([]);
+      script.compiled!.link();
       const namespace = evaluate(script) as { test(value: unknown): number; text: string; };
       expect(namespace.test('hello')).toBe(1);
       expect(namespace.test(1)).toBe(0);
@@ -107,7 +107,7 @@ describe('HTML WebAssembly module records', () => {
     const f = fixture();
     for (const bytes of [new Uint8Array([0]), callImport('wasm:js-string', 'test')]) {
       const script = f.wasm(bytes);
-      expect(script.record).toBeNull();
+      expect(script.compiled).toBeNull();
       expect(script.parseError).toBeInstanceOf(f.env.realm.WebAssemblyCompileError);
       expect(script.errorToRethrow).toBeNull();
     }
@@ -122,7 +122,7 @@ describe('HTML WebAssembly module records', () => {
   ])('records LinkError for a %s before loading dependencies', (_name, bytes) => {
     const f = fixture();
     const script = f.wasm(bytes());
-    expect(script.record).toBeNull();
+    expect(script.compiled).toBeNull();
     expect(script.parseError).toBeInstanceOf(Reflect.get(f.env.realm.WebAssembly, 'LinkError') as ErrorConstructor);
     expect(script.errorToRethrow).toBeNull();
   });
@@ -133,8 +133,8 @@ describe('HTML WebAssembly module records', () => {
     const bytes = new Uint8Array([1, 2, 3]);
     const script = f.wasm(bytes);
     expect(script.parseError).toBeNull();
-    expect(script.record!.requestedModules).toEqual([]);
-    expect(WebAssembly.Module.exports(script.record!.code.source as unknown as WebAssembly.Module)).toEqual([]);
+    expect(script.compiled!.requestedModules).toEqual([]);
+    expect(WebAssembly.Module.exports(script.compiled!.code.source as unknown as WebAssembly.Module)).toEqual([]);
     expect(bytes).toEqual(new Uint8Array([1, 2, 3]));
   });
 
@@ -145,16 +145,16 @@ describe('HTML WebAssembly module records', () => {
       const script = f.wasm(binary({ types: [[[], []]], imports: [['./js', 'start', 'function', [0]]], start: 0 }));
       const prepare = vi.spyOn(f.env.realm.callbacks, 'prepareToRunCallback');
       const cleanup = vi.spyOn(f.env.realm.callbacks, 'cleanUpAfterRunningCallback');
-      script.record!.loadedModules.set(script.record!.requestedModules[0]!, js.record!);
-      script.record!.link();
-      expect(script.record!.code.instance).toBeUndefined();
+      script.compiled!.loadedModules.set(script.compiled!.requestedModules[0]!, js.compiled!);
+      script.compiled!.link();
+      expect(script.compiled!.code.instance).toBeUndefined();
       expect(Reflect.has(f.env.global, 'starts')).toBe(false);
       expect(prepare).not.toHaveBeenCalled();
       const namespace = evaluate(script);
       expect(Reflect.get(f.env.global, 'starts')).toBe(1);
       expect(prepare).toHaveBeenCalledExactlyOnceWith(f.env);
       expect(cleanup).toHaveBeenCalledExactlyOnceWith(f.env);
-      expect(f.env.realm.getWebAssemblyNamespaceInstance(namespace)).toBe(script.record!.code.instance);
+      expect(f.env.realm.getWebAssemblyNamespaceInstance(namespace)).toBe(script.compiled!.code.instance);
       evaluate(script);
       expect(Reflect.get(f.env.global, 'starts')).toBe(1);
       expect(f.env.responsibleEventLoop.executionContextStack).toEqual([]);
@@ -172,8 +172,8 @@ describe('HTML WebAssembly module records', () => {
       Reflect.set(f.env.global, 'shouldThrow', throws);
       const js = f.js('export function answer() { events.push("call"); return { valueOf() { events.push("convert"); if (shouldThrow) throw marker; return 42; } }; }');
       const script = f.wasm(callImport());
-      script.record!.loadedModules.set(script.record!.requestedModules[0]!, js.record!);
-      script.record!.link();
+      script.compiled!.loadedModules.set(script.compiled!.requestedModules[0]!, js.compiled!);
+      script.compiled!.link();
       const namespace = evaluate(script) as { answer(): number; };
       const callbacks = f.env.realm.callbacks;
       const prepare = callbacks.prepareToRunCallback.bind(callbacks);
@@ -198,14 +198,14 @@ describe('HTML WebAssembly module records', () => {
       const f = fixture();
       const js = f.js('await new Promise(resolve => globalThis.release = resolve); export function start() { globalThis.started = true; }');
       const script = f.wasm(binary({ types: [[[], []]], imports: [['./js', 'start', 'function', [0]]], start: 0 }));
-      script.record!.loadedModules.set(script.record!.requestedModules[0]!, js.record!);
-      script.record!.link();
+      script.compiled!.loadedModules.set(script.compiled!.requestedModules[0]!, js.compiled!);
+      script.compiled!.link();
       let settled = false;
       let reason: unknown;
       script.run(true).observe(() => { settled = true; }, (error) => { reason = error; });
       f.env.responsibleEventLoop.performMicrotaskCheckpoint();
       expect(settled).toBe(false);
-      expect(script.record!.code.instance).toBeUndefined();
+      expect(script.compiled!.code.instance).toBeUndefined();
       const release = Reflect.get(f.env.global, 'release') as () => void;
       release();
       f.env.responsibleEventLoop.performMicrotaskCheckpoint();
@@ -227,7 +227,7 @@ describe('HTML WebAssembly module records', () => {
         functions: [{ code: [0x41, 42] }], exports: names.map((name) => [name, 'function', 0]),
       }));
       link(wasm);
-      const namespace = f.env.realm.getModuleNamespace(wasm.record!.code);
+      const namespace = f.env.realm.getModuleNamespace(wasm.compiled!.code);
       expect(Object.getPrototypeOf(namespace)).toBeNull();
       expect(Object.isExtensible(namespace)).toBe(false);
       expect(Object.getOwnPropertyNames(namespace)).toEqual([...names].sort());
@@ -235,7 +235,7 @@ describe('HTML WebAssembly module records', () => {
         expect(() => { f.env.realm.reflectGet(namespace, name); }).toThrow(f.env.realm.ReferenceError);
       }
       expect(evaluate(wasm)).toBe(namespace);
-      const instance = wasm.record!.code.instance as unknown as WebAssembly.Instance;
+      const instance = wasm.compiled!.code.instance as unknown as WebAssembly.Instance;
       for (const name of names) {
         expect(Reflect.get(namespace, name)).toBe(instance.exports[name]);
         expect(Reflect.set(namespace, name, null)).toBe(false);
@@ -269,8 +269,8 @@ describe('HTML WebAssembly module records', () => {
     const barrel = f.js('export * from "./first"; export * from "./second"; globalThis.ran = true;');
     const root = f.js(`import { ${kind === 'missing' ? 'absent' : 'answer'} } from "./barrel";`);
     expect(() => link(root, [[root, [barrel]], [barrel, [first, second]]])).toThrow(f.env.realm.SyntaxError);
-    expect(first.record!.code.instance).toBeUndefined();
-    expect(second.record!.code.instance).toBeUndefined();
+    expect(first.compiled!.code.instance).toBeUndefined();
+    expect(second.compiled!.code.instance).toBeUndefined();
     expect(Reflect.has(f.env.global, 'ran')).toBe(false);
   });
 
@@ -280,7 +280,7 @@ describe('HTML WebAssembly module records', () => {
     const wasm = f.wasm(binary({ imports: [['./js', 'hidden', 'function', [0]]] }));
     const root = f.js('import { hidden } from "./wasm";');
     expect(() => link(root, [[root, [wasm]], [wasm, [dependency]]])).toThrow(f.env.realm.SyntaxError);
-    expect(wasm.record!.code.instance).toBeUndefined();
+    expect(wasm.compiled!.code.instance).toBeUndefined();
   });
 
   // ESM §10.5: preserve native linking/instantiation while applying the HTML
@@ -297,7 +297,7 @@ describe('HTML WebAssembly module records', () => {
         expect(Reflect.get(evaluate(js), 'result')).toBe(42);
       } else {
         expect(rejection(js)).toBeInstanceOf(f.env.realm.ReferenceError);
-        expect(wasm.record!.code.instance).toBeUndefined();
+        expect(wasm.compiled!.code.instance).toBeUndefined();
       }
       expect(f.env.responsibleEventLoop.executionContextStack).toEqual([]);
     });
@@ -316,11 +316,11 @@ describe('HTML WebAssembly module records', () => {
       expect(record.implInst).toBeInstanceOf(WasmMemoryImpl);
       expect(record.realm).toBe(f.env.realm);
       expect(record.implInst).not.toBe(memory);
-      expect(Reflect.get(f.env.realm.getModuleNamespace(producer.record!.code), 'memory')).toBe(memory);
-      expect(Reflect.get(consumer.record!.instance.exports, 'memory')).toBe(memory);
-      expect(Reflect.get(producer.record!.instance.exports, 'memory')).toBe(memory);
+      expect(Reflect.get(f.env.realm.getModuleNamespace(producer.compiled!.code), 'memory')).toBe(memory);
+      expect(Reflect.get(consumer.compiled!.instance.exports, 'memory')).toBe(memory);
+      expect(Reflect.get(producer.compiled!.instance.exports, 'memory')).toBe(memory);
       const api = Reflect.get(f.browser.window, 'WebAssembly') as { namespaceInstance(namespace: object): object; };
-      expect(getPlatformRecord(api.namespaceInstance(namespace), PlatformRecordSource.Platform)!.implInst).toBe(consumer.record!.instance);
+      expect(getPlatformRecord(api.namespaceInstance(namespace), PlatformRecordSource.Platform)!.implInst).toBe(consumer.compiled!.instance);
     });
   });
 
@@ -331,12 +331,12 @@ describe('HTML WebAssembly module records', () => {
       const consumer = f.wasm(importGlobal());
       link(consumer, [[consumer, [original]]]);
       const namespace = evaluate(consumer) as { read(): number; };
-      const source = f.env.realm.getModuleNamespace(original.record!.code) as { bump(): void; };
+      const source = f.env.realm.getModuleNamespace(original.compiled!.code) as { bump(): void; };
       expect(namespace.read()).toBe(1);
       source.bump();
       expect(namespace.read()).toBe(2);
-      const originalInstance = original.record!.code.instance as unknown as WebAssembly.Instance;
-      const consumerInstance = consumer.record!.code.instance as unknown as WebAssembly.Instance;
+      const originalInstance = original.compiled!.code.instance as unknown as WebAssembly.Instance;
+      const consumerInstance = consumer.compiled!.code.instance as unknown as WebAssembly.Instance;
       expect(consumerInstance.exports.value).toBe(originalInstance.exports.value);
 
       const memory = f.wasm(binary({ memories: [[0, 1]], exports: [['memory', 'memory', 0]] }));
@@ -345,7 +345,7 @@ describe('HTML WebAssembly module records', () => {
       }));
       link(usesMemory, [[usesMemory, [memory]]]);
       expect(Reflect.get(evaluate(usesMemory), 'memory'))
-        .toBe(Reflect.get(f.env.realm.getModuleNamespace(memory.record!.code), 'memory'));
+        .toBe(Reflect.get(f.env.realm.getModuleNamespace(memory.compiled!.code), 'memory'));
     });
   });
 
@@ -364,12 +364,12 @@ describe('HTML WebAssembly module records', () => {
       const consumer = f.wasm(importGlobal('./barrel'));
       link(consumer, [[consumer, [barrel]], [barrel, [renamed]], [renamed, [original]]]);
       const namespace = evaluate(consumer) as { read(): number; };
-      const source = f.env.realm.getModuleNamespace(barrel.record!.code) as { bump(): void; };
+      const source = f.env.realm.getModuleNamespace(barrel.compiled!.code) as { bump(): void; };
       expect(namespace.read()).toBe(1);
       source.bump();
       expect(namespace.read()).toBe(2);
-      expect(Reflect.get(consumer.record!.instance.exports, 'value'))
-        .toBe(Reflect.get(original.record!.instance.exports, 'value'));
+      expect(Reflect.get(consumer.compiled!.instance.exports, 'value'))
+        .toBe(Reflect.get(original.compiled!.instance.exports, 'value'));
     });
   });
 
@@ -380,8 +380,8 @@ describe('HTML WebAssembly module records', () => {
       const second = f.wasm(callImport('./first'));
       link(first, [[first, [second]], [second, [first]]]);
       expect(rejection(first)).toBeInstanceOf(Reflect.get(f.env.realm.WebAssembly, 'LinkError') as ErrorConstructor);
-      expect(first.record!.code.instance).toBeUndefined();
-      expect(second.record!.code.instance).toBeUndefined();
+      expect(first.compiled!.code.instance).toBeUndefined();
+      expect(second.compiled!.code.instance).toBeUndefined();
     });
   });
 
@@ -395,12 +395,12 @@ describe('HTML WebAssembly module records', () => {
       link(consumer, [[consumer, [memory]]]);
       if (accepted) {
         evaluate(consumer);
-        expect(consumer.record!.code.instance).toBeDefined();
+        expect(consumer.compiled!.code.instance).toBeDefined();
       } else {
         expect(rejection(consumer)).toBeInstanceOf(Reflect.get(f.env.realm.WebAssembly, 'LinkError') as ErrorConstructor);
-        expect(consumer.record!.code.instance).toBeUndefined();
+        expect(consumer.compiled!.code.instance).toBeUndefined();
       }
-      expect(memory.record!.code.instance).toBeDefined();
+      expect(memory.compiled!.code.instance).toBeDefined();
       expect(f.env.responsibleEventLoop.executionContextStack).toEqual([]);
     });
   });
@@ -419,10 +419,10 @@ describe('HTML WebAssembly module records', () => {
       const error = rejection(wasm);
       if (kind === 'throw') expect(error).toBe(marker);
       else expect(error).toBeInstanceOf(Reflect.get(f.env.realm.WebAssembly, 'RuntimeError') as ErrorConstructor);
-      expect(wasm.record!.code.error).toBe(error);
+      expect(wasm.compiled!.code.error).toBe(error);
       expect(rejection(wasm)).toBe(error);
       expect(Reflect.get(f.env.global, 'starts')).toBe(1);
-      expect(wasm.record!.code.instance).toBeUndefined();
+      expect(wasm.compiled!.code.instance).toBeUndefined();
       expect(f.env.responsibleEventLoop.executionContextStack).toEqual([]);
       expect(f.env.responsibleEventLoop.backupIncumbentEnvironmentStack).toEqual([]);
     });
@@ -479,7 +479,7 @@ describe('HTML WebAssembly module records', () => {
     });
     expect(root!.errorToRethrow).toBeNull();
     expect(requests).toEqual(['https://modules.test/root.js', 'https://modules.test/answer.wasm']);
-    const record = root!.record!.getLoadedModule(root!.record!.requestedModules[0]!) as JSWasmModuleRecord;
+    const record = root!.compiled!.getLoadedModule(root!.compiled!.requestedModules[0]!) as CompiledWasmModule;
     expect(record.code.status).toBe('unlinked');
     expect(record.requestedModulesLoaded).toBe(false);
     expect(record.loadedModules.size).toBe(0);
@@ -501,7 +501,7 @@ function fixture() {
   return {
     browser, env,
     wasm: (bytes: Uint8Array) => new WasmModuleScript(bytes, env, env.parseURL('https://modules.test/root.wasm')!, options),
-    js: (source: string) => new JavaScriptModuleScript(source, env, env.parseURL('https://modules.test/callback.js')!, options),
+    js: (source: string) => new JSModuleScript(source, env, env.parseURL('https://modules.test/callback.js')!, options),
   };
 }
 
@@ -510,18 +510,18 @@ function evaluate(script: ModuleScript): object {
   script.run(true).observe(() => { result = { state: 'fulfilled' }; }, (error) => { result = { state: 'rejected', error }; });
   script.env.responsibleEventLoop.performMicrotaskCheckpoint();
   expect(result).toEqual({ state: 'fulfilled' });
-  return script.env.realm.getModuleNamespace(script.record!.code);
+  return script.env.realm.getModuleNamespace(script.compiled!.code);
 }
 
 function link(root: ModuleScript, graph: [ModuleScript, ModuleScript[]][] = []): void {
   for (const [script, dependencies] of graph) {
     expect(script.parseError).toBeNull();
-    expect(script.record!.requestedModules).toHaveLength(dependencies.length);
+    expect(script.compiled!.requestedModules).toHaveLength(dependencies.length);
     dependencies.forEach((dependency, index) => {
-      script.record!.loadedModules.set(script.record!.requestedModules[index]!, dependency.record!);
+      script.compiled!.loadedModules.set(script.compiled!.requestedModules[index]!, dependency.compiled!);
     });
   }
-  root.record!.link();
+  root.compiled!.link();
 }
 
 function rejection(script: ModuleScript): unknown {

@@ -9,9 +9,9 @@ import { Browlet } from '../../../src/browlet/browlet';
 import { CSPList } from '../../../src/browlet/browsing/policy/csp/list';
 import { ContentSecurityPolicy } from '../../../src/browlet/browsing/policy/csp/policy';
 import { ImportMap } from '../../../src/browlet/scripting/import-map';
-import { DynamicModuleImport } from '../../../src/browlet/scripting/module-loading';
-import { type JSWasmModuleRecord, type ModuleScript } from '../../../src/browlet/scripting/script';
+import { type CompiledWasmModule, type ModuleScript } from '../../../src/browlet/scripting/script';
 import { ScriptFetchOptions } from '../../../src/browlet/scripting/script-fetch-options';
+import { DynamicImport } from '../../../src/browlet/scripting/import-handler';
 import { mockHTTPTransport } from '../../fetch/transport-fixture';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { runInHostTask } from '../../support/tasks';
@@ -39,13 +39,13 @@ describe('HTML WebAssembly source imports', () => {
       '/callback.js': 'globalThis.runs = (globalThis.runs ?? 0) + 1; export function answer() { return 42; }',
     });
     const root = await f.load('/root.js');
-    const requests = root!.record!.requestedModules;
-    const records = requests.map((request) => root!.record!.getLoadedModule(request));
+    const requests = root!.compiled!.requestedModules;
+    const records = requests.map((request) => root!.compiled!.getLoadedModule(request));
     expect(records[0]).toBe(records[1]);
     expect(f.requests).toEqual(['/root.js', '/answer.wasm', '/callback.js']);
     await runInHostTask(() => {
       const namespace = evaluate(root!) as { code: object; answer(): number; };
-      expect(namespace.code).toBe(f.env.project((records[0] as JSWasmModuleRecord).moduleSource));
+      expect(namespace.code).toBe(f.env.project((records[0] as CompiledWasmModule).moduleSource));
       expect(namespace.answer()).toBe(42);
       expect(Reflect.get(f.env.global, 'runs')).toBe(1);
     });
@@ -59,7 +59,7 @@ describe('HTML WebAssembly source imports', () => {
       '/callback.js': 'export function answer() { return 42; }',
     });
     const source = await f.load('/source.js');
-    const record = f.record('/answer.wasm');
+    const record = f.module('/answer.wasm');
     expect(record.requestedModulesLoaded).toBe(false);
     expect(f.requests).toEqual(['/source.js', '/answer.wasm']);
     const evaluated = await f.load('/evaluate.js');
@@ -88,7 +88,7 @@ describe('HTML WebAssembly source imports', () => {
     });
     const source = await f.load('/source.js');
     await runInHostTask(() => {
-      expect(Reflect.get(evaluate(source!), 'code')).toBe(f.env.project(f.record('/trap.wasm').moduleSource));
+      expect(Reflect.get(evaluate(source!), 'code')).toBe(f.env.project(f.module('/trap.wasm').moduleSource));
     });
     expect(f.requests).toEqual(['/bad.js', '/trap.wasm', '/source.js']);
   });
@@ -101,7 +101,7 @@ describe('HTML WebAssembly source imports', () => {
     const root = await f.load('/root.js');
     expect(root!.parseError).toBeNull();
     expect(root!.errorToRethrow).toBeInstanceOf(f.env.realm.SyntaxError);
-    expect(root!.record!.loadedModules.size).toBe(1);
+    expect(root!.compiled!.loadedModules.size).toBe(1);
     expect(Reflect.has(f.env.global, 'ran')).toBe(false);
     expect(f.requests).toEqual(['/root.js', '/child.js']);
   });
@@ -123,7 +123,7 @@ describe('HTML WebAssembly source imports', () => {
     f.env.globalImplementation.importMap = ImportMap.parse('{"imports":{"mapped":"./answer.wasm"}}', f.env.apiBaseURL, f.env);
     const root = await f.load('/root.js');
     await runInHostTask(() => {
-      expect(Reflect.get(evaluate(root!), 'code')).toBe(f.env.project(f.record('/answer.wasm').moduleSource));
+      expect(Reflect.get(evaluate(root!), 'code')).toBe(f.env.project(f.module('/answer.wasm').moduleSource));
     });
     expect(f.requests).toEqual(['/root.js', '/answer.wasm']);
   });
@@ -141,17 +141,16 @@ describe('HTML WebAssembly source imports', () => {
   it('returns a source record from the dynamic continuation without traversing its graph', async () => {
     const f = await fixture({ '/source.js': 'import source code from "./answer.wasm";', '/answer.wasm': callImport('unmapped') });
     await f.load('/source.js');
-    const record = f.record('/answer.wasm');
+    const record = f.module('/answer.wasm');
+    const delivered = Promise.withResolvers<unknown>();
     await runInHostTask(() => {
-      const dynamic = new DynamicModuleImport(f.env);
-      const resolved = vi.fn();
-      dynamic.promise.observe(resolved, (error) => { throw error; });
-      dynamic.continue('source', { type: 'normal', value: record });
+      const result = new DynamicImport(null, f.env).importModule('./answer.wasm', {}, 'source');
+      void result.then(delivered.resolve, delivered.reject);
       f.env.responsibleEventLoop.performMicrotaskCheckpoint();
-      expect(resolved).toHaveBeenCalledExactlyOnceWith(record.code);
-      expect(record.code.status).toBe('unlinked');
-      expect(record.requestedModulesLoaded).toBe(false);
     });
+    expect(await delivered.promise).toBe(record.code);
+    expect(record.code.status).toBe('unlinked');
+    expect(record.requestedModulesLoaded).toBe(false);
     expect(f.requests).toEqual(['/source.js', '/answer.wasm']);
   });
 
@@ -175,7 +174,7 @@ describe('HTML WebAssembly source imports', () => {
     })()`);
     expect(value).toEqual([true, true, 42]);
     expect(f.requests).toEqual(['/root.js', '/answer.wasm']);
-    expect(f.record('/answer.wasm').code.instance).toBeUndefined();
+    expect(f.module('/answer.wasm').code.instance).toBeUndefined();
   });
 
   testImport('dynamic source imports reject JavaScript with the author realm SyntaxError', async () => {
@@ -228,9 +227,9 @@ async function fixture(resources: Record<string, Resource | undefined>) {
     load: (path: string) => new Promise<ModuleScript | null>((complete) => {
       env.fetchExternalModuleScriptGraph(env.parseURL(`https://modules.test${path}`)!, new ScriptFetchOptions(), complete);
     }),
-    record: (path: string) => {
+    module: (path: string) => {
       const script = env.moduleMap.get(env.parseURL(`https://modules.test${path}`)!, 'javascript-or-wasm') as ModuleScript;
-      return script.record as JSWasmModuleRecord;
+      return script.compiled as CompiledWasmModule;
     },
   };
 }
@@ -243,7 +242,7 @@ function evaluate(script: ModuleScript): object {
   script.env.responsibleEventLoop.performMicrotaskCheckpoint();
   expect(rejected).not.toHaveBeenCalled();
   expect(resolved).toHaveBeenCalledOnce();
-  return script.env.realm.getModuleNamespace(script.record!.code);
+  return script.env.realm.getModuleNamespace(script.compiled!.code);
 }
 
 const { binary, constant, callImport } = createRequire(__filename)('../../../node-compat/test/support/wasm-fixtures.cjs') as {

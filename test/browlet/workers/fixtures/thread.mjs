@@ -4,7 +4,7 @@ import { threadId, isMainThread, workerData } from 'node:worker_threads';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
-  AgentCluster, ClassicScript, EventLoop, JavaScriptModuleScript, ScriptFetchOptions,
+  AgentCluster, ClassicScript, EventLoop, JSModuleScript, ScriptFetchOptions,
   SharedWorkerAgent, WindowAgent, createTaskSource, networkingTaskSource,
 } from '../../../../src/browlet/scripting/index.ts';
 import { addon, JSThread } from '../../../../src/js-engine/index.ts';
@@ -57,7 +57,7 @@ function startFixture() {
         modules: env.moduleMap.entries.map(({ key, value }) => ({
           url: serializeURL(key[0]),
           type: key[1],
-          status: value?.record?.code.status ?? null,
+          status: value?.compiled?.code.status ?? null,
           sameEnvironment: value?.env === env,
         })),
       });
@@ -247,7 +247,7 @@ function startFixture() {
       case 'resolve-module-specifiers': {
         const env = runtime.environment;
         const script = message.referrerURL === undefined ? null
-          : new JavaScriptModuleScript('', env, parseURL(message.referrerURL).url, new ScriptFetchOptions());
+          : new JSModuleScript('', env, parseURL(message.referrerURL).url, new ScriptFetchOptions());
         runtime.send(message.specifiers.map((specifier) => {
           try { return { url: serializeURL(env.resolveModuleSpecifier(script, specifier)) }; }
           catch (error) { return { error: error.message, realmTypeError: error instanceof env.realm.TypeError }; }
@@ -275,7 +275,7 @@ function startFixture() {
         // Invalid source distinguishes disabled scripting's empty script from
         // actual parsing. Neither case runs author code or needs shared stores.
         const classic = new ClassicScript('}', env, env.apiBaseURL, options);
-        const module = new JavaScriptModuleScript('}', env, env.apiBaseURL, options);
+        const module = new JSModuleScript('}', env, env.apiBaseURL, options);
         runtime.send({
           enabled: env.isScriptingEnabled(), canRun: env.canRunScript(),
           classicParseError: classic.parseError !== null, moduleParseError: module.parseError !== null,
@@ -688,9 +688,9 @@ function runWorkerError(runtime, message, followupTaskSource) {
   // locally while outside delivery carries only its diagnostic string.
   const source = 'const failure = function workerFailure() {}; failure.toString = () => "worker failed"; throw failure;';
   const script = message.scriptType === 'module'
-    ? new JavaScriptModuleScript(source, env, env.apiBaseURL, new ScriptFetchOptions())
+    ? new JSModuleScript(source, env, env.apiBaseURL, new ScriptFetchOptions())
     : new ClassicScript(source, env, env.apiBaseURL, new ScriptFetchOptions(), message.muted === true);
-  if (message.scriptType === 'module') script.record.link();
+  if (message.scriptType === 'module') script.compiled.link();
   script.run();
   traceWorker('error script returned');
   // Module rejection reporting finishes at the checkpoint before this reply.
@@ -783,9 +783,9 @@ function runBlockingWorkerScript(runtime, state, scriptType, entry = 'script') {
     // promise checkpoint would be the wrong contract for Worker.terminate().
     env.queueTask('dom-manipulation', { run: () => { Atomics.store(state, 5, 1); } });
   }
-  const Script = scriptType === 'classic' ? ClassicScript : JavaScriptModuleScript;
+  const Script = scriptType === 'classic' ? ClassicScript : JSModuleScript;
   const script = new Script(source, env, env.apiBaseURL, new ScriptFetchOptions());
-  if (scriptType === 'module') script.record.link();
+  if (scriptType === 'module') script.compiled.link();
   void script.run();
 }
 

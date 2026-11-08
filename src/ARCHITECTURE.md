@@ -368,7 +368,11 @@ the record used by HTML: realm, function, ScriptOrModule, and the incumbent skip
 counter. Each `BrowletRealm` retains one context; the environment's
 `realmExecutionContext` query returns it. EventLoop owns the agent's modeled
 stack and backup incumbent stack. Controlled script entries push the retained
-context followed by a script context. This does not intercept arbitrary author
+context followed by a script context. Direct embedder entries mark their context
+with `isHostEntry` and supply `incumbentEnv`, leaving ScriptOrModule null. That
+explicit boundary prevents inheriting an unrelated caller's active script;
+CompiledScriptOrModule is abstract and represents only retained script/module records.
+This does not intercept arbitrary author
 function calls. Incumbent-sensitive platform bindings can opt into native entry
 capture. A `JSExecutionContext` scopes that observation on the same stack with
 the method's current realm and the observed `incumbentEnv`, but no
@@ -376,7 +380,7 @@ ScriptOrModule. It leaves retained entry selection and active-script provenance
 unchanged; callback skipping applies to the observation as well as script records.
 `Window.postMessage()` is the first consumer. JobCallback records retain
 incumbent settings plus a fresh context for the active script. The addon resolves
-its compilation metadata to retained VM code, and `JSScriptOrModule` owns the weak
+its compilation metadata to retained VM code, and `CompiledScriptOrModule` owns the weak
 association from that code to its HTML record. Absent metadata uses the modeled
 stack; foreign/unassociated code does not inherit its script. Make/call hooks
 restore the captured context across invocation and unwind it on return or throw.
@@ -424,20 +428,41 @@ Import metadata uses Node's lazy `initializeImportMeta` callback, installed duri
 HTML source-text compilation. The initializer retains the exact HTML module
 record and installs its `HostGetImportMetaProperties` results; its realm-owned
 resolver uses that module's environment and base URL, without active-script lookup.
-`module-loading.ts` owns HTML's `HostLoadImportedModule` and supported-attribute
-policy. Static traversal calls it directly; the realm's installed dynamic-import
-callbacks reach the same operation. `host-hooks.ts` owns engine callback installation
-and its callback implementations. Loading uses the existing specifier resolver,
-module map, and script fetchers. A modeled graph traversal
-owns pending visits and cycles separately from HTML's fetch state; successful
-loading supplies the dependency associations to the engine's linker. Completion
-uses `env.InternalPromise`. Dynamic import uses the same hook with absent HTML
-fetch state. Node-shaped compilation callbacks retain the exact classic/module
-record; context and direct-evaluation callbacks supply the realm referrer.
-ContinueDynamicImport loads descendants, links, and waits for evaluation through
-internal promises. Only the Node callback boundary returns a native Promise for
-the evaluated engine Module; Node converts it to a namespace and resolves the
-author's import Promise. This avoids adopting a namespace's exported `then` twice.
+`ImportHandler` in `import-handler.ts` owns the shared dependency-loading path.
+It retains the fetch policy, asks the referring compiled script/module to retain
+successful associations, and delivers completion to the graph traversal. Its
+result-producing fetch helper distinguishes fetch failures from script errors.
+`StaticImport` owns one HTML root's descendant-loading operation, including its
+fetch client, destination, custom fetch hook, and first script error. Errors and
+successful associations are retained before traversal can ignore late results.
+`module-loading-state.ts` owns ECMAScript's pending visits, visited set, and
+completion. It calls the supplied handler's `load()` method without owning HTML
+fetch policy or error state. Source/evaluation phases select single/recursive
+graph loading explicitly.
+
+Classic and source-text module compilation pass a `DynamicImport` instance to
+JS Engine. The handler retains the HTML script, whose compiled association is
+available when code later imports a module. Each invocation allocates its own
+completion and coordinates loading, linking, and evaluation. Static and dynamic
+handlers share `ImportHandler`'s dependency loading; concurrent dynamic imports
+share the handler while retaining independent results. JS Engine accepts its
+narrow `DynamicImportHandler` contract and creates the backend callback.
+BrowletRealm lazily retains its default handler for context imports, supplying
+no referring script. JSRealm registers the callback during context construction;
+that callback reads BrowletRealm's getter only when an import occurs, after the
+environment is attached. Replacing the attached environment clears the cache.
+Standalone JSRealm may omit the host callback.
+Successful no-referrer associations remain on the realm. `module-request.ts`
+owns request comparison, module-type selection, and supported attributes.
+Fetching reuses the existing specifier resolver, module map, and script fetchers.
+
+Graph and import completions use `env.InternalPromise` to observe on the owning
+browser queue. `UserAgent.HostPromise` observes on Node's host queue and is not
+interchangeable here. The original callback ordering is preserved without adding
+Promise checkpoints around individual loads.
+Only the Node callback boundary returns a native Promise for the requested engine
+Module; Node converts it to a namespace and resolves the author's import Promise.
+This avoids adopting a namespace's exported `then` twice.
 Module-specific context/async restoration remains a separate dependency.
 
 Wasm parsing retains the addon's source object, external requests, and HTML script

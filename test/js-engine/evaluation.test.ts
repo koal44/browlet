@@ -53,6 +53,6 @@ describe('realm source evaluation', () => {
 
 function createRealm(): JSRealm {
   return new JSRealm(createMicrotaskQueue(), {
-    importModuleDynamically: () => { throw new Error('Unexpected import'); },
+    dynamicImport: { importModule() { throw new Error('Unexpected import'); } },
   });
 }

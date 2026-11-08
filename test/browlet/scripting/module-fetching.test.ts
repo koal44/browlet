@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InternalError } from '../../../src/infra/index';
 import { Browlet } from '../../../src/browlet/browlet';
 import * as scriptClasses from '../../../src/browlet/scripting/script';
-import { JSModuleRequest, type ModuleScript, type ModuleType } from '../../../src/browlet/scripting/script';
+import { type ModuleScript, type ModuleType } from '../../../src/browlet/scripting/script';
+import { ModuleRequest } from '../../../src/browlet/scripting/module-request';
 import { ScriptFetchOptions } from '../../../src/browlet/scripting/script-fetch-options';
 import type { PerformScriptFetch } from '../../../src/browlet/scripting/script-fetching';
 import { utf8Encode } from '../../../src/encoding/index';
@@ -23,7 +24,7 @@ describe('module request type', () => {
     [undefined, 'javascript-or-wasm'], ['css', 'css'], ['json', 'json'], ['text', 'text'],
     ['javascript-or-wasm', null], ['javascript', null], ['wasm', null], ['unknown', null], ['', null],
   ] as const)('selects the supported type for attribute %s', (attribute, expected) => {
-    const request = moduleRequest(attribute) ?? new JSModuleRequest('./module');
+    const request = moduleRequest(attribute) ?? new ModuleRequest('./module');
     const type: ModuleType | null = request.getModuleType();
     expect(type).toBe(expected);
   });
@@ -312,7 +313,7 @@ describe('fetch a single imported module script', () => {
     const { env, url } = await createFixture();
     const complete = vi.fn();
     const performFetch = vi.fn<PerformScriptFetch>();
-    const request = new JSModuleRequest('./module', [
+    const request = new ModuleRequest('./module', [
       { key: 'type', value: 'json' }, { key, value: 'ignored' },
     ]);
 
@@ -377,7 +378,7 @@ describe('fetch a single imported module script', () => {
     const performFetch = vi.fn<PerformScriptFetch>();
 
     env.fetchSingleImportedModuleScript(
-      url, env, 'script', new ScriptFetchOptions(), 'client', new JSModuleRequest('./module.js'), vi.fn(), performFetch,
+      url, env, 'script', new ScriptFetchOptions(), 'client', new ModuleRequest('./module.js'), vi.fn(), performFetch,
     );
 
     expect(performFetch).toHaveBeenCalledWith(expect.any(Object), false, expect.any(Function));
@@ -398,7 +399,7 @@ async function createFixture() {
   };
   // Constructor mocks must be constructible; arrows and mockReturnValue are not suitable here.
   const create = {
-    javascript: vi.spyOn(scriptClasses, 'JavaScriptModuleScript').mockImplementation(function() { return scripts.javascript; }),
+    javascript: vi.spyOn(scriptClasses, 'JSModuleScript').mockImplementation(function() { return scripts.javascript; }),
     css: vi.spyOn(scriptClasses, 'CSSModuleScript').mockImplementation(function() { return scripts.css; }),
     json: vi.spyOn(scriptClasses, 'JSONModuleScript').mockImplementation(function() { return scripts.json; }),
     text: vi.spyOn(scriptClasses, 'TextModuleScript').mockImplementation(function() { return scripts.text; }),
@@ -407,6 +408,6 @@ async function createFixture() {
   return { env, url: env.parseURL('https://modules.test/module.js')!, scripts, create };
 }
 
-function moduleRequest(type: string | undefined): JSModuleRequest | undefined {
-  return type === undefined ? undefined : new JSModuleRequest('./module', [{ key: 'type', value: type }]);
+function moduleRequest(type: string | undefined): ModuleRequest | undefined {
+  return type === undefined ? undefined : new ModuleRequest('./module', [{ key: 'type', value: type }]);
 }

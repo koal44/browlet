@@ -8,8 +8,10 @@ import { serializeURL } from '../../../src/url/index';
 import { idlType } from '../../../src/web-idl/core/index';
 import { Browlet } from '../../../src/browlet/browlet';
 import type { BrowletEnvironment } from '../../../src/browlet/environment/index';
-import { ClassicScript, JavaScriptModuleScript } from '../../../src/browlet/scripting/script';
+import { ClassicScript, JSModuleScript } from '../../../src/browlet/scripting/script';
 import { ScriptFetchOptions } from '../../../src/browlet/scripting/script-fetch-options';
+import { DynamicImport } from '../../../src/browlet/scripting/import-handler';
+import { BrowletRealm } from '../../../src/browlet/scripting/realm';
 import { mockHTTPTransport } from '../../fetch/transport-fixture';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { runInHostTask } from '../../support/tasks';
@@ -35,12 +37,22 @@ describe('HTML dynamic import', () => {
     expect(env.responsibleEventLoop.executionContextStack).toEqual([]);
   });
 
-  testImport('uses the document base for imports in Browlet source-string evaluation', async () => {
-    const { browser, requests } = await fixture({ '/child.js': 'export const answer = 42;' });
+  testImport('lazily reuses the realm importer with the document base in source-string evaluation', async () => {
+    const getDefaultImport = vi.spyOn(BrowletRealm.prototype, 'defaultDynamicImport', 'get');
+    const { browser, env, requests } = await fixture({ '/child.js': 'export const answer = 42;' });
+    expect(getDefaultImport).not.toHaveBeenCalled();
+    expect(await browser.evaluate(() => 5)).toBe(5);
+    expect(getDefaultImport).not.toHaveBeenCalled();
     // Exercise source-string evaluation directly: Vitest rewrites import() in
     // host function bodies, so serializing such a function would test its helper.
     const value = await browser.evaluate('import("./child.js").then(module => module.answer)');
     expect(value).toBe(42);
+    expect(getDefaultImport).toHaveBeenCalledOnce();
+    const importer = env.realm.defaultDynamicImport;
+    expect(getDefaultImport).toHaveNthReturnedWith(1, importer);
+    env.realm.env = env;
+    expect(await browser.evaluate('import("./child.js").then(module => module.answer)')).toBe(42);
+    expect(env.realm.defaultDynamicImport).toBe(importer);
     expect(requests).toEqual(['https://modules.test/child.js']);
   });
 
@@ -72,20 +84,20 @@ describe('HTML dynamic import', () => {
   testImport('retains a module referrer across await and calls from another Window', async () => {
     const owner = await fixture({ '/app/child.js': 'export const answer = 42;' });
     const caller = await fixture({});
-    const script = new JavaScriptModuleScript(
+    const script = new JSModuleScript(
       'export async function load() { await 0; return import("./child.js"); }',
       owner.env, owner.env.parseURL('https://modules.test/app/root.js')!, new ScriptFetchOptions(),
     );
-    script.record!.link();
+    script.compiled!.link();
     await runInHostTask(() => { script.run(true); owner.env.responsibleEventLoop.performMicrotaskCheckpoint(); });
-    const namespace = owner.env.realm.getModuleNamespace(script.record!.code);
+    const namespace = owner.env.realm.getModuleNamespace(script.compiled!.code);
     Reflect.set(caller.env.global, 'loadFromOwner', Reflect.get(namespace, 'load'));
 
     const observation = await observe(owner.env, () => classic(caller.env, 'loadFromOwner()'));
     expect(fulfilled(await settled(owner.env, observation))).toMatchObject({ answer: 42 });
     expect(owner.requests).toEqual(['https://modules.test/app/child.js']);
     expect(caller.requests).toEqual([]);
-    expect(script.record!.loadedModules.size).toBe(1);
+    expect(script.compiled!.loadedModules.size).toBe(1);
     expect(owner.env.realm.loadedModules.size).toBe(0);
   });
 
@@ -99,6 +111,11 @@ describe('HTML dynamic import', () => {
     }
     expect(first.requests).toEqual(['https://modules.test/child.js']);
     expect(second.requests).toEqual(['https://modules.test/child.js']);
+    for (const { env } of [first, second]) {
+      expect(env.realm.loadedModules.size).toBe(1);
+      const [module] = env.realm.loadedModules.values();
+      expect(module!.realm).toBe(env.realm);
+    }
   });
 
   testImport('retains the classic-script referrer for Function-created imports', async () => {
@@ -134,7 +151,7 @@ describe('HTML dynamic import', () => {
   it.fails('allocates unsupported-attribute errors in the executing realm of a borrowed Function constructor', async () => {
     const source = await fixture({});
     const executing = await fixture({});
-    const importing = vi.spyOn(source.env.realm, 'importModuleDynamically');
+    const importing = vi.spyOn(DynamicImport.prototype, 'importModule');
     Reflect.set(source.env.global, 'OtherFunction', executing.env.realm.Function);
     const observation = await observe(executing.env, () => classic(source.env,
       `OtherFunction("return import('./borrowed.js', { with: { unsupported: 'x' } });")()`,
@@ -157,6 +174,21 @@ describe('HTML dynamic import', () => {
     expect(namespaces[0]).toBe(namespaces[1]);
     expect(Reflect.get(env.global, 'evaluations')).toBe(1);
     expect(requests).toEqual(['https://modules.test/app/child.js']);
+  });
+
+  testImport('keeps concurrent success and failure independent on one script handler', async () => {
+    const { env, requests } = await fixture({ '/app/child.js': 'export const answer = 42;' });
+    const observation = await observe(env, () => classic(env,
+      'Promise.allSettled([import("./child.js"), import("./missing.js")])',
+    ));
+    const results = fulfilled(await settled(env, observation)) as PromiseSettledResult<{ answer: number; }>[];
+    expect(results).toHaveLength(2);
+    expect(results[0]).toMatchObject({ status: 'fulfilled', value: { answer: 42 } });
+    const failure = results[1];
+    expect(failure?.status).toBe('rejected');
+    if (failure?.status !== 'rejected') throw new Error('Expected the missing module to reject');
+    expect(failure.reason).toBeInstanceOf(env.realm.TypeError);
+    expect(requests).toEqual(['https://modules.test/app/child.js', 'https://modules.test/app/missing.js']);
   });
 
   for (const outcome of ['fulfillment', 'rejection'] as const) {
@@ -220,7 +252,7 @@ describe('HTML dynamic import', () => {
         '/app/link.js': 'import { missing } from "./child.js";',
         '/app/descendant.js': 'import "./invalid.js";',
       });
-      const importing = vi.spyOn(env.realm, 'importModuleDynamically');
+      const importing = vi.spyOn(DynamicImport.prototype, 'importModule');
       const observation = await observe(env, () => classic(env, failure.source));
       const result = await settled(env, observation);
       expect(result.type).toBe('rejected');
@@ -262,7 +294,7 @@ describe('HTML dynamic import', () => {
       // These global implementations are unfinished; exercise their explicit
       // environment contract while retaining real compilation and native import.
       vi.spyOn(env, kind, 'get').mockReturnValue(true);
-      const importing = vi.spyOn(env.realm, 'importModuleDynamically');
+      const importing = vi.spyOn(DynamicImport.prototype, 'importModule');
       const observation = await observe(env, () => classic(env, 'import("./child.js")'));
       const result = await settled(env, observation);
       expect(result.type).toBe('rejected');

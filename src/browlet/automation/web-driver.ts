@@ -265,13 +265,13 @@ export class WebDriver {
   }
 
   #evaluateRecord(script: ClassicScript): ScriptCompletion {
-    if (script.record === null) {
+    if (script.compiled === null) {
       // SPEC_GAP(bidi-script-parse-errors): BiDi omits HTML creation's null-record
       // branch. Follow Firefox, Chromium, and WPT: report the retained parse error
       // through the command's ordinary exception-result path.
       return { type: 'throw', value: script.parseError };
     }
-    const completion = script.record.evaluate();
+    const completion = script.compiled.evaluate();
     if (completion === null) {
       // TODO(WebDriver BiDi): Connect command cancellation/realm destruction to
       // the backend's termination outcome; HTML's run algorithm is not this command.

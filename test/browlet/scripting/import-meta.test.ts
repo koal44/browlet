@@ -2,7 +2,7 @@ import { describe, expect, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import { ImportMap } from '../../../src/browlet/scripting/import-map';
-import { JavaScriptModuleScript } from '../../../src/browlet/scripting/script';
+import { JSModuleScript } from '../../../src/browlet/scripting/script';
 import { ScriptFetchOptions } from '../../../src/browlet/scripting/script-fetch-options';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { runInHostTask } from '../../support/tasks';
@@ -48,8 +48,8 @@ describe('HTML HostGetImportMetaProperties', () => {
       const source = 'export function readMeta() { return import.meta; }';
       const first = f.script(source);
       const second = f.script(source);
-      const initializeFirst = vi.spyOn(first.record!, 'getImportMetaProperties');
-      const initializeSecond = vi.spyOn(second.record!, 'getImportMetaProperties');
+      const initializeFirst = vi.spyOn(first.compiled!, 'getImportMetaProperties');
+      const initializeSecond = vi.spyOn(second.compiled!, 'getImportMetaProperties');
       const a = evaluate(first) as { readMeta(): ImportMeta; };
       const b = evaluate(second) as { readMeta(): ImportMeta; };
       expect(initializeFirst).not.toHaveBeenCalled();
@@ -155,13 +155,13 @@ describe('HTML HostGetImportMetaProperties', () => {
       const f = fixture();
       const gate = f.env.realm.NativePromise.withResolvers<void>();
       Reflect.set(f.env.global, 'gate', gate.promise);
-      const child = new JavaScriptModuleScript(
+      const child = new JSModuleScript(
         'await gate; export const meta = import.meta;', f.env,
         f.env.parseURL('https://modules.test/dependency/child.js')!, new ScriptFetchOptions(),
       );
       const root = f.script('export { meta as childMeta } from "./child.js"; export const meta = import.meta;');
-      root.record!.loadedModules.set(root.record!.requestedModules[0]!, child.record!);
-      root.record!.link();
+      root.compiled!.loadedModules.set(root.compiled!.requestedModules[0]!, child.compiled!);
+      root.compiled!.link();
       let result: { state: string; error?: unknown; } = { state: 'pending' };
       root.run(true).observe(() => { result = { state: 'fulfilled' }; }, (error) => {
         result = { state: 'rejected', error };
@@ -171,7 +171,7 @@ describe('HTML HostGetImportMetaProperties', () => {
       gate.resolve();
       f.env.responsibleEventLoop.performMicrotaskCheckpoint();
       expect(result).toEqual({ state: 'fulfilled' });
-      const { meta, childMeta } = f.env.realm.getModuleNamespace(root.record!.code) as {
+      const { meta, childMeta } = f.env.realm.getModuleNamespace(root.compiled!.code) as {
         meta: ImportMeta; childMeta: ImportMeta;
       };
       expect(childMeta.url).toBe('https://modules.test/dependency/child.js');
@@ -190,20 +190,20 @@ function fixture() {
   const baseURL = env.parseURL('https://modules.test/app/main.js?query#fragment')!;
   return {
     browser, env, baseURL, route,
-    script: (source: string) => new JavaScriptModuleScript(source, env, baseURL, new ScriptFetchOptions()),
+    script: (source: string) => new JSModuleScript(source, env, baseURL, new ScriptFetchOptions()),
   };
 }
 
-function evaluate(script: JavaScriptModuleScript): object {
+function evaluate(script: JSModuleScript): object {
   expect(script.parseError).toBeNull();
-  script.record!.link();
+  script.compiled!.link();
   let result: { state: string; error?: unknown; } = { state: 'pending' };
   script.run(true).observe(() => { result = { state: 'fulfilled' }; }, (error) => {
     result = { state: 'rejected', error };
   });
   script.env.responsibleEventLoop.performMicrotaskCheckpoint();
   expect(result).toEqual({ state: 'fulfilled' });
-  return script.env.realm.getModuleNamespace(script.record!.code);
+  return script.env.realm.getModuleNamespace(script.compiled!.code);
 }
 
 interface ImportMeta {

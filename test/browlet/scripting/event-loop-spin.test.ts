@@ -6,7 +6,8 @@ import { DocumentState } from '../../../src/browlet/browsing/navigation/state/in
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/top-level-traversable';
 import { JSExecutionContext } from '../../../src/browlet/scripting/execution-context';
 import type { Task } from '../../../src/browlet/scripting/event-loop';
-import { JSScriptOrModule } from '../../../src/browlet/scripting/script';
+import { ClassicScript } from '../../../src/browlet/scripting/script';
+import { ScriptFetchOptions } from '../../../src/browlet/scripting/script-fetch-options';
 import { networkingTaskSource } from '../../../src/browlet/scripting/tasks';
 import { createManualEventLoop, createManualUserAgent } from '../../support/browlet-agent';
 import { getRelevantRealm } from '../../support/browlet-binding';
@@ -52,7 +53,8 @@ describe('continuation-based event-loop spinning', () => {
     const { loop, env, document, turns } = createFixture();
     const ready: (() => void)[] = [];
     const checkpointContexts: (JSExecutionContext | null)[] = [];
-    const context = new JSExecutionContext({ realm: env.realm, scriptOrModule: new JSScriptOrModule(env.realm, null) });
+    const script = new ClassicScript('', env, env.apiBaseURL, new ScriptFetchOptions());
+    const context = new JSExecutionContext({ realm: env.realm, scriptOrModule: script.compiled });
     const failure = new Error('continuation failed');
     const cleanup = vi.fn();
     const task = loop.queueTask(networkingTaskSource, document, {

@@ -5,10 +5,12 @@ import { utf8Encode } from '../../../src/encoding/index';
 import { Browlet } from '../../../src/browlet/browlet';
 import type { BrowletEnvironment } from '../../../src/browlet/environment/index';
 import * as scriptClasses from '../../../src/browlet/scripting/script';
-import { JSSourceTextModuleRecord, type JavaScriptModuleScript, type ModuleScript } from '../../../src/browlet/scripting/script';
+import { CompiledSourceTextModule, type JSModuleScript, type ModuleScript } from '../../../src/browlet/scripting/script';
+import { ModuleRequest } from '../../../src/browlet/scripting/module-request';
 import {
-  fetchWorkletModuleWorkerScriptGraph, type ModuleGraphLoadingState, type PerformScriptFetch,
+  fetchWorkletModuleWorkerScriptGraph, type PerformScriptFetch,
 } from '../../../src/browlet/scripting/script-fetching';
+import type { ImportedModuleFetchOptions } from '../../../src/browlet/scripting/module-loading';
 import { ModuleResponsesMap } from '../../../src/browlet/worklets/module-responses-map';
 import { FetchHeaders } from '../../../src/fetch/headers';
 import { FetchRequest } from '../../../src/fetch/request';
@@ -39,12 +41,12 @@ describe('worker module graphs', () => {
     const complete = vi.fn();
 
     target.env.fetchModuleWorkerScriptGraph(url, fetchClient, 'worker', 'include', complete);
-    const state = await scope.waitFor(target.started);
+    const options = await scope.waitFor(target.started);
 
     expect(transport).toHaveBeenCalledOnce();
     expect(construct).toHaveBeenCalledExactlyOnceWith('export default 1;', target.env, url,
       expect.objectContaining({ credentialsMode: 'include' }));
-    expect(state).toEqual({ errorToRethrow: null, fetchClient, destination: 'worker', performFetch: null });
+    expect(options).toEqual({ fetchClient, destination: 'worker', performFetch: null });
     expect(fetchClient.moduleMap.get(url, 'javascript-or-wasm')).toBeUndefined();
     expect(target.env.moduleMap.get(url, 'javascript-or-wasm')).toBe(target.script);
     expect(complete).not.toHaveBeenCalled();
@@ -92,10 +94,10 @@ describe('worker module graphs', () => {
       });
 
       fetchWorkletModuleWorkerScriptGraph(url, fetchClient, 'paintworklet', credentialsMode, target.env, complete, performFetch);
-      const state = await scope.waitFor(target.started);
+      const options = await scope.waitFor(target.started);
 
       expect(construct).toHaveBeenCalledOnce();
-      expect(state).toEqual({ errorToRethrow: null, fetchClient, destination: 'paintworklet', performFetch });
+      expect(options).toEqual({ fetchClient, destination: 'paintworklet', performFetch });
       await scope.waitFor(finish(target));
       expect(complete).toHaveBeenCalledExactlyOnceWith(target.script);
     },
@@ -135,17 +137,17 @@ describe('worklet module graphs', () => {
     const responses = new ModuleResponsesMap();
     const transport = mockHTTPTransport(fetchClient.userAgent, (_request, listener) => respond(listener));
     target.env.fetchWorkletScriptGraph(url, fetchClient, 'audioworklet', 'same-origin', responses, vi.fn());
-    const state = await scope.waitFor(target.started);
-    expect(state.performFetch).not.toBeNull();
+    const options = await scope.waitFor(target.started);
+    expect(options.performFetch).not.toBeNull();
     const request = new FetchRequest(dependencyURL, fetchClient);
     request.client = fetchClient;
     request.destination = 'audioworklet';
 
     const response = await scope.waitFor(new Promise<FetchResponse>((complete) => {
-      state.performFetch!(request, false, (result) => complete(result));
+      options.performFetch!(request, false, (result) => complete(result));
     }));
     const replay = vi.fn();
-    state.performFetch!(request, false, replay);
+    options.performFetch!(request, false, replay);
 
     expect(transport).toHaveBeenCalledTimes(2);
     expect(replay).toHaveBeenCalledExactlyOnceWith(response, utf8Encode('export default 1;'));
@@ -290,15 +292,20 @@ async function createEnvironment(scope: Fixture, environments: Set<BrowletEnviro
 }
 
 function createModule(env: BrowletEnvironment, scope: Fixture) {
-  const script: JavaScriptModuleScript = createScriptState(env);
-  const record = new JSSourceTextModuleRecord(script, env.realm.compileModule('', 'fixture.js'));
-  script.record = record;
+  const script: JSModuleScript = createScriptState(env);
+  const record = new CompiledSourceTextModule(script, env.realm.compileModule('', 'fixture.js'));
+  script.compiled = record;
   const loading = env.InternalPromise.withResolvers(internalType<void>());
   scope.onCleanup(() => { loading.resolve(undefined); });
-  const started = Promise.withResolvers<ModuleGraphLoadingState>();
-  const load = vi.spyOn(record, 'loadRequestedModules').mockImplementation((state) => {
-    expect(state).toBeDefined();
-    started.resolve(state!);
+  const started = Promise.withResolvers<ImportedModuleFetchOptions>();
+  vi.spyOn(env, 'fetchSingleImportedModuleScript').mockImplementation((
+    _url, fetchClient, destination, _options, _referrer, _request, _complete, performFetch,
+  ) => {
+    started.resolve({ fetchClient, destination, performFetch: performFetch ?? null });
+  });
+  const load = vi.spyOn(record, 'loadRequestedModules').mockImplementation((loadDependency) => {
+    // Exercise the supplied loader to inspect actual descendant fetch inputs.
+    loadDependency.load(record, new ModuleRequest('./dependency.js'), () => {});
     return loading.promise;
   });
   const link = vi.spyOn(record, 'link').mockImplementation(() => {});
@@ -306,7 +313,7 @@ function createModule(env: BrowletEnvironment, scope: Fixture) {
 }
 
 function mockCreation(...targets: ReturnType<typeof createModule>[]) {
-  return vi.spyOn(scriptClasses, 'JavaScriptModuleScript').mockImplementation(function(_source, env, baseURL, options) {
+  return vi.spyOn(scriptClasses, 'JSModuleScript').mockImplementation(function(_source, env, baseURL, options) {
     const target = targets.find((candidate) => candidate.env === env)!;
     target.script.baseURL = baseURL;
     target.script.fetchOptions = options;

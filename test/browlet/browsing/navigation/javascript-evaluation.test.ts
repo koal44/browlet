@@ -87,7 +87,7 @@ describe('javascript: classic-script evaluation', () => {
     expect(script!.fetchOptions).toEqual(new ScriptFetchOptions());
     expect(script!.mutedErrors).toBe(false);
     expect(script!.originalSourceURL).toBeNull();
-    expect(record).toBe(script!.record);
+    expect(record).toBe(script!.compiled);
     expect(loop.executionContextStack).toHaveLength(0);
   });
 

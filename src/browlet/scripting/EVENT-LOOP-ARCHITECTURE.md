@@ -272,7 +272,7 @@ stack empties. Ordinary JavaScript calls do not each invoke HTML preparation.
 | Current realm/settings | SharedArrayBuffer serialization policy; HTML/Image/Audio/Option construction; cross-origin Window/Location checks, frameElement, and access reporting; module resolution/import without a referrer; importScripts and pause timing. Capture the intended settings before parallel work. |
 | Entry settings | window.open source/base selection, Location access, document.open origin checks, origin extraction, and download request clients |
 | Incumbent settings | postMessage source/default origin, Location navigation source and activation, window.close checks, and JobCallback capture |
-| Active script | Topmost non-null ScriptOrModule, independent of incumbent skip counters. JobCallback and string-timer capture preserve script provenance and fetch options for later imports. |
+| Active script | Topmost non-null ScriptOrModule, independent of incumbent skip counters; direct host entries explicitly stop lookup with no script. JobCallback and string-timer capture preserve script provenance and fetch options for later imports. |
 | Running script | The running context's ScriptOrModule: rejected-Promise tracking and exception reporting consult its settings and muted-errors state |
 | Relevant realm | Platform-object ownership, supplied by Web IDL rather than selected from this stack |
 

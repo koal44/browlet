@@ -3,9 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InternalError } from '../../../src/infra/index';
 import { Browlet } from '../../../src/browlet/browlet';
 import {
-  ClassicScript, CSSModuleScript, JavaScriptModuleScript, JSONModuleScript, TextModuleScript,
-  WasmModuleScript, JSScriptRecord, JSSourceTextModuleRecord, JSSyntheticModuleRecord,
-  type JSWasmModuleRecord,
+  ClassicScript, CSSModuleScript, JSModuleScript, JSONModuleScript, TextModuleScript,
+  WasmModuleScript, CompiledScript, CompiledSourceTextModule, CompiledSyntheticModule,
+  type CompiledWasmModule,
 } from '../../../src/browlet/scripting/script';
 import { ScriptFetchOptions } from '../../../src/browlet/scripting/script-fetch-options';
 import { CSSStyleSheetImpl } from '../../../src/stylelet/index';
@@ -19,10 +19,10 @@ describe('create a classic script', () => {
     const { env, baseURL, options } = fixture();
     const script = new ClassicScript('var creationSideEffect = 1; throw new Error("not yet");', env, baseURL, options);
 
-    expect(script.record).toBeInstanceOf(JSScriptRecord);
-    expect(script.record!.script).toBe(script);
-    expect(script.record!.realm).toBe(env.realm);
-    expect(script.record!.code).toBeDefined();
+    expect(script.compiled).toBeInstanceOf(CompiledScript);
+    expect(script.compiled!.script).toBe(script);
+    expect(script.compiled!.realm).toBe(env.realm);
+    expect(script.compiled!.code).toBeDefined();
     expect(script.env).toBe(env);
     expect(script.baseURL).toBe(baseURL);
     expect(script.fetchOptions).toBe(options);
@@ -36,7 +36,7 @@ describe('create a classic script', () => {
   it.each(['let duplicate; let duplicate;', 'return 1;', 'export default 1;', 'const ='])('retains a realm-owned syntax error for %s', (source) => {
     const { env, baseURL, options } = fixture();
     const script = new ClassicScript(source, env, baseURL, options);
-    expect(script.record).toBeNull();
+    expect(script.compiled).toBeNull();
     expect(script.parseError).toBeInstanceOf(env.realm.SyntaxError);
     expect(script.errorToRethrow).toBe(script.parseError);
   });
@@ -56,7 +56,7 @@ describe('create a classic script', () => {
     const hasInstance = vi.fn(() => { throw new Error('author hasInstance'); });
     Object.defineProperty(env.realm.SyntaxError, Symbol.hasInstance, { value: hasInstance });
     const script = new ClassicScript('const =', env, baseURL, options);
-    expect(script.record).toBeNull();
+    expect(script.compiled).toBeNull();
     expect(Object.getPrototypeOf(script.parseError)).toBe(env.realm.SyntaxError.prototype);
     expect(hasInstance).not.toHaveBeenCalled();
   });
@@ -66,9 +66,9 @@ describe('create a classic script', () => {
     env.userAgent.scriptingEnabled = false;
     const disabled = new ClassicScript('const =', env, baseURL, options);
     const bypassed = new ClassicScript('const =', env, baseURL, options, false, null, true);
-    expect(disabled.record).toBeInstanceOf(JSScriptRecord);
+    expect(disabled.compiled).toBeInstanceOf(CompiledScript);
     expect(disabled.parseError).toBeNull();
-    expect(bypassed.record).toBeNull();
+    expect(bypassed.compiled).toBeNull();
     expect(bypassed.parseError).toBeInstanceOf(env.realm.SyntaxError);
   });
 
@@ -91,13 +91,13 @@ describe('create synthetic module scripts', () => {
     const { browser, env } = fixture();
     await browser.evaluate(() => { JSON.parse = () => { throw new Error('replaced'); }; });
     const script = new JSONModuleScript('{"items":[1]}', env);
-    const value = script.record!.defaultExport as { items: number[]; };
+    const value = script.compiled!.defaultExport as { items: number[]; };
     expect(Object.getPrototypeOf(value)).toBe(env.realm.objectPrototype);
     expect(Object.getPrototypeOf(value.items)).toBe(env.realm.Array.prototype);
     expect(value.items[0]).toBe(1);
-    expect(script.record).toBeInstanceOf(JSSyntheticModuleRecord);
-    expect(script.record!.script).toBe(script);
-    expect(script.record!.realm).toBe(env.realm);
+    expect(script.compiled).toBeInstanceOf(CompiledSyntheticModule);
+    expect(script.compiled!.script).toBe(script);
+    expect(script.compiled!.realm).toBe(env.realm);
     expect(script.baseURL).toBeNull();
     expect(script.fetchOptions).toBeNull();
     expect(script.parseError).toBeNull();
@@ -107,14 +107,14 @@ describe('create synthetic module scripts', () => {
   it.each(['null', 'false', '17', '"text"'])('retains a primitive JSON default export from %s', (source) => {
     const { env } = fixture();
     const script = new JSONModuleScript(source, env);
-    expect(script.record!.defaultExport).toEqual(JSON.parse(source));
+    expect(script.compiled!.defaultExport).toEqual(JSON.parse(source));
     expect(script.parseError).toBeNull();
   });
 
   it('retains JSON parse failure without setting the later rethrow field', () => {
     const { env } = fixture();
     const script = new JSONModuleScript('{', env);
-    expect(script.record).toBeNull();
+    expect(script.compiled).toBeNull();
     expect(script.parseError).toBeInstanceOf(env.realm.SyntaxError);
     expect(script.errorToRethrow).toBeNull();
   });
@@ -123,7 +123,7 @@ describe('create synthetic module scripts', () => {
     const { env } = fixture();
     const text = '\uFEFFhello\r\n\0world';
     const script = new TextModuleScript(text, env);
-    expect(script.record!.defaultExport).toBe(text);
+    expect(script.compiled!.defaultExport).toBe(text);
     expect(script.baseURL).toBeNull();
     expect(script.fetchOptions).toBeNull();
     expect(script.parseError).toBeNull();
@@ -133,7 +133,7 @@ describe('create synthetic module scripts', () => {
   it('constructs a CSS sheet without adopting it, discarding imports as replaceSync requires', () => {
     const { browser, env, baseURL } = fixture();
     const script = new CSSModuleScript('@import "not-fetched.css"; div { color: red; }', baseURL, env);
-    const sheet = unwrap(script.record!.defaultExport as CSSStyleSheet) as CSSStyleSheetImpl;
+    const sheet = unwrap(script.compiled!.defaultExport as CSSStyleSheet) as CSSStyleSheetImpl;
     expect(sheet).toBeInstanceOf(CSSStyleSheetImpl);
     expect(sheet.cssRules.length).toBe(1);
     expect(sheet.cssRules.item(0)!.cssText).toBe('div { color: red; }');
@@ -151,7 +151,7 @@ describe('create synthetic module scripts', () => {
     const failure = new env.DOMException('replacement failed', 'NotAllowedError');
     const replace = vi.spyOn(CSSStyleSheetImpl.prototype, 'replaceSync').mockImplementation(() => { throw failure; });
     const script = new CSSModuleScript('', baseURL, env);
-    expect(script.record).toBeNull();
+    expect(script.compiled).toBeNull();
     expect(script.parseError).toBe(failure);
     expect(script.errorToRethrow).toBeNull();
     const internal = new InternalError('replacement implementation missing');
@@ -162,10 +162,10 @@ describe('create synthetic module scripts', () => {
   it('does not blank CSS, JSON, or text when scripting is disabled', () => {
     const { env, baseURL } = fixture();
     env.userAgent.scriptingEnabled = false;
-    expect(new JSONModuleScript('42', env).record!.defaultExport).toBe(42);
-    expect(new TextModuleScript('kept', env).record!.defaultExport).toBe('kept');
+    expect(new JSONModuleScript('42', env).compiled!.defaultExport).toBe(42);
+    expect(new TextModuleScript('kept', env).compiled!.defaultExport).toBe('kept');
     const css = new CSSModuleScript('div { color: red; }', baseURL, env);
-    expect((css.record!.defaultExport as CSSStyleSheet).cssRules.length).toBe(1);
+    expect((css.compiled!.defaultExport as CSSStyleSheet).cssRules.length).toBe(1);
   });
 });
 
@@ -178,11 +178,11 @@ describe('module parser handoffs', () => {
     const parse = vi.spyOn(env.realm, 'parseModule').mockImplementation((_source, script) => {
       expect(script.baseURL).toBe(baseURL);
       expect(script.fetchOptions).toBe(options);
-      return new JSSourceTextModuleRecord(script, env.realm.compileModule('', 'fixture.js'));
+      return new CompiledSourceTextModule(script, env.realm.compileModule('', 'fixture.js'));
     });
-    const script = new JavaScriptModuleScript('export default 1;', env, baseURL, options);
+    const script = new JSModuleScript('export default 1;', env, baseURL, options);
     expect(parse).toHaveBeenCalledExactlyOnceWith(enabled ? 'export default 1;' : '', script);
-    expect(script.record!.script).toBe(script);
+    expect(script.compiled!.script).toBe(script);
     expect(script.parseError).toBeNull();
     expect(script.errorToRethrow).toBeNull();
   });
@@ -191,8 +191,8 @@ describe('module parser handoffs', () => {
     const { env, baseURL, options } = fixture();
     const first = new env.realm.SyntaxError('first');
     vi.spyOn(env.realm, 'parseModule').mockReturnValue([first, new env.realm.SyntaxError('second')]);
-    const script = new JavaScriptModuleScript('', env, baseURL, options);
-    expect(script.record).toBeNull();
+    const script = new JSModuleScript('', env, baseURL, options);
+    expect(script.compiled).toBeNull();
     expect(script.parseError).toBe(first);
     expect(script.errorToRethrow).toBeNull();
   });
@@ -206,13 +206,13 @@ describe('module parser handoffs', () => {
       expect(script.fetchOptions).toBe(options);
       // This test isolates HTML's disabled-scripting byte substitution from the
       // backend capability; real Wasm records are covered by wasm-modules.test.ts.
-      return Object.assign(Object.create(null) as JSWasmModuleRecord, { script });
+      return Object.assign(Object.create(null) as CompiledWasmModule, { script });
     });
     const script = new WasmModuleScript(bytes, env, baseURL, options);
     expect(parse).toHaveBeenCalledExactlyOnceWith(enabled ? bytes : new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]), script);
     if (enabled) expect(parse.mock.calls[0]![0]).toBe(bytes);
     expect(bytes).toEqual(new Uint8Array([10, 20, 30]));
-    expect(script.record!.script).toBe(script);
+    expect(script.compiled!.script).toBe(script);
     expect(script.parseError).toBeNull();
   });
 
@@ -221,7 +221,7 @@ describe('module parser handoffs', () => {
     const failure = new env.realm.Error('bad module');
     const parse = vi.spyOn(env.realm, 'parseWebAssemblyModule').mockImplementation(() => { throw failure; });
     const script = new WasmModuleScript(new Uint8Array(), env, baseURL, options);
-    expect(script.record).toBeNull();
+    expect(script.compiled).toBeNull();
     expect(script.parseError).toBe(failure);
     expect(script.errorToRethrow).toBeNull();
     const internal = new InternalError('parser unavailable');

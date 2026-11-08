@@ -4,7 +4,7 @@ import { parseURL } from '../../../src/url/index';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/index';
 import { createWorkerEnvironment } from '../../../src/browlet/integration/web-idl/index';
 import {
-  AgentCluster, ClassicScript, DedicatedWorkerAgent, JavaScriptModuleScript, ScriptFetchOptions, SharedWorkerAgent,
+  AgentCluster, ClassicScript, DedicatedWorkerAgent, JSModuleScript, ScriptFetchOptions, SharedWorkerAgent,
 } from '../../../src/browlet/scripting/index';
 import type { DedicatedWorkerGlobalScope, ErrorEvent, SharedWorkerGlobalScope } from '../../../src/browlet/platform';
 import { createManualEventLoop, createManualUserAgent } from '../../support/browlet-agent';
@@ -52,7 +52,7 @@ describe.each([false, true])('Worker runtime errors (HTML §10.2.5), shared: %s'
 
     script.run();
 
-    expect(script.record).toBeNull();
+    expect(script.compiled).toBeNull();
     expect(errors).toHaveLength(1);
     expect(errors[0]!.error).toBe(script.parseError);
     expect(errors[0]!.error).toBeInstanceOf(env.realm.SyntaxError);
@@ -65,9 +65,9 @@ describe.each([false, true])('Worker runtime errors (HTML §10.2.5), shared: %s'
     const errors: ErrorEvent[] = [];
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     scope.addEventListener('error', (event) => { event.preventDefault(); errors.push(event as ErrorEvent); });
-    const script = new JavaScriptModuleScript('throw new Error("module failed")', env, env.apiBaseURL, new ScriptFetchOptions());
-    assert(script.record !== null);
-    script.record.link();
+    const script = new JSModuleScript('throw new Error("module failed")', env, env.apiBaseURL, new ScriptFetchOptions());
+    assert(script.compiled !== null);
+    script.compiled.link();
 
     void script.run();
     env.responsibleEventLoop.performMicrotaskCheckpoint();

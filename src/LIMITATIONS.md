@@ -455,7 +455,11 @@ failure. See the [browser evidence](js-engine/ROADMAP.md#detached-context-promis
   the native API in HTML's examples is uncertain. Revisit with the actual example
   pages and platform APIs when supported. Manual stack selection/restoration tests
   do not establish automatic function-call tracking.
-  The direct-host-entry fallback remains in place. See the
+  Direct embedder entry still lacks a retained parsed record. Its execution
+  context now explicitly marks that host boundary and supplies the incumbent
+  environment, with null ScriptOrModule; no incomplete Script/Module object is
+  created. This preserves the boundary against inheriting an outer script without
+  claiming complete native provenance. See the
   [callback lifecycle record](browlet/scripting/EVENT-LOOP-ARCHITECTURE.md#node-v8-execution-contexts)
   and [tests](../test/browlet/scripting/callback-lifecycle.test.ts).
 - **Native cleanup reporting needs the addon.** With it, registry errors reach

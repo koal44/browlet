@@ -113,7 +113,7 @@ describe('pausing an event loop', () => {
       .mockReturnValueOnce(new Duration(100.125))
       .mockReturnValueOnce(new Duration(107.625));
     loop.runScriptEvaluation(env, () => {
-      const context = new JSExecutionContext({ realm: env.realm, scriptOrModule: script.record });
+      const context = new JSExecutionContext({ realm: env.realm, scriptOrModule: script.compiled });
       loop.executionContextStack.push(context);
       try {
         loop.pauseUntil(() => {

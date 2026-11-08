@@ -1,8 +1,8 @@
 import { InternalError, type TaskRecord } from '../../infra/index';
 import {
   JSRealm, bindAsyncContext, getAssociatedRealm, isObject,
-  type CompiledModule, type ModuleRequestPhase,
-  type GlobalAccessSelector, type GlobalObject, type GlobalPrototypeKind, type GlobalThis, type RealmFunctionSteps,
+  type GlobalAccessSelector, type GlobalObject, type GlobalPrototypeKind, type GlobalThis,
+  type ImportModuleDynamically, type RealmFunctionSteps,
 } from '../../js-engine/index';
 import { unsafeSharedCurrentTime, type DOMHighResTimeStamp, type UnsafeMoment } from '../../timing/index';
 import type { CallbackHooks, StampedPlatformObject, WebIDLEnvironment, WebIDLRealm } from '../../web-idl/index';
@@ -19,11 +19,12 @@ import { SandboxAgent, type Agent, type WindowAgent } from './agents';
 import { JSExecutionContext } from './execution-context';
 import type { TaskSource } from './event-loop';
 import type { QueuedTaskHandle } from './tasks';
-import { DynamicModuleImport, getSupportedImportAttributes, loadImportedModule, type ModuleReferrer } from './module-loading';
+import { DynamicImport } from './import-handler';
 import {
-  JSScriptRecord, JSSourceTextModuleRecord, JSWasmModuleRecord, JSModuleRequest,
-  type ClassicScript, type JavaScriptModuleScript, type JSModuleRecord, type WasmModuleScript,
+  CompiledScript, CompiledSourceTextModule, CompiledWasmModule,
+  type ClassicScript, type JSModuleScript, type CompiledModule, type WasmModuleScript,
 } from './script';
+import { ModuleRequest } from './module-request';
 
 /** Create an HTML realm and install the host-selected global and global-this identities. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#creating-a-new-javascript-realm
@@ -52,21 +53,19 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
   /** Whether this host permits changes to the global prototype chain. */
   isGlobalPrototypeChainMutable: boolean;
   /** Imports from code with no Script/Module record, retained with this realm's lifetime. */
-  loadedModules = new Map<JSModuleRequest, JSModuleRecord>();
+  loadedModules = new Map<ModuleRequest, CompiledModule>();
   /** Security state retained during realm creation and replaced by the attached full environment. */
   #baseEnv: BrowletEnvironmentBase | undefined;
   /** HTML settings object stored in this realm's modeled HostDefined slot. */
   #env: BrowletEnvironment | undefined;
+  #defaultDynamicImport: DynamicImport | undefined;
 
   constructor(options: BrowletRealmOptions) {
     const { agent } = options;
-    // The context callback cannot run author code until construction and environment attachment finish.
     super(agent.eventLoop.microtaskQueue, {
       globalPrototypeChain: options.globalPrototypeChain,
       globalAccess: options.globalAccess,
       reuseGlobalProxyFrom: options.reuseGlobalProxyFrom,
-      importModuleDynamically: (specifier, _context, attributes, phase) =>
-        this.importModuleDynamically(this, specifier, attributes, phase),
     });
     this.agent = agent;
     this.executionContext = new JSExecutionContext({ realm: this });
@@ -138,8 +137,14 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
   }
 
   set env(env: BrowletEnvironment) {
+    if (this.#env !== env) this.#defaultDynamicImport = undefined;
     this.#baseEnv = env;
     this.#env = env;
+  }
+
+  /** Import handler for code with no retained Script/Module association. */
+  get defaultDynamicImport(): DynamicImport {
+    return this.#defaultDynamicImport ??= new DynamicImport(null, this.env);
   }
 
   /** Shared security state, available before and after full environment attachment. */
@@ -153,30 +158,30 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
 
   /** Parse retained classic code with its exact HTML referrer captured for later imports. */
   // https://tc39.es/ecma262/#sec-parse-script
-  parseClassicScript(source: string, script: ClassicScript): JSScriptRecord | SyntaxError[] {
+  parseClassicScript(source: string, script: ClassicScript): CompiledScript | SyntaxError[] {
+    // The script retains its execution owner even without attached realm settings.
     const code = this.parseScript(source, serializeURL(script.baseURL!), this.supportsDynamicImport
-      ? (specifier, _script, attributes, phase) => this.importModuleDynamically(record, specifier, attributes, phase)
+      ? new DynamicImport(script, script.env)
       : undefined);
     if (Array.isArray(code)) return code;
-    const record = new JSScriptRecord(script, code);
-    return record;
+    return new CompiledScript(script, code);
   }
 
   /** Parse a source-text module in this realm without linking or evaluating it. */
   // https://tc39.es/ecma262/#sec-parsemodule
-  parseModule(source: string, script: JavaScriptModuleScript): JSSourceTextModuleRecord | SyntaxError[] {
+  parseModule(source: string, script: JSModuleScript): CompiledSourceTextModule | SyntaxError[] {
     let code;
     try {
       code = this.compileModule(source, serializeURL(script.baseURL!), {
-        importModuleDynamically: this.supportsDynamicImport
-          ? (specifier, _module, attributes, phase) => this.importModuleDynamically(record, specifier, attributes, phase)
+        dynamicImport: this.supportsDynamicImport
+          ? new DynamicImport(script, script.env)
           : undefined,
-        // Node/V8 create and cache import.meta during execution, after record
+        // Node/V8 create and cache import.meta during execution, after compiled
         // assignment. The module association survives calls and await resumptions.
         // Official addon bases lack the forwarding export: retain ordinary
         // compilation and the approved empty-metadata limitation on those bases.
         initializeImportMeta: this.supportsImportMeta ? (meta) => {
-          for (const { key, value } of record.getImportMetaProperties()) {
+          for (const { key, value } of compiled.getImportMetaProperties()) {
             // ECMAScript's ImportMeta evaluation creates ordinary data properties.
             Object.defineProperty(meta, key, {
               value, writable: true, enumerable: true, configurable: true,
@@ -194,54 +199,36 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
       return [new this.SyntaxError(error.message)];
     }
     const requests = this.getModuleRequests(code).map((request) =>
-      new JSModuleRequest(request.specifier,
+      new ModuleRequest(request.specifier,
         Object.entries(request.attributes).map(([key, value]) => ({ key, value })), request.phase));
-    const record = new JSSourceTextModuleRecord(script, code, requests);
-    return record;
+    const compiled = new CompiledSourceTextModule(script, code, requests);
+    return compiled;
   }
 
-  /** Adapt Node's preconverted import request to HTML, then return a native completion to Node. */
-  // SPEC_MISMATCH: HostLoadImportedModule(referrer, moduleRequest, loadState, payload)
-  // Node supplies specifier/attributes/phase and owns the import Promise. It does
-  // not expose that PromiseCapability; this boundary returns the evaluated Module instead.
-  importModuleDynamically(
-    referrer: ModuleReferrer, specifier: string, attributes: Record<string, string>, phase: ModuleRequestPhase,
-  ): Promise<CompiledModule> {
-    // EvaluateImportCall already performed expression evaluation, ToString, and
-    // attribute-value conversion. Node's VM API leaves supported-key policy to us.
-    // TODO(dynamic-import-executing-realm): A borrowed Function constructor can
-    // execute in a different realm from this retained referrer. Node's callback
-    // does not supply that realm: unsupported-key TypeErrors currently use the
-    // referrer's realm. Keep the approved regression until that boundary is resolved.
-    const supported = getSupportedImportAttributes();
-    if (Object.keys(attributes).some((key) => !supported.includes(key))) {
-      // Node turns a callback throw into rejection of the existing import Promise.
-      throw new this.TypeError('Unsupported import attribute');
+  /** Add a loaded module, requiring equivalent requests to retain the same module identity. */
+  // The successful-association step of FinishLoadingImportedModule; the caller continues loading.
+  // https://tc39.es/ecma262/#sec-FinishLoadingImportedModule
+  addLoadedModule(request: ModuleRequest, module: CompiledModule): void {
+    for (const [loadedRequest, loaded] of this.loadedModules) {
+      if (!loadedRequest.equals(request)) continue;
+      if (loaded !== module) throw new InternalError('A module request resolved to different modules');
+      return;
     }
-    if (phase === 'defer') throw new InternalError('Deferred dynamic imports are not implemented');
-    const request = new JSModuleRequest(specifier, Object.entries(attributes).map(([key, value]) => ({ key, value })), phase);
-    const payload = new DynamicModuleImport(this.env);
-    // Native Promise usage is confined to Node's callback boundary; the graph
-    // and its continuations use env.InternalPromise and retain implementation values.
-    const result = new this.NativePromise<CompiledModule>((resolve, reject) => {
-      payload.promise.observe(resolve, reject);
-    });
-    loadImportedModule(referrer, request, undefined, payload);
-    return result;
+    this.loadedModules.set(request, module);
   }
 
   /** Parse a WebAssembly ESM record, including its imports, in this realm. */
   // https://webassembly.github.io/esm-integration/js-api/#parse-a-webassembly-module
-  parseWebAssemblyModule(bodyBytes: Uint8Array, script: WasmModuleScript): JSWasmModuleRecord {
+  parseWebAssemblyModule(bodyBytes: Uint8Array, script: WasmModuleScript): CompiledWasmModule {
     const code = this.compileWebAssemblyModule(bodyBytes, serializeURL(script.baseURL!),
-      (_module, imports) => record.createInstance(imports), () => record.instance.exports,
-      () => this.env.project(record.moduleSource)!);
+      (_module, imports) => compiled.createInstance(imports), () => compiled.instance.exports,
+      () => this.env.project(compiled.moduleSource)!);
     // Reuse HTML's ModuleRequest records, with empty attributes and evaluation phase.
-    const requests = this.getModuleRequests(code).map((request) => new JSModuleRequest(
+    const requests = this.getModuleRequests(code).map((request) => new ModuleRequest(
       request.specifier, Object.entries(request.attributes).map(([key, value]) => ({ key, value })), request.phase,
     ));
-    const record = new JSWasmModuleRecord(script, code, requests);
-    return record;
+    const compiled = new CompiledWasmModule(script, code, requests);
+    return compiled;
   }
 
   override evaluate(source: string, filename: string, lineOffset = 0): unknown {
@@ -349,6 +336,12 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
     if (!this.isGlobalPrototypeChainMutable) {
       this.makeHostGlobalPrototypeImmutable();
     }
+  }
+
+  protected override createDefaultDynamicImportCallback(): ImportModuleDynamically<object> {
+    // JSRealm calls this during super(); only the later import may read host state.
+    return (specifier, _referrer, attributes, phase) =>
+      this.defaultDynamicImport.importModule(specifier, attributes, phase);
   }
 
   protected override callWithIncumbent<Result>(

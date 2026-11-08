@@ -1,6 +1,7 @@
-export { JSRealm, type JSRealmOptions, type CompiledCode, type CompiledScript, type FunctionCompilationOptions } from './realm';
+export { JSRealm, type JSRealmOptions, type EngineCode, type EngineScript, type FunctionCompilationOptions } from './realm';
 export type {
-  CompiledModule, ImportModuleDynamically, ModuleCompilationOptions, ModuleRequest, ModuleRequestPhase, WebAssemblyModule,
+  EngineModule, ImportModuleDynamically, DynamicImportHandler, ModuleCompilationOptions, EngineModuleRequest,
+  ModuleRequestPhase, EngineWasmModule,
 } from './modules';
 export type { JSEnvironment } from './environment';
 export { JSThread, JSThreadEndpoint, type JSThreadExit, type JSThreadProtocol } from './threads';

@@ -9,7 +9,7 @@ export function createScriptState(env: BrowletEnvironment) {
     errorToRethrow: null,
     fetchOptions: null,
     baseURL: null,
-    record: null,
+    compiled: null,
     run(): never { throw new InternalError('Script state fixtures cannot execute'); },
   };
 }

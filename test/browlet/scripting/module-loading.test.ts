@@ -5,7 +5,9 @@ import { FetchHeaders, FetchResponse, type FetchRequest } from '../../../src/fet
 import { serializeURL } from '../../../src/url/index';
 import { Browlet } from '../../../src/browlet/browlet';
 import { ImportMap } from '../../../src/browlet/scripting/import-map';
-import { JavaScriptModuleScript, JSModuleRequest, type ModuleScript } from '../../../src/browlet/scripting/script';
+import { JSModuleScript, type ModuleScript } from '../../../src/browlet/scripting/script';
+import { ModuleRequest } from '../../../src/browlet/scripting/module-request';
+import type { ModuleDependencyLoader } from '../../../src/browlet/scripting/module-loading-state';
 import { ScriptFetchOptions } from '../../../src/browlet/scripting/script-fetch-options';
 import { fetchDescendantsAndLink, type PerformScriptFetch } from '../../../src/browlet/scripting/script-fetching';
 import { getRelevantRealm } from '../../support/browlet-binding';
@@ -70,7 +72,7 @@ describe('HTML static module loading', () => {
       f.respond('/shared.js');
       f.checkpoint();
       expect(complete.mock.calls).toEqual(roots.map((root) => [root]));
-      const records = roots.map((root) => root.record!.getLoadedModule(root.record!.requestedModules[0]!));
+      const records = roots.map((root) => root.compiled!.getLoadedModule(root.compiled!.requestedModules[0]!));
       expect(records[0]).toBe(records[1]);
       for (const root of roots) expect(Reflect.get(evaluate(root), 'default')).toBe(42);
       expect(Reflect.get(f.env.global, 'sharedRuns')).toBe(1);
@@ -92,7 +94,7 @@ describe('HTML static module loading', () => {
       expect(complete).toHaveBeenCalledExactlyOnceWith(root);
       expect(Object.getPrototypeOf(root.errorToRethrow)).toBe(f.env.realm[errorName].prototype);
       expect(f.performFetch).not.toHaveBeenCalled();
-      expect(root.record!.requestedModulesLoaded).toBe(false);
+      expect(root.compiled!.requestedModulesLoaded).toBe(false);
     });
   });
 
@@ -100,13 +102,13 @@ describe('HTML static module loading', () => {
     await runInHostTask(() => {
       const f = fixture({});
       const root = f.script('import "./data.json" with { type: "json", extra: "value" };');
-      const state = { errorToRethrow: null, destination: 'script' as const, performFetch: f.performFetch, fetchClient: f.env };
+      const loadDependency = vi.fn<ModuleDependencyLoader['load']>();
       const rejected = vi.fn();
-      root.record!.loadRequestedModules(state).observe(() => { throw new Error('Invalid attributes must reject'); }, rejected);
+      root.compiled!.loadRequestedModules({ load: loadDependency }).observe(() => { throw new Error('Invalid attributes must reject'); }, rejected);
       f.checkpoint();
       expect(rejected).toHaveBeenCalledExactlyOnceWith(expect.any(f.env.realm.SyntaxError));
-      // ECMA's early attribute rejection does not enter HTML's preflight/error slot.
-      expect(state.errorToRethrow).toBeNull();
+      // ECMA's early attribute rejection does not enter HTML's loading operation.
+      expect(loadDependency).not.toHaveBeenCalled();
       expect(f.performFetch).not.toHaveBeenCalled();
     });
   });
@@ -122,7 +124,7 @@ describe('HTML static module loading', () => {
       const cached = f.env.moduleMap.get(f.env.parseURL('https://modules.test/bad.js')!, 'javascript-or-wasm') as ModuleScript;
       expect(root.errorToRethrow).toBe(cached.parseError);
       expect(Object.getPrototypeOf(root.errorToRethrow)).toBe(f.env.realm.SyntaxError.prototype);
-      expect(root.record!.loadedModules.size).toBe(0);
+      expect(root.compiled!.loadedModules.size).toBe(0);
       expect(Reflect.has(f.env.global, 'executed')).toBe(false);
     });
   });
@@ -136,7 +138,7 @@ describe('HTML static module loading', () => {
       f.checkpoint();
       expect(complete).toHaveBeenCalledExactlyOnceWith(root);
       expect(Object.getPrototypeOf(root.errorToRethrow)).toBe(f.env.realm.SyntaxError.prototype);
-      expect(root.record!.requestedModulesLoaded).toBe(true);
+      expect(root.compiled!.requestedModulesLoaded).toBe(true);
       expect(Reflect.has(f.env.global, 'executed')).toBe(false);
     });
   });
@@ -159,8 +161,8 @@ describe('HTML static module loading', () => {
       expect(f.env.moduleMap.get(f.env.parseURL('https://modules.test/bad.js')!, 'javascript-or-wasm')).toBeUndefined();
       f.respond('/late.js');
       f.checkpoint();
-      expect(root.record!.loadedModules.size).toBe(1);
-      expect(root.record!.requestedModulesLoaded).toBe(false);
+      expect(root.compiled!.loadedModules.size).toBe(1);
+      expect(root.compiled!.requestedModulesLoaded).toBe(false);
       expect(f.requests).toHaveLength(2); // The settled graph does not start late.js's child.
       expect(complete).toHaveBeenCalledTimes(1);
 
@@ -176,6 +178,28 @@ describe('HTML static module loading', () => {
       f.checkpoint();
       expect(retried).toHaveBeenCalledExactlyOnceWith(root);
       expect(Reflect.get(evaluate(root), 'answer')).toBe(42);
+    });
+  });
+
+  it('records a late parse error before observing an earlier fetch rejection', async () => {
+    await runInHostTask(() => {
+      const f = fixture({
+        '/missing.js': { source: '', status: 404 },
+        '/invalid.js': { source: 'export const = ;' },
+      }, true);
+      const root = f.script('import "./missing.js"; import "./invalid.js";');
+      const complete = vi.fn();
+      fetchDescendantsAndLink(root, f.env, 'script', complete, f.performFetch);
+      f.respond('/missing.js');
+      // The traversal has rejected, but HTML has not observed that rejection.
+      f.respond('/invalid.js');
+      expect(complete).not.toHaveBeenCalled();
+      f.checkpoint();
+      const invalid = f.env.moduleMap.get(f.env.parseURL('https://modules.test/invalid.js')!, 'javascript-or-wasm') as ModuleScript;
+      expect(complete).toHaveBeenCalledExactlyOnceWith(root);
+      expect(root.errorToRethrow).toBe(invalid.parseError);
+      expect(root.errorToRethrow).toBeInstanceOf(f.env.realm.SyntaxError);
+      expect(root.compiled!.requestedModulesLoaded).toBe(false);
     });
   });
 
@@ -213,7 +237,7 @@ describe('HTML static module loading', () => {
           cryptographicNonceMetadata: 'nonce', parserInserted: true, referrerPolicy: 'no-referrer', renderBlocking: true, priority: 'auto',
         });
       }
-      const child = root.record!.getLoadedModule(root.record!.requestedModules[0]!)!;
+      const child = root.compiled!.getLoadedModule(root.compiled!.requestedModules[0]!)!;
       expect(child.realm).toBe(f.env.realm);
       expect(client.moduleMap.entries).toHaveLength(0);
       expect(options.integrityMetadata).toBe('sha256-root');
@@ -250,7 +274,7 @@ describe('HTML static module loading', () => {
       const f = fixture({});
       const root = f.script('export { answer } from "./child.js";');
       const child = f.script('export const answer = 42;');
-      root.record!.loadedModules.set(new JSModuleRequest('./child.js'), child.record!);
+      root.compiled!.loadedModules.set(new ModuleRequest('./child.js'), child.compiled!);
       const complete = vi.fn();
       fetchDescendantsAndLink(root, f.env, 'script', complete, f.performFetch);
       f.checkpoint();
@@ -309,7 +333,7 @@ function fixture(files: Record<string, Resource>, deferred = false) {
   return {
     browser, env, baseURL, requests, performFetch, respond,
     checkpoint: () => env.responsibleEventLoop.performMicrotaskCheckpoint(),
-    script: (source: string, options = new ScriptFetchOptions()) => new JavaScriptModuleScript(source, env, baseURL, options),
+    script: (source: string, options = new ScriptFetchOptions()) => new JSModuleScript(source, env, baseURL, options),
   };
 }
 
@@ -320,7 +344,7 @@ function evaluate(script: ModuleScript): object {
   });
   script.env.responsibleEventLoop.performMicrotaskCheckpoint();
   expect(result).toEqual({ state: 'fulfilled' });
-  return script.env.realm.getModuleNamespace(script.record!.code);
+  return script.env.realm.getModuleNamespace(script.compiled!.code);
 }
 
 interface Resource {

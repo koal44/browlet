@@ -116,7 +116,7 @@ type Loader = {
 async function batch(loader: Loader, count: number): Promise<void> {
   for (let index = 0; index < count; ++index) {
     const script = await new Promise<ClassicScript | null>((resolve, reject) => loader.start(resolve, reject));
-    assert.notEqual(script?.record, null);
+    assert.notEqual(script?.compiled, null);
     assert.equal(script?.parseError, null);
   }
 }

@@ -3,7 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { internalType } from '../../../src/infra/index';
 import { Browlet } from '../../../src/browlet/browlet';
 import * as scriptClasses from '../../../src/browlet/scripting/script';
-import { JSSourceTextModuleRecord, type JavaScriptModuleScript, type ModuleScript } from '../../../src/browlet/scripting/script';
+import { CompiledSourceTextModule, type JSModuleScript, type ModuleScript } from '../../../src/browlet/scripting/script';
+import { StaticImport } from '../../../src/browlet/scripting/import-handler';
+import { ModuleRequest } from '../../../src/browlet/scripting/module-request';
+import * as moduleLoading from '../../../src/browlet/scripting/module-loading';
 import { ScriptFetchOptions } from '../../../src/browlet/scripting/script-fetch-options';
 import { fetchDescendantsAndLink, type PerformScriptFetch } from '../../../src/browlet/scripting/script-fetching';
 import { FetchHeaders } from '../../../src/fetch/headers';
@@ -24,9 +27,10 @@ describe('module script graph entry points', () => {
 
     env.fetchExternalModuleScriptGraph(url, new ScriptFetchOptions(), complete);
 
-    expect(load).toHaveBeenCalledExactlyOnceWith({
-      errorToRethrow: null, destination: 'script', performFetch: null, fetchClient: env,
-    });
+    expect(load).toHaveBeenCalledExactlyOnceWith(expect.any(StaticImport));
+    const fetching = vi.spyOn(moduleLoading, 'fetchImportedModule').mockImplementation(() => {});
+    load.mock.calls[0]![0].load(script.compiled!, new ModuleRequest('./child.js'), () => {});
+    expect(fetching.mock.calls[0]![2]).toEqual({ destination: 'script', performFetch: null, fetchClient: env });
     expect(link).not.toHaveBeenCalled();
     expect(complete).not.toHaveBeenCalled();
     loading.resolve(undefined);
@@ -54,7 +58,7 @@ describe('module script graph entry points', () => {
   it('creates the inline root with its base URL and options before loading descendants', async () => {
     const { env, url, script, loading, load, link } = await createFixture();
     const options = new ScriptFetchOptions();
-    const construct = vi.spyOn(scriptClasses, 'JavaScriptModuleScript').mockImplementation(function() { return script; });
+    const construct = vi.spyOn(scriptClasses, 'JSModuleScript').mockImplementation(function() { return script; });
     const complete = vi.fn();
 
     env.fetchInlineModuleScriptGraph('export default 1;', url, options, complete);
@@ -73,9 +77,9 @@ describe('module script graph entry points', () => {
       const { env, url, script, loading, load, link } = await createFixture();
       env.moduleMap.set(url, 'javascript-or-wasm', script);
       const complete = vi.fn();
-      load.mockImplementation((state) => {
+      load.mockImplementation((loadDependency) => {
         expect(complete).toHaveBeenCalledExactlyOnceWith(script);
-        expect(state?.destination).toBe('script');
+        expect(loadDependency).toEqual(expect.any(StaticImport));
         return loading.promise;
       });
 
@@ -106,7 +110,7 @@ describe('fetch descendants and link a module script', () => {
   it('returns a script with its parse error instead of treating it as a fetch failure', async () => {
     const { env, script, load } = await createFixture();
     const error = new SyntaxError('Invalid module');
-    script.record = null;
+    script.compiled = null;
     script.parseError = error;
     const complete = vi.fn();
 
@@ -125,9 +129,10 @@ describe('fetch descendants and link a module script', () => {
 
     fetchDescendantsAndLink(script, fetchClient, 'worker', complete, performFetch);
 
-    expect(load).toHaveBeenCalledExactlyOnceWith({
-      errorToRethrow: null, destination: 'worker', performFetch, fetchClient,
-    });
+    expect(load).toHaveBeenCalledExactlyOnceWith(expect.any(StaticImport));
+    const fetching = vi.spyOn(moduleLoading, 'fetchImportedModule').mockImplementation(() => {});
+    load.mock.calls[0]![0].load(script.compiled!, new ModuleRequest('./child.js'), () => {});
+    expect(fetching.mock.calls[0]![2]).toEqual({ destination: 'worker', performFetch, fetchClient });
     expect(script.env).toBe(env);
     expect(complete).not.toHaveBeenCalled();
     loading.resolve(undefined);
@@ -141,7 +146,10 @@ describe('fetch descendants and link a module script', () => {
     const error = new SyntaxError('Dependency parse error');
     const complete = vi.fn();
     fetchDescendantsAndLink(script, env, 'script', complete);
-    if (hasModuleError) load.mock.calls[0]![0]!.errorToRethrow = error;
+    vi.spyOn(moduleLoading, 'fetchImportedModule').mockImplementation((_referrer, _request, _options, complete) => {
+      complete({ type: hasModuleError ? 'script-error' : 'fetch-error', error });
+    });
+    load.mock.calls[0]![0].load(script.compiled!, new ModuleRequest('./child.js'), () => {});
 
     loading.reject(new Error('Loading rejected'));
     await runInHostTask(() => { env.realm.agent.eventLoop.performMicrotaskCheckpoint(); });
@@ -172,11 +180,11 @@ async function createFixture() {
   await browser.navigate('https://modules.test/page');
   const env = getRelevantRealm(browser.window).env;
   const url = env.parseURL('https://modules.test/module.js')!;
-  const script: JavaScriptModuleScript = createScriptState(env);
+  const script: JSModuleScript = createScriptState(env);
   script.baseURL = url;
   script.fetchOptions = new ScriptFetchOptions();
-  const record = new JSSourceTextModuleRecord(script, env.realm.compileModule('', 'fixture.js'));
-  script.record = record;
+  const record = new CompiledSourceTextModule(script, env.realm.compileModule('', 'fixture.js'));
+  script.compiled = record;
   const loading = env.InternalPromise.withResolvers(internalType<void>());
   const load = vi.spyOn(record, 'loadRequestedModules').mockReturnValue(loading.promise);
   const link = vi.spyOn(record, 'link').mockImplementation(() => {});

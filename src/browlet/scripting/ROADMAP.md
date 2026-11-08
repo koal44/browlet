@@ -127,10 +127,13 @@ controls; the engine does not supply a record for every function invocation.
 | Current | `runningExecutionContext.realm` gives the top modeled realm; that realm's `.env` and `.globalObject` supply current settings and global. It is only current for the transitions recorded in this stack; arbitrary author/built-in calls do not yet maintain it. |
 | Relevant | A platform object's `PlatformRecord.realm` supplies its relevant realm independently of the stack; that realm's `.env` and `.globalObject` supply relevant settings and global. The binding records ownership, so changing the object's prototype does not change it. |
 
-`JSScriptOrModule` carries the realm and HTML host-defined script. Complete
-Script/Module records and active-script restoration remain §§8.1.4 and 8.1.6
-work; the temporary record in `runScriptEvaluation()` has null `script`
-until script creation and execution supply a parsed HTML script.
+`CompiledScriptOrModule` is an abstract base for actual Script/Module records, retaining
+the realm, non-null HTML script, and dependency associations. Direct embedder
+entry in `runScriptEvaluation()` instead marks its `JSExecutionContext` with
+`isHostEntry` and supplies `incumbentEnv`. Its ScriptOrModule remains null;
+the host boundary prevents active-script lookup from inheriting an outer script.
+Callback skipping and unwind restore the prior context. Native attribution of
+arbitrary author execution remains separate work.
 The generic realm factory alone does not construct an HTML global implementation
 or attach settings; Window/worker/worklet composition owns those steps.
 
@@ -247,24 +250,33 @@ roadmaps. Do not infer them from a worker's own URL or opaque worklet origin.
 
 ## HTML §8.1.4.1: scripts
 
-[script.ts](script.ts) owns the script classes, their creation algorithms, and partial
-parsed-record classes; it does not evaluate code. `ScriptBase` holds shared state, `ClassicScript`
-is concrete, and the abstract `ModuleScript` is the base for the module variants.
-The base initializes `record` to null; subclasses only narrow its type. Concrete
-JS records take their HTML script and derive the realm from its environment.
+[script.ts](script.ts) contains two related hierarchies. HTML scripts retain the
+environment, fetch metadata, and errors; their ECMAScript counterparts retain
+compiled code, dependency associations, and linking/evaluation behavior.
+`ScriptBase` shares HTML state, while `ModuleScript` supplies the common module
+execution and error-reporting steps. `SyntheticModuleScript` currently only
+narrows types for CSS/JSON/text scripts; it adds no runtime behavior. The base
+initializes `compiled` to null, and concrete scripts narrow it to `CompiledScript`,
+`CompiledSourceTextModule`, `CompiledSyntheticModule`, or `CompiledWasmModule`.
+Each compiled counterpart takes its HTML script and derives the realm from that
+environment. Their `CompiledScriptOrModule` base models ECMAScript's ScriptOrModule
+concept. HTML's record field is named `compiled`; its `code` field retains an
+`EngineScript` or `EngineModule` supplied by JS Engine. The concrete engine
+module contracts are `EngineSourceTextModule`, `EngineSyntheticModule`, and
+`EngineWasmModule`.
 
 | Requirement | Code and remaining dependency |
 | --- | --- |
-| Classic or module script | `Script` is the union. Both retain `env`, `record`, `parseError`, `errorToRethrow`, `fetchOptions`, and `baseURL`; classic scripts also retain `mutedErrors`. |
-| Parse failure versus evaluation failure | `record` can be null; creation retains the immediate failure in `parseError`. Classic creation also sets `errorToRethrow`; module creation leaves it null for graph loading to set. Calling scripts must consume these in §8.1.4.4. |
-| ECMAScript records | Browlet's record classes distinguish kinds and carry realm/HostDefined. Classic, source-text, and synthetic records retain engine artifacts. Linking supplied graphs and evaluation work; automatic loading, Wasm ESM, and complete module-specific context restoration remain missing. |
+| Classic or module script | `Script` is the union. Both retain `env`, `compiled`, `parseError`, `errorToRethrow`, `fetchOptions`, and `baseURL`; classic scripts also retain `mutedErrors`. |
+| Parse failure versus evaluation failure | `compiled` can be null; creation retains the immediate failure in `parseError`. Classic creation also sets `errorToRethrow`; module creation leaves it null for graph loading to set. Calling scripts must consume these in §8.1.4.4. |
+| ECMAScript records | Browlet's compiled classes distinguish kinds and carry realm/HostDefined. Classic, source-text, synthetic, and Wasm modules retain engine artifacts. Graph loading, linking, and evaluation are connected; complete native module-specific context restoration remains unfinished. |
 | Module classifications | JavaScript and WebAssembly script classes have their corresponding record types. CSS/JSON/text share a synthetic-module base with null base URL and fetch options. See the creation slice below. |
 | Fetch options | `ScriptFetchOptions` owns the seven fields, their defaults, request setup, and descendant copying; see the §8.1.4.2 slice below. |
 | Active script | `EventLoop.activeScript` implements the lookup over the modeled stack: select the topmost non-null ScriptOrModule, then return its HostDefined. Built-in frames and incumbent skip counters do not change selection. |
-| Existing consumers | HTMLScriptElement's result accepts `Script`; base-URL changes reparse only speculation-rule results. The current parser/Browlet evaluation path still supplies a provisional record with null HostDefined. Script creation/calling must establish actual records; job hooks must later capture and restore them. |
+| Existing consumers | HTMLScriptElement's result accepts `Script`; base-URL changes reparse only speculation-rule results. Direct Browlet evaluation marks its execution context as a host entry with null ScriptOrModule. Real script creation supplies concrete compiled counterparts; native provenance coverage remains incomplete. |
 
 The callback lifecycle test exercises active-script selection across classic,
-module, built-in, skipped-incumbent, and provisional entries, with restoration
+module, built-in, skipped-incumbent, and direct host entries, with restoration
 after nested evaluation. It supplies records explicitly; it does not establish
 dynamic import, actual module evaluation, or automatic author-call tracking.
 [Base-URL regressions](../../../test/browlet/html/base-url.test.ts) also keep
@@ -344,7 +356,11 @@ response URL. The fetch algorithm removes HTTP/body/MIME failures before callbac
 allowing a later attempt. Its initial lookup still honors a retained null, as
 specified, although this fetcher does not produce one.
 
-`JSModuleRequest` models ECMAScript's specifier and import-attribute list. Its
+`ModuleRequest` in [module-request.ts](module-request.ts) models ECMAScript's
+specifier, import-attribute list, and phase. The same module owns supported
+attribute names so graph traversal can use that policy without importing fetching.
+JS Engine reports the Node-shaped `EngineModuleRequest`; Realm converts it into
+`ModuleRequest` when retaining a compiled module. Its
 `getModuleType()` returns `ModuleType | null` (`javascript-or-wasm`, `css`, `json`,
 or `text`). Explicit `javascript-or-wasm` attributes are invalid even though that
 string is the internal default. Unsupported attribute strings also become null
@@ -379,10 +395,11 @@ optional descendant-preloading branch without notifying its owner a second time.
 The shared descendant algorithm retains root parse errors and link exceptions on
 the script. A dependency loading rejection returns null unless the host loading
 state records an error to rethrow, in which case the script carries that error.
-`ModuleGraphLoadingState` retains the destination, optional custom fetch hook,
-fetch client, and error slot consumed by HostLoadImportedModule.
+StaticImport retains the error, destination, optional custom fetch hook, and
+fetch client for that graph. The
+ECMAScript graph walker does not receive HTML's mutable error state.
 
-`JSModuleRecord.loadRequestedModules()` now traverses static dependencies through
+`CompiledModule.loadRequestedModules()` now traverses static dependencies through
 HostLoadImportedModule, and `link()` supplies the retained graph to the engine.
 Promise completion uses the owning environment's `InternalPromise` observation path.
 Internal implementation errors remain explicit rather than becoming author
@@ -496,7 +513,7 @@ The maintained [Wasm gaps](../../../node-compat/test/wasm-gaps.test.cjs),
 retain the approved expected failures.
 
 `UserAgent.webDriver` now contains BiDi's create/prepare/ScriptEvaluation command
-sequence, stopping at explicit unfinished dependencies. `JSScriptRecord.evaluate()`
+sequence, stopping at explicit unfinished dependencies. `CompiledScript.evaluate()`
 is the retained-record execution boundary and runs the compiled artifact.
 ECMAScript Await must also suspend/resume the modeled context before asynchronous
 command completion can work. Browlet's local `PageEvaluation` remains separate
@@ -551,7 +568,7 @@ algorithms.
 | Preparation and cleanup | Existing EventLoop methods retain the realm context and task's settings set. Direct Node-host entries still have the documented nullable-task/checkpoint accommodation; uncontrolled JavaScript entries are not made observable by this audit. |
 | Running script | `EventLoop.runningScript` reads only the running context's ScriptOrModule.HostDefined. Unlike `activeScript`, it does not search lower frames. |
 | Execution timing | Explicit TODOs at both run entry points; Long Animation Frames needs document frame timing and pending-script entries. |
-| Retained execution | `JSScriptRecord.evaluate()` pushes a script context, executes its compiled code through JSRealm, converts the result/exception to a completion, and restores the stack before HTML cleanup. `JSModuleRecord.evaluate()` executes linked graphs and adapts their native Promise; module-specific context entry and restoration remain unfinished. |
+| Retained execution | `CompiledScript.evaluate()` pushes a script context, executes its compiled code through JSRealm, converts the result/exception to a completion, and restores the stack before HTML cleanup. `CompiledModule.evaluate()` executes linked graphs and adapts their native Promise; module-specific context entry and restoration remain unfinished. |
 | Runtime errors | The run algorithms invoke `env.reportException`; §8.1.4.6 now supplies ErrorEvent dispatch, cancellation, and muting. Classic runners retain their script explicitly for parse errors and unwound evaluation. Source attribution and worker propagation remain unfinished. |
 | Termination | A null evaluation outcome selects the specified QuotaExceededError completion/rejected promise. Binding allocates that exception in the script's realm. Actual termination and unwinding remain §8.1.4.5/runtime work. |
 
@@ -1521,7 +1538,7 @@ covered, so registration does not merely inherit whichever script is muted.
 
 The existing native snapshot already carries the compilation's import-loader
 identity. The VM adapter resolves it to retained Script/SourceTextModule code;
-JS Engine supplies that code to the HTML hook, where `JSScriptOrModule` owns its
+JS Engine supplies that code to the HTML hook, where `CompiledScriptOrModule` owns its
 weak association with the HTML record. No new C++ or V8 hooks are required.
 Missing metadata preserves the modeled-stack fallback needed by built-ins;
 foreign metadata or code without an HTML association does not inherit that script.
@@ -1543,7 +1560,7 @@ touched-file ESLint, and diff checks pass with existing native limitations retai
 
 ### §8.1.6.7.1: Import metadata
 
-`JSSourceTextModuleRecord.getImportMetaProperties()` implements
+`CompiledSourceTextModule.getImportMetaProperties()` implements
 `HostGetImportMetaProperties(moduleRecord)`. It returns the serialized module
 base URL and a realm-owned, non-constructible `resolve` function with length one.
 The function performs ToString, calls the module environment's existing specifier
@@ -1583,7 +1600,7 @@ touched-file ESLint, and diff checks pass.
 `getSupportedImportAttributes()` implements `HostGetSupportedImportAttributes()`
 with the list containing only `"type"`. The existing single-imported-module fetcher
 now obtains its assertion policy from this hook. This is name validation, separate
-from `JSModuleRequest.getModuleType()` and the target environment's module-type
+from `ModuleRequest.getModuleType()` and the target environment's module-type
 permission check. A supported key with an unsupported value still fails type
 selection; a differently cased or otherwise unknown key fails the key check.
 
@@ -1614,7 +1631,7 @@ Typechecking, declaration contracts, touched-file ESLint, and diff checks pass.
 
 ### §8.1.6.7.3: Static HostLoadImportedModule
 
-`loadImportedModule()` in [module-loading.ts](module-loading.ts) resolves each static
+`fetchImportedModule()` in [module-loading.ts](module-loading.ts) resolves each static
 request with its referring module's environment and base URL. Its first call for
 a cyclic record preflights every request's attribute keys, specifier, and allowed
 module type before fetching any dependency. Descendant options inherit the
@@ -1622,17 +1639,21 @@ referrer's settings, select integrity from its import map, and reset fetch prior
 The existing single-imported-module fetcher retains the separate fetch client,
 destination, custom fetch operation, and target module map supplied by HTML.
 
-[module-loading.ts](module-loading.ts) supplies ECMAScript's GraphLoadingState,
-InnerModuleLoading, and ContinueModuleLoading bookkeeping. This is separate from
-HTML's ModuleGraphLoadingState (fetch options and first error). Pending visits and
+[module-loading-state.ts](module-loading-state.ts) supplies ECMAScript's
+GraphLoadingState, InnerModuleLoading, and ContinueModuleLoading bookkeeping.
+HTML's fetch options and first error belong to its StaticImport handler.
+The walker receives the import handler instead of host state; request
+phase is translated explicitly into single versus recursive loading. Pending visits and
 a visited set close cycles and wait for all dependencies. Node's `unlinked` status
 covers both ECMAScript's `new` and `unlinked` states, so each record additionally
 retains `requestedModulesLoaded` after a successful traversal. V8 still owns
 linking, live bindings, evaluation, and top-level await.
 
-`finishLoadingImportedModule()` retains successful request/record
-associations even when their traversal has already failed. Later completions do
-not restart or settle that traversal again. Equivalent requests compare specifiers
+The shared ImportHandler calls the referring compiled module's `addLoadedModule()`
+before continuing the traversal. That method implements only the successful
+association step of `FinishLoadingImportedModule`; the caller owns the continuation.
+Successful associations are retained even when the traversal has already failed.
+Later completions do not restart or settle that traversal again. Equivalent requests compare specifiers
 and attribute entries by value, independently of attribute order, while retaining
 the native request phase. A later attempt can reuse downloaded records and retry
 failed fetches through the existing module map.
@@ -1645,9 +1666,16 @@ the HTML hook, so that specific rejection does not populate HTML's error slot.
 The regression checks the SyntaxError directly at LoadRequestedModules rather than
 mistaking the fetcher's assertion for an author exception.
 
-**Callable shapes:** LoadRequestedModules accepts optional HTML load state and
-returns `env.InternalPromise`. HostLoadImportedModule and FinishLoadingImportedModule
-accept Script/Module/Realm referrers and static or dynamic completion payloads.
+**Callable shapes:** LoadRequestedModules accepts an import handler with a
+`load()` method and returns `env.InternalPromise`. Fetching accepts a nullable Script/Module
+referrer, request, optional fetch inputs, result callback, and the environment
+selected by the caller (the referrer's environment, or the import environment
+when there is no referrer). It
+reports a loaded module, fetch failure, or script error without changing caller
+bookkeeping. StaticImport records the first script error before the traversal's
+settlement guard, including late errors that arrive before rejection observation.
+Each referring record or fallback realm retains its own successful associations.
+No completion payload or synthetic fallback record is passed through the loader.
 Wasm parsing and source-phase URL imports now use these same paths. Deferred
 imports and object-valued source lookup remain explicit boundaries. Script
 elements and worker/worklet startup must invoke the graph entry points; these
@@ -1661,16 +1689,21 @@ and equivalent requests. An external-root case uses real Fetch with only HTTP
 transport controlled. The existing graph/fetch suites retain their narrower
 orchestration checks. No Node, addon, or V8 changes are required.
 
-Validation: the six focused module loading/execution/fetching/graph/import-map
-suites pass on custom Node, 24.19.0, and 26.8.1, each in stock and compat mode:
-127 ordinary passes per configuration, with no skips or expected failures.
-Typechecking, declaration contracts, touched-file ESLint, and diff checks pass.
+Consolidation validation covers eleven focused loading, execution, Wasm, callback,
+and event-loop suites across custom Node, 24.19.0, and 26.8.1 in stock and compat
+mode. Custom/compat has 163 ordinary passes and one existing expected failure;
+each stock configuration has 109 passes and eleven existing expected failures;
+each official compat configuration has 127 passes and 37 existing expected
+failures. Each configuration retains the one previously agreed callback-oracle
+skip. Typechecking, declaration contracts, touched-file ESLint, and diff checks
+pass. The cycle guard confirms that the scripting cycle is gone; its production
+assertion remains an ordinary failure for the separate storage cycle.
 
 ### §8.1.6.7.3: Dynamic HostLoadImportedModule
 
 Node-shaped `importModuleDynamically` callbacks now connect native `import()` to
 the same HTML hook. Classic/source-text compilation captures the exact retained
-record; context and direct-evaluation callbacks supply a Realm referrer and use
+record; context and direct-evaluation callbacks supply null plus their captured realm and use
 the environment's base URL. HostLoadImportedModule selects default fetch options,
 client, destination, and referrer when HTML load state is absent. Dynamically
 loaded descendants also retain absent load state, as ECMAScript requires.
@@ -1683,13 +1716,29 @@ without disturbing native getter/abrupt-completion ordering. Unsupported module
 types, resolution, Fetch, parse, link, and evaluation failures reject the import.
 They do not become HTML runtime script-error reports.
 
-`DynamicModuleImport` supplies ContinueDynamicImport's descendant loading, linking,
-and evaluation wait through `env.InternalPromise`. Node owns the import Promise
-and final namespace resolution, so the adapter returns a native Promise for the
-evaluated engine Module. Pending SPEC_MISMATCH markers identify that representation
-and Node's callback inputs. Returning a Module avoids an additional adoption of
-a namespace's exported `then` function. Successful associations are retained on
-Script/Module/Realm records, independently of the HTML module map.
+Classic and source-text module compilation now pass a `DynamicImport` handler
+instance from [import-handler.ts](import-handler.ts). The handler retains its
+HTML script before compilation and reads that script's compiled association
+when an import executes. JS Engine accepts a narrow `DynamicImportHandler`
+interface and converts it into the backend callback. BrowletRealm lazily caches
+its default context-import handler after environment attachment. The callback
+is registered during context construction but reads the getter only when an
+import occurs; replacing the attached environment clears the cached handler.
+
+Each invocation keeps its own request and internal completion while reusing
+the handler. `ImportHandler` shares dependency fetching and successful-association
+retention with `StaticImport`; the latter owns one graph's HTML fetch inputs
+and first script error. `ModuleLoadingState` calls the supplied handler's
+`load()` method. Concurrent imports keep independent completions, and late
+static errors remain observable before the graph's rejection observer runs.
+
+Completion uses `env.InternalPromise` on the browser queue. The dynamic handler
+attaches its native bridge before starting loading; `UserAgent.HostPromise`
+would instead move those reactions to Node's host queue. Node already owns the
+author's import Promise and final namespace resolution, so the bridge returns
+an engine Module, avoiding another adoption of a namespace's exported `then`.
+Successful associations remain on Script/Module/Realm records independently of
+the HTML module map.
 
 The [dynamic regressions](../../../test/browlet/scripting/dynamic-import.test.ts)
 cover actual Fetch graphs, classic/module/evaluation entry points, cross-Window
@@ -1728,6 +1777,12 @@ The full custom/compat unit run passes with four workers: 16,362 ordinary passes
 alongside the matrix timed out the finalization subprocess; it passed alone and
 in the bounded full rerun. No timeout or regression classification was changed.
 Typechecking, declaration contracts, touched-file ESLint, and diff checks pass.
+
+The 2026-11-07 import-handler refactor passes eight focused parser, graph-loading,
+worker/worklet, dynamic-import, and Wasm source-import suites in all six runtime
+configurations under the existing capability expectations. The added concurrent
+success/failure case verifies independent completions on one retained handler.
+Typechecking, type contracts, touched-module ESLint, and diff checks pass.
 
 ### HTML §8.1.7 event-loop entry audit
 
@@ -3072,9 +3127,12 @@ implementation of another chat's parser/worker work.
 | --- | --- |
 | `agents.ts` | Agent/cluster records, Window inventory, one EventLoop per Agent, observer creation counters, and batched MutationObserver/slot-change notification |
 | `realm.ts` | Relevant/incumbent ownership and controlled script/callback entry; environment bases and full browser settings live in [`../environment.ts`](../environment/environment.ts) |
-| `execution-context.ts`, `script.ts` | Explicit contexts, HTML script state/creation, compiled classic/source-text/synthetic records, ModuleRequests, supplied dependency linking, and the Wasm ESM boundary |
+| `execution-context.ts`, `script.ts` | Explicit contexts, HTML script state/creation, compiled classic/source-text/synthetic records, supplied dependency linking, and the Wasm ESM boundary |
 | `script-fetch-options.ts`, `script-fetching.ts`, `module-map.ts` | Fetch options, classic/worker/single-module fetching, document/worker/worklet module-graph orchestration, and cached results/pending callbacks; the environment forwards fetch calls and owns integrity lookup/type permission |
-| `module-loading.ts` | HostLoadImportedModule and supported import attributes, graph pending/visited state, and static/dynamic completion; separate from HTML fetch state |
+| `module-request.ts` | Module requests, request comparison, module-type selection, and supported import attributes |
+| `module-loading.ts` | Imported-module resolution, preflight, fetching, and classified results using the selected environment |
+| `import-handler.ts` | Shared dependency loading with static graph state and retained dynamic-import handlers |
+| `module-loading-state.ts` | ECMAScript graph visits, pending count, and completion; dependency loading is supplied by the caller |
 | [`../worklets/module-responses-map.ts`](../worklets/module-responses-map.ts) | Downloaded responses and pending notifications shared across a Worklet's globals; separate from their per-environment module maps |
 | `global-object.ts`, `import-map.ts` | Shared HTML global state, import-map parsing/normalization/merging, module specifier resolution, and parse-result creation; Window owns registration |
 | [`../environment.ts`](../environment/environment.ts), [`../dom/events/error-event.ts`](../dom/events/error-event.ts) | Global exception reporting and ErrorEvent; the realm callback and global-scope operation delegate to the environment |

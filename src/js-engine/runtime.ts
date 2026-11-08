@@ -13,7 +13,7 @@ import {
   type AddonContextHandle, type AddonMicrotaskQueueHandle, type ContextEvaluationOptions,
 } from './node-addons';
 import type {
-  CollectionIteratorKind, CompiledCode, CompiledScript, ExoticObjectHandlers, FunctionCompilationOptions,
+  CollectionIteratorKind, EngineCode, EngineScript, ExoticObjectHandlers, FunctionCompilationOptions,
   GlobalAccessSelector, GlobalAllocation, GlobalIndexedProperties,
   GlobalPrototypeKind, GlobalProxy,
   JSFunction, JSIteratorResult, JSRealm,
@@ -294,9 +294,9 @@ export function runInContext(
 
 /** Compile without execution using the backend that owns the supplied context. */
 export function compileScript(
-  source: string, context: VMContext, filename: string, importModuleDynamically?: ImportModuleDynamically<CompiledScript>,
+  source: string, context: VMContext, filename: string, importModuleDynamically?: ImportModuleDynamically<EngineScript>,
   lineOffset = 0,
-): CompiledScript {
+): EngineScript {
   if (isAddonContextHandle(context)) {
     if (!addon.Script) throw new InternalError('Node backend does not provide Script');
     return new addon.Script(source, { filename, lineOffset, displayErrors: false, importModuleDynamically });
@@ -343,7 +343,7 @@ export function compileFunction(
 }
 
 /** Run retained code without reparsing it or performing a microtask checkpoint. */
-export function runScript(script: CompiledScript, context: VMContext): unknown {
+export function runScript(script: EngineScript, context: VMContext): unknown {
   return script.runInContext(context, { displayErrors: false });
 }
 
@@ -523,7 +523,7 @@ export type JSJobRegistration = {
    * fallback to saved execution state. Null means metadata was present but
    * unrecognized, so it must not inherit an unrelated host script.
    */
-  compiledCode: CompiledCode | null | undefined;
+  compiledCode: EngineCode | null | undefined;
 };
 
 export type JSMicrotaskQueue = {

@@ -92,7 +92,7 @@ describe('runtime script errors', () => {
     const env = realm.env;
     const events = captureErrors(window);
     const script = new ClassicScript('', env, env.apiBaseURL, new ScriptFetchOptions(), muted);
-    const context = new JSExecutionContext({ realm, scriptOrModule: script.record });
+    const context = new JSExecutionContext({ realm, scriptOrModule: script.compiled });
     env.responsibleEventLoop.executionContextStack.push(context);
     try {
       window.reportError('private message');

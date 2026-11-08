@@ -15,7 +15,7 @@ afterEach(() => vi.restoreAllMocks());
 describe('run a classic script', () => {
   it.each(['disabled', 'inactive'] as const)('returns an empty completion for %s settings without entering execution', (policy) => {
     const { env, script, loop } = fixture();
-    const evaluate = vi.spyOn(script.record!, 'evaluate');
+    const evaluate = vi.spyOn(script.compiled!, 'evaluate');
     const prepare = vi.spyOn(loop, 'prepareToRunScript');
     if (policy === 'disabled') env.userAgent.scriptingEnabled = false;
     else env.window.document.browsingContext = null;
@@ -28,7 +28,7 @@ describe('run a classic script', () => {
   it('prepares the task settings, preserves the completion, and cleans up', () => {
     const { env, script, loop } = fixture();
     const completion: ScriptCompletion = { type: 'normal', value: undefined };
-    vi.spyOn(script.record!, 'evaluate').mockImplementation(() => {
+    vi.spyOn(script.compiled!, 'evaluate').mockImplementation(() => {
       expect(loop.runningExecutionContext).toBe(env.realmExecutionContext);
       expect(loop.currentlyRunningTask!.scriptEvaluationEnvironments.has(env)).toBe(true);
       return completion;
@@ -48,7 +48,7 @@ describe('run a classic script', () => {
     const script = new ClassicScript('const =', env, env.apiBaseURL, new ScriptFetchOptions());
     const report = vi.spyOn(env, 'reportException').mockImplementation((error) => {
       expect(error).toBe(script.parseError);
-      expect(script.record).toBeNull();
+      expect(script.compiled).toBeNull();
       expect(loop.runningExecutionContext).toBe(env.realmExecutionContext);
       expect(loop.runningScript).toBeNull();
     });
@@ -78,7 +78,7 @@ describe('run a classic script', () => {
   it('reports an evaluation throw without changing its completion', () => {
     const { env, script, loop } = fixture();
     const completion: ScriptCompletion = { type: 'throw', value: 42 };
-    vi.spyOn(script.record!, 'evaluate').mockReturnValue(completion);
+    vi.spyOn(script.compiled!, 'evaluate').mockReturnValue(completion);
     const report = vi.spyOn(env, 'reportException').mockImplementation(() => {});
     expect(script.run()).toBe(completion);
     expect(report).toHaveBeenCalledExactlyOnceWith(42, false, script);
@@ -87,7 +87,7 @@ describe('run a classic script', () => {
 
   it('returns a realm-owned QuotaExceededError after a termination outcome', () => {
     const { env, script, loop } = fixture();
-    vi.spyOn(script.record!, 'evaluate').mockReturnValue(null);
+    vi.spyOn(script.compiled!, 'evaluate').mockReturnValue(null);
     Reflect.set(env.global, 'QuotaExceededError', () => { throw new Error('author replacement'); });
     const report = vi.spyOn(env, 'reportException');
     const result = script.run(true);
@@ -106,7 +106,7 @@ describe('run a classic script', () => {
       expect(loop.executionContextStack).toHaveLength(2);
       expect(loop.executionContextStack[0]).toBe(env.realmExecutionContext);
       expect(loop.runningExecutionContext!.realm).toBe(env.realm);
-      expect(loop.runningExecutionContext!.scriptOrModule).toBe(script.record);
+      expect(loop.runningExecutionContext!.scriptOrModule).toBe(script.compiled);
       expect(loop.runningScript).toBe(script);
     });
     Reflect.set(env.global, 'inspect', inspect);
@@ -185,7 +185,7 @@ describe('run a classic script', () => {
 describe('run a module script', () => {
   it.each(['disabled', 'inactive'] as const)('resolves without evaluation or preparation for %s settings', async (policy) => {
     const { env, module, loop } = fixture();
-    const evaluate = vi.spyOn(module.record!, 'evaluate');
+    const evaluate = vi.spyOn(module.compiled!, 'evaluate');
     const prepare = vi.spyOn(loop, 'prepareToRunScript');
     if (policy === 'disabled') env.userAgent.scriptingEnabled = false;
     else env.window.document.browsingContext = null;
@@ -199,7 +199,7 @@ describe('run a module script', () => {
   it('returns the evaluation promise and cleans up before it settles', async () => {
     const { env, module, loop } = fixture();
     const pending = env.InternalPromise.withResolvers(idlType.undefined);
-    vi.spyOn(module.record!, 'evaluate').mockImplementation(() => {
+    vi.spyOn(module.compiled!, 'evaluate').mockImplementation(() => {
       expect(loop.runningExecutionContext).toBe(env.realmExecutionContext);
       return pending.promise;
     });
@@ -214,7 +214,7 @@ describe('run a module script', () => {
     const { env, module, loop } = fixture();
     const reason = new env.realm.SyntaxError('dependency failed');
     module.errorToRethrow = reason;
-    const evaluate = vi.spyOn(module.record!, 'evaluate');
+    const evaluate = vi.spyOn(module.compiled!, 'evaluate');
     const report = vi.spyOn(env, 'reportException').mockImplementation(() => {});
     const result = module.run(prevent);
     await expect(observe(result, env)).rejects.toBe(reason);
@@ -229,7 +229,7 @@ describe('run a module script', () => {
     const pending = env.InternalPromise.withResolvers(idlType.undefined);
     const reason = new env.realm.Error('top-level await rejected');
     const report = vi.spyOn(env, 'reportException').mockImplementation(() => {});
-    vi.spyOn(module.record!, 'evaluate').mockReturnValue(pending.promise);
+    vi.spyOn(module.compiled!, 'evaluate').mockReturnValue(pending.promise);
     const result = module.run();
     expect(result).toBe(pending.promise);
     expect(report).not.toHaveBeenCalled();
@@ -240,7 +240,7 @@ describe('run a module script', () => {
 
   it('rejects with a realm-owned QuotaExceededError for termination', async () => {
     const { env, module, loop } = fixture();
-    vi.spyOn(module.record!, 'evaluate').mockReturnValue(null);
+    vi.spyOn(module.compiled!, 'evaluate').mockReturnValue(null);
     let reason: unknown;
     await observe(module.run(true), env).catch((error: unknown) => { reason = error; });
     expect(reason).toMatchObject({ name: 'QuotaExceededError', quota: null, requested: null });
@@ -251,9 +251,9 @@ describe('run a module script', () => {
   it('evaluates the linked synthetic record and preserves its default export', async () => {
     const { env, module, loop } = fixture();
     const report = vi.spyOn(env, 'reportException');
-    module.record!.link();
+    module.compiled!.link();
     await expect(observe(module.run(), env)).resolves.toBeUndefined();
-    expect(Reflect.get(env.realm.getModuleNamespace(module.record!.code), 'default')).toBe('text');
+    expect(Reflect.get(env.realm.getModuleNamespace(module.compiled!.code), 'default')).toBe('text');
     expect(loop.executionContextStack).toHaveLength(0);
     expect(report).not.toHaveBeenCalled();
   });

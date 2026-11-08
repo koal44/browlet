@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { JSRealm, createMicrotaskQueue, type CompiledModule } from '../../src/js-engine/index';
+import { JSRealm, createMicrotaskQueue, type EngineModule } from '../../src/js-engine/index';
 import { runInHostTask } from '../support/tasks';
 import { itPassesWith } from '../test-runtime';
 
@@ -129,7 +129,7 @@ function fixture() {
   return { realm: new JSRealm(queue), queue };
 }
 
-function observe(realm: JSRealm, module: CompiledModule) {
+function observe(realm: JSRealm, module: EngineModule) {
   const result: { state: string; value?: unknown; } = { state: 'pending' };
   realm.observePromise(realm.evaluateModule(module), (value) => {
     result.state = 'fulfilled';

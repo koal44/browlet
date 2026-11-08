@@ -27,13 +27,13 @@ export {
   type ModuleSpecifierMap, type ModuleIntegrityMap, type SpecifierResolutionRecord,
 } from './import-map';
 export {
-  ClassicScript, ModuleScript, JavaScriptModuleScript, CSSModuleScript, JSONModuleScript,
+  ClassicScript, ModuleScript, JSModuleScript, CSSModuleScript, JSONModuleScript,
   TextModuleScript, WasmModuleScript, emptyCompletionValue, type Script, type ModuleType, type ScriptCompletion,
-  JSScriptOrModule, JSScriptRecord, JSModuleRecord, JSSourceTextModuleRecord, JSSyntheticModuleRecord, JSWasmModuleRecord,
-  JSModuleRequest,
+  CompiledScriptOrModule, CompiledScript, CompiledModule, CompiledSourceTextModule, CompiledSyntheticModule, CompiledWasmModule,
 } from './script';
 export { ModuleMap, type ModuleMapKey, type ModuleMapEntry, type ModuleFetchCallback } from './module-map';
 export { ScriptFetchOptions } from './script-fetch-options';
+export { ModuleRequest } from './module-request';
 export { ScriptingPolicy } from './scripting-policy';
 export {
   fetchClassicScript, createWorkerScriptRequest, fetchClassicWorkerScript, fetchClassicWorkerImportedScript,
@@ -41,7 +41,7 @@ export {
   fetchExternalModuleScriptGraph, fetchModulepreloadModuleScriptGraph, fetchInlineModuleScriptGraph, fetchDescendantsAndLink,
   fetchModuleWorkerScriptGraph, fetchWorkletScriptGraph, fetchWorkletModuleWorkerScriptGraph,
   fetchSingleModuleScript, fetchSingleImportedModuleScript, fetchDestinationFromModuleType,
-  type PerformScriptFetch, type ModuleGraphLoadingState,
+  type PerformScriptFetch,
 } from './script-fetching';
 export {
   createBrowletRealm, BrowletRealm, WindowRealm,

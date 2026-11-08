@@ -2017,9 +2017,9 @@ CompileError and LinkError reach the HTML script's `parseError`; missing backend
 facilities remain explicit InternalErrors rather than invalid-source failures.
 Disabled scripting still substitutes the empty module before compilation.
 
-`JSWasmModuleRecord` retains the compiled record, owning realm, exact
+`CompiledWasmModule` retains the compiled record, owning realm, exact
 HTML script, and dependency requests. The draft's set of module-name strings is
-represented as HTML's existing `JSModuleRequest` records, with empty attributes
+represented as HTML's existing `ModuleRequest` records, with empty attributes
 and evaluation phase. The backend preserves
 first-occurrence order and hides its private instantiation helper. No second
 source-object registry or duplicate binding implementation is introduced.
@@ -2134,7 +2134,7 @@ The loader carries the request phase directly instead of a separate single-load
 versus recursive-load enum. Source imports of JavaScript records fail with a
 realm-owned SyntaxError; Fetch and compile failures keep their existing paths.
 
-JSWasmModuleRecord retains one WasmModuleImpl as `moduleSource`; it also uses that
+CompiledWasmModule retains one WasmModuleImpl as `moduleSource`; it also uses that
 implementation when eventually instantiating. The addon's optional `getSource()`
 callback projects this implementation through existing Binding. No new Web IDL
 machinery or native-object adoption is needed. The private C++ source linker now

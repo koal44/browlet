@@ -14,9 +14,10 @@ import type { JSWasmInstance, JSWasmModule, JSWasmTag } from './built-in-primiti
 import { addon, isAddonContextHandle } from './node-addons';
 import { reportPromiseObserverError } from './node-promise';
 import {
-  compileModule, compileWebAssemblyModule, createDefaultExportModule, moduleRequests, linkModule, evaluateModule, moduleNamespace,
-  type CompiledModule, type ImportModuleDynamically, type ModuleCompilationOptions, type ModuleRequest,
-  type WebAssemblyModule, type WasmInstanceFactory,
+  compileModule, compileWebAssemblyModule, createDefaultExportModule, createDynamicImportCallback,
+  moduleRequests, linkModule, evaluateModule, moduleNamespace,
+  type EngineModule, type ImportModuleDynamically, type DynamicImportHandler, type ModuleCompilationOptions,
+  type EngineModuleRequest, type EngineWasmModule, type WasmInstanceFactory,
 } from './modules';
 import {
   associateContext, associateGlobalRealm, associateObjectRealm, cloneSharedArrayBuffer, cloneWebAssemblyModule, compileFunction, compileScript,
@@ -233,10 +234,10 @@ export class JSRealm {
   #incumbentFunctionFactory: RealmFunctionFactory;
   /** Constructor proxies can capture at their existing call/construct traps. */
   #constructibleFunctionFactory: RealmConstructorFactory;
-  /** Uses this context as the referrer for source-string evaluation and host-compiled functions. */
-  #importModuleDynamically: ImportModuleDynamically<CompiledScript | JSFunction> | undefined;
+  /** Default import handler adapted for source-string evaluation and host-compiled functions. */
+  #importModuleDynamically: ImportModuleDynamically<EngineScript | JSFunction> | undefined;
   /** Recent evaluation code, scoped to this realm's fixed import loader. */
-  #evaluations = new Map<string, { filename: string; lineOffset: number; code: CompiledScript; }>();
+  #evaluations = new Map<string, { filename: string; lineOffset: number; code: EngineScript; }>();
   #fallbackIteratorNext: Partial<Record<CollectionIteratorKind, JSFunction>> = {};
   /** Task source selected for each outstanding native compilation. */
   #wasmCompletionSources = new WeakMap<Promise<unknown>, TaskSourceKey>();
@@ -256,7 +257,7 @@ export class JSRealm {
     options: JSRealmOptions = {},
   ) {
     this.#microtaskQueue = microtaskQueue;
-    const { importModuleDynamically } = options;
+    const importModuleDynamically = this.createDefaultDynamicImportCallback(options.dynamicImport);
     const reuseGlobalProxyFrom = options.reuseGlobalProxyFrom === undefined
       ? undefined
       : options.reuseGlobalProxyFrom.#vmContext;
@@ -267,10 +268,7 @@ export class JSRealm {
       importModuleDynamically,
       options.globalAccess !== undefined,
     );
-    this.#importModuleDynamically = importModuleDynamically && this.supportsDynamicImport
-      ? (specifier, _referrer, attributes, phase) =>
-        importModuleDynamically(specifier, this.#vmContext, attributes, phase)
-      : undefined;
+    this.#importModuleDynamically = this.supportsDynamicImport ? importModuleDynamically : undefined;
     this.#globalAllocation = getContextGlobalAllocation(this.#vmContext);
     this.#globalProxy = getContextGlobalProxy(this.#vmContext);
     this.#globalObject = this.#globalProxy;
@@ -755,7 +753,7 @@ export class JSRealm {
    * it cannot supply these synchronous notifications without the addon.
    */
   setPromiseRejectionTracker(
-    tracker: ((promise: Promise<unknown>, operation: 'reject' | 'handle', compiledCode: CompiledCode | null | undefined) => void) | undefined,
+    tracker: ((promise: Promise<unknown>, operation: 'reject' | 'handle', compiledCode: EngineCode | null | undefined) => void) | undefined,
   ): void {
     addon.setPromiseRejectionTracker?.(this.#vmContext, tracker);
   }
@@ -857,10 +855,10 @@ export class JSRealm {
   // SPEC_MISMATCH: ParseScript(sourceText, realm, hostDefined) -> Script Record or a List of SyntaxError objects
   // HTML supplies its Script Record and HostDefined around this unbound compiled code.
   parseScript(
-    source: string, filename: string, importModuleDynamically?: ImportModuleDynamically<CompiledScript>,
-  ): CompiledScript | SyntaxError[] {
+    source: string, filename: string, dynamicImport?: DynamicImportHandler,
+  ): EngineScript | SyntaxError[] {
     try {
-      return compileScript(source, this.#vmContext, filename, importModuleDynamically);
+      return compileScript(source, this.#vmContext, filename, dynamicImport && createDynamicImportCallback(dynamicImport));
     } catch (error) {
       // The compiler's fresh error has the intrinsic prototype; instanceof could
       // invoke an author-defined Symbol.hasInstance on the realm constructor.
@@ -874,7 +872,7 @@ export class JSRealm {
   }
 
   /** Execute retained compiled code in this realm without an implicit checkpoint. */
-  runScript(script: CompiledScript): unknown {
+  runScript(script: EngineScript): unknown {
     return runWithActiveRealm(this, () => runScript(script, this.#vmContext));
   }
 
@@ -900,7 +898,7 @@ export class JSRealm {
   }
 
   /** Compile module source in this realm without linking or executing it. */
-  compileModule(source: string, filename: string, options: ModuleCompilationOptions = {}): CompiledModule {
+  compileModule(source: string, filename: string, options: ModuleCompilationOptions = {}): EngineModule {
     return compileModule(source, this.#vmContext, filename, options);
   }
 
@@ -908,27 +906,27 @@ export class JSRealm {
   compileWebAssemblyModule(
     bytes: Uint8Array, filename: string, createInstance?: WasmInstanceFactory,
     getExports?: () => object, getSource?: () => object,
-  ): WebAssemblyModule {
+  ): EngineWasmModule {
     return compileWebAssemblyModule(bytes, this.#vmContext, filename, createInstance, getExports, getSource);
   }
 
   /** Retain a prepared author value as a synthetic module's default export. */
-  createDefaultExportModule(value: unknown): CompiledModule {
+  createDefaultExportModule(value: unknown): EngineModule {
     return createDefaultExportModule(value, this.#vmContext);
   }
 
   /** Read the engine's import requests before host resolution and loading. */
-  getModuleRequests(module: CompiledModule): ModuleRequest[] {
+  getModuleRequests(module: EngineModule): EngineModuleRequest[] {
     return moduleRequests(module);
   }
 
   /** Link supplied dependencies in the order of each referrer's requests. */
-  linkModule(root: CompiledModule, graph: Map<CompiledModule, CompiledModule[]>): void {
+  linkModule(root: EngineModule, graph: Map<EngineModule, EngineModule[]>): void {
     linkModule(root, graph);
   }
 
   /** Evaluate a linked graph, returning its native completion Promise. */
-  evaluateModule(module: CompiledModule): Promise<unknown> {
+  evaluateModule(module: EngineModule): Promise<unknown> {
     return runWithActiveRealm(this, () => evaluateModule(module));
   }
 
@@ -945,7 +943,7 @@ export class JSRealm {
   }
 
   /** Return the linked module's namespace with live exported bindings. */
-  getModuleNamespace(module: CompiledModule): object {
+  getModuleNamespace(module: EngineModule): object {
     return moduleNamespace(module);
   }
 
@@ -972,6 +970,13 @@ export class JSRealm {
       if (this.#evaluations.size > 32) this.#evaluations.delete(this.#evaluations.keys().next().value!);
       return runScript(evaluation.code, this.#vmContext);
     });
+  }
+
+  /** Create the context callback during construction, before host state is attached. */
+  protected createDefaultDynamicImportCallback(
+    handler?: DynamicImportHandler,
+  ): ImportModuleDynamically<object> | undefined {
+    return handler && createDynamicImportCallback(handler);
   }
 
   /** Let the host scope its own bookkeeping around a captured native function entry. */
@@ -1088,14 +1093,14 @@ export class JSRealm {
 }
 
 /** Retained VM compilation, distinct from HTML's associated Script/Module record. */
-export type CompiledCode = CompiledScript | CompiledModule;
+export type EngineCode = EngineScript | EngineModule;
 
 /**
  * Retained code from JSRealm.parseScript(): a Node.js vm.Script or the addon's
  * matching Script object. Both keep compilation separate from context selection.
  * HTML separately retains the associated realm and script.
  */
-export interface CompiledScript {
+export interface EngineScript {
   runInContext(context: VMContext, options?: { displayErrors?: boolean; }): unknown;
 }
 
@@ -1166,7 +1171,7 @@ export type JSRealmOptions = {
   /** Accessing-realm policy for preallocated globals; stock Node cannot enforce these checks. */
   globalAccess?: GlobalAccessSelector;
   /** Loader for code without script/module metadata and direct realm evaluation. */
-  importModuleDynamically?: ImportModuleDynamically<VMContext>;
+  dynamicImport?: DynamicImportHandler;
 };
 
 export type GlobalPrototypeKind = 'mutable' | 'immutable' | 'delegated';

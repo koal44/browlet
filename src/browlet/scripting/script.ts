@@ -1,6 +1,6 @@
 import { InternalError, type InternalPromise } from '../../infra/index';
 import type {
-  CompiledCode, CompiledScript, CompiledModule, ModuleRequestPhase, WebAssemblyModule, JSWasmInstance,
+  EngineCode, EngineScript, EngineModule, EngineWasmModule, JSWasmInstance,
 } from '../../js-engine/index';
 import { idlType } from '../../web-idl/core/index';
 import { aboutBlankURL, copyURL, serializeURL, type URLRecord } from '../../url/index';
@@ -11,9 +11,9 @@ import type { BrowletEnvironment } from '../environment/index';
 
 import type { BrowletRealm } from './realm';
 import { JSExecutionContext } from './execution-context';
-import { JSModuleGraphLoadingState } from './module-loading';
+import { ModuleLoadingState, type ModuleDependencyLoader } from './module-loading-state';
 import type { ScriptFetchOptions } from './script-fetch-options';
-import type { ModuleGraphLoadingState } from './script-fetching';
+import type { ModuleRequest } from './module-request';
 
 /** HTML's script state, distinct from its parsed ECMAScript record. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#script-structs
@@ -21,14 +21,14 @@ export type Script = ClassicScript | ModuleScript;
 
 abstract class ScriptBase {
   env: BrowletEnvironment;
-  /** Immediate parse failure; meaningful only when record is null. */
+  /** Immediate parse failure; meaningful only when compiled is null. */
   parseError: unknown = null;
   /** Error preventing evaluation, including a dependency failure; null means none. */
   errorToRethrow: unknown = null;
   fetchOptions: ScriptFetchOptions | null = null;
   /** External script URL or the inline script's captured document base URL. */
   baseURL: URLRecord | null = null;
-  record: JSScriptOrModule | null = null;
+  compiled: CompiledScriptOrModule | null = null;
 
   constructor(env: BrowletEnvironment) {
     this.env = env;
@@ -36,7 +36,7 @@ abstract class ScriptBase {
 }
 
 export class ClassicScript extends ScriptBase {
-  declare record: JSScriptRecord | null;
+  declare compiled: CompiledScript | null;
   /** Suppress error details for a cross-origin classic script. */
   mutedErrors = false;
   /** Original request URL for Long Animation Frames attribution; null for inline scripts. */
@@ -65,7 +65,7 @@ export class ClassicScript extends ScriptBase {
       this.errorToRethrow = result[0];
       return;
     }
-    this.record = result;
+    this.compiled = result;
   }
 
   /** Run this classic script, optionally rethrowing its exception to the caller. */
@@ -84,8 +84,8 @@ export class ClassicScript extends ScriptBase {
       if (this.errorToRethrow !== null) {
         status = { type: 'throw', value: this.errorToRethrow };
       } else {
-        if (this.record === null) throw new InternalError('A classic script has no record or error to rethrow');
-        status = this.record.evaluate();
+        if (this.compiled === null) throw new InternalError('A classic script has no compiled code or error to rethrow');
+        status = this.compiled.evaluate();
       }
       if (status?.type === 'throw' && !rethrowErrors) {
         // The prepared realm context has no script; parse failures have no record
@@ -108,7 +108,7 @@ export class ClassicScript extends ScriptBase {
 export type ModuleType = 'javascript-or-wasm' | 'css' | 'json' | 'text';
 
 export abstract class ModuleScript extends ScriptBase {
-  declare record: JSSourceTextModuleRecord | JSSyntheticModuleRecord | JSWasmModuleRecord | null;
+  declare compiled: CompiledSourceTextModule | CompiledSyntheticModule | CompiledWasmModule | null;
 
   /** Evaluate this module graph and report rejections unless the caller takes responsibility. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#run-a-module-script
@@ -126,8 +126,8 @@ export abstract class ModuleScript extends ScriptBase {
       if (this.errorToRethrow !== null) {
         promise = env.InternalPromise.reject(this.errorToRethrow, idlType.undefined);
       } else {
-        if (this.record === null) throw new InternalError('A module script has no record or error to rethrow');
-        promise = this.record.evaluate() ?? env.InternalPromise.reject(env.createQuotaExceededError(), idlType.undefined);
+        if (this.compiled === null) throw new InternalError('A module script has no compiled code or error to rethrow');
+        promise = this.compiled.evaluate() ?? env.InternalPromise.reject(env.createQuotaExceededError(), idlType.undefined);
       }
       if (!preventErrorReporting) {
         // Reporting is attached before cleanup can perform a microtask checkpoint.
@@ -140,8 +140,8 @@ export abstract class ModuleScript extends ScriptBase {
   }
 }
 
-export class JavaScriptModuleScript extends ModuleScript {
-  declare record: JSSourceTextModuleRecord | null;
+export class JSModuleScript extends ModuleScript {
+  declare compiled: CompiledSourceTextModule | null;
 
   /** Initialize a JavaScript module and hand its source to the realm's parser. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#creating-a-javascript-module-script
@@ -157,12 +157,12 @@ export class JavaScriptModuleScript extends ModuleScript {
       this.parseError = result[0];
       return;
     }
-    this.record = result;
+    this.compiled = result;
   }
 }
 
 abstract class SyntheticModuleScript extends ModuleScript {
-  declare record: JSSyntheticModuleRecord | null;
+  declare compiled: CompiledSyntheticModule | null;
   declare fetchOptions: null;
   declare baseURL: null;
 }
@@ -187,7 +187,7 @@ export class CSSModuleScript extends SyntheticModuleScript {
       this.parseError = error;
       return;
     }
-    this.record = new JSSyntheticModuleRecord(this, env.project(sheet));
+    this.compiled = new CompiledSyntheticModule(this, env.project(sheet));
   }
 }
 
@@ -203,7 +203,7 @@ export class JSONModuleScript extends SyntheticModuleScript {
       this.parseError = error;
       return;
     }
-    this.record = new JSSyntheticModuleRecord(this, value);
+    this.compiled = new CompiledSyntheticModule(this, value);
   }
 }
 
@@ -212,12 +212,12 @@ export class TextModuleScript extends SyntheticModuleScript {
   // https://html.spec.whatwg.org/multipage/webappapis.html#creating-a-text-module-script
   constructor(text: string, env: BrowletEnvironment) {
     super(env);
-    this.record = new JSSyntheticModuleRecord(this, text);
+    this.compiled = new CompiledSyntheticModule(this, text);
   }
 }
 
 export class WasmModuleScript extends ModuleScript {
-  declare record: JSWasmModuleRecord | null;
+  declare compiled: CompiledWasmModule | null;
 
   /** Initialize a WebAssembly module and hand its bytes to the realm's ESM parser. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#creating-a-webassembly-module-script
@@ -228,7 +228,7 @@ export class WasmModuleScript extends ModuleScript {
     if (!env.isScriptingEnabled()) bodyBytes = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]);
     this.baseURL = baseURL;
     this.fetchOptions = options;
-    try { this.record = env.realm.parseWebAssemblyModule(bodyBytes, this); }
+    try { this.compiled = env.realm.parseWebAssemblyModule(bodyBytes, this); }
     catch (error) {
       if (error instanceof InternalError) throw error;
       this.parseError = error;
@@ -236,75 +236,51 @@ export class WasmModuleScript extends ModuleScript {
   }
 }
 
-/** ECMAScript's requested specifier, import attributes, and phase. */
-// https://tc39.es/ecma262/#modulerequest-record
-export class JSModuleRequest {
-  specifier: string;
-  attributes: { key: string; value: string; }[];
-  /** Whether the request needs source or evaluation; deferred loading remains unfinished. */
-  phase: ModuleRequestPhase;
-
-  constructor(
-    specifier: string, attributes: { key: string; value: string; }[] = [], phase: ModuleRequestPhase = 'evaluation',
-  ) {
-    this.specifier = specifier;
-    this.attributes = attributes;
-    this.phase = phase;
-  }
-
-  /** Compare specifiers and attributes by value, independently of attribute order. */
-  // https://tc39.es/ecma262/#sec-ModuleRequestsEqual
-  equals(other: JSModuleRequest): boolean {
-    if (this.specifier !== other.specifier || this.phase !== other.phase ||
-      this.attributes.length !== other.attributes.length) return false;
-    return this.attributes.every((attribute) => other.attributes.some((candidate) =>
-      attribute.key === candidate.key && attribute.value === candidate.value));
-  }
-
-  /** Select a supported module type, or null for an invalid type attribute. */
-  // https://html.spec.whatwg.org/multipage/webappapis.html#module-type-from-module-request
-  // Recognize supported names here; the environment separately checks realm exposure.
-  // SPEC_MISMATCH: module type from module request(moduleRequest) -> string or null
-  getModuleType(): ModuleType | null {
-    const type = this.attributes.find((attribute) => attribute.key === 'type');
-    if (type === undefined) return 'javascript-or-wasm';
-    if (type.value === 'css' || type.value === 'json' || type.value === 'text') return type.value;
-    return null;
-  }
-}
-
-/** The portion of ECMAScript Script and Module records used by HTML's context model. */
-// TODO(HTML §§8.1.4.3–4): Supply complete records from script creation and evaluation.
-export class JSScriptOrModule {
-  /** HTML records retained only while their compiled code remains reachable. */
-  static #compiledRecords = new WeakMap<CompiledCode, JSScriptOrModule>();
+/** Shared ownership and dependency associations of retained ECMAScript Script and Module records. */
+export abstract class CompiledScriptOrModule {
+  /** Compiled representations retained while their engine code remains reachable. */
+  static #compiledByEngineCode = new WeakMap<EngineCode, CompiledScriptOrModule>();
 
   realm: BrowletRealm;
-  /** The HTML script; null for a provisional entry without a parsed HTML script. */
-  // ECMAScript's [[HostDefined]] field.
-  script: Script | null;
+  /** The HTML script retained in ECMAScript's [[HostDefined]] field. */
+  script: Script;
+  /** Dependencies retained for this record, independently of the script's URL. */
+  // SPEC_MISMATCH: [[LoadedModules]] -> List of LoadedModuleRequest Records
+  loadedModules = new Map<ModuleRequest, CompiledModule>();
 
-  constructor(realm: BrowletRealm, script: Script | null, code?: CompiledCode) {
-    this.realm = realm;
+  protected constructor(script: Script, code?: EngineCode) {
+    this.realm = script.env.realm;
     this.script = script;
-    if (code !== undefined) JSScriptOrModule.#compiledRecords.set(code, this);
+    if (code !== undefined) CompiledScriptOrModule.#compiledByEngineCode.set(code, this);
   }
 
   /** Recover the HTML association of code observed at an engine boundary. */
-  static fromCompiledCode(code: CompiledCode): JSScriptOrModule | null {
-    return JSScriptOrModule.#compiledRecords.get(code) ?? null;
+  static fromEngineCode(code: EngineCode): CompiledScriptOrModule | null {
+    return CompiledScriptOrModule.#compiledByEngineCode.get(code) ?? null;
+  }
+
+  isModule(): this is CompiledModule { return false; }
+
+  /** Add a loaded module, requiring equivalent requests to retain the same module identity. */
+  // The successful-association step of FinishLoadingImportedModule; the caller continues loading.
+  // https://tc39.es/ecma262/#sec-FinishLoadingImportedModule
+  addLoadedModule(request: ModuleRequest, module: CompiledModule): void {
+    for (const [loadedRequest, loaded] of this.loadedModules) {
+      if (!loadedRequest.equals(request)) continue;
+      if (loaded !== module) throw new InternalError('A module request resolved to different modules');
+      return;
+    }
+    this.loadedModules.set(request, module);
   }
 }
 
 /** Retained compiled classic code and its HTML script association. */
-export class JSScriptRecord extends JSScriptOrModule {
+export class CompiledScript extends CompiledScriptOrModule {
   declare script: ClassicScript;
-  code: CompiledScript;
-  /** Dynamic imports retained for this classic record, independently of its URL. */
-  loadedModules = new Map<JSModuleRequest, JSModuleRecord>();
+  code: EngineScript;
 
-  constructor(script: ClassicScript, code: CompiledScript) {
-    super(script.env.realm, script, code);
+  constructor(script: ClassicScript, code: EngineScript) {
+    super(script, code);
     this.code = code;
   }
 
@@ -338,34 +314,34 @@ export type ScriptCompletion = { type: 'normal' | 'throw'; value: unknown; };
 export const emptyCompletionValue = Symbol('empty completion value');
 
 /** Engine module plus the dependency associations supplied by HTML's loader. */
-export abstract class JSModuleRecord extends JSScriptOrModule {
+export abstract class CompiledModule extends CompiledScriptOrModule {
   declare script: ModuleScript;
   /** Retained module bound to this record's realm. */
-  abstract code: CompiledModule;
+  abstract code: EngineModule;
   /** [[ModuleSource]], retained as an implementation until the engine import boundary projects it. */
   moduleSource: WasmModuleImpl | null = null;
   /** Engine-reported dependencies, in their linking order. */
-  requestedModules: JSModuleRequest[] = [];
+  requestedModules: ModuleRequest[] = [];
   /** Whether a successful traversal completed this record's dependency loading. */
   // Node's "unlinked" status covers ECMAScript's new and unlinked states; this
   // flag retains the loading transition that the VM module API does not expose.
   requestedModulesLoaded = false;
-  /** Loaded records keyed by this record's requests; filled by the host module loader. */
-  // SPEC_MISMATCH: [[LoadedModules]] -> List of LoadedModuleRequest Records
-  loadedModules = new Map<JSModuleRequest, JSModuleRecord>();
 
-  /** Load this graph using optional HTML fetch state and an internal completion promise. */
+  override isModule(): this is CompiledModule { return true; }
+
+  isSynthetic(): this is CompiledSyntheticModule { return false; }
+
+  /** Load this graph with the host's import handler and an internal completion promise. */
   // https://tc39.es/ecma262/#sec-LoadRequestedModules
-  // SPEC_MISMATCH: ModuleRecord.LoadRequestedModules(hostDefined) -> Promise
   // HTML uses an internal completion; native dynamic import is adapted at the VM callback boundary.
-  loadRequestedModules(state?: ModuleGraphLoadingState): InternalPromise<void> {
-    const loading = new JSModuleGraphLoadingState(state, this.script.env);
+  loadRequestedModules(imports: ModuleDependencyLoader): InternalPromise<void> {
+    const loading = new ModuleLoadingState(imports, this.script.env);
     loading.load(this);
     return loading.promise;
   }
 
   /** Find the retained record for an equivalent request, including a fresh request object. */
-  getLoadedModule(request: JSModuleRequest): JSModuleRecord | undefined {
+  getLoadedModule(request: ModuleRequest): CompiledModule | undefined {
     for (const [loadedRequest, module] of this.loadedModules) {
       if (loadedRequest.equals(request)) return module;
     }
@@ -373,19 +349,19 @@ export abstract class JSModuleRecord extends JSScriptOrModule {
   }
 
   link(): void {
-    const graph = new Map<CompiledModule, CompiledModule[]>();
-    const visit = (record: JSModuleRecord): void => {
-      if (graph.has(record.code)) return;
-      const dependencies: CompiledModule[] = [];
-      graph.set(record.code, dependencies);
-      for (const request of record.requestedModules) {
+    const graph = new Map<EngineModule, EngineModule[]>();
+    const visit = (compiled: CompiledModule): void => {
+      if (graph.has(compiled.code)) return;
+      const dependencies: EngineModule[] = [];
+      graph.set(compiled.code, dependencies);
+      for (const request of compiled.requestedModules) {
         if (request.phase === 'defer') {
           throw new InternalError('Deferred module loading is not implemented');
         }
-        const dependency = record.getLoadedModule(request);
+        const dependency = compiled.getLoadedModule(request);
         if (dependency === undefined) throw new InternalError('Module dependency loading is not implemented');
         if (request.phase === 'source' && dependency.moduleSource === null) {
-          throw new record.realm.SyntaxError('The imported module has no source object');
+          throw new compiled.realm.SyntaxError('The imported module has no source object');
         }
         dependencies.push(dependency.code);
         if (request.phase === 'evaluation') visit(dependency);
@@ -406,12 +382,12 @@ export abstract class JSModuleRecord extends JSScriptOrModule {
   }
 }
 
-export class JSSourceTextModuleRecord extends JSModuleRecord {
-  declare script: JavaScriptModuleScript;
-  code: CompiledModule;
+export class CompiledSourceTextModule extends CompiledModule {
+  declare script: JSModuleScript;
+  code: EngineModule;
 
-  constructor(script: JavaScriptModuleScript, code: CompiledModule, requests: JSModuleRequest[] = []) {
-    super(script.env.realm, script, code);
+  constructor(script: JSModuleScript, code: EngineModule, requests: ModuleRequest[] = []) {
+    super(script, code);
     this.code = code;
     this.requestedModules = requests;
   }
@@ -434,28 +410,30 @@ export class JSSourceTextModuleRecord extends JSModuleRecord {
   }
 }
 
-export class JSSyntheticModuleRecord extends JSModuleRecord {
+export class CompiledSyntheticModule extends CompiledModule {
   declare script: SyntheticModuleScript;
   /** Value retained by CreateDefaultExportSyntheticModule's evaluation steps. */
   defaultExport: unknown;
-  code: CompiledModule;
+  code: EngineModule;
 
   constructor(script: SyntheticModuleScript, defaultExport: unknown) {
-    super(script.env.realm, script);
+    super(script);
     this.defaultExport = defaultExport;
     this.code = this.realm.createDefaultExportModule(defaultExport);
   }
+
+  override isSynthetic(): this is CompiledSyntheticModule { return true; }
 }
 
-export class JSWasmModuleRecord extends JSModuleRecord {
+export class CompiledWasmModule extends CompiledModule {
   declare moduleSource: WasmModuleImpl;
   declare script: WasmModuleScript;
-  code: WebAssemblyModule;
+  code: EngineWasmModule;
   /** Implementation retained for the namespace and its public exports. */
   instance!: WasmInstanceImpl;
 
-  constructor(script: WasmModuleScript, code: WebAssemblyModule, requests: JSModuleRequest[] = []) {
-    super(script.env.realm, script, code);
+  constructor(script: WasmModuleScript, code: EngineWasmModule, requests: ModuleRequest[] = []) {
+    super(script, code);
     this.code = code;
     this.moduleSource = new WasmModuleImpl(code.source);
     this.requestedModules = requests;

@@ -14,13 +14,14 @@ import type { WorkerType } from '../workers/index';
 import type { ModuleResponsesMap } from '../worklets/index';
 
 import {
-  ClassicScript, JavaScriptModuleScript, CSSModuleScript, JSONModuleScript, TextModuleScript, WasmModuleScript,
-  type JSModuleRequest, type ModuleScript, type ModuleType,
+  ClassicScript, JSModuleScript, CSSModuleScript, JSONModuleScript, TextModuleScript, WasmModuleScript,
+  type ModuleScript, type ModuleType,
 } from './script';
+import { getSupportedImportAttributes, type ModuleRequest } from './module-request';
 import { ScriptFetchOptions } from './script-fetch-options';
 import type { ModuleFetchCallback } from './module-map';
 import type { ScriptEnvironment } from './environment';
-import { getSupportedImportAttributes } from './module-loading';
+import { StaticImport } from './import-handler';
 
 /** Fetch and decode a classic script, then hand its source to script creation. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-classic-script
@@ -180,7 +181,7 @@ export function fetchInlineModuleScriptGraph(
   sourceText: string, baseURL: URLRecord, env: BrowletEnvironment,
   options: ScriptFetchOptions, onComplete: ModuleFetchCallback,
 ): void {
-  const script = new JavaScriptModuleScript(sourceText, env, baseURL, options);
+  const script = new JSModuleScript(sourceText, env, baseURL, options);
   fetchDescendantsAndLink(script, env, 'script', onComplete);
 }
 
@@ -244,33 +245,8 @@ export function fetchDescendantsAndLink(
   script: ModuleScript, fetchClient: ScriptEnvironment, destination: Destination,
   onComplete: ModuleFetchCallback, performFetch?: PerformScriptFetch,
 ): void {
-  const record = script.record;
-  if (record === null) {
-    script.errorToRethrow = script.parseError;
-    onComplete(script);
-    return;
-  }
-
-  const state: ModuleGraphLoadingState = {
-    errorToRethrow: null, destination, performFetch: performFetch ?? null, fetchClient,
-  };
-  const loadingPromise = record.loadRequestedModules(state);
-  loadingPromise.observe(() => {
-    try { record.link(); }
-    catch (error) {
-      // An unfinished implementation must not masquerade as an author module error.
-      if (error instanceof InternalError) throw error;
-      script.errorToRethrow = error;
-    }
-    onComplete(script);
-  }, () => {
-    if (state.errorToRethrow !== null) {
-      script.errorToRethrow = state.errorToRethrow;
-      onComplete(script);
-    } else {
-      onComplete(null);
-    }
-  });
+  const imports = new StaticImport(script, { destination, performFetch: performFetch ?? null, fetchClient });
+  imports.fetchDescendantsAndLink(onComplete);
 }
 
 /** Fetch one module for these settings, sharing in-flight work and retained results. */
@@ -278,7 +254,7 @@ export function fetchDescendantsAndLink(
 // Worker/worklet startup fetches with the creator's client but stores and creates modules in env.
 export function fetchSingleModuleScript(
   url: URLRecord, fetchClient: ScriptEnvironment, destination: Destination, options: ScriptFetchOptions,
-  env: BrowletEnvironment, referrer: URLRecord | 'client' | 'no-referrer', moduleRequest: JSModuleRequest | undefined,
+  env: BrowletEnvironment, referrer: URLRecord | 'client' | 'no-referrer', moduleRequest: ModuleRequest | undefined,
   isTopLevel: boolean, onComplete: ModuleFetchCallback, performFetch?: PerformScriptFetch,
 ): void {
   const moduleType = moduleRequest === undefined ? 'javascript-or-wasm' : moduleRequest.getModuleType();
@@ -347,7 +323,7 @@ export function createModuleScriptFromResponse(
   const source = utf8Decode(bodyBytes);
   if (moduleType === 'text') return new TextModuleScript(source, env);
   if (moduleType === 'javascript-or-wasm' && mimeType !== null && isJavaScriptMIMEType(mimeType)) {
-    return new JavaScriptModuleScript(source, env, response.url!, options);
+    return new JSModuleScript(source, env, response.url!, options);
   }
   if (moduleType === 'css' && essence === 'text/css') return new CSSModuleScript(source, response.url!, env);
   if (moduleType === 'json' && mimeType !== null && isJSONMIMEType(mimeType)) return new JSONModuleScript(source, env);
@@ -358,7 +334,7 @@ export function createModuleScriptFromResponse(
 // https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-single-imported-module-script
 export function fetchSingleImportedModuleScript(
   url: URLRecord, fetchClient: ScriptEnvironment, destination: Destination, options: ScriptFetchOptions,
-  env: BrowletEnvironment, referrer: URLRecord | 'client' | 'no-referrer', moduleRequest: JSModuleRequest,
+  env: BrowletEnvironment, referrer: URLRecord | 'client' | 'no-referrer', moduleRequest: ModuleRequest,
   onComplete: ModuleFetchCallback, performFetch?: PerformScriptFetch,
 ): void {
   const supportedAttributes = getSupportedImportAttributes();
@@ -391,11 +367,3 @@ export type PerformScriptFetch = (
   isTopLevel: boolean,
   processCustomFetchResponse: (response: FetchResponse, body: Uint8Array | null | 'failure') => void,
 ) => void;
-
-/** HTML's host state passed through LoadRequestedModules to HostLoadImportedModule. */
-export interface ModuleGraphLoadingState {
-  errorToRethrow: unknown;
-  destination: Destination;
-  performFetch: PerformScriptFetch | null;
-  fetchClient: ScriptEnvironment;
-}

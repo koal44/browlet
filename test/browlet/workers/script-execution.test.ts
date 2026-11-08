@@ -7,7 +7,7 @@ import { MessagePortImpl } from '../../../src/browlet/communication/index';
 import type { WorkerEnvironment } from '../../../src/browlet/workers/index';
 import { createWorkerEnvironment } from '../../../src/browlet/integration/web-idl/index';
 import {
-  AgentCluster, ClassicScript, DedicatedWorkerAgent, JavaScriptModuleScript, ScriptFetchOptions, type ModuleScript,
+  AgentCluster, ClassicScript, DedicatedWorkerAgent, JSModuleScript, ScriptFetchOptions, type ModuleScript,
   SharedWorkerAgent, domManipulationTaskSource, type EventLoop,
 } from '../../../src/browlet/scripting/index';
 import { DedicatedWorkerGlobalImpl } from '../../../src/browlet/workers/index';
@@ -97,13 +97,13 @@ describe('Worker initial script execution (HTML §10.2.4)', () => {
       scope.onconnect = (event) => { (event as MessageEvent).ports[0]!.postMessage('connected while suspended'); };
     }
     Reflect.set(env.global, 'sendFromScript', (data: unknown) => { inside.postMessage(data); });
-    const script = new JavaScriptModuleScript(`
+    const script = new JSModuleScript(`
       sendFromScript('before await');
       await new Promise(resolve => { globalThis.resume = resolve; });
       sendFromScript('after await');
     `, env, env.apiBaseURL, new ScriptFetchOptions());
-    assert(script.record !== null);
-    script.record.link();
+    assert(script.compiled !== null);
+    script.compiled.link();
     runInitialScript(env, script, outsidePort, insidePort);
     expect(env.executionReady).toBe(true);
     drain(env.responsibleEventLoop);
